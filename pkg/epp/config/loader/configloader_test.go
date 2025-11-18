@@ -366,10 +366,15 @@ func checkError(t *testing.T, function string, test testStruct, err error) {
 
 func TestInstantiatePlugins(t *testing.T) {
 	registerNeededFeatureGates()
-	handle := utils.NewTestHandle(context.Background())
-	_, err := LoadConfig([]byte(successConfigText), handle, logging.NewTestLogger())
+	logger := logging.NewTestLogger()
+	rawConfig, _, err := LoadConfigPhaseOne([]byte(successConfigText), logger)
 	if err != nil {
-		t.Fatalf("LoadConfig returned unexpected error - %v", err)
+		t.Fatalf("LoadConfigPhaseOne returned unexpected error - %v", err)
+	}
+	handle := utils.NewTestHandle(context.Background())
+	_, err = LoadConfigPhaseTwo(rawConfig, handle, logger)
+	if err != nil {
+		t.Fatalf("LoadConfigPhaseTwo returned unexpected error - %v", err)
 	}
 	if len(handle.GetAllPlugins()) == 0 {
 		t.Fatalf("unexpected empty set of loaded plugins")
@@ -380,10 +385,14 @@ func TestInstantiatePlugins(t *testing.T) {
 		t.Fatalf("loaded plugins returned test1 has the wrong type %#v", t1)
 	}
 
+	rawConfig, _, err = LoadConfigPhaseOne([]byte(errorBadPluginReferenceParametersText), logger)
+	if err != nil {
+		t.Fatalf("LoadConfigPhaseTwo returned unexpected error - %v", err)
+	}
 	handle = utils.NewTestHandle(context.Background())
-	_, err = LoadConfig([]byte(errorBadPluginReferenceParametersText), handle, logging.NewTestLogger())
+	_, err = LoadConfigPhaseTwo(rawConfig, handle, logger)
 	if err == nil {
-		t.Fatalf("LoadConfig did not return error as expected ")
+		t.Fatalf("LoadConfigPhaseTwo did not return error as expected ")
 	}
 }
 
@@ -457,15 +466,23 @@ func TestLoadConfig(t *testing.T) {
 
 	logger := logging.NewTestLogger()
 	for _, test := range tests {
-		handle := utils.NewTestHandle(context.Background())
-		_, err := LoadConfig([]byte(test.configText), handle, logger)
+		rawConfig, _, err := LoadConfigPhaseOne([]byte(test.configText), logger)
 		if err != nil {
 			if !test.wantErr {
-				t.Errorf("LoadConfig returned an unexpected error. error %v", err)
+				t.Errorf("LoadConfigPhaseOne returned an unexpected error. error %v", err)
 			}
 			t.Logf("error was %s", err)
 		} else if test.wantErr {
-			t.Errorf("LoadConfig did not return an expected error (%s)", test.name)
+			handle := utils.NewTestHandle(context.Background())
+			_, err = LoadConfigPhaseTwo(rawConfig, handle, logger)
+			if err != nil {
+				if !test.wantErr {
+					t.Errorf("LoadConfigPhaseOne returned an unexpected error. error %v", err)
+				}
+				t.Logf("error was %s", err)
+			} else if test.wantErr {
+				t.Errorf("LoadConfig did not return an expected error (%s)", test.name)
+			}
 		}
 	}
 }
