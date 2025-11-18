@@ -114,8 +114,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, 0)
-	ds.SetEndpointFactory(pmf)
+	ds := datastore.NewDatastore(ctx, pmf, 0)
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
@@ -262,8 +261,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	ctx := context.Background()
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, 0)
-	ds.SetEndpointFactory(pmf)
+	ds := datastore.NewDatastore(ctx, pmf, 0)
 	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
 	// Step 1: Inception, only ready pods matching pool1 are added to the store.
