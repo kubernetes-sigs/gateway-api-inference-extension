@@ -26,5 +26,3 @@ type Config struct {
 	SchedulerConfig          *scheduling.SchedulerConfig
 	SaturationDetectorConfig *saturationdetector.Config
 }
-
-type FeatureConfig map[string]bool

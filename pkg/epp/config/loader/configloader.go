@@ -37,14 +37,14 @@ import (
 
 var scheme = runtime.NewScheme()
 
-var registeredFeatureGates = map[string]struct{}{}
+var registeredFeatureGates = sets.New[string]() // set of feature gates names, a name must be unique
 
 func init() {
 	utilruntime.Must(configapi.Install(scheme))
 }
 
 // LoadConfigPhaseOne first phase of loading configuration from supplied text that was converted to []byte
-func LoadConfigPhaseOne(configBytes []byte, logger logr.Logger) (*configapi.EndpointPickerConfig, config.FeatureConfig, error) {
+func LoadConfigPhaseOne(configBytes []byte, logger logr.Logger) (*configapi.EndpointPickerConfig, map[string]bool, error) {
 	rawConfig, err := loadRawConfig(configBytes)
 	if err != nil {
 		return nil, nil, err
@@ -201,5 +201,5 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins
 
 // RegisterFeatureGate registers feature gate keys for validation
 func RegisterFeatureGate(gate string) {
-	registeredFeatureGates[gate] = struct{}{}
+	registeredFeatureGates.Insert(gate)
 }
