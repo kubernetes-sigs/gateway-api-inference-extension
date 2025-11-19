@@ -30,12 +30,13 @@ jobs:
 
       - name: Run CRD Validation Check
         run: |
-          HEAD_REF="${{ github.head_ref }}"
-          HEAD_SHA=$(git rev-parse $HEAD_REF)
+          git fetch origin ${{ github.base_ref }}:upstream_base
+          BASE_SHA=$(git rev-parse upstream_base)
+          echo "Validating against Base SHA: $BASE_SHA"
 
           FAILED=0
           for crd in config/crd/bases/*.yaml; do
-            if ! crdify "git://${HEAD_SHA}?path=$crd" "git://HEAD?path=$crd"; then
+            if ! crdify "git://${BASE_SHA}?path=$crd" "git://HEAD?path=$crd"; then
               echo "❌ Incompatible change detected in $crd"
               ((FAILED++))
             else
