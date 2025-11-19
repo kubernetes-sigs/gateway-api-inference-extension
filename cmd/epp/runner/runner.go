@@ -237,10 +237,12 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	gknn, err := extractGKNN()
 	if err != nil {
+		setupLog.Error(err, "Failed to extract GKNN")
 		return err
 	}
 	ds, err := setupDataStore(setupLog, ctx, epf, int32(*modelServerMetricsPort), *gknn)
 	if err != nil {
+		setupLog.Error(err, "Failed to setup datastore")
 		return err
 	}
 	eppConfig, err := r.parseConfigurationPhaseTwo(ctx, rawConfig, ds)
