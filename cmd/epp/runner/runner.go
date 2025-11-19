@@ -75,15 +75,15 @@ import (
 
 const (
 	// enableExperimentalDatalayerV2 defines the environment variable used as feature flag for the pluggable data layer.
-	// DEPRECATION NOTICE - this env var will be depreacated in the next version as we switch into configuring EPP using FeatureGates in the config file.
+	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
 	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
 	// enableExperimentalFlowControlLayer defines the environment variable used as a feature flag for the pluggable flow
 	// control layer.
-	// DEPRECATION NOTICE - this env var will be depreacated in the next version as we switch into configuring EPP using FeatureGates in the config file.
+	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
 	enableExperimentalFlowControlLayer = "ENABLE_EXPERIMENTAL_FLOW_CONTROL_LAYER"
 
 	// Saturation Detector deprecated configuration environment variables
-	// DEPRECATION NOTICE - these env vars will be depreacated in the next version as we switch into configuring EPP using FeatureGates in the config file.
+	// DEPRECATION NOTICE - these env vars will be removed in the next version as we switch to configuring the EPP using the config file.
 	EnvSdQueueDepthThreshold       = "SD_QUEUE_DEPTH_THRESHOLD"
 	EnvSdKVCacheUtilThreshold      = "SD_KV_CACHE_UTIL_THRESHOLD"
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
