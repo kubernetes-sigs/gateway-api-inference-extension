@@ -62,7 +62,7 @@ func validateFeatureGates(fg configapi.FeatureGates) error {
 	}
 
 	for _, gate := range fg {
-		if _, ok := registeredFeatureGates[gate]; !ok {
+		if !registeredFeatureGates.Has(gate) {
 			return errors.New(gate + " is an unregistered Feature Gate")
 		}
 	}

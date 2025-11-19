@@ -289,10 +289,10 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 // HandleResponseReceived is called when the response headers are received.
 func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	response := &Response{
-		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:   reqCtx.Response.Headers,
+		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:     reqCtx.Response.Headers,
+		ReqMetadata: reqCtx.Request.Metadata,
 	}
-
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
 	d.runResponseReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)

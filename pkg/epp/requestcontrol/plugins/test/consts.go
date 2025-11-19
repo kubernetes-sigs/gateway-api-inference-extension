@@ -14,15 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package config
+package test
 
-import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+const (
+	// ConformanceTestResultHeader is the header key for the conformance test result.
+	ConformanceTestResultHeader = "x-conformance-test-served-endpoint"
 )
-
-// Config is the configuration loaded from the text based configuration
-type Config struct {
-	SchedulerConfig          *scheduling.SchedulerConfig
-	SaturationDetectorConfig *saturationdetector.Config
-}
