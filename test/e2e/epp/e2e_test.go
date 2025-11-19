@@ -63,24 +63,14 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				return err
 			}
 
-<<<<<<< HEAD
 			deploy.Spec.Template.Spec.Containers[0].Image = "vllm-dynamic-backend:local" // TODO(ryanrosario): Change back to official image after testing
 			deploy.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullNever
 			deploy.Spec.Template.Spec.Containers[0].Args = []string{strconv.Itoa(firstPort), strconv.Itoa(numPorts)}
-=======
-			deploy.Spec.Template.Spec.Containers[0].Image = "vllm-dynamic-backend:local"
-			deploy.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullNever
-			deploy.Spec.Template.Spec.Containers[0].Args = []string{"8000", "8"}
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 			deploy.Spec.Template.Spec.Containers[0].Ports = buildContainerPorts(firstPort, numPorts)
 			return testConfig.K8sClient.Update(testConfig.Context, deploy)
 		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 
-<<<<<<< HEAD
 		waitForDeploymentRollout(testConfig, deploy)
-=======
-		WaitForDeploymentRollout(testConfig, deploy)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 
 		pool := &v1.InferencePool{}
 		gomega.Eventually(func() error {
@@ -94,92 +84,15 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			return testConfig.K8sClient.Update(testConfig.Context, pool)
 		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 
-<<<<<<< HEAD
 		ginkgo.By("Restarting EPP to force configuration reload")
 		// We delete the EPP *POD*, not the deployment. The Deployment will recreate it immediately.
 		// This forces the new EPP process to read the Multi-Port InferencePool from scratch.
 		eppLabels := client.MatchingLabels{"app": inferExtName}
-=======
-		// ginkgo.By("Programmatically disabling prefix-cache-scorer in EPP ConfigMap")
-		// cmKey := types.NamespacedName{Name: "plugins-config", Namespace: testConfig.NsName}
-		// eppConfigMap := &corev1.ConfigMap{}
-
-		// // 1. Get the current ConfigMap
-		// gomega.Eventually(func() error {
-		// 	return testConfig.K8sClient.Get(testConfig.Context, cmKey, eppConfigMap)
-		// }, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed(), "Failed to get plugins-config ConfigMap")
-
-		// // 2. Extract and Unmarshal the default-plugins.yaml data
-		// configYAML, exists := eppConfigMap.Data["default-plugins.yaml"]
-		// gomega.Expect(exists).To(gomega.BeTrue(), "default-plugins.yaml not found in plugins-config ConfigMap")
-
-		// var config map[string]any
-		// err := yaml.Unmarshal([]byte(configYAML), &config)
-		// gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to unmarshal default-plugins.yaml from ConfigMap")
-
-		// // 3. Modify the 'plugins' list to remove "prefix-cache-scorer"
-		// if plugins, ok := config["plugins"].([]any); ok {
-		// 	var filteredPlugins []any
-		// 	for _, p := range plugins {
-		// 		if pluginMap, isMap := p.(map[string]any); isMap {
-		// 			if pluginType, typeOk := pluginMap["type"].(string); typeOk && pluginType == "prefix-cache-scorer" {
-		// 				ginkgo.By("Filtering out type: prefix-cache-scorer from plugins list")
-		// 				continue // Skip adding this plugin
-		// 			}
-		// 		}
-		// 		filteredPlugins = append(filteredPlugins, p)
-		// 	}
-		// 	config["plugins"] = filteredPlugins
-		// }
-
-		// // 4. Modify 'schedulingProfiles' to remove "prefix-cache-scorer" references
-		// if profiles, ok := config["schedulingProfiles"].([]any); ok {
-		// 	for _, profile := range profiles {
-		// 		if profileMap, isMap := profile.(map[string]any); isMap {
-		// 			if plugins, pluginsOk := profileMap["plugins"].([]any); pluginsOk {
-		// 				var filteredProfilePlugins []any
-		// 				for _, p := range plugins {
-		// 					if pluginRefMap, isMap := p.(map[string]any); isMap {
-		// 						if pluginRef, refOk := pluginRefMap["pluginRef"].(string); refOk && pluginRef == "prefix-cache-scorer" {
-		// 							ginkgo.By("Filtering out pluginRef: prefix-cache-scorer from scheduling profile")
-		// 							continue // Skip this pluginRef
-		// 						}
-		// 					}
-		// 					filteredProfilePlugins = append(filteredProfilePlugins, p)
-		// 				}
-		// 				profileMap["plugins"] = filteredProfilePlugins
-		// 			}
-		// 		}
-		// 	}
-		// 	// Update the profiles slice in the config map (though modifications are often in-place)
-		// 	config["schedulingProfiles"] = profiles
-		// }
-
-		// // 5. Marshal the modified config back to YAML
-		// modifiedYAML, err := yaml.Marshal(config)
-		// gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to marshal modified ConfigMap data to YAML")
-		// eppConfigMap.Data["default-plugins.yaml"] = string(modifiedYAML)
-
-		// // 6. Update the ConfigMap in Kubernetes
-		// gomega.Expect(testConfig.K8sClient.Update(testConfig.Context, eppConfigMap)).To(gomega.Succeed(), "Failed to update plugins-config ConfigMap")
-		// ginkgo.By("Successfully updated plugins-config ConfigMap to disable prefix-cache-scorer")
-
-		// --- The rest of your BeforeEach block follows ---
-
-		ginkgo.By("Restarting EPP to force configuration reload")
-		// We delete the EPP *POD*, not the deployment. The Deployment will recreate it immediately.
-		// This forces the new EPP process to read the Multi-Port InferencePool from scratch.
-		eppLabels := client.MatchingLabels{"app": inferExtName} // "vllm-llama3-8b-instruct-epp"
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		gomega.Expect(testConfig.K8sClient.DeleteAllOf(testConfig.Context, &corev1.Pod{}, client.InNamespace(testConfig.NsName), eppLabels)).To(gomega.Succeed())
 
 		// Wait for the new EPP to be ready
 		eppDeploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: inferExtName, Namespace: testConfig.NsName}}
-<<<<<<< HEAD
 		waitForDeploymentReady(testConfig, eppDeploy)
-=======
-		WaitForDeploymentReady(testConfig, eppDeploy)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 
 		ginkgo.By("Creating an InferenceObjective resource")
 		infObjective = newInferenceObjective(testConfig.NsName)
@@ -342,7 +255,6 @@ func verifyTrafficRouting() {
 	} {
 		ginkgo.By(fmt.Sprintf("Verifying connectivity through the inference extension with %s api and prompt/messages: %v", t.api, t.promptOrMessages))
 
-<<<<<<< HEAD
 		// Expected ports and InferenceObjective target models
 		expectedPort := generateSequence(firstPort, numPorts)
 		expectedModel := []string{targetModelName}
@@ -358,20 +270,6 @@ func verifyTrafficRouting() {
 		gomega.Eventually(func() error {
 			// Run a small batch per retry (e.g., 5) to keep the test active
 			for i := range batches {
-=======
-		// Ensura each port is serving traffic.
-		expectedPort := generateSequence(firstPort, numPorts)
-		// Ensure the expectedModel responses include the InferenceObjective target model names.
-		var expectedModel []string
-		expectedModel = append(expectedModel, targetModelName)
-
-		actualModel := make(map[string]int)
-		actualPort := make(map[int]int)
-		// Send curl requests to verify routing to all target ports in the InferencePool.
-		gomega.Eventually(func() error {
-			// Run a small batch per retry (e.g., 5) to keep the test active
-			for i := 0; i < 100; i++ {
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 				uniqueID := time.Now().UnixNano()
 				dynamicHashValue := fmt.Sprintf("Nonce-%d", uniqueID)
 				currentPromptOrMessages := t.promptOrMessages // Start with the original
@@ -381,31 +279,17 @@ func verifyTrafficRouting() {
 					messagesCopy := make([]map[string]any, len(originalMessages))
 					for idx, msg := range originalMessages {
 						msgCopy := make(map[string]any, len(msg))
-<<<<<<< HEAD
 						maps.Copy(msgCopy, msg)
 						// Inject a unique nonce into the content of *EACH* message
 						if content, ok := msgCopy["content"].(string); ok {
 							msgCopy["content"] = fmt.Sprintf("(TestNonce: %s-%d-msg%d) %s", dynamicHashValue, i, idx, content)
-=======
-						for k, v := range msg {
-							msgCopy[k] = v
-						}
-						// Inject a unique nonce into the content of *EACH* message
-						if content, ok := msgCopy["content"].(string); ok {
-							msgCopy["content"] = fmt.Sprintf("(TestNonce: %s-%d-msg%d) %s", dynamicHashValue, i, idx, content)
-							// msgCopy["content"] = fmt.Sprintf("%s\n\n(TestNonce: %s-%d-msg%d)", content, dynamicHashValue, i, idx)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 						}
 						messagesCopy[idx] = msgCopy
 					}
 					currentPromptOrMessages = messagesCopy // Use the modified messages for getCurlCommand
 				}
 
-<<<<<<< HEAD
 				curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, currentPromptOrMessages, false)
-=======
-				curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, currentPromptOrMessages, false, dynamicHashValue)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 
 				resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 				if err != nil {
@@ -416,10 +300,6 @@ func verifyTrafficRouting() {
 					return fmt.Errorf("did not get 200 OK: %s", resp)
 				}
 
-<<<<<<< HEAD
-=======
-				// Accumulate results into the OUTER maps
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 				for _, m := range expectedModel {
 					if strings.Contains(resp, m) {
 						actualModel[m] = 0
@@ -427,16 +307,11 @@ func verifyTrafficRouting() {
 				}
 				for _, p := range expectedPort {
 					if strings.Contains(resp, fmt.Sprintf("x-backend-port: %d", p)) {
-						fmt.Printf("Port: %d\n", p)
 						actualPort[p] = 0
 					}
 				}
 			}
 
-<<<<<<< HEAD
-=======
-			// 4. Flatten maps to slices for comparison
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 			var gotModel []string
 			for m := range actualModel {
 				gotModel = append(gotModel, m)
@@ -446,11 +321,6 @@ func verifyTrafficRouting() {
 				gotPort = append(gotPort, p)
 			}
 
-<<<<<<< HEAD
-=======
-			// 5. Compare. If this fails, Eventually waits and runs the loop again,
-			// BUT actualModel/actualPort retain the data we already collected.
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 			if !cmp.Equal(gotModel, expectedModel, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
 				return fmt.Errorf("collecting models... have %v, want %v", gotModel, expectedModel)
 			}
@@ -486,7 +356,7 @@ func verifyMetrics() {
 
 	// Generate traffic by sending requests through the inference extension.
 	ginkgo.By("Generating traffic through the inference extension")
-	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true, "")
+	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
 
 	// Run the curl command multiple times to generate some metrics data.
 	for range 5 {
@@ -519,13 +389,8 @@ func verifyMetrics() {
 
 	ginkgo.By("Verifying that all expected metrics are present.")
 	gomega.Eventually(func() error {
-<<<<<<< HEAD
 		// Execute the metrics scrape command inside the curl pod.
 		fmt.Printf("pod IP: %s", podIP)
-=======
-		// Execute the metrics scrape command inside the curl pod
-		fmt.Printf("Pod IP: %s", podIP)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", metricScrapeCmd)
 		if err != nil {
 			return err
@@ -593,7 +458,7 @@ func getMetricsScrapeCommand(podIP, token string) []string {
 // getCurlCommand returns the command, as a slice of strings, for curl'ing
 // the test model server at the given name, namespace, port, and model name.
 // This command gets executed by a dummy pod that communites with Envoy
-func getCurlCommand(name, ns, port, model string, timeout time.Duration, api string, promptOrMessages any, streaming bool, dynamicHashValue string) []string {
+func getCurlCommand(name, ns, port, model string, timeout time.Duration, api string, promptOrMessages any, streaming bool) []string {
 	body := map[string]any{
 		"model":       model,
 		"max_tokens":  100,
@@ -623,11 +488,6 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		"-H",
 		"Content-Type: application/json",
 		"-H",
-<<<<<<< HEAD
-=======
-		fmt.Sprintf("X-Hash-Nonce: %s", dynamicHashValue),
-		"-H",
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		"Cache-Control: no-cache",
 		"-H",
 		fmt.Sprintf("%v: inferenceobjective-sample", metadata.ObjectiveKey),
@@ -640,16 +500,10 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 	}
 }
 
-<<<<<<< HEAD
 // buildContainerPorts constructs a slice of corev1.ContainerPort starting from 'start' with 'count' ports.
 func buildContainerPorts(start int, count int) []corev1.ContainerPort {
 	ports := make([]corev1.ContainerPort, count)
 	for i := range count {
-=======
-func buildContainerPorts(start int, count int) []corev1.ContainerPort {
-	ports := make([]corev1.ContainerPort, count)
-	for i := 0; i < count; i++ {
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		portNum := int32(start + i)
 		ports[i] = corev1.ContainerPort{
 			Name:          fmt.Sprintf("http-%d", portNum),
@@ -660,18 +514,11 @@ func buildContainerPorts(start int, count int) []corev1.ContainerPort {
 	return ports
 }
 
-<<<<<<< HEAD
 // buildTargetPorts constructs a slice of v1.Port starting from 'start' with 'count' ports.
 func buildTargetPorts(start int, count int) []v1.Port {
 	ports := make([]v1.Port, count)
 	for i := range count {
 		// v1.PortNumber is usually a typedef for int32 in these APIs.
-=======
-func buildTargetPorts(start int, count int) []v1.Port {
-	ports := make([]v1.Port, count)
-	for i := 0; i < count; i++ {
-		// v1.PortNumber is usually a typedef for int32 in these APIs
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		ports[i] = v1.Port{
 			Number: v1.PortNumber(start + i),
 		}
@@ -679,44 +526,23 @@ func buildTargetPorts(start int, count int) []v1.Port {
 	return ports
 }
 
-<<<<<<< HEAD
 // waitForDeploymentRollout waits until the Deployment has completed its update.
 // It ensures that the new version is fully rolled out and available.
 func waitForDeploymentRollout(tc *testutils.TestConfig, deploy *appsv1.Deployment) {
-=======
-// WaitForDeploymentRollout waits until the Deployment has completed its update.
-// It ensures that the new version is fully rolled out and available.
-func WaitForDeploymentRollout(tc *testutils.TestConfig, deploy *appsv1.Deployment) {
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 	ginkgo.By(fmt.Sprintf("Waiting for Deployment %s/%s to complete rollout", deploy.Namespace, deploy.Name))
 
 	key := types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}
 
 	gomega.Eventually(func() error {
-<<<<<<< HEAD
-=======
-		// 1. Get the latest status from the API server
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		currentDeploy := &appsv1.Deployment{}
 		if err := tc.K8sClient.Get(tc.Context, key, currentDeploy); err != nil {
 			return err
 		}
 
-<<<<<<< HEAD
-=======
-		// 2. Check if the controller has observed the latest spec change
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		if currentDeploy.Generation > currentDeploy.Status.ObservedGeneration {
 			return fmt.Errorf("deployment generation not observed yet")
 		}
 
-<<<<<<< HEAD
-=======
-		// 3. Check replica counts
-		// - Spec.Replicas: What we want
-		// - UpdatedReplicas: How many pods are on the NEW version
-		// - AvailableReplicas: How many pods are healthy
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		desiredReplicas := *currentDeploy.Spec.Replicas
 
 		if currentDeploy.Status.UpdatedReplicas < desiredReplicas {
@@ -727,10 +553,6 @@ func WaitForDeploymentRollout(tc *testutils.TestConfig, deploy *appsv1.Deploymen
 			return fmt.Errorf("waiting for available replicas: %d/%d", currentDeploy.Status.AvailableReplicas, desiredReplicas)
 		}
 
-<<<<<<< HEAD
-=======
-		// 4. Ensure no old replicas are lingering (optional, but good for clean tests)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		if currentDeploy.Status.Replicas > desiredReplicas {
 			return fmt.Errorf("waiting for old replicas to terminate: %d > %d", currentDeploy.Status.Replicas, desiredReplicas)
 		}
@@ -741,50 +563,23 @@ func WaitForDeploymentRollout(tc *testutils.TestConfig, deploy *appsv1.Deploymen
 	ginkgo.By("Deployment rollout complete")
 }
 
-<<<<<<< HEAD
 // waitForDeploymentReady waits for the Deployment to have all replicas ready.
 func waitForDeploymentReady(tc *testutils.TestConfig, deploy *appsv1.Deployment) {
 	ginkgo.By(fmt.Sprintf("waiting for Deployment %s/%s to be ready", deploy.Namespace, deploy.Name))
-=======
-func generateSequence(start int, count int) []int {
-	nums := make([]int, count)
-	for i := 0; i < count; i++ {
-		nums[i] = start + i
-	}
-	return nums
-}
-
-// WaitForDeploymentReady waits for the Deployment to have all replicas ready.
-func WaitForDeploymentReady(tc *testutils.TestConfig, deploy *appsv1.Deployment) {
-	ginkgo.By(fmt.Sprintf("Waiting for Deployment %s/%s to be ready", deploy.Namespace, deploy.Name))
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 
 	key := types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}
 
 	gomega.Eventually(func() error {
-<<<<<<< HEAD
-=======
-		// 1. Fetch the latest status
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		current := &appsv1.Deployment{}
 		if err := tc.K8sClient.Get(tc.Context, key, current); err != nil {
 			return err
 		}
 
-<<<<<<< HEAD
-=======
-		// 2. Check if Replicas match ReadyReplicas
-		// (e.g., if you asked for 1 pod, is 1 pod ready?)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		if current.Status.Replicas != current.Status.ReadyReplicas {
 			return fmt.Errorf("replicas mismatch: expected %d, got %d ready",
 				current.Status.Replicas, current.Status.ReadyReplicas)
 		}
 
-<<<<<<< HEAD
-=======
-		// 3. Ensure we have at least 1 replica (if that's what we want)
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
 		if current.Status.ReadyReplicas == 0 {
 			return fmt.Errorf("no replicas are ready yet")
 		}
@@ -792,7 +587,6 @@ func WaitForDeploymentReady(tc *testutils.TestConfig, deploy *appsv1.Deployment)
 		return nil
 	}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
 }
-<<<<<<< HEAD
 
 // generateSequence generates a sequence of integers starting from 'start' with 'count' numbers.
 func generateSequence(start int, count int) []int {
@@ -811,5 +605,3 @@ func harmonicNumber(n int) int {
 	}
 	return h
 }
-=======
->>>>>>> ab435f81236dab9078a69f65ceebb50c95f7ee5b
