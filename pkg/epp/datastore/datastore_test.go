@@ -418,7 +418,7 @@ func TestPods(t *testing.T) {
 	}
 }
 
-func TestPodInfo(t *testing.T) {
+func TestEndpointMetadata(t *testing.T) {
 	tests := []struct {
 		name              string
 		op                func(ctx context.Context, ds Datastore)
