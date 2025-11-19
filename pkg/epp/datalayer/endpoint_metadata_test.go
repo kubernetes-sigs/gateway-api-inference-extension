@@ -66,7 +66,7 @@ func TestEndpointMetadataClone(t *testing.T) {
 	assert.Equal(t, "prod", expected.Labels["env"], "mutating clone should not affect original")
 }
 
-func TestPodInfoString(t *testing.T) {
+func TestEndpointMetadataString(t *testing.T) {
 	endpointMetadata := EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      pod.Name,

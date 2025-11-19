@@ -49,7 +49,7 @@ type ModelServer struct {
 	attributes *Attributes
 }
 
-// NewEndpoint returns a new ModelServer with the given PodInfo and Metrics.
+// NewEndpoint returns a new ModelServer with the given EndpointMetadata and Metrics.
 func NewEndpoint(meta *EndpointMetadata, metrics *Metrics) *ModelServer {
 	if meta == nil {
 		meta = &EndpointMetadata{}
