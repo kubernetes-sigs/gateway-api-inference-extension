@@ -53,10 +53,10 @@ type PodMetricsClient interface {
 }
 
 func (pm *podMetrics) String() string {
-	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetPod(), pm.GetMetrics())
+	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetMetadata(), pm.GetMetrics())
 }
 
-func (pm *podMetrics) GetPod() *backend.Pod {
+func (pm *podMetrics) GetMetadata() *backend.Pod {
 	return pm.pod.Load()
 }
 
@@ -64,7 +64,7 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 
-func (pm *podMetrics) UpdatePod(pod *datalayer.PodInfo) {
+func (pm *podMetrics) UpdateMetadata(pod *datalayer.EndpointMetadata) {
 	pm.pod.Store(pod)
 }
 
@@ -73,7 +73,7 @@ func (pm *podMetrics) UpdatePod(pod *datalayer.PodInfo) {
 func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 	pm.startOnce.Do(func() {
 		go func() {
-			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "pod", pm.GetPod())
+			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "pod", pm.GetMetadata())
 			ticker := time.NewTicker(pm.interval)
 			defer ticker.Stop()
 			for {
@@ -84,7 +84,7 @@ func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 					return
 				case <-ticker.C: // refresh metrics periodically
 					if err := pm.refreshMetrics(); err != nil {
-						pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "pod", pm.GetPod())
+						pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "pod", pm.GetMetadata())
 					}
 				}
 			}
@@ -95,7 +95,7 @@ func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 func (pm *podMetrics) refreshMetrics() error {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchMetricsTimeout)
 	defer cancel()
-	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics())
+	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetMetadata(), pm.GetMetrics())
 	if err != nil {
 		pm.logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", err)
 	}
@@ -115,7 +115,7 @@ func (pm *podMetrics) refreshMetrics() error {
 }
 
 func (pm *podMetrics) stopRefreshLoop() {
-	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "pod", pm.GetPod())
+	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "pod", pm.GetMetadata())
 	pm.stopOnce.Do(func() {
 		close(pm.done)
 	})

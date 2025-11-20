@@ -698,7 +698,7 @@ func TestGetCandidatePodsForScheduling(t *testing.T) {
 			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
 
 			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b backendmetrics.PodMetrics) bool {
-				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
+				return a.GetMetadata().NamespacedName.String() < b.GetMetadata().NamespacedName.String()
 			}))
 			if diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)

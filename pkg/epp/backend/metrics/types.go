@@ -52,7 +52,7 @@ type PodMetricsFactory struct {
 	refreshMetricsInterval time.Duration
 }
 
-func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, pod *datalayer.PodInfo, ds datalayer.PoolInfo) PodMetrics {
+func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, pod *datalayer.EndpointMetadata, ds datalayer.PoolInfo) PodMetrics {
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
