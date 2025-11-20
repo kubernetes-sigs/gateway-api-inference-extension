@@ -244,10 +244,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to extract GKNN")
 		return err
 	}
-	disableK8sCrdReconcile := false
-	if *endpointSelector != "" {
-		disableK8sCrdReconcile = true
-	}
+	disableK8sCrdReconcile := *endpointSelector != ""
 	ds, err := setupDatastore(setupLog, ctx, epf, int32(*modelServerMetricsPort), disableK8sCrdReconcile, *poolName, *poolNamespace, *endpointSelector, *endpointTargetPorts)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup datastore")
