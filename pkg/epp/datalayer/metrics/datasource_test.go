@@ -29,7 +29,7 @@ import (
 
 func TestDatasource(t *testing.T) {
 	source := NewDataSource("https", "/metrics", true, nil)
-	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric, "", "", "")
+	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric, "", "", "", "")
 	assert.Nil(t, err, "failed to create extractor")
 
 	name := source.Name()
