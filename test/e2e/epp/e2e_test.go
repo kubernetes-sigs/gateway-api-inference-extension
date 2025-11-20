@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -122,12 +123,10 @@ var _ = ginkgo.Describe("InferencePool", func() {
 	ginkgo.When("The Inference Extension is running", func() {
 		ginkgo.It("Should route traffic to target model servers", func() {
 			verifyTrafficRouting()
-			// Likely needs to be modified
 		})
 
 		ginkgo.It("Should expose EPP metrics after generating traffic", func() {
-			verifyMetrics()
-			// Likely needs to be modified.
+			verifyMetrics() // TODO(RyanRosario) Needs to be updated.
 		})
 	})
 
@@ -265,7 +264,7 @@ func verifyTrafficRouting() {
 		// Probability: need to compute estimate of number of batches to send to have high confidence of hitting all ports.
 		// Using the Coupon Collector's Problem formula: n * H_n, where H_n is the nth harmonic number.
 		// This gives us an expected number of trials to collect all coupons (ports).
-		batches := numPorts * harmonicNumber(numPorts)
+		batches := int(math.Ceil(numPorts * harmonicNumber(numPorts)))
 		// Send curl requests to verify routing to all target ports in the InferencePool.
 		gomega.Eventually(func() error {
 			// Run a small batch per retry (e.g., 5) to keep the test active
@@ -518,7 +517,6 @@ func buildContainerPorts(start int, count int) []corev1.ContainerPort {
 func buildTargetPorts(start int, count int) []v1.Port {
 	ports := make([]v1.Port, count)
 	for i := range count {
-		// v1.PortNumber is usually a typedef for int32 in these APIs.
 		ports[i] = v1.Port{
 			Number: v1.PortNumber(start + i),
 		}
@@ -598,10 +596,10 @@ func generateSequence(start int, count int) []int {
 }
 
 // Calculates the nth harmonic number.
-func harmonicNumber(n int) int {
-	h := 0
+func harmonicNumber(n int) float64 {
+	h := float64(0.0)
 	for i := 1; i <= n; i++ {
-		h += 1 / i
+		h += 1 / float64(i)
 	}
 	return h
 }

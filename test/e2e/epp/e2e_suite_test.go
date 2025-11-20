@@ -320,7 +320,6 @@ func createInferExt(testConfig *testutils.TestConfig, filePath string) {
 
 	// This image needs to be updated to open multiple ports and respond.
 	inManifests := testutils.ReadYaml(filePath) // Modify inference-pool.yaml
-	ginkgo.GinkgoWriter.Print("Deployment: %s", filePath)
 	ginkgo.By("Replacing placeholders with environment variables")
 	outManifests := []string{}
 	replacer := strings.NewReplacer(

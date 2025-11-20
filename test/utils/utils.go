@@ -339,7 +339,6 @@ func ExecCommandInPod(testConfig *TestConfig, podName, containerName string, cmd
 	parameterCodec := runtime.NewParameterCodec(testConfig.Scheme)
 
 	// construct REST request to the API server.
-	// fmt.Printf("Pod Name: %s", podName)
 	// podName is curl, that is where this is being sent.
 	req := testConfig.KubeCli.CoreV1().RESTClient().
 		Post().
