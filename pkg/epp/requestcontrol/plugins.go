@@ -55,7 +55,7 @@ type ResponseStreaming interface {
 // ResponseComplete is called by the director after the complete response is sent.
 type ResponseComplete interface {
 	plugins.Plugin
-	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *types.LLMResponse, targetPod *backend.Pod)
 }
 
 // PrepareRequestData is called by the director before scheduling requests.

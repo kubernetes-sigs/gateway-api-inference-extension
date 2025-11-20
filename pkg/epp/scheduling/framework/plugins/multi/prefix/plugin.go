@@ -17,6 +17,7 @@ limitations under the License.
 package prefix
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -28,6 +29,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -122,6 +124,12 @@ var _ plugins.StateData = &SchedulingContextState{}
 type SchedulingContextState struct {
 	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
 	PrefixHashes []BlockHash
+	// RestBytes is the trailing bytes that not able to fill in a full block and left over.
+	// If not empty, this will be used as the starting block for the following response that will
+	// be added to the response as well. This happens especially at the multi-turn scenario.
+	RestBytes []byte
+	// BlockSize is the block size used to caculate the hash of the request/response.
+	BlockSize int
 	// A map of server to its longest prefix cache match length.
 	PrefixCacheServers map[ServerID]int
 }
@@ -217,10 +225,13 @@ func (p *Plugin) WithName(name string) *Plugin {
 
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+	blockSize := getBlockSize(pods, p.config.DefaultBlockSize)
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config.DefaultBlockSize), p.config.MaxPrefixBlocksToMatch)
+	hashes, restBytes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
+		RestBytes:          restBytes,
+		BlockSize:          blockSize,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
 	}
 
@@ -252,7 +263,6 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	gpuBlocks := primaryProfileResult.TargetPods[0].GetMetrics().CacheNumGPUBlocks
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
-	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
 		return
@@ -273,9 +283,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
-
-	blockSize := getBlockSize(primaryProfileResult.TargetPods, p.config.DefaultBlockSize)
-	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
+	metrics.RecordPrefixCacheMatch(matchLen*state.BlockSize, total*state.BlockSize)
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
@@ -330,47 +338,59 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle)
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
+// Also return the extra string.
+func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) ([]BlockHash, []byte) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
-		return nil
+		return nil, nil
 	}
 
 	userInput, err := getUserInputBytes(request)
 	if err != nil {
 		loggerDebug.Error(err, "Failed to get user input bytes")
-		return nil
+		return nil, nil
 	}
+	prevBlockHash := defaultPrevBlock(request)
+	return hashInputWithPrevBlockHash(ctx, prevBlockHash, 0, userInput, cacheBlockSize, maxPrefixBlocks)
+}
 
-	if len(userInput) < cacheBlockSize {
-		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size", cacheBlockSize)
-		return nil
-	}
-	if len(userInput) > cacheBlockSize*maxPrefixBlocks {
-		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size", cacheBlockSize)
-		userInput = userInput[:maxPrefixBlocks*cacheBlockSize]
-	}
-	// Split the body into blocks of size cacheBlockSize.
-	// If the last block is smaller than cacheBlockSize, it will be ignored.
-	res := make([]BlockHash, 0, len(userInput)/cacheBlockSize)
-	// Add the model to the first block hash so that different models have different hashes even with the same body.
+func defaultPrevBlock(request *types.LLMRequest) BlockHash {
 	h := xxhash.New()
+	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	_, _ = h.Write([]byte(request.TargetModel))
 	if cacheSalt := request.Body.CacheSalt(); cacheSalt != "" {
 		_, _ = h.Write([]byte(cacheSalt))
 	}
 
-	prevBlockHash := BlockHash(h.Sum64())
-	for i := 0; i+cacheBlockSize <= len(userInput); i += cacheBlockSize {
+	return BlockHash(h.Sum64())
+}
+
+func hashInputWithPrevBlockHash(ctx context.Context, prevBlockHash BlockHash, prevBlockLength int, input []byte, cacheBlockSize int, maxPrefixBlocks int) ([]BlockHash, []byte) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	if len(input)+prevBlockLength < cacheBlockSize {
+		loggerDebug.Info("Request body too small for prefix cache", "size", len(input), "block size", cacheBlockSize)
+		return nil, input
+	}
+	if len(input)+prevBlockLength > cacheBlockSize*maxPrefixBlocks {
+		loggerDebug.Info("Truncating input", "size", len(input), "max prefix blocks", maxPrefixBlocks, "block size", cacheBlockSize)
+		input = input[:(maxPrefixBlocks*cacheBlockSize - prevBlockLength)]
+	}
+	// Split the body into blocks of size cacheBlockSize.
+	// If the last block is smaller than cacheBlockSize, it will be ignored.
+	res := make([]BlockHash, 0, len(input)/cacheBlockSize)
+	lastOffSet := 0
+	h := xxhash.New()
+	for i := 0; i+cacheBlockSize <= len(input); i += cacheBlockSize {
 		h.Reset()
-		_, _ = h.Write(userInput[i : i+cacheBlockSize])
+		_, _ = h.Write(input[i : i+cacheBlockSize])
 		_, _ = h.Write(toBytes(prevBlockHash))
 		res = append(res, BlockHash(h.Sum64()))
 
 		prevBlockHash = res[len(res)-1]
+		lastOffSet = i + cacheBlockSize
 	}
-	return res
+	return res, input[lastOffSet:]
 }
 
 func toBytes(i BlockHash) []byte {
@@ -385,7 +405,39 @@ func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
 	}
 
 	// must be chat-completions request at this point, return bytes of entire messages
-	return json.Marshal(request.Body.ChatCompletions.Messages)
+	return types.MarshalMessagesToJSON(request.Body.ChatCompletions.Messages...)
+}
+
+func (p *Plugin) ResponseComplete(ctx context.Context, request *types.LLMRequest, response *types.LLMResponse, targetPod *backend.Pod) {
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
+		return
+	}
+	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it.
+
+	reponseForKVCache, err := response.FirstChoiceContent()
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to get first choice content", "requestID", request.RequestId)
+		return
+	}
+	var input bytes.Buffer
+	input.Write(state.RestBytes)
+	input.Write(reponseForKVCache)
+
+	server := ServerID(targetPod.NamespacedName)
+	prevBlockHash := defaultPrevBlock(request)
+	prevBlockHashLength := 0
+	if len(state.PrefixHashes) > 0 {
+		prevBlockHash = state.PrefixHashes[len(state.PrefixHashes)-1]
+		prevBlockHashLength = len(state.PrefixHashes)
+	}
+	hashBlocks, _ := hashInputWithPrevBlockHash(ctx, prevBlockHash, prevBlockHashLength, input.Bytes(), state.BlockSize, p.config.MaxPrefixBlocksToMatch)
+	p.wg.Add(1)
+	go func() {
+		p.indexer.Add(hashBlocks, server)
+		p.wg.Done()
+	}()
 }
 
 func getBlockSize(pods []types.Pod, defaultBlockSize int) int {
