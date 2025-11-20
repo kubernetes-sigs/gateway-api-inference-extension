@@ -45,7 +45,7 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
+func defaultManagerOptions(disableK8sCrdReconcile bool, gknn common.GKNN, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
 	opt := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -59,7 +59,7 @@ func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.
 		},
 		Metrics: metricsServerOptions,
 	}
-	if gknn.Kind == "InferencePool" {
+	if !disableK8sCrdReconcile {
 		opt.Cache.ByObject[&v1alpha2.InferenceObjective{}] = cache.ByObject{Namespaces: map[string]cache.Config{
 			gknn.Namespace: {},
 		}}
@@ -85,8 +85,8 @@ func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
-	opt, err := defaultManagerOptions(gknn, metricsServerOptions)
+func NewDefaultManager(disableK8sCrdReconcile bool, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
+	opt, err := defaultManagerOptions(disableK8sCrdReconcile, gknn, metricsServerOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
 	}

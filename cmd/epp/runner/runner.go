@@ -239,12 +239,16 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	gknn, err := extractGKNN()
+	gknn, err := extractGKNN(*poolName, *poolGroup, *poolNamespace, *endpointSelector)
 	if err != nil {
 		setupLog.Error(err, "Failed to extract GKNN")
 		return err
 	}
-	ds, err := setupDataStore(setupLog, ctx, epf, int32(*modelServerMetricsPort), *gknn)
+	disableK8sCrdReconciler := false
+	if *endpointSelector != "" {
+		disableK8sCrdReconciler = true
+	}
+	ds, err := setupDatastore(setupLog, ctx, epf, int32(*modelServerMetricsPort), disableK8sCrdReconciler, *poolName, *poolNamespace, *endpointSelector, *endpointTargetPorts)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup datastore")
 		return err
@@ -278,7 +282,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(*gknn, cfg, metricsServerOptions, *haEnableLeaderElection)
+	mgr, err := runserver.NewDefaultManager(disableK8sCrdReconciler, *gknn, cfg, metricsServerOptions, *haEnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
@@ -356,6 +360,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		GrpcPort:                         *grpcPort,
 		GKNN:                             *gknn,
 		Datastore:                        ds,
+		DisableK8sCrdReconcile:           disableK8sCrdReconciler,
 		SecureServing:                    *secureServing,
 		HealthChecking:                   *healthChecking,
 		CertPath:                         *certPath,
@@ -392,19 +397,18 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func setupDataStore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, gknn common.GKNN) (datastore.Datastore, error) {
-	if gknn.Kind == "InferencePool" {
+func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, disableK8sCrdReconciler bool, namespace, name, endpointSelector, endpointTargetPorts string) (datastore.Datastore, error) {
+	if !disableK8sCrdReconciler {
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort), nil
-	}
-	if gknn.Kind == "Deployment" {
-		endpointPool := datalayer.NewEndpointPool(true, gknn)
-		labelsMap, err := labels.ConvertSelectorToLabelsMap(*endpointSelector)
+	} else {
+		endpointPool := datalayer.NewEndpointPool(namespace, name)
+		labelsMap, err := labels.ConvertSelectorToLabelsMap(endpointSelector)
 		if err != nil {
 			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-selector", err)
 			return nil, err
 		}
-		endpointPool.EndpointMeta.Selector = labelsMap
-		endpointPool.EndpointMeta.TargetPorts, err = strToUniqueIntSlice(*endpointTargetPorts)
+		endpointPool.Selector = labelsMap
+		endpointPool.TargetPorts, err = strToUniqueIntSlice(endpointTargetPorts)
 		if err != nil {
 			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-target-ports", err)
 			return nil, err
@@ -413,8 +417,6 @@ func setupDataStore(setupLog logr.Logger, ctx context.Context, epFactory datalay
 		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
 	}
-	return nil, fmt.Errorf("invalid gknn kind %s", gknn.Kind)
-
 }
 
 // registerInTreePlugins registers the factory functions of all known plugins
@@ -656,7 +658,7 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 
 func validateFlags() error {
 	if (*poolName != "" && *endpointSelector != "") || (*poolName == "" && *endpointSelector == "") {
-		return errors.New("either poolName or endpoint-selector must be set")
+		return errors.New("either pool-name or endpoint-selector must be set")
 	}
 	if *endpointSelector != "" {
 		targetPortsList, err := strToUniqueIntSlice(*endpointTargetPorts)
@@ -752,16 +754,16 @@ func extractDeploymentName(podName string) (string, error) {
 	return "", fmt.Errorf("failed to parse deployment name from pod name %s", podName)
 }
 
-func extractGKNN() (*common.GKNN, error) {
-	if *poolName != "" {
+func extractGKNN(poolName, poolGroup, poolNamespace, endpointSelector string) (*common.GKNN, error) {
+	if poolName != "" {
 		// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
-		resolvedPoolNamespace := resolvePoolNamespace()
+		resolvedPoolNamespace := resolvePoolNamespace(poolNamespace)
 		poolNamespacedName := types.NamespacedName{
-			Name:      *poolName,
+			Name:      poolName,
 			Namespace: resolvedPoolNamespace,
 		}
 		poolGroupKind := schema.GroupKind{
-			Group: *poolGroup,
+			Group: poolGroup,
 			Kind:  "InferencePool",
 		}
 		return &common.GKNN{
@@ -770,9 +772,9 @@ func extractGKNN() (*common.GKNN, error) {
 		}, nil
 	}
 
-	if *endpointSelector != "" {
+	if endpointSelector != "" {
 		// Determine EPP namespace: NAMESPACE env var; else default
-		resolvedPoolNamespace := resolvePoolNamespace()
+		resolvedPoolNamespace := resolvePoolNamespace(poolNamespace)
 		// Determine EPP name: POD_NAME env var
 		eppPodNameEnv := os.Getenv("POD_NAME")
 		if eppPodNameEnv == "" {
@@ -791,9 +793,9 @@ func extractGKNN() (*common.GKNN, error) {
 	return nil, errors.New("can't construct gknn as both pool-name and endpoint-selector are missing")
 }
 
-func resolvePoolNamespace() string {
-	if *poolNamespace != "" {
-		return *poolNamespace
+func resolvePoolNamespace(poolNamespace string) string {
+	if poolNamespace != "" {
+		return poolNamespace
 	}
 	if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
 		return nsEnv

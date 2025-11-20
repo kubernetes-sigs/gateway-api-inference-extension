@@ -1170,11 +1170,10 @@ func BeforeSuite() func() {
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
-	poolGKNN := common.GKNN{
+	serverRunner.GKNN = common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
-	serverRunner.GKNN = poolGKNN
 
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
 

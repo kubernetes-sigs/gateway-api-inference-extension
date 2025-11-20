@@ -18,12 +18,8 @@ package pool
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
@@ -40,18 +36,11 @@ func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datalayer.End
 	for k, v := range inferencePool.Spec.Selector.MatchLabels {
 		selector[string(k)] = string(v)
 	}
-	gknn := common.GKNN{
-		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
-		GroupKind:      schema.GroupKind{Group: "inference.networking.k8s.io", Kind: "InferencePool"},
-	}
-	endPoints := &datalayer.EndpointsMeta{
+	endpointPool := &datalayer.EndpointPool{
 		Selector:    selector,
 		TargetPorts: targetPorts,
-	}
-	endpointPool := &datalayer.EndpointPool{
-		EndpointMeta:           endPoints,
-		DisableK8sCrdReconcile: false,
-		GKNN:                   gknn,
+		Namespace:   inferencePool.Namespace,
+		Name:        inferencePool.Name,
 	}
 	return endpointPool
 }
@@ -62,29 +51,23 @@ func AlphaInferencePoolToEndpointPool(inferencePool *v1alpha2.InferencePool) *da
 	for k, v := range inferencePool.Spec.Selector {
 		selector[string(k)] = string(v)
 	}
-	gknn := common.GKNN{
-		NamespacedName: types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name},
-		GroupKind:      schema.GroupKind{Group: "inference.networking.x-k8s.io", Kind: "InferencePool"},
-	}
-	endPoints := &datalayer.EndpointsMeta{
-		Selector:    selector,
-		TargetPorts: targetPorts,
-	}
+
 	endpointPool := &datalayer.EndpointPool{
-		EndpointMeta:           endPoints,
-		DisableK8sCrdReconcile: false,
-		GKNN:                   gknn,
+		TargetPorts: targetPorts,
+		Selector:    selector,
+		Namespace:   inferencePool.Namespace,
+		Name:        inferencePool.Name,
 	}
 	return endpointPool
 }
 
 func EndpointPoolToInferencePool(endpointPool *datalayer.EndpointPool) *v1.InferencePool {
-	targetPorts := make([]v1.Port, 0, len(endpointPool.EndpointMeta.TargetPorts))
-	for _, p := range endpointPool.EndpointMeta.TargetPorts {
+	targetPorts := make([]v1.Port, 0, len(endpointPool.TargetPorts))
+	for _, p := range endpointPool.TargetPorts {
 		targetPorts = append(targetPorts, v1.Port{Number: v1.PortNumber(p)})
 	}
-	labels := make(map[v1.LabelKey]v1.LabelValue, len(endpointPool.EndpointMeta.Selector))
-	for k, v := range endpointPool.EndpointMeta.Selector {
+	labels := make(map[v1.LabelKey]v1.LabelValue, len(endpointPool.Selector))
+	for k, v := range endpointPool.Selector {
 		labels[v1.LabelKey(k)] = v1.LabelValue(v)
 	}
 
@@ -94,8 +77,8 @@ func EndpointPoolToInferencePool(endpointPool *datalayer.EndpointPool) *v1.Infer
 			Kind:       "InferencePool",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      endpointPool.GKNN.Name,
-			Namespace: endpointPool.GKNN.Namespace,
+			Name:      endpointPool.Name,
+			Namespace: endpointPool.Namespace,
 		},
 		Spec: v1.InferencePoolSpec{
 			Selector:    v1.LabelSelector{MatchLabels: labels},
@@ -103,20 +86,4 @@ func EndpointPoolToInferencePool(endpointPool *datalayer.EndpointPool) *v1.Infer
 		},
 	}
 	return inferencePool
-}
-
-func ToGKNN(ip *v1.InferencePool) common.GKNN {
-	if ip == nil {
-		return common.GKNN{}
-	}
-	return common.GKNN{
-		NamespacedName: types.NamespacedName{
-			Name:      ip.Name,
-			Namespace: ip.Namespace,
-		},
-		GroupKind: schema.GroupKind{
-			Group: ip.GroupVersionKind().Group,
-			Kind:  ip.GroupVersionKind().Kind,
-		},
-	}
 }

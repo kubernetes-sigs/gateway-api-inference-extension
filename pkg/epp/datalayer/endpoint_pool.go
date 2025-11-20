@@ -16,35 +16,19 @@ limitations under the License.
 
 package datalayer
 
-import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-)
-
 type EndpointPool struct {
-	EndpointMeta           *EndpointsMeta
-	DisableK8sCrdReconcile bool
-	GKNN                   common.GKNN
+	Selector    map[string]string
+	TargetPorts []int
+	Namespace   string
+	Name        string
 }
 
 // NewEndpointPool creates and returns a new empty instance of EndpointPool.
-func NewEndpointPool(disableK8sCrdReconcile bool, gknn common.GKNN) *EndpointPool {
-	endpointsMeta := NewEndpointMeta()
+func NewEndpointPool(namespace string, name string) *EndpointPool {
 	return &EndpointPool{
-		GKNN:                   gknn,
-		DisableK8sCrdReconcile: disableK8sCrdReconcile,
-		EndpointMeta:           endpointsMeta,
-	}
-}
-
-type EndpointsMeta struct {
-	Selector    map[string]string
-	TargetPorts []int
-}
-
-// NewEndpointMeta creates and returns a new empty instance of EndpointPool.
-func NewEndpointMeta() *EndpointsMeta {
-	return &EndpointsMeta{
 		Selector:    make(map[string]string),
 		TargetPorts: []int{},
+		Namespace:   namespace,
+		Name:        name,
 	}
 }

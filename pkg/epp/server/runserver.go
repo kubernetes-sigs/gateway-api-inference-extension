@@ -28,6 +28,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -47,6 +49,7 @@ import (
 type ExtProcServerRunner struct {
 	GrpcPort                         int
 	GKNN                             common.GKNN
+	DisableK8sCrdReconcile           bool
 	Datastore                        datastore.Datastore
 	SecureServing                    bool
 	HealthChecking                   bool
@@ -88,8 +91,17 @@ const (
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
+	gknn := common.GKNN{
+		NamespacedName: types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
+		GroupKind: schema.GroupKind{
+			Group: DefaultPoolGroup,
+			Kind:  "InferencePool",
+		},
+	}
 	return &ExtProcServerRunner{
 		GrpcPort:                         DefaultGrpcPort,
+		GKNN:                             gknn,
+		DisableK8sCrdReconcile:           false,
 		SecureServing:                    DefaultSecureServing,
 		HealthChecking:                   DefaultHealthChecking,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
@@ -101,7 +113,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if r.GKNN.Kind == "InferencePool" {
+	if !r.DisableK8sCrdReconcile {
 		if err := (&controller.InferencePoolReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),

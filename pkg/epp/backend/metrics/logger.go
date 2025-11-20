@@ -97,7 +97,7 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore datalayer.PoolInfo, 
 	}
 
 	podTotalCount := len(podMetrics)
-	metrics.RecordInferencePoolAvgKVCache(pool.GKNN.Name, kvCacheTotal/float64(podTotalCount))
-	metrics.RecordInferencePoolAvgQueueSize(pool.GKNN.Name, float64(queueTotal/podTotalCount))
-	metrics.RecordInferencePoolReadyPods(pool.GKNN.Name, float64(podTotalCount))
+	metrics.RecordInferencePoolAvgKVCache(pool.Name, kvCacheTotal/float64(podTotalCount))
+	metrics.RecordInferencePoolAvgQueueSize(pool.Name, float64(queueTotal/podTotalCount))
+	metrics.RecordInferencePoolReadyPods(pool.Name, float64(podTotalCount))
 }
