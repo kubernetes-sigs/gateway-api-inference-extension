@@ -107,6 +107,14 @@ func TestExtractorExtract(t *testing.T) {
 						},
 					},
 				},
+				defaultTotalRunningRequestsMetric: &dto.MetricFamily{
+					Type: dto.MetricType_GAUGE.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Gauge: &dto.Gauge{Value: ptr.To(1.0)},
+						},
+					},
+				},
 				defaultKvCacheUsagePercentageMetric: &dto.MetricFamily{
 					Type: dto.MetricType_GAUGE.Enum(),
 					Metric: []*dto.Metric{
