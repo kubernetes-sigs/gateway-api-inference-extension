@@ -1,9 +1,9 @@
 inferenceExtension:
   replicas: 1
   image:
-    name: epp-wlp-latencypredictor-helm-v2
-    hub:  us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo
-    tag: latest
+    name: epp
+    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    tag: main
     pullPolicy: Always
   extProcPort: 9002
   env: []
@@ -12,6 +12,11 @@ inferenceExtension:
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
+  #  extraServicePorts:
+  #    - name: http
+  #      port: 8081
+  #      protocol: TCP
+  #      targetPort: 8081
 
   # This is the plugins configuration file.
   # pluginsCustomConfig:
@@ -38,6 +43,10 @@ inferenceExtension:
   affinity: {}
 
   tolerations: []
+
+  # Sidecar configuration for EPP
+  sidecar:
+    enabled: false
 
   # Monitoring configuration for EPP
   monitoring:
@@ -69,7 +78,7 @@ inferenceExtension:
     # Training Server Configuration
     trainingServer:
       image:
-        hub: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo
+        hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
         name: latencypredictor-v3-training-server
         tag: latest
         pullPolicy: Always
@@ -110,7 +119,7 @@ inferenceExtension:
       count: 10
       startPort: 8001
       image:
-        hub: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo
+        hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
         name: latencypredictor-v3-prediction-server
         tag: latest
         pullPolicy: Always
@@ -168,10 +177,23 @@ provider:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
 
+  # Istio-specific configuration.
+  # This block is only used if name is "istio".
+  istio:
+    destinationRule:
+      # Provide a way to override the default calculated host
+      host: ""
+      # Optional: Enables customization of the traffic policy
+      trafficPolicy: {}
+        # connectionPool:
+        #   http:
+        #     maxRequestsPerConnection: 256000
+
+# DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
 istio:
   destinationRule:
     # Provide a way to override the default calculated host
-    host: "" 
+    host: ""
     # Optional: Enables customization of the traffic policy
     trafficPolicy: {}
       # connectionPool:

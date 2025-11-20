@@ -46,6 +46,16 @@ data:
   {{- .Values.inferenceExtension.pluginsCustomConfig | toYaml | nindent 2 }}
   {{- end }}
 ---
+{{- if .Values.inferenceExtension.sidecar.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.inferenceExtension.sidecar.configMap.name }}
+  namespace: {{ .Release.Namespace }}
+data:
+  {{- .Values.inferenceExtension.sidecar.configMap.data | toYaml | nindent 2 }}
+{{- end }}
+---
 {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
 apiVersion: v1
 kind: ConfigMap
@@ -55,7 +65,7 @@ metadata:
 data:
   {{- range $key, $value := .Values.inferenceExtension.latencyPredictor.trainingServer.config }}
   {{ $key }}: {{ $value | quote }}
-  {{- end }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap

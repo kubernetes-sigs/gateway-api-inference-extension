@@ -880,7 +880,11 @@ type predictorRunnable struct {
 
 func (p *predictorRunnable) Start(ctx context.Context) error {
 	setupLog.Info("Starting latency predictor...")
-	p.predictor.Start(ctx)
+	if err := p.predictor.Start(ctx); err != nil {
+		setupLog.Error(err, "Failed to start latency predictor")
+		return err
+	}
+	setupLog.Info("Latency predictor started.")
 	<-ctx.Done()
 	setupLog.Info("Stopping latency predictor...")
 	p.predictor.Stop()
