@@ -68,6 +68,8 @@ type Datastore interface {
 	Clear()
 }
 
+// NewDatastore creates a new data store.
+// TODO: modelServerMetricsPort is being deprecated
 func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, opts ...DatastoreOption) Datastore {
 	// Initialize with defaults
 	store := &datastore{
@@ -100,7 +102,7 @@ type datastore struct {
 	pods *sync.Map
 	// modelServerMetricsPort metrics port from EPP command line argument
 	// used only if there is only one inference engine per pod
-	modelServerMetricsPort int32
+	modelServerMetricsPort int32 // TODO: deprecating
 	epf                    datalayer.EndpointFactory
 }
 
