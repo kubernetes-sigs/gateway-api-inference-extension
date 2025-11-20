@@ -237,7 +237,20 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	rawConfig, err := r.parseConfigurationPhaseOne(ctx)
+	// ===================================================================
+	// == Latency Predictor Integration
+	// ===================================================================
+	var predictor latencypredictor.PredictorInterface // Use the interface type
+	if *enableLatencyPredictor {
+		setupLog.Info("Latency predictor is enabled. Initializing...")
+		predictor = latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
+	} else {
+		setupLog.Info("Latency predictor is disabled.")
+		predictor = nil // This will be a true nil interface
+	}
+	// ===================================================================
+
+	rawConfig, err := r.parseConfigurationPhaseOne(ctx, predictor)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
 		return err
@@ -318,32 +331,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
-	// ===================================================================
-	// == Latency Predictor Integration
-	// ===================================================================
-	var predictor latencypredictor.PredictorInterface // Use the interface type
-	if *enableLatencyPredictor {
-		setupLog.Info("Latency predictor is enabled. Initializing...")
-		predictor = latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
-
-		// For the runnable, you'll need to type assert back to the concrete type
-		concretePredictor := predictor.(*latencypredictor.Predictor)
-		if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: concretePredictor})); err != nil {
-			setupLog.Error(err, "Failed to register latency predictor runnable")
-			return err
-		}
-	} else {
-		setupLog.Info("Latency predictor is disabled.")
-		predictor = nil // This will be a true nil interface
-	}
-	// ===================================================================
-
-	err = r.parsePluginsConfiguration(ctx, predictor, datastore)
-	if err != nil {
-		setupLog.Error(err, "Failed to parse the configuration")
-		return err
-	}
-
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
@@ -420,6 +407,12 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	if *enableLatencyPredictor && predictor != nil {
+		if err := registerLatencyPredictorServer(mgr, predictor); err != nil {
+			return err
+		}
+	}
+
 	// --- Start Manager ---
 	// This blocks until a signal is received.
 	setupLog.Info("Controller manager starting")
@@ -476,7 +469,7 @@ func (r *Runner) registerLatencyPredictorPlugins(predictor latencypredictor.Pred
 	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
 }
 
-func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, error) {
+func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, predictor latencypredictor.PredictorInterface) (*configapi.EndpointPickerConfig, error) {
 	if *configText == "" && *configFile == "" {
 		return nil, nil // configuring through code, not through file
 	}
@@ -714,6 +707,18 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		setupLog.Error(err, "Failed to register health server")
 		return err
 	}
+	return nil
+}
+
+// registerLatencyPredictorServer adds the Latency Predictor server as a Runnable to the given manager.
+func registerLatencyPredictorServer(mgr manager.Manager, predictor latencypredictor.PredictorInterface) error {
+	// For the runnable, you'll need to type assert back to the concrete type
+	concretePredictor := predictor.(*latencypredictor.Predictor)
+	if err := mgr.Add(runnable.NoLeaderElection(&predictorRunnable{predictor: concretePredictor})); err != nil {
+		setupLog.Error(err, "Failed to register latency predictor runnable")
+		return err
+	}
+	setupLog.Info("Latency predictor runnable added to manager.")
 	return nil
 }
 
