@@ -478,6 +478,10 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
+	// Sort prepare data plugins in DAG order (topological sort). Also check prepare data plugins for cycles.
+	if r.requestControlConfig.PrepareDataPluginGraph() != nil {
+		return nil, errors.New("failed to load the configuration - prepare data plugins have cyclic dependencies")
+	}
 
 	// Handler deprecated configuration options
 	r.deprecatedConfigurationHelper(cfg, logger)

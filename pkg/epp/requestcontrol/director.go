@@ -351,13 +351,9 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 	}
 }
 
-// TODO: Execute plugins in parallel once DAG execution is supported.
-// runPrepareDataPlugins executes PrepareDataPlugins sequentially.
 func (d *Director) runPrepareDataPlugins(ctx context.Context,
 	request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
-	return prepareDataPluginsWithTimeout(
-		prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, pods)
-
+	return prepareDataPluginsWithTimeout(prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, pods)
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
