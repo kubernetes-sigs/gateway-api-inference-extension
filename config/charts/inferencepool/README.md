@@ -123,20 +123,7 @@ $ helm install triton-llama3-8b-instruct \
 
 ### Install with SLO-Aware Routing
 
-To enable SLO-aware routing, you must enable the latency predictor, which is deployed as a set of sidecar containers alongside the Endpoint Picker. When the latency predictor is enabled, the `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
-
-You can enable the latency predictor by setting `inferenceExtension.latencyPredictor.enabled` to `true` in your `values.yaml` file, or by using the `--set` flag on the command line.
-
-Here is an example of how to install the chart with SLO-aware routing enabled:
-
-```txt
-$ helm install vllm-llama3-8b-instruct . \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set inferenceExtension.monitoring.gke.enabled=true \
-  --set inferenceExtension.latencyPredictor.enabled=true \
-  --set provider.name=gke \
-  -f values.yaml
-```
+For full details see the dedicated [SLO-Aware Routing Guide](../../../site-src/guides/slo-aware-routing.md)
 
 #### SLO-Aware Router Environment Variables
 

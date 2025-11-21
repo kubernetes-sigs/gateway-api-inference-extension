@@ -22,9 +22,9 @@ The SLO-aware routing feature is implemented as a plugin for the Endpoint Picker
 
 To use SLO-aware routing, you need to include the following headers in your inference requests:
 
--   `x-prediction-based-scheduling`: Set to `true` to enable SLO-aware routing for the request.
+-   `x-prediction-based-scheduling`: Set to `true` to enable SLO-aware routing for the request, setting this to false or omiting the header will use non-SLO routing, but will still use the latency data to train the predictor.
 -   `x-slo-ttft-ms`: The Time to First Token SLO in milliseconds.
--   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds.
+-   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds (this is vLLMs equivalent of ITL, is it **not** NTPOT).
 
 ## Headroom Selection Strategies
 
@@ -42,13 +42,49 @@ The selection strategy can be configured via the `HEADROOM_SELECTION_STRATEGY` e
 
 ### Prerequisites
 
-Before you begin, ensure you have a functional Inference Gateway with at least one model server deployed. If you haven't set this up yet, please follow the [Getting started guide](../index.md).
+Before you begin, ensure you have a functional Inference Gateway with at least one model server deployed. If you haven't set this up yet, please follow the [Getting Started Guide](./getting-started-latest.md).
 
 ### Deployment
 
-To use SLO-aware routing, you must deploy the Endpoint Picker with the latency predictor sidecars. This can be done via the Helm chart by setting the `inferenceExtension.latencyPredictor.enabled` flag to `true`. When this flag is set, the necessary `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
+To enable SLO-aware routing, you must enable the latency predictor in the chart and have built the images for the training/prediction sidecars, which are then deployed as containers alongside the Endpoint Picker. When the latency predictor is enabled, the `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
 
-For specific deployment instructions and details on configuring environment variables for SLO-aware routing, refer to the [InferencePool Helm Chart README](../../config/charts/inferencepool/README.md#slo-aware-router-environment-variables).
+#### Steps:
+
+1. Build the predictor and sidecar images from inside the `latencypredictor` package. See the [Latency Predictor - Build Guide](../../../latencypredictor/README.md) for instructions.
+
+2. Set your Docker repository path by replacing the placeholders in Helm chart [values.yaml](../../../config/charts/inferencepool/values.yaml) in the format `us-docker.pkg.dev/PROJECT_ID/REPOSITORY` based on what you used to build the sidecars in the Build Guide from step 1.
+
+3. Deploy the chart with the latency predictor enabled by setting `inferenceExtension.latencyPredictor.enabled` to `true` in your `values.yaml` file, or by using the `--set` flag on the command line:
+
+```txt
+helm install vllm-llama3-8b-instruct . \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set inferenceExtension.monitoring.gke.enabled=true \
+  --set inferenceExtension.latencyPredictor.enabled=true \
+  --set provider.name=gke \
+  -f values.yaml
+```
+
+After these steps, Inference Gateway will be prepared to predict, train, and route requests based on their SLOs.
+
+For details on configuring specific environment variables for SLO-aware routing, refer to the [InferencePool Helm Chart README](../../config/charts/inferencepool/README.md#slo-aware-router-environment-variables).
+
+### Sending Requests
+
+To send a request with SLO-Aware Routing, you will need to specify the request SLOs and whether to route or not in the request header. See [Request Headers](#request-headers) section above.
+
+If you have a standard setup via using the [Getting Started Guide](./getting-started-latest.md) and then followed the steps outlined above, below is an example inference request with SLOs specified and routing enabled:
+
+```txt
+export GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}'):80
+
+curl -v $GW_IP/v1/completions -H 'Content-Type: application/json' -H 'x-slo-ttft-ms: 100' -H 'x-slo-tpot-ms: 100' -H 'x-prediction-based-scheduling: true' -d '{
+"model": "meta-llama/Llama-3.1-8B-Instruct",
+"prompt": "Write as if you were a critic: San Francisco where the ",
+"max_tokens": 100,
+"temperature": 0, "stream_options": {"include_usage": "true"}, "stream" : "true"
+}'
+```
 
 ## Monitoring
 

@@ -79,7 +79,7 @@ inferenceExtension:
     trainingServer:
       image:
         hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-        name: latencypredictor-v3-training-server
+        name: latencypredictor-training-server
         tag: latest
         pullPolicy: Always
       port: 8000
@@ -120,7 +120,7 @@ inferenceExtension:
       startPort: 8001
       image:
         hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-        name: latencypredictor-v3-prediction-server
+        name: latencypredictor-prediction-server
         tag: latest
         pullPolicy: Always
       resources:
