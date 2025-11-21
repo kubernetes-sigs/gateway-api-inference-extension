@@ -121,6 +121,27 @@ $ helm install triton-llama3-8b-instruct \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
+### Install with SLO-Aware Routing
+
+For full details see the dedicated [SLO-Aware Routing Guide](../../../site-src/guides/slo-aware-routing.md)
+
+#### SLO-Aware Router Environment Variables
+
+The behavior of the SLO-aware router can be fine-tuned using the following environment variables in the Endpoint Picker deployment. These can be set under `inferenceExtension.env` in your `values.yaml` file.
+
+| Environment Variable             | Description                                                                                             | Default     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------- |
+| `SAMPLING_MEAN`                  | The sampling mean (lambda) for the Poisson distribution of token sampling.                              | `100.0`     |
+| `MAX_SAMPLED_TOKENS`             | The maximum number of tokens to sample for TPOT prediction.                                             | `20`        |
+| `SLO_BUFFER_FACTOR`              | A buffer to apply to the SLO to make it more or less strict.                                            | `1.0`       |
+| `NEG_HEADROOM_TTFT_WEIGHT`       | The weight to give to the TTFT when a pod has negative headroom.                                        | `0.8`       |
+| `NEG_HEADROOM_TPOT_WEIGHT`       | The weight to give to the TPOT when a pod has negative headroom.                                        | `0.2`       |
+| `HEADROOM_TTFT_WEIGHT`           | The weight to give to the TTFT when a pod has positive headroom.                                        | `0.8`       |
+| `HEADROOM_TPOT_WEIGHT`           | The weight to give to the TPOT when a pod has positive headroom.                                        | `0.2`       |
+| `HEADROOM_SELECTION_STRATEGY`    | The strategy to use for selecting a pod based on headroom. Options: `least`, `most`, `composite-least`, `composite-most`, `composite-only`. | `least`     |
+
+**Note:** Enabling SLO-aware routing also exposes a number of Prometheus metrics for monitoring the feature, including actual vs. predicted latency, SLO violations, and more.
+
 ### Install with High Availability (HA)
 
 To deploy the EndpointPicker in a high-availability (HA) active-passive configuration set replicas to be greater than one. In such a setup, only one "leader" replica will be active and ready to process traffic at any given time. If the leader pod fails, another pod will be elected as the new leader, ensuring service continuity.

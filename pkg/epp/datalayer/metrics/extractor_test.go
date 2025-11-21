@@ -31,6 +31,7 @@ import (
 const (
 	// use hardcoded values - importing causes cycle
 	defaultTotalQueuedRequestsMetric    = "vllm:num_requests_waiting"
+	defaultTotalRunningRequestsMetric   = "vllm:num_requests_running"
 	defaultKvCacheUsagePercentageMetric = "vllm:gpu_cache_usage_perc"
 	defaultLoraInfoMetric               = "vllm:lora_requests_info"
 	defaultCacheInfoMetric              = "vllm:cache_config_info"
@@ -39,11 +40,11 @@ const (
 func TestExtractorExtract(t *testing.T) {
 	ctx := context.Background()
 
-	if _, err := NewExtractor("vllm: dummy", "", "", ""); err == nil {
+	if _, err := NewExtractor("vllm: dummy", "", "", "", ""); err == nil {
 		t.Error("expected to fail to create extractor with invalid specification")
 	}
 
-	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric,
+	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric, defaultTotalRunningRequestsMetric,
 		defaultKvCacheUsagePercentageMetric, defaultLoraInfoMetric, defaultCacheInfoMetric)
 	if err != nil {
 		t.Fatalf("failed to create extractor: %v", err)
@@ -103,6 +104,14 @@ func TestExtractorExtract(t *testing.T) {
 					Metric: []*dto.Metric{
 						{
 							Gauge: &dto.Gauge{Value: ptr.To(5.0)},
+						},
+					},
+				},
+				defaultTotalRunningRequestsMetric: &dto.MetricFamily{
+					Type: dto.MetricType_GAUGE.Enum(),
+					Metric: []*dto.Metric{
+						{
+							Gauge: &dto.Gauge{Value: ptr.To(1.0)},
 						},
 					},
 				},

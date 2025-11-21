@@ -274,6 +274,12 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
 --8<-- "site-src/_includes/bbr.md"
 
+### Next Steps: Advanced Features
+
+You have now deployed a basic Inference Gateway with a simple routing strategy. To explore more advanced features, such as SLO-aware routing, please refer to the following guide:
+
+*   [SLO-Aware Routing](./slo-aware-routing.md)
+
 ### Cleanup
 
    The following instructions assume you would like to cleanup ALL resources that were created in this quickstart guide.
