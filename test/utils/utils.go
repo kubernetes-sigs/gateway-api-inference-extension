@@ -338,6 +338,8 @@ func checkCrdStatus(
 func ExecCommandInPod(testConfig *TestConfig, podName, containerName string, cmd []string) (string, error) {
 	parameterCodec := runtime.NewParameterCodec(testConfig.Scheme)
 
+	// construct REST request to the API server.
+	// podName is curl, that is where this is being sent.
 	req := testConfig.KubeCli.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
@@ -353,11 +355,13 @@ func ExecCommandInPod(testConfig *TestConfig, podName, containerName string, cmd
 			TTY:       false,
 		}, parameterCodec)
 
+	// req.URL() contains the request above
 	exec, err := remotecommand.NewSPDYExecutor(testConfig.RestConfig, "POST", req.URL())
 	if err != nil {
 		return "", fmt.Errorf("could not initialize executor: %w", err)
 	}
 
+	// Stream the data using the executor and stream result
 	var stdout, stderr bytes.Buffer
 	execErr := exec.StreamWithContext(testConfig.Context, remotecommand.StreamOptions{
 		Stdout: &stdout,

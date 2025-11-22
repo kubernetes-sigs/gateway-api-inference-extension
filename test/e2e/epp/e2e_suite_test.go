@@ -317,7 +317,9 @@ func createEnvoy(testConfig *testutils.TestConfig, filePath string) {
 
 // createInferExt creates the inference extension resources used for testing from the given filePath.
 func createInferExt(testConfig *testutils.TestConfig, filePath string) {
-	inManifests := testutils.ReadYaml(filePath)
+
+	// This image needs to be updated to open multiple ports and respond.
+	inManifests := testutils.ReadYaml(filePath) // Modify inference-pool.yaml
 	ginkgo.By("Replacing placeholders with environment variables")
 	outManifests := []string{}
 	replacer := strings.NewReplacer(
