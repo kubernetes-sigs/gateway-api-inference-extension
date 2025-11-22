@@ -36,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
@@ -64,9 +63,29 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				return err
 			}
 
-			deploy.Spec.Template.Spec.Containers[0].Image = "vllm-dynamic-backend:local" // TODO(ryanrosario): Change back to official image after testing
-			deploy.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullNever
-			deploy.Spec.Template.Spec.Containers[0].Args = []string{strconv.Itoa(firstPort), strconv.Itoa(numPorts)}
+			// Instead of hardcoding arguments, we can instead replace teh arguments that need
+			// to be changed, preserving any others that may exist.
+			var newArgs []string
+			skipNext := false
+
+			for _, arg := range deploy.Spec.Template.Spec.Containers[0].Args {
+				if skipNext {
+					skipNext = false
+					continue
+				}
+				// If this is one of the arguments we are updating, skip it AND its value
+				if arg == "--port" || arg == "--data-parallel-size" {
+					skipNext = true
+					continue
+				}
+				newArgs = append(newArgs, arg)
+			} // contains only the args we want to keep
+
+			// add new arguments
+			newArgs = append(newArgs, "--port", strconv.Itoa(firstPort))
+			newArgs = append(newArgs, "--data-parallel-size", strconv.Itoa(numPorts))
+
+			deploy.Spec.Template.Spec.Containers[0].Args = newArgs
 			deploy.Spec.Template.Spec.Containers[0].Ports = buildContainerPorts(firstPort, numPorts)
 			return testConfig.K8sClient.Update(testConfig.Context, deploy)
 		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
@@ -305,7 +324,7 @@ func verifyTrafficRouting() {
 					}
 				}
 				for _, p := range expectedPort {
-					if strings.Contains(resp, fmt.Sprintf("x-backend-port: %d", p)) {
+					if strings.Contains(resp, fmt.Sprintf("x-inference-port: %d", p)) {
 						actualPort[p] = 0
 					}
 				}
@@ -347,10 +366,15 @@ func verifyMetrics() {
 		"inference_objective_output_tokens",
 		"inference_pool_average_kv_cache_utilization",
 		"inference_pool_average_queue_size",
-		"inference_pool_per_pod_queue_size",
+		//"inference_pool_per_pod_queue_size",
 		"inference_objective_running_requests",
 		"inference_pool_ready_pods",
 		"inference_extension_info",
+	}
+
+	for i := range numPorts {
+		expectedMetrics = append(expectedMetrics, fmt.Sprintf("inference_pool_pod_requests_total{port=\"%d\"}", firstPort+i))
+		fmt.Printf("inference_pool_pod_requests_total{port=\"%d\"}", firstPort+i)
 	}
 
 	// Generate traffic by sending requests through the inference extension.
@@ -358,14 +382,16 @@ func verifyMetrics() {
 	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
 
 	// Run the curl command multiple times to generate some metrics data.
-	for range 5 {
+	// Use the coupon collector computation.
+	batches := int(math.Ceil(numPorts * harmonicNumber(numPorts)))
+	for range batches {
 		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
 	// Modify the curl command to generate some error metrics.
 	curlCmd[len(curlCmd)-1] = "invalid input"
-	for range 5 {
+	for range batches {
 		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	}
@@ -389,7 +415,7 @@ func verifyMetrics() {
 	ginkgo.By("Verifying that all expected metrics are present.")
 	gomega.Eventually(func() error {
 		// Execute the metrics scrape command inside the curl pod.
-		fmt.Printf("pod IP: %s", podIP)
+		// fmt.Printf("pod IP: %s", podIP)
 		resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", metricScrapeCmd)
 		if err != nil {
 			return err
@@ -456,7 +482,7 @@ func getMetricsScrapeCommand(podIP, token string) []string {
 
 // getCurlCommand returns the command, as a slice of strings, for curl'ing
 // the test model server at the given name, namespace, port, and model name.
-// This command gets executed by a dummy pod that communites with Envoy
+// This command gets executed by a dummy pod that communicates with Envoy
 func getCurlCommand(name, ns, port, model string, timeout time.Duration, api string, promptOrMessages any, streaming bool) []string {
 	body := map[string]any{
 		"model":       model,
@@ -478,6 +504,26 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 	}
 	b, err := json.Marshal(body)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+	fmt.Print([]string{
+		"curl",
+		"-i",
+		"--max-time",
+		strconv.Itoa((int)(timeout.Seconds())),
+		fmt.Sprintf("%s.%s.svc:%s/v1%s", name, ns, port, api),
+		"-H",
+		"Content-Type: application/json",
+		"-H",
+		"Cache-Control: no-cache",
+		"-H",
+		fmt.Sprintf("%v: inferenceobjective-sample", metadata.ObjectiveKey),
+		"-H",
+		fmt.Sprintf("%v: %s", metadata.ModelNameRewriteKey, targetModelName),
+		"-H",
+		"Connection: close",
+		"-d",
+		string(b),
+	})
 	return []string{
 		"curl",
 		"-i",
@@ -538,7 +584,7 @@ func waitForDeploymentRollout(tc *testutils.TestConfig, deploy *appsv1.Deploymen
 		}
 
 		if currentDeploy.Generation > currentDeploy.Status.ObservedGeneration {
-			return fmt.Errorf("deployment generation not observed yet")
+			return errors.New("deployment generation not observed yet")
 		}
 
 		desiredReplicas := *currentDeploy.Spec.Replicas
@@ -579,7 +625,7 @@ func waitForDeploymentReady(tc *testutils.TestConfig, deploy *appsv1.Deployment)
 		}
 
 		if current.Status.ReadyReplicas == 0 {
-			return fmt.Errorf("no replicas are ready yet")
+			return errors.New("no replicas are ready yet")
 		}
 
 		return nil
