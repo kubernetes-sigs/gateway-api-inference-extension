@@ -131,6 +131,14 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		}
 	}
 
+	if err := (&controller.InferenceModelRewriteReconciler{
+		Datastore: r.Datastore,
+		Reader:    mgr.GetClient(),
+		PoolGKNN:  r.PoolGKNN,
+	}).SetupWithManager(ctx, mgr); err != nil {
+		return fmt.Errorf("failed setting up InferenceModelRewriteReconciler: %w", err)
+	}
+
 	if err := (&controller.PodReconciler{
 		Datastore: r.Datastore,
 		Reader:    mgr.GetClient(),

@@ -74,11 +74,9 @@ spec:
                 items:
                   description: |-
                     InferenceModelRewriteRule defines the match criteria and corresponding action.
-
-                    A specific model name can only be matched by one rule across all
-                    rules attached to the same InferencePool. If multiple rules attempt
-                    to match the same model name, the oldest rule (by creationTimestamp)
-                    will be the only one considered valid.
+                    For details on how precedence is determined across multiple rules and
+                    InferenceModelRewrite resources, see the "Precedence and Conflict Resolution"
+                    section in InferenceModelRewriteSpec.
                   properties:
                     matches:
                       items:
