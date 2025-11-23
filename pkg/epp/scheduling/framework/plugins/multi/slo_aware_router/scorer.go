@@ -190,7 +190,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	allPodsHaveRunningRequests := true
 
 	for _, pred := range allPreds {
-		if pred.IsValid {
+		if pred.IsValid && pred.TTFTValid && pred.TPOTValid {
 			allPodsInvalid = false
 		}
 
