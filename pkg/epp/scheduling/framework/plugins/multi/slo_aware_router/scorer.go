@@ -153,6 +153,11 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 
 	s.parseSLOHeaders(ctx, request, sloCtx)
 
+	for _, pod := range pods {
+		prefixCacheScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
+		sloCtx.prefixCacheScoresForPods[pod.GetPod().String()] = prefixCacheScore
+	}
+
 	// Check if SLOs are provided
 	if !sloCtx.predictorBasedScheduling {
 		logger.V(logutil.DEBUG).Info("PredictorBasedScheduling turned off, skipping prediction-based filtering")
@@ -168,7 +173,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 
 	source := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(source)
-	predictions, err := s.generatePredictions(ctx, state, request, sloCtx, pods)
+	predictions, err := s.generatePredictions(ctx, request, sloCtx, pods)
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Error generating predictions, falling back to composite-only scoring")
 		// Fall back to composite-only scoring using prefix cache scores
@@ -180,12 +185,12 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	allPreds := append([]podPredictionResult(nil), predictions...)
 	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, r, "overall", AffinityGateTauGlobal)
 
-	// Check if all pods are invalid and all have running requests
-	allPodsInvalid := true
+	// Check if all pods are invalid and all have running requests. If slos are == 0 then all pods are valid
+	allPodsInvalid := (sloCtx.ttftSLO > 0 && sloCtx.avgTPOTSLO > 0)
 	allPodsHaveRunningRequests := true
 
 	for _, pred := range allPreds {
-		if pred.IsValid {
+		if pred.IsValid && pred.TTFTValid && pred.TPOTValid {
 			allPodsInvalid = false
 		}
 
