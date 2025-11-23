@@ -25,7 +25,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -35,7 +34,7 @@ const (
 )
 
 type podMetrics struct {
-	pod      atomic.Pointer[backend.Pod]
+	metadata atomic.Pointer[datalayer.EndpointMetadata]
 	metrics  atomic.Pointer[MetricsState]
 	pmc      PodMetricsClient
 	ds       datalayer.PoolInfo
@@ -49,15 +48,15 @@ type podMetrics struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error)
+	FetchMetrics(ctx context.Context, pod *datalayer.EndpointMetadata, existing *MetricsState) (*MetricsState, error)
 }
 
 func (pm *podMetrics) String() string {
 	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetMetadata(), pm.GetMetrics())
 }
 
-func (pm *podMetrics) GetMetadata() *backend.Pod {
-	return pm.pod.Load()
+func (pm *podMetrics) GetMetadata() *datalayer.EndpointMetadata {
+	return pm.metadata.Load()
 }
 
 func (pm *podMetrics) GetMetrics() *MetricsState {
@@ -65,7 +64,7 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 }
 
 func (pm *podMetrics) UpdateMetadata(pod *datalayer.EndpointMetadata) {
-	pm.pod.Store(pod)
+	pm.metadata.Store(pod)
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be

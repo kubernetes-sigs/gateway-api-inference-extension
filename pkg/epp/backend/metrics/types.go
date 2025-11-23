@@ -48,7 +48,7 @@ type PodMetricsFactory struct {
 	refreshMetricsInterval time.Duration
 }
 
-func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, pod *datalayer.EndpointMetadata, ds datalayer.PoolInfo) PodMetrics {
+func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *datalayer.EndpointMetadata, ds datalayer.PoolInfo) datalayer.Endpoint {
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -56,9 +56,9 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, pod *datalaye
 		startOnce: sync.Once{},
 		stopOnce:  sync.Once{},
 		done:      make(chan struct{}),
-		logger:    log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
+		logger:    log.FromContext(parentCtx).WithValues("endpoint", metadata.NamespacedName),
 	}
-	pm.pod.Store(pod)
+	pm.metadata.Store(metadata)
 	pm.metrics.Store(NewMetricsState())
 
 	pm.startRefreshLoop(parentCtx)
