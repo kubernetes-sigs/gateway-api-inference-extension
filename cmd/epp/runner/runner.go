@@ -141,7 +141,7 @@ var (
 
 	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "[DEPRECATED] Port to scrape metrics from pods. "+
 		"Default value will be set to the InferencePool.Spec.TargetPorts[0].Number if not set."+
-		"[DEPRECATED] This option will be removed in the next release.")
+		"This option will be removed in the next release.")
 	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
@@ -199,7 +199,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	flag.Parse()
 	initLogging(&opts)
 
-	_ = r.deprecatedFlagsHandler(setupLog) // ignore error for now
+	r.deprecatedFlagsHandler(setupLog)
 
 	if *tracing {
 		err := common.InitTracing(ctx, setupLog)
@@ -489,31 +489,12 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 	return cfg, nil
 }
 
-func (r *Runner) deprecatedFlagsHandler(logger logr.Logger) error {
-	deprecated := map[string]string{ // Map of deprecated flags: key = flag name, value = replacement (empty if none)
-		"model-server-metrics-port": "",
-	}
-
-	var usedDeprecated []string // Track which deprecated flags were explicitly set
+func (r *Runner) deprecatedFlagsHandler(logger logr.Logger) {
 	flag.Visit(func(f *flag.Flag) {
-		if _, ok := deprecated[f.Name]; ok {
-			usedDeprecated = append(usedDeprecated, f.Name)
+		if f.Name == "model-server-metrics-port" { // future: use  map/set to store deprecated flags (and replacements?)
+			logger.Info("deprecated option will be removed in the next release.", "option", f.Name)
 		}
 	})
-
-	if len(usedDeprecated) > 0 { // report on deprecated flags used
-		for _, option := range usedDeprecated {
-			if replacement := deprecated[option]; replacement != "" {
-				logger.Info("deprecated option will be removed in the next release",
-					"option", option, "replacement", replacement)
-			} else {
-				logger.Info("deprecated option will be removed in the next release. No replacement available.",
-					"option", option)
-			}
-		}
-		return errors.New("deprecated options used" + fmt.Sprintf("%+v", usedDeprecated))
-	}
-	return nil
 }
 
 func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.Logger) {
