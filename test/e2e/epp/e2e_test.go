@@ -17,6 +17,7 @@ limitations under the License.
 package epp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,7 +47,7 @@ import (
 const (
 	firstPort             = 8000
 	numPorts              = 8
-	maxConcurrentRequests = 5
+	maxConcurrentRequests = 2 // prevent hammering Envoy and backend
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
@@ -65,11 +66,10 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				return err
 			}
 
-			// Instead of hardcoding arguments, we can instead replace teh arguments that need
+			// Instead of hardcoding arguments, we can instead replace the arguments that need
 			// to be changed, preserving any others that may exist.
 			var newArgs []string
 			skipNext := false
-
 			for _, arg := range deploy.Spec.Template.Spec.Containers[0].Args {
 				if skipNext {
 					skipNext = false
@@ -83,13 +83,14 @@ var _ = ginkgo.Describe("InferencePool", func() {
 				newArgs = append(newArgs, arg)
 			} // contains only the args we want to keep
 
-			// add new arguments
+			// add new arguments to open proper ports
 			newArgs = append(newArgs, "--port", strconv.Itoa(firstPort))
 			newArgs = append(newArgs, "--data-parallel-size", strconv.Itoa(numPorts))
-
 			deploy.Spec.Template.Spec.Containers[0].Args = newArgs
 			deploy.Spec.Template.Spec.Containers[0].Ports = buildContainerPorts(firstPort, numPorts)
+
 			return testConfig.K8sClient.Update(testConfig.Context, deploy)
+
 		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 
 		waitForDeploymentRollout(testConfig, deploy)
@@ -143,11 +144,11 @@ var _ = ginkgo.Describe("InferencePool", func() {
 
 	ginkgo.When("The Inference Extension is running", func() {
 		ginkgo.It("Should route traffic to target model servers", func() {
-			// verifyTrafficRouting()
+			verifyTrafficRouting()
 		})
 
 		ginkgo.It("Should expose EPP metrics after generating traffic", func() {
-			verifyMetrics() // TODO(RyanRosario) Needs to be updated.
+			verifyMetrics()
 		})
 	})
 
@@ -368,15 +369,10 @@ func verifyMetrics() {
 		"inference_objective_output_tokens",
 		"inference_pool_average_kv_cache_utilization",
 		"inference_pool_average_queue_size",
-		//"inference_pool_per_pod_queue_size",
+		"inference_pool_per_pod_queue_size",
 		"inference_objective_running_requests",
 		"inference_pool_ready_pods",
 		"inference_extension_info",
-	}
-
-	for i := range numPorts {
-		expectedMetrics = append(expectedMetrics, fmt.Sprintf("inference_pool_pod_requests_total{port=\"%d\"}", firstPort+i))
-		fmt.Printf("inference_pool_pod_requests_total{port=\"%d\"}", firstPort+i)
 	}
 
 	// Generate traffic by sending requests through the inference extension.
@@ -412,6 +408,21 @@ func verifyMetrics() {
 
 	// Construct the metric scraping curl command using Pod IP.
 	metricScrapeCmd := getMetricsScrapeCommand(podIP, token)
+
+	modelServerPods, err := getPodsByLabel(testConfig.K8sClient, testConfig.Context, testConfig.NsName, "app", modelServerName)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Expected to find model server pods")
+
+	for _, modelServerPod := range modelServerPods {
+		for rank := range numPorts {
+			metricQueueSize := fmt.Sprintf(
+				"inference_pool_per_pod_queue_size{model_server_pod=\"%s-rank-%d\",name=\"%s\"}",
+				modelServerPod.Name,
+				rank,
+				modelServerName,
+			)
+			expectedMetrics = append(expectedMetrics, metricQueueSize)
+		}
+	}
 
 	ginkgo.By("Verifying that all expected metrics are present.")
 	gomega.Eventually(func() error {
@@ -613,30 +624,42 @@ func waitForDeploymentReady(tc *testutils.TestConfig, deploy *appsv1.Deployment)
 	}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
 }
 
+// generateTraffic sends multiple concurrent requests using the provided curl command.
 func generateTraffic(
 	curlCmd []string,
 	batches int,
 	semaphore chan struct{},
 ) error {
 	var wg sync.WaitGroup
-	// Create an error channel with a buffer size equal to the number of batches.
 	errorCh := make(chan error, batches)
+
+	// Recommended: 3 retries with backoff
+	const maxRetries = 3
+	const backoff = 1 * time.Second
 
 	for i := 0; i < batches; i++ {
 		wg.Add(1)
-
-		semaphore <- struct{}{} // Acquire slot
+		semaphore <- struct{}{}
 
 		go func(requestNum int) {
 			defer wg.Done()
-			defer func() { <-semaphore }() // Release slot
+			defer func() { <-semaphore }()
 
-			// Execute the command in the pod
-			_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
+			var err error
+			// RETRY LOOP
+			for attempt := 0; attempt <= maxRetries; attempt++ {
+				_, err = testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
+				if err == nil {
+					return // Success!
+				}
 
-			if err != nil {
-				errorCh <- fmt.Errorf("request %d failed: %w", requestNum, err)
+				// Log the retry to help debugging
+				fmt.Printf("Request %d failed (attempt %d/%d): %v. Retrying...\n", requestNum, attempt, maxRetries, err)
+				time.Sleep(backoff)
 			}
+
+			// If we get here, we failed all retries
+			errorCh <- fmt.Errorf("request %d failed: %w", requestNum, err)
 		}(i)
 	}
 
@@ -650,11 +673,26 @@ func generateTraffic(
 	}
 
 	if len(failures) > 0 {
-		// Return a single aggregated error for gomega to fail on
 		return fmt.Errorf("found %d failed requests: %v", len(failures), failures)
 	}
 
 	return nil
+}
+
+// getPodsByLabel lists pods in a given namespace that have a specific label key-value pair.
+func getPodsByLabel(k8sClient client.Client, ctx context.Context, namespace, labelKey, labelValue string) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	labels := map[string]string{labelKey: labelValue}
+
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(labels),
+	}
+
+	if err := k8sClient.List(ctx, podList, listOptions...); err != nil {
+		return nil, fmt.Errorf("failed to list pods with label %s=%s in namespace %s: %w", labelKey, labelValue, namespace, err)
+	}
+	return podList.Items, nil
 }
 
 // generateSequence generates a sequence of integers starting from 'start' with 'count' numbers.

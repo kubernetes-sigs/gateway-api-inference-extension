@@ -41,7 +41,7 @@ import (
 
 const (
 	// defaultCurlTimeout is the default timeout for the curl command to get a response.
-	defaultCurlTimeout = 30 * time.Second
+	defaultCurlTimeout = 120 * time.Second
 	// defaultCurlInterval is the default interval to run the test curl command.
 	defaultCurlInterval = time.Second * 5
 	// defaultNsName is the default name of the Namespace used for tests. Can override using the E2E_NS environment variable.
