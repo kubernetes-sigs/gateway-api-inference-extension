@@ -355,6 +355,8 @@ func ExecCommandInPod(testConfig *TestConfig, podName, containerName string, cmd
 			TTY:       false,
 		}, parameterCodec)
 
+	fmt.Printf("Executing command in pod %s/%s: %v\n", testConfig.NsName, podName, cmd)
+
 	// req.URL() contains the request above
 	exec, err := remotecommand.NewSPDYExecutor(testConfig.RestConfig, "POST", req.URL())
 	if err != nil {
