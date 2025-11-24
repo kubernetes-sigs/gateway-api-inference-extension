@@ -255,10 +255,13 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var router *SLOAwareRouter
-			if tt.predictor == nil {
-				router = NewSLOAwareRouter(nil, tt.strategy)
-			} else {
-				router = NewSLOAwareRouter(tt.predictor, tt.strategy)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(tt.strategy)
+			router = NewSLOAwareRouter(cfg)
+			if tt.predictor != nil {
+				router.SetPredictor(tt.predictor)
+			} else if tt.name == "No predictor configured" {
+				router.SetPredictor(nil)
 			}
 
 			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), tt.request, tt.pods)
@@ -333,7 +336,10 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 					"0.3": {TTFT: 0.4, TPOT: 0.02},
 				},
 			}
-			router := NewSLOAwareRouter(predictor, tt.strategy)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(tt.strategy)
+			router := NewSLOAwareRouter(cfg)
+			router.SetPredictor(predictor)
 
 			request := createTestLLMRequest("test", 1.0, 0.05, true)
 			pods := []schedulingtypes.Pod{
@@ -360,7 +366,10 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 
 func TestSLOAwareRouter_TypedName(t *testing.T) {
 	predictor := &mockPredictor{}
-	router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+	cfg := DefaultConfig
+	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+	router := NewSLOAwareRouter(cfg)
+	router.SetPredictor(predictor)
 
 	tn := router.TypedName()
 	assert.Equal(t, "slo-aware-routing", tn.Type, "Type should be slo-aware-routing")
@@ -369,7 +378,10 @@ func TestSLOAwareRouter_TypedName(t *testing.T) {
 
 func TestSLOAwareRouter_WithName(t *testing.T) {
 	predictor := &mockPredictor{}
-	router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+	cfg := DefaultConfig
+	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+	router := NewSLOAwareRouter(cfg)
+	router.SetPredictor(predictor)
 
 	customName := "custom-router"
 	router = router.WithName(customName)
@@ -421,7 +433,10 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+			router := NewSLOAwareRouter(cfg)
+			router.SetPredictor(predictor)
 			pod := createTestPod("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -475,7 +490,10 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+			router := NewSLOAwareRouter(cfg)
+			router.SetPredictor(predictor)
 			pod := createTestPod("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -502,7 +520,10 @@ func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+			router := NewSLOAwareRouter(cfg)
+			router.SetPredictor(predictor)
 
 			state := schedulingtypes.NewCycleState()
 			tt.setupState(state)

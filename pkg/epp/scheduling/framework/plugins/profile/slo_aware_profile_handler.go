@@ -32,7 +32,7 @@ const (
 	SLOAwareProfileHandlerType = "slo-aware-profile-handler"
 	DefaultProfileName         = "default"
 	PrefixProfileName          = "prefix"
-	SLOProfileName             = "slo"
+	SLOProfileName             = "routing"
 
 	// Boolean header string for whether to use predictor based scheduling
 	PreictionBasedSchedulingHeaderKey = "x-prediction-based-scheduling"

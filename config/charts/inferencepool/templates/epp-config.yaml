@@ -13,6 +13,25 @@ data:
     - type: prefix-cache-scorer
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
     - type: slo-aware-routing
+      config:
+        {{- with .Values.inferenceExtension.latencyPredictor.sloAwareRouting | default dict }}
+        samplingMean: {{ .samplingMean | default 100.0 }}
+        maxSampledTokens: {{ .maxSampledTokens | default 20 }}
+        sloBufferFactor: {{ .sloBufferFactor | default 1.0 }}
+        negHeadroomTTFTWeight: {{ .negHeadroomTTFTWeight | default 0.8 }}
+        negHeadroomTPOTWeight: {{ .negHeadroomTPOTWeight | default 0.2 }}
+        headroomTTFTWeight: {{ .headroomTTFTWeight | default 0.8 }}
+        headroomTPOTWeight: {{ .headroomTPOTWeight | default 0.2 }}
+        headroomSelectionStrategy: {{ .headroomSelectionStrategy | default "least" | quote }}
+        compositeKVWeight: {{ .compositeKVWeight | default 1.0 }}
+        compositeQueueWeight: {{ .compositeQueueWeight | default 1.0 }}
+        compositePrefixWeight: {{ .compositePrefixWeight | default 1.0 }}
+        epsilonExploreSticky: {{ .epsilonExploreSticky | default 0.01 }}
+        epsilonExploreNeg: {{ .epsilonExploreNeg | default 0.01 }}
+        affinityGateTau: {{ .affinityGateTau | default 0.80 }}
+        affinityGateTauGlobal: {{ .affinityGateTauGlobal | default 0.99 }}
+        selectionMode: {{ .selectionMode | default "linear" | quote }}
+        {{- end }}
     - type: slo-aware-profile-handler
     - type: max-score-picker
     {{- end }}
@@ -27,11 +46,9 @@ data:
         weight: 0
       - pluginRef: queue-scorer
       - pluginRef: kv-cache-utilization-scorer
-      - pluginRef: max-score-picker
-    - name: slo
+    - name: routing
       plugins:
       - pluginRef: slo-aware-routing
-      - pluginRef: max-score-picker
     {{- else }}
     - name: default
       plugins:

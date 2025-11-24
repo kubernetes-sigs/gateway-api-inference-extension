@@ -74,7 +74,7 @@ func (s *SLOAwareRouter) selectPodBasedOnStrategy(
 		selectedPod = s.selectFromCompositeScores(ctx, allPreds, r, headroomStrategyCompositeOnly)
 	case len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0:
 		// 99% chance to select from positive headroom pods, 1% from negative
-		if r.Float64() < EpsilonExploreNeg {
+		if r.Float64() < s.config.EpsilonExploreNeg {
 			logger.V(logutil.DEBUG).Info("Selecting from negative headroom pods (1% chance)")
 			selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
 		} else {

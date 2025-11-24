@@ -16,6 +16,8 @@ limitations under the License.
 
 package plugins
 
+import "sigs.k8s.io/controller-runtime/pkg/manager"
+
 // Plugin defines the interface for a plugin.
 // This interface should be embedded in all plugins across the code.
 type Plugin interface {
@@ -39,4 +41,9 @@ type ProducerPlugin interface {
 	// This is a map from data key (string) produced to
 	// the data type of the key (represented as data with default value casted as any field).
 	Produces() map[string]any
+}
+
+// RunnablePlugin defines the interface for a plugin that provides a controller-runtime Runnable.
+type RunnablePlugin interface {
+	GetRunnable() manager.Runnable
 }

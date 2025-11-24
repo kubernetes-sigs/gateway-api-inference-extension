@@ -129,13 +129,13 @@ func (s *SLOAwareRouter) validatePrediction(
 	podMinTPOTSLO float64,
 ) (ttftOk, tpotOk, isValid bool, headroom float64, ttftHeadroom float64) {
 
-	bufferedTPOT := sloCtx.avgTPOTSLO * SLOBufferFactor
+	bufferedTPOT := sloCtx.avgTPOTSLO * s.config.SLOBufferFactor
 	// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
 	if podMinTPOTSLO > 0 {
 		if podMinTPOTSLO < sloCtx.avgTPOTSLO {
 			log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", sloCtx.avgTPOTSLO)
 		}
-		bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*SLOBufferFactor)
+		bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*s.config.SLOBufferFactor)
 	}
 
 	tpotOk = pred.TPOT < bufferedTPOT
