@@ -31,6 +31,10 @@ spec:
         - "json"
         - --config-file
         - "/config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
+        {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io/v1" }}
+        - --pool-group
+        - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+        {{- end }}
         {{- range .Values.inferenceExtension.flags }}
         - "--{{ .name }}"
         - "{{ .value }}"
@@ -84,10 +88,142 @@ spec:
         volumeMounts:
         - name: plugins-config-volume
           mountPath: "/config"
+      {{- if .Values.inferenceExtension.sidecars }}
+      {{- if .Values.inferenceExtension.sidecars.trainingServer }}
+      {{- if .Values.inferenceExtension.sidecars.trainingServer.enabled }}
+      # Training Server Sidecar Container
+      - name: training-server
+        image: {{ .Values.inferenceExtension.sidecars.trainingServer.image.hub }}/{{ .Values.inferenceExtension.sidecars.trainingServer.image.name }}:{{ .Values.inferenceExtension.sidecars.trainingServer.image.tag }}
+        imagePullPolicy: {{ .Values.inferenceExtension.sidecars.trainingServer.image.pullPolicy | default "Always" }}
+        ports:
+        - containerPort: 8000
+          name: training-port
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+        {{- if .Values.inferenceExtension.sidecars.trainingServer.resources }}
+        resources:
+          {{- toYaml .Values.inferenceExtension.sidecars.trainingServer.resources | nindent 10 }}
+        {{- end }}
+        envFrom:
+        {{- if .Values.inferenceExtension.sidecars.trainingServer.envFrom }}
+          {{- toYaml .Values.inferenceExtension.sidecars.trainingServer.envFrom | nindent 10 }}
+        {{- else }}
+        - configMapRef:
+            name: latency-predictor-config
+        {{- end }}
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "training"
+        {{- if .Values.inferenceExtension.sidecars.trainingServer.env }}
+        {{- toYaml .Values.inferenceExtension.sidecars.trainingServer.env | nindent 8 }}
+        {{- end }}
+        volumeMounts:
+        - name: training-server-storage
+          mountPath: /models
+      {{- end }}
+      {{- end }}
+      {{- if .Values.inferenceExtension.sidecars.predictionServers }}
+      {{- if .Values.inferenceExtension.sidecars.predictionServers.enabled }}
+      {{- $replicas := int (.Values.inferenceExtension.sidecars.predictionServers.replicas | default 3) }}
+      {{- range $i := until $replicas }}
+      # Prediction Server Sidecar Container {{ add $i 1 }}
+      - name: prediction-server-{{ add $i 1 }}
+        image: {{ $.Values.inferenceExtension.sidecars.predictionServers.image.hub }}/{{ $.Values.inferenceExtension.sidecars.predictionServers.image.name }}:{{ $.Values.inferenceExtension.sidecars.predictionServers.image.tag }}
+        imagePullPolicy: {{ $.Values.inferenceExtension.sidecars.predictionServers.image.pullPolicy | default "Always" }}
+        command: ["uvicorn"]
+        args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "{{ add 8001 $i }}"]
+        ports:
+        - containerPort: {{ add 8001 $i }}
+          name: predict-port-{{ add $i 1 }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ add 8001 $i }}
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ add 8001 $i }}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        {{- if $.Values.inferenceExtension.sidecars.predictionServers.resources }}
+        resources:
+          {{- toYaml $.Values.inferenceExtension.sidecars.predictionServers.resources | nindent 10 }}
+        {{- end }}
+        envFrom:
+        {{- if $.Values.inferenceExtension.sidecars.predictionServers.envFrom }}
+          {{- toYaml $.Values.inferenceExtension.sidecars.predictionServers.envFrom | nindent 10 }}
+        {{- else }}
+        - configMapRef:
+            name: prediction-server-config
+        {{- end }}
+        env:
+        - name: PREDICT_PORT
+          value: "{{ add 8001 $i }}"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "prediction-{{ add $i 1 }}"
+        - name: TRAINING_SERVER_URL
+          value: "http://localhost:8000"
+        {{- if $.Values.inferenceExtension.sidecars.predictionServers.env }}
+        {{- toYaml $.Values.inferenceExtension.sidecars.predictionServers.env | nindent 8 }}
+        {{- end }}
+        volumeMounts:
+        - name: prediction-server-{{ add $i 1 }}-storage
+          mountPath: /server_models
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
       volumes:
       - name: plugins-config-volume
         configMap:
           name: {{ include "gateway-api-inference-extension.name" . }}
+      {{- if .Values.inferenceExtension.sidecars }}
+      {{- if .Values.inferenceExtension.sidecars.trainingServer }}
+      {{- if .Values.inferenceExtension.sidecars.trainingServer.enabled }}
+      - name: training-server-storage
+        {{- if .Values.inferenceExtension.sidecars.trainingServer.persistence }}
+        {{- if .Values.inferenceExtension.sidecars.trainingServer.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.inferenceExtension.sidecars.trainingServer.persistence.claimName | default "training-models-pvc" }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.inferenceExtension.sidecars.predictionServers }}
+      {{- if .Values.inferenceExtension.sidecars.predictionServers.enabled }}
+      {{- $replicas := int (.Values.inferenceExtension.sidecars.predictionServers.replicas | default 3) }}
+      {{- range $i := until $replicas }}
+      - name: prediction-server-{{ add $i 1 }}-storage
+        emptyDir: {}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
       {{- if .Values.inferenceExtension.affinity }}
       affinity:
         {{- toYaml .Values.inferenceExtension.affinity | nindent 8 }}
