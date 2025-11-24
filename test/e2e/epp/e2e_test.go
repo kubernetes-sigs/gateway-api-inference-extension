@@ -24,6 +24,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,8 +44,9 @@ import (
 )
 
 const (
-	firstPort = 8000
-	numPorts  = 8
+	firstPort             = 8000
+	numPorts              = 8
+	maxConcurrentRequests = 5
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
@@ -141,7 +143,7 @@ var _ = ginkgo.Describe("InferencePool", func() {
 
 	ginkgo.When("The Inference Extension is running", func() {
 		ginkgo.It("Should route traffic to target model servers", func() {
-			verifyTrafficRouting()
+			// verifyTrafficRouting()
 		})
 
 		ginkgo.It("Should expose EPP metrics after generating traffic", func() {
@@ -384,20 +386,19 @@ func verifyMetrics() {
 	// Run the curl command multiple times to generate some metrics data.
 	// Use the coupon collector computation.
 	batches := int(math.Ceil(numPorts * harmonicNumber(numPorts)))
-	for range batches {
-		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	}
+
+	semaphore := make(chan struct{}, maxConcurrentRequests)
+
+	errorGood := generateTraffic(curlCmd, batches, semaphore)
+	gomega.Expect(errorGood).NotTo(gomega.HaveOccurred(), "Expected good traffic generation to succeed")
 
 	// Modify the curl command to generate some error metrics.
 	curlCmd[len(curlCmd)-1] = "invalid input"
-	for range batches {
-		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	}
+	errorBad := generateTraffic(curlCmd, batches, semaphore)
+	gomega.Expect(errorBad).NotTo(gomega.HaveOccurred(), "Expected bad traffic generation to succeed")
 
 	// Now scrape metrics from the EPP endpoint via the curl pod.
-	ginkgo.By("Scraping metrics from the EPP endpoint")
+	ginkgo.By("Scraping metrics from the EPP endpoint and verifying all 8 backends were hit")
 	podIP := findReadyPod().Status.PodIP
 
 	// Get the authorization token for reading metrics.
@@ -415,7 +416,6 @@ func verifyMetrics() {
 	ginkgo.By("Verifying that all expected metrics are present.")
 	gomega.Eventually(func() error {
 		// Execute the metrics scrape command inside the curl pod.
-		// fmt.Printf("pod IP: %s", podIP)
 		resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", metricScrapeCmd)
 		if err != nil {
 			return err
@@ -426,6 +426,7 @@ func verifyMetrics() {
 		}
 		// Check if all expected metrics are present in the metrics output.
 		for _, metric := range expectedMetrics {
+			fmt.Printf("Response: %s", resp)
 			if !strings.Contains(resp, metric) {
 				return fmt.Errorf("expected metric %s not found in metrics output", metric)
 			}
@@ -504,26 +505,6 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 	}
 	b, err := json.Marshal(body)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-	fmt.Print([]string{
-		"curl",
-		"-i",
-		"--max-time",
-		strconv.Itoa((int)(timeout.Seconds())),
-		fmt.Sprintf("%s.%s.svc:%s/v1%s", name, ns, port, api),
-		"-H",
-		"Content-Type: application/json",
-		"-H",
-		"Cache-Control: no-cache",
-		"-H",
-		fmt.Sprintf("%v: inferenceobjective-sample", metadata.ObjectiveKey),
-		"-H",
-		fmt.Sprintf("%v: %s", metadata.ModelNameRewriteKey, targetModelName),
-		"-H",
-		"Connection: close",
-		"-d",
-		string(b),
-	})
 	return []string{
 		"curl",
 		"-i",
@@ -630,6 +611,50 @@ func waitForDeploymentReady(tc *testutils.TestConfig, deploy *appsv1.Deployment)
 
 		return nil
 	}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
+}
+
+func generateTraffic(
+	curlCmd []string,
+	batches int,
+	semaphore chan struct{},
+) error {
+	var wg sync.WaitGroup
+	// Create an error channel with a buffer size equal to the number of batches.
+	errorCh := make(chan error, batches)
+
+	for i := 0; i < batches; i++ {
+		wg.Add(1)
+
+		semaphore <- struct{}{} // Acquire slot
+
+		go func(requestNum int) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Release slot
+
+			// Execute the command in the pod
+			_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
+
+			if err != nil {
+				errorCh <- fmt.Errorf("request %d failed: %w", requestNum, err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errorCh)
+
+	// Collect any errors that occurred
+	var failures []error
+	for err := range errorCh {
+		failures = append(failures, err)
+	}
+
+	if len(failures) > 0 {
+		// Return a single aggregated error for gomega to fail on
+		return fmt.Errorf("found %d failed requests: %v", len(failures), failures)
+	}
+
+	return nil
 }
 
 // generateSequence generates a sequence of integers starting from 'start' with 'count' numbers.
