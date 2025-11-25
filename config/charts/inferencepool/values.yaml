@@ -12,11 +12,11 @@ inferenceExtension:
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
-  #  extraServicePorts:
-  #    - name: http
-  #      port: 8081
-  #      protocol: TCP
-  #      targetPort: 8081
+#  extraServicePorts:
+#    - name: http
+#      port: 8081
+#      protocol: TCP
+#      targetPort: 8081
 
   # This is the plugins configuration file.
   # pluginsCustomConfig:
@@ -43,7 +43,7 @@ inferenceExtension:
   affinity: {}
 
   tolerations: []
-
+  
   # Sidecar configuration for EPP
   sidecar:
     enabled: false

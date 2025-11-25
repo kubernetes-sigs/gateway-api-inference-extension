@@ -62,6 +62,7 @@ data:
   {{- if (hasKey .Values.inferenceExtension "pluginsCustomConfig") }}
   {{- .Values.inferenceExtension.pluginsCustomConfig | toYaml | nindent 2 }}
   {{- end }}
+  
 ---
 {{- if .Values.inferenceExtension.sidecar.enabled }}
 apiVersion: v1
