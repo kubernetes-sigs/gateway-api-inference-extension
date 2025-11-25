@@ -169,7 +169,6 @@ type Runner struct {
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
-	plugins              []plugins.Plugin
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -312,19 +311,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		runtime.SetMutexProfileFraction(1)
 		runtime.SetBlockProfileRate(1)
-	}
-
-	// Register plugin runnables by adding them to the manager.
-	for _, p := range r.plugins {
-		if rp, ok := p.(plugins.RunnablePlugin); ok {
-			if r := rp.GetRunnable(); r != nil {
-				if err := mgr.Add(r); err != nil {
-					setupLog.Error(err, "Failed to register plugin runnable", "plugin", p.TypedName())
-					return err
-				}
-				setupLog.Info("Registered plugin runnable", "plugin", p.TypedName())
-			}
-		}
 	}
 
 	// --- Initialize Core EPP Components ---
@@ -507,8 +493,6 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	// Handler deprecated configuration options
 	r.deprecatedConfigurationHelper(cfg, logger)
-
-	r.plugins = handle.GetAllPlugins()
 
 	logger.Info("loaded configuration from file/text successfully")
 	return cfg, nil

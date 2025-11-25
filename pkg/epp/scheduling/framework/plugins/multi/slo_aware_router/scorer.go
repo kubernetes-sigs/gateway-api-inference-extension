@@ -25,11 +25,9 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
@@ -87,20 +85,23 @@ var DefaultConfig = Config{
 	SelectionMode:             string(SelectionMode),
 }
 
-func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 	parameters := DefaultConfig
 	if len(rawParameters) > 0 {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal config for SLOAwareRouter: %w", err)
 		}
 	}
-	return NewSLOAwareRouter(parameters).WithName(name), nil
+
+	predictor, err := startPredictor(handle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start latency predictor: %w", err)
+	}
+
+	return NewSLOAwareRouter(parameters, predictor).WithName(name), nil
 }
 
-func NewSLOAwareRouter(config Config) *SLOAwareRouter {
-	// Initialize the latency predictor
-	predictor := latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
-
+func NewSLOAwareRouter(config Config, predictor latencypredictor.PredictorInterface) *SLOAwareRouter {
 	strategy := headroomStrategy(config.HeadroomSelectionStrategy)
 	if strategy == "" {
 		strategy = headroomStrategyLeast
@@ -116,15 +117,18 @@ func NewSLOAwareRouter(config Config) *SLOAwareRouter {
 	}
 }
 
-func (s *SLOAwareRouter) SetPredictor(predictor latencypredictor.PredictorInterface) {
-	s.latencypredictor = predictor
-}
-
-func (s *SLOAwareRouter) GetRunnable() manager.Runnable {
-	if p, ok := s.latencypredictor.(*latencypredictor.Predictor); ok {
-		return runnable.NoLeaderElection(&predictorRunnable{predictor: p})
+func startPredictor(handle plugins.Handle) (latencypredictor.PredictorInterface, error) {
+	// Initialize the latency predictor
+	predictor := latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
+	if err := predictor.Start(handle.Context()); err != nil {
+		return nil, fmt.Errorf("failed to start latency predictor: %w", err)
 	}
-	return nil
+
+	go func() {
+		<-handle.Context().Done()
+		predictor.Stop()
+	}()
+	return predictor, nil
 }
 
 func (s *SLOAwareRouter) TypedName() plugins.TypedName {

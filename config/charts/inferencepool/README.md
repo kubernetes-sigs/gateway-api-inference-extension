@@ -121,24 +121,32 @@ $ helm install triton-llama3-8b-instruct \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
-### Install with SLO-Aware Routing
+### Install with Latency-Based Routing
 
-For full details see the dedicated [SLO-Aware Routing Guide](../../../site-src/guides/slo-aware-routing.md)
+For full details see the dedicated [Latency-Based Routing Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/latency-based-predictor.md)
 
-#### SLO-Aware Router Environment Variables
+#### Latency-Based Router Configuration
 
-The behavior of the SLO-aware router can be fine-tuned using the following environment variables in the Endpoint Picker deployment. These can be set under `inferenceExtension.env` in your `values.yaml` file.
+The behavior of the latency-based router can be fine-tuned using the configuration parameters under `inferenceExtension.latencyPredictor.sloAwareRouting` in your `values.yaml` file.
 
-| Environment Variable             | Description                                                                                             | Default     |
+| Parameter                        | Description                                                                                             | Default     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------- |
-| `SAMPLING_MEAN`                  | The sampling mean (lambda) for the Poisson distribution of token sampling.                              | `100.0`     |
-| `MAX_SAMPLED_TOKENS`             | The maximum number of tokens to sample for TPOT prediction.                                             | `20`        |
-| `SLO_BUFFER_FACTOR`              | A buffer to apply to the SLO to make it more or less strict.                                            | `1.0`       |
-| `NEG_HEADROOM_TTFT_WEIGHT`       | The weight to give to the TTFT when a pod has negative headroom.                                        | `0.8`       |
-| `NEG_HEADROOM_TPOT_WEIGHT`       | The weight to give to the TPOT when a pod has negative headroom.                                        | `0.2`       |
-| `HEADROOM_TTFT_WEIGHT`           | The weight to give to the TTFT when a pod has positive headroom.                                        | `0.8`       |
-| `HEADROOM_TPOT_WEIGHT`           | The weight to give to the TPOT when a pod has positive headroom.                                        | `0.2`       |
-| `HEADROOM_SELECTION_STRATEGY`    | The strategy to use for selecting a pod based on headroom. Options: `least`, `most`, `composite-least`, `composite-most`, `composite-only`. | `least`     |
+| `samplingMean`                   | The sampling mean (lambda) for the Poisson distribution of token sampling.                              | `100.0`     |
+| `maxSampledTokens`               | The maximum number of tokens to sample for TPOT prediction.                                             | `20`        |
+| `sloBufferFactor`                | A buffer to apply to the SLO to make it more or less strict.                                            | `1.0`       |
+| `negHeadroomTTFTWeight`          | The weight to give to the TTFT when a pod has negative headroom.                                        | `0.8`       |
+| `negHeadroomTPOTWeight`          | The weight to give to the TPOT when a pod has negative headroom.                                        | `0.2`       |
+| `headroomTTFTWeight`             | The weight to give to the TTFT when a pod has positive headroom.                                        | `0.8`       |
+| `headroomTPOTWeight`             | The weight to give to the TPOT when a pod has positive headroom.                                        | `0.2`       |
+| `headroomSelectionStrategy`      | The strategy to use for selecting a pod based on headroom. Options: `least`, `most`, `composite-least`, `composite-most`, `composite-only`. | `least`     |
+| `compositeKVWeight`              | The weight for KV cache in the composite score.                                                         | `1.0`       |
+| `compositeQueueWeight`           | The weight for queue size in the composite score.                                                       | `1.0`       |
+| `compositePrefixWeight`          | The weight for prefix cache in the composite score.                                                     | `1.0`       |
+| `epsilonExploreSticky`           | Exploration factor for sticky sessions.                                                                 | `0.01`      |
+| `epsilonExploreNeg`              | Exploration factor for negative headroom.                                                               | `0.01`      |
+| `affinityGateTau`                | Affinity gate threshold.                                                                                | `0.80`      |
+| `affinityGateTauGlobal`          | Global affinity gate threshold.                                                                         | `0.99`      |
+| `selectionMode`                  | The mode for selection (e.g., "linear").                                                                | `linear`    |
 
 **Note:** Enabling SLO-aware routing also exposes a number of Prometheus metrics for monitoring the feature, including actual vs. predicted latency, SLO violations, and more.
 

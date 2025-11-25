@@ -42,8 +42,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-require github.com/go-logr/zapr v1.3.0
-
 require (
 	cel.dev/expr v0.24.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect

@@ -23,9 +23,12 @@ import (
 	"fmt"
 	"strconv"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -73,28 +76,41 @@ func (h *SLOAwareProfileHandler) WithName(name string) *SLOAwareProfileHandler {
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
 // previously executed cycles along with their results.
-func (h *SLOAwareProfileHandler) Pick(_ context.Context, _ *types.CycleState, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
+func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
 	profileResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
-	if len(profiles) == len(profileResults) { // all profiles have been executed already in previous call
-		return map[string]*framework.SchedulerProfile{}
+
+	logger := log.FromContext(ctx)
+
+	predictorBasedScheduling, err := parseBoolHeader(*request, PreictionBasedSchedulingHeaderKey)
+	if err != nil {
+		logger.V(logutil.DEBUG).Error(err, "error parsing predictorBasedScheduling from header failed to choose scheduling profile: x-prediction-based-scheduling must be a bool")
+		return nil
 	}
 
-	if _, executed := profileResults[PrefixProfileName]; !executed {
-		// if prefix profile was not executed yet, first let the scheduler run the decode profile
+	if predictorBasedScheduling {
+		_, prefixExecuted := profileResults[PrefixProfileName]
+		_, routingExecuted := profileResults[SLOProfileName]
+		if prefixExecuted && routingExecuted { // both routing profiles have been executed already in previous call
+			return map[string]*framework.SchedulerProfile{}
+		}
+
+		// if prefix profile was not executed yet, first let the scheduler run it
+		if !prefixExecuted {
+			return map[string]*framework.SchedulerProfile{
+				PrefixProfileName: profiles[PrefixProfileName],
+			}
+		}
+
+		// otherwise, return only the SLO profile to be executed next
 		return map[string]*framework.SchedulerProfile{
-			PrefixProfileName: profiles[PrefixProfileName],
+			SLOProfileName: profiles[SLOProfileName],
 		}
 	}
-	// otherwise, prefix was already executed.
 
-	// return all profiles except prefix.
-	profilesToRun := make(map[string]*framework.SchedulerProfile)
-	for name, profile := range profiles {
-		if name != PrefixProfileName {
-			profilesToRun[name] = profile
-		}
+	// If predictor based scheduling is not requested, proceed with only default profile
+	return map[string]*framework.SchedulerProfile{
+		DefaultProfileName: profiles[DefaultProfileName],
 	}
-	return profilesToRun
 }
 
 // ProcessResults handles the outcome of the profile runs after all profiles ran.

@@ -75,6 +75,7 @@ nav:
       - Configuration Guide:
           - Configuring the EndPoint Picker via configuration YAML file: guides/epp-configuration/config-text.md
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
+          - Latency-Based Routing: guides/latency-based-predictor.md
       - Migration Guide: guides/ga-migration.md
       - Troubleshooting Guide: guides/troubleshooting.md
     - Implementer Guides:

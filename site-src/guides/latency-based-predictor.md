@@ -1,14 +1,14 @@
-# SLO-Aware Routing
+# Latency-Based Routing
 
-> For deployment instructions, jump to [Deploying with SLO-Aware Routing](#deploying-with-slo-aware-routing).
+> For deployment instructions, jump to [Deploying with Latency-Based Routing](#deploying-with-latency-based-routing).
 
-SLO-aware routing is a feature of the Inference Gateway that enables intelligent routing of inference requests based on Service Level Objectives (SLOs). It uses a latency predictor to estimate the Time to First Token (TTFT) and Time Per Output Token (TPOT) for each request on each available model server. This allows the gateway to select the optimal server that can meet the request's SLOs, while also considering the overall health and utilization of the model servers.
+Latency-based routing is a feature of the Inference Gateway that enables intelligent routing of inference requests based on Service Level Objectives (SLOs) using latency predictions. It uses a latency predictor to estimate the Time to First Token (TTFT) and Time Per Output Token (TPOT) for each request on each available model server. This allows the gateway to select the optimal server that can meet the request's SLOs, while also considering the overall health and utilization of the model servers.
 
 ## How it Works
 
-The SLO-aware routing feature is implemented as a plugin for the Endpoint Picker (EPP). When a request is received, the plugin performs the following steps:
+The latency-based routing feature is implemented as a plugin for the Endpoint Picker (EPP). When a request is received, the plugin performs the following steps:
 
-1.  **SLO Extraction**: The plugin extracts the TTFT and TPOT SLOs from the request headers (`x-slo-ttft-ms` and `x-slo-tpot-ms`). It also checks for the `x-prediction-based-scheduling` header to determine if SLO-aware routing should be used for this request.
+1.  **SLO Extraction**: The plugin extracts the TTFT and TPOT SLOs from the request headers (`x-slo-ttft-ms` and `x-slo-tpot-ms`). It also checks for the `x-prediction-based-scheduling` header to determine if latency-based routing should be used for this request.
 
 2.  **Latency Prediction**: The plugin uses a latency predictor, deployed as a set of sidecar containers to the EPP, to predict the TTFT and TPOT for the request on each of the available model servers. The prediction is based on the current state of the server, including its KV cache utilization, and the number of running and waiting requests.
 
@@ -20,15 +20,15 @@ The SLO-aware routing feature is implemented as a plugin for the Endpoint Picker
 
 ## Request Headers
 
-To use SLO-aware routing, you need to include the following headers in your inference requests:
+To use latency-based routing, you need to include the following headers in your inference requests:
 
--   `x-prediction-based-scheduling`: Set to `true` to enable SLO-aware routing for the request, setting this to false or omiting the header will use non-SLO routing, but will still use the latency data to train the predictor.
+-   `x-prediction-based-scheduling`: Set to `true` to enable latency-based routing for the request, setting this to false or omiting the header will use non-SLO routing, but will still use the latency data to train the predictor.
 -   `x-slo-ttft-ms`: The Time to First Token SLO in milliseconds.
 -   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds (this is vLLMs equivalent of ITL, is it **not** NTPOT).
 
 ## Headroom Selection Strategies
 
-The SLO-aware routing plugin provides several strategies for selecting a model server based on the calculated headrooms:
+The latency-based routing plugin provides several strategies for selecting a model server based on the calculated headrooms:
 
 -   `least`: (Default) Prefers the pod with the least positive headroom. This strategy is good for packing pods tightly and maximizing utilization.
 -   `most`: Prefers the pod with the most positive headroom. This strategy is more conservative and leaves more room for unexpected latency spikes.
@@ -38,21 +38,21 @@ The SLO-aware routing plugin provides several strategies for selecting a model s
 
 The selection strategy can be configured via the `HEADROOM_SELECTION_STRATEGY` environment variable in the Endpoint Picker deployment.
 
-## Deploying with SLO-Aware Routing
+## Deploying with Latency-Based Routing
 
 ### Prerequisites
 
-Before you begin, ensure you have a functional Inference Gateway with at least one model server deployed. If you haven't set this up yet, please follow the [Getting Started Guide](./getting-started-latest.md).
+Before you begin, ensure you have a functional Inference Gateway with at least one model server deployed. If you haven't set this up yet, please follow the [Getting Started Guide](getting-started-latest.md).
 
 ### Deployment
 
-To enable SLO-aware routing, you must enable the latency predictor in the chart and have built the images for the training/prediction sidecars, which are then deployed as containers alongside the Endpoint Picker. When the latency predictor is enabled, the `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
+To enable latency-based routing, you must enable the latency predictor in the chart and have built the images for the training/prediction sidecars, which are then deployed as containers alongside the Endpoint Picker. When the latency predictor is enabled, the `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
 
 #### Steps:
 
-1. Build the predictor and sidecar images from inside the `latencypredictor` package. See the [Latency Predictor - Build Guide](../../../latencypredictor/README.md) for instructions.
+1. Build the predictor and sidecar images from inside the `latencypredictor` package. See the [Latency Predictor - Build Guide](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/latencypredictor/README.md) for instructions.
 
-2. Set your Docker repository path by replacing the placeholders in Helm chart [values.yaml](../../../config/charts/inferencepool/values.yaml) in the format `us-docker.pkg.dev/PROJECT_ID/REPOSITORY` based on what you used to build the sidecars in the Build Guide from step 1.
+2. Set your Docker repository path by replacing the placeholders in Helm chart [values.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/config/charts/inferencepool/values.yaml) in the format `us-docker.pkg.dev/PROJECT_ID/REPOSITORY` based on what you used to build the sidecars in the Build Guide from step 1.
 
 3. Deploy the chart with the latency predictor enabled by setting `inferenceExtension.latencyPredictor.enabled` to `true` in your `values.yaml` file, or by using the `--set` flag on the command line:
 
@@ -67,13 +67,13 @@ helm install vllm-llama3-8b-instruct . \
 
 After these steps, Inference Gateway will be prepared to predict, train, and route requests based on their SLOs.
 
-For details on configuring specific environment variables for SLO-aware routing, refer to the [InferencePool Helm Chart README](../../config/charts/inferencepool/README.md#slo-aware-router-environment-variables).
+For details on configuring specific environment variables for latency-based routing, refer to the [InferencePool Helm Chart README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/config/charts/inferencepool/README.md#latency-based-router-environment-variables).
 
 ### Sending Requests
 
-To send a request with SLO-Aware Routing, you will need to specify the request SLOs and whether to route or not in the request header. See [Request Headers](#request-headers) section above.
+To send a request with Latency-Based Routing, you will need to specify the request SLOs and whether to route or not in the request header. See [Request Headers](#request-headers) section above.
 
-If you have a standard setup via using the [Getting Started Guide](./getting-started-latest.md) and then followed the steps outlined above, below is an example inference request with SLOs specified and routing enabled:
+If you have a standard setup via using the [Getting Started Guide](getting-started-latest.md) and then followed the steps outlined above, below is an example inference request with SLOs specified and routing enabled:
 
 ```txt
 export GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}'):80
@@ -88,7 +88,7 @@ curl -v $GW_IP/v1/completions -H 'Content-Type: application/json' -H 'x-slo-ttft
 
 ## Monitoring
 
-When SLO-aware routing is enabled, a number of Prometheus metrics are exposed to allow for monitoring and observability of the feature. These metrics provide insight into the performance of the latency predictor and the effectiveness of the SLO-based routing.
+When latency-based routing is enabled, a number of Prometheus metrics are exposed to allow for monitoring and observability of the feature. These metrics provide insight into the performance of the latency predictor and the effectiveness of the SLO-based routing.
 
 Key categories of metrics include:
 

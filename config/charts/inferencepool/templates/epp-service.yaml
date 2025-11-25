@@ -15,18 +15,6 @@ spec:
     - name: http-metrics
       protocol: TCP
       port: {{ .Values.inferenceExtension.metricsPort | default 9090 }}
-    {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
-    - name: latency-predictor-training
-      protocol: TCP
-      port: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.port }}
-      targetPort: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.port }}
-    {{- range $i := until (int .Values.inferenceExtension.latencyPredictor.predictionServers.count) }}
-    - name: latency-predictor-{{ add $i 1 }}
-      protocol: TCP
-      port: {{ add $.Values.inferenceExtension.latencyPredictor.predictionServers.startPort $i }}
-      targetPort: {{ add $.Values.inferenceExtension.latencyPredictor.predictionServers.startPort $i }}
-    {{- end }}
-    {{- end }}
     {{- with .Values.inferenceExtension.extraServicePorts }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

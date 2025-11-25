@@ -42,6 +42,7 @@ data:
       - pluginRef: prefix-cache-scorer
     - name: default
       plugins:
+      - pluginRef: prefix-cache-scorer
       - pluginRef: slo-aware-routing
         weight: 0
       - pluginRef: queue-scorer
