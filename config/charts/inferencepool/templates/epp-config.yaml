@@ -33,7 +33,6 @@ data:
         selectionMode: {{ .selectionMode | default "linear" | quote }}
         {{- end }}
     - type: slo-aware-profile-handler
-    - type: max-score-picker
     {{- end }}
     schedulingProfiles:
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
