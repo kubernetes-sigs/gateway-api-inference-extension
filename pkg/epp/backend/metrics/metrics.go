@@ -97,6 +97,15 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 		}
 	}
 
+	if p.MetricMapping.TotalRunningRequests != nil {
+		running, err := p.getMetric(metricFamilies, *p.MetricMapping.TotalRunningRequests)
+		if err == nil {
+			updated.RunningQueueSize = int(running.GetGauge().GetValue())
+		} else {
+			errs = multierr.Append(errs, err)
+		}
+	}
+
 	if p.MetricMapping.KVCacheUtilization != nil {
 		usage, err := p.getMetric(metricFamilies, *p.MetricMapping.KVCacheUtilization)
 		if err == nil {

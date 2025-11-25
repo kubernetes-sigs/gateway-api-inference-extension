@@ -126,6 +126,7 @@ var (
 		"then a self-signed certificate is used.")
 	// metric flags
 	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
+	totalRunningRequestsMetric   = flag.String("total-running-requests-metric", runserver.DefaultTotalRunningRequestsMetric, "Prometheus metric for the number of running requests.")
 	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
 	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
@@ -549,6 +550,7 @@ func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDat
 func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 	mapping, err := backendmetrics.NewMetricMapping(
 		*totalQueuedRequestsMetric,
+		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
 		*cacheInfoMetric,
@@ -597,6 +599,7 @@ func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 		*modelServerMetricsHttpsInsecureSkipVerify,
 		nil)
 	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
+		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric, *cacheInfoMetric)
 
