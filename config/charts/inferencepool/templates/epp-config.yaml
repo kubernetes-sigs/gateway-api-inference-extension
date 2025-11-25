@@ -13,7 +13,7 @@ data:
     - type: prefix-cache-scorer
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
     - type: slo-aware-routing
-      config:
+      parameters:
         {{- with .Values.inferenceExtension.latencyPredictor.sloAwareRouting | default dict }}
         samplingMean: {{ .samplingMean | default 100.0 }}
         maxSampledTokens: {{ .maxSampledTokens | default 20 }}

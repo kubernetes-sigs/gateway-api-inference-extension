@@ -96,7 +96,6 @@ spec:
         {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
         - --ha-enable-leader-election
         {{- end }}
-        {{- include "gateway-api-inference-extension.latencyPredictor.args" . | nindent 8 }}
         # Pass additional flags via the inferenceExtension.flags field in values.yaml.
         {{- range $key, $value := .Values.inferenceExtension.flags }}
         - --{{ $key }}

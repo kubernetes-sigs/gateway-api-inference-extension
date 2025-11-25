@@ -1,13 +1,4 @@
 {{/*
-Latency Predictor Args
-*/}}
-{{- define "gateway-api-inference-extension.latencyPredictor.args" -}}
-{{- if .Values.inferenceExtension.latencyPredictor.enabled }}
-- --enable-latency-predictor
-{{- end }}
-{{- end }}
-
-{{/*
 Latency Predictor Env
 */}}
 {{- define "gateway-api-inference-extension.latencyPredictor.env" -}}
