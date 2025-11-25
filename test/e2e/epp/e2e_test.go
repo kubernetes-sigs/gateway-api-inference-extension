@@ -437,7 +437,6 @@ func verifyMetrics() {
 		}
 		// Check if all expected metrics are present in the metrics output.
 		for _, metric := range expectedMetrics {
-			fmt.Printf("Response: %s", resp)
 			if !strings.Contains(resp, metric) {
 				return fmt.Errorf("expected metric %s not found in metrics output", metric)
 			}
