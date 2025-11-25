@@ -9,6 +9,10 @@ bbr:
   port: 9004
   healthCheckPort: 9005
 
+  flags:
+    # Log verbosity
+    v: 3
+
 provider:
   name: none
 
