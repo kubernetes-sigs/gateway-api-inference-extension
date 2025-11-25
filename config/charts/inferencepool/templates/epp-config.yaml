@@ -12,7 +12,7 @@ data:
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
-    - type: slo-aware-routing
+    - type: predicted-latency-scorer
       parameters:
         {{- with .Values.inferenceExtension.latencyPredictor.sloAwareRouting | default dict }}
         samplingMean: {{ .samplingMean | default 100.0 }}
@@ -32,23 +32,23 @@ data:
         affinityGateTauGlobal: {{ .affinityGateTauGlobal | default 0.99 }}
         selectionMode: {{ .selectionMode | default "linear" | quote }}
         {{- end }}
-    - type: slo-aware-profile-handler
+    - type: predicted-latency-profile-handler
     {{- end }}
     schedulingProfiles:
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
-    - name: prefix
+    - name: predicted-latency-prefix
       plugins:
       - pluginRef: prefix-cache-scorer
-    - name: default
+    - name: predicted-latency-no-routing
       plugins:
       - pluginRef: prefix-cache-scorer
-      - pluginRef: slo-aware-routing
+      - pluginRef: predicted-latency-scorer
         weight: 0
       - pluginRef: queue-scorer
       - pluginRef: kv-cache-utilization-scorer
-    - name: routing
+    - name: predicted-latency-routing
       plugins:
-      - pluginRef: slo-aware-routing
+      - pluginRef: predicted-latency-scorer
     {{- else }}
     - name: default
       plugins:

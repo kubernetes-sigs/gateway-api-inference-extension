@@ -19,7 +19,6 @@ package latencypredictorasync
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -68,12 +67,12 @@ func New(config *Config, logger logr.Logger) *Predictor {
 func (p *Predictor) Start(ctx context.Context) error {
 	// Get initial server status
 	if err := p.refreshServerStatus(ctx); err != nil {
-		return fmt.Errorf("failed to get initial server status: %v", err)
+		p.logger.Error(err, "failed to get initial server status (will retry in background)")
 	}
 
 	// Get initial model info if training server is available
 	if err := p.refreshModelInfo(ctx); err != nil {
-		return fmt.Errorf("failed to get initial model info: %v", err)
+		p.logger.Error(err, "failed to get initial model info (will retry in background)")
 	}
 
 	p.logger.Info("Latency predictor async client started.",

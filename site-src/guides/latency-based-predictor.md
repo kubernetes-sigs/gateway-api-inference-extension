@@ -36,7 +36,7 @@ The latency-based routing plugin provides several strategies for selecting a mod
 -   `composite-most`: A strategy that considers a composite score of various metrics, and prefers the pod with the highest score.
 -   `composite-only`: This strategy only uses the composite score and ignores latency predictions.
 
-The selection strategy can be configured via the `HEADROOM_SELECTION_STRATEGY` environment variable in the Endpoint Picker deployment.
+The selection strategy can be configured via the `headroomSelectionStrategy` plugin config variable in the EPP helm chart (see deployment details below).
 
 ## Deploying with Latency-Based Routing
 
@@ -46,7 +46,7 @@ Before you begin, ensure you have a functional Inference Gateway with at least o
 
 ### Deployment
 
-To enable latency-based routing, you must enable the latency predictor in the chart and have built the images for the training/prediction sidecars, which are then deployed as containers alongside the Endpoint Picker. When the latency predictor is enabled, the `slo-aware-routing` and `slo-aware-profile-handler` plugins are automatically configured.
+To enable latency-based routing, you must enable the latency predictor in the chart and have built the images for the training/prediction sidecars, which are then deployed as containers alongside the Endpoint Picker. When the latency predictor is enabled, the `predicted-latency-scorer` and `predicted-latency-profile-handler` plugins are automatically configured.
 
 #### Steps:
 
@@ -67,7 +67,7 @@ helm install vllm-llama3-8b-instruct . \
 
 After these steps, Inference Gateway will be prepared to predict, train, and route requests based on their SLOs.
 
-For details on configuring specific environment variables for latency-based routing, refer to the [InferencePool Helm Chart README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/config/charts/inferencepool/README.md#latency-based-router-environment-variables).
+For details on specific plugin config variables for latency-based routing, refer to the [InferencePool Helm Chart README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/config/charts/inferencepool/README.md#latency-based-router-configuration).
 
 ### Sending Requests
 

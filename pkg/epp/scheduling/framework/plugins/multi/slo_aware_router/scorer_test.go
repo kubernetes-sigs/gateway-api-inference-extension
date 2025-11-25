@@ -375,8 +375,8 @@ func TestSLOAwareRouter_TypedName(t *testing.T) {
 	router := NewSLOAwareRouter(cfg, predictor)
 
 	tn := router.TypedName()
-	assert.Equal(t, "slo-aware-routing", tn.Type, "Type should be slo-aware-routing")
-	assert.Equal(t, "slo-aware-routing", tn.Name, "Default name should be slo-aware-routing")
+	assert.Equal(t, "predicted-latency-scorer", tn.Type, "Type should be predicted-latency-scorer")
+	assert.Equal(t, "predicted-latency-scorer", tn.Name, "Default name should be predicted-latency-scorer")
 }
 
 func TestSLOAwareRouter_WithName(t *testing.T) {
@@ -389,7 +389,7 @@ func TestSLOAwareRouter_WithName(t *testing.T) {
 	router = router.WithName(customName)
 
 	tn := router.TypedName()
-	assert.Equal(t, "slo-aware-routing", tn.Type, "Type should remain slo-aware-routing")
+	assert.Equal(t, "predicted-latency-scorer", tn.Type, "Type should remain predicted-latency-scorer")
 	assert.Equal(t, customName, tn.Name, "Name should be updated to custom name")
 }
 

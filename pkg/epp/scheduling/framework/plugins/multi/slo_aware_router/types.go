@@ -43,7 +43,7 @@ const (
 )
 
 const (
-	SLOAwareRouterPluginType = "slo-aware-routing"
+	SLOAwareRouterPluginType = "predicted-latency-scorer"
 	eps                      = 1e-9
 	wMax                     = 100
 	minWeight                = 1

@@ -32,10 +32,10 @@ import (
 )
 
 const (
-	SLOAwareProfileHandlerType = "slo-aware-profile-handler"
-	DefaultProfileName         = "default"
-	PrefixProfileName          = "prefix"
-	SLOProfileName             = "routing"
+	SLOAwareProfileHandlerType  = "predicted-latency-profile-handler"
+	NoLatencyRoutingProfileName = "predicted-latency-no-routing"
+	PrefixProfileName           = "predicted-latency-prefix"
+	LatencyRoutingProfileName   = "predicted-latency-routing"
 
 	// Boolean header string for whether to use predictor based scheduling
 	PreictionBasedSchedulingHeaderKey = "x-prediction-based-scheduling"
@@ -89,7 +89,7 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 
 	if predictorBasedScheduling {
 		_, prefixExecuted := profileResults[PrefixProfileName]
-		_, routingExecuted := profileResults[SLOProfileName]
+		_, routingExecuted := profileResults[LatencyRoutingProfileName]
 		if prefixExecuted && routingExecuted { // both routing profiles have been executed already in previous call
 			return map[string]*framework.SchedulerProfile{}
 		}
@@ -103,13 +103,13 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 
 		// otherwise, return only the SLO profile to be executed next
 		return map[string]*framework.SchedulerProfile{
-			SLOProfileName: profiles[SLOProfileName],
+			LatencyRoutingProfileName: profiles[LatencyRoutingProfileName],
 		}
 	}
 
 	// If predictor based scheduling is not requested, proceed with only default profile
 	return map[string]*framework.SchedulerProfile{
-		DefaultProfileName: profiles[DefaultProfileName],
+		NoLatencyRoutingProfileName: profiles[NoLatencyRoutingProfileName],
 	}
 }
 
@@ -129,22 +129,22 @@ func (h *SLOAwareProfileHandler) ProcessResults(ctx context.Context, _ *types.Cy
 	}
 
 	if predictorBasedScheduling { // TODO grab header directly from request.Headers instead of request field
-		if profileResults[SLOProfileName] == nil { // there was an error while running the SLO profile
-			return nil, fmt.Errorf("failed to run scheduler profile '%s'", SLOProfileName)
+		if profileResults[LatencyRoutingProfileName] == nil { // there was an error while running the SLO profile
+			return nil, fmt.Errorf("failed to run scheduler profile '%s'", LatencyRoutingProfileName)
 		}
 		return &types.SchedulingResult{
 			ProfileResults:     profileResults,
-			PrimaryProfileName: SLOProfileName,
+			PrimaryProfileName: LatencyRoutingProfileName,
 		}, nil
 	}
 
-	if profileResults[DefaultProfileName] == nil { // there was an error while running the default profile
-		return nil, fmt.Errorf("failed to run scheduler profile '%s'", DefaultProfileName)
+	if profileResults[NoLatencyRoutingProfileName] == nil { // there was an error while running the default profile
+		return nil, fmt.Errorf("failed to run scheduler profile '%s'", NoLatencyRoutingProfileName)
 	}
 
 	return &types.SchedulingResult{
 		ProfileResults:     profileResults,
-		PrimaryProfileName: DefaultProfileName,
+		PrimaryProfileName: NoLatencyRoutingProfileName,
 	}, nil
 }
 
