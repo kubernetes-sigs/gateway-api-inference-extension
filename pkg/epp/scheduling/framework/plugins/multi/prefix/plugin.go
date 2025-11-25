@@ -28,7 +28,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -307,10 +306,10 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle)
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			activePodMetrics := handle.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
-			activePods := make(map[ServerID]struct{}, len(activePodMetrics))
-			for _, pm := range activePodMetrics {
-				activePods[ServerID(pm.GetPod().NamespacedName)] = struct{}{}
+			podNames := handle.PodList()
+			activePods := make(map[ServerID]struct{}, len(podNames))
+			for _, nsn := range podNames {
+				activePods[ServerID(nsn)] = struct{}{}
 			}
 
 			for _, pod := range m.indexer.Pods() {

@@ -473,9 +473,22 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 	return rawConfig, nil
 }
 
+// Return a function that can be used in the EPP Handle to list pod names.
+func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
+	return func() []types.NamespacedName {
+		pods := ds.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
+		names := make([]types.NamespacedName, 0, len(pods))
+
+		for _, p := range pods {
+			names = append(names, p.GetPod().NamespacedName)
+		}
+		return names
+	}
+}
+
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
-	handle := plugins.NewEppHandle(ctx, ds.PodList)
+	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
 	cfg, err := loader.LoadConfigPhaseTwo(rawConfig, handle, logger)
 
 	if err != nil {
