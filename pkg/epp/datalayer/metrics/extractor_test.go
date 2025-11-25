@@ -50,8 +50,8 @@ func TestExtractorExtract(t *testing.T) {
 		t.Fatalf("failed to create extractor: %v", err)
 	}
 
-	if name := extractor.Name(); name == "" {
-		t.Error("empty extractor name")
+	if exType := extractor.TypedName().Type; exType == "" {
+		t.Error("empty extractor type")
 	}
 
 	if inputType := extractor.ExpectedInputType(); inputType != PrometheusMetricType {

@@ -637,7 +637,7 @@ func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 	// TODO: this could be moved to the configuration loading functions once ported over.
 	sources := datalayer.GetSources()
 	for _, src := range sources {
-		logger.Info("data layer configuration", "source", src.Name(), "extractors", src.Extractors())
+		logger.Info("data layer configuration", "source", src.TypedName().Type, "extractors", src.Extractors())
 	}
 	factory := datalayer.NewEndpointFactory(sources, *refreshMetricsInterval)
 	return factory, nil

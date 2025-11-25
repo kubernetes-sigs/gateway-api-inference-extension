@@ -22,12 +22,14 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 // DataSource provides raw data to registered Extractors.
 type DataSource interface {
-	// Name of this data source.
-	Name() string
+	// TypedName returns the type and name of the data source.
+	TypedName() plugins.TypedName
 	// Extractors returns a list of registered Extractor names.
 	Extractors() []string
 	// AddExtractor adds an extractor to the data source. Multiple
@@ -43,15 +45,20 @@ type DataSource interface {
 	Collect(ctx context.Context, ep Endpoint) error
 }
 
+var _ plugins.Plugin = (DataSource)(nil) // DataSource implements Plugin interface
+
 // Extractor transforms raw data into structured attributes.
 type Extractor interface {
-	Name() string
+	// TypedName returns the type and name of the extractor.
+	TypedName() plugins.TypedName
 	// ExpectedType defines the type expected by the extractor.
 	ExpectedInputType() reflect.Type
 	// Extract transforms the raw data source output into a concrete structured
 	// attribute, stored on the given endpoint.
 	Extract(ctx context.Context, data any, ep Endpoint) error
 }
+
+var _ plugins.Plugin = (Extractor)(nil) // Extractor implements Plugin interface
 
 var defaultDataSources = DataSourceRegistry{}
 
@@ -65,15 +72,15 @@ func (dsr *DataSourceRegistry) Register(src DataSource) error {
 	if src == nil {
 		return errors.New("unable to register a nil data source")
 	}
-	if _, loaded := dsr.sources.LoadOrStore(src.Name(), src); loaded {
-		return fmt.Errorf("unable to register duplicate data source: %s", src.Name())
+	if _, loaded := dsr.sources.LoadOrStore(src.TypedName().Type, src); loaded {
+		return fmt.Errorf("unable to register duplicate data source: %s", src.TypedName().String())
 	}
 	return nil
 }
 
-// GetNamedSource fetches a source by name.
-func (dsr *DataSourceRegistry) GetNamedSource(name string) (DataSource, bool) {
-	if val, ok := dsr.sources.Load(name); ok {
+// GetSourceByType fetches a source by type.
+func (dsr *DataSourceRegistry) GetSourceByType(dsType string) (DataSource, bool) {
+	if val, ok := dsr.sources.Load(dsType); ok {
 		if ds, ok := val.(DataSource); ok {
 			return ds, true
 		}
@@ -100,9 +107,9 @@ func RegisterSource(src DataSource) error {
 	return defaultDataSources.Register(src)
 }
 
-// GetNamedSource returns a typed data source from the default registry.
-func GetNamedSource[T DataSource](name string) (T, bool) {
-	v, ok := defaultDataSources.GetNamedSource(name)
+// GetSourceByType returns a typed data source from the default registry.
+func GetSourceByType[T DataSource](dsType string) (T, bool) {
+	v, ok := defaultDataSources.GetSourceByType(dsType)
 	if !ok {
 		var zero T
 		return zero, false

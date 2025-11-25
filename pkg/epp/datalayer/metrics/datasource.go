@@ -25,10 +25,11 @@ import (
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
-	DataSourceName = "metrics-data-source"
+	DataSourceType = "metrics-data-source"
 )
 
 // DataSource is a Model Server Protocol (MSP) compliant metrics data source,
@@ -66,21 +67,23 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 	return dataSrc
 }
 
-// Name returns the metrics data source name.
-func (dataSrc *DataSource) Name() string {
-	return DataSourceName
+// TypedName returns the metrics data source type and name.
+func (dataSrc *DataSource) TypedName() plugins.TypedName {
+	return plugins.TypedName{
+		Type: DataSourceType,
+	}
 }
 
 // Extractors returns a list of registered Extractor names.
 func (dataSrc *DataSource) Extractors() []string {
-	names := []string{}
+	extractors := []string{}
 	dataSrc.extractors.Range(func(_, val any) bool {
 		if ex, ok := val.(datalayer.Extractor); ok {
-			names = append(names, ex.Name())
+			extractors = append(extractors, ex.TypedName().Type)
 		}
 		return true // continue iteration
 	})
-	return names
+	return extractors
 }
 
 // AddExtractor adds an extractor to the data source, validating it can process
@@ -89,8 +92,9 @@ func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 	if err := datalayer.ValidateExtractorType(PrometheusMetricType, extractor.ExpectedInputType()); err != nil {
 		return err
 	}
-	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.Name(), extractor); loaded {
-		return fmt.Errorf("attempt to add extractor with duplicate name %s to %s", extractor.Name(), dataSrc.Name())
+	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.TypedName().Type, extractor); loaded {
+		return fmt.Errorf("attempt to add extractor with duplicate name %s to %s", extractor.TypedName().Type,
+			dataSrc.TypedName().Type)
 	}
 	return nil
 }

@@ -30,11 +30,12 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
-	extractorName = "model-server-protocol-metrics"
+	extractorType = "model-server-protocol-metrics"
 
 	// LoRA metrics based on MSP
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
@@ -76,9 +77,11 @@ func NewExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec s
 	}, nil
 }
 
-// Name returns the name of the metrics.Extractor.
-func (ext *Extractor) Name() string {
-	return extractorName
+// TypedName returns the type and name of the metrics.Extractor.
+func (ext *Extractor) TypedName() plugins.TypedName {
+	return plugins.TypedName{
+		Type: extractorType,
+	}
 }
 
 // ExpectedType defines the type expected by the metrics.Extractor - a
