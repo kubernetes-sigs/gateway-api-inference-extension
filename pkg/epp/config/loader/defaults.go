@@ -17,8 +17,10 @@ limitations under the License.
 package loader
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -41,12 +43,34 @@ var defaultScorerWeight = DefaultScorerWeight
 // setDefaultsPhaseOne Performs the first phase of setting configuration defaults.
 // In particuylar it:
 //  1. Sets the name of plugins, for which one wasn't specified
+//  2. Sets defaults for the feature gates
+//  3. Sets defaults for the SaturationDetector configuration
 func setDefaultsPhaseOne(cfg *configapi.EndpointPickerConfig) {
 	// If no name was given for the plugin, use it's type as the name
 	for idx, pluginConfig := range cfg.Plugins {
 		if pluginConfig.Name == "" {
 			cfg.Plugins[idx].Name = pluginConfig.Type
 		}
+	}
+
+	// If no feature gates were specified, provide a default FeatureGates struct
+	if cfg.FeatureGates == nil {
+		cfg.FeatureGates = configapi.FeatureGates{}
+	}
+
+	// If the SaturationDetector configuration wasn't specified setup a default one
+	if cfg.SaturationDetector == nil {
+		cfg.SaturationDetector = &configapi.SaturationDetector{}
+	}
+	if cfg.SaturationDetector.QueueDepthThreshold == 0 {
+		cfg.SaturationDetector.QueueDepthThreshold = saturationdetector.DefaultQueueDepthThreshold
+	}
+	if cfg.SaturationDetector.KVCacheUtilThreshold == 0.0 {
+		cfg.SaturationDetector.KVCacheUtilThreshold = saturationdetector.DefaultKVCacheUtilThreshold
+	}
+	if cfg.SaturationDetector.MetricsStalenessThreshold.Duration == 0.0 {
+		cfg.SaturationDetector.MetricsStalenessThreshold =
+			metav1.Duration{Duration: saturationdetector.DefaultMetricsStalenessThreshold}
 	}
 }
 

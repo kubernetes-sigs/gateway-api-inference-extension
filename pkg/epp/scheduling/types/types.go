@@ -24,6 +24,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 const nilString = "<nil>"
@@ -191,6 +192,9 @@ type Pod interface {
 	GetPod() *backend.Pod
 	GetMetrics() *backendmetrics.MetricsState
 	String() string
+	Get(string) (datalayer.Cloneable, bool)
+	Put(string, datalayer.Cloneable)
+	Keys() []string
 }
 
 type ScoredPod struct {
@@ -217,6 +221,7 @@ func (pm *PodMetrics) GetMetrics() *backendmetrics.MetricsState {
 type PodMetrics struct {
 	*backend.Pod
 	*backendmetrics.MetricsState
+	datalayer.AttributeMap
 }
 
 // ProfileRunResult captures the profile run result.
@@ -228,4 +233,9 @@ type ProfileRunResult struct {
 type SchedulingResult struct {
 	ProfileResults     map[string]*ProfileRunResult
 	PrimaryProfileName string
+}
+
+// Cloneable types support cloning of the value.
+type Cloneable interface {
+	Clone() Cloneable
 }

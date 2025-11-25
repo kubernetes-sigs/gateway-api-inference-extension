@@ -26,6 +26,8 @@ const (
 	DestinationEndpointNamespace = "envoy.lb"
 	// DestinationEndpointKey is the header and response metadata key used by Envoy to route to the appropriate pod.
 	DestinationEndpointKey = "x-gateway-destination-endpoint"
+	// DestinationEndpointServedKey is the metadata key used by Envoy to specify the endpoint that served the request.
+	DestinationEndpointServedKey = "x-gateway-destination-endpoint-served"
 	// FlowFairnessIDKey is the header key used to pass the fairness ID to be used in Flow Control.
 	FlowFairnessIDKey = "x-gateway-inference-fairness-id"
 	// ObjectiveKey is the header key used to specify the objective of an incoming request.

@@ -29,6 +29,7 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -36,21 +37,35 @@ import (
 
 var scheme = runtime.NewScheme()
 
+var registeredFeatureGates = sets.New[string]() // set of feature gates names, a name must be unique
+
 func init() {
 	utilruntime.Must(configapi.Install(scheme))
 }
 
-// Load config from supplied text that was converted to []byte
-func LoadConfig(configBytes []byte, handle plugins.Handle, logger logr.Logger) (*config.Config, error) {
+// LoadConfigPhaseOne first phase of loading configuration from supplied text that was converted to []byte
+func LoadConfigPhaseOne(configBytes []byte, logger logr.Logger) (*configapi.EndpointPickerConfig, map[string]bool, error) {
 	rawConfig, err := loadRawConfig(configBytes)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	logger.Info("Loaded configuration", "config", rawConfig)
 
+	if err = validateFeatureGates(rawConfig.FeatureGates); err != nil {
+		return nil, nil, fmt.Errorf("failed to validate feature gates - %w", err)
+	}
+
 	setDefaultsPhaseOne(rawConfig)
 
+	featureConfig := loadFeatureConfig(rawConfig.FeatureGates)
+
+	return rawConfig, featureConfig, nil
+}
+
+// LoadConfigPhaseOne first phase of loading configuration from supplied text that was converted to []byte
+func LoadConfigPhaseTwo(rawConfig *configapi.EndpointPickerConfig, handle plugins.Handle, logger logr.Logger) (*config.Config, error) {
+	var err error
 	// instantiate loaded plugins
 	if err = instantiatePlugins(rawConfig.Plugins, handle); err != nil {
 		return nil, fmt.Errorf("failed to instantiate plugins - %w", err)
@@ -70,6 +85,7 @@ func LoadConfig(configBytes []byte, handle plugins.Handle, logger logr.Logger) (
 	if err != nil {
 		return nil, err
 	}
+	config.SaturationDetectorConfig = loadSaturationDetectorConfig(rawConfig.SaturationDetector)
 
 	return config, nil
 }
@@ -121,6 +137,39 @@ func loadSchedulerConfig(configProfiles []configapi.SchedulingProfile, handle pl
 	return scheduling.NewSchedulerConfig(profileHandler, profiles), nil
 }
 
+func loadFeatureConfig(featureGates configapi.FeatureGates) map[string]bool {
+	featureConfig := map[string]bool{}
+
+	for gate := range registeredFeatureGates {
+		featureConfig[gate] = false
+	}
+
+	for _, gate := range featureGates {
+		featureConfig[gate] = true
+	}
+
+	return featureConfig
+}
+
+func loadSaturationDetectorConfig(sd *configapi.SaturationDetector) *saturationdetector.Config {
+	sdConfig := saturationdetector.Config{}
+
+	sdConfig.QueueDepthThreshold = sd.QueueDepthThreshold
+	if sdConfig.QueueDepthThreshold <= 0 {
+		sdConfig.QueueDepthThreshold = saturationdetector.DefaultQueueDepthThreshold
+	}
+	sdConfig.KVCacheUtilThreshold = sd.KVCacheUtilThreshold
+	if sdConfig.KVCacheUtilThreshold <= 0.0 || sdConfig.KVCacheUtilThreshold >= 1.0 {
+		sdConfig.KVCacheUtilThreshold = saturationdetector.DefaultKVCacheUtilThreshold
+	}
+	sdConfig.MetricsStalenessThreshold = sd.MetricsStalenessThreshold.Duration
+	if sdConfig.MetricsStalenessThreshold <= 0.0 {
+		sdConfig.MetricsStalenessThreshold = saturationdetector.DefaultMetricsStalenessThreshold
+	}
+
+	return &sdConfig
+}
+
 func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins.Handle) error {
 	pluginNames := sets.New[string]() // set of plugin names, a name must be unique
 
@@ -150,34 +199,7 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins
 	return nil
 }
 
-func validateSchedulingProfiles(config *configapi.EndpointPickerConfig) error {
-	profileNames := sets.New[string]()
-	for _, profile := range config.SchedulingProfiles {
-		if profile.Name == "" {
-			return errors.New("SchedulingProfile must have a name")
-		}
-
-		if profileNames.Has(profile.Name) {
-			return fmt.Errorf("the name '%s' has been specified for more than one SchedulingProfile", profile.Name)
-		}
-		profileNames.Insert(profile.Name)
-
-		for _, plugin := range profile.Plugins {
-			if len(plugin.PluginRef) == 0 {
-				return fmt.Errorf("SchedulingProfile '%s' plugins must have a plugin reference", profile.Name)
-			}
-
-			notFound := true
-			for _, pluginConfig := range config.Plugins {
-				if plugin.PluginRef == pluginConfig.Name {
-					notFound = false
-					break
-				}
-			}
-			if notFound {
-				return errors.New(plugin.PluginRef + " is a reference to an undefined Plugin")
-			}
-		}
-	}
-	return nil
+// RegisterFeatureGate registers feature gate keys for validation
+func RegisterFeatureGate(gate string) {
+	registeredFeatureGates.Insert(gate)
 }

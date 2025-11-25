@@ -16,14 +16,13 @@ limitations under the License.
 
 // Package roundrobin provides a `framework.InterFlowDispatchPolicy` that selects a queue from a priority band using a
 // simple round-robin strategy.
-package roundrobin
+package interflow
 
 import (
 	"slices"
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
@@ -31,7 +30,7 @@ import (
 const RoundRobinPolicyName = "RoundRobin"
 
 func init() {
-	dispatch.MustRegisterPolicy(dispatch.RegisteredPolicyName(RoundRobinPolicyName),
+	MustRegisterPolicy(RegisteredPolicyName(RoundRobinPolicyName),
 		func() (framework.InterFlowDispatchPolicy, error) {
 			return newRoundRobin(), nil
 		})
@@ -104,7 +103,7 @@ func (r *iterator) selectNextQueue(band framework.PriorityBandAccessor) framewor
 	}
 
 	numFlows := len(keys)
-	for i := 0; i < numFlows; i++ {
+	for i := range numFlows {
 		currentIdx := (startIndex + i) % numFlows
 		currentKey := keys[currentIdx]
 		queue := band.Queue(currentKey.ID)

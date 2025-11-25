@@ -38,9 +38,7 @@ type MockFlowQueueAccessor struct {
 	LenV          int
 	ByteSizeV     uint64
 	PeekHeadV     types.QueueItemAccessor
-	PeekHeadErrV  error
 	PeekTailV     types.QueueItemAccessor
-	PeekTailErrV  error
 	FlowKeyV      types.FlowKey
 	ComparatorV   framework.ItemComparator
 	CapabilitiesV []framework.QueueCapability
@@ -53,12 +51,12 @@ func (m *MockFlowQueueAccessor) Comparator() framework.ItemComparator      { ret
 func (m *MockFlowQueueAccessor) FlowKey() types.FlowKey                    { return m.FlowKeyV }
 func (m *MockFlowQueueAccessor) Capabilities() []framework.QueueCapability { return m.CapabilitiesV }
 
-func (m *MockFlowQueueAccessor) PeekHead() (types.QueueItemAccessor, error) {
-	return m.PeekHeadV, m.PeekHeadErrV
+func (m *MockFlowQueueAccessor) PeekHead() types.QueueItemAccessor {
+	return m.PeekHeadV
 }
 
-func (m *MockFlowQueueAccessor) PeekTail() (types.QueueItemAccessor, error) {
-	return m.PeekTailV, m.PeekTailErrV
+func (m *MockFlowQueueAccessor) PeekTail() types.QueueItemAccessor {
+	return m.PeekTailV
 }
 
 var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
@@ -108,13 +106,11 @@ type MockSafeQueue struct {
 	LenV          int
 	ByteSizeV     uint64
 	PeekHeadV     types.QueueItemAccessor
-	PeekHeadErrV  error
 	PeekTailV     types.QueueItemAccessor
-	PeekTailErrV  error
-	AddFunc       func(item types.QueueItemAccessor) error
+	AddFunc       func(item types.QueueItemAccessor)
 	RemoveFunc    func(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
-	CleanupFunc   func(predicate framework.PredicateFunc) ([]types.QueueItemAccessor, error)
-	DrainFunc     func() ([]types.QueueItemAccessor, error)
+	CleanupFunc   func(predicate framework.PredicateFunc) []types.QueueItemAccessor
+	DrainFunc     func() []types.QueueItemAccessor
 }
 
 func (m *MockSafeQueue) Name() string                              { return m.NameV }
@@ -122,19 +118,18 @@ func (m *MockSafeQueue) Capabilities() []framework.QueueCapability { return m.Ca
 func (m *MockSafeQueue) Len() int                                  { return m.LenV }
 func (m *MockSafeQueue) ByteSize() uint64                          { return m.ByteSizeV }
 
-func (m *MockSafeQueue) PeekHead() (types.QueueItemAccessor, error) {
-	return m.PeekHeadV, m.PeekHeadErrV
+func (m *MockSafeQueue) PeekHead() types.QueueItemAccessor {
+	return m.PeekHeadV
 }
 
-func (m *MockSafeQueue) PeekTail() (types.QueueItemAccessor, error) {
-	return m.PeekTailV, m.PeekTailErrV
+func (m *MockSafeQueue) PeekTail() types.QueueItemAccessor {
+	return m.PeekTailV
 }
 
-func (m *MockSafeQueue) Add(item types.QueueItemAccessor) error {
+func (m *MockSafeQueue) Add(item types.QueueItemAccessor) {
 	if m.AddFunc != nil {
-		return m.AddFunc(item)
+		m.AddFunc(item)
 	}
-	return nil
 }
 
 func (m *MockSafeQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
@@ -144,18 +139,18 @@ func (m *MockSafeQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAcc
 	return nil, nil
 }
 
-func (m *MockSafeQueue) Cleanup(predicate framework.PredicateFunc) ([]types.QueueItemAccessor, error) {
+func (m *MockSafeQueue) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
 	if m.CleanupFunc != nil {
 		return m.CleanupFunc(predicate)
 	}
-	return nil, nil
+	return nil
 }
 
-func (m *MockSafeQueue) Drain() ([]types.QueueItemAccessor, error) {
+func (m *MockSafeQueue) Drain() []types.QueueItemAccessor {
 	if m.DrainFunc != nil {
 		return m.DrainFunc()
 	}
-	return nil, nil
+	return nil
 }
 
 var _ framework.SafeQueue = &MockSafeQueue{}

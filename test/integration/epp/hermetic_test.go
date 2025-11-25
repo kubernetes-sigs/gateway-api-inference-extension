@@ -48,6 +48,7 @@ import (
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	metricsutils "k8s.io/component-base/metrics/testutil"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,8 +57,6 @@ import (
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/yaml"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -79,6 +78,7 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -1170,10 +1170,11 @@ func BeforeSuite() func() {
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
-	serverRunner.PoolGKNN = common.GKNN{
+	serverRunner.GKNN = common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
+
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()

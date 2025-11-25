@@ -24,6 +24,27 @@ $ helm install body-based-router oci://us-central1-docker.pkg.dev/k8s-staging-im
     --set provider.name=[gke|istio]
 ```
 
+### Install with Custom Cmd-line Flags
+
+To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
+
+```txt
+$ helm install body-based-router ./config/charts/body-based-routing \
+    --set provider.name=[gke|istio] \
+    --set inferenceGateway.name=inference-gateway
+    --set bbr.flags.<FLAG_NAME>=<FLAG_VALUE>
+```
+
+Alternatively, you can define flags in the `values.yaml` file:
+
+```yaml
+bbr:
+  flags:
+    FLAG_NAME: <FLAG_VALUE>
+    v: 3 ## Log verbosity
+    ...
+```
+
 ## Uninstall
 
 Run the following command to uninstall the chart:
@@ -46,6 +67,7 @@ The following table list the configurable parameters of the chart.
 | `bbr.image.hub`              | Registry URL where the image is hosted.                                                                           | 
 | `bbr.image.tag`              | Image tag.                                                                                                        |
 | `bbr.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`. |
+| `bbr.flags`                  | map of flags which are passed through to bbr. Refer to [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/bbr/runner/runner.go) for complete list. |
 | `provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
 | `inferenceGateway.name`      | The name of the Gateway. Defaults to `inference-gateway`.                                                         |                        
 

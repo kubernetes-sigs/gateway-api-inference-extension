@@ -26,9 +26,11 @@ import (
 	"time"
 
 	dto "github.com/prometheus/client_model/go"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -64,8 +66,8 @@ func Produces() map[string]any {
 // configured with the given metrics' specifications.
 // These are mandatory metrics per the MSP specification, and are used
 // as the basis for the built-in scheduling plugins.
-func NewExtractor(queueSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
-	mapping, err := NewMapping(queueSpec, kvusageSpec, loraSpec, cacheInfoSpec)
+func NewExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
+	mapping, err := NewMapping(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
@@ -107,6 +109,15 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
+	if spec := ext.mapping.TotalRunningRequests; spec != nil { // extract running requests
+		if metric, err := spec.getLatestMetric(families); err != nil {
+			errs = append(errs, err)
+		} else {
+			clone.RunningQueueSize = int(extractValue(metric))
+			updated = true
+		}
+	}
+
 	if spec := ext.mapping.KVCacheUtilization; spec != nil { // extract KV cache usage
 		if metric, err := spec.getLatestMetric(families); err != nil {
 			errs = append(errs, err)
@@ -136,8 +147,10 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
+	logger := log.FromContext(ctx).WithValues("pod", ep.GetPod().NamespacedName)
 	if updated {
 		clone.UpdateTime = time.Now()
+		logger.V(logutil.TRACE).Info("Refreshed metrics", "updated", clone)
 		ep.UpdateMetrics(clone)
 	}
 

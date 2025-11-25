@@ -74,22 +74,16 @@ func testLifecycleAndOrdering(
 	t.Helper()
 
 	// PeekHead/PeekTail on empty queue
-	peeked, err := q.PeekHead()
-	assert.ErrorIs(t, err, framework.ErrQueueEmpty,
-		"[%s] PeekHead on empty queue should return ErrQueueEmpty", comparatorName)
+	peeked := q.PeekHead()
 	assert.Nil(t, peeked, "[%s] PeekHead on empty queue should return a nil item", comparatorName)
-	peeked, err = q.PeekTail()
-	assert.ErrorIs(t, err, framework.ErrQueueEmpty,
-		"[%s] PeekTail on empty queue should return ErrQueueEmpty", comparatorName)
+	peeked = q.PeekTail()
 	assert.Nil(t, peeked, "[%s] PeekTail on empty queue should return a nil item", comparatorName)
 
 	// Add items
 	currentExpectedLen := 0
 	var currentExpectedByteSize uint64
 	for i, item := range itemsInOrder {
-		addErr := q.Add(item)
-		require.NoError(t, addErr, "[%s] Add should not fail for a valid item (item %d, ID: %s)",
-			comparatorName, i, item.OriginalRequest().ID())
+		q.Add(item)
 		require.NotNil(t, item.Handle(), "[%s] Add must assign a non-nil handle to the item (item %d, ID: %s)",
 			comparatorName, i, item.OriginalRequest().ID())
 		require.False(t, item.Handle().IsInvalidated(),
@@ -121,8 +115,7 @@ func testLifecycleAndOrdering(
 	expectedByteSize := expectedTotalByteSize
 	for i, expectedItem := range itemsInOrder {
 		// Verify PeekHead
-		peeked, err = q.PeekHead()
-		require.NoError(t, err, "[%s] PeekHead should not error on a non-empty queue (iteration %d)", comparatorName, i)
+		peeked = q.PeekHead()
 		require.NotNil(t, peeked, "[%s] PeekHead should return a non-nil item (iteration %d)", comparatorName, i)
 		assert.Equal(t, expectedItem.OriginalRequest().ID(), peeked.OriginalRequest().ID(),
 			"[%s] PeekHead must return the item (ID: %s) at the head of the queue (iteration %d)",
@@ -137,8 +130,7 @@ func testLifecycleAndOrdering(
 			"[%s] ByteSize() must be unchanged after PeekHead (iteration %d)", comparatorName, i)
 
 		// Verify PeekTail
-		peekedTail, err := q.PeekTail()
-		require.NoError(t, err, "[%s] PeekTail should not error on a non-empty queue (iteration %d)", comparatorName, i)
+		peekedTail := q.PeekTail()
 		require.NotNil(t, peekedTail, "[%s] PeekTail should return a non-nil item (iteration %d)", comparatorName, i)
 		// The tail is the last item in the *remaining* ordered slice.
 		expectedTailItem := itemsInOrder[len(itemsInOrder)-1]
@@ -166,9 +158,7 @@ func testLifecycleAndOrdering(
 	assert.Zero(t, q.Len(), "[%s] Queue length should be 0 after all items are removed", comparatorName)
 	assert.Zero(t, q.ByteSize(), "[%s] Queue byte size should be 0 after all items are removed", comparatorName)
 
-	peeked, err = q.PeekHead()
-	assert.ErrorIs(t, err, framework.ErrQueueEmpty, "[%s] PeekHead on an empty queue should return ErrQueueEmpty again",
-		comparatorName)
+	peeked = q.PeekHead()
 	assert.Nil(t, peeked, "[%s] PeekHead on an empty queue should return a nil item again", comparatorName)
 }
 
@@ -247,33 +237,18 @@ func TestQueueConformance(t *testing.T) {
 				})
 			}
 
-			t.Run("Add_NilItem", func(t *testing.T) {
-				t.Parallel()
-				q, err := constructor(enqueueTimeComparator)
-				require.NoError(t, err, "Setup: creating queue for test should not fail")
-
-				currentLen := q.Len()
-				currentByteSize := q.ByteSize()
-				err = q.Add(nil)
-				assert.ErrorIs(t, err, framework.ErrNilQueueItem, "Add(nil) must return ErrNilQueueItem")
-				assert.Equal(t, currentLen, q.Len(), "The queue's length must not change after a failed Add")
-				assert.Equal(t, currentByteSize, q.ByteSize(), "The queue's byte size must not change after a failed Add")
-			})
-
 			t.Run("Remove_InvalidHandle", func(t *testing.T) {
 				t.Parallel()
 				q, err := constructor(enqueueTimeComparator)
 				require.NoError(t, err, "Setup: creating queue for test should not fail")
 
 				item := typesmocks.NewMockQueueItemAccessor(100, "item", flowKey)
-				err = q.Add(item)
-				require.NoError(t, err, "Setup: adding an item should succeed")
+				q.Add(item)
 
 				otherQ, err := constructor(enqueueTimeComparator) // A different queue instance
 				require.NoError(t, err, "Setup: creating otherQ should succeed")
 				otherItem := typesmocks.NewMockQueueItemAccessor(10, "other_item", types.FlowKey{ID: "other-flow"})
-				err = otherQ.Add(otherItem)
-				require.NoError(t, err, "Setup: adding item to otherQ should succeed")
+				otherQ.Add(otherItem)
 				alienHandle := otherItem.Handle()
 				require.NotNil(t, alienHandle, "Setup: alien handle should not be nil")
 
@@ -322,9 +297,9 @@ func TestQueueConformance(t *testing.T) {
 				item3 := typesmocks.NewMockQueueItemAccessor(30, "item3_nonhead", flowKey)
 				item3.EnqueueTimeV = now.Add(-1 * time.Second)
 
-				_ = q.Add(item1)
-				_ = q.Add(item2)
-				_ = q.Add(item3)
+				q.Add(item1)
+				q.Add(item2)
+				q.Add(item3)
 				require.Equal(t, 3, q.Len(), "Queue should have 3 items before removing non-head")
 				handleNonHead := item2.Handle()
 
@@ -351,8 +326,7 @@ func TestQueueConformance(t *testing.T) {
 			t.Run("Cleanup_EmptyQueue", func(t *testing.T) {
 				t.Parallel()
 				emptyQ, _ := constructor(enqueueTimeComparator)
-				cleanedItems, err := emptyQ.Cleanup(predicateRemoveOddSizes)
-				require.NoError(t, err, "Cleanup on an empty queue should not return an error")
+				cleanedItems := emptyQ.Cleanup(predicateRemoveOddSizes)
 				assert.Empty(t, cleanedItems, "Cleanup on an empty queue should return an empty slice")
 				assert.Zero(t, emptyQ.Len(), "Len() should be 0 after Cleanup on an empty queue")
 				assert.Zero(t, emptyQ.ByteSize(), "ByteSize() should be 0 after Cleanup on an empty queue")
@@ -363,13 +337,12 @@ func TestQueueConformance(t *testing.T) {
 				q, _ := constructor(enqueueTimeComparator)
 				itemK1 := typesmocks.NewMockQueueItemAccessor(10, "k1_matchNone", flowKey)
 				itemK2 := typesmocks.NewMockQueueItemAccessor(12, "k2_matchNone", flowKey)
-				_ = q.Add(itemK1)
-				_ = q.Add(itemK2)
+				q.Add(itemK1)
+				q.Add(itemK2)
 				initialLen := q.Len()
 				initialBs := q.ByteSize()
 
-				cleanedItems, err := q.Cleanup(func(item types.QueueItemAccessor) bool { return false })
-				require.NoError(t, err, "Cleanup should not return an error")
+				cleanedItems := q.Cleanup(func(item types.QueueItemAccessor) bool { return false })
 				assert.Empty(t, cleanedItems, "Cleanup should return an empty slice when no items match the predicate")
 				assert.Equal(t, initialLen, q.Len(), "Len() should not change after Cleanup when no items match thepredicate")
 				assert.Equal(t, initialBs, q.ByteSize(),
@@ -383,11 +356,10 @@ func TestQueueConformance(t *testing.T) {
 				q, _ := constructor(enqueueTimeComparator)
 				itemR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_matchAll", flowKey)
 				itemR2 := typesmocks.NewMockQueueItemAccessor(13, "r2_matchAll", flowKey)
-				_ = q.Add(itemR1)
-				_ = q.Add(itemR2)
+				q.Add(itemR1)
+				q.Add(itemR2)
 
-				cleanedItems, err := q.Cleanup(func(item types.QueueItemAccessor) bool { return true })
-				require.NoError(t, err, "Cleanup should not return an error")
+				cleanedItems := q.Cleanup(func(item types.QueueItemAccessor) bool { return true })
 				assert.Len(t, cleanedItems, 2, "Cleanup should return all items that matched the predicate")
 				assert.Zero(t, q.Len(), "Len() should be 0 after Cleanup")
 				assert.Zero(t, q.ByteSize(), "ByteSize() should be 0 after Cleanup")
@@ -402,15 +374,14 @@ func TestQueueConformance(t *testing.T) {
 				iR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_subset", flowKey)
 				iK2 := typesmocks.NewMockQueueItemAccessor(22, "k2_subset", flowKey)
 				iR2 := typesmocks.NewMockQueueItemAccessor(33, "r2_subset", flowKey)
-				_ = q.Add(iK1)
-				_ = q.Add(iR1)
-				_ = q.Add(iK2)
-				_ = q.Add(iR2)
+				q.Add(iK1)
+				q.Add(iR1)
+				q.Add(iK2)
+				q.Add(iR2)
 
 				expectedKeptByteSize := iK1.OriginalRequest().ByteSize() + iK2.OriginalRequest().ByteSize()
 
-				cleanedItems, err := q.Cleanup(predicateRemoveOddSizes)
-				require.NoError(t, err, "Cleanup should not return an error")
+				cleanedItems := q.Cleanup(predicateRemoveOddSizes)
 				assert.Len(t, cleanedItems, 2, "Cleanup should return 2 items that matched the predicate")
 				assert.Equal(t, 2, q.Len(), "Len() should be 2 after Cleanup")
 				assert.Equal(t, expectedKeptByteSize, q.ByteSize(), "ByteSize() should be sum of kept items after Cleanup")
@@ -435,7 +406,7 @@ func TestQueueConformance(t *testing.T) {
 				// Verify remaining items are correct
 				var remainingIDs []string
 				for q.Len() > 0 {
-					peeked, _ := q.PeekHead()
+					peeked := q.PeekHead()
 					item, _ := q.Remove(peeked.Handle())
 					remainingIDs = append(remainingIDs, item.OriginalRequest().ID())
 				}
@@ -452,11 +423,10 @@ func TestQueueConformance(t *testing.T) {
 
 				itemD1 := typesmocks.NewMockQueueItemAccessor(10, "ditem1", flowKey)
 				itemD2 := typesmocks.NewMockQueueItemAccessor(20, "ditem2", flowKey)
-				_ = q.Add(itemD1)
-				_ = q.Add(itemD2)
+				q.Add(itemD1)
+				q.Add(itemD2)
 
-				drainedItems, err := q.Drain()
-				require.NoError(t, err, "Drain on a non-empty queue should not fail")
+				drainedItems := q.Drain()
 				assert.Len(t, drainedItems, 2, "Drain should return all items that were in the queue")
 				assert.Zero(t, q.Len(), "Queue length must be 0 after Drain")
 				assert.Zero(t, q.ByteSize(), "Queue byte size must be 0 after Drain")
@@ -482,12 +452,10 @@ func TestQueueConformance(t *testing.T) {
 				q, err := constructor(enqueueTimeComparator)
 				require.NoError(t, err, "Setup: creating queue for empty drain test should not fail")
 
-				drainedItems, err := q.Drain() // First drain on empty
-				require.NoError(t, err, "Drain on an empty queue should not fail")
+				drainedItems := q.Drain() // First drain on empty
 				assert.Empty(t, drainedItems, "Drain on an empty queue should return an empty slice")
 
-				drainedAgain, err := q.Drain() // Second drain on already empty
-				require.NoError(t, err, "Second drain on an already empty queue should not fail")
+				drainedAgain := q.Drain() // Second drain on already empty
 				assert.Empty(t, drainedAgain, "Second drain on an already empty queue should return an empty slice")
 				assert.Zero(t, q.Len())
 				assert.Zero(t, q.ByteSize())
@@ -510,7 +478,7 @@ func TestQueueConformance(t *testing.T) {
 				// Pre-populate the queue with an initial set of items.
 				for i := range initialItems {
 					item := typesmocks.NewMockQueueItemAccessor(1, fmt.Sprintf("%s_conc_init_%d", flowKey, i), flowKey)
-					err := q.Add(item)
+					q.Add(item)
 					require.NoError(t, err, "Setup: pre-populating the queue should not fail")
 					handleChan <- item.Handle()
 				}
@@ -529,11 +497,9 @@ func TestQueueConformance(t *testing.T) {
 							case 0: // Add
 								item := typesmocks.NewMockQueueItemAccessor(1,
 									fmt.Sprintf("%s_conc_init_%d_%d", flowKey, routineID, j), flowKey)
-								err := q.Add(item)
-								if assert.NoError(t, err, "Add must be goroutine-safe") {
-									successfulAdds.Add(1)
-									handleChan <- item.Handle()
-								}
+								q.Add(item)
+								successfulAdds.Add(1)
+								handleChan <- item.Handle()
 							case 1: // Remove
 								select {
 								case handle := <-handleChan:
@@ -553,17 +519,16 @@ func TestQueueConformance(t *testing.T) {
 							case 2: // Inspect
 								_ = q.Len()
 								_ = q.ByteSize()
-								_, err := q.PeekHead()
-								if q.Len() == 0 { // Only expect ErrQueueEmpty if Len is 0
-									assert.ErrorIs(t, err, framework.ErrQueueEmpty, "Peek on empty queue expected ErrQueueEmpty")
+								peeked := q.PeekHead()
+								if q.Len() == 0 {
+									assert.Nil(t, peeked, "PeekHead on empty queue expected nil")
 								}
-								_, err = q.PeekTail()
-								if q.Len() == 0 { // Only expect ErrQueueEmpty if Len is 0
-									assert.ErrorIs(t, err, framework.ErrQueueEmpty, "PeekTail on empty queue expected ErrQueueEmpty")
+								peeked = q.PeekTail()
+								if q.Len() == 0 {
+									assert.Nil(t, peeked, "PeekTail on empty queue expected nil")
 								}
 							case 3: // Cleanup
-								_, cleanupErr := q.Cleanup(func(item types.QueueItemAccessor) bool { return false })
-								assert.NoError(t, cleanupErr, "Cleanup (no-op) should be goroutine-safe")
+								q.Cleanup(func(item types.QueueItemAccessor) bool { return false })
 							}
 						}
 					}(i)
@@ -573,8 +538,7 @@ func TestQueueConformance(t *testing.T) {
 				close(handleChan)
 
 				// Drain the queue to verify all handles are invalidated and to count remaining items accurately.
-				drainedItems, drainErr := q.Drain()
-				require.NoError(t, drainErr, "Draining queue at the end of concurrency test should not fail")
+				drainedItems := q.Drain()
 
 				for _, item := range drainedItems {
 					require.True(t, item.Handle().IsInvalidated(), "All handles from final drain must be invalidated")

@@ -32,8 +32,9 @@ import (
 
 // FakePodMetrics is an implementation of PodMetrics that doesn't run the async refresh loop.
 type FakePodMetrics struct {
-	Pod     *backend.Pod
-	Metrics *MetricsState
+	Pod        *backend.Pod
+	Metrics    *MetricsState
+	Attributes *datalayer.Attributes
 }
 
 func (fpm *FakePodMetrics) String() string {
@@ -50,6 +51,9 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 
 func (fpm *FakePodMetrics) UpdatePod(pod *datalayer.PodInfo) {
 	fpm.Pod = pod
+}
+func (fpm *FakePodMetrics) GetAttributes() *datalayer.Attributes {
+	return fpm.Attributes
 }
 
 func (*FakePodMetrics) Put(string, datalayer.Cloneable)        {}

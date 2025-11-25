@@ -552,20 +552,43 @@ class LatencyPredictor:
             logging.error(f"Error in _train_model_with_scaling: {e}", exc_info=True)
             raise
         
-    def _calculate_quantile_metrics_on_test(self, model, scaler, test_data, feature_cols, target_col):
+    def _calculate_quantile_metrics_on_test(self, model, scaler, test_data, model_name, target_col):
         """Calculate quantile-specific metrics on test data"""
         try:
-            df = pd.DataFrame(test_data).dropna()
-            df = df[df[target_col] > 0]
-            
-            if len(df) < 2:
+            df_raw = pd.DataFrame(test_data).dropna()
+            df_raw = df_raw[df_raw[target_col] > 0]
+
+            if len(df_raw) < 2:
                 return None, None, None
+
+        # Apply feature engineering to create interaction terms and categorical features
+            df_features = self._prepare_features_with_interaction(df_raw.copy(), model_type=model_name)
+
+        # Get appropriate feature columns based on model type and name
+            if model_name == "ttft":
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    feature_cols = [
+                        'kv_cache_percentage','input_token_length','num_request_waiting',
+                        'num_request_running','prefix_cache_score','effective_input_tokens'
+                    ]
+                else:  # XGBoost or LightGBM
+                    feature_cols = [
+                        'kv_cache_percentage','input_token_length','num_request_waiting',
+                        'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket'
+                    ]
+            else:  # tpot
+                feature_cols = ['kv_cache_percentage', 'input_token_length', 
+                   'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+
+            X = df_features[feature_cols]  # ✅ Now has properly typed categorical!
             
-            X = df[feature_cols]
+
+            
+
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
                 X = scaler.transform(X)
-            
-            y_true = df[target_col].values
+
+            y_true = df_raw[target_col].values
             y_pred = model.predict(X)
             
             # For Bayesian Ridge (which doesn't do true quantile regression), 
@@ -644,19 +667,19 @@ class LatencyPredictor:
                     'kv_cache_percentage','input_token_length','num_request_waiting',
                     'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket'
                 ]
-                ttft_feature_cols_br = [
+                    ttft_feature_cols_br = [
                     'kv_cache_percentage','input_token_length','num_request_waiting',
                     'num_request_running','prefix_cache_score','effective_input_tokens'
                 ]
 
-                # Build X_ttft for all model types, then trim for BR
-                X_ttft = df_ttft[ttft_feature_cols_tree]
-                if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    X_ttft = X_ttft[ttft_feature_cols_br]
+                    # Build X_ttft for all model types, then trim for BR
+                    X_ttft = df_ttft[ttft_feature_cols_tree]
+                    if self.model_type == ModelType.BAYESIAN_RIDGE:
+                        X_ttft = X_ttft[ttft_feature_cols_br]
 
-                y_ttft = raw_ttft['actual_ttft_ms']
+                    y_ttft = raw_ttft['actual_ttft_ms']
 
-                try:
+                    try:
                         # raw_ttft still has the original columns including 'prefix_cache_score'
                         raw_ttft['_prefix_bucket'] = raw_ttft['prefix_cache_score'].clip(0, 1).apply(
                             lambda s: min(int(s * self.prefix_buckets), self.prefix_buckets - 1)
@@ -681,14 +704,13 @@ class LatencyPredictor:
 
                         # Quantile metrics on test set
                         ql = coverage = violation_rate = None
-                        ttft_test_raw = pd.DataFrame(list(self.ttft_test_data)).dropna()
-                        if not ttft_test_raw.empty:
-                            ttft_test_fe = self._prepare_features_with_interaction(ttft_test_raw.copy(), "ttft")
-                            cols = ttft_feature_cols_br if self.model_type == ModelType.BAYESIAN_RIDGE else ttft_feature_cols_tree
-                            test_records = ttft_test_fe[cols].assign(actual_ttft_ms=ttft_test_raw['actual_ttft_ms']).to_dict("records")
+                        if self.ttft_test_data:
                             ql, coverage, violation_rate = self._calculate_quantile_metrics_on_test(
-                                new_ttft_model, new_ttft_scaler, test_records, cols, 'actual_ttft_ms'
-                            )
+                                new_ttft_model, new_ttft_scaler,
+                                list(self.ttft_test_data),  # Pass raw data
+                                "ttft",                      # Pass model name instead of feature_cols
+                                'actual_ttft_ms'
+                            )       
 
 
                         
@@ -703,7 +725,7 @@ class LatencyPredictor:
                         else:
                             logging.info(f"TTFT model trained on {len(df_ttft)} samples. Quantile metrics = N/A (insufficient test data)")
 
-                except Exception:
+                    except Exception:
                         logging.error("Error training TTFT model", exc_info=True)
 
 
@@ -724,11 +746,12 @@ class LatencyPredictor:
                             new_tpot_scaler = None
                         
                         # Calculate quantile metrics on test data
-                        tpot_feature_cols = ['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']
                         ql, coverage, violation_rate = self._calculate_quantile_metrics_on_test(
                             new_tpot_model, new_tpot_scaler, 
-                            list(self.tpot_test_data), tpot_feature_cols, 'actual_tpot_ms'
-                        )
+                            list(self.tpot_test_data),  # Pass raw data
+                        "tpot",                      # Pass model name instead of feature_cols
+                        'actual_tpot_ms'
+                )
                         
                         if ql is not None:
                             self.tpot_quantile_loss_scores.append(ql)

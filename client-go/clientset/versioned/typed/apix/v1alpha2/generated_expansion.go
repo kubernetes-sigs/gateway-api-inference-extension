@@ -18,6 +18,8 @@ limitations under the License.
 
 package v1alpha2
 
+type InferenceModelRewriteExpansion interface{}
+
 type InferenceObjectiveExpansion interface{}
 
 type InferencePoolExpansion interface{}

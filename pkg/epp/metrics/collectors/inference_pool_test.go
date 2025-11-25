@@ -27,11 +27,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/component-base/metrics/testutil"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
 var (
@@ -68,13 +69,6 @@ func TestMetricsCollected(t *testing.T) {
 		},
 	}
 	pmf := backendmetrics.NewPodMetricsFactory(pmc, time.Millisecond)
-	ds := datastore.NewDatastore(context.Background(), pmf, 0)
-
-	scheme := runtime.NewScheme()
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
 	inferencePool := &v1.InferencePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pool",
@@ -83,7 +77,14 @@ func TestMetricsCollected(t *testing.T) {
 			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 		},
 	}
-	_ = ds.PoolSet(context.Background(), fakeClient, inferencePool)
+	ds := datastore.NewDatastore(context.Background(), pmf, 0)
+
+	scheme := runtime.NewScheme()
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+
+	_ = ds.PoolSet(context.Background(), fakeClient, poolutil.InferencePoolToEndpointPool(inferencePool))
 	_ = ds.PodUpdateOrAddIfNotExist(pod1)
 
 	time.Sleep(1 * time.Second)

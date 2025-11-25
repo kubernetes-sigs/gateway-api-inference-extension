@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -165,6 +164,10 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 	sp.wg.Add(1)
 	go sp.runCleanupSweep(ctx)
 
+	// Create a ticker for periodic dispatch attempts to avoid tight loops
+	dispatchTicker := sp.clock.NewTicker(time.Millisecond)
+	defer dispatchTicker.Stop()
+
 	// This is the main worker loop. It continuously processes incoming requests and dispatches queued requests until the
 	// context is cancelled. The `select` statement has three cases:
 	//
@@ -172,9 +175,8 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 	//     loop will drain all queues and exit. This is the primary exit condition.
 	//  2. New Item Arrival: If an item is available on `enqueueChan`, it will be processed. This ensures that the
 	//     processor is responsive to new work.
-	//  3. Default (Dispatch): If neither of the above cases is ready, the `default` case executes, ensuring the loop is
-	//     non-blocking. It continuously attempts to dispatch items from the existing backlog, preventing starvation and
-	//     ensuring queues are drained.
+	//  3. Dispatch Ticker: Periodically triggers a dispatch cycle to attempt to dispatch items from existing queues,
+	//     ensuring that queued work is processed even when no new items arrive.
 	for {
 		select {
 		case <-ctx.Done():
@@ -193,14 +195,9 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 				continue
 			}
 			sp.enqueue(item)
-			sp.dispatchCycle(ctx)
-		default:
-			// If no new items are arriving, continuously try to dispatch from the backlog.
-			if !sp.dispatchCycle(ctx) {
-				// If no work was done, yield to the scheduler to prevent a tight, busy-loop when idle, while still allowing for
-				// immediate rescheduling.
-				runtime.Gosched()
-			}
+			sp.dispatchCycle(ctx) // Process immediately when an item arrives
+		case <-dispatchTicker.C():
+			sp.dispatchCycle(ctx) // Periodically attempt to dispatch from queues
 		}
 	}
 }
@@ -408,10 +405,7 @@ func (sp *ShardProcessor) sweepFinalizedItems() {
 		predicate := func(itemAcc types.QueueItemAccessor) bool {
 			return itemAcc.(*FlowItem).FinalState() != nil
 		}
-		removedItems, err := managedQ.Cleanup(predicate)
-		if err != nil {
-			logger.Error(err, "Error during ManagedQueue Cleanup", "flowKey", key)
-		}
+		removedItems := managedQ.Cleanup(predicate)
 		logger.V(logutil.DEBUG).Info("Swept finalized items and released capacity.",
 			"flowKey", key, "count", len(removedItems))
 	}
@@ -449,10 +443,7 @@ func (sp *ShardProcessor) shutdown() {
 func (sp *ShardProcessor) evictAll() {
 	processFn := func(managedQ contracts.ManagedQueue, logger logr.Logger) {
 		key := managedQ.FlowQueueAccessor().FlowKey()
-		removedItems, err := managedQ.Drain()
-		if err != nil {
-			logger.Error(err, "Error during ManagedQueue Drain", "flowKey", key)
-		}
+		removedItems := managedQ.Drain()
 
 		outcome := types.QueueOutcomeEvictedOther
 		errShutdown := fmt.Errorf("%w: %w", types.ErrEvicted, types.ErrFlowControllerNotRunning)

@@ -19,8 +19,11 @@ spec:
         imagePullPolicy: {{ .Values.bbr.image.pullPolicy | default "Always" }}
         args:
         - "--streaming"
-        - "--v"
-        - "3"
+        # Pass additional flags via the bbr.flags field in values.yaml.
+        {{- range $key, $value := .Values.bbr.flags }}
+        - --{{ $key }}
+        - "{{ $value }}"
+        {{- end }}
         ports:
         - containerPort: {{ .Values.bbr.port }}
         # health check

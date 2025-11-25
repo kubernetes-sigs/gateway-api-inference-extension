@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package besthead
+package interflow
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -34,11 +33,6 @@ const (
 	flow1ID         = "flow1"
 	flow2ID         = "flow2"
 	commonScoreType = "enqueue_time_ns_asc"
-)
-
-var (
-	flow1Key = types.FlowKey{ID: flow1ID, Priority: 0}
-	flow2Key = types.FlowKey{ID: flow2ID, Priority: 0}
 )
 
 // enqueueTimeComparatorFunc is a test utility. Lower enqueue time is better.
@@ -105,10 +99,10 @@ func TestBestHead_SelectQueue(t *testing.T) {
 		ComparatorV: newTestComparator(),
 	}
 	queueEmpty := &frameworkmocks.MockFlowQueueAccessor{
-		LenV:         0,
-		PeekHeadErrV: framework.ErrQueueEmpty,
-		FlowKeyV:     types.FlowKey{ID: "flowEmpty"},
-		ComparatorV:  newTestComparator(),
+		LenV:        0,
+		PeekHeadV:   nil,
+		FlowKeyV:    types.FlowKey{ID: "flowEmpty"},
+		ComparatorV: newTestComparator(),
 	}
 
 	testCases := []struct {
@@ -152,19 +146,6 @@ func TestBestHead_SelectQueue(t *testing.T) {
 			expectedErr: framework.ErrIncompatiblePriorityType,
 		},
 		{
-			name: "QueuePeekHeadErrors",
-			band: newTestBand(
-				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:         1,
-					PeekHeadErrV: errors.New("peek error"),
-					FlowKeyV:     flow1Key,
-					ComparatorV:  newTestComparator(),
-				},
-				queue2,
-			),
-			expectedQueueID: flow2ID,
-		},
-		{
 			name: "QueueComparatorIsNil",
 			band: newTestBand(
 				&frameworkmocks.MockFlowQueueAccessor{
@@ -195,10 +176,10 @@ func TestBestHead_SelectQueue(t *testing.T) {
 			band: newTestBand(
 				queueEmpty,
 				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:         0,
-					PeekHeadErrV: framework.ErrQueueEmpty,
-					FlowKeyV:     types.FlowKey{ID: "flowEmpty2"},
-					ComparatorV:  newTestComparator(),
+					LenV:        0,
+					PeekHeadV:   nil,
+					FlowKeyV:    types.FlowKey{ID: "flowEmpty2"},
+					ComparatorV: newTestComparator(),
 				},
 			),
 		},

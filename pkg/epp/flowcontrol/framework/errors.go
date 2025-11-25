@@ -26,13 +26,6 @@ import (
 // and might be handled or wrapped by the `contracts.FlowRegistry`'s `contracts.ManagedQueue` or the
 // `controller.FlowController`.
 var (
-	// ErrNilQueueItem indicates that a nil `types.QueueItemAccessor` was passed to `SafeQueue.Add()`.
-	ErrNilQueueItem = errors.New("queue item cannot be nil")
-
-	// ErrQueueEmpty indicates an attempt to perform an operation on an empty `SafeQueue` that requires one or more items
-	// (e.g., calling `SafeQueue.PeekHead()`).
-	ErrQueueEmpty = errors.New("queue is empty")
-
 	// ErrInvalidQueueItemHandle indicates that a `types.QueueItemHandle` provided to a `SafeQueue` operation (e.g.,
 	// `SafeQueue.Remove()`) is not valid for that queue, has been invalidated, or does not correspond to an actual item
 	// in the queue.

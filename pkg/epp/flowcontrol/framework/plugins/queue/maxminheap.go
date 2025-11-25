@@ -115,56 +115,51 @@ func (h *maxMinHeap) ByteSize() uint64 {
 
 // PeekHead returns the item with the highest priority (max value) without removing it.
 // Time complexity: O(1).
-func (h *maxMinHeap) PeekHead() (types.QueueItemAccessor, error) {
+func (h *maxMinHeap) PeekHead() types.QueueItemAccessor {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	if len(h.items) == 0 {
-		return nil, framework.ErrQueueEmpty
+		return nil
 	}
 	// The root of the max-min heap is always the maximum element.
-	return h.items[0], nil
+	return h.items[0]
 }
 
 // PeekTail returns the item with the lowest priority (min value) without removing it.
 // Time complexity: O(1).
-func (h *maxMinHeap) PeekTail() (types.QueueItemAccessor, error) {
+func (h *maxMinHeap) PeekTail() types.QueueItemAccessor {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	n := len(h.items)
 	if n == 0 {
-		return nil, framework.ErrQueueEmpty
+		return nil
 	}
 	if n == 1 {
-		return h.items[0], nil
+		return h.items[0]
 	}
 	if n == 2 {
 		// With two items, the root is max, the second is min.
-		return h.items[1], nil
+		return h.items[1]
 	}
 
 	// With three or more items, the minimum element is guaranteed to be one of the two children of the root (at indices 1
 	// and 2). We must compare them to find the true minimum.
 	if h.comparator.Func()(h.items[1], h.items[2]) {
-		return h.items[2], nil
+		return h.items[2]
 	}
-	return h.items[1], nil
+	return h.items[1]
 }
 
 // Add adds an item to the queue.
 // Time complexity: O(log n).
-func (h *maxMinHeap) Add(item types.QueueItemAccessor) error {
+func (h *maxMinHeap) Add(item types.QueueItemAccessor) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if item == nil {
-		return framework.ErrNilQueueItem
-	}
-
 	h.push(item)
 	h.byteSize.Add(item.OriginalRequest().ByteSize())
-	return nil
 }
 
 // push adds an item to the heap and restores the heap property.
@@ -425,7 +420,7 @@ func isMinLevel(i int) bool {
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (h *maxMinHeap) Cleanup(predicate framework.PredicateFunc) ([]types.QueueItemAccessor, error) {
+func (h *maxMinHeap) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -459,11 +454,11 @@ func (h *maxMinHeap) Cleanup(predicate framework.PredicateFunc) ([]types.QueueIt
 		}
 	}
 
-	return removedItems, nil
+	return removedItems
 }
 
 // Drain removes all items from the queue.
-func (h *maxMinHeap) Drain() ([]types.QueueItemAccessor, error) {
+func (h *maxMinHeap) Drain() []types.QueueItemAccessor {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -482,5 +477,5 @@ func (h *maxMinHeap) Drain() ([]types.QueueItemAccessor, error) {
 	h.handles = make(map[types.QueueItemHandle]*heapItem)
 	h.byteSize.Store(0)
 
-	return drainedItems, nil
+	return drainedItems
 }

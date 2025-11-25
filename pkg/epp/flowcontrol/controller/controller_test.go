@@ -1128,7 +1128,7 @@ func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey types.Flow
 			IntraFlowDispatchPolicyFunc: func(_ types.FlowKey) (framework.IntraFlowDispatchPolicy, error) {
 				return &frameworkmocks.MockIntraFlowDispatchPolicy{
 					SelectItemFunc: func(qa framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-						return qa.PeekHead()
+						return qa.PeekHead(), nil
 					},
 				}, nil
 			},

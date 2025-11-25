@@ -16,13 +16,12 @@ limitations under the License.
 
 // Package besthead provides a `framework.InterFlowDispatchPolicy` that selects the queue containing the single "best"
 // item from across all queues in a priority band.
-package besthead
+package interflow
 
 import (
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
@@ -30,7 +29,7 @@ import (
 const BestHeadPolicyName = "BestHead"
 
 func init() {
-	dispatch.MustRegisterPolicy(dispatch.RegisteredPolicyName(BestHeadPolicyName),
+	MustRegisterPolicy(RegisteredPolicyName(BestHeadPolicyName),
 		func() (framework.InterFlowDispatchPolicy, error) {
 			return newBestHead(), nil
 		})
@@ -68,8 +67,8 @@ func (p *bestHead) SelectQueue(band framework.PriorityBandAccessor) (framework.F
 			return true
 		}
 
-		item, err := queue.PeekHead()
-		if err != nil || item == nil {
+		item := queue.PeekHead()
+		if item == nil {
 			return true
 		}
 
