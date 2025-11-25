@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
