@@ -46,7 +46,7 @@ type DataSource struct {
 // the provided client factory. If ClientFactory is nil, a default factory is used.
 // The Scheme, port and path are command line options. It should be noted that
 // a port value of zero is set if the command line is unspecified.
-func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool, cl Client) *DataSource {
+func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool) *DataSource {
 	if metricsScheme == "https" {
 		httpsTransport := baseTransport.Clone()
 		httpsTransport.TLSClientConfig = &tls.Config{
@@ -55,14 +55,10 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 		defaultClient.Transport = httpsTransport
 	}
 
-	if cl == nil {
-		cl = defaultClient
-	}
-
 	dataSrc := &DataSource{
 		metricsScheme: metricsScheme,
 		metricsPath:   metricsPath,
-		client:        cl,
+		client:        defaultClient,
 	}
 	return dataSrc
 }

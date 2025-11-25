@@ -617,8 +617,7 @@ func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 	// create and register a metrics data source and extractor.
 	source := dlmetrics.NewDataSource(*modelServerMetricsScheme,
 		*modelServerMetricsPath,
-		*modelServerMetricsHttpsInsecureSkipVerify,
-		nil)
+		*modelServerMetricsHttpsInsecureSkipVerify)
 	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
 		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
