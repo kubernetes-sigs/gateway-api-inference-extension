@@ -90,7 +90,7 @@ func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 	if err := datalayer.ValidateExtractorType(PrometheusMetricType, extractor.ExpectedInputType()); err != nil {
 		return err
 	}
-	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.TypedName().Type, extractor); loaded {
+	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.TypedName().Name, extractor); loaded {
 		return fmt.Errorf("attempt to add duplicate extractor %s to %s", extractor.TypedName(), dataSrc.TypedName())
 	}
 	return nil

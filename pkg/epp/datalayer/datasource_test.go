@@ -53,11 +53,6 @@ func TestRegisterAndGetSource(t *testing.T) {
 	err = reg.Register(nil)
 	assert.Error(t, err, "expected error on nil")
 
-	// Get by type
-	got, found := reg.GetSourceByType(testType)
-	assert.True(t, found, "expected to find registered data source")
-	assert.Equal(t, testType, got.TypedName().Type)
-
 	// Get all sources
 	all := reg.GetSources()
 	assert.Len(t, all, 1)
@@ -67,21 +62,16 @@ func TestRegisterAndGetSource(t *testing.T) {
 	err = RegisterSource(ds)
 	assert.NoError(t, err, "expected no error on registration")
 
-	// Get by type
-	got, found = GetSourceByType[*mockDataSource](testType)
-	assert.True(t, found, "expected to find registered data source")
-	assert.Equal(t, testType, got.TypedName().Type)
-
 	// Get all sources
 	all = GetSources()
 	assert.Len(t, all, 1)
 	assert.Equal(t, testType, all[0].TypedName().Type)
 }
 
-func TestGetNamedSourceWhenNotFound(t *testing.T) {
+func TestGetSourceWhenNoneAreRegistered(t *testing.T) {
 	reg := DataSourceRegistry{}
-	_, found := reg.GetSourceByType("missing")
-	assert.False(t, found, "expected source to be missing")
+	found := reg.GetSources()
+	assert.Empty(t, found, "expected no sources to be returned")
 }
 
 func TestValidateExtractorType(t *testing.T) {

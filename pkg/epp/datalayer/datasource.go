@@ -66,20 +66,10 @@ func (dsr *DataSourceRegistry) Register(src DataSource) error {
 	if src == nil {
 		return errors.New("unable to register a nil data source")
 	}
-	if _, loaded := dsr.sources.LoadOrStore(src.TypedName().Type, src); loaded {
+	if _, loaded := dsr.sources.LoadOrStore(src.TypedName().Name, src); loaded {
 		return fmt.Errorf("unable to register duplicate data source: %s", src.TypedName().String())
 	}
 	return nil
-}
-
-// GetSourceByType fetches a source by type.
-func (dsr *DataSourceRegistry) GetSourceByType(dsType string) (DataSource, bool) {
-	if val, ok := dsr.sources.Load(dsType); ok {
-		if ds, ok := val.(DataSource); ok {
-			return ds, true
-		}
-	}
-	return nil, false
 }
 
 // GetSources returns all registered sources.
@@ -99,21 +89,6 @@ func (dsr *DataSourceRegistry) GetSources() []DataSource {
 // RegisterSource adds a new data source to the default registry.
 func RegisterSource(src DataSource) error {
 	return defaultDataSources.Register(src)
-}
-
-// GetSourceByType returns a typed data source from the default registry.
-func GetSourceByType[T DataSource](dsType string) (T, bool) {
-	v, ok := defaultDataSources.GetSourceByType(dsType)
-	if !ok {
-		var zero T
-		return zero, false
-	}
-	src, ok := v.(T)
-	if !ok {
-		var zero T
-		return zero, false
-	}
-	return src, true
 }
 
 // GetSources returns the list of data sources registered in the default registry.
