@@ -24,7 +24,7 @@ spec:
         - --max-loras
         - "2"
         - --lora-modules
-        - '{"name": "food-review"}'
+        - '{"name": "ski-resorts"}'
         - '{"name": "movie-critique"}'
         env:
         - name: POD_NAME
