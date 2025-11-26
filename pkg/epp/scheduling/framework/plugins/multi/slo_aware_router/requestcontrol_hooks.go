@@ -107,6 +107,10 @@ func (s *SLOAwareRouter) deleteSLOContextForRequest(request *schedulingtypes.LLM
 
 func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult) {
 	logger := log.FromContext(ctx)
+	if request == nil {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter.PreRequest: request is nil, skipping")
+		return
+	}
 
 	if schedulingResult == nil || len(schedulingResult.ProfileResults) == 0 {
 		logger.V(logutil.TRACE).Info("SLOAwareRouter: Skipping PreRequest because no scheduling result was provided.")
@@ -157,6 +161,10 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 
 func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetPod *backend.Pod) {
 	logger := log.FromContext(ctx)
+	if request == nil {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter.ResponseReceived: request is nil, skipping")
+		return
+	}
 	if !t.checkPredictor(logger, targetPod) {
 		return
 	}
@@ -177,6 +185,10 @@ func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *scheduli
 
 func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
+	if request == nil {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter.ResponseStreaming: request is nil, skipping")
+		return
+	}
 	if !t.checkPredictor(logger, pod) || response.EndOfStream {
 		return
 	}
@@ -199,6 +211,10 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 
 func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
+	if request == nil {
+		logger.V(logutil.DEBUG).Info("SLOAwareRouter.ResponseComplete: request is nil, skipping")
+		return
+	}
 	targetPod := pod
 	if !t.checkPredictor(logger, targetPod) {
 		return
