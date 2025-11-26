@@ -30,7 +30,7 @@ spec:
       {{- if .Values.inferenceExtension.sidecar.enabled }}
       - name: {{ .Values.inferenceExtension.sidecar.name }}
         image: {{ .Values.inferenceExtension.sidecar.image }}
-        imagePullPolicy: {{ .Values.inferenceExtension.sidecar.image.pullPolicy | default "IfNotPresent" }}
+        imagePullPolicy: {{ .Values.inferenceExtension.sidecar.imagePullPolicy | default "IfNotPresent" }}
         {{- with .Values.inferenceExtension.sidecar.command }}
         command:
           - {{ . | quote }}
