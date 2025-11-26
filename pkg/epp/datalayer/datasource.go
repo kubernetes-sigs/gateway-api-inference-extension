@@ -28,8 +28,7 @@ import (
 
 // DataSource provides raw data to registered Extractors.
 type DataSource interface {
-	// TypedName returns the type and name of the data source.
-	TypedName() plugins.TypedName
+	plugins.Plugin
 	// Extractors returns a list of registered Extractor names.
 	Extractors() []string
 	// AddExtractor adds an extractor to the data source. Multiple
@@ -45,20 +44,15 @@ type DataSource interface {
 	Collect(ctx context.Context, ep Endpoint) error
 }
 
-var _ plugins.Plugin = (DataSource)(nil) // DataSource implements Plugin interface
-
 // Extractor transforms raw data into structured attributes.
 type Extractor interface {
-	// TypedName returns the type and name of the extractor.
-	TypedName() plugins.TypedName
+	plugins.Plugin
 	// ExpectedType defines the type expected by the extractor.
 	ExpectedInputType() reflect.Type
 	// Extract transforms the raw data source output into a concrete structured
 	// attribute, stored on the given endpoint.
 	Extract(ctx context.Context, data any, ep Endpoint) error
 }
-
-var _ plugins.Plugin = (Extractor)(nil) // Extractor implements Plugin interface
 
 var defaultDataSources = DataSourceRegistry{}
 
