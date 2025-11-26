@@ -19,6 +19,7 @@ package slo_aware_router
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -93,12 +94,60 @@ func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, handle pl
 		}
 	}
 
+	if err := parameters.validate(); err != nil {
+		return nil, fmt.Errorf("invalid SLOAwareRouter config: %w", err)
+	}
+
 	predictor, err := startPredictor(handle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start latency predictor: %w", err)
 	}
 
 	return NewSLOAwareRouter(parameters, predictor).WithName(name), nil
+}
+
+func (c *Config) validate() error {
+	var errs []error
+
+	if c.SamplingMean <= 0 {
+		errs = append(errs, fmt.Errorf("samplingMean must be > 0, got %f", c.SamplingMean))
+	}
+
+	if c.MaxSampledTokens <= 0 {
+		errs = append(errs, fmt.Errorf("maxSampledTokens must be > 0, got %d", c.MaxSampledTokens))
+	}
+
+	if c.SLOBufferFactor <= 0 {
+		errs = append(errs, fmt.Errorf("sloBufferFactor must be > 0, got %f", c.SLOBufferFactor))
+	}
+
+	if c.NegHeadroomTTFTWeight < 0 || c.NegHeadroomTPOTWeight < 0 ||
+		c.HeadroomTTFTWeight < 0 || c.HeadroomTPOTWeight < 0 {
+		errs = append(errs, errors.New("all headroom weights must be >= 0"))
+	}
+
+	if c.CompositeKVWeight < 0 || c.CompositeQueueWeight < 0 || c.CompositePrefixWeight < 0 {
+		errs = append(errs, errors.New("composite weights must be >= 0"))
+	}
+
+	if c.EpsilonExploreSticky < 0 || c.EpsilonExploreSticky > 1 {
+		errs = append(errs, fmt.Errorf("epsilonExploreSticky must be in [0, 1], got %f", c.EpsilonExploreSticky))
+	}
+	if c.EpsilonExploreNeg < 0 || c.EpsilonExploreNeg > 1 {
+		errs = append(errs, fmt.Errorf("epsilonExploreNeg must be in [0, 1], got %f", c.EpsilonExploreNeg))
+	}
+
+	if c.AffinityGateTau < 0 || c.AffinityGateTau > 1 {
+		errs = append(errs, fmt.Errorf("affinityGateTau must be in [0, 1], got %f", c.AffinityGateTau))
+	}
+	if c.AffinityGateTauGlobal <= 0 || c.AffinityGateTauGlobal > 1 {
+		errs = append(errs, fmt.Errorf("affinityGateTauGlobal must be in (0, 1], got %f", c.AffinityGateTauGlobal))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }
 
 func NewSLOAwareRouter(config Config, predictor latencypredictor.PredictorInterface) *SLOAwareRouter {

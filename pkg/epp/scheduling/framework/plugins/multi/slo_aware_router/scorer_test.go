@@ -18,6 +18,7 @@ package slo_aware_router
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -31,6 +32,7 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 // mockPredictor implements PredictorInterface for testing
@@ -531,6 +533,164 @@ func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
 
 			score := router.getPrefixCacheScoreForPod(context.Background(), state, pod)
 			assert.InDelta(t, tt.expectedScore, score, 0.0001, "Prefix cache score should match expected")
+		})
+	}
+}
+
+func TestSLOAwareRouterFactory(t *testing.T) {
+	tests := []struct {
+		name       string
+		pluginName string
+		jsonParams string
+		expectErr  bool
+	}{
+		{
+			name:       "valid config with all fields",
+			pluginName: "full-config",
+			jsonParams: `{
+				"samplingMean": 150.0,
+				"maxSampledTokens": 30,
+				"sloBufferFactor": 1.2,
+				"negHeadroomTTFTWeight": 0.7,
+				"negHeadroomTPOTWeight": 0.3,
+				"headroomTTFTWeight": 0.9,
+				"headroomTPOTWeight": 0.1,
+				"headroomSelectionStrategy": "least",
+				"compositeKVWeight": 1.0,
+				"compositeQueueWeight": 0.8,
+				"compositePrefixWeight": 0.5,
+				"epsilonExploreSticky": 0.02,
+				"epsilonExploreNeg": 0.03,
+				"affinityGateTau": 0.85,
+				"affinityGateTauGlobal": 0.95,
+				"selectionMode": "linear"
+			}`,
+			expectErr: false,
+		},
+		{
+			name:       "valid config with minimal override (uses defaults)",
+			pluginName: "minimal",
+			jsonParams: `{}`,
+			expectErr:  false,
+		},
+		{
+			name:       "valid config with composite strategy",
+			pluginName: "composite",
+			jsonParams: `{
+				"headroomSelectionStrategy": "composite-least",
+				"selectionMode": "linear"
+			}`,
+			expectErr: false,
+		},
+		{
+			name:       "invalid samplingMean <= 0",
+			pluginName: "bad-sampling-mean",
+			jsonParams: `{"samplingMean": -1.0}`,
+			expectErr:  true,
+		},
+		{
+			name:       "invalid maxSampledTokens <= 0",
+			pluginName: "bad-max-tokens",
+			jsonParams: `{"maxSampledTokens": 0}`,
+			expectErr:  true,
+		},
+		{
+			name:       "invalid sloBufferFactor <= 0",
+			pluginName: "bad-buffer",
+			jsonParams: `{"sloBufferFactor": 0}`,
+			expectErr:  true,
+		},
+		{
+			name:       "negative headroom weight",
+			pluginName: "neg-weight",
+			jsonParams: `{"negHeadroomTTFTWeight": -0.1}`,
+			expectErr:  true,
+		},
+		{
+			name:       "epsilonExploreSticky > 1",
+			pluginName: "epsilon-too-high",
+			jsonParams: `{"epsilonExploreSticky": 1.1}`,
+			expectErr:  true,
+		},
+		{
+			name:       "epsilonExploreNeg < 0",
+			pluginName: "epsilon-negative",
+			jsonParams: `{"epsilonExploreNeg": -0.1}`,
+			expectErr:  true,
+		},
+		{
+			name:       "affinityGateTau out of (0,1]",
+			pluginName: "tau-invalid",
+			jsonParams: `{"affinityGateTau": 1.5}`,
+			expectErr:  true,
+		},
+		{
+			name:       "affinityGateTauGlobal <= 0",
+			pluginName: "tau-global-zero",
+			jsonParams: `{"affinityGateTauGlobal": 0}`,
+			expectErr:  true,
+		},
+		{
+			name:       "multiple validation errors",
+			pluginName: "multi-error",
+			jsonParams: `{
+				"samplingMean": -1,
+				"maxSampledTokens": 0,
+				"epsilonExploreSticky": 2.0,
+				"headroomSelectionStrategy": "unknown"
+			}`,
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handle := utils.NewTestHandle(context.Background())
+			rawParams := json.RawMessage(tt.jsonParams)
+			plugin, err := SLOAwareRouterFactory(tt.pluginName, rawParams, handle)
+
+			if tt.expectErr {
+				assert.Error(t, err)
+				assert.Nil(t, plugin)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, plugin)
+			}
+		})
+	}
+}
+
+func TestSLOAwareRouterFactoryInvalidJSON(t *testing.T) {
+	invalidTests := []struct {
+		name       string
+		jsonParams string
+	}{
+		{
+			name:       "malformed JSON",
+			jsonParams: `{"samplingMean": 100.0, "maxSampledTokens":`, // incomplete
+		},
+		{
+			name:       "samplingMean as string",
+			jsonParams: `{"samplingMean": "100"}`,
+		},
+		{
+			name:       "maxSampledTokens as float",
+			jsonParams: `{"maxSampledTokens": 20.5}`,
+		},
+		{
+			name:       "headroomSelectionStrategy as number",
+			jsonParams: `{"headroomSelectionStrategy": 123}`,
+		},
+	}
+
+	for _, tt := range invalidTests {
+		t.Run(tt.name, func(t *testing.T) {
+			handle := utils.NewTestHandle(context.Background())
+			rawParams := json.RawMessage(tt.jsonParams)
+			plugin, err := SLOAwareRouterFactory("test", rawParams, handle)
+
+			assert.Error(t, err)
+			assert.Nil(t, plugin)
 		})
 	}
 }
