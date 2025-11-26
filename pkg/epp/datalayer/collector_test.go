@@ -36,9 +36,14 @@ type DummySource struct {
 	callCount int64
 }
 
+const (
+	dummySource = "test-dummy-data-source"
+)
+
 func (d *DummySource) TypedName() plugins.TypedName {
 	return plugins.TypedName{
-		Type: "test-dummy-data-source",
+		Type: dummySource,
+		Name: dummySource,
 	}
 }
 func (d *DummySource) Extractors() []string           { return []string{} }

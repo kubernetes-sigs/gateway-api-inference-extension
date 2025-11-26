@@ -43,7 +43,7 @@ func TestDatasource(t *testing.T) {
 
 	extractors := source.Extractors()
 	assert.Len(t, extractors, 1)
-	assert.Equal(t, extractor.TypedName().Type, extractors[0])
+	assert.Equal(t, extractor.TypedName().String(), extractors[0])
 
 	err = datalayer.RegisterSource(source)
 	assert.Nil(t, err, "failed to register")

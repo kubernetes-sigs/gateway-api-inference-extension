@@ -41,7 +41,7 @@ func (m *mockDataSource) Collect(_ context.Context, _ Endpoint) error { return n
 
 func TestRegisterAndGetSource(t *testing.T) {
 	reg := DataSourceRegistry{}
-	ds := &mockDataSource{tn: plugins.TypedName{Type: testType}}
+	ds := &mockDataSource{tn: plugins.TypedName{Type: testType, Name: testType}}
 
 	err := reg.Register(ds)
 	assert.NoError(t, err, "expected no error on first registration")

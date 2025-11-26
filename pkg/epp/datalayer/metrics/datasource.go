@@ -35,6 +35,7 @@ const (
 // DataSource is a Model Server Protocol (MSP) compliant metrics data source,
 // returning Prometheus formatted metrics for an endpoint.
 type DataSource struct {
+	tn            plugins.TypedName
 	metricsScheme string // scheme to use in metrics URL
 	metricsPath   string // path to use in metrics URL
 
@@ -43,9 +44,8 @@ type DataSource struct {
 }
 
 // NewDataSource returns a new MSP compliant metrics data source, configured with
-// the provided client factory. If ClientFactory is nil, a default factory is used.
-// The Scheme, port and path are command line options. It should be noted that
-// a port value of zero is set if the command line is unspecified.
+// the provided client configuration.
+// The Scheme, path and certificate validation setting are command line options.
 func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool) *DataSource {
 	if metricsScheme == "https" {
 		httpsTransport := baseTransport.Clone()
@@ -56,6 +56,10 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 	}
 
 	dataSrc := &DataSource{
+		tn: plugins.TypedName{
+			Type: DataSourceType,
+			Name: DataSourceType,
+		},
 		metricsScheme: metricsScheme,
 		metricsPath:   metricsPath,
 		client:        defaultClient,
@@ -65,9 +69,7 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 
 // TypedName returns the metrics data source type and name.
 func (dataSrc *DataSource) TypedName() plugins.TypedName {
-	return plugins.TypedName{
-		Type: DataSourceType,
-	}
+	return dataSrc.tn
 }
 
 // Extractors returns a list of registered Extractor names.
@@ -75,7 +77,7 @@ func (dataSrc *DataSource) Extractors() []string {
 	extractors := []string{}
 	dataSrc.extractors.Range(func(_, val any) bool {
 		if ex, ok := val.(datalayer.Extractor); ok {
-			extractors = append(extractors, ex.TypedName().Type)
+			extractors = append(extractors, ex.TypedName().String())
 		}
 		return true // continue iteration
 	})
@@ -89,8 +91,7 @@ func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 		return err
 	}
 	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.TypedName().Type, extractor); loaded {
-		return fmt.Errorf("attempt to add extractor with duplicate name %s to %s", extractor.TypedName().Type,
-			dataSrc.TypedName().Type)
+		return fmt.Errorf("attempt to add duplicate extractor %s to %s", extractor.TypedName(), dataSrc.TypedName())
 	}
 	return nil
 }

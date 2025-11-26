@@ -49,6 +49,7 @@ const (
 // Extractor implements the metrics extraction based on the model
 // server protocol standard.
 type Extractor struct {
+	tn      plugins.TypedName
 	mapping *Mapping
 }
 
@@ -73,15 +74,17 @@ func NewExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec s
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
 	return &Extractor{
+		tn: plugins.TypedName{
+			Type: extractorType,
+			Name: extractorType,
+		},
 		mapping: mapping,
 	}, nil
 }
 
 // TypedName returns the type and name of the metrics.Extractor.
 func (ext *Extractor) TypedName() plugins.TypedName {
-	return plugins.TypedName{
-		Type: extractorType,
-	}
+	return ext.tn
 }
 
 // ExpectedType defines the type expected by the metrics.Extractor - a
