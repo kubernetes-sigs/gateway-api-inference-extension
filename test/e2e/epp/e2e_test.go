@@ -666,7 +666,8 @@ func generateTraffic(
 	close(errorCh)
 
 	// Collect any errors that occurred
-	var failures []error
+	failures := make([]error, 0, batches)
+
 	for err := range errorCh {
 		failures = append(failures, err)
 	}
