@@ -864,6 +864,148 @@ func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
 	assert.NotEqual(t, queue1, queue2)
 }
 
+func TestSLOAwareRouter_AdmitRequest_NilRequest(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+	pods := []schedulingtypes.Pod{}
+
+	err := router.AdmitRequest(ctx, nil, pods)
+
+	assert.NoError(t, err, "Should return nil for nil request")
+}
+
+func TestSLOAwareRouter_AdmitRequest_NoContext(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+	request := createTestLLMRequest("test", 100, 50, true)
+	pods := []schedulingtypes.Pod{}
+
+	// Don't set SLO context
+	err := router.AdmitRequest(ctx, request, pods)
+
+	assert.NoError(t, err, "Should return nil when SLO context not found")
+}
+
+func TestSLOAwareRouter_AdmitRequest_HasValidPod(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+	request := createTestLLMRequest("test", 100, 50, true)
+	pods := []schedulingtypes.Pod{}
+
+	// Create SLO context with valid pod
+	sloCtx := newSLORequestContext(request)
+	sloCtx.hasValidPod = true
+	router.setSLOContextForRequest(request, sloCtx)
+
+	err := router.AdmitRequest(ctx, request, pods)
+
+	assert.NoError(t, err, "Should admit request when hasValidPod is true")
+}
+
+func TestSLOAwareRouter_AdmitRequest_NoValidPod(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+	request := createTestLLMRequest("test", 100, 50, true)
+	pods := []schedulingtypes.Pod{}
+
+	// Create SLO context without valid pod
+	sloCtx := newSLORequestContext(request)
+	sloCtx.hasValidPod = false
+	router.setSLOContextForRequest(request, sloCtx)
+
+	err := router.AdmitRequest(ctx, request, pods)
+
+	assert.Error(t, err, "Should reject request when hasValidPod is false")
+	assert.Contains(t, err.Error(), "no valid pod available based on SLO predictions")
+}
+
+func TestSLOAwareRouter_AdmitRequest_WithMultiplePods(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+	request := createTestLLMRequest("test", 100, 50, true)
+
+	// Create multiple test pods
+	pod1 := createTestPod("test-pod-1", 1, 1, 1)
+	pod2 := createTestPod("test-pod-2", 1, 1, 1)
+	pods := []schedulingtypes.Pod{pod1, pod2}
+
+	// Create SLO context with valid pod
+	sloCtx := newSLORequestContext(request)
+	sloCtx.hasValidPod = true
+	router.setSLOContextForRequest(request, sloCtx)
+
+	err := router.AdmitRequest(ctx, request, pods)
+
+	assert.NoError(t, err, "Should admit request with valid pod even with multiple pods available")
+}
+
+func TestSLOAwareRouter_AdmitRequest_DefaultHasValidPod(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+	request := createTestLLMRequest("test", 100, 50, true)
+	pods := []schedulingtypes.Pod{}
+
+	// Create SLO context - hasValidPod defaults to false
+	sloCtx := newSLORequestContext(request)
+	router.setSLOContextForRequest(request, sloCtx)
+
+	err := router.AdmitRequest(ctx, request, pods)
+
+	assert.Error(t, err, "Should reject request when hasValidPod defaults to false")
+	assert.Contains(t, err.Error(), "no valid pod available")
+}
+
+func TestSLOAwareRouter_AdmitRequest_ConcurrentAccess(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	numGoroutines := 50
+
+	// Half with valid pods, half without
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			requestID := uuid.New().String()
+			request := createTestLLMRequest(requestID, 100, 50, true)
+			pods := []schedulingtypes.Pod{}
+
+			sloCtx := newSLORequestContext(request)
+			sloCtx.hasValidPod = (idx%2 == 0) // Alternate between true and false
+			router.setSLOContextForRequest(request, sloCtx)
+
+			err := router.AdmitRequest(ctx, request, pods)
+
+			if idx%2 == 0 {
+				assert.NoError(t, err, "Should admit request with valid pod")
+			} else {
+				assert.Error(t, err, "Should reject request without valid pod")
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestSLOAwareRouter_AdmitRequest_ErrorMessage(t *testing.T) {
+	router := createTestRouter()
+	ctx := context.Background()
+	request := createTestLLMRequest("test", 100, 50, true)
+	pods := []schedulingtypes.Pod{}
+
+	sloCtx := newSLORequestContext(request)
+	sloCtx.hasValidPod = false
+	router.setSLOContextForRequest(request, sloCtx)
+
+	err := router.AdmitRequest(ctx, request, pods)
+
+	require.Error(t, err)
+	expectedMsg := "request cannot be admitted: no valid pod available based on SLO predictions"
+	assert.Equal(t, expectedMsg, err.Error(), "Error message should match expected format")
+}
+
 func TestSLORequestContext_SLOValidation(t *testing.T) {
 	tests := []struct {
 		name       string
