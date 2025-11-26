@@ -24,6 +24,6 @@ type Config struct {
 
 // DataSourceConfig defines the configuration of a specific DataSource
 type DataSourceConfig struct {
-	Source     DataSource  // the data source instance
-	Extractors []Extractor // extractors defined for the source
+	Plugin     DataSource  // the data source plugin instance
+	Extractors []Extractor // extractors defined for the data source
 }
