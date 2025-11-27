@@ -28,14 +28,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-const (
-	DataSourceType = "metrics-data-source"
-)
-
 // DataSource is a Model Server Protocol (MSP) compliant metrics data source,
 // returning Prometheus formatted metrics for an endpoint.
 type DataSource struct {
-	tn            plugins.TypedName
+	typedName     plugins.TypedName
 	metricsScheme string // scheme to use in metrics URL
 	metricsPath   string // path to use in metrics URL
 
@@ -44,8 +40,7 @@ type DataSource struct {
 }
 
 // NewDataSource returns a new MSP compliant metrics data source, configured with
-// the provided client configuration.
-// The Scheme, path and certificate validation setting are command line options.
+// the provided scheme, path and certificate verification parameters.
 func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool) *DataSource {
 	if metricsScheme == "https" {
 		httpsTransport := baseTransport.Clone()
@@ -56,7 +51,7 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 	}
 
 	dataSrc := &DataSource{
-		tn: plugins.TypedName{
+		typedName: plugins.TypedName{
 			Type: DataSourceType,
 			Name: DataSourceType,
 		},
@@ -69,7 +64,7 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 
 // TypedName returns the metrics data source type and name.
 func (dataSrc *DataSource) TypedName() plugins.TypedName {
-	return dataSrc.tn
+	return dataSrc.typedName
 }
 
 // Extractors returns a list of registered Extractor names.
