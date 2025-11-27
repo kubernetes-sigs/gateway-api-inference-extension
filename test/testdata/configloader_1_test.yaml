@@ -12,6 +12,8 @@ plugins:
     blockSize: 32
 - name: testPicker
   type: test-picker
+- type: test-source
+- type: test-extractor
 schedulingProfiles:
 - name: default
   plugins:
@@ -19,6 +21,11 @@ schedulingProfiles:
   - pluginRef: test-two
     weight: 50
   - pluginRef: testPicker
+data:
+  sources:
+  - pluginRef: test-source
+    extractors:
+    - test-extractor
 featureGates:
 - dataLayer
 saturationDetector:

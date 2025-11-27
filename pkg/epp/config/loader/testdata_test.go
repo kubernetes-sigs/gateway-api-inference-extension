@@ -75,12 +75,21 @@ plugins:
   type: max-score-picker
 - name: profileHandler
   type: single-profile-handler
+- name: testSource
+  type: test-source
+- name: testExtractor
+  type: test-extractor
 schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: testScorer
     weight: 50
   - pluginRef: maxScorePicker
+data:
+  sources:
+  - pluginRef: testSource
+    extractors:
+    - testExtractor
 featureGates:
 - dataLayer
 `
@@ -348,4 +357,64 @@ schedulingProfiles:
 - name: prof2
   plugins:
   - pluginRef: maxScore
+`
+
+// errorMissingDataConfigText has the datalayer enabled without config
+const errorMissingDataConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: test1
+  type: test-one
+  parameters:
+    threshold: 10
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: test1
+featureGates:
+- dataLayer
+`
+
+// errorBadSourceReferenceText has a bad DataSource plugin reference
+const errorBadSourceReferenceText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: test1
+  type: test-one
+  parameters:
+    threshold: 10
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: test1
+data:
+  sources:
+  - pluginRef: test-one
+featureGates:
+- dataLayer
+`
+
+// errorBadExtractorReferenceText has a bad Extractor plugin reference
+const errorBadExtractorReferenceText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: test1
+  type: test-one
+  parameters:
+    threshold: 10
+- type: test-source
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: test1
+data:
+  sources:
+  - pluginRef: test-source
+    extractors:
+    - test-one
+featureGates:
+- dataLayer
 `
