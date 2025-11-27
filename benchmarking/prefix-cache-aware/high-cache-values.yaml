@@ -40,19 +40,11 @@ config:
     stages:
     - rate: 100
       duration: 30
-    - rate: 200
-      duration: 30
     - rate: 300
-      duration: 30
-    - rate: 400
       duration: 30
     - rate: 500
       duration: 30
-    - rate: 600
-      duration: 30
     - rate: 700
-      duration: 30
-    - rate: 800
       duration: 30
     worker_max_concurrency: 1000
   api:
