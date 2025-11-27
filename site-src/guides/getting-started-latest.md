@@ -56,22 +56,26 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Requirements
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Install Istio:
-
+      2. Install Istio:
+   
+         On Linux or MacOS
          ```
-         TAG=$(curl https://storage.googleapis.com/istio-build/dev/1.28-dev)
-         # on Linux
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-linux-amd64.tar.gz
-         tar -xvf istioctl-$TAG-linux-amd64.tar.gz
-         # on macOS
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-osx.tar.gz
-         tar -xvf istioctl-$TAG-osx.tar.gz
-         # on Windows
-         wget https://storage.googleapis.com/istio-build/dev/$TAG/istioctl-$TAG-win.zip
-         unzip istioctl-$TAG-win.zip
-
-         ./istioctl install --set tag=$TAG --set hub=gcr.io/istio-testing --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
+         ISTIO_VERSION=1.28.0
+         curl -L https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIO_VERSION} sh -
+         ./istio-$ISTIO_VERSION/bin/istioctl install \
+            --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
          ```
+         On Windows
+         ```
+         ISTIO_VERSION=1.28.0
+         wget https://storage.googleapis.com/istio-release/releases/$ISTIO_VERSION/istio-$ISTIO_VERSION-win.zip
+         unzip istioctl-$ISTIO_VERSION-win.zip
+         ./istio-$ISTIO_VERSION/bin/istioctl.exe install \
+            --set values.pilot.env.ENABLE_GATEWAY_API_INFERENCE_EXTENSION=true
+         ```
+         > **Note**
+         >
+         > Istio v1.28.0 includes full support for InferencePool v1. This guide assumes you are using Istio v1.28.0 or later to ensure compatibility with the InferencePool API.
 
 === "Kgateway"
 
@@ -79,14 +83,14 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Set the Kgateway version and install the Kgateway CRDs:
+      2. Set the Kgateway version and install the Kgateway CRDs:
 
          ```bash
          KGTW_VERSION=v2.1.0
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
-      1. Install Kgateway:
+      3. Install Kgateway:
 
          ```bash
          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
