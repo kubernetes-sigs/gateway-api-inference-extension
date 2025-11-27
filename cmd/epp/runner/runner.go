@@ -438,6 +438,9 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)
 	plugins.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
+	// register datalayer metrics collection plugins
+	plugins.Register(dlmetrics.DataSourceType, dlmetrics.DataSourceFactory)
+	plugins.Register(dlmetrics.ExtractorType, dlmetrics.ExtractorFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, error) {
@@ -476,7 +479,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 // Return a function that can be used in the EPP Handle to list pod names.
 func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 	return func() []types.NamespacedName {
-		pods := ds.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
+		pods := ds.PodList(backendmetrics.AllPodsPredicate)
 		names := make([]types.NamespacedName, 0, len(pods))
 
 		for _, p := range pods {

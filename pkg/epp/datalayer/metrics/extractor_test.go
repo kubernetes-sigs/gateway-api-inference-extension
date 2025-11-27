@@ -54,6 +54,10 @@ func TestExtractorExtract(t *testing.T) {
 		t.Error("empty extractor type")
 	}
 
+	if exName := extractor.TypedName().Name; exName == "" {
+		t.Error("empty extractor name")
+	}
+
 	if inputType := extractor.ExpectedInputType(); inputType != PrometheusMetricType {
 		t.Errorf("incorrect expected input type: %v", inputType)
 	}
