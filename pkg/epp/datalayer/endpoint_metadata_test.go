@@ -48,14 +48,14 @@ var (
 			PodIP: podip,
 		},
 	}
-	expected = &PodInfo{
+	expected = &EndpointMetadata{
 		NamespacedName: types.NamespacedName{Name: name, Namespace: namespace},
 		Address:        podip,
 		Labels:         labels,
 	}
 )
 
-func TestPodInfoClone(t *testing.T) {
+func TestEndpointMetadataClone(t *testing.T) {
 	clone := expected.Clone()
 	assert.NotSame(t, expected, clone)
 	if diff := cmp.Diff(expected, clone); diff != "" {
@@ -66,8 +66,8 @@ func TestPodInfoClone(t *testing.T) {
 	assert.Equal(t, "prod", expected.Labels["env"], "mutating clone should not affect original")
 }
 
-func TestPodInfoString(t *testing.T) {
-	podinfo := PodInfo{
+func TestEndpointMetadataString(t *testing.T) {
+	endpointMetadata := EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
@@ -79,7 +79,7 @@ func TestPodInfoString(t *testing.T) {
 		Labels:      labels,
 	}
 
-	s := podinfo.String()
+	s := endpointMetadata.String()
 	assert.Contains(t, s, name)
 	assert.Contains(t, s, namespace)
 	assert.Contains(t, s, podip)
