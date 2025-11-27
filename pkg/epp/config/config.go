@@ -17,6 +17,7 @@ limitations under the License.
 package config
 
 import (
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 )
@@ -25,4 +26,5 @@ import (
 type Config struct {
 	SchedulerConfig          *scheduling.SchedulerConfig
 	SaturationDetectorConfig *saturationdetector.Config
+	DataConfig               *datalayer.Config
 }
