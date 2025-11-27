@@ -20,7 +20,7 @@ logLevel: INFO
 # A GCS bucket path that points to the dataset file.
 # The file will be copied from this path to the local file system
 # at /dataset/dataset.json for use during the run.
-# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/dataset.json.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/gcs-dataset.json.
 gcsPath: ""
 
 # An S3 bucket path that points to the dataset file.
