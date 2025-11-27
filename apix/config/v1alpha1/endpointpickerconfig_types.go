@@ -50,13 +50,18 @@ type EndpointPickerConfig struct {
 	// SaturationDetector when present specifies the configuration of the
 	// Saturation detector. If not present, default values are used.
 	SaturationDetector *SaturationDetector `json:"saturationDetector,omitempty"`
+
+	// +optional
+	// Data configures the DataLayer. It is required if the new DataLayer is enabled.
+	Data *DataLayerConfig `json:"data"`
 }
 
 func (cfg EndpointPickerConfig) String() string {
 	return fmt.Sprintf(
-		"{Plugins: %v, SchedulingProfiles: %v, FeatureGates: %v, SaturationDetector: %v}",
+		"{Plugins: %v, SchedulingProfiles: %v, Data: %v, FeatureGates: %v, SaturationDetector: %v}",
 		cfg.Plugins,
 		cfg.SchedulingProfiles,
+		cfg.Data,
 		cfg.FeatureGates,
 		cfg.SaturationDetector,
 	)
@@ -192,4 +197,36 @@ func (sd *SaturationDetector) String() string {
 		}
 	}
 	return "{" + result + "}"
+}
+
+// DataLayerConfig contains the configuration of the V2 DataLayer feature
+type DataLayerConfig struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// Sources is the list of sources to define to the DataLayer
+	Sources []DataLayerSource `json:"sources"`
+}
+
+func (dlc DataLayerConfig) String() string {
+	return fmt.Sprintf("{Sources: %v}", dlc.Sources)
+}
+
+type DataLayerSource struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// PluginRef specifies a partiular Plugin instance to be associated with
+	// this Source. The reference is to the name of an entry of the Plugins
+	// defined in the configuration's Plugins section
+	PluginRef string `json:"pluginRef"`
+
+	// +required
+	// +kubebuilder:validation:Required
+	// Extractors specifies the list of Plugin instances to be associated with
+	// this Source. The entries are references to the names of entries of the Plugins
+	// defined in the configuration's Plugins section
+	Extractors []string `json:"extractors"`
+}
+
+func (dls DataLayerSource) String() string {
+	return fmt.Sprintf("{PluginRef: %s, Extractors: %v}", dls.PluginRef, dls.Extractors)
 }
