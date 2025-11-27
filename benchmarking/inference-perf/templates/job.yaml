@@ -23,19 +23,19 @@ spec:
       initContainers:
         - name: fetch-gcs-dataset
           image: google/cloud-sdk:latest
-          command: ["sh", "-c", "gsutil cp {{ .Values.gcsPath }} /dataset/gcs-dataset.json"]
+          command: ["sh", "-c", "gsutil cp {{ .Values.gcsPath }} /gcsDataset/gcs-dataset.json"]
           volumeMounts:
-            - name: dataset-volume
-              mountPath: /dataset
+            - name: gcs-dataset-volume
+              mountPath: /gcsDataset
 {{- end }}
 {{- if .Values.s3Path}}
       initContainers:
         - name: fetch-s3-dataset
           image: google/cloud-sdk:latest
-          command: ["sh", "-c", "aws s3 cp s3://{{ .Values.s3Path }} /dataset/s3-dataset.json"]
+          command: ["sh", "-c", "aws s3 cp s3://{{ .Values.s3Path }} /s3Dataset/s3-dataset.json"]
           volumeMounts:
-            - name: dataset-volume
-              mountPath: /dataset
+            - name: s3-dataset-volume
+              mountPath: /s3Dataset
 {{- end }}
       containers:
         - name: inference-perf-container
@@ -58,9 +58,25 @@ spec:
             - name: config-volume
               mountPath: {{ include "inference-perf.configMount" . }}
               readOnly: true
+            {{- if .Values.gcsPath}}
+            - name: gcs-dataset-volume
+              mountPath: /gcsDataset
+            {{- end }}
+            {{- if .Values.s3Path}}
+            - name: s3-dataset-volume
+              mountPath: /s3Dataset
+            {{- end }}
           resources:
             {{- toYaml .Values.job.resources | nindent 12 }}
       volumes:
         - name: config-volume
           configMap:
             name: {{ include "inference-perf.fullname" . }}-config
+{{- if .Values.gcsPath}}
+        - name: gcs-dataset-volume
+          emptyDir: {}
+{{- end }}
+{{- if .Values.s3Path}}
+        - name: s3-dataset-volume
+          emptyDir: {}
+{{- end }}
