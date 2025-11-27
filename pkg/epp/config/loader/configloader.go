@@ -28,6 +28,7 @@ import (
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -95,9 +96,15 @@ func InstantiateAndConfigure(
 		return nil, fmt.Errorf("scheduler config build failed: %w", err)
 	}
 
+	dataConfig, err := buildDataLayerConfig(rawConfig.Data, rawConfig.FeatureGates, handle)
+	if err != nil {
+		return nil, fmt.Errorf("data layer config build failed: %w", err)
+	}
+
 	return &config.Config{
 		SchedulerConfig:          schedulerConfig,
 		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
+		DataConfig:               dataConfig,
 	}, nil
 }
 
@@ -223,4 +230,39 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *saturationd
 	}
 
 	return cfg
+}
+
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, rawFeatureGates configapi.FeatureGates, handle plugins.Handle) (*datalayer.Config, error) {
+	featureGates := loadFeatureConfig(rawFeatureGates)
+	if !featureGates[datalayer.FeatureGate] {
+		return nil, nil
+	}
+
+	if rawDataConfig == nil {
+		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
+	}
+
+	cfg := datalayer.Config{
+		Sources: []datalayer.DataSourceConfig{},
+	}
+	for _, source := range rawDataConfig.Sources {
+		if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
+			sourceConfig := datalayer.DataSourceConfig{
+				Plugin:     sourcePlugin,
+				Extractors: []datalayer.Extractor{},
+			}
+			for _, extractor := range source.Extractors {
+				if extractorPlugin, ok := handle.Plugin(extractor).(datalayer.Extractor); ok {
+					sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
+				} else {
+					return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)
+				}
+			}
+			cfg.Sources = append(cfg.Sources, sourceConfig)
+		} else {
+			return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
+		}
+	}
+
+	return &cfg, nil
 }
