@@ -125,6 +125,7 @@ var (
 	certPath            = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
 		"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 		"then a self-signed certificate is used.")
+	enableCertReload = flag.Bool("enable-cert-reload", runserver.DefaultCertReload, "Enables certificate reloading of the certificates specified in --cert-path")
 	// metric flags
 	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
 	totalRunningRequestsMetric   = flag.String("total-running-requests-metric", runserver.DefaultTotalRunningRequestsMetric, "Prometheus metric for the number of running requests.")
@@ -366,6 +367,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		SecureServing:                    *secureServing,
 		HealthChecking:                   *healthChecking,
 		CertPath:                         *certPath,
+		EnableCertReload:                 *enableCertReload,
 		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
 		MetricsStalenessThreshold:        *metricsStalenessThreshold,
 		Director:                         director,
