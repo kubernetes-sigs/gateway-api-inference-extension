@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"k8s.io/utils/ptr"
 )
 
 // --- Test Helpers ---
@@ -474,6 +475,53 @@ func TestLabelsMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.spec.labelsMatch(tt.metricLabels)
 			assert.Equal(t, tt.want, got, "labelsMatch() mismatch")
+		})
+	}
+}
+
+func TestExtractValue(t *testing.T) {
+	tests := []struct {
+		name   string
+		metric *dto.Metric
+		want   float64
+	}{
+		{
+			name:   "nil metric",
+			metric: nil,
+			want:   0.0,
+		},
+		{
+			name: "unsupported metric type",
+			metric: &dto.Metric{
+				Summary: &dto.Summary{},
+			},
+			want: 0.0,
+		},
+		{
+			name: "gauge metric",
+			metric: &dto.Metric{
+				Gauge: &dto.Gauge{Value: ptr.To(42.5)},
+			},
+			want: 42.5,
+		},
+		{
+			name: "counter metric",
+			metric: &dto.Metric{
+				Counter: &dto.Counter{Value: ptr.To(99.9)},
+			},
+			want: 99.9,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("extractValue panicked for test %q: %v", tt.name, r)
+				}
+			}()
+			got := extractValue(tt.metric)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

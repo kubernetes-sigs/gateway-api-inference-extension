@@ -30,9 +30,9 @@ import (
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -48,8 +48,8 @@ import (
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort                         int
-	PoolNamespacedName               types.NamespacedName
-	PoolGKNN                         common.GKNN
+	GKNN                             common.GKNN
+	DisableK8sCrdReconcile           bool
 	Datastore                        datastore.Datastore
 	SecureServing                    bool
 	HealthChecking                   bool
@@ -78,7 +78,8 @@ const (
 	DefaultHealthChecking                   = false                         // default for --health-checking
 	DefaultEnablePprof                      = true                          // default for --enable-pprof
 	DefaultTotalQueuedRequestsMetric        = "vllm:num_requests_waiting"   // default for --total-queued-requests-metric
-	DefaultKvCacheUsagePercentageMetric     = "vllm:gpu_cache_usage_perc"   // default for --kv-cache-usage-percentage-metric
+	DefaultTotalRunningRequestsMetric       = "vllm:num_requests_running"   // default for --total-running-requests-metric
+	DefaultKvCacheUsagePercentageMetric     = "vllm:kv_cache_usage_perc"    // default for --kv-cache-usage-percentage-metric
 	DefaultLoraInfoMetric                   = "vllm:lora_requests_info"     // default for --lora-info-metric
 	DefaultCacheInfoMetric                  = "vllm:cache_config_info"      // default for --cache-info-metric
 	DefaultCertPath                         = ""                            // default for --cert-path
@@ -91,7 +92,7 @@ const (
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
-	poolGKNN := common.GKNN{
+	gknn := common.GKNN{
 		NamespacedName: types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
 		GroupKind: schema.GroupKind{
 			Group: DefaultPoolGroup,
@@ -100,8 +101,8 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	}
 	return &ExtProcServerRunner{
 		GrpcPort:                         DefaultGrpcPort,
-		PoolNamespacedName:               types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
-		PoolGKNN:                         poolGKNN,
+		GKNN:                             gknn,
+		DisableK8sCrdReconcile:           false,
 		SecureServing:                    DefaultSecureServing,
 		HealthChecking:                   DefaultHealthChecking,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
@@ -113,20 +114,30 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if err := (&controller.InferencePoolReconciler{
-		Datastore: r.Datastore,
-		Reader:    mgr.GetClient(),
-		PoolGKNN:  r.PoolGKNN,
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
+	if !r.DisableK8sCrdReconcile {
+		if err := (&controller.InferencePoolReconciler{
+			Datastore: r.Datastore,
+			Reader:    mgr.GetClient(),
+			PoolGKNN:  r.GKNN,
+		}).SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
+		}
+
+		if err := (&controller.InferenceObjectiveReconciler{
+			Datastore: r.Datastore,
+			Reader:    mgr.GetClient(),
+			PoolGKNN:  r.GKNN,
+		}).SetupWithManager(ctx, mgr); err != nil {
+			return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
+		}
 	}
 
-	if err := (&controller.InferenceObjectiveReconciler{
+	if err := (&controller.InferenceModelRewriteReconciler{
 		Datastore: r.Datastore,
 		Reader:    mgr.GetClient(),
-		PoolGKNN:  r.PoolGKNN,
+		PoolGKNN:  r.GKNN,
 	}).SetupWithManager(ctx, mgr); err != nil {
-		return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
+		return fmt.Errorf("failed setting up InferenceModelRewriteReconciler: %w", err)
 	}
 
 	if err := (&controller.PodReconciler{

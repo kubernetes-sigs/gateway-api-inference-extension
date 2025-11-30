@@ -23,9 +23,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	compbasemetrics "k8s.io/component-base/metrics"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
-
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	metricsutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/metrics"
 )
@@ -61,6 +61,104 @@ var (
 			Help:      metricsutil.HelpMsgWithStability("Counter of inference objective requests errors broken out for each model and target model.", compbasemetrics.ALPHA),
 		},
 		[]string{"model_name", "target_model_name", "error_code"},
+	)
+
+	// Gauge for various inference request metrics
+	inferenceGauges = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "inference_request_metric",
+			Help:      metricsutil.HelpMsgWithStability("Consolidated gauge for various inference request metrics including TTFT, TPOT, SLOs, and prediction durations.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name", "type"},
+	)
+
+	requestTTFT = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_ttft_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model TTFT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
+				4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200, 1800, 2700, 3600,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestPredictedTTFT = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_predicted_ttft_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TTFT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.005, 0.025, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2, 3,
+				4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 480, 600, 900, 1200, 1800, 2700, 3600,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	// New metrics for TTFT prediction duration
+	requestTTFTPredictionDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_ttft_prediction_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TTFT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestTPOT = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_tpot_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0005, 0.00205, 0.005, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.125, 0.15, 0.2, 0.3,
+				0.4, 0.5, 0.6, 0.8, 1, 1.5, 2, 3, 4.5, 6, 12, 18, 24, 30, 36, 48, 60, 90, 120, 180, 270, 360,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	requestPredictedTPOT = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_predicted_tpot_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0005, 0.00205, 0.005, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.125, 0.15, 0.2, 0.3,
+				0.4, 0.5, 0.6, 0.8, 1, 1.5, 2, 3, 4.5, 6, 12, 18, 24, 30, 36, 48, 60, 90, 120, 180, 270, 360,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	// New metrics for TPOT prediction duration
+	requestTPOTPredictionDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_tpot_prediction_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0,
+			},
+		},
+		[]string{"model_name", "target_model_name"},
+	)
+
+	// Counter for SLO Violations
+	sloViolationCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_slo_violation_total",
+			Help:      metricsutil.HelpMsgWithStability("Counter of SLO violations for each model, target model, and violation type.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "target_model_name", "type"},
 	)
 
 	requestLatencies = prometheus.NewHistogramVec(
@@ -282,6 +380,21 @@ var registerMetrics sync.Once
 // Register all metrics.
 func Register(customCollectors ...prometheus.Collector) {
 	registerMetrics.Do(func() {
+		// Register inference gauges
+		metrics.Registry.MustRegister(inferenceGauges)
+
+		// Register Histograms
+		metrics.Registry.MustRegister(requestTPOT)
+		metrics.Registry.MustRegister(requestTTFT)
+		metrics.Registry.MustRegister(requestPredictedTPOT)
+		metrics.Registry.MustRegister(requestPredictedTTFT)
+		metrics.Registry.MustRegister(requestTPOTPredictionDuration)
+		metrics.Registry.MustRegister(requestTTFTPredictionDuration)
+
+		// Register SLO violation counters
+		metrics.Registry.MustRegister(sloViolationCounter)
+
+		// Register other metrics
 		metrics.Registry.MustRegister(requestCounter)
 		metrics.Registry.MustRegister(requestErrCounter)
 		metrics.Registry.MustRegister(requestLatencies)
@@ -311,6 +424,21 @@ func Register(customCollectors ...prometheus.Collector) {
 
 // Just for integration test
 func Reset() {
+	// Reset inference gauges
+	inferenceGauges.Reset()
+
+	// Reset Histograms
+	requestTPOT.Reset()
+	requestTTFT.Reset()
+	requestPredictedTPOT.Reset()
+	requestPredictedTTFT.Reset()
+	requestTPOTPredictionDuration.Reset()
+	requestTTFTPredictionDuration.Reset()
+
+	// Reset SLO violation counter
+	sloViolationCounter.Reset()
+
+	// Reset other metrics
 	requestCounter.Reset()
 	requestErrCounter.Reset()
 	requestLatencies.Reset()
@@ -360,6 +488,123 @@ func RecordRequestLatencies(ctx context.Context, modelName, targetModelName stri
 	}
 	elapsedSeconds := complete.Sub(received).Seconds()
 	requestLatencies.WithLabelValues(modelName, targetModelName).Observe(elapsedSeconds)
+	return true
+}
+
+func RecordRequestTPOT(ctx context.Context, modelName, targetModelName string, tpot float64) bool {
+	if tpot < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot)
+		return false
+	}
+	requestTPOT.WithLabelValues(modelName, targetModelName).Observe(tpot)
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot"}).Set(tpot)
+	return true
+}
+
+// RecordRequestTPOTWithSLO records TPOT and checks for SLO violation.
+// If tpot exceeds the threshold, it records a violation (sets gauge to 1 and increments counter).
+// If tpot is within limits, it sets gauge to 0.
+func RecordRequestTPOTWithSLO(ctx context.Context, modelName, targetModelName string, tpot float64, sloThreshold float64) bool {
+	if tpot < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot)
+		return false
+	}
+
+	// Check for SLO violation (tpot exceeds threshold)
+	if tpot > sloThreshold {
+		inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot_slo_violation"}).Set(1)
+		sloViolationCounter.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot"}).Inc()
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("TPOT SLO violation detected",
+			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot, "threshold", sloThreshold)
+	} else {
+		inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot_slo_violation"}).Set(0)
+	}
+
+	return true
+}
+
+// TPOT records duration of request.
+func RecordRequestPredictedTPOT(ctx context.Context, modelName, targetModelName string, predicted_tpot float64) bool {
+	if predicted_tpot < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Predicted TPOT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "tpot", predicted_tpot)
+		return false
+	}
+	requestPredictedTPOT.WithLabelValues(modelName, targetModelName).Observe(predicted_tpot)
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "predicted_tpot"}).Set(predicted_tpot)
+	return true
+}
+
+// RecordRequestTPOTPredictionDuration records the duration taken to generate TPOT predictions.
+func RecordRequestTPOTPredictionDuration(ctx context.Context, modelName, targetModelName string, duration float64) bool {
+	if duration < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT prediction duration must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "duration", duration)
+		return false
+	}
+	requestTPOTPredictionDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot_prediction_duration"}).Set(duration)
+	return true
+}
+
+// TTFT records duration of request.
+func RecordRequestTTFT(ctx context.Context, modelName, targetModelName string, ttft float64) bool {
+	if ttft < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TTFT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "ttft", ttft)
+		return false
+	}
+	requestTTFT.WithLabelValues(modelName, targetModelName).Observe(ttft)
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "ttft"}).Set(ttft)
+	return true
+}
+
+// RecordRequestTTFTWithSLO records TTFT and checks for SLO violation.
+// If ttft exceeds the threshold, it records a violation (sets gauge to 1 and increments counter).
+// If ttft is within limits, it sets gauge to 0.
+func RecordRequestTTFTWithSLO(ctx context.Context, modelName, targetModelName string, ttft float64, sloThreshold float64) bool {
+	if ttft < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TTFT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "ttft", ttft)
+		return false
+	}
+
+	// Check for SLO violation (ttft exceeds threshold)
+	if ttft > sloThreshold {
+		inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "ttft_slo_violation"}).Set(1)
+		sloViolationCounter.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "ttft"}).Inc()
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("TTFT SLO violation detected",
+			"modelName", modelName, "targetModelName", targetModelName, "ttft", ttft, "threshold", sloThreshold)
+	} else {
+		inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "ttft_slo_violation"}).Set(0)
+	}
+
+	return true
+}
+
+// TPOT records duration of request.
+func RecordRequestPredictedTTFT(ctx context.Context, modelName, targetModelName string, predicted_ttft float64) bool {
+	if predicted_ttft < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Predicted TTFT value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "ttft", predicted_ttft)
+		return false
+	}
+	requestPredictedTTFT.WithLabelValues(modelName, targetModelName).Observe(predicted_ttft)
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "predicted_ttft"}).Set(predicted_ttft)
+	return true
+}
+
+// RecordRequestTTFTPredictionDuration records the duration taken to generate TTFT predictions.
+func RecordRequestTTFTPredictionDuration(ctx context.Context, modelName, targetModelName string, duration float64) bool {
+	if duration < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TTFT prediction duration must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "duration", duration)
+		return false
+	}
+	requestTTFTPredictionDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "ttft_prediction_duration"}).Set(duration)
 	return true
 }
 
@@ -479,4 +724,16 @@ func IncFlowControlQueueSize(fairnessID, priority string) {
 // DecFlowControlQueueSize decrements the Flow Control queue size gauge.
 func DecFlowControlQueueSize(fairnessID, priority string) {
 	flowControlQueueSize.WithLabelValues(fairnessID, priority).Dec()
+}
+
+// SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
+// This allows dynamic threshold management and makes the threshold visible in metrics.
+func SetTTFTSLOThreshold(modelName, targetModelName string, threshold float64) {
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "ttft_slo_threshold"}).Set(threshold)
+}
+
+// SetTPOTSLOThreshold sets the TPOT SLO threshold for a model.
+// This allows dynamic threshold management and makes the threshold visible in metrics.
+func SetTPOTSLOThreshold(modelName, targetModelName string, threshold float64) {
+	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot_slo_threshold"}).Set(threshold)
 }

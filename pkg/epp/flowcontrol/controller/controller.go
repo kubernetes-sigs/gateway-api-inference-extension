@@ -374,7 +374,7 @@ func (fc *FlowController) selectDistributionCandidates(key types.FlowKey) ([]can
 					"flowKey", key, "shardID", shard.ID())
 				continue
 			}
-			candidates = append(candidates, candidate{worker.processor, shard.ID(), mq.ByteSize()})
+			candidates = append(candidates, candidate{worker.processor, shard.ID(), mq.FlowQueueAccessor().ByteSize()})
 		}
 		return nil
 	})

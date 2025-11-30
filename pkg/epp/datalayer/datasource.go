@@ -22,11 +22,15 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 // DataSource provides raw data to registered Extractors.
 type DataSource interface {
-	Name() string
+	plugins.Plugin
+	// Extractors returns a list of registered Extractor names.
+	Extractors() []string
 	// AddExtractor adds an extractor to the data source. Multiple
 	// Extractors can be registered.
 	// The extractor will be called whenever the DataSource might
@@ -42,7 +46,7 @@ type DataSource interface {
 
 // Extractor transforms raw data into structured attributes.
 type Extractor interface {
-	Name() string
+	plugins.Plugin
 	// ExpectedType defines the type expected by the extractor.
 	ExpectedInputType() reflect.Type
 	// Extract transforms the raw data source output into a concrete structured
@@ -62,20 +66,10 @@ func (dsr *DataSourceRegistry) Register(src DataSource) error {
 	if src == nil {
 		return errors.New("unable to register a nil data source")
 	}
-	if _, loaded := dsr.sources.LoadOrStore(src.Name(), src); loaded {
-		return fmt.Errorf("unable to register duplicate data source: %s", src.Name())
+	if _, loaded := dsr.sources.LoadOrStore(src.TypedName().Name, src); loaded {
+		return fmt.Errorf("unable to register duplicate data source: %s", src.TypedName().String())
 	}
 	return nil
-}
-
-// GetNamedSource fetches a source by name.
-func (dsr *DataSourceRegistry) GetNamedSource(name string) (DataSource, bool) {
-	if val, ok := dsr.sources.Load(name); ok {
-		if ds, ok := val.(DataSource); ok {
-			return ds, true
-		}
-	}
-	return nil, false
 }
 
 // GetSources returns all registered sources.
@@ -95,21 +89,6 @@ func (dsr *DataSourceRegistry) GetSources() []DataSource {
 // RegisterSource adds a new data source to the default registry.
 func RegisterSource(src DataSource) error {
 	return defaultDataSources.Register(src)
-}
-
-// GetNamedSource returns a typed data source from the default registry.
-func GetNamedSource[T DataSource](name string) (T, bool) {
-	v, ok := defaultDataSources.GetNamedSource(name)
-	if !ok {
-		var zero T
-		return zero, false
-	}
-	src, ok := v.(T)
-	if !ok {
-		var zero T
-		return zero, false
-	}
-	return src, true
 }
 
 // GetSources returns the list of data sources registered in the default registry.

@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 // --- Test Stubs ---
@@ -35,7 +36,17 @@ type DummySource struct {
 	callCount int64
 }
 
-func (d *DummySource) Name() string                   { return "test-dummy-data-source" }
+const (
+	dummySource = "test-dummy-data-source"
+)
+
+func (d *DummySource) TypedName() plugins.TypedName {
+	return plugins.TypedName{
+		Type: dummySource,
+		Name: dummySource,
+	}
+}
+func (d *DummySource) Extractors() []string           { return []string{} }
 func (d *DummySource) AddExtractor(_ Extractor) error { return nil }
 func (d *DummySource) Collect(ctx context.Context, ep Endpoint) error {
 	atomic.AddInt64(&d.callCount, 1)
@@ -43,7 +54,6 @@ func (d *DummySource) Collect(ctx context.Context, ep Endpoint) error {
 }
 
 func defaultEndpoint() Endpoint {
-	ms := NewEndpoint()
 	pod := &PodInfo{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod-name",
@@ -51,7 +61,7 @@ func defaultEndpoint() Endpoint {
 		},
 		Address: "1.2.3.4:5678",
 	}
-	ms.UpdatePod(pod)
+	ms := NewEndpoint(pod, nil)
 	return ms
 }
 

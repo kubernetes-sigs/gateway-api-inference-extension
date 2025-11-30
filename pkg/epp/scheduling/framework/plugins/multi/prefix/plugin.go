@@ -28,7 +28,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -67,15 +66,19 @@ const (
 )
 
 var DefaultConfig = Config{
-	DefaultBlockSize:       DefaultBlockSize,
+	AutoTune:               true,
+	BlockSize:              DefaultBlockSize,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 }
 
 type Config struct {
+	// If set to true, the plugin will automatically adjust the configuration based on various
+	// metrics from the model servers.
+	AutoTune bool `json:"autoTune"`
 	// The input prompt is broken into sizes of BlockSize to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
-	DefaultBlockSize int `json:"blockSize"`
+	BlockSize int `json:"blockSize"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
@@ -148,11 +151,7 @@ var (
 
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
-	parameters := Config{
-		DefaultBlockSize:       DefaultBlockSize,
-		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
-		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
-	}
+	parameters := DefaultConfig
 
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -167,40 +166,32 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 
 // New initializes a new prefix Plugin and returns its pointer.
 func New(ctx context.Context, config Config) *Plugin {
-	capacity := config.LRUCapacityPerServer
-	if capacity <= 0 {
-		capacity = DefaultLRUCapacityPerServer
+	if config.LRUCapacityPerServer <= 0 {
+		config.LRUCapacityPerServer = DefaultLRUCapacityPerServer
 		log.FromContext(ctx).V(logutil.DEFAULT).Info(
 			"LRUCapacityPerServer is not positive, using default value",
 			"defaultCapacity", DefaultLRUCapacityPerServer,
 		)
 	}
 
-	blockSize := config.DefaultBlockSize
-	if blockSize <= 0 {
-		blockSize = DefaultBlockSize
-		log.FromContext(ctx).V(logutil.DEFAULT).Info("DefaultBlockSize is not positive, using default value",
+	if config.BlockSize <= 0 {
+		config.BlockSize = DefaultBlockSize
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("BlockSize is not positive, using default value",
 			"default", DefaultBlockSize)
 	}
 
-	maxPrefixBlocks := config.MaxPrefixBlocksToMatch
-	if maxPrefixBlocks <= 0 {
-		maxPrefixBlocks = DefaultMaxPrefixBlocks
+	if config.MaxPrefixBlocksToMatch <= 0 {
+		config.MaxPrefixBlocksToMatch = DefaultMaxPrefixBlocks
 		log.FromContext(ctx).V(logutil.DEFAULT).Info("MaxPrefixBlocksToMatch is not positive, using default value",
 			"default", DefaultMaxPrefixBlocks)
 	}
 
-	validConfig := Config{
-		DefaultBlockSize:       blockSize,
-		MaxPrefixBlocksToMatch: maxPrefixBlocks,
-		LRUCapacityPerServer:   capacity,
-	}
-
+	log.FromContext(ctx).V(logutil.DEFAULT).Info("PrefixCachePlugin initialized", "config", config)
 	return &Plugin{
 		typedName:   plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
-		config:      validConfig,
+		config:      config,
 		pluginState: plugins.NewPluginState(ctx),
-		indexer:     newIndexer(ctx, capacity),
+		indexer:     newIndexer(ctx, config.LRUCapacityPerServer),
 	}
 }
 
@@ -218,7 +209,7 @@ func (p *Plugin) WithName(name string) *Plugin {
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config.DefaultBlockSize), p.config.MaxPrefixBlocksToMatch)
+	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config), p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
@@ -248,8 +239,12 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 // PreRequest records in the plugin cache the result of the scheduling selection.
 func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
-	targetPod := primaryProfileResult.TargetPods[0].GetPod() // get the first pod of the primary profile
-	gpuBlocks := primaryProfileResult.TargetPods[0].GetMetrics().CacheNumGPUBlocks
+	targetPod := primaryProfileResult.TargetPods[0] // get the first pod of the primary profile
+
+	gpuBlocks := p.config.LRUCapacityPerServer
+	if p.config.AutoTune && targetPod.GetMetrics().CacheNumGPUBlocks > 0 {
+		gpuBlocks = targetPod.GetMetrics().CacheNumGPUBlocks
+	}
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
 	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
@@ -265,16 +260,16 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	p.wg.Add(1)
 	go func() {
 		p.indexer.Add(state.PrefixHashes, Server{
-			ServerID(targetPod.NamespacedName),
+			ServerID(targetPod.GetPod().NamespacedName),
 			gpuBlocks,
 		})
 		p.wg.Done()
 	}()
 
 	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[ServerID(targetPod.NamespacedName)]
+	matchLen := state.PrefixCacheServers[ServerID(targetPod.GetPod().NamespacedName)]
 
-	blockSize := getBlockSize(primaryProfileResult.TargetPods, p.config.DefaultBlockSize)
+	blockSize := getBlockSize(primaryProfileResult.TargetPods, p.config)
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
 }
 
@@ -311,10 +306,10 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle)
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			activePodMetrics := handle.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
-			activePods := make(map[ServerID]struct{}, len(activePodMetrics))
-			for _, pm := range activePodMetrics {
-				activePods[ServerID(pm.GetPod().NamespacedName)] = struct{}{}
+			podNames := handle.PodList()
+			activePods := make(map[ServerID]struct{}, len(podNames))
+			for _, nsn := range podNames {
+				activePods[ServerID(nsn)] = struct{}{}
 			}
 
 			for _, pod := range m.indexer.Pods() {
@@ -388,9 +383,14 @@ func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
 	return json.Marshal(request.Body.ChatCompletions.Messages)
 }
 
-func getBlockSize(pods []types.Pod, defaultBlockSize int) int {
+func getBlockSize(pods []types.Pod, config Config) int {
+	if !config.AutoTune {
+		return config.BlockSize
+	}
+
+	// Fallback to BlockSize if no metrics are available.
 	if len(pods) == 0 {
-		return defaultBlockSize
+		return config.BlockSize
 	}
 
 	// Since all PODs originate from the same inference pool, they are considered to have identical configurations.
@@ -401,5 +401,5 @@ func getBlockSize(pods []types.Pod, defaultBlockSize int) int {
 			return cacheBlockSize * averageCharactersPerToken
 		}
 	}
-	return defaultBlockSize
+	return config.BlockSize
 }

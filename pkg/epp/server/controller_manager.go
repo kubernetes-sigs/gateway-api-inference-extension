@@ -25,12 +25,12 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -45,7 +45,7 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
+func defaultManagerOptions(disableK8sCrdReconcile bool, gknn common.GKNN, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
 	opt := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -60,33 +60,43 @@ func defaultManagerOptions(gknn common.GKNN, metricsServerOptions metricsserver.
 						gknn.Namespace: {},
 					},
 				},
+				&v1alpha2.InferenceModelRewrite{}: {
+					Namespaces: map[string]cache.Config{
+						gknn.Namespace: {},
+					},
+				},
 			},
 		},
 		Metrics: metricsServerOptions,
 	}
-	switch gknn.Group {
-	case v1alpha2.GroupName:
-		opt.Cache.ByObject[&v1alpha2.InferencePool{}] = cache.ByObject{
-			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
-				"metadata.name": gknn.Name,
-			})}},
+	if !disableK8sCrdReconcile {
+		opt.Cache.ByObject[&v1alpha2.InferenceObjective{}] = cache.ByObject{Namespaces: map[string]cache.Config{
+			gknn.Namespace: {},
+		}}
+		switch gknn.Group {
+		case v1alpha2.GroupName:
+			opt.Cache.ByObject[&v1alpha2.InferencePool{}] = cache.ByObject{
+				Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
+					"metadata.name": gknn.Name,
+				})}},
+			}
+		case v1.GroupName:
+			opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
+				Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
+					"metadata.name": gknn.Name,
+				})}},
+			}
+		default:
+			return ctrl.Options{}, fmt.Errorf("unknown group: %s", gknn.Group)
 		}
-	case v1.GroupName:
-		opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
-			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
-				"metadata.name": gknn.Name,
-			})}},
-		}
-	default:
-		return ctrl.Options{}, fmt.Errorf("unknown group: %s", gknn.Group)
 	}
 
 	return opt, nil
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
-	opt, err := defaultManagerOptions(gknn, metricsServerOptions)
+func NewDefaultManager(disableK8sCrdReconcile bool, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
+	opt, err := defaultManagerOptions(disableK8sCrdReconcile, gknn, metricsServerOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
 	}

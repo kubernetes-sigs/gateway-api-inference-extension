@@ -1,0 +1,51 @@
+name: CRD Validation
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  crd-validation:
+    name: CRD Validation Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Install crdify
+        run: |
+          go install sigs.k8s.io/crdify@latest
+
+      - name: Run CRD Validation Check
+        run: |
+          git fetch origin ${{ github.base_ref }}:upstream_base
+          BASE_SHA=$(git rev-parse upstream_base)
+
+          FAILED=0
+          for crd in config/crd/bases/*.yaml; do
+            if ! crdify "git://${BASE_SHA}?path=$crd" "git://HEAD?path=$crd"; then
+              echo "❌ Incompatible change detected in $crd"
+              ((FAILED++))
+            else
+              echo "✅ $crd is valid"
+            fi
+          done
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::Validation failed! Found $FAILED incompatible CRD change(s)."
+            exit 1
+          fi
+
+          echo "All CRDs are compatible."

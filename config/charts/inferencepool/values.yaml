@@ -12,6 +12,11 @@ inferenceExtension:
   extraContainerPorts: []
   # Define additional service ports
   extraServicePorts: []
+#  extraServicePorts:
+#    - name: http
+#      port: 8081
+#      protocol: TCP
+#      targetPort: 8081
 
   # This is the plugins configuration file.
   # pluginsCustomConfig:
@@ -38,6 +43,10 @@ inferenceExtension:
   affinity: {}
 
   tolerations: []
+  
+  # Sidecar configuration for EPP
+  sidecar:
+    enabled: false
 
   # Monitoring configuration for EPP
   monitoring:
@@ -62,6 +71,89 @@ inferenceExtension:
       sampler: "parentbased_traceidratio"
       samplerArg: "0.1"
 
+  # Latency Predictor Configuration
+  latencyPredictor:
+    enabled: false
+    
+    # Training Server Configuration
+    trainingServer:
+      image:
+        hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+        name: latencypredictor-training-server
+        tag: latest
+        pullPolicy: Always
+      port: 8000
+      resources:
+        requests:
+          cpu: "2000m"
+          memory: "4Gi"
+        limits:
+          cpu: "4000m"
+          memory: "8Gi"
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 8000
+        initialDelaySeconds: 30
+        periodSeconds: 20
+      readinessProbe:
+        httpGet:
+          path: /readyz
+          port: 8000
+        initialDelaySeconds: 45
+        periodSeconds: 10
+      volumeSize: "20Gi"
+      config:
+        LATENCY_RETRAINING_INTERVAL_SEC: "1"
+        LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
+        LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
+        LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
+        LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
+        LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
+        LATENCY_MODEL_TYPE: "xgboost"
+        LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
+        LATENCY_QUANTILE_ALPHA: "0.9"
+
+    # Prediction Server Configuration
+    predictionServers:
+      count: 10
+      startPort: 8001
+      image:
+        hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+        name: latencypredictor-prediction-server
+        tag: latest
+        pullPolicy: Always
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1000m"
+          memory: "2Gi"
+      livenessProbe:
+        httpGet:
+          path: /healthz
+        initialDelaySeconds: 15
+        periodSeconds: 15
+      readinessProbe:
+        httpGet:
+          path: /readyz
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        failureThreshold: 10
+      volumeSize: "10Gi"
+      config:
+        LATENCY_MODEL_TYPE: "xgboost"
+        PREDICT_HOST: "0.0.0.0"
+        LOCAL_TTFT_MODEL_PATH: "/server_models/ttft.joblib"
+        LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
+        LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
+        LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
+
+    # EPP Environment Variables for Latency Predictor
+    eppEnv:
+      LATENCY_MAX_SAMPLE_SIZE: "10000"
+
 inferencePool:
   targetPorts:
     - number: 8000
@@ -85,10 +177,23 @@ provider:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
 
+  # Istio-specific configuration.
+  # This block is only used if name is "istio".
+  istio:
+    destinationRule:
+      # Provide a way to override the default calculated host
+      host: ""
+      # Optional: Enables customization of the traffic policy
+      trafficPolicy: {}
+        # connectionPool:
+        #   http:
+        #     maxRequestsPerConnection: 256000
+
+# DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
 istio:
   destinationRule:
     # Provide a way to override the default calculated host
-    host: "" 
+    host: ""
     # Optional: Enables customization of the traffic policy
     trafficPolicy: {}
       # connectionPool:

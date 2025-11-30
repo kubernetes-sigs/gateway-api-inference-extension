@@ -23,8 +23,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	inter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/besthead"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
@@ -41,7 +40,7 @@ const (
 	// defaultIntraFlowDispatchPolicy is the default policy for selecting items within a single flow's queue.
 	defaultIntraFlowDispatchPolicy intra.RegisteredPolicyName = fcfs.FCFSPolicyName
 	// defaultInterFlowDispatchPolicy is the default policy for selecting which flow's queue to service next.
-	defaultInterFlowDispatchPolicy inter.RegisteredPolicyName = besthead.BestHeadPolicyName
+	defaultInterFlowDispatchPolicy interflow.RegisteredPolicyName = interflow.BestHeadPolicyName
 	// defaultQueue is the default queue implementation for flows.
 	defaultQueue queue.RegisteredQueueName = queue.ListQueueName
 	// defaultInitialShardCount is the default number of parallel shards to create when the registry is initialized.
@@ -128,7 +127,7 @@ type PriorityBandConfig struct {
 	// InterFlowDispatchPolicy specifies the name of the policy used to select which flow's queue to service next from
 	// this band.
 	// Optional: Defaults to `defaultInterFlowDispatchPolicy` ("BestHead").
-	InterFlowDispatchPolicy inter.RegisteredPolicyName
+	InterFlowDispatchPolicy interflow.RegisteredPolicyName
 
 	// Queue specifies the default name of the `framework.SafeQueue` implementation for flow queues in this band.
 	// Optional: Defaults to `defaultQueue` ("ListQueue").
@@ -167,7 +166,7 @@ type ShardPriorityBandConfig struct {
 	// IntraFlowDispatchPolicy is the name of the policy for dispatch within a flow's queue.
 	IntraFlowDispatchPolicy intra.RegisteredPolicyName
 	// InterFlowDispatchPolicy is the name of the policy for dispatch between flow queues.
-	InterFlowDispatchPolicy inter.RegisteredPolicyName
+	InterFlowDispatchPolicy interflow.RegisteredPolicyName
 	// Queue is the name of the queue implementation to use.
 	Queue queue.RegisteredQueueName
 	// MaxBytes is this shard's partitioned portion of this band's global capacity limit.
@@ -209,7 +208,7 @@ func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
 
 	// Ensure the DI factories are initialized for production use if `NewConfig` was called without options.
 	if cfg.interFlowDispatchPolicyFactory == nil {
-		cfg.interFlowDispatchPolicyFactory = inter.NewPolicyFromName
+		cfg.interFlowDispatchPolicyFactory = interflow.NewPolicyFromName
 	}
 	if cfg.intraFlowDispatchPolicyFactory == nil {
 		cfg.intraFlowDispatchPolicyFactory = intra.NewPolicyFromName
@@ -362,9 +361,9 @@ type configOption func(*Config)
 
 // interFlowDispatchPolicyFactory defines the signature for a function that creates an
 // `framework.InterFlowDispatchPolicy` instance from its registered name.
-// It serves as an abstraction over the concrete `inter.NewPolicyFromName` factory, enabling dependency injection for
+// It serves as an abstraction over the concrete `interflow.NewPolicyFromName` factory, enabling dependency injection for
 // testing validation logic.
-type interFlowDispatchPolicyFactory func(name inter.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error)
+type interFlowDispatchPolicyFactory func(name interflow.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error)
 
 // intraFlowDispatchPolicyFactory defines the signature for a function that creates an
 // `framework.IntraFlowDispatchPolicy` instance from its registered name.

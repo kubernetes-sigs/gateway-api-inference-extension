@@ -121,6 +121,35 @@ $ helm install triton-llama3-8b-instruct \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
+### Install with Latency-Based Routing
+
+For full details see the dedicated [Latency-Based Routing Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/latency-based-predictor.md)
+
+#### Latency-Based Router Configuration
+
+The behavior of the latency-based router can be fine-tuned using the configuration parameters under `inferenceExtension.latencyPredictor.sloAwareRouting` in your `values.yaml` file.
+
+| Parameter                        | Description                                                                                             | Default     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------- |
+| `samplingMean`                   | The sampling mean (lambda) for the Poisson distribution of token sampling.                              | `100.0`     |
+| `maxSampledTokens`               | The maximum number of tokens to sample for TPOT prediction.                                             | `20`        |
+| `sloBufferFactor`                | A buffer to apply to the SLO to make it more or less strict.                                            | `1.0`       |
+| `negHeadroomTTFTWeight`          | The weight to give to the TTFT when a pod has negative headroom.                                        | `0.8`       |
+| `negHeadroomTPOTWeight`          | The weight to give to the TPOT when a pod has negative headroom.                                        | `0.2`       |
+| `headroomTTFTWeight`             | The weight to give to the TTFT when a pod has positive headroom.                                        | `0.8`       |
+| `headroomTPOTWeight`             | The weight to give to the TPOT when a pod has positive headroom.                                        | `0.2`       |
+| `headroomSelectionStrategy`      | The strategy to use for selecting a pod based on headroom. Options: `least`, `most`, `composite-least`, `composite-most`, `composite-only`. | `least`     |
+| `compositeKVWeight`              | The weight for KV cache in the composite score.                                                         | `1.0`       |
+| `compositeQueueWeight`           | The weight for queue size in the composite score.                                                       | `1.0`       |
+| `compositePrefixWeight`          | The weight for prefix cache in the composite score.                                                     | `1.0`       |
+| `epsilonExploreSticky`           | Exploration factor for sticky sessions.                                                                 | `0.01`      |
+| `epsilonExploreNeg`              | Exploration factor for negative headroom.                                                               | `0.01`      |
+| `affinityGateTau`                | Affinity gate threshold.                                                                                | `0.80`      |
+| `affinityGateTauGlobal`          | Global affinity gate threshold.                                                                         | `0.99`      |
+| `selectionMode`                  | The mode for selection (e.g., "linear").                                                                | `linear`    |
+
+**Note:** Enabling SLO-aware routing also exposes a number of Prometheus metrics for monitoring the feature, including actual vs. predicted latency, SLO violations, and more.
+
 ### Install with High Availability (HA)
 
 To deploy the EndpointPicker in a high-availability (HA) active-passive configuration set replicas to be greater than one. In such a setup, only one "leader" replica will be active and ready to process traffic at any given time. If the leader pod fails, another pod will be elected as the new leader, ensuring service continuity.
@@ -224,16 +253,6 @@ The following table list the configurable parameters of the chart.
 ### Provider Specific Configuration
 
 This section should document any Gateway provider specific values configurations.
-
-#### GKE
-
-These are the options available to you with `provider.name` set to `gke`:
-
-| **Parameter Name**                          | **Description**                                                                                                        |
-|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
-| `gke.monitoringSecret.name`                 | The name of the monitoring secret to be used. Defaults to `inference-gateway-sa-metrics-reader-secret`.                |
-| `gke.monitoringSecret.namespace`            | The namespace that the monitoring secret lives in. Defaults to `default`.                                              |
-
 
 #### Istio
 

@@ -42,6 +42,30 @@ First install this server. Depending on your Gateway provider, you can use one o
     oci://registry.k8s.io/gateway-api-inference-extension/charts/body-based-routing
     ```
 
+=== "Kgateway"
+
+    Kgateway does not require the Body-Based Routing Extension, and instead natively implements Body-Based Routing.
+    To use Body Based Routing, apply an `AgentgatewayPolicy`:
+
+    ```yaml
+    apiVersion: gateway.kgateway.dev/v1alpha1
+    kind: AgentgatewayPolicy
+    metadata:
+      name: bbr
+    spec:
+      targetRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: inference-gateway
+      traffic:
+        phase: PreRouting
+        transformation:
+          request:
+            set:
+            - name: X-Gateway-Model-Name
+              value: 'json(request.body).model'
+    ```
+
 === "Other"
 
     ```bash

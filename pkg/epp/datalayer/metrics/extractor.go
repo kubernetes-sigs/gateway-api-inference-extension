@@ -26,13 +26,16 @@ import (
 	"time"
 
 	dto "github.com/prometheus/client_model/go"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
-	extractorName = "model-server-protocol-metrics"
+	extractorType = "model-server-protocol-metrics"
 
 	// LoRA metrics based on MSP
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
@@ -46,6 +49,7 @@ const (
 // Extractor implements the metrics extraction based on the model
 // server protocol standard.
 type Extractor struct {
+	tn      plugins.TypedName
 	mapping *Mapping
 }
 
@@ -64,19 +68,23 @@ func Produces() map[string]any {
 // configured with the given metrics' specifications.
 // These are mandatory metrics per the MSP specification, and are used
 // as the basis for the built-in scheduling plugins.
-func NewExtractor(queueSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
-	mapping, err := NewMapping(queueSpec, kvusageSpec, loraSpec, cacheInfoSpec)
+func NewExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
+	mapping, err := NewMapping(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
 	return &Extractor{
+		tn: plugins.TypedName{
+			Type: extractorType,
+			Name: extractorType,
+		},
 		mapping: mapping,
 	}, nil
 }
 
-// Name returns the name of the metrics.Extractor.
-func (ext *Extractor) Name() string {
-	return extractorName
+// TypedName returns the type and name of the metrics.Extractor.
+func (ext *Extractor) TypedName() plugins.TypedName {
+	return ext.tn
 }
 
 // ExpectedType defines the type expected by the metrics.Extractor - a
@@ -103,6 +111,15 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 			errs = append(errs, err)
 		} else {
 			clone.WaitingQueueSize = int(extractValue(metric))
+			updated = true
+		}
+	}
+
+	if spec := ext.mapping.TotalRunningRequests; spec != nil { // extract running requests
+		if metric, err := spec.getLatestMetric(families); err != nil {
+			errs = append(errs, err)
+		} else {
+			clone.RunningQueueSize = int(extractValue(metric))
 			updated = true
 		}
 	}
@@ -136,8 +153,10 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
+	logger := log.FromContext(ctx).WithValues("pod", ep.GetPod().NamespacedName)
 	if updated {
 		clone.UpdateTime = time.Now()
+		logger.V(logutil.TRACE).Info("Refreshed metrics", "updated", clone)
 		ep.UpdateMetrics(clone)
 	}
 

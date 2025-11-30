@@ -14,23 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package runner
 
 import (
 	"context"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-type healthServer struct {
-	logger logr.Logger
-}
+type healthServer struct{}
 
 func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckRequest) (*healthPb.HealthCheckResponse, error) {
 	// TODO: we're accepting ANY service name for now as a temporary hack in alignment with
@@ -40,7 +38,7 @@ func (s *healthServer) Check(ctx context.Context, in *healthPb.HealthCheckReques
 	// 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVICE_UNKNOWN}, nil
 	// }
 
-	s.logger.V(logutil.VERBOSE).Info("gRPC health check serving", "service", in.Service)
+	log.FromContext(ctx).V(logutil.DEBUG).Info("gRPC health check serving", "service", in.Service)
 	return &healthPb.HealthCheckResponse{Status: healthPb.HealthCheckResponse_SERVING}, nil
 }
 

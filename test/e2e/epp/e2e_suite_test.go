@@ -68,6 +68,8 @@ const (
 	xInferPoolManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
 	// xInferObjectiveManifest is the manifest for the inference model CRD with 'inference.networking.x-k8s.io' group.
 	xInferObjectiveManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml"
+	// xInferenceModelRewritesManifest is the manifest for the inference rewrites CRD with 'inference.networking.x-k8s.io' group.
+	xInferenceModelRewritesManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodelrewrites.yaml"
 	// inferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.k8s.io' group.
 	inferPoolManifest = "../../../config/crd/bases/inference.networking.k8s.io_inferencepools.yaml"
 	// inferExtManifestDefault is the manifest for the default inference extension test resources (single replica).
@@ -132,9 +134,10 @@ func setupInfra() {
 		createHfSecret(testConfig, modelServerSecretManifest)
 	}
 	crds := map[string]string{
-		"inferencepools.inference.networking.x-k8s.io":      xInferPoolManifest,
-		"inferenceobjectives.inference.networking.x-k8s.io": xInferObjectiveManifest,
-		"inferencepools.inference.networking.k8s.io":        inferPoolManifest,
+		"inferencepools.inference.networking.x-k8s.io":         xInferPoolManifest,
+		"inferenceobjectives.inference.networking.x-k8s.io":    xInferObjectiveManifest,
+		"inferencemodelrewrites.inference.networking.x-k8s.io": xInferenceModelRewritesManifest,
+		"inferencepools.inference.networking.k8s.io":           inferPoolManifest,
 	}
 
 	createCRDs(testConfig, crds)

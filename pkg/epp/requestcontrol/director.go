@@ -27,11 +27,10 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -41,11 +40,17 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
+const (
+	// TODO: Make these configurable per plugin via config.
+	prepareDataTimeout = 400 * time.Millisecond
+)
+
 // Datastore defines the interface required by the Director.
 type Datastore interface {
-	PoolGet() (*v1.InferencePool, error)
-	ObjectiveGet(modelName string) *v1alpha2.InferenceObjective
+	PoolGet() (*datalayer.EndpointPool, error)
+	ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	ModelRewriteGet(modelName string) *v1alpha2.InferenceModelRewriteRule
 }
 
 // Scheduler defines the interface required by the Director for scheduling.
@@ -89,6 +94,23 @@ type Director struct {
 	defaultPriority int
 }
 
+// getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
+func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.RequestContext) *v1alpha2.InferenceObjective {
+	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
+	if infObjective == nil {
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
+		infObjective = &v1alpha2.InferenceObjective{
+			Spec: v1alpha2.InferenceObjectiveSpec{
+				Priority: &d.defaultPriority,
+			},
+		}
+	} else if infObjective.Spec.Priority == nil {
+		// Default to 0 if not specified.
+		infObjective.Spec.Priority = &d.defaultPriority
+	}
+	return infObjective
+}
+
 // HandleRequest orchestrates the request lifecycle.
 // It always returns the requestContext even in the error case, as the request context is used in error handling.
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
@@ -106,6 +128,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		// Default to incoming model name
 		reqCtx.TargetModelName = reqCtx.IncomingModelName
 	}
+
+	d.applyWeightedModelRewrite(reqCtx)
+
 	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
 
 	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body)
@@ -113,18 +138,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
 	}
 
-	infObjective := d.datastore.ObjectiveGet(reqCtx.ObjectiveKey)
-	if infObjective == nil {
-		logger.V(logutil.VERBOSE).Info("No associated InferenceObjective found, using default", "objectiveKey", reqCtx.ObjectiveKey)
-		infObjective = &v1alpha2.InferenceObjective{
-			Spec: v1alpha2.InferenceObjectiveSpec{
-				Priority: &d.defaultPriority,
-			},
-		}
-	} else if infObjective.Spec.Priority == nil {
-		// Default to 0 if not specified.
-		infObjective.Spec.Priority = &d.defaultPriority
-	}
+	// Parse inference objective.
+	infObjective := d.getInferenceObjective(ctx, reqCtx)
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
@@ -144,13 +159,25 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if len(candidatePods) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
 	}
-
 	if err := d.admissionController.Admit(ctx, reqCtx, candidatePods, *infObjective.Spec.Priority); err != nil {
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
 	}
+	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, d.toSchedulerPodMetrics(candidatePods))
+	// Prepare per request data by running PrepareData plugins.
+	if d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) != nil {
+		// Don't fail the request if PrepareData plugins fail.
+		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
+	}
+
+	// Run admit request plugins
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
+		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
+		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "request cannot be admitted"}
+	}
+
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
@@ -164,6 +191,42 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	return reqCtx, nil
+}
+
+func (d *Director) applyWeightedModelRewrite(reqCtx *handlers.RequestContext) {
+	rewriteRule := d.datastore.ModelRewriteGet(reqCtx.IncomingModelName)
+	if rewriteRule == nil {
+		return
+	}
+	reqCtx.TargetModelName = d.selectWeightedModel(rewriteRule.Targets)
+}
+
+func (d *Director) selectWeightedModel(models []v1alpha2.TargetModel) string {
+	if len(models) == 0 {
+		return ""
+	}
+
+	var totalWeight int32
+	for _, model := range models {
+		totalWeight += model.Weight
+	}
+
+	if totalWeight == 0 {
+		// If total weight is 0, distribute evenly
+		return models[rand.Intn(len(models))].ModelRewrite
+	}
+
+	randomNum := rand.Intn(int(totalWeight))
+	var currentWeight int32
+	for _, model := range models {
+		currentWeight += model.Weight
+		if randomNum < int(currentWeight) {
+			return model.ModelRewrite
+		}
+	}
+
+	// Should not happen
+	return models[len(models)-1].ModelRewrite
 }
 
 // getCandidatePodsForScheduling gets the list of relevant endpoints for the scheduling cycle from the datastore.
@@ -244,7 +307,11 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Pod {
 	pm := make([]schedulingtypes.Pod, len(pods))
 	for i, pod := range pods {
-		pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone()}
+		if pod.GetAttributes() != nil {
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
+		} else {
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
+		}
 	}
 
 	return pm
@@ -253,10 +320,10 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 // HandleResponseReceived is called when the response headers are received.
 func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	response := &Response{
-		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:   reqCtx.Response.Headers,
+		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:     reqCtx.Response.Headers,
+		ReqMetadata: reqCtx.Request.Metadata,
 	}
-
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
 	d.runResponseReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
@@ -269,8 +336,9 @@ func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *hand
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
 	response := &Response{
-		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:   reqCtx.Response.Headers,
+		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:     reqCtx.Response.Headers,
+		EndOfStream: reqCtx.ResponseComplete,
 	}
 
 	d.runResponseStreamingPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
@@ -313,6 +381,25 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 		metrics.RecordPluginProcessingLatency(PreRequestExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running PreRequest plugin successfully", "plugin", plugin.TypedName())
 	}
+}
+
+func (d *Director) runPrepareDataPlugins(ctx context.Context,
+	request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+	return prepareDataPluginsWithTimeout(prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, pods)
+}
+
+func (d *Director) runAdmissionPlugins(ctx context.Context,
+	request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) bool {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	for _, plugin := range d.requestControlPlugins.admissionPlugins {
+		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
+		if denyReason := plugin.AdmitRequest(ctx, request, pods); denyReason != nil {
+			loggerDebug.Info("AdmitRequest plugin denied the request", "plugin", plugin.TypedName(), "reason", denyReason.Error())
+			return false
+		}
+		loggerDebug.Info("Completed running AdmitRequest plugin successfully", "plugin", plugin.TypedName())
+	}
+	return true
 }
 
 func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {

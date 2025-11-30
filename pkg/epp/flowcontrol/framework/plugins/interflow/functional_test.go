@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package dispatch_test
+package interflow
 
 import (
 	"testing"
@@ -24,9 +24,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch"
-	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/besthead"
-	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/interflow/dispatch/roundrobin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
@@ -37,7 +34,7 @@ import (
 func TestInterFlowDispatchPolicyConformance(t *testing.T) {
 	t.Parallel()
 
-	for policyName, constructor := range dispatch.RegisteredPolicies {
+	for policyName, constructor := range RegisteredPolicies {
 		t.Run(string(policyName), func(t *testing.T) {
 			t.Parallel()
 
@@ -63,9 +60,9 @@ func runSelectQueueConformanceTests(t *testing.T, policy framework.InterFlowDisp
 
 	flowIDEmpty := "flow-empty"
 	mockQueueEmpty := &frameworkmocks.MockFlowQueueAccessor{
-		LenV:         0,
-		PeekHeadErrV: framework.ErrQueueEmpty,
-		FlowKeyV:     types.FlowKey{ID: flowIDEmpty},
+		LenV:      0,
+		PeekHeadV: nil,
+		FlowKeyV:  types.FlowKey{ID: flowIDEmpty},
 	}
 
 	testCases := []struct {

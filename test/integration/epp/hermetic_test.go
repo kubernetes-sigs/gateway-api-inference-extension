@@ -48,6 +48,7 @@ import (
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	metricsutils "k8s.io/component-base/metrics/testutil"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,8 +57,6 @@ import (
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/yaml"
-
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -79,6 +78,7 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -90,6 +90,8 @@ const (
 	// Model Names
 	modelMyModel         = "my-model"
 	modelMyModelTarget   = "my-model-12345"
+	modelToBeWritten     = "model-to-be-rewritten"
+	modelAfterRewrite    = "rewritten-model"
 	modelSQLLora         = "sql-lora"
 	modelSQLLoraTarget   = "sql-lora-1fdg2"
 	modelSheddable       = "sql-lora-sheddable"
@@ -981,6 +983,42 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:     "rewrite request model",
+			requests: integrationutils.GenerateStreamedRequestSet(logger, "test-rewrite", modelToBeWritten, modelToBeWritten, nil),
+			// Pod 0 will be picked.
+			// Expected flow:
+			// 1. Request asks for "model-to-be-rewritten"
+			// 2. Rewrite rule transforms "model-to-be-rewritten" -> "rewritten-model"
+			// 3. EPP sends request to backend with model "rewritten-model"
+			pods: newPodStates(
+				podState{index: 0, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", "rewritten-model"}},
+			),
+			wantMetrics: map[string]string{
+				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
+					{"model_name", modelToBeWritten},
+					{"target_model_name", modelAfterRewrite},
+				}),
+			},
+			wantErr: false,
+			wantResponses: integrationutils.NewRequestBufferedResponse(
+				"192.168.1.1:8000",
+				// Note: The prompt remains "test-rewrite", but the model in the JSON body is updated to the *rewritten target* model.
+				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test-rewrite","temperature":0}`, modelAfterRewrite),
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      "hi",
+						RawValue: []byte("mom"),
+					},
+				},
+				&configPb.HeaderValueOption{
+					Header: &configPb.HeaderValue{
+						Key:      requtil.RequestIdHeaderKey,
+						RawValue: []byte("test-request-id"),
+					},
+				},
+			),
+		},
 	}
 
 	for _, test := range tests {
@@ -1170,10 +1208,11 @@ func BeforeSuite() func() {
 	serverRunner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
 	pmf := backendmetrics.NewPodMetricsFactory(serverRunner.TestPodMetricsClient, 10*time.Millisecond)
 	// Adjust from defaults
-	serverRunner.PoolGKNN = common.GKNN{
+	serverRunner.GKNN = common.GKNN{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testPoolName},
 		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
 	}
+
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
 
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
@@ -1246,6 +1285,7 @@ func BeforeSuite() func() {
 		_ = testEnv.Stop()
 		_ = k8sClient.DeleteAllOf(context.Background(), &v1.InferencePool{})
 		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceObjective{})
+		_ = k8sClient.DeleteAllOf(context.Background(), &v1alpha2.InferenceModelRewrite{})
 	}
 }
 
@@ -1294,6 +1334,11 @@ func managerTestOptions(namespace, name string, metricsServerOptions metricsserv
 					},
 				},
 				&v1alpha2.InferenceObjective{}: {
+					Namespaces: map[string]cache.Config{
+						namespace: {},
+					},
+				},
+				&v1alpha2.InferenceModelRewrite{}: {
 					Namespaces: map[string]cache.Config{
 						namespace: {},
 					},

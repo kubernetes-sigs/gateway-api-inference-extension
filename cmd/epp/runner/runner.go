@@ -25,7 +25,10 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"regexp"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -34,19 +37,23 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
@@ -58,9 +65,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
@@ -73,10 +82,18 @@ import (
 
 const (
 	// enableExperimentalDatalayerV2 defines the environment variable used as feature flag for the pluggable data layer.
+	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
 	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
 	// enableExperimentalFlowControlLayer defines the environment variable used as a feature flag for the pluggable flow
 	// control layer.
+	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
 	enableExperimentalFlowControlLayer = "ENABLE_EXPERIMENTAL_FLOW_CONTROL_LAYER"
+
+	// Saturation Detector deprecated configuration environment variables
+	// DEPRECATION NOTICE - these env vars will be removed in the next version as we switch to configuring the EPP using the config file.
+	EnvSdQueueDepthThreshold       = "SD_QUEUE_DEPTH_THRESHOLD"
+	EnvSdKVCacheUtilThreshold      = "SD_KV_CACHE_UTIL_THRESHOLD"
+	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
 // TODO: this is hardcoded for POC only. This needs to be hooked up to our text-based config story.
@@ -100,6 +117,8 @@ var (
 	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
 	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
 	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
+	endpointSelector    = flag.String("endpoint-selector", "", "selector to filter model server pods on, only key=value paris is supported. Format: a comma-separated list of key value paris,  e.g., 'app=vllm-llama3-8b-instruct,env=prod'.")
+	endpointTargetPorts = flag.String("endpoint-target-ports", "", "target ports of model server pods. Format: a comma-separated list of numbers, e.g., '3000,3001,3002'")
 	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
 	healthChecking      = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
@@ -108,6 +127,7 @@ var (
 		"then a self-signed certificate is used.")
 	// metric flags
 	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
+	totalRunningRequestsMetric   = flag.String("total-running-requests-metric", runserver.DefaultTotalRunningRequestsMetric, "Prometheus metric for the number of running requests.")
 	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
 	// LoRA metrics
 	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
@@ -121,8 +141,9 @@ var (
 	configFile = flag.String("config-file", runserver.DefaultConfigFile, "The path to the configuration file")
 	configText = flag.String("config-text", runserver.DefaultConfigText, "The configuration specified as text, in lieu of a file")
 
-	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "Port to scrape metrics from pods. "+
-		"Default value will be set to the InferencePool.Spec.TargetPorts[0].Number if not set.")
+	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "[DEPRECATED] Port to scrape metrics from pods. "+
+		"Default value will be set to the InferencePool.Spec.TargetPorts[0].Number if not set."+
+		"This option will be removed in the next release.")
 	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
 	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
 	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
@@ -137,12 +158,14 @@ func NewRunner() *Runner {
 	return &Runner{
 		eppExecutableName:    "GIE",
 		requestControlConfig: requestcontrol.NewConfig(), // default requestcontrol config has empty plugin list
+		customCollectors:     []prometheus.Collector{},
 	}
 }
 
 // Runner is used to run epp with its plugins
 type Runner struct {
 	eppExecutableName    string // the EPP executable name
+	featureGates         map[string]bool
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
@@ -178,6 +201,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	flag.Parse()
 	initLogging(&opts)
 
+	r.deprecatedFlagsHandler(setupLog)
+
 	if *tracing {
 		err := common.InitTracing(ctx, setupLog)
 		if err != nil {
@@ -200,9 +225,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	})
 	setupLog.Info("Flags processed", "flags", flags)
 
-	// --- Load Configurations from Environment Variables ---
-	sdConfig := saturationdetector.LoadConfigFromEnv()
-
 	// --- Get Kubernetes Config ---
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
@@ -210,20 +232,38 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	rawConfig, err := r.parseConfigurationPhaseOne(ctx)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse configuration")
+		return err
+	}
+
 	// --- Setup Datastore ---
-	useDatalayerV2 := env.GetEnvBool(enableExperimentalDatalayerV2, false, setupLog)
-	epf, err := r.setupMetricsCollection(setupLog, useDatalayerV2)
+	epf, err := r.setupMetricsCollection(setupLog, r.featureGates[datalayer.FeatureGate])
 	if err != nil {
 		return err
 	}
-	datastore := datastore.NewDatastore(ctx, epf, int32(*modelServerMetricsPort))
+
+	gknn, err := extractGKNN(*poolName, *poolGroup, *poolNamespace, *endpointSelector)
+	if err != nil {
+		setupLog.Error(err, "Failed to extract GKNN")
+		return err
+	}
+	disableK8sCrdReconcile := *endpointSelector != ""
+	ds, err := setupDatastore(setupLog, ctx, epf, int32(*modelServerMetricsPort), disableK8sCrdReconcile, *poolName, *poolNamespace, *endpointSelector, *endpointTargetPorts)
+	if err != nil {
+		setupLog.Error(err, "Failed to setup datastore")
+		return err
+	}
+	eppConfig, err := r.parseConfigurationPhaseTwo(ctx, rawConfig, ds)
+	if err != nil {
+		setupLog.Error(err, "Failed to parse configuration")
+		return err
+	}
 
 	// --- Setup Metrics Server ---
-	customCollectors := []prometheus.Collector{collectors.NewInferencePoolMetricsCollector(datastore)}
-	if r.customCollectors != nil {
-		customCollectors = append(customCollectors, r.customCollectors...)
-	}
-	metrics.Register(customCollectors...)
+	r.customCollectors = append(r.customCollectors, collectors.NewInferencePoolMetricsCollector(ds))
+	metrics.Register(r.customCollectors...)
 	metrics.RecordInferenceExtensionInfo(version.CommitSHA, version.BuildRef)
 	// Register metrics handler.
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
@@ -241,34 +281,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		}(),
 	}
 
-	// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
-	resolvePoolNamespace := func() string {
-		if *poolNamespace != "" {
-			return *poolNamespace
-		}
-		if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
-			return nsEnv
-		}
-		return runserver.DefaultPoolNamespace
-	}
-	resolvedPoolNamespace := resolvePoolNamespace()
-	poolNamespacedName := types.NamespacedName{
-		Name:      *poolName,
-		Namespace: resolvedPoolNamespace,
-	}
-	poolGroupKind := schema.GroupKind{
-		Group: *poolGroup,
-		Kind:  "InferencePool",
-	}
-	poolGKNN := common.GKNN{
-		NamespacedName: poolNamespacedName,
-		GroupKind:      poolGroupKind,
-	}
-
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(poolGKNN, cfg, metricsServerOptions, *haEnableLeaderElection)
+	mgr, err := runserver.NewDefaultManager(disableK8sCrdReconcile, *gknn, cfg, metricsServerOptions, *haEnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
@@ -297,12 +313,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		runtime.SetBlockProfileRate(1)
 	}
 
-	err = r.parsePluginsConfiguration(ctx, datastore)
-	if err != nil {
-		setupLog.Error(err, "Failed to parse plugins configuration")
-		return err
-	}
-
 	// --- Initialize Core EPP Components ---
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
@@ -314,12 +324,11 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(sdConfig, setupLog)
+	saturationDetector := saturationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
-	enableFlowControl := env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
 	var admissionController requestcontrol.AdmissionController
-	if enableFlowControl {
+	if r.featureGates[flowcontrol.FeatureGate] {
 		setupLog.Info("Initializing experimental Flow Control layer")
 		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
 		if err != nil {
@@ -331,13 +340,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
-		fc, err := fccontroller.NewFlowController(
-			ctx,
-			fcCfg.Controller,
-			registry,
-			saturationDetector,
-			setupLog,
-		)
+		fc, err := fccontroller.NewFlowController(ctx, fcCfg.Controller, registry, saturationDetector, setupLog)
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
 		}
@@ -349,7 +352,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	director := requestcontrol.NewDirectorWithConfig(
-		datastore,
+		ds,
 		scheduler,
 		admissionController,
 		r.requestControlConfig)
@@ -357,9 +360,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         *grpcPort,
-		PoolNamespacedName:               poolNamespacedName,
-		PoolGKNN:                         poolGKNN,
-		Datastore:                        datastore,
+		GKNN:                             *gknn,
+		Datastore:                        ds,
+		DisableK8sCrdReconcile:           disableK8sCrdReconcile,
 		SecureServing:                    *secureServing,
 		HealthChecking:                   *healthChecking,
 		CertPath:                         *certPath,
@@ -367,7 +370,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		MetricsStalenessThreshold:        *metricsStalenessThreshold,
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
-		UseExperimentalDatalayerV2:       useDatalayerV2, // pluggable data layer feature flag
+		UseExperimentalDatalayerV2:       r.featureGates[datalayer.FeatureGate], // pluggable data layer feature flag
 	}
 	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
@@ -376,7 +379,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), datastore, *grpcHealthPort, isLeader, *haEnableLeaderElection); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, *grpcHealthPort, isLeader, *haEnableLeaderElection); err != nil {
 		return err
 	}
 
@@ -396,6 +399,28 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
+func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, disableK8sCrdReconcile bool, namespace, name, endpointSelector, endpointTargetPorts string) (datastore.Datastore, error) {
+	if !disableK8sCrdReconcile {
+		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort), nil
+	} else {
+		endpointPool := datalayer.NewEndpointPool(namespace, name)
+		labelsMap, err := labels.ConvertSelectorToLabelsMap(endpointSelector)
+		if err != nil {
+			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-selector", err)
+			return nil, err
+		}
+		endpointPool.Selector = labelsMap
+		endpointPool.TargetPorts, err = strToUniqueIntSlice(endpointTargetPorts)
+		if err != nil {
+			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-target-ports", err)
+			return nil, err
+		}
+
+		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
+		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
+	}
+}
+
 // registerInTreePlugins registers the factory functions of all known plugins
 func (r *Runner) registerInTreePlugins() {
 	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
@@ -406,13 +431,18 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
 	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	// Latency predictor plugins
+	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, slo_aware_router.SLOAwareRouterFactory)
+	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
+	// register response received plugin for test purpose only (used in conformance tests)
+	plugins.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
 }
 
-func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Datastore) error {
+func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, error) {
 	if *configText == "" && *configFile == "" {
-		return nil // configuring through code, not through file
+		return nil, nil // configuring through code, not through file
 	}
 
 	logger := log.FromContext(ctx)
@@ -424,30 +454,112 @@ func (r *Runner) parsePluginsConfiguration(ctx context.Context, ds datastore.Dat
 		var err error
 		configBytes, err = os.ReadFile(*configFile)
 		if err != nil {
-			return fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
+			return nil, fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
 		}
 	}
 
-	r.registerInTreePlugins()
-	handle := plugins.NewEppHandle(ctx, ds.PodList)
-	config, err := loader.LoadConfig(configBytes, handle, logger)
+	loader.RegisterFeatureGate(datalayer.FeatureGate)
+	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
 
+	r.registerInTreePlugins()
+
+	rawConfig, featureGates, err := loader.LoadConfigPhaseOne(configBytes, logger)
 	if err != nil {
-		return fmt.Errorf("failed to load the configuration - %w", err)
+		return nil, fmt.Errorf("failed to parse config - %w", err)
 	}
 
-	r.schedulerConfig = config.SchedulerConfig
+	r.featureGates = featureGates
+
+	return rawConfig, nil
+}
+
+// Return a function that can be used in the EPP Handle to list pod names.
+func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
+	return func() []types.NamespacedName {
+		pods := ds.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
+		names := make([]types.NamespacedName, 0, len(pods))
+
+		for _, p := range pods {
+			names = append(names, p.GetPod().NamespacedName)
+		}
+		return names
+	}
+}
+
+func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
+	logger := log.FromContext(ctx)
+	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
+	cfg, err := loader.LoadConfigPhaseTwo(rawConfig, handle, logger)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to load the configuration - %w", err)
+	}
+
+	r.schedulerConfig = cfg.SchedulerConfig
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
+	// Sort prepare data plugins in DAG order (topological sort). Also check prepare data plugins for cycles.
+	if r.requestControlConfig.PrepareDataPluginGraph() != nil {
+		return nil, errors.New("failed to load the configuration - prepare data plugins have cyclic dependencies")
+	}
+
+	// Handler deprecated configuration options
+	r.deprecatedConfigurationHelper(cfg, logger)
 
 	logger.Info("loaded configuration from file/text successfully")
-	return nil
+	return cfg, nil
+}
+
+func (r *Runner) deprecatedFlagsHandler(logger logr.Logger) {
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "model-server-metrics-port" { // future: use  map/set to store deprecated flags (and replacements?)
+			logger.Info("deprecated option will be removed in the next release.", "option", f.Name)
+		}
+	})
+}
+
+func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.Logger) {
+	// Handle deprecated environment variable based feature flags
+
+	if _, ok := os.LookupEnv(enableExperimentalDatalayerV2); ok {
+		logger.Info("Enabling the experimental Data Layer V2 using environment variables is deprecated and will be removed in next version")
+		r.featureGates[datalayer.FeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, logger)
+	}
+	if _, ok := os.LookupEnv(enableExperimentalFlowControlLayer); ok {
+		logger.Info("Enabling the experimental Flow Control layer using environment variables is deprecated and will be removed in next version")
+		r.featureGates[flowcontrol.FeatureGate] = env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
+	}
+
+	// Handle deprecated environment variable base Saturation Detector configuration
+
+	if _, ok := os.LookupEnv(EnvSdQueueDepthThreshold); ok {
+		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
+		cfg.SaturationDetectorConfig.QueueDepthThreshold =
+			env.GetEnvInt(EnvSdQueueDepthThreshold, saturationdetector.DefaultQueueDepthThreshold, logger)
+		if cfg.SaturationDetectorConfig.QueueDepthThreshold <= 0 {
+			cfg.SaturationDetectorConfig.QueueDepthThreshold = saturationdetector.DefaultQueueDepthThreshold
+		}
+	}
+	if _, ok := os.LookupEnv(EnvSdKVCacheUtilThreshold); ok {
+		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
+		cfg.SaturationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, saturationdetector.DefaultKVCacheUtilThreshold, logger)
+		if cfg.SaturationDetectorConfig.KVCacheUtilThreshold <= 0 || cfg.SaturationDetectorConfig.KVCacheUtilThreshold >= 1 {
+			cfg.SaturationDetectorConfig.KVCacheUtilThreshold = saturationdetector.DefaultKVCacheUtilThreshold
+		}
+	}
+	if _, ok := os.LookupEnv(EnvSdMetricsStalenessThreshold); ok {
+		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
+		cfg.SaturationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, saturationdetector.DefaultMetricsStalenessThreshold, logger)
+		if cfg.SaturationDetectorConfig.MetricsStalenessThreshold <= 0 {
+			cfg.SaturationDetectorConfig.MetricsStalenessThreshold = saturationdetector.DefaultMetricsStalenessThreshold
+		}
+	}
 }
 
 func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool) (datalayer.EndpointFactory, error) {
 	if useExperimentalDatalayer {
-		return setupDatalayer()
+		return setupDatalayer(setupLog)
 	}
 
 	if len(datalayer.GetSources()) != 0 {
@@ -459,6 +571,7 @@ func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDat
 func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 	mapping, err := backendmetrics.NewMetricMapping(
 		*totalQueuedRequestsMetric,
+		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric,
 		*cacheInfoMetric,
@@ -492,16 +605,21 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 	return pmf, nil
 }
 
-func setupDatalayer() (datalayer.EndpointFactory, error) {
-	// create and register a metrics data source and extractor. In the future,
-	// data sources and extractors might be configured via a file. Once done,
-	// this (and registering the sources with the endpoint factory) should
-	// be moved accordingly.
+// This function serves two (independent) purposes:
+// - creating data sources and configuring their extractors.
+// - configuring endpoint factory with the provided source.
+// In the future, data sources and extractors might be configured via
+// a file. Once done, this (and registering the sources with the
+// endpoint factory) should be moved accordingly.
+// Regardless, registration of all sources (e.g., if additional sources
+// are to be configured), must be done before the EndpointFactory is initialized.
+func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
+	// create and register a metrics data source and extractor.
 	source := dlmetrics.NewDataSource(*modelServerMetricsScheme,
 		*modelServerMetricsPath,
-		*modelServerMetricsHttpsInsecureSkipVerify,
-		nil)
+		*modelServerMetricsHttpsInsecureSkipVerify)
 	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
+		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric, *cacheInfoMetric)
 
@@ -515,7 +633,12 @@ func setupDatalayer() (datalayer.EndpointFactory, error) {
 		return nil, err
 	}
 
-	factory := datalayer.NewEndpointFactory(datalayer.GetSources(), *refreshMetricsInterval)
+	// TODO: this could be moved to the configuration loading functions once ported over.
+	sources := datalayer.GetSources()
+	for _, src := range sources {
+		logger.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
+	}
+	factory := datalayer.NewEndpointFactory(sources, *refreshMetricsInterval)
 	return factory, nil
 }
 
@@ -565,9 +688,19 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 }
 
 func validateFlags() error {
-	if *poolName == "" {
-		return fmt.Errorf("required %q flag not set", "poolName")
+	if (*poolName != "" && *endpointSelector != "") || (*poolName == "" && *endpointSelector == "") {
+		return errors.New("either pool-name or endpoint-selector must be set")
 	}
+	if *endpointSelector != "" {
+		targetPortsList, err := strToUniqueIntSlice(*endpointTargetPorts)
+		if err != nil {
+			return fmt.Errorf("unexpected value for %q flag with error %w", "endpoint-target-ports", err)
+		}
+		if len(targetPortsList) == 0 || len(targetPortsList) > 8 {
+			return fmt.Errorf("flag %q should have length from 1 to 8", "endpoint-target-ports")
+		}
+	}
+
 	if *configText != "" && *configFile != "" {
 		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
 	}
@@ -576,6 +709,34 @@ func validateFlags() error {
 	}
 
 	return nil
+}
+
+func strToUniqueIntSlice(s string) ([]int, error) {
+	seen := sets.NewInt()
+	var intList []int
+
+	if s == "" {
+		return intList, nil
+	}
+
+	strList := strings.Split(s, ",")
+
+	for _, str := range strList {
+		trimmedStr := strings.TrimSpace(str)
+		if trimmedStr == "" {
+			continue
+		}
+		portInt, err := strconv.Atoi(trimmedStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid number: '%s' is not an integer", trimmedStr)
+		}
+
+		if _, ok := seen[portInt]; !ok {
+			seen[portInt] = struct{}{}
+			intList = append(intList, portInt)
+		}
+	}
+	return intList, nil
 }
 
 func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logger) {
@@ -612,4 +773,63 @@ func setupPprofHandlers(mgr ctrl.Manager) error {
 		}
 	}
 	return nil
+}
+
+func extractDeploymentName(podName string) (string, error) {
+	regex := regexp.MustCompile(`^(.+)-[a-z0-9]+-[a-z0-9]+$`)
+
+	matches := regex.FindStringSubmatch(podName)
+	if len(matches) == 2 {
+		return matches[1], nil
+	}
+	return "", fmt.Errorf("failed to parse deployment name from pod name %s", podName)
+}
+
+func extractGKNN(poolName, poolGroup, poolNamespace, endpointSelector string) (*common.GKNN, error) {
+	if poolName != "" {
+		// Determine pool namespace: if --pool-namespace is non-empty, use it; else NAMESPACE env var; else default
+		resolvedPoolNamespace := resolvePoolNamespace(poolNamespace)
+		poolNamespacedName := types.NamespacedName{
+			Name:      poolName,
+			Namespace: resolvedPoolNamespace,
+		}
+		poolGroupKind := schema.GroupKind{
+			Group: poolGroup,
+			Kind:  "InferencePool",
+		}
+		return &common.GKNN{
+			NamespacedName: poolNamespacedName,
+			GroupKind:      poolGroupKind,
+		}, nil
+	}
+
+	if endpointSelector != "" {
+		// Determine EPP namespace: NAMESPACE env var; else default
+		resolvedPoolNamespace := resolvePoolNamespace(poolNamespace)
+		// Determine EPP name: POD_NAME env var
+		eppPodNameEnv := os.Getenv("POD_NAME")
+		if eppPodNameEnv == "" {
+			return nil, errors.New("failed to get environment variable POD_NAME")
+
+		}
+		eppName, err := extractDeploymentName(eppPodNameEnv)
+		if err != nil {
+			return nil, err
+		}
+		return &common.GKNN{
+			NamespacedName: types.NamespacedName{Namespace: resolvedPoolNamespace, Name: eppName},
+			GroupKind:      schema.GroupKind{Kind: "Deployment", Group: "apps"},
+		}, nil
+	}
+	return nil, errors.New("can't construct gknn as both pool-name and endpoint-selector are missing")
+}
+
+func resolvePoolNamespace(poolNamespace string) string {
+	if poolNamespace != "" {
+		return poolNamespace
+	}
+	if nsEnv := os.Getenv("NAMESPACE"); nsEnv != "" {
+		return nsEnv
+	}
+	return runserver.DefaultPoolNamespace
 }

@@ -35,88 +35,93 @@ func TestFilter(t *testing.T) {
 		output []types.Pod
 	}{
 		{
-			name: "TestHeaderBasedFilter, header endpoint unset in request",
-			req:  &types.LLMRequest{}, // Delieverately unset the header.
+			name: "header unset in request",
+			req:  &types.LLMRequest{}, // Deliberately unset
 			input: []types.Pod{
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint",
-					},
-				},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3000"}},
 			},
 			output: []types.Pod{},
 		},
 		{
-			name: "TestHeaderBasedFilter, header endpoint set in request but no match",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
+			name: "header set but no IP match",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.99"}},
 			input: []types.Pod{
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint-unmatch",
-					},
-				},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3000"}},
 			},
 			output: []types.Pod{},
 		},
 		{
-			name: "TestHeaderBasedFilter, header endpoint set",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "test-endpoint"}},
+			name: "IP-only header matches pod (port-agnostic)",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1"}},
 			input: []types.Pod{
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint",
-					},
-				},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3002"}},
 			},
 			output: []types.Pod{
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint",
-					},
-				},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3002"}},
 			},
 		},
 		{
-			name: "TestHeaderBasedFilter, multiple header endpoints set and multiple matches",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "test-endpoint3,test-endpoint2"}},
+			name: "IP:port header matches exact port",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:3002"}},
 			input: []types.Pod{
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint1",
-					},
-				},
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint2",
-					},
-				},
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint3",
-					},
-				},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3000"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3002"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.2", Port: "3002"}},
 			},
 			output: []types.Pod{
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint3",
-					},
-				},
-				&types.PodMetrics{
-					Pod: &backend.Pod{
-						Address: "test-endpoint2",
-					},
-				},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3002"}},
+			},
+		},
+		{
+			name: "IP:port header with non-matching port produces no match",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:9999"}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3002"}},
+			},
+			output: []types.Pod{},
+		},
+		{
+			name: "multiple header values (IP and IP:port) produce multiple matches in order and deduped",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.3:3004, 10.0.0.2, 10.0.0.3"}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.1", Port: "3000"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.2", Port: "3002"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.3", Port: "3004"}},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.3", Port: "3004"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "10.0.0.2", Port: "3002"}},
+			},
+		},
+		{
+			name: "IPv6 with brackets and port",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "[fd00::1]:3002"}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::1", Port: "3002"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::2", Port: "3002"}},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::1", Port: "3002"}},
+			},
+		},
+		{
+			name: "IPv6 bare address (no port)",
+			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "fd00::2"}},
+			input: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::1", Port: "3002"}},
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::2", Port: "3004"}},
+			},
+			output: []types.Pod{
+				&types.PodMetrics{Pod: &backend.Pod{Address: "fd00::2", Port: "3004"}},
 			},
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := NewHeaderBasedTestingFilter().Filter(context.Background(), types.NewCycleState(), test.req, test.input)
-
-			if diff := cmp.Diff(test.output, got); diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := NewHeaderBasedTestingFilter().Filter(context.Background(), types.NewCycleState(), tc.req, tc.input)
+			if diff := cmp.Diff(tc.output, got); diff != "" {
+				t.Fatalf("Unexpected output (-want +got): %s", diff)
 			}
 		})
 	}

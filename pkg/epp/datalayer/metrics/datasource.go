@@ -25,15 +25,17 @@ import (
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
-	DataSourceName = "metrics-data-source"
+	DataSourceType = "metrics-data-source"
 )
 
 // DataSource is a Model Server Protocol (MSP) compliant metrics data source,
 // returning Prometheus formatted metrics for an endpoint.
 type DataSource struct {
+	tn            plugins.TypedName
 	metricsScheme string // scheme to use in metrics URL
 	metricsPath   string // path to use in metrics URL
 
@@ -42,10 +44,9 @@ type DataSource struct {
 }
 
 // NewDataSource returns a new MSP compliant metrics data source, configured with
-// the provided client factory. If ClientFactory is nil, a default factory is used.
-// The Scheme, port and path are command line options. It should be noted that
-// a port value of zero is set if the command line is unspecified.
-func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool, cl Client) *DataSource {
+// the provided client configuration.
+// The Scheme, path and certificate validation setting are command line options.
+func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool) *DataSource {
 	if metricsScheme == "https" {
 		httpsTransport := baseTransport.Clone()
 		httpsTransport.TLSClientConfig = &tls.Config{
@@ -54,21 +55,33 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 		defaultClient.Transport = httpsTransport
 	}
 
-	if cl == nil {
-		cl = defaultClient
-	}
-
 	dataSrc := &DataSource{
+		tn: plugins.TypedName{
+			Type: DataSourceType,
+			Name: DataSourceType,
+		},
 		metricsScheme: metricsScheme,
 		metricsPath:   metricsPath,
-		client:        cl,
+		client:        defaultClient,
 	}
 	return dataSrc
 }
 
-// Name returns the metrics data source name.
-func (dataSrc *DataSource) Name() string {
-	return DataSourceName
+// TypedName returns the metrics data source type and name.
+func (dataSrc *DataSource) TypedName() plugins.TypedName {
+	return dataSrc.tn
+}
+
+// Extractors returns a list of registered Extractor names.
+func (dataSrc *DataSource) Extractors() []string {
+	extractors := []string{}
+	dataSrc.extractors.Range(func(_, val any) bool {
+		if ex, ok := val.(datalayer.Extractor); ok {
+			extractors = append(extractors, ex.TypedName().String())
+		}
+		return true // continue iteration
+	})
+	return extractors
 }
 
 // AddExtractor adds an extractor to the data source, validating it can process
@@ -77,8 +90,8 @@ func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 	if err := datalayer.ValidateExtractorType(PrometheusMetricType, extractor.ExpectedInputType()); err != nil {
 		return err
 	}
-	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.Name(), extractor); loaded {
-		return fmt.Errorf("attempt to add extractor with duplicate name %s to %s", extractor.Name(), dataSrc.Name())
+	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.TypedName().Name, extractor); loaded {
+		return fmt.Errorf("attempt to add duplicate extractor %s to %s", extractor.TypedName(), dataSrc.TypedName())
 	}
 	return nil
 }

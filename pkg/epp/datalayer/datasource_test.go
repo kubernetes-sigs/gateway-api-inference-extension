@@ -22,19 +22,26 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+)
+
+const (
+	testType = "test-ds-type"
 )
 
 type mockDataSource struct {
-	name string
+	tn plugins.TypedName
 }
 
-func (m *mockDataSource) Name() string                                { return m.name }
+func (m *mockDataSource) TypedName() plugins.TypedName                { return m.tn }
+func (m *mockDataSource) Extractors() []string                        { return []string{} }
 func (m *mockDataSource) AddExtractor(_ Extractor) error              { return nil }
 func (m *mockDataSource) Collect(_ context.Context, _ Endpoint) error { return nil }
 
 func TestRegisterAndGetSource(t *testing.T) {
 	reg := DataSourceRegistry{}
-	ds := &mockDataSource{name: "test"}
+	ds := &mockDataSource{tn: plugins.TypedName{Type: testType, Name: testType}}
 
 	err := reg.Register(ds)
 	assert.NoError(t, err, "expected no error on first registration")
@@ -43,21 +50,28 @@ func TestRegisterAndGetSource(t *testing.T) {
 	err = reg.Register(ds)
 	assert.Error(t, err, "expected error on duplicate registration")
 
-	// Get by name
-	got, found := reg.GetNamedSource("test")
-	assert.True(t, found, "expected to find registered data source")
-	assert.Equal(t, "test", got.Name())
+	err = reg.Register(nil)
+	assert.Error(t, err, "expected error on nil")
 
 	// Get all sources
 	all := reg.GetSources()
 	assert.Len(t, all, 1)
-	assert.Equal(t, "test", all[0].Name())
+	assert.Equal(t, testType, all[0].TypedName().Type)
+
+	// Default registry
+	err = RegisterSource(ds)
+	assert.NoError(t, err, "expected no error on registration")
+
+	// Get all sources
+	all = GetSources()
+	assert.Len(t, all, 1)
+	assert.Equal(t, testType, all[0].TypedName().Type)
 }
 
-func TestGetNamedSourceWhenNotFound(t *testing.T) {
+func TestGetSourceWhenNoneAreRegistered(t *testing.T) {
 	reg := DataSourceRegistry{}
-	_, found := reg.GetNamedSource("missing")
-	assert.False(t, found, "expected source to be missing")
+	found := reg.GetSources()
+	assert.Empty(t, found, "expected no sources to be returned")
 }
 
 func TestValidateExtractorType(t *testing.T) {

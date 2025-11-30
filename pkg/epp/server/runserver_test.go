@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )

@@ -24,6 +24,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// InferenceModelRewrites returns a InferenceModelRewriteInformer.
+	InferenceModelRewrites() InferenceModelRewriteInformer
 	// InferenceObjectives returns a InferenceObjectiveInformer.
 	InferenceObjectives() InferenceObjectiveInformer
 	// InferencePools returns a InferencePoolInformer.
@@ -39,6 +41,11 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// InferenceModelRewrites returns a InferenceModelRewriteInformer.
+func (v *version) InferenceModelRewrites() InferenceModelRewriteInformer {
+	return &inferenceModelRewriteInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // InferenceObjectives returns a InferenceObjectiveInformer.

@@ -120,7 +120,6 @@ type PredictorInterface interface {
 	PredictBulk(ctx context.Context, requests []PredictionRequest) (*BulkPredictionResponse, error)
 	PredictBulkStrict(ctx context.Context, requests []PredictionRequest) (*BulkPredictionResponse, error)
 	AddTrainingDataBulk(entry []TrainingEntry) error
-	GetServerStatus(ctx context.Context) (*ServerStatusResponse, error)
 }
 
 // --- Data Models ---

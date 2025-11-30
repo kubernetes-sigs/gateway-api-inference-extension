@@ -73,8 +73,9 @@ nav:
         - InferencePool Rollout: guides/inferencepool-rollout.md
       - Metrics and Observability: guides/metrics-and-observability.md
       - Configuration Guide:
-          - Configuring the plugins via configuration YAML file: guides/epp-configuration/config-text.md
+          - Configuring the EndPoint Picker via configuration YAML file: guides/epp-configuration/config-text.md
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
+          - Latency-Based Routing: guides/latency-based-predictor.md
       - Migration Guide: guides/ga-migration.md
       - Troubleshooting Guide: guides/troubleshooting.md
     - Implementer Guides:
@@ -84,6 +85,8 @@ nav:
     - Benchmark: performance/benchmark/index.md
     - Advanced Benchmarking Configs: 
       - Prefix Cache Aware: performance/benchmark/advanced-configs/prefix-cache-aware.md
+      - Decode Heavy Workload: performance/benchmark/advanced-configs/decode-heavy-workload.md
+      - Prefill Heavy Workload: performance/benchmark/advanced-configs/prefill-heavy-workload.md
     - Regression Testing: performance/regression-testing/index.md
   - Reference:
     - v1 API Reference: reference/spec.md

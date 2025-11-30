@@ -17,9 +17,22 @@ limitations under the License.
 package test
 
 const (
-	// HeaderTestEppEndPointSelectionKey is the header used for testing purposes to make EPP behavior controllable.
-	// The header value should be a comma-separated list of endpoint IP addresses.
-	// E.g., "test-epp-endpoint-selection": "10.0.0.7,10.0.0.8"
-	// The returned order is the same as the order provided in the header.
+	// HeaderTestEppEndPointSelectionKey is the request header used in tests to control
+	// Endpoint Picker (EPP) behavior deterministically.
+	//
+	// The header value is a comma-separated list of endpoint identifiers. Each entry
+	// may be in one of the following formats:
+	//
+	//   - "IP"          — selects all pods whose IP address matches the given value.
+	//   - "IP:port"     — selects only pods whose IP and port both match exactly.
+	//                     Ports correspond to data-parallel ranks or specific targetPorts.
+	//
+	// IPv6 addresses are supported, with or without brackets (e.g. "fd00::1" or "[fd00::1]:3002").
+	// The returned order matches the order of endpoints specified in the header, and duplicates
+	// are ignored.
+	//
+	// Examples:
+	//   "test-epp-endpoint-selection": "10.0.0.7,10.0.0.8:3002"
+	//   "test-epp-endpoint-selection": "[fd00::1]:3000,fd00::2"
 	HeaderTestEppEndPointSelectionKey = "test-epp-endpoint-selection"
 )

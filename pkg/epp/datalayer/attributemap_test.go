@@ -43,6 +43,9 @@ func TestExpectPutThenGetToMatch(t *testing.T) {
 	dv, ok := got.(*dummy)
 	assert.True(t, ok, "expected value to be of type *dummy")
 	assert.Equal(t, "foo", dv.Text)
+
+	_, ok = attrs.Get("b")
+	assert.False(t, ok, "expected key not to exist")
 }
 
 func TestExpectKeysToMatchAdded(t *testing.T) {
