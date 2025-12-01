@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -225,9 +226,16 @@ func diffStoreRewrites(ds datastore.Datastore, wantRewrites []*v1alpha2.Inferenc
 	if wantRewrites == nil {
 		wantRewrites = []*v1alpha2.InferenceModelRewrite{}
 	}
-
 	gotRewrites := ds.ModelRewriteGetAll()
-	if diff := cmp.Diff(wantRewrites, gotRewrites); diff != "" {
+
+	less := func(a, b *v1alpha2.InferenceModelRewrite) bool {
+		if a.Namespace != b.Namespace {
+			return a.Namespace < b.Namespace
+		}
+		return a.Name < b.Name
+	}
+
+	if diff := cmp.Diff(wantRewrites, gotRewrites, cmpopts.SortSlices(less)); diff != "" {
 		return "rewrites:" + diff
 	}
 	return ""
