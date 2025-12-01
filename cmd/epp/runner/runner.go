@@ -68,12 +68,17 @@ import (
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/kvcacheutilizationscorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/loraaffinityscorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/maxscorepicker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/predictedlatencyprofilehandler"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/predictedlatencyscorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/prefixcachescorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/queuescorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/randompicker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/singleprofilehandler"
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/weightedrandompicker"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -423,17 +428,17 @@ func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalay
 
 // registerInTreePlugins registers the factory functions of all known plugins
 func (r *Runner) registerInTreePlugins() {
-	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
-	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
-	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
-	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
-	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
-	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
-	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
-	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	plugins.Register(prefixcachescorer.PrefixCachePluginType, prefixcachescorer.PrefixCachePluginFactory)
+	plugins.Register(maxscorepicker.MaxScorePickerType, maxscorepicker.MaxScorePickerFactory)
+	plugins.Register(randompicker.RandomPickerType, randompicker.RandomPickerFactory)
+	plugins.Register(weightedrandompicker.WeightedRandomPickerType, weightedrandompicker.WeightedRandomPickerFactory)
+	plugins.Register(singleprofilehandler.SingleProfileHandlerType, singleprofilehandler.SingleProfileHandlerFactory)
+	plugins.Register(kvcacheutilizationscorer.KvCacheUtilizationScorerType, kvcacheutilizationscorer.KvCacheUtilizationScorerFactory)
+	plugins.Register(queuescorer.QueueScorerType, queuescorer.QueueScorerFactory)
+	plugins.Register(loraaffinityscorer.LoraAffinityScorerType, loraaffinityscorer.LoraAffinityScorerFactory)
 	// Latency predictor plugins
-	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, slo_aware_router.SLOAwareRouterFactory)
-	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
+	plugins.Register(predictedlatencyscorer.SLOAwareRouterPluginType, predictedlatencyscorer.SLOAwareRouterFactory)
+	plugins.Register(predictedlatencyprofilehandler.SLOAwareProfileHandlerType, predictedlatencyprofilehandler.SLOAwareProfileHandlerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)

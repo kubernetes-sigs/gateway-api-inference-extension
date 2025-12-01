@@ -1,6 +1,6 @@
 # Prefix Cache Aware Plugin Configuration
 
-The [prefix cache plugin](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/7617439188b410670ed0f1ff805a3b7f9918a75b/pkg/epp/scheduling/framework/plugins/multi/prefix/plugin.go#L63)
+The [prefix cache plugin](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/epp/scheduling/framework/plugins/prefixcachescorer/plugin.go#L63)
 takes advantage of the prefix caching (e.g., [vllm APC](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html))
 feature of model servers, and optimizes request scheduling by placing requests sharing the longest
 prefixes to the same server as much as possible, while balancing the server load by considering kv-cache

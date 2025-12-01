@@ -69,10 +69,13 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/kvcacheutilizationscorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/loraaffinityscorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/maxscorepicker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/pickershared"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/prefixcachescorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/queuescorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/singleprofilehandler"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -1215,10 +1218,10 @@ func BeforeSuite() func() {
 
 	serverRunner.Datastore = datastore.NewDatastore(context.Background(), pmf, 0)
 
-	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
-	queueingScorer := scorer.NewQueueScorer()
-	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
-	loraAffinityScorer := scorer.NewLoraAffinityScorer()
+	kvCacheUtilizationScorer := kvcacheutilizationscorer.NewKVCacheUtilizationScorer()
+	queueingScorer := queuescorer.NewQueueScorer()
+	prefixCacheScorer := prefixcachescorer.New(context.Background(), prefixcachescorer.DefaultConfig)
+	loraAffinityScorer := loraaffinityscorer.NewLoraAffinityScorer()
 
 	defaultProfile := framework.NewSchedulerProfile().
 		WithScorers(framework.NewWeightedScorer(kvCacheUtilizationScorer, 1),
@@ -1226,9 +1229,9 @@ func BeforeSuite() func() {
 			framework.NewWeightedScorer(prefixCacheScorer, 1),
 			framework.NewWeightedScorer(loraAffinityScorer, 1),
 		).
-		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
+		WithPicker(maxscorepicker.NewMaxScorePicker(pickershared.DefaultMaxNumOfEndpoints))
 
-	profileHandler := profile.NewSingleProfileHandler()
+	profileHandler := singleprofilehandler.NewSingleProfileHandler()
 
 	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
 	scheduler := scheduling.NewSchedulerWithConfig(schedulerConfig)
