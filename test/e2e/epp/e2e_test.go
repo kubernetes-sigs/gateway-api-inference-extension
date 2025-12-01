@@ -396,7 +396,7 @@ func verifyMetrics() {
 	gomega.Expect(errorBad).NotTo(gomega.HaveOccurred(), "Expected bad traffic generation to succeed")
 
 	// Now scrape metrics from the EPP endpoint via the curl pod.
-	ginkgo.By("Scraping metrics from the EPP endpoint and verifying all 8 backends were hit")
+	ginkgo.By("Scraping metrics from the EPP endpoint and verifying all backends were hit")
 	podIP := findReadyPod().Status.PodIP
 
 	// Get the authorization token for reading metrics.
@@ -488,7 +488,7 @@ func findReadyPod() *corev1.Pod {
 // getMetricsScrapeCommand returns the command to scrape the /metrics endpoint.
 func getMetricsScrapeCommand(podIP, token string) []string {
 	return []string{
-		"curl", "-i", "--max-time", strconv.Itoa((int)(curlTimeout.Seconds())),
+		"curl", "-i", "--max-time", strconv.Itoa((int)(2 * curlTimeout.Seconds())),
 		"-H", "Authorization: Bearer " + token, fmt.Sprintf("http://%s:%d/metrics", podIP, 9090),
 	}
 }
