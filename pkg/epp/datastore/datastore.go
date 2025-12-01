@@ -59,10 +59,16 @@ type Datastore interface {
 	ObjectiveDelete(namespacedName types.NamespacedName)
 	ObjectiveGetAll() []*v1alpha2.InferenceObjective
 
+	// InferenceModelRewrite operations
+	ModelRewriteSet(infModelRewrite *v1alpha2.InferenceModelRewrite)
+	ModelRewriteDelete(namespacedName types.NamespacedName)
+	ModelRewriteGet(modelName string) *v1alpha2.InferenceModelRewriteRule
+	ModelRewriteGetAll() []*v1alpha2.InferenceModelRewrite
+
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
-	PodDelete(podNAme string)
+	PodDelete(podName string)
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
@@ -74,9 +80,10 @@ func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory
 	// Initialize with defaults
 	store := &datastore{
 		parentCtx:              parentCtx,
-		poolAndObjectivesMu:    sync.RWMutex{},
 		pool:                   nil,
+		mu:                     sync.RWMutex{},
 		objectives:             make(map[string]*v1alpha2.InferenceObjective),
+		modelRewrites:          newModelRewriteStore(),
 		pods:                   &sync.Map{},
 		modelServerMetricsPort: modelServerMetricsPort,
 		epf:                    epFactory,
@@ -93,11 +100,13 @@ func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory
 type datastore struct {
 	// parentCtx controls the lifecycle of the background metrics goroutines that spawn up by the datastore.
 	parentCtx context.Context
-	// poolAndObjectivesMu is used to synchronize access to pool and the objectives map.
-	poolAndObjectivesMu sync.RWMutex
-	pool                *datalayer.EndpointPool
-	// key: InferenceObjective.Spec.ModelName, value: *InferenceObjective
+	// mu is used to synchronize access to pool, objectives, and rewrites.
+	mu   sync.RWMutex
+	pool *datalayer.EndpointPool
+	// key: InferenceObjective name, value: *InferenceObjective
 	objectives map[string]*v1alpha2.InferenceObjective
+	// modelRewrites store for InferenceModelRewrite objects.
+	modelRewrites *modelRewriteStore
 	// key: types.NamespacedName, value: backendmetrics.PodMetrics
 	pods *sync.Map
 	// modelServerMetricsPort metrics port from EPP command line argument
@@ -107,10 +116,11 @@ type datastore struct {
 }
 
 func (ds *datastore) Clear() {
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
 	ds.pool = nil
 	ds.objectives = make(map[string]*v1alpha2.InferenceObjective)
+	ds.modelRewrites = newModelRewriteStore()
 	// stop all pods go routines before clearing the pods map.
 	ds.pods.Range(func(_, v any) bool {
 		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
@@ -126,8 +136,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 		return nil
 	}
 	logger := log.FromContext(ctx)
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
 
 	oldEndpointPool := ds.pool
 	ds.pool = endpointPool
@@ -148,8 +158,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 }
 
 func (ds *datastore) PoolGet() (*datalayer.EndpointPool, error) {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
 	if !ds.PoolHasSynced() {
 		return nil, errPoolNotSynced
 	}
@@ -157,14 +167,14 @@ func (ds *datastore) PoolGet() (*datalayer.EndpointPool, error) {
 }
 
 func (ds *datastore) PoolHasSynced() bool {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
 	return ds.pool != nil
 }
 
 func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
 	if ds.pool == nil {
 		return false
 	}
@@ -173,37 +183,57 @@ func (ds *datastore) PoolLabelsMatch(podLabels map[string]string) bool {
 	return poolSelector.Matches(podSet)
 }
 
+// /// InferenceObjective APIs ///
 func (ds *datastore) ObjectiveSet(infObjective *v1alpha2.InferenceObjective) {
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
-	// Set the objective.
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
 	ds.objectives[infObjective.Name] = infObjective
 }
 
 func (ds *datastore) ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
-	iObj, ok := ds.objectives[objectiveName]
-	if !ok {
-		return nil
-	}
-	return iObj
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+	return ds.objectives[objectiveName]
 }
 
 func (ds *datastore) ObjectiveDelete(namespacedName types.NamespacedName) {
-	ds.poolAndObjectivesMu.Lock()
-	defer ds.poolAndObjectivesMu.Unlock()
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
 	delete(ds.objectives, namespacedName.Name)
 }
 
 func (ds *datastore) ObjectiveGetAll() []*v1alpha2.InferenceObjective {
-	ds.poolAndObjectivesMu.RLock()
-	defer ds.poolAndObjectivesMu.RUnlock()
-	res := []*v1alpha2.InferenceObjective{}
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+	res := make([]*v1alpha2.InferenceObjective, 0, len(ds.objectives))
 	for _, v := range ds.objectives {
 		res = append(res, v)
 	}
 	return res
+}
+
+func (ds *datastore) ModelRewriteSet(infModelRewrite *v1alpha2.InferenceModelRewrite) {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	ds.modelRewrites.set(infModelRewrite)
+}
+
+func (ds *datastore) ModelRewriteDelete(namespacedName types.NamespacedName) {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	ds.modelRewrites.delete(namespacedName)
+}
+
+func (ds *datastore) ModelRewriteGet(modelName string) *v1alpha2.InferenceModelRewriteRule {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+	return ds.modelRewrites.getRule(modelName)
+}
+
+func (ds *datastore) ModelRewriteGetAll() []*v1alpha2.InferenceModelRewrite {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+	return ds.modelRewrites.getAll()
 }
 
 // /// Pods/endpoints APIs ///

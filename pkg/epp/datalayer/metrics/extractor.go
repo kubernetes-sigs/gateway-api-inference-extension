@@ -30,11 +30,12 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
-	extractorName = "model-server-protocol-metrics"
+	extractorType = "model-server-protocol-metrics"
 
 	// LoRA metrics based on MSP
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
@@ -48,6 +49,7 @@ const (
 // Extractor implements the metrics extraction based on the model
 // server protocol standard.
 type Extractor struct {
+	tn      plugins.TypedName
 	mapping *Mapping
 }
 
@@ -72,13 +74,17 @@ func NewExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec s
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
 	return &Extractor{
+		tn: plugins.TypedName{
+			Type: extractorType,
+			Name: extractorType,
+		},
 		mapping: mapping,
 	}, nil
 }
 
-// Name returns the name of the metrics.Extractor.
-func (ext *Extractor) Name() string {
-	return extractorName
+// TypedName returns the type and name of the metrics.Extractor.
+func (ext *Extractor) TypedName() plugins.TypedName {
+	return ext.tn
 }
 
 // ExpectedType defines the type expected by the metrics.Extractor - a

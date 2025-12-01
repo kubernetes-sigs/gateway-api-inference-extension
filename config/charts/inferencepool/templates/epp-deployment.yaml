@@ -30,7 +30,7 @@ spec:
       {{- if .Values.inferenceExtension.sidecar.enabled }}
       - name: {{ .Values.inferenceExtension.sidecar.name }}
         image: {{ .Values.inferenceExtension.sidecar.image }}
-        imagePullPolicy: {{ .Values.inferenceExtension.sidecar.image.pullPolicy | default "IfNotPresent" }}
+        imagePullPolicy: {{ .Values.inferenceExtension.sidecar.imagePullPolicy | default "IfNotPresent" }}
         {{- with .Values.inferenceExtension.sidecar.command }}
         command:
           - {{ . | quote }}
@@ -151,6 +151,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        {{- include "gateway-api-inference-extension.latencyPredictor.env" . | nindent 8 }}
         {{- if .Values.inferenceExtension.tracing.enabled }}
         - name: OTEL_SERVICE_NAME
           value: "gateway-api-inference-extension"
@@ -181,6 +182,7 @@ spec:
         volumeMounts:
         - name: plugins-config-volume
           mountPath: "/config"
+      {{- include "gateway-api-inference-extension.latencyPredictor.containers" . | nindent 6 }}
       volumes:
       {{- if .Values.inferenceExtension.sidecar.volumes }}
       {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 6 }}
@@ -188,6 +190,7 @@ spec:
       - name: plugins-config-volume
         configMap:
           name: {{ include "gateway-api-inference-extension.name" . }}
+      {{- include "gateway-api-inference-extension.latencyPredictor.volumes" . | nindent 6 }}
       {{- if .Values.inferenceExtension.affinity }}
       affinity:
         {{- toYaml .Values.inferenceExtension.affinity | nindent 8 }}

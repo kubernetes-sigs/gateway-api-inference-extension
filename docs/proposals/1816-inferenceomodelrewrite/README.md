@@ -64,20 +64,25 @@ type InferenceModelRewriteSpec struct {
 	// If multiple InferenceModelRewrite resources target the same
 	// InferencePool, the controller will merge them based on precedence.
 	//
-	// **Timestamp Wins:** If two rules from different rewrite all matches,
-	// the rule from the *oldest*
-	// InferenceModelRewrite resource (determined by
-	// metadata.creationTimestamp) will be used.
+	// Across all rules specified on applicable rewrites, precedence MUST be
+	// given to the match having an "Exact" model match over a generic match
+	// (a rule with an empty `matches` array).
+	//
+	// If ties still exist across multiple InferenceModelRewrite resources (e.g.
+	// two rewrites both have an exact match for the same model), matching
+	// precedence MUST be determined by the oldest resource based on
+	// creation timestamp.
+	//
+	// If ties still exist within a single InferenceModelRewrite resource, the
+	// FIRST matching rule (in list order) is used.
 	// +required
 	Rules []InferenceModelRewriteRule `json:"rules"`
 }
 
 // InferenceModelRewriteRule defines the match criteria and corresponding action.
-//
-// A specific model name can only be matched by one rule across all
-// rewrites attached to the same InferencePool. If multiple rules attempt
-// to match the same model name, the oldest rule (by creationTimestamp)
-// will be the only one considered valid.
+// For details on how precedence is determined across multiple rules and
+// InferenceModelRewrite resources, see the "Precedence and Conflict Resolution"
+// section in InferenceModelRewriteSpec.
 type InferenceModelRewriteRule struct {
 	// Matches defines the criteria for matching a request.
 	// If multiple match criteria are specified, a request matches if

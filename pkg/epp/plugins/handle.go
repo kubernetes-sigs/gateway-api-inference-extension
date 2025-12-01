@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // Handle provides plugins a set of standard data and tools to work with
@@ -30,8 +30,8 @@ type Handle interface {
 
 	HandlePlugins
 
-	// PodList lists pods matching the given predicate.
-	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	// PodList lists pods.
+	PodList() []types.NamespacedName
 }
 
 // HandlePlugins defines a set of APIs to work with instantiated plugins
@@ -50,7 +50,7 @@ type HandlePlugins interface {
 }
 
 // PodListFunc is a function type that filters and returns a list of pod metrics
-type PodListFunc func(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+type PodListFunc func() []types.NamespacedName
 
 // eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
@@ -93,9 +93,9 @@ func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]Plugin {
 	return h.plugins
 }
 
-// PodList lists pods matching the given predicate.
-func (h *eppHandle) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
-	return h.podList(predicate)
+// PodList lists pods.
+func (h *eppHandle) PodList() []types.NamespacedName {
+	return h.podList()
 }
 
 func NewEppHandle(ctx context.Context, podList PodListFunc) Handle {
