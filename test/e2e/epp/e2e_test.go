@@ -46,7 +46,7 @@ import (
 
 const (
 	firstPort             = 8000
-	numPorts              = 8
+	numPorts              = 2
 	maxConcurrentRequests = 2 // prevent hammering Envoy and backend
 	maxRetries            = 3
 	backoff               = 1 * time.Second
