@@ -84,8 +84,8 @@ echo "Updating ${EPP_HELM}, ${BBR_HELM}, and ${CONFORMANCE_MANIFESTS} ..."
 # Update the container tag.
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
-sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
-
+# Update epp
+sed -i.bak -E "s|(gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
 # Update the container image pull policy.
 sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/{n;s/Always/IfNotPresent/;}' "$CONFORMANCE_MANIFESTS"
 
@@ -125,8 +125,7 @@ sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "
 sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
 
 # Update the container tag for lora-syncer in vLLM CPU and GPU deployment manifests.
-sed -i.bak -E "s|(us-central1-docker\.pkg\.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
-
+sed -i.bak -E "s|(gateway-api-inference-extension/lora-syncer:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
 # Update the container image pull policy for lora-syncer in vLLM CPU and GPU deployment manifests.
 sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/lora-syncer/{n;s/Always/IfNotPresent/;}' "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
 
