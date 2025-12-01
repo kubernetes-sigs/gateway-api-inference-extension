@@ -2,7 +2,7 @@
 
 This package contains the scheduling plugin implementations.
 
-Plugins are grouped by plugin name to make it easy to find a specific behavior.
+Plugins are grouped by plugin name to make it easy to find a specific feature.
 Each plugin lives in its own directory (for example `prefixcachescorer/`,
 `predictedlatencyscorer/`, `maxscorepicker/`). Shared helpers that are used by
 multiple plugins live in supporting packages such as `pickershared/`, and test
