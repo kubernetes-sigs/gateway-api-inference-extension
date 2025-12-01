@@ -26,14 +26,14 @@ import (
 )
 
 const (
-	DataSourceType = "metrics-data-source"
-	ExtractorType  = "model-server-protocol-metrics"
+	MetricsDataSourceType = "metrics-data-source"
+	MetricsExtractorType  = "model-server-protocol-metrics"
 )
 
 // Configuration parameters for metrics data source and extractor.
 type (
 	// Data source configuration parameters
-	datasourceParams struct {
+	metricsDatasourceParams struct {
 		// Scheme defines the protocol scheme used in metrics retrieval (e.g., "http").
 		Scheme string // `json:"scheme"`
 		// Path defines the URL path used in metrics retrieval (e.g., "/metrics").
@@ -43,7 +43,7 @@ type (
 	}
 
 	// Extractor configuration parameters
-	extractorParams struct {
+	modelServerExtractorParams struct {
 		// QueueRequestsSpec defines the metric specification string for retrieving queued request count.
 		QueueRequestsSpec string // `json:"queuedRequestsSpec"`
 		// RunningRequestsSpec defines the metric specification string for retrieving running requests count.
@@ -57,9 +57,9 @@ type (
 	}
 )
 
-// DataSourceFactory is a factory function used to instantiate data layer's
+// MetricsDataSourceFactory is a factory function used to instantiate data layer's
 // metrics data source plugins specified in a configuration.
-func DataSourceFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 	cfg, err := defaultDataSourceConfigParams()
 	if err != nil {
 		return nil, err
@@ -71,14 +71,14 @@ func DataSourceFactory(name string, parameters json.RawMessage, handle plugins.H
 		}
 	}
 
-	ds := NewDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify)
+	ds := NewMetricsDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify)
 	ds.typedName.Name = name
 	return ds, nil
 }
 
-// ExtractorFactory is a factory function used to instantiate data layer's metrics
+// ModelServerExtractorFactory is a factory function used to instantiate data layer's metrics
 // Extractor plugins specified in a configuration.
-func ExtractorFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
 	cfg, err := defaultExtractorConfigParams()
 	if err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func ExtractorFactory(name string, parameters json.RawMessage, handle plugins.Ha
 		}
 	}
 
-	extractor, err := NewExtractor(cfg.QueueRequestsSpec, cfg.RunningRequestsSpec, cfg.KVUsageSpec,
+	extractor, err := NewModelServerExtractor(cfg.QueueRequestsSpec, cfg.RunningRequestsSpec, cfg.KVUsageSpec,
 		cfg.LoRASpec, cfg.CacheInfoSpec)
 	if err != nil {
 		return nil, err
@@ -124,9 +124,9 @@ const (
 
 // return the default configuration state. The defaults are populated from
 // existing command line flags.
-func defaultDataSourceConfigParams() (*datasourceParams, error) {
+func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 	var err error
-	cfg := &datasourceParams{}
+	cfg := &metricsDatasourceParams{}
 
 	if cfg.Scheme, err = fromStringFlag(modelServerMetricsSchemeFlag); err != nil {
 		return nil, err
@@ -140,9 +140,9 @@ func defaultDataSourceConfigParams() (*datasourceParams, error) {
 	return cfg, nil
 }
 
-func defaultExtractorConfigParams() (*extractorParams, error) {
+func defaultExtractorConfigParams() (*modelServerExtractorParams, error) {
 	var err error
-	cfg := &extractorParams{}
+	cfg := &modelServerExtractorParams{}
 
 	if cfg.QueueRequestsSpec, err = fromStringFlag(totalQueuedRequestsMetricSpecFlag); err != nil {
 		return nil, err

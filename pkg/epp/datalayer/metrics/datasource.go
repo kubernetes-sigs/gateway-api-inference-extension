@@ -39,9 +39,9 @@ type DataSource struct {
 	extractors sync.Map // key: name, value: extractor
 }
 
-// NewDataSource returns a new MSP compliant metrics data source, configured with
+// NewMetricsDataSource returns a new MSP compliant metrics data source, configured with
 // the provided scheme, path and certificate verification parameters.
-func NewDataSource(metricsScheme string, metricsPath string, skipCertVerification bool) *DataSource {
+func NewMetricsDataSource(metricsScheme string, metricsPath string, skipCertVerification bool) *DataSource {
 	if metricsScheme == "https" {
 		httpsTransport := baseTransport.Clone()
 		httpsTransport.TLSClientConfig = &tls.Config{
@@ -52,8 +52,8 @@ func NewDataSource(metricsScheme string, metricsPath string, skipCertVerificatio
 
 	dataSrc := &DataSource{
 		typedName: plugins.TypedName{
-			Type: DataSourceType,
-			Name: DataSourceType,
+			Type: MetricsDataSourceType,
+			Name: MetricsDataSourceType,
 		},
 		metricsScheme: metricsScheme,
 		metricsPath:   metricsPath,

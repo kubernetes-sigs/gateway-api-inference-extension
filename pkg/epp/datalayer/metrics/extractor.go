@@ -64,19 +64,19 @@ func Produces() map[string]any {
 	}
 }
 
-// NewExtractor returns a new model server protocol (MSP) metrics extractor,
+// NewModelServerExtractor returns a new model server protocol (MSP) metrics extractor,
 // configured with the given metrics' specifications.
 // These are mandatory metrics per the MSP specification, and are used
 // as the basis for the built-in scheduling plugins.
-func NewExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
+func NewModelServerExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
 	mapping, err := NewMapping(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
 	return &Extractor{
 		typedName: plugins.TypedName{
-			Type: ExtractorType,
-			Name: ExtractorType,
+			Type: MetricsExtractorType,
+			Name: MetricsExtractorType,
 		},
 		mapping: mapping,
 	}, nil

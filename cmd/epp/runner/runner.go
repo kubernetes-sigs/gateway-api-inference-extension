@@ -439,8 +439,8 @@ func (r *Runner) registerInTreePlugins() {
 	// register response received plugin for test purpose only (used in conformance tests)
 	plugins.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
 	// register datalayer metrics collection plugins
-	plugins.Register(dlmetrics.DataSourceType, dlmetrics.DataSourceFactory)
-	plugins.Register(dlmetrics.ExtractorType, dlmetrics.ExtractorFactory)
+	plugins.Register(dlmetrics.MetricsDataSourceType, dlmetrics.MetricsDataSourceFactory)
+	plugins.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, error) {
@@ -618,10 +618,10 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 // are to be configured), must be done before the EndpointFactory is initialized.
 func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 	// create and register a metrics data source and extractor.
-	source := dlmetrics.NewDataSource(*modelServerMetricsScheme,
+	source := dlmetrics.NewMetricsDataSource(*modelServerMetricsScheme,
 		*modelServerMetricsPath,
 		*modelServerMetricsHttpsInsecureSkipVerify)
-	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
+	extractor, err := dlmetrics.NewModelServerExtractor(*totalQueuedRequestsMetric,
 		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
 		*loraInfoMetric, *cacheInfoMetric)

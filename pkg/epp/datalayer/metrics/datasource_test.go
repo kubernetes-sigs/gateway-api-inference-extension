@@ -28,12 +28,12 @@ import (
 )
 
 func TestDatasource(t *testing.T) {
-	source := NewDataSource("https", "/metrics", true)
-	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric, "", "", "", "")
+	source := NewMetricsDataSource("https", "/metrics", true)
+	extractor, err := NewModelServerExtractor(defaultTotalQueuedRequestsMetric, "", "", "", "")
 	assert.Nil(t, err, "failed to create extractor")
 
 	dsType := source.TypedName().Type
-	assert.Equal(t, DataSourceType, dsType)
+	assert.Equal(t, MetricsDataSourceType, dsType)
 
 	err = source.AddExtractor(extractor)
 	assert.Nil(t, err, "failed to add extractor")
