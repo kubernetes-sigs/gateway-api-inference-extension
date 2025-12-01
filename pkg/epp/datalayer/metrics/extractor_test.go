@@ -32,7 +32,7 @@ const (
 	// use hardcoded values - importing causes cycle
 	defaultTotalQueuedRequestsMetric    = "vllm:num_requests_waiting"
 	defaultTotalRunningRequestsMetric   = "vllm:num_requests_running"
-	defaultKvCacheUsagePercentageMetric = "vllm:gpu_cache_usage_perc"
+	defaultKvCacheUsagePercentageMetric = "vllm:kv_cache_usage_perc"
 	defaultLoraInfoMetric               = "vllm:lora_requests_info"
 	defaultCacheInfoMetric              = "vllm:cache_config_info"
 )
@@ -50,8 +50,8 @@ func TestExtractorExtract(t *testing.T) {
 		t.Fatalf("failed to create extractor: %v", err)
 	}
 
-	if name := extractor.Name(); name == "" {
-		t.Error("empty extractor name")
+	if exType := extractor.TypedName().Type; exType == "" {
+		t.Error("empty extractor type")
 	}
 
 	if inputType := extractor.ExpectedInputType(); inputType != PrometheusMetricType {

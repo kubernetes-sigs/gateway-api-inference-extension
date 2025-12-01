@@ -24,6 +24,7 @@ COPY internal ./internal
 COPY apix ./apix
 COPY api ./api
 COPY version ./version
+COPY sidecars ./sidecars
 WORKDIR /src/cmd/epp
 RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/version.CommitSHA=${COMMIT_SHA} -X sigs.k8s.io/gateway-api-inference-extension/version.BuildRef=${BUILD_REF}" -o /epp
 

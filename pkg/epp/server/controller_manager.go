@@ -55,6 +55,16 @@ func defaultManagerOptions(disableK8sCrdReconcile bool, gknn common.GKNN, metric
 						gknn.Namespace: {},
 					},
 				},
+				&v1alpha2.InferenceObjective{}: {
+					Namespaces: map[string]cache.Config{
+						gknn.Namespace: {},
+					},
+				},
+				&v1alpha2.InferenceModelRewrite{}: {
+					Namespaces: map[string]cache.Config{
+						gknn.Namespace: {},
+					},
+				},
 			},
 		},
 		Metrics: metricsServerOptions,

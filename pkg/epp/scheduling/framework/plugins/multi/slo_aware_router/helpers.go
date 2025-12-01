@@ -29,7 +29,7 @@ import (
 func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds []podPredictionResult, r *rand.Rand, strategy headroomStrategy) schedulingtypes.Pod {
 	total := 0
 	choices := s.buildCompositeChoices(
-		ctx, allPreds, CompositeKVWeight, CompositeQueueWeight, CompositePrefixWeight, &total,
+		ctx, allPreds, s.config.CompositeKVWeight, s.config.CompositeQueueWeight, s.config.CompositePrefixWeight, &total,
 	)
 	if strategy == headroomStrategyCompositeLeast {
 		// Invert weights for "least" strategy
@@ -46,7 +46,7 @@ func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []choice
 	}
 	logger := log.FromContext(context.Background())
 	// Check if MAX_SCORE_SELECTION env variable is set
-	if SelectionMode == podSelectionMax {
+	if s.config.SelectionMode == string(podSelectionMax) {
 
 		logger.V(logutil.DEBUG).Info("Pod selection mode: MAX - selecting pod with highest weight")
 		maxWeight := 0

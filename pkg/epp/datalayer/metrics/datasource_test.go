@@ -28,12 +28,12 @@ import (
 )
 
 func TestDatasource(t *testing.T) {
-	source := NewDataSource("https", "/metrics", true, nil)
+	source := NewDataSource("https", "/metrics", true)
 	extractor, err := NewExtractor(defaultTotalQueuedRequestsMetric, "", "", "", "")
 	assert.Nil(t, err, "failed to create extractor")
 
-	name := source.Name()
-	assert.Equal(t, DataSourceName, name)
+	dsType := source.TypedName().Type
+	assert.Equal(t, DataSourceType, dsType)
 
 	err = source.AddExtractor(extractor)
 	assert.Nil(t, err, "failed to add extractor")
@@ -43,7 +43,7 @@ func TestDatasource(t *testing.T) {
 
 	extractors := source.Extractors()
 	assert.Len(t, extractors, 1)
-	assert.Equal(t, extractor.Name(), extractors[0])
+	assert.Equal(t, extractor.TypedName().String(), extractors[0])
 
 	err = datalayer.RegisterSource(source)
 	assert.Nil(t, err, "failed to register")

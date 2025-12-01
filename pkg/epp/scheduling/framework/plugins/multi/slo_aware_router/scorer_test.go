@@ -255,11 +255,19 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var router *SLOAwareRouter
-			if tt.predictor == nil {
-				router = NewSLOAwareRouter(nil, tt.strategy)
-			} else {
-				router = NewSLOAwareRouter(tt.predictor, tt.strategy)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(tt.strategy)
+
+			var predictor latencypredictor.PredictorInterface
+			if tt.predictor != nil {
+				predictor = tt.predictor
+			} else if tt.name != "No predictor configured" {
+				// Keep logic consistent with original test setup if needed,
+				// but here we just use what's in tt.predictor which is nil or set.
+				predictor = nil
 			}
+
+			router = NewSLOAwareRouter(cfg, predictor)
 
 			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), tt.request, tt.pods)
 
@@ -333,7 +341,9 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 					"0.3": {TTFT: 0.4, TPOT: 0.02},
 				},
 			}
-			router := NewSLOAwareRouter(predictor, tt.strategy)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(tt.strategy)
+			router := NewSLOAwareRouter(cfg, predictor)
 
 			request := createTestLLMRequest("test", 1.0, 0.05, true)
 			pods := []schedulingtypes.Pod{
@@ -360,22 +370,26 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 
 func TestSLOAwareRouter_TypedName(t *testing.T) {
 	predictor := &mockPredictor{}
-	router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+	cfg := DefaultConfig
+	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+	router := NewSLOAwareRouter(cfg, predictor)
 
 	tn := router.TypedName()
-	assert.Equal(t, "slo-aware-routing", tn.Type, "Type should be slo-aware-routing")
-	assert.Equal(t, "slo-aware-routing", tn.Name, "Default name should be slo-aware-routing")
+	assert.Equal(t, "predicted-latency-scorer", tn.Type, "Type should be predicted-latency-scorer")
+	assert.Equal(t, "predicted-latency-scorer", tn.Name, "Default name should be predicted-latency-scorer")
 }
 
 func TestSLOAwareRouter_WithName(t *testing.T) {
 	predictor := &mockPredictor{}
-	router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+	cfg := DefaultConfig
+	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+	router := NewSLOAwareRouter(cfg, predictor)
 
 	customName := "custom-router"
 	router = router.WithName(customName)
 
 	tn := router.TypedName()
-	assert.Equal(t, "slo-aware-routing", tn.Type, "Type should remain slo-aware-routing")
+	assert.Equal(t, "predicted-latency-scorer", tn.Type, "Type should remain predicted-latency-scorer")
 	assert.Equal(t, customName, tn.Name, "Name should be updated to custom name")
 }
 
@@ -421,7 +435,9 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+			router := NewSLOAwareRouter(cfg, predictor)
 			pod := createTestPod("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -475,7 +491,9 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+			router := NewSLOAwareRouter(cfg, predictor)
 			pod := createTestPod("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -502,7 +520,9 @@ func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
-			router := NewSLOAwareRouter(predictor, headroomStrategyLeast)
+			cfg := DefaultConfig
+			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
+			router := NewSLOAwareRouter(cfg, predictor)
 
 			state := schedulingtypes.NewCycleState()
 			tt.setupState(state)

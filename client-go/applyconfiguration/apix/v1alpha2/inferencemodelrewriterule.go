@@ -22,7 +22,7 @@ package v1alpha2
 // with apply.
 type InferenceModelRewriteRuleApplyConfiguration struct {
 	Matches []MatchApplyConfiguration       `json:"matches,omitempty"`
-	Targets []TargetModelApplyConfiguration `json:"split,omitempty"`
+	Targets []TargetModelApplyConfiguration `json:"targets,omitempty"`
 }
 
 // InferenceModelRewriteRuleApplyConfiguration constructs a declarative configuration of the InferenceModelRewriteRule type for use with

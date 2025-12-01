@@ -37,7 +37,7 @@ func (s *SLOAwareRouter) selectFromPositiveHeadroomPods(ctx context.Context, pos
 	}
 
 	// Apply perfect stickiness (with exploration)
-	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, posHeadroomPods, r, "positive", AffinityGateTau)
+	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, posHeadroomPods, r, "positive", s.config.AffinityGateTau)
 
 	// If perfect stickiness collapsed us to a single pod, short-circuit
 	if sticky && len(candidates) == 1 {
@@ -102,7 +102,7 @@ func (s *SLOAwareRouter) selectFromNegativeHeadroomPodsInternal(ctx context.Cont
 	}
 
 	// Apply perfect stickiness (with exploration)
-	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, negHeadroomPods, r, "negative", AffinityGateTau)
+	candidates, sticky := s.epsilonGreedyAffinityGate(ctx, negHeadroomPods, r, "negative", s.config.AffinityGateTau)
 
 	// If perfect stickiness collapsed us to a single pod, short-circuit
 	if sticky && len(candidates) == 1 {
@@ -263,19 +263,19 @@ func (s *SLOAwareRouter) handleNegativeHeadroomPodsHierarchical(
 	// Priority 1: both TTFT and TPOT negative -> blended deficits (both active)
 	if len(negTTFTNegTPOT) > 0 {
 		s.weightPodsByBlendedDeficit(ctx, negTTFTNegTPOT, choices, total, minWeightForNegative,
-			NegHeadroomTTFTWeight, NegHeadroomTPOTWeight, "both_negative")
+			s.config.NegHeadroomTTFTWeight, s.config.NegHeadroomTPOTWeight, "both_negative")
 	}
 
 	// Priority 2: TTFT negative, TPOT non-negative -> blended still works (TPOT deficit=0)
 	if len(negTTFTNonNegTPOT) > 0 {
 		s.weightPodsByBlendedDeficit(ctx, negTTFTNonNegTPOT, choices, total, minWeightForNegative,
-			NegHeadroomTTFTWeight, NegHeadroomTPOTWeight, "ttft_negative")
+			s.config.NegHeadroomTTFTWeight, s.config.NegHeadroomTPOTWeight, "ttft_negative")
 	}
 
 	// Priority 3: TTFT non-negative, TPOT negative -> blended (TTFT deficit=0)
 	if len(nonNegTTFTNegTPOT) > 0 {
 		s.weightPodsByBlendedDeficit(ctx, nonNegTTFTNegTPOT, choices, total, minWeightForNegative,
-			NegHeadroomTTFTWeight, NegHeadroomTPOTWeight, "tpot_negative")
+			s.config.NegHeadroomTTFTWeight, s.config.NegHeadroomTPOTWeight, "tpot_negative")
 	}
 
 	// Priority 4: edge-case bucket -> minimal weight

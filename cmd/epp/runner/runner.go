@@ -69,6 +69,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
@@ -430,6 +431,9 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
 	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
 	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	// Latency predictor plugins
+	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, slo_aware_router.SLOAwareRouterFactory)
+	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)
@@ -469,9 +473,22 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 	return rawConfig, nil
 }
 
+// Return a function that can be used in the EPP Handle to list pod names.
+func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
+	return func() []types.NamespacedName {
+		pods := ds.PodList(func(_ backendmetrics.PodMetrics) bool { return true })
+		names := make([]types.NamespacedName, 0, len(pods))
+
+		for _, p := range pods {
+			names = append(names, p.GetPod().NamespacedName)
+		}
+		return names
+	}
+}
+
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
-	handle := plugins.NewEppHandle(ctx, ds.PodList)
+	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
 	cfg, err := loader.LoadConfigPhaseTwo(rawConfig, handle, logger)
 
 	if err != nil {
@@ -600,8 +617,7 @@ func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 	// create and register a metrics data source and extractor.
 	source := dlmetrics.NewDataSource(*modelServerMetricsScheme,
 		*modelServerMetricsPath,
-		*modelServerMetricsHttpsInsecureSkipVerify,
-		nil)
+		*modelServerMetricsHttpsInsecureSkipVerify)
 	extractor, err := dlmetrics.NewExtractor(*totalQueuedRequestsMetric,
 		*totalRunningRequestsMetric,
 		*kvCacheUsagePercentageMetric,
@@ -620,7 +636,7 @@ func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 	// TODO: this could be moved to the configuration loading functions once ported over.
 	sources := datalayer.GetSources()
 	for _, src := range sources {
-		logger.Info("data layer configuration", "source", src.Name(), "extractors", src.Extractors())
+		logger.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
 	}
 	factory := datalayer.NewEndpointFactory(sources, *refreshMetricsInterval)
 	return factory, nil
