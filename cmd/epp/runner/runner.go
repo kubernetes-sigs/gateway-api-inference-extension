@@ -489,7 +489,7 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 		names := make([]types.NamespacedName, 0, len(pods))
 
 		for _, p := range pods {
-			names = append(names, p.GetPod().NamespacedName)
+			names = append(names, p.GetMetadata().NamespacedName)
 		}
 		return names
 	}
