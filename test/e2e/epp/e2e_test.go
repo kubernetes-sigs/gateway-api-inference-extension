@@ -48,6 +48,8 @@ const (
 	firstPort             = 8000
 	numPorts              = 8
 	maxConcurrentRequests = 2 // prevent hammering Envoy and backend
+	maxRetries            = 3
+	backoff               = 1 * time.Second
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
@@ -632,10 +634,6 @@ func generateTraffic(
 	var wg sync.WaitGroup
 	errorCh := make(chan error, batches)
 
-	// Recommended: 3 retries with backoff
-	const maxRetries = 3
-	const backoff = 1 * time.Second
-
 	for i := 0; i < batches; i++ {
 		wg.Add(1)
 		semaphore <- struct{}{}
@@ -667,7 +665,6 @@ func generateTraffic(
 
 	// Collect any errors that occurred
 	failures := make([]error, 0, batches)
-
 	for err := range errorCh {
 		failures = append(failures, err)
 	}
