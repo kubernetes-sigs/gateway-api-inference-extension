@@ -26,6 +26,8 @@ schedulingProfiles:
 - ....
 saturationDetector:
   ...
+data:
+  ...
 featureGates:
   ...
 ```
@@ -39,6 +41,9 @@ requests to pods. This section is described in more detail in the section [Confi
 
 The saturationDetector section configures the saturation detector, which is used to determine if special
 action needs to eb taken due to the system being overloaded or saturated. This section is described in more detail in the section [Saturation Detector configuration](#saturation-detector-configuration)
+
+The data section configures the data layer, which is used to gather metrics and other data used in making scheduling decisions.
+This section is described in more detail in the section [Data Layer configuration](#data-layer-configuration)
 
 The featureGates sections allows the enablement of experimental features of the IGW. This section is
 described in more detail in the section [Feature Gates](#feature-gates)
@@ -329,6 +334,34 @@ a value of `0.8` will be used.
 - The `metricsStalenessThreshold` field which defines how old a pod's metrics can be. If a pod's
 metrics are older than this, it might be excluded from "good capacity" considerations or treated
 as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
+
+## Data Layer configuration
+
+The Data Layer collects metrics and other data used in scheduling decisions made by the various configured
+filters and plugins. The exact data collected varies by the DataSource and Extractors configured. The basic ones
+collect Prometheus metrics from the Model Servers in the InferencePool.
+
+The Data Layer is configured via the data section of the overall configuration. It has the following form:
+
+```yaml
+data:
+  sources:
+  - pluginRef: source1
+    extractors:
+    - extarctor1
+    - extractor2
+```
+
+The data section has one field *sources* which configures the set of DataSources to be used to gather the metrics
+and other data used for scheduling.
+
+Each entry in the sources list has the following fields:
+
+- *pluginRef* is a reference to the name of the plugin instance to be used.
+- *extractors* specifies the list of the extractor plugin instances, by name, to be used with this DataSource.
+
+**Note**: The names of the plugin instances mentioned above, refer to plugin instances defined in the plugins section
+of the configuration.
 
 ## Feature Gates
 
