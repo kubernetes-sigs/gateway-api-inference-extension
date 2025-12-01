@@ -650,8 +650,6 @@ func generateTraffic(
 					return // Success!
 				}
 
-				// Log the retry to help debugging
-				fmt.Printf("Request %d failed (attempt %d/%d): %v. Retrying...\n", requestNum, attempt, maxRetries, err)
 				time.Sleep(backoff)
 			}
 
