@@ -299,6 +299,16 @@ var (
 		[]string{},
 	)
 
+	// SchedulerAttemptsTotal counts total number of scheduling attempts, labeled by status.
+	SchedulerAttemptsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "scheduler_attempts_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of scheduling attempts.", compbasemetrics.ALPHA),
+		},
+		[]string{"status"}, // "success", "failure"
+	)
+
 	PluginProcessingLatencies = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceExtension,
@@ -419,6 +429,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(inferencePoolAvgQueueSize)
 		metrics.Registry.MustRegister(inferencePoolReadyPods)
 		metrics.Registry.MustRegister(SchedulerE2ELatency)
+		metrics.Registry.MustRegister(SchedulerAttemptsTotal)
 		metrics.Registry.MustRegister(PluginProcessingLatencies)
 		metrics.Registry.MustRegister(InferenceExtensionInfo)
 		metrics.Registry.MustRegister(PrefixCacheSize)
@@ -464,6 +475,7 @@ func Reset() {
 	inferencePoolAvgQueueSize.Reset()
 	inferencePoolReadyPods.Reset()
 	SchedulerE2ELatency.Reset()
+	SchedulerAttemptsTotal.Reset()
 	PluginProcessingLatencies.Reset()
 	InferenceExtensionInfo.Reset()
 	PrefixCacheSize.Reset()
@@ -474,7 +486,7 @@ func Reset() {
 	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
-// RecordRequstCounter records the number of requests.
+// RecordRequestCounter records the number of requests.
 func RecordRequestCounter(modelName, targetModelName string) {
 	requestCounter.WithLabelValues(modelName, targetModelName).Inc()
 }
@@ -695,6 +707,20 @@ func RecordInferencePoolReadyPods(name string, runningPods float64) {
 func RecordSchedulerE2ELatency(duration time.Duration) {
 	SchedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
 }
+
+// RecordSchedulerAttempt records a scheduling attempt with status.
+func RecordSchedulerAttempt(err error) {
+	if err != nil {
+		SchedulerAttemptsTotal.WithLabelValues(SchedulerStatusFailure).Inc()
+	} else {
+		SchedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess).Inc()
+	}
+}
+
+const (
+	SchedulerStatusSuccess = "success"
+	SchedulerStatusFailure = "failure"
+)
 
 // RecordPluginProcessingLatency records the processing latency for a plugin.
 func RecordPluginProcessingLatency(extensionPoint, pluginType, pluginName string, duration time.Duration) {

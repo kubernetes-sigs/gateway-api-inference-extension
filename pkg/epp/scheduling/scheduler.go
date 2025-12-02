@@ -87,6 +87,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	before := time.Now()
 	result, err := s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
 	metrics.RecordPluginProcessingLatency(framework.ProcessProfilesResultsExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
+	metrics.RecordSchedulerAttempt(err)
 	loggerVerbose.Info("Completed running profile handler ProcessResults successfully", "plugin", s.profileHandler.TypedName())
 
 	return result, err

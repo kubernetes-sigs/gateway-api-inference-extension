@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -679,6 +680,50 @@ func TestSchedulerE2ELatency(t *testing.T) {
 			}
 			if err := testutil.GatherAndCompare(metrics.Registry, wantE2ELatency, "inference_extension_scheduler_e2e_duration_seconds"); err != nil {
 				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestSchedulerAttemptsTotal(t *testing.T) {
+
+	scenarios := []struct {
+		name         string
+		successCount int
+		failureCount int
+	}{
+		{
+			name:         "mixed success and failure attempts",
+			successCount: 10,
+			failureCount: 5,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			Reset()
+			for i := 0; i < scenario.successCount; i++ {
+				RecordSchedulerAttempt(nil)
+			}
+			for i := 0; i < scenario.failureCount; i++ {
+				RecordSchedulerAttempt(errors.New("simulated scheduling failure"))
+			}
+
+			wantMetrics, err := os.Open("testdata/scheduler_attempts_total_metrics")
+			defer func() {
+				if err = wantMetrics.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(
+				metrics.Registry,
+				wantMetrics,
+				"inference_extension_scheduler_attempts_total",
+			); err != nil {
+				t.Errorf("metric comparison failed: %v", err)
 			}
 		})
 	}
