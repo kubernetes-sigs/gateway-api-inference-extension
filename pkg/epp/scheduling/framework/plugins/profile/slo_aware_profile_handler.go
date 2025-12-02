@@ -107,7 +107,8 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 		}
 	}
 
-	if len(profileResults) == 1 { // we are not using predictor scheduling and all profiles have been executed already in previous call
+	_, defaultExecuted := profileResults[NoLatencyRoutingProfileName]
+	if defaultExecuted { // the defualt profile when predictorBasedScheduling is turned off  have been executed already in previous call
 		return map[string]*framework.SchedulerProfile{}
 	}
 
@@ -123,16 +124,15 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 // When a profile run fails, its result in the profileResults map is nil.
 func (h *SLOAwareProfileHandler) ProcessResults(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
 
-	if len(profileResults) < 2 {
-		return nil, errors.New("SLOAwareProfileHandler requires at least two profiles to operate")
-	}
-
 	predictorBasedScheduling, err := parseBoolHeader(*request, PreictionBasedSchedulingHeaderKey)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing predictorBasedScheduling from header failed to choose scheduling profile: x-prediction-based-scheduling must be a bool: %v", err)
 	}
 
 	if predictorBasedScheduling { // TODO grab header directly from request.Headers instead of request field
+		if len(profileResults) < 2 {
+			return nil, errors.New("SLOAwareProfileHandler requires at least two profiles to operate when predictorBasedScheduling is true")
+		}
 		if profileResults[LatencyRoutingProfileName] == nil { // there was an error while running the SLO profile
 			return nil, fmt.Errorf("failed to run scheduler profile '%s'", LatencyRoutingProfileName)
 		}
@@ -140,6 +140,9 @@ func (h *SLOAwareProfileHandler) ProcessResults(ctx context.Context, _ *types.Cy
 			ProfileResults:     profileResults,
 			PrimaryProfileName: LatencyRoutingProfileName,
 		}, nil
+	}
+	if len(profileResults) < 1 {
+		return nil, errors.New("SLOAwareProfileHandler requires at least one profiles to operate when predictorBasedScheduling is false")
 	}
 
 	if profileResults[NoLatencyRoutingProfileName] == nil { // there was an error while running the default profile
