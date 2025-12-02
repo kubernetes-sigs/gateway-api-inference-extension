@@ -108,7 +108,7 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 	}
 
 	_, defaultExecuted := profileResults[NoLatencyRoutingProfileName]
-	if defaultExecuted { // the defualt profile when predictorBasedScheduling is turned off  have been executed already in previous call
+	if defaultExecuted { // predictorBasedScheduling is off, and NoLatencyRoutingProfileName profile has already been executed in a previous call
 		return map[string]*framework.SchedulerProfile{}
 	}
 
