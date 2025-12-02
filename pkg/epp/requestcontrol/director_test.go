@@ -652,27 +652,27 @@ func TestDirector_HandleRequest(t *testing.T) {
 		}
 
 		for _, test := range tests {
-		  t.Run(test.name, func(t *testing.T) {
-			  mockSched := &mockScheduler{}
-			  if test.schedulerMockSetup != nil {
-				  test.schedulerMockSetup(mockSched)
-			  }
-			  config := NewConfig()
-			  if test.prepareDataPlugin != nil {
-				  config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
-			  }
-			  config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
+			t.Run(test.name, func(t *testing.T) {
+				mockSched := &mockScheduler{}
+				if test.schedulerMockSetup != nil {
+					test.schedulerMockSetup(mockSched)
+				}
+				config := NewConfig()
+				if test.prepareDataPlugin != nil {
+					config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
+				}
+				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
-			  locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
-			  director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, locator, config)
-			  if test.name == "successful request with model rewrite" {
-				  mockDs := &mockDatastore{
-					  pods:     ds.PodList(datastore.AllPodsPredicate),
-					  rewrites: []*v1alpha2.InferenceModelRewrite{rewrite},
-				  }
-				  director.datastore = mockDs
-				  director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
-			  }
+				locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, locator, config)
+				if test.name == "successful request with model rewrite" {
+					mockDs := &mockDatastore{
+						pods:     ds.PodList(datastore.AllPodsPredicate),
+						rewrites: []*v1alpha2.InferenceModelRewrite{rewrite},
+					}
+					director.datastore = mockDs
+					director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
+				}
 				reqCtx := &handlers.RequestContext{
 					Request: &handlers.Request{
 						// Create a copy of the map for each test run to avoid mutation issues.
