@@ -34,19 +34,19 @@ featureGates:
 
 The first two lines of the configuration are constant and must appear as is.
 
-The plugins section defines the set of plugins that will be instantiated and their parameters. This section is described in more detail in the section [Configuring Plugins via text](#configuring-plugins-via-text)
+The `featureGates` section allows the enablement of experimental features of the IGW. This section is
+described in more detail in the section [Feature Gates](#feature-gates)
 
-The schedulingProfiles section defines the set of scheduling profiles that can be used in scheduling
+The `plugins` section defines the set of plugins that will be instantiated and their parameters. This section is described in more detail in the section [Configuring Plugins via text](#configuring-plugins-via-text)
+
+The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
 requests to pods. This section is described in more detail in the section [Configuring Plugins via YAML](#configuring-plugins-via-yaml)
 
-The saturationDetector section configures the saturation detector, which is used to determine if special
+The `saturationDetector` section configures the saturation detector, which is used to determine if special
 action needs to eb taken due to the system being overloaded or saturated. This section is described in more detail in the section [Saturation Detector configuration](#saturation-detector-configuration)
 
-The data section configures the data layer, which is used to gather metrics and other data used in making scheduling decisions.
-This section is described in more detail in the section [Data Layer configuration](#data-layer-configuration)
-
-The featureGates sections allows the enablement of experimental features of the IGW. This section is
-described in more detail in the section [Feature Gates](#feature-gates)
+The `data` section configures the data layer, which is used to gather information (such as metrics) used in making scheduling
+decisions. This section is described in more detail in the section [Data Layer configuration](#data-layer-configuration)
 
 ## Configuring Plugins via YAML
 
@@ -69,7 +69,7 @@ In addition, the set of instantiated plugins can also include a picker, which ch
 the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, an
 instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
-The plugins section defines the set of plugins that will be instantiated and their parameters.
+The `plugins` section defines the set of plugins that will be instantiated and their parameters.
 Each entry in this section has the following form:
 
 ```yaml
@@ -88,7 +88,7 @@ field is omitted, the plugin's type will be used as its name.
 - *parameters* which is optional, defines the set of parameters used to configure the plugin in question.
 The actual set of parameters varies from plugin to plugin.
 
-The schedulingProfiles section defines the set of scheduling profiles that can be used in scheduling
+The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
 requests to pods. The number of scheduling profiles one defines, depends on the use case. For simple
 serving of requests, one is enough. For disaggregated prefill, two profiles are required. Each entry
 in this section has the following form:
@@ -313,7 +313,7 @@ The Saturation Detector determines that the cluster is saturated by looking at t
 - KV cache utilization
 - Metrics staleness
 
-The Saturation Detector is configured via the saturationDetector section of the overall configuration.
+The Saturation Detector is configured via the `saturationDetector` section of the overall configuration.
 It has the following form:
 
 ```yaml
@@ -323,7 +323,7 @@ saturationDetector:
   metricsStalenessThreshold: 150ms
 ```
 
-The various sub-fields of the saturationDetector section are:
+The various sub-fields of the `saturationDetector` section are:
 
 - The `queueDepthThreshold` field which defines the backend waiting queue size above which a
 pod is considered to have insufficient capacity for new requests. This field is optional, if
@@ -338,18 +338,18 @@ as having no capacity for safety. This field is optional, if omitted a value of 
 ## Data Layer configuration
 
 The Data Layer collects metrics and other data used in scheduling decisions made by the various configured
-filters and plugins. The exact data collected varies by the DataSource and Extractors configured. The basic ones
-collect Prometheus metrics from the Model Servers in the InferencePool.
+plugins. The exact data collected varies by the DataSource and Extractors configured. The baseline
+provided in GAIE collect Prometheus metrics from the Model Servers in the InferencePool.
 
-The Data Layer is configured via the data section of the overall configuration. It has the following form:
+The Data Layer is configured via the `data` section of the overall configuration. It has the following form:
 
 ```yaml
 data:
   sources:
   - pluginRef: source1
     extractors:
-    - extarctor1
-    - extractor2
+    - pluginRef: extractor1
+    - pluginRef: extractor2
 ```
 
 The data section has one field *sources* which configures the set of DataSources to be used to gather the metrics
@@ -358,7 +358,9 @@ and other data used for scheduling.
 Each entry in the sources list has the following fields:
 
 - *pluginRef* is a reference to the name of the plugin instance to be used.
-- *extractors* specifies the list of the extractor plugin instances, by name, to be used with this DataSource.
+- *extractors* specifies the list of the extractors to be used with this DataSource. Each entry in the extractors
+list has the following field:
+  - *pluginRef* is a reference to the name of the plugin instances to be used.
 
 **Note**: The names of the plugin instances mentioned above, refer to plugin instances defined in the plugins section
 of the configuration.
