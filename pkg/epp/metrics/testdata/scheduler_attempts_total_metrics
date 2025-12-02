@@ -1,0 +1,4 @@
+# HELP inference_extension_scheduler_attempts_total [ALPHA] Total number of scheduling attempts.
+# TYPE inference_extension_scheduler_attempts_total counter
+inference_extension_scheduler_attempts_total{status="failure"} 5
+inference_extension_scheduler_attempts_total{status="success"} 10
