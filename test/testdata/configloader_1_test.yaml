@@ -25,7 +25,7 @@ data:
   sources:
   - pluginRef: test-source
     extractors:
-    - test-extractor
+    - pluginRef: test-extractor
 featureGates:
 - dataLayer
 saturationDetector:
