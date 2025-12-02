@@ -87,35 +87,34 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 		return nil
 	}
 
-	if predictorBasedScheduling {
-		_, prefixExecuted := profileResults[PrefixProfileName]
-		_, routingExecuted := profileResults[LatencyRoutingProfileName]
-		if prefixExecuted && routingExecuted { // both routing profiles have been executed already in previous call
-			return map[string]*framework.SchedulerProfile{}
+	_, prefixExecuted := profileResults[PrefixProfileName]
+	// if prefix profile was not executed yet, first let the scheduler run it
+	if !prefixExecuted {
+		return map[string]*framework.SchedulerProfile{
+			PrefixProfileName: profiles[PrefixProfileName],
 		}
+	}
 
-		// if prefix profile was not executed yet, first let the scheduler run it
-		if !prefixExecuted {
+	if predictorBasedScheduling {
+		_, routingExecuted := profileResults[LatencyRoutingProfileName]
+		// both routing profiles has not been executed yet
+		if !routingExecuted {
 			return map[string]*framework.SchedulerProfile{
-				PrefixProfileName: profiles[PrefixProfileName],
+				LatencyRoutingProfileName: profiles[LatencyRoutingProfileName],
 			}
 		}
-
-		// otherwise, return only the SLO profile to be executed next
-		return map[string]*framework.SchedulerProfile{
-			LatencyRoutingProfileName: profiles[LatencyRoutingProfileName],
+	} else {
+		_, defaultExecuted := profileResults[NoLatencyRoutingProfileName]
+		// predictorBasedScheduling is off, and NoLatencyRoutingProfileName profile has not been executed yet
+		if !defaultExecuted {
+			return map[string]*framework.SchedulerProfile{
+				NoLatencyRoutingProfileName: profiles[NoLatencyRoutingProfileName],
+			}
 		}
 	}
 
-	_, defaultExecuted := profileResults[NoLatencyRoutingProfileName]
-	if defaultExecuted { // predictorBasedScheduling is off, and NoLatencyRoutingProfileName profile has already been executed in a previous call
-		return map[string]*framework.SchedulerProfile{}
-	}
-
-	// If predictor based scheduling is not requested, proceed with only default profile
-	return map[string]*framework.SchedulerProfile{
-		NoLatencyRoutingProfileName: profiles[NoLatencyRoutingProfileName],
-	}
+	// all previous profiles have been executed, nothing more to run
+	return map[string]*framework.SchedulerProfile{}
 }
 
 // ProcessResults handles the outcome of the profile runs after all profiles ran.

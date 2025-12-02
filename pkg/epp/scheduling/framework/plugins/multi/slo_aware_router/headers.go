@@ -52,7 +52,7 @@ func parseBoolHeader(request schedulingtypes.LLMRequest, headerName string) (boo
 	// 1. Get header value from the map
 	headerValue, ok := request.Headers[headerName]
 	if !ok {
-		return false, nil // Header not found, return 0 and false
+		return true, nil // Header not found, return true by default
 	}
 
 	// 2. Parse the header value to a bool
