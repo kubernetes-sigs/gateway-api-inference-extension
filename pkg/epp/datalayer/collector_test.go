@@ -27,31 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 // --- Test Stubs ---
-
-type DummySource struct {
-	callCount int64
-}
-
-const (
-	dummySource = "test-dummy-data-source"
-)
-
-func (d *DummySource) TypedName() plugins.TypedName {
-	return plugins.TypedName{
-		Type: dummySource,
-		Name: dummySource,
-	}
-}
-func (d *DummySource) Extractors() []string           { return []string{} }
-func (d *DummySource) AddExtractor(_ Extractor) error { return nil }
-func (d *DummySource) Collect(ctx context.Context, ep Endpoint) error {
-	atomic.AddInt64(&d.callCount, 1)
-	return nil
-}
 
 func defaultEndpoint() Endpoint {
 	pod := &PodInfo{
@@ -69,7 +47,7 @@ func defaultEndpoint() Endpoint {
 
 var (
 	endpoint = defaultEndpoint()
-	sources  = []DataSource{&DummySource{}}
+	sources  = []DataSource{&FakeDataSource{}}
 )
 
 func TestCollectorCanStartOnlyOnce(t *testing.T) {
@@ -101,7 +79,7 @@ func TestCollectorCanStopOnlyOnce(t *testing.T) {
 }
 
 func TestCollectorCollectsOnTicks(t *testing.T) {
-	source := &DummySource{}
+	source := &FakeDataSource{}
 	c := NewCollector()
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
@@ -119,7 +97,7 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 }
 
 func TestCollectorStopCancelsContext(t *testing.T) {
-	source := &DummySource{}
+	source := &FakeDataSource{}
 	c := NewCollector()
 	ticker := mocks.NewTicker()
 	ctx := context.Background()

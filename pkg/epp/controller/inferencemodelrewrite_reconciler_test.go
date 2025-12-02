@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -167,58 +168,64 @@ func TestInferenceModelRewriteReconciler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			_ = clientgoscheme.AddToScheme(scheme)
-			_ = v1alpha2.Install(scheme)
-			_ = v1.Install(scheme)
-			initObjs := []client.Object{}
-			if test.rewrite != nil {
-				initObjs = append(initObjs, test.rewrite)
-			}
-			for _, r := range test.rewritesInAPIServer {
-				initObjs = append(initObjs, r)
-			}
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(initObjs...).
-				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := datastore.NewDatastore(t.Context(), pmf, 0)
-			for _, r := range test.rewritesInStore {
-				ds.ModelRewriteSet(r)
-			}
-			endpointPool := poolutil.InferencePoolToEndpointPool(poolForRewrite)
-			_ = ds.PoolSet(context.Background(), fakeClient, endpointPool)
-			reconciler := &InferenceModelRewriteReconciler{
-				Reader:    fakeClient,
-				Datastore: ds,
-				PoolGKNN: common.GKNN{
-					NamespacedName: types.NamespacedName{Name: poolForRewrite.Name, Namespace: poolForRewrite.Namespace},
-					GroupKind:      schema.GroupKind{Group: poolForRewrite.GroupVersionKind().Group, Kind: poolForRewrite.GroupVersionKind().Kind},
-				},
-			}
-			if test.incomingReq == nil {
-				test.incomingReq = &types.NamespacedName{Name: test.rewrite.Name, Namespace: test.rewrite.Namespace}
-			}
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				_ = v1alpha2.Install(scheme)
+				_ = v1.Install(scheme)
+				initObjs := []client.Object{}
+				if test.rewrite != nil {
+					initObjs = append(initObjs, test.rewrite)
+				}
+				for _, r := range test.rewritesInAPIServer {
+					initObjs = append(initObjs, r)
+				}
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(initObjs...).
+					Build()
+				ds := datastore.NewDatastore(t.Context(), epf, 0)
+				for _, r := range test.rewritesInStore {
+					ds.ModelRewriteSet(r)
+				}
+				endpointPool := poolutil.InferencePoolToEndpointPool(poolForRewrite)
+				_ = ds.PoolSet(context.Background(), fakeClient, endpointPool)
+				reconciler := &InferenceModelRewriteReconciler{
+					Reader:    fakeClient,
+					Datastore: ds,
+					PoolGKNN: common.GKNN{
+						NamespacedName: types.NamespacedName{Name: poolForRewrite.Name, Namespace: poolForRewrite.Namespace},
+						GroupKind:      schema.GroupKind{Group: poolForRewrite.GroupVersionKind().Group, Kind: poolForRewrite.GroupVersionKind().Kind},
+					},
+				}
+				if test.incomingReq == nil {
+					test.incomingReq = &types.NamespacedName{Name: test.rewrite.Name, Namespace: test.rewrite.Namespace}
+				}
 
-			result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: *test.incomingReq})
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+				result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: *test.incomingReq})
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
 
-			if diff := cmp.Diff(result, test.wantResult); diff != "" {
-				t.Errorf("Unexpected result diff (+got/-want): %s", diff)
-			}
+				if diff := cmp.Diff(result, test.wantResult); diff != "" {
+					t.Errorf("Unexpected result diff (+got/-want): %s", diff)
+				}
 
-			if len(test.wantRewrites) != len(ds.ModelRewriteGetAll()) {
-				t.Errorf("Unexpected number of rewrites; want: %d, got:%d", len(test.wantRewrites), len(ds.ModelRewriteGetAll()))
-			}
+				if len(test.wantRewrites) != len(ds.ModelRewriteGetAll()) {
+					t.Errorf("Unexpected number of rewrites; want: %d, got:%d", len(test.wantRewrites), len(ds.ModelRewriteGetAll()))
+				}
 
-			if diff := diffStoreRewrites(ds, test.wantRewrites); diff != "" {
-				t.Errorf("Unexpected diff (+got/-want): %s", diff)
-			}
-		})
+				if diff := diffStoreRewrites(ds, test.wantRewrites); diff != "" {
+					t.Errorf("Unexpected diff (+got/-want): %s", diff)
+				}
+			})
+		}
 	}
 }
 

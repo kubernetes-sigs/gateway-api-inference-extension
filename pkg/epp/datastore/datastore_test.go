@@ -78,35 +78,43 @@ func TestPool(t *testing.T) {
 			wantSynced: false,
 		},
 	}
+
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Set up the scheme.
-			scheme := runtime.NewScheme()
-			_ = clientgoscheme.AddToScheme(scheme)
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(context.Background(), pmf, 0)
-			_ = ds.PoolSet(context.Background(), fakeClient, pooltuil.InferencePoolToEndpointPool(tt.inferencePool))
-			gotPool, gotErr := ds.PoolGet()
-			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
-			}
-			if diff := cmp.Diff(pooltuil.InferencePoolToEndpointPool(tt.wantPool), gotPool); diff != "" {
-				t.Errorf("Unexpected pool diff (+got/-want): %s", diff)
-			}
-			gotSynced := ds.PoolHasSynced()
-			if diff := cmp.Diff(tt.wantSynced, gotSynced); diff != "" {
-				t.Errorf("Unexpected synced diff (+got/-want): %s", diff)
-			}
-			if tt.labels != nil {
-				gotLabelsMatch := ds.PoolLabelsMatch(tt.labels)
-				if diff := cmp.Diff(tt.wantLabelsMatch, gotLabelsMatch); diff != "" {
-					t.Errorf("Unexpected labels match diff (+got/-want): %s", diff)
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(tt.name, func(t *testing.T) {
+				// Set up the scheme.
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					Build()
+
+				ds := NewDatastore(context.Background(), epf, 0)
+				_ = ds.PoolSet(context.Background(), fakeClient, pooltuil.InferencePoolToEndpointPool(tt.inferencePool))
+				gotPool, gotErr := ds.PoolGet()
+				if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+					t.Errorf("Unexpected error diff (+got/-want): %s", diff)
 				}
-			}
-		})
+				if diff := cmp.Diff(pooltuil.InferencePoolToEndpointPool(tt.wantPool), gotPool); diff != "" {
+					t.Errorf("Unexpected pool diff (+got/-want): %s", diff)
+				}
+				gotSynced := ds.PoolHasSynced()
+				if diff := cmp.Diff(tt.wantSynced, gotSynced); diff != "" {
+					t.Errorf("Unexpected synced diff (+got/-want): %s", diff)
+				}
+				if tt.labels != nil {
+					gotLabelsMatch := ds.PoolLabelsMatch(tt.labels)
+					if diff := cmp.Diff(tt.wantLabelsMatch, gotLabelsMatch); diff != "" {
+						t.Errorf("Unexpected labels match diff (+got/-want): %s", diff)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -192,24 +200,30 @@ func TestObjective(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
-			for _, m := range test.existingModels {
-				ds.ObjectiveSet(m)
-			}
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				ds := NewDatastore(t.Context(), epf, 0)
+				for _, m := range test.existingModels {
+					ds.ObjectiveSet(m)
+				}
 
-			gotOpResult := test.op(ds)
-			if gotOpResult != test.wantOpResult {
-				t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
-			}
+				gotOpResult := test.op(ds)
+				if gotOpResult != test.wantOpResult {
+					t.Errorf("Unexpected operation result, want: %v, got: %v", test.wantOpResult, gotOpResult)
+				}
 
-			if diff := cmp.Diff(test.wantModels, ds.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
-				return a.Name < b.Name
-			})); diff != "" {
-				t.Errorf("Unexpected models diff: %s", diff)
-			}
-		})
+				if diff := cmp.Diff(test.wantModels, ds.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
+					return a.Name < b.Name
+				})); diff != "" {
+					t.Errorf("Unexpected models diff: %s", diff)
+				}
+			})
+		}
 	}
 }
 
@@ -266,42 +280,38 @@ var (
 func TestMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
-		pmc       backendmetrics.PodMetricsClient
+		metrics   map[types.NamespacedName]*backendmetrics.MetricsState
+		err       map[types.NamespacedName]error
 		storePods []*corev1.Pod
 		want      []*backendmetrics.MetricsState
 		predict   func(backendmetrics.PodMetrics) bool
 	}{
 		{
 			name: "Probing metrics success",
-			pmc: &backendmetrics.FakePodMetricsClient{
-				Res: map[types.NamespacedName]*backendmetrics.MetricsState{
-					pod1NamespacedName: pod1Metrics,
-					pod2NamespacedName: pod2Metrics,
-				},
+			metrics: map[types.NamespacedName]*backendmetrics.MetricsState{
+				pod1NamespacedName: pod1Metrics,
+				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
 			want:      []*backendmetrics.MetricsState{pod1Metrics, pod2Metrics},
 		},
 		{
 			name: "Only pods in are probed",
-			pmc: &backendmetrics.FakePodMetricsClient{
-				Res: map[types.NamespacedName]*backendmetrics.MetricsState{
-					pod1NamespacedName: pod1Metrics,
-					pod2NamespacedName: pod2Metrics,
-				},
+			metrics: map[types.NamespacedName]*backendmetrics.MetricsState{
+				pod1NamespacedName: pod1Metrics,
+				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1},
 			want:      []*backendmetrics.MetricsState{pod1Metrics},
 		},
 		{
 			name: "Probing metrics error",
-			pmc: &backendmetrics.FakePodMetricsClient{
-				Err: map[types.NamespacedName]error{
-					pod2NamespacedName: errors.New("injected error"),
-				},
-				Res: map[types.NamespacedName]*backendmetrics.MetricsState{
-					pod1NamespacedName: pod1Metrics,
-				},
+			err: map[types.NamespacedName]error{
+				pod2NamespacedName: errors.New("injected error"),
+			},
+			metrics: map[types.NamespacedName]*backendmetrics.MetricsState{
+				pod1NamespacedName: pod1Metrics,
+				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
 			want: []*backendmetrics.MetricsState{pod1Metrics,
@@ -318,37 +328,43 @@ func TestMetrics(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			// Set up the scheme.
-			scheme := runtime.NewScheme()
-			_ = clientgoscheme.AddToScheme(scheme)
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(test.pmc, time.Millisecond)
-			ds := NewDatastore(ctx, pmf, 0)
-			_ = ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool))
-			for _, pod := range test.storePods {
-				ds.PodUpdateOrAddIfNotExist(pod)
-			}
-			time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
-			if test.predict == nil {
-				test.predict = backendmetrics.AllPodsPredicate
-			}
-			assert.EventuallyWithT(t, func(t *assert.CollectT) {
-				got := ds.PodList(test.predict)
-				metrics := []*backendmetrics.MetricsState{}
-				for _, one := range got {
-					metrics = append(metrics, one.GetMetrics())
+		period := time.Millisecond
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: test.metrics, Err: test.err}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{Metrics: test.metrics, Errors: test.err}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				// Set up the scheme.
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					Build()
+				ds := NewDatastore(ctx, epf, 0)
+				_ = ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool))
+				for _, pod := range test.storePods {
+					ds.PodUpdateOrAddIfNotExist(pod)
 				}
-				diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(backendmetrics.MetricsState{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *backendmetrics.MetricsState) bool {
-					return a.String() < b.String()
-				}))
-				assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
-			}, 5*time.Second, time.Millisecond)
-		})
+				time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
+				if test.predict == nil {
+					test.predict = backendmetrics.AllPodsPredicate
+				}
+				assert.EventuallyWithT(t, func(t *assert.CollectT) {
+					got := ds.PodList(test.predict)
+					metrics := []*backendmetrics.MetricsState{}
+					for _, one := range got {
+						metrics = append(metrics, one.GetMetrics())
+					}
+					diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(backendmetrics.MetricsState{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *backendmetrics.MetricsState) bool {
+						return a.String() < b.String()
+					}))
+					assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
+				}, 5*time.Second, time.Millisecond)
+			})
+		}
 	}
 }
 
@@ -393,28 +409,34 @@ func TestPods(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
-			fakeClient := fake.NewFakeClient()
-			if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool)); err != nil {
-				t.Error(err)
-			}
-			for _, pod := range test.existingPods {
-				ds.PodUpdateOrAddIfNotExist(pod)
-			}
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				ctx := context.Background()
+				ds := NewDatastore(t.Context(), epf, 0)
+				fakeClient := fake.NewFakeClient()
+				if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool)); err != nil {
+					t.Error(err)
+				}
+				for _, pod := range test.existingPods {
+					ds.PodUpdateOrAddIfNotExist(pod)
+				}
 
-			test.op(ctx, ds)
-			var gotPods []*corev1.Pod
-			for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
-				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
-				gotPods = append(gotPods, pod)
-			}
-			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
-				t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
-			}
-		})
+				test.op(ctx, ds)
+				var gotPods []*corev1.Pod
+				for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
+					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
+					gotPods = append(gotPods, pod)
+				}
+				if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
+					t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
+				}
+			})
+		}
 	}
 }
 
@@ -577,26 +599,32 @@ func TestPodInfo(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := NewDatastore(t.Context(), pmf, 0)
-			fakeClient := fake.NewFakeClient()
-			if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(test.pool)); err != nil {
-				t.Error(err)
-			}
-			for _, pod := range test.existingPods {
-				ds.PodUpdateOrAddIfNotExist(pod)
-			}
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				ctx := context.Background()
+				ds := NewDatastore(t.Context(), epf, 0)
+				fakeClient := fake.NewFakeClient()
+				if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(test.pool)); err != nil {
+					t.Error(err)
+				}
+				for _, pod := range test.existingPods {
+					ds.PodUpdateOrAddIfNotExist(pod)
+				}
 
-			test.op(ctx, ds)
-			var gotPodInfos []*datalayer.PodInfo
-			for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
-				gotPodInfos = append(gotPodInfos, pm.GetPod())
-			}
-			if diff := cmp.Diff(test.wantPodInfos, gotPodInfos, cmpopts.SortSlices(func(a, b *datalayer.PodInfo) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
-				t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
-			}
-		})
+				test.op(ctx, ds)
+				var gotPodInfos []*datalayer.PodInfo
+				for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
+					gotPodInfos = append(gotPodInfos, pm.GetPod())
+				}
+				if diff := cmp.Diff(test.wantPodInfos, gotPodInfos, cmpopts.SortSlices(func(a, b *datalayer.PodInfo) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
+					t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
+				}
+			})
+		}
 	}
 }
