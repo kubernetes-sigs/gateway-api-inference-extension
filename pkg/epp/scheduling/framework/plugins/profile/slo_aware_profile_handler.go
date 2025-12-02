@@ -107,6 +107,10 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 		}
 	}
 
+	if len(profileResults) == 1 { // we are not using predictor scheduling and all profiles have been executed already in previous call
+		return map[string]*framework.SchedulerProfile{}
+	}
+
 	// If predictor based scheduling is not requested, proceed with only default profile
 	return map[string]*framework.SchedulerProfile{
 		NoLatencyRoutingProfileName: profiles[NoLatencyRoutingProfileName],
