@@ -252,7 +252,7 @@ func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, rawFeatureGa
 				Extractors: []datalayer.Extractor{},
 			}
 			for _, extractor := range source.Extractors {
-				if extractorPlugin, ok := handle.Plugin(extractor).(datalayer.Extractor); ok {
+				if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(datalayer.Extractor); ok {
 					sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
 				} else {
 					return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)

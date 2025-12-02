@@ -89,7 +89,7 @@ data:
   sources:
   - pluginRef: testSource
     extractors:
-    - testExtractor
+    - pluginRef: testExtractor
 featureGates:
 - dataLayer
 `
