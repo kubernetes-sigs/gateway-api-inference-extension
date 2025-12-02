@@ -38,7 +38,7 @@ type FakePodMetrics struct {
 }
 
 func (fpm *FakePodMetrics) String() string {
-	return fmt.Sprintf("Pod: %v; Metrics: %v", fpm.GetMetadata(), fpm.GetMetrics())
+	return fmt.Sprintf("Metadata: %v; Metrics: %v", fpm.GetMetadata(), fpm.GetMetrics())
 }
 
 func (fpm *FakePodMetrics) GetMetadata() *backend.Pod {
@@ -49,8 +49,8 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 	return fpm.Metrics
 }
 
-func (fpm *FakePodMetrics) UpdateMetadata(pod *datalayer.EndpointMetadata) {
-	fpm.Pod = pod
+func (fpm *FakePodMetrics) UpdateMetadata(metadata *datalayer.EndpointMetadata) {
+	fpm.Pod = metadata
 }
 func (fpm *FakePodMetrics) GetAttributes() *datalayer.Attributes {
 	return fpm.Attributes

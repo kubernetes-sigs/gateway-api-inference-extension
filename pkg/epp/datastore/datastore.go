@@ -344,7 +344,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(datalayer.Endpoint)
 		if exist := activePods[ep.GetMetadata().PodName]; !exist {
-			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", ep.GetMetadata())
+			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", ep.GetMetadata().PodName)
 			ds.PodDelete(ep.GetMetadata().PodName)
 		}
 		return true

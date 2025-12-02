@@ -68,7 +68,7 @@ func NewEndpoint(meta *EndpointMetadata, metrics *Metrics) *ModelServer {
 // String returns a representation of the ModelServer. For brevity, only names of
 // extended attributes are returned and not their values.
 func (srv *ModelServer) String() string {
-	return fmt.Sprintf("Pod: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.Keys())
+	return fmt.Sprintf("Metadata: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.Keys())
 }
 
 func (srv *ModelServer) GetMetadata() *EndpointMetadata {

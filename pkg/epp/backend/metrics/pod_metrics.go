@@ -52,7 +52,7 @@ type PodMetricsClient interface {
 }
 
 func (pm *podMetrics) String() string {
-	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetMetadata(), pm.GetMetrics())
+	return fmt.Sprintf("Metadata: %v; Metrics: %v", pm.GetMetadata(), pm.GetMetrics())
 }
 
 func (pm *podMetrics) GetMetadata() *datalayer.EndpointMetadata {
@@ -72,7 +72,7 @@ func (pm *podMetrics) UpdateMetadata(pod *datalayer.EndpointMetadata) {
 func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 	pm.startOnce.Do(func() {
 		go func() {
-			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "pod", pm.GetMetadata())
+			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "metadata", pm.GetMetadata())
 			ticker := time.NewTicker(pm.interval)
 			defer ticker.Stop()
 			for {
@@ -83,7 +83,7 @@ func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 					return
 				case <-ticker.C: // refresh metrics periodically
 					if err := pm.refreshMetrics(); err != nil {
-						pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "pod", pm.GetMetadata())
+						pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "metadata", pm.GetMetadata())
 					}
 				}
 			}
@@ -114,7 +114,7 @@ func (pm *podMetrics) refreshMetrics() error {
 }
 
 func (pm *podMetrics) stopRefreshLoop() {
-	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "pod", pm.GetMetadata())
+	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "metadata", pm.GetMetadata())
 	pm.stopOnce.Do(func() {
 		close(pm.done)
 	})
