@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -127,7 +126,9 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64, predictionBase
 	if tpotSLO > 0 {
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
-	headers["x-prediction-based-scheduling"] = strconv.FormatBool(predictionBased)
+	if !predictionBased {
+		headers["x-prediction-based-scheduling-off"] = "true"
+	}
 
 	return &schedulingtypes.LLMRequest{
 		Headers: headers,

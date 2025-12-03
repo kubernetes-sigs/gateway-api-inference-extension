@@ -21,14 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
-
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -38,7 +34,7 @@ const (
 	LatencyRoutingProfileName   = "predicted-latency-routing"
 
 	// Boolean header string for whether to use predictor based scheduling
-	PreictionBasedSchedulingHeaderKey = "x-prediction-based-scheduling"
+	PreictionBasedSchedulingHeaderKey = "x-prediction-based-scheduling-off"
 )
 
 // compile-time type assertion
@@ -79,13 +75,7 @@ func (h *SLOAwareProfileHandler) WithName(name string) *SLOAwareProfileHandler {
 func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
 	profileResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
 
-	logger := log.FromContext(ctx)
-
-	predictorBasedScheduling, err := parseBoolHeader(*request, PreictionBasedSchedulingHeaderKey)
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(err, "error parsing predictorBasedScheduling from header failed to choose scheduling profile: x-prediction-based-scheduling must be a bool")
-		return nil
-	}
+	predictorBasedScheduling := !isHeaderPresent(*request, PreictionBasedSchedulingHeaderKey)
 
 	_, prefixExecuted := profileResults[PrefixProfileName]
 	// if prefix profile was not executed yet, first let the scheduler run it
@@ -123,10 +113,7 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 // When a profile run fails, its result in the profileResults map is nil.
 func (h *SLOAwareProfileHandler) ProcessResults(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
 
-	predictorBasedScheduling, err := parseBoolHeader(*request, PreictionBasedSchedulingHeaderKey)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing predictorBasedScheduling from header failed to choose scheduling profile: x-prediction-based-scheduling must be a bool: %v", err)
-	}
+	predictorBasedScheduling := !isHeaderPresent(*request, PreictionBasedSchedulingHeaderKey)
 
 	if predictorBasedScheduling { // TODO grab header directly from request.Headers instead of request field
 		if len(profileResults) < 2 {
@@ -154,21 +141,9 @@ func (h *SLOAwareProfileHandler) ProcessResults(ctx context.Context, _ *types.Cy
 	}, nil
 }
 
-// parseFloatHeader retrieves a header by name, parses it as a bool,
-// and returns the value or an error if the header is missing or invalid.
-func parseBoolHeader(request types.LLMRequest, headerName string) (bool, error) {
+// isHeaderPresent checks if a header key exists in the request headers map.
+func isHeaderPresent(request types.LLMRequest, headerName string) bool {
 	// 1. Get header value from the map
-	headerValue, ok := request.Headers[headerName]
-	if !ok {
-		return false, nil // Header not found, return 0 and false
-	}
-
-	// 2. Parse the header value to a bool
-	parsedBool, err := strconv.ParseBool(headerValue)
-	if err != nil {
-		return false, fmt.Errorf("must be a bool: %v", headerName)
-	}
-
-	// 3. Return the successfully parsed value
-	return parsedBool, nil
+	_, ok := request.Headers[headerName]
+	return ok
 }
