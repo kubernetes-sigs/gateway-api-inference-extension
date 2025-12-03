@@ -1,0 +1,129 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /app
+plugins: anyio-4.12.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 29 items / 3 deselected / 26 selected
+
+test/test_dual_server_client.py::test_prediction_server_healthz Waiting for prediction server...
+Waiting for training server...
+PASSED
+test/test_dual_server_client.py::test_training_server_healthz PASSED
+test/test_dual_server_client.py::test_prediction_server_readyz PASSED
+test/test_dual_server_client.py::test_training_server_readyz PASSED
+test/test_dual_server_client.py::test_prediction_server_status Prediction server using model type: bayesian_ridge
+Models exist: {'ttft_model': True, 'tpot_model': True, 'ttft_scaler': True, 'tpot_scaler': True}
+Quantile: 0.9
+Models ready: True
+PASSED
+test/test_dual_server_client.py::test_training_server_model_info Training server using model type: bayesian_ridge
+PASSED
+test/test_dual_server_client.py::test_training_server_models_list Model ttft: exists=True, size=1399 bytes
+Model tpot: exists=True, size=1295 bytes
+Model ttft_scaler: exists=True, size=1143 bytes
+Model tpot_scaler: exists=True, size=1087 bytes
+PASSED
+test/test_dual_server_client.py::test_model_download_from_training_server Successfully downloaded ttft model (1399 bytes)
+Successfully downloaded tpot model (1295 bytes)
+PASSED
+test/test_dual_server_client.py::test_treelite_models_on_training_server SKIPPED
+test/test_dual_server_client.py::test_add_training_data_to_training_server Successfully sent training data to training server
+  Cleaned up test data: Successfully flushed: 45 TTFT and 45 TPOT training samples, 5 TTFT and 5 TPOT test samples, all metric scores
+PASSED
+test/test_dual_server_client.py::test_prediction_server_model_sync Flushing old training data...
+  ✓ Training data flushed: Successfully flushed: 0 TTFT and 0 TPOT training samples, 0 TTFT and 0 TPOT test samples, all metric scores
+Adding 150 training samples...
+✓ Added 150 training samples
+Waiting for bundle with ≥108 TTFT and ≥108 TPOT samples (timeout: 32s)...
+  Waiting... current: TTFT=0, TPOT=0 (need: ≥108, ≥108)
+  ✓ Bundle found after 2s: TTFT=134, TPOT=134 samples
+✓ Prediction server models are trained! (TTFT: 134, TPOT: 134 samples)
+  ✓ Training data flushed: Successfully flushed: 134 TTFT and 134 TPOT training samples, 16 TTFT and 16 TPOT test samples, all metric scores
+PASSED
+test/test_dual_server_client.py::test_prediction_endpoint_response_format ⚠️  Prediction using DEFAULT models: TTFT=411.40ms, TPOT=46.01ms
+  Only 0 TTFT samples, 0 TPOT samples (default models are synthetic)
+  Model type: bayesian_ridge
+PASSED
+test/test_dual_server_client.py::test_bulk_prediction_strict Testing bulk prediction strict endpoint...
+✓ Bulk prediction strict endpoint test passed
+PASSED
+test/test_dual_server_client.py::test_bulk_prediction_with_validation_errors Testing bulk prediction validation error handling...
+✓ Bulk prediction correctly failed when any request had validation errors
+PASSED
+test/test_dual_server_client.py::test_bulk_prediction_all_valid Testing bulk prediction with all valid requests...
+✓ Bulk prediction succeeded with all valid requests
+PASSED
+test/test_dual_server_client.py::test_prediction_missing_prefix_cache_score ✓ Prediction correctly failed when prefix_cache_score was missing
+PASSED
+test/test_dual_server_client.py::test_training_server_metrics Training server metrics endpoint working correctly
+✓ Prefix cache score feature found in metrics
+PASSED
+test/test_dual_server_client.py::test_model_consistency_between_servers Model type consistent across servers: bayesian_ridge
+PASSED
+test/test_dual_server_client.py::test_model_specific_endpoints_on_training_server SKIPPED
+test/test_dual_server_client.py::test_dual_server_quantile_regression_learns_distribution SKIPPED
+test/test_dual_server_client.py::test_end_to_end_workflow Testing end-to-end workflow...
+Step 1: Sending training data to training server...
+Step 2: Waiting for training...
+Step 3: Syncing models to prediction server...
+Step 4: Making predictions...
+  Prediction 1: TTFT=717.27ms, TPOT=242.24ms (prefix_cache=0.55)
+  Prediction 2: TTFT=1554.53ms, TPOT=408.09ms (prefix_cache=0.08)
+  Prediction 3: TTFT=932.93ms, TPOT=304.46ms (prefix_cache=0.50)
+  Prediction 4: TTFT=1444.60ms, TPOT=383.78ms (prefix_cache=0.42)
+  Prediction 5: TTFT=1654.86ms, TPOT=432.57ms (prefix_cache=0.08)
+✓ End-to-end workflow completed successfully!
+  ✓ Training data flushed: Successfully flushed: 18 TTFT and 18 TPOT training samples, 2 TTFT and 2 TPOT test samples, all metric scores
+PASSED
+test/test_dual_server_client.py::test_server_configuration Testing server configuration...
+Prediction server: HTTP-based Quantile Latency Predictor is running
+  Model type: bayesian_ridge
+  Is ready: True
+  Sync interval: 10s
+  Training server URL: http://training-service:8000
+Training server: Latency Predictor is running.
+  Model type: bayesian_ridge
+PASSED
+test/test_dual_server_client.py::test_training_server_flush_api Testing training server flush API...
+Step 1: Checking initial data status...
+  Initial training samples: TTFT=0, TPOT=0
+  Initial test samples: TTFT=0, TPOT=0
+Step 2: Adding training data...
+  Added 100 training samples
+Step 3: Verifying data was added...
+  After adding - Training: 178, Test: 22, Total: 200
+Step 4: Testing flush with only training data...
+  Flushed 89 TTFT training samples
+  Flushed 89 TPOT training samples
+  Test samples flushed: 0 TTFT, 0 TPOT (should be 0)
+  After training flush - Training: 0, Test: 22
+Step 5: Adding more training data...
+Step 6: Testing flush everything...
+  Complete flush message: Successfully flushed: 43 TTFT and 43 TPOT training samples, 18 TTFT and 18 TPOT test samples, all metric scores
+  After complete flush - Training: 0, Test: 0
+Step 7: Testing default flush (no body)...
+  Default flush result: Successfully flushed: 18 TTFT and 18 TPOT training samples, 2 TTFT and 2 TPOT test samples, all metric scores
+Step 8: Testing flush with only test data...
+  Test data flush: 7 TTFT, 7 TPOT
+  After test flush - Training: 86, Test: 0
+Step 9: Testing bucket distribution in status...
+  Bucket distribution available: 0 buckets with data
+✓ Flush API tests passed!
+PASSED
+test/test_dual_server_client.py::test_training_server_flush_error_handling Testing flush API error handling...
+✓ Invalid JSON handled correctly
+✓ Flush error handling tests passed!
+PASSED
+test/test_dual_server_client.py::test_native_quantile_mode 
+==================================================
+Testing Native Quantile Mode (USE_TREELITE=false)
+==================================================
+SKIPPED (...)
+test/test_dual_server_client.py::test_treelite_conformal_mode 
+==================================================
+Testing TreeLite + Conformal Mode (USE_TREELITE=true)
+==================================================
+SKIPPED
+
+================= 21 passed, 5 skipped, 3 deselected in 25.47s =================
