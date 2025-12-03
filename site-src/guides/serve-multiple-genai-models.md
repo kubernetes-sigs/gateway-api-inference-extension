@@ -358,7 +358,7 @@ kubectl get httproute llm-deepseek-route -o yaml
                       ]
                    }'
           ```
-      3. Send a few requests to the LoRA of the Llama model as follows:
+      1. Send a few requests to the LoRA of the Llama model as follows:
 
           ```bash
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
@@ -380,7 +380,7 @@ kubectl get httproute llm-deepseek-route -o yaml
                 }'
           ```
 
-      4. Send a few requests to one LoRA of the Deepseek model as follows:
+      1. Send a few requests to one LoRA of the Deepseek model as follows:
 
           ```bash
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
@@ -402,7 +402,7 @@ kubectl get httproute llm-deepseek-route -o yaml
                 }'
           ```
 
-      5. Send a few requests to another LoRA of the Deepseek model as follows:
+      1. Send a few requests to another LoRA of the Deepseek model as follows:
 
           ```bash
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
