@@ -40,6 +40,7 @@ import (
 
 var (
 	errPoolNotSynced = errors.New("InferencePool is not initialized in data store")
+	AllPodsPredicate = func(_ datalayer.Endpoint) bool { return true }
 )
 
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)

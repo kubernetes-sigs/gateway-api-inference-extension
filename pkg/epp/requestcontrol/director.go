@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -240,13 +241,13 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 
 	subsetMap, found := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any)
 	if !found {
-		return d.datastore.PodList(backendmetrics.AllPodsPredicate)
+		return d.datastore.PodList(datastore.AllPodsPredicate)
 	}
 
 	// Check if endpoint key is present in the subset map and ensure there is at least one value
 	endpointSubsetList, found := subsetMap[metadata.SubsetFilterKey].([]any)
 	if !found {
-		return d.datastore.PodList(backendmetrics.AllPodsPredicate)
+		return d.datastore.PodList(datastore.AllPodsPredicate)
 	} else if len(endpointSubsetList) == 0 {
 		loggerTrace.Info("found empty subset filter in request metadata, filtering all pods")
 		return []backendmetrics.PodMetrics{}
@@ -362,7 +363,7 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 }
 
 func (d *Director) GetRandomPod() *backend.Pod {
-	pods := d.datastore.PodList(backendmetrics.AllPodsPredicate)
+	pods := d.datastore.PodList(datastore.AllPodsPredicate)
 	if len(pods) == 0 {
 		return nil
 	}

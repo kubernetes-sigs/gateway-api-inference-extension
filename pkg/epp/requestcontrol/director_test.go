@@ -661,7 +661,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 			director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, config)
 			if test.name == "successful request with model rewrite" {
-				director.datastore = &mockDatastore{pods: ds.PodList(backendmetrics.AllPodsPredicate), rewrites: []*v1alpha2.InferenceModelRewrite{rewrite}}
+				director.datastore = &mockDatastore{pods: ds.PodList(datastore.AllPodsPredicate), rewrites: []*v1alpha2.InferenceModelRewrite{rewrite}}
 			}
 
 			reqCtx := &handlers.RequestContext{

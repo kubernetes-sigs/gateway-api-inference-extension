@@ -479,7 +479,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 // Return a function that can be used in the EPP Handle to list pod names.
 func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 	return func() []types.NamespacedName {
-		pods := ds.PodList(backendmetrics.AllPodsPredicate)
+		pods := ds.PodList(datastore.AllPodsPredicate)
 		names := make([]types.NamespacedName, 0, len(pods))
 
 		for _, p := range pods {

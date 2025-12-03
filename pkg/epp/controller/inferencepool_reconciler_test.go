@@ -182,8 +182,8 @@ type diffStoreParams struct {
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
-func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
-	gotPool, _ := datastore.PoolGet()
+func diffStore(store datastore.Datastore, params diffStoreParams) string {
+	gotPool, _ := store.PoolGet()
 	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
 		return "inferencePool:" + diff
 	}
@@ -193,7 +193,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
+	for _, pm := range store.PodList(datastore.AllPodsPredicate) {
 		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
@@ -205,7 +205,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 		params.wantObjectives = []*v1alpha2.InferenceObjective{}
 	}
 
-	if diff := cmp.Diff(params.wantObjectives, datastore.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
+	if diff := cmp.Diff(params.wantObjectives, store.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
 		return a.Name < b.Name
 	})); diff != "" {
 		return "models:" + diff
@@ -328,8 +328,8 @@ type xDiffStoreParams struct {
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
-func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
-	gotPool, _ := datastore.PoolGet()
+func xDiffStore(store datastore.Datastore, params xDiffStoreParams) string {
+	gotPool, _ := store.PoolGet()
 	if gotPool == nil && params.wantPool == nil {
 		return ""
 	}
@@ -343,7 +343,7 @@ func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
+	for _, pm := range store.PodList(datastore.AllPodsPredicate) {
 		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
@@ -355,7 +355,7 @@ func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
 		params.wantObjectives = []*v1alpha2.InferenceObjective{}
 	}
 
-	if diff := cmp.Diff(params.wantObjectives, datastore.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
+	if diff := cmp.Diff(params.wantObjectives, store.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
 		return a.Name < b.Name
 	})); diff != "" {
 		return "models:" + diff
