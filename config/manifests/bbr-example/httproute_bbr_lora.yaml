@@ -20,6 +20,13 @@ spec:
         - type: Exact
           name: X-Gateway-Model-Name 
           value: 'meta-llama/Llama-3.1-8B-Instruct'
+    - path:
+        type: PathPrefix
+        value: /
+      headers:
+        - type: Exact
+          name: X-Gateway-Model-Name
+          value: 'food-review-1'  
     timeouts:
       request: 300s
 ---   
@@ -62,27 +69,3 @@ spec:
     timeouts:
       request: 300s
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: vllm-llama3-8b-instruct-lora-food-review-1 #give this HTTPRoute any name that helps you to group and track the routes
-spec:
-  parentRefs:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    name: inference-gateway
-  rules:
-  - backendRefs:
-    - group: inference.networking.k8s.io
-      kind: InferencePool
-      name: vllm-llama3-8b-instruct
-    matches:
-    - path:
-        type: PathPrefix
-        value: /
-      headers:
-        - type: Exact
-          name: X-Gateway-Model-Name 
-          value: 'food-review-1'   #this is the name of LoRA as defined in vLLM deployment
-    timeouts:
-      request: 300s
