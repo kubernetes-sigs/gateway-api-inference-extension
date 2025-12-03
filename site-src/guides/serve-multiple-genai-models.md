@@ -176,6 +176,27 @@ Select a tab to follow the provider-specific instructions.
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
+=== "Kgateway"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-deepseek-r1 \
+      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version $IGW_CHART_VERSION \
+      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      ```
+
+=== "NGINX Gateway Fabric"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-deepseek-r1 \
+      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --version $IGW_CHART_VERSION \
+      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      ```
 
 After the installation, verify that you have two `InferencePools` and two EPP pods, one per base model type, running without errors
 
