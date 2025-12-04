@@ -199,7 +199,7 @@ func (sd *SaturationDetector) String() string {
 	return "{" + result + "}"
 }
 
-// DataLayerConfig contains the configuration of the V2 DataLayer feature
+// DataLayerConfig contains the configuration of the DataLayer feature
 type DataLayerConfig struct {
 	// +required
 	// +kubebuilder:validation:Required
@@ -211,7 +211,7 @@ func (dlc DataLayerConfig) String() string {
 	return fmt.Sprintf("{Sources: %v}", dlc.Sources)
 }
 
-// DataLayerSource contains the configuration of a DataSource of the V2 DataLayer feature
+// DataLayerSource contains the configuration of a DataSource of the DataLayer feature
 type DataLayerSource struct {
 	// +required
 	// +kubebuilder:validation:Required
@@ -232,7 +232,7 @@ func (dls DataLayerSource) String() string {
 	return fmt.Sprintf("{PluginRef: %s, Extractors: %v}", dls.PluginRef, dls.Extractors)
 }
 
-// DataLayerExtractor contains the configuration of an Extractor of the V2 DataLayer feature
+// DataLayerExtractor contains the configuration of an Extractor of the DataLayer feature
 type DataLayerExtractor struct {
 	// +required
 	// +kubebuilder:validation:Required
