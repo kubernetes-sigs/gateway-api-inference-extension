@@ -182,8 +182,14 @@ spec:
         volumeMounts:
         - name: plugins-config-volume
           mountPath: "/config"
+        {{- if .Values.inferenceExtension.volumeMounts }}
+        {{- tpl (toYaml .Values.inferenceExtension.volumeMounts) $ | nindent 8 }}
+        {{- end }}
       {{- include "gateway-api-inference-extension.latencyPredictor.containers" . | nindent 6 }}
       volumes:
+      {{- if .Values.inferenceExtension.volumes }}
+      {{- tpl (toYaml .Values.inferenceExtension.volumes) $ | nindent 6 }}
+      {{- end }}
       {{- if .Values.inferenceExtension.sidecar.volumes }}
       {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 6 }}
       {{- end }}
