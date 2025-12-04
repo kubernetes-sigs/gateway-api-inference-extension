@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
 // PodLocator defines the contract for a component that resolves the set of candidate pods for a request based on its
@@ -29,7 +30,7 @@ import (
 // enabling support for "Scale-from-Zero" scenarios where pods may not exist when the request is first enqueued.
 type PodLocator interface {
 	// Locate returns a list of pod metrics that match the criteria defined in the request metadata.
-	Locate(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics
+	Locate(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics
 }
 
 // SaturationDetector defines the contract for a component that provides real-time load signals to the
