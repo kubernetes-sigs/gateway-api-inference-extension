@@ -167,7 +167,7 @@ skipped_dirs = [
     '_output',
     'pkg/epp/backend/metrics/pod_metrics_test.go',
     'pkg/epp/saturationdetector/config.go',
-    'pkg/epp/scheduling/framework/plugins/multi/prefix/indexer_test.go',
+    'pkg/epp/scheduling/framework/plugins/prefixcachescorer/indexer_test.go',
     'pkg/epp/util/env/env_test.go',
     'staging/src/k8s.io/kubectl/pkg/generated/bindata.go',
     'test/e2e/generated/bindata.go',

@@ -22,8 +22,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/maxscorepicker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/pickershared"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/singleprofilehandler"
 )
 
 const (
@@ -115,10 +116,10 @@ func setDefaultsPhaseTwo(cfg *configapi.EndpointPickerConfig, handle plugins.Han
 			}
 		}
 		if !profileHandlerFound {
-			handle.AddPlugin(profile.SingleProfileHandlerType, profile.NewSingleProfileHandler())
+			handle.AddPlugin(singleprofilehandler.SingleProfileHandlerType, singleprofilehandler.NewSingleProfileHandler())
 			cfg.Plugins = append(cfg.Plugins,
-				configapi.PluginSpec{Name: profile.SingleProfileHandlerType,
-					Type: profile.SingleProfileHandlerType,
+				configapi.PluginSpec{Name: singleprofilehandler.SingleProfileHandlerType,
+					Type: singleprofilehandler.SingleProfileHandlerType,
 				})
 		}
 	}
@@ -131,8 +132,8 @@ func setDefaultsPhaseTwo(cfg *configapi.EndpointPickerConfig, handle plugins.Han
 		}
 	}
 	if maxScorePicker == "" {
-		handle.AddPlugin(picker.MaxScorePickerType, picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
-		maxScorePicker = picker.MaxScorePickerType
+		handle.AddPlugin(maxscorepicker.MaxScorePickerType, maxscorepicker.NewMaxScorePicker(pickershared.DefaultMaxNumOfEndpoints))
+		maxScorePicker = maxscorepicker.MaxScorePickerType
 		cfg.Plugins = append(cfg.Plugins, configapi.PluginSpec{Name: maxScorePicker, Type: maxScorePicker})
 	}
 

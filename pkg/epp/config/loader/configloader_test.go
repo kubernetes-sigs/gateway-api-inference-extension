@@ -33,9 +33,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/maxscorepicker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/prefixcachescorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/randompicker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/singleprofilehandler"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/weightedrandompicker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -226,12 +228,12 @@ func TestLoadRawConfigurationWithDefaults(t *testing.T) {
 				Parameters: json.RawMessage("{\"threshold\":10}"),
 			},
 			{
-				Name: profile.SingleProfileHandlerType,
-				Type: profile.SingleProfileHandlerType,
+				Name: singleprofilehandler.SingleProfileHandlerType,
+				Type: singleprofilehandler.SingleProfileHandlerType,
 			},
 			{
-				Name: picker.MaxScorePickerType,
-				Type: picker.MaxScorePickerType,
+				Name: maxscorepicker.MaxScorePickerType,
+				Type: maxscorepicker.MaxScorePickerType,
 			},
 		},
 		SchedulingProfiles: []configapi.SchedulingProfile{
@@ -492,11 +494,11 @@ func registerNeededFeatureGates() {
 }
 
 func registerNeededPlgugins() {
-	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
-	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
-	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
-	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
-	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
+	plugins.Register(prefixcachescorer.PrefixCachePluginType, prefixcachescorer.PrefixCachePluginFactory)
+	plugins.Register(maxscorepicker.MaxScorePickerType, maxscorepicker.MaxScorePickerFactory)
+	plugins.Register(randompicker.RandomPickerType, randompicker.RandomPickerFactory)
+	plugins.Register(weightedrandompicker.WeightedRandomPickerType, weightedrandompicker.WeightedRandomPickerFactory)
+	plugins.Register(singleprofilehandler.SingleProfileHandlerType, singleprofilehandler.SingleProfileHandlerFactory)
 }
 
 func TestNewDetector(t *testing.T) {

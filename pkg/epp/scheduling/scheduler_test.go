@@ -27,19 +27,22 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/kvcacheutilizationscorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/loraaffinityscorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/maxscorepicker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/pickershared"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/prefixcachescorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/queuescorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/singleprofilehandler"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // Tests the default scheduler configuration and expected behavior.
 func TestSchedule(t *testing.T) {
-	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
-	queueingScorer := scorer.NewQueueScorer()
-	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
-	loraAffinityScorer := scorer.NewLoraAffinityScorer()
+	kvCacheUtilizationScorer := kvcacheutilizationscorer.NewKVCacheUtilizationScorer()
+	queueingScorer := queuescorer.NewQueueScorer()
+	prefixCacheScorer := prefixcachescorer.New(context.Background(), prefixcachescorer.DefaultConfig)
+	loraAffinityScorer := loraaffinityscorer.NewLoraAffinityScorer()
 
 	defaultProfile := framework.NewSchedulerProfile().
 		WithScorers(framework.NewWeightedScorer(kvCacheUtilizationScorer, 1),
@@ -47,9 +50,9 @@ func TestSchedule(t *testing.T) {
 			framework.NewWeightedScorer(prefixCacheScorer, 1),
 			framework.NewWeightedScorer(loraAffinityScorer, 1),
 		).
-		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
+		WithPicker(maxscorepicker.NewMaxScorePicker(pickershared.DefaultMaxNumOfEndpoints))
 
-	profileHandler := profile.NewSingleProfileHandler()
+	profileHandler := singleprofilehandler.NewSingleProfileHandler()
 
 	schedulerConfig := NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
 
