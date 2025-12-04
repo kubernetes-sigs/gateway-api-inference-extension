@@ -440,7 +440,7 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 .PHONY: golangci-api-lint
 golangci-api-lint: golangci-lint $(GOLANGCI_API_LINT) ## Download golangci-lint locally if necessary before building KAL
 $(GOLANGCI_API_LINT):
-	$(GOLANGCI_LINT) -v custom
+	$(GOLANGCI_LINT) custom
 
 .PHONY: yq
 yq: ## Download yq locally if necessary.
