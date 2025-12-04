@@ -20,7 +20,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	compbasemetrics "k8s.io/component-base/metrics"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	metricsutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/metrics"
 )
@@ -63,7 +62,7 @@ func (c *inferencePoolMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	podMetrics := c.ds.PodList(backendmetrics.AllPodsPredicate)
+	podMetrics := c.ds.PodList(datastore.AllPodsPredicate)
 	if len(podMetrics) == 0 {
 		return
 	}

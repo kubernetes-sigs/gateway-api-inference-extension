@@ -40,6 +40,7 @@ import (
 
 var (
 	errPoolNotSynced = errors.New("InferencePool is not initialized in data store")
+	AllPodsPredicate = func(_ datalayer.Endpoint) bool { return true }
 )
 
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
@@ -62,7 +63,7 @@ type Datastore interface {
 	// InferenceModelRewrite operations
 	ModelRewriteSet(infModelRewrite *v1alpha2.InferenceModelRewrite)
 	ModelRewriteDelete(namespacedName types.NamespacedName)
-	ModelRewriteGet(modelName string) *v1alpha2.InferenceModelRewriteRule
+	ModelRewriteGet(modelName string) (*v1alpha2.InferenceModelRewriteRule, string)
 	ModelRewriteGetAll() []*v1alpha2.InferenceModelRewrite
 
 	// PodList lists pods matching the given predicate.
@@ -224,7 +225,7 @@ func (ds *datastore) ModelRewriteDelete(namespacedName types.NamespacedName) {
 	ds.modelRewrites.delete(namespacedName)
 }
 
-func (ds *datastore) ModelRewriteGet(modelName string) *v1alpha2.InferenceModelRewriteRule {
+func (ds *datastore) ModelRewriteGet(modelName string) (*v1alpha2.InferenceModelRewriteRule, string) {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 	return ds.modelRewrites.getRule(modelName)

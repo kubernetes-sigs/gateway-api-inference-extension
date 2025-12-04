@@ -169,7 +169,7 @@ func (m mockProducedDataType) Clone() datalayer.Cloneable {
 	return mockProducedDataType{value: m.value}
 }
 
-func (ds *mockDatastore) ModelRewriteGet(modelName string) *v1alpha2.InferenceModelRewriteRule {
+func (ds *mockDatastore) ModelRewriteGet(modelName string) (*v1alpha2.InferenceModelRewriteRule, string) {
 	// This mock implementation simulates the precedence logic for simplicity.
 	// It finds the oldest rewrite that has a rule matching the modelName.
 	var matchingRewrites []*v1alpha2.InferenceModelRewrite
@@ -185,7 +185,7 @@ func (ds *mockDatastore) ModelRewriteGet(modelName string) *v1alpha2.InferenceMo
 	}
 
 	if len(matchingRewrites) == 0 {
-		return nil
+		return nil, ""
 	}
 
 	// Sort by timestamp to find the oldest.
@@ -194,7 +194,7 @@ func (ds *mockDatastore) ModelRewriteGet(modelName string) *v1alpha2.InferenceMo
 	})
 
 	// Return the first rule from the oldest rewrite.
-	return &matchingRewrites[0].Spec.Rules[0]
+	return &matchingRewrites[0].Spec.Rules[0], matchingRewrites[0].Name
 }
 
 func TestDirector_HandleRequest(t *testing.T) {
@@ -666,7 +666,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, config)
 				if test.name == "successful request with model rewrite" {
-					director.datastore = &mockDatastore{pods: ds.PodList(backendmetrics.AllPodsPredicate), rewrites: []*v1alpha2.InferenceModelRewrite{rewrite}}
+					director.datastore = &mockDatastore{pods: ds.PodList(datastore.AllPodsPredicate), rewrites: []*v1alpha2.InferenceModelRewrite{rewrite}}
 				}
 
 				reqCtx := &handlers.RequestContext{

@@ -218,7 +218,7 @@ func TestPodReconciler(t *testing.T) {
 				}
 
 				var gotPods []*corev1.Pod
-				for _, pm := range store.PodList(backendmetrics.AllPodsPredicate) {
+				for _, pm := range store.PodList(datastore.AllPodsPredicate) {
 					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
 					gotPods = append(gotPods, pod)
 				}

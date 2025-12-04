@@ -27,10 +27,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-var (
-	AllPodsPredicate = func(PodMetrics) bool { return true }
-)
-
 func PodsWithFreshMetrics(stalenessThreshold time.Duration) func(PodMetrics) bool {
 	return func(pm PodMetrics) bool {
 		if pm == nil {

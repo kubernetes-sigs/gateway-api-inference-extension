@@ -373,6 +373,16 @@ var (
 		},
 		[]string{"fairness_id", "priority"},
 	)
+
+	// Inference Model Rewrite Metrics
+	inferenceModelRewriteDecisionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "model_rewrite_decisions_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of inference model rewrite decisions.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_rewrite_name", "model_name", "target_model"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -416,6 +426,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(PrefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
+		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
 		}
@@ -460,6 +471,7 @@ func Reset() {
 	PrefixCacheHitLength.Reset()
 	flowControlRequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
+	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
 // RecordRequstCounter records the number of requests.
@@ -736,4 +748,9 @@ func SetTTFTSLOThreshold(modelName, targetModelName string, threshold float64) {
 // This allows dynamic threshold management and makes the threshold visible in metrics.
 func SetTPOTSLOThreshold(modelName, targetModelName string, threshold float64) {
 	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot_slo_threshold"}).Set(threshold)
+}
+
+// RecordInferenceModelRewriteDecision records the routing decision for InferenceModelRewrite.
+func RecordInferenceModelRewriteDecision(modelRewriteName, modelName, targetModel string) {
+	inferenceModelRewriteDecisionsTotal.WithLabelValues(modelRewriteName, modelName, targetModel).Inc()
 }

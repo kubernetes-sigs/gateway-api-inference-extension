@@ -350,7 +350,7 @@ func TestMetrics(t *testing.T) {
 				}
 				time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
 				if test.predict == nil {
-					test.predict = backendmetrics.AllPodsPredicate
+					test.predict = AllPodsPredicate
 				}
 				assert.EventuallyWithT(t, func(t *assert.CollectT) {
 					got := ds.PodList(test.predict)
@@ -428,7 +428,7 @@ func TestPods(t *testing.T) {
 
 				test.op(ctx, ds)
 				var gotPods []*corev1.Pod
-				for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
+				for _, pm := range ds.PodList(AllPodsPredicate) {
 					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
 					gotPods = append(gotPods, pod)
 				}
@@ -618,7 +618,7 @@ func TestPodInfo(t *testing.T) {
 
 				test.op(ctx, ds)
 				var gotPodInfos []*datalayer.PodInfo
-				for _, pm := range ds.PodList(backendmetrics.AllPodsPredicate) {
+				for _, pm := range ds.PodList(AllPodsPredicate) {
 					gotPodInfos = append(gotPodInfos, pm.GetPod())
 				}
 				if diff := cmp.Diff(test.wantPodInfos, gotPodInfos, cmpopts.SortSlices(func(a, b *datalayer.PodInfo) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
