@@ -18,8 +18,6 @@ package types
 
 import (
 	"time"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 )
 
 // FlowControlRequest is the contract for an incoming request submitted to the `controller.FlowController`. It
@@ -45,15 +43,15 @@ type FlowControlRequest interface {
 	// applied.
 	InitialEffectiveTTL() time.Duration
 
-	// CandidatePodsForScheduling passes through a set of candidate pods a request may be admitted to.
-	// This is necessary for invoking `contracts.SaturationDetector.IsSaturated`, but it is otherwise unused in the Flow
-	// Control system.
-	CandidatePodsForScheduling() []metrics.PodMetrics
-
 	// ID returns an optional, user-facing unique identifier for this specific request. It is intended for logging,
 	// tracing, and observability. The `controller.FlowController` does not use this ID for dispatching decisions; it uses
 	// the internal, opaque `QueueItemHandle`.
 	ID() string
+
+	// GetMetadata returns the opaque metadata associated with the request (e.g., header-derived context, subset filters).
+	// This data is passed transparently to components like the contracts.PodLocator to resolve resources (candidate pods)
+	// lazily during the dispatch cycle.
+	GetMetadata() map[string]any
 }
 
 // QueueItemHandle is an opaque handle to an item that has been successfully added to a `framework.SafeQueue`. It acts
