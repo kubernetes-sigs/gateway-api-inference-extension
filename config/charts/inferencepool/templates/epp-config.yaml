@@ -64,7 +64,7 @@ data:
   {{- end }}
   
 ---
-{{- if .Values.inferenceExtension.sidecar.enabled }}
+{{- if and .Values.inferenceExtension.sidecar.enabled .Values.inferenceExtension.sidecar.configMap }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
