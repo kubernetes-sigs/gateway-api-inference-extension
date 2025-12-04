@@ -1241,7 +1241,15 @@ func BeforeSuite() func() {
 	detector := saturationdetector.NewDetector(sdConfig, logger.WithName("saturation-detector"))
 	serverRunner.SaturationDetector = detector
 	admissionController := requestcontrol.NewLegacyAdmissionController(detector)
-	serverRunner.Director = requestcontrol.NewDirectorWithConfig(serverRunner.Datastore, scheduler, admissionController, requestcontrol.NewConfig())
+	locator := requestcontrol.NewDatastorePodLocator(serverRunner.Datastore)
+	cachedLocator := requestcontrol.NewCachedPodLocator(context.Background(), locator, time.Millisecond*50)
+	serverRunner.Director = requestcontrol.NewDirectorWithConfig(
+		serverRunner.Datastore,
+		scheduler,
+		admissionController,
+		cachedLocator,
+		requestcontrol.NewConfig(),
+	)
 	serverRunner.SecureServing = false
 
 	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
