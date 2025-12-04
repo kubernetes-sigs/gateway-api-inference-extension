@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	fctypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -33,14 +34,6 @@ import (
 )
 
 // --- Mocks ---
-
-type mockSaturationDetector struct {
-	isSaturated bool
-}
-
-func (m *mockSaturationDetector) IsSaturated(_ context.Context, _ []backendmetrics.PodMetrics) bool {
-	return m.isSaturated
-}
 
 type mockFlowController struct {
 	outcome fctypes.QueueOutcome
@@ -56,18 +49,25 @@ func (m *mockFlowController) EnqueueAndWait(
 	return m.outcome, m.err
 }
 
+// --- Legacy Controller Tests ---
+
 func TestLegacyAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	candidatePods := []backendmetrics.PodMetrics{}
 	reqCtx := &handlers.RequestContext{
 		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		Request: &handlers.Request{
+			Metadata: map[string]any{},
+		},
 	}
+
+	mockPods := []backendmetrics.PodMetrics{&backendmetrics.FakePodMetrics{}}
 
 	testCases := []struct {
 		name            string
 		priority        int
 		isSaturated     bool
+		locatorPods     []backendmetrics.PodMetrics
 		expectErr       bool
 		expectErrCode   string
 		expectErrSubstr string
@@ -76,18 +76,30 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 			name:        "non_sheddable_saturated_admit",
 			priority:    0,
 			isSaturated: true,
+			locatorPods: mockPods,
 			expectErr:   false,
 		},
 		{
 			name:        "sheddable_not_saturated_admit",
 			priority:    -1,
 			isSaturated: false,
+			locatorPods: mockPods,
 			expectErr:   false,
 		},
 		{
 			name:            "sheddable_saturated_reject",
 			priority:        -1,
 			isSaturated:     true,
+			locatorPods:     mockPods,
+			expectErr:       true,
+			expectErrCode:   errutil.InferencePoolResourceExhausted,
+			expectErrSubstr: "system saturated, sheddable request dropped",
+		},
+		{
+			name:            "sheddable_no_pods_reject",
+			priority:        -1,
+			isSaturated:     true,
+			locatorPods:     []backendmetrics.PodMetrics{},
 			expectErr:       true,
 			expectErrCode:   errutil.InferencePoolResourceExhausted,
 			expectErrSubstr: "system saturated, sheddable request dropped",
@@ -97,10 +109,13 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			saturationDetector := &mockSaturationDetector{isSaturated: tc.isSaturated}
-			ac := NewLegacyAdmissionController(saturationDetector)
+			saturationDetector := &mocks.MockSaturationDetector{
+				IsSaturatedFunc: func(context.Context, []backendmetrics.PodMetrics) bool { return tc.isSaturated },
+			}
+			locator := &mocks.MockPodLocator{Pods: tc.locatorPods}
+			ac := NewLegacyAdmissionController(saturationDetector, locator)
 
-			err := ac.Admit(ctx, reqCtx, candidatePods, tc.priority)
+			err := ac.Admit(ctx, reqCtx, tc.priority)
 
 			if !tc.expectErr {
 				assert.NoError(t, err, "Admit() should not have returned an error for scenario: %s", tc.name)
@@ -116,9 +131,10 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	}
 }
 
+// --- Flow Control Controller Tests ---
+
 func TestFlowControlRequestAdapter(t *testing.T) {
 	t.Parallel()
-	candidatePods := []backendmetrics.PodMetrics{&backendmetrics.FakePodMetrics{}}
 
 	testCases := []struct {
 		name            string
@@ -146,59 +162,46 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 				fairnessID:      tc.fairnessID,
 				priority:        tc.priority,
 				requestByteSize: tc.requestByteSize,
-				candidatePods:   candidatePods,
 			}
 
 			assert.Equal(t, tc.requestID, fcReq.ID(), "ID() mismatch")
 			assert.Equal(t, tc.requestByteSize, fcReq.ByteSize(), "ByteSize() mismatch")
-			assert.Equal(t, candidatePods, fcReq.CandidatePodsForScheduling(), "CandidatePodsForScheduling() mismatch")
 			assert.Equal(t, tc.expectFlowKey, fcReq.FlowKey(), "FlowKey() mismatch")
 			assert.Zero(t, fcReq.InitialEffectiveTTL(), "InitialEffectiveTTL() should be zero")
 		})
 	}
 }
+
 func TestFlowControlAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	candidatePods := []backendmetrics.PodMetrics{}
-
 	reqCtx := &handlers.RequestContext{
 		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		Request: &handlers.Request{
+			Metadata: map[string]any{},
+		},
 	}
 
 	testCases := []struct {
 		name            string
 		priority        int
-		isSaturated     bool
 		fcOutcome       fctypes.QueueOutcome
 		fcErr           error
 		expectErr       bool
 		expectErrCode   string
 		expectErrSubstr string
-		expectFCSkipped bool
 	}{
 		{
-			name:            "sheddable_saturated_reject",
-			priority:        -1,
-			isSaturated:     true,
-			expectErr:       true,
-			expectErrCode:   errutil.InferencePoolResourceExhausted,
-			expectErrSubstr: "system saturated, sheddable request dropped",
-			expectFCSkipped: true,
+			name:      "sheddable_dispatched",
+			priority:  -1,
+			fcOutcome: fctypes.QueueOutcomeDispatched,
+			expectErr: false,
 		},
 		{
-			name:        "sheddable_not_saturated_dispatch",
-			priority:    -1,
-			isSaturated: false,
-			fcOutcome:   fctypes.QueueOutcomeDispatched,
-			expectErr:   false,
-		},
-		{
-			name:        "non_sheddable_saturated_dispatch",
-			priority:    0,
-			isSaturated: true,
-			fcOutcome:   fctypes.QueueOutcomeDispatched,
-			expectErr:   false,
+			name:      "non_sheddable_dispatched",
+			priority:  0,
+			fcOutcome: fctypes.QueueOutcomeDispatched,
+			expectErr: false,
 		},
 		{
 			name:            "fc_reject_capacity",
@@ -255,17 +258,12 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			sd := &mockSaturationDetector{isSaturated: tc.isSaturated}
 			fc := &mockFlowController{outcome: tc.fcOutcome, err: tc.fcErr}
-			ac := NewFlowControlAdmissionController(sd, fc)
+			ac := NewFlowControlAdmissionController(fc)
 
-			err := ac.Admit(ctx, reqCtx, candidatePods, tc.priority)
+			err := ac.Admit(ctx, reqCtx, tc.priority)
 
-			if tc.expectFCSkipped {
-				assert.False(t, fc.called, "FlowController should not have been called for scenario: %s", tc.name)
-			} else {
-				assert.True(t, fc.called, "FlowController should have been called for scenario: %s", tc.name)
-			}
+			assert.True(t, fc.called, "FlowController should have been called for scenario: %s", tc.name)
 
 			if !tc.expectErr {
 				assert.NoError(t, err, "Admit() returned an unexpected error for scenario: %s", tc.name)

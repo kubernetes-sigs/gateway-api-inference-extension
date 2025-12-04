@@ -75,6 +75,7 @@ type testHarness struct {
 	clock              *testclock.FakeClock
 	logger             logr.Logger
 	saturationDetector *mocks.MockSaturationDetector
+	podLocator         *mocks.MockPodLocator
 
 	// --- Centralized Mock State ---
 	// The harness's mutex protects the single source of truth for all mock state.
@@ -96,6 +97,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		clock:              testclock.NewFakeClock(time.Now()),
 		logger:             logr.Discard(),
 		saturationDetector: &mocks.MockSaturationDetector{},
+		podLocator:         &mocks.MockPodLocator{Pods: []metrics.PodMetrics{&metrics.FakePodMetrics{}}},
 		startSignal:        make(chan struct{}),
 		queues:             make(map[types.FlowKey]*mocks.MockManagedQueue),
 		priorityFlows:      make(map[int][]types.FlowKey),
@@ -123,6 +125,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		h.ctx,
 		h,
 		h.saturationDetector,
+		h.podLocator,
 		h.clock,
 		expiryCleanupInterval,
 		100,

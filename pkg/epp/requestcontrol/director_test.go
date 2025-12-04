@@ -60,12 +60,7 @@ type mockAdmissionController struct {
 	admitErr error
 }
 
-func (m *mockAdmissionController) Admit(
-	_ context.Context,
-	_ *handlers.RequestContext,
-	_ []backendmetrics.PodMetrics,
-	_ int,
-) error {
+func (m *mockAdmissionController) Admit(context.Context, *handlers.RequestContext, int) error {
 	return m.admitErr
 }
 
