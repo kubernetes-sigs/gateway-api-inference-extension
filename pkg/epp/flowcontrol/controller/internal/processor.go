@@ -65,6 +65,7 @@ var ErrProcessorBusy = errors.New("shard processor is busy")
 type ShardProcessor struct {
 	shard                contracts.RegistryShard
 	saturationDetector   contracts.SaturationDetector
+	podLocator           contracts.PodLocator
 	clock                clock.WithTicker
 	cleanupSweepInterval time.Duration
 	logger               logr.Logger
@@ -86,6 +87,7 @@ func NewShardProcessor(
 	ctx context.Context,
 	shard contracts.RegistryShard,
 	saturationDetector contracts.SaturationDetector,
+	podLocator contracts.PodLocator,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -94,6 +96,7 @@ func NewShardProcessor(
 	return &ShardProcessor{
 		shard:                shard,
 		saturationDetector:   saturationDetector,
+		podLocator:           podLocator,
 		clock:                clock,
 		cleanupSweepInterval: cleanupSweepInterval,
 		logger:               logger,
@@ -307,8 +310,8 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 
 		// --- Viability Check (Saturation/HoL Blocking) ---
 		req := item.OriginalRequest()
-		candidatePods := req.CandidatePodsForScheduling()
-		if sp.saturationDetector.IsSaturated(ctx, candidatePods) {
+		candidates := sp.podLocator.Locate(ctx, req.GetMetadata())
+		if sp.saturationDetector.IsSaturated(ctx, candidates) {
 			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
 				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
 			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where

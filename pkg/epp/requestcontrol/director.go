@@ -159,14 +159,16 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
-	// Get candidate pods for scheduling
-	candidatePods := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
-	if len(candidatePods) == 0 {
-		return reqCtx, errutil.Error{Code: errutil.ServiceUnavailable, Msg: "failed to find candidate pods for serving the request"}
-	}
-	if err := d.admissionController.Admit(ctx, reqCtx, candidatePods, *infObjective.Spec.Priority); err != nil {
+	if err := d.admissionController.Admit(ctx, reqCtx, *infObjective.Spec.Priority); err != nil {
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
+	}
+	candidatePods := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
+	if len(candidatePods) == 0 {
+		return reqCtx, errutil.Error{
+			Code: errutil.ServiceUnavailable,
+			Msg:  "failed to find candidate pods for serving the request",
+		}
 	}
 	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
 
