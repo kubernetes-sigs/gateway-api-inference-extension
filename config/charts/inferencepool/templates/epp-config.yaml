@@ -9,6 +9,7 @@ data:
     kind: EndpointPickerConfig
     plugins:
     - type: queue-scorer
+    - type: running-queue-size-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
@@ -45,6 +46,7 @@ data:
       - pluginRef: predicted-latency-scorer
         weight: 0
       - pluginRef: queue-scorer
+      - pluginRef: running-queue-size-scorer
       - pluginRef: kv-cache-utilization-scorer
     - name: predicted-latency-routing
       plugins:
@@ -53,6 +55,8 @@ data:
     - name: default
       plugins:
       - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: running-queue-size-scorer
         weight: 2
       - pluginRef: kv-cache-utilization-scorer
         weight: 2
