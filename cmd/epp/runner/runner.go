@@ -472,7 +472,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 
 	r.registerInTreePlugins()
 
-	rawConfig, featureGates, err := loader.LoadConfigPhaseOne(configBytes, logger)
+	rawConfig, featureGates, err := loader.LoadRawConfig(configBytes, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config - %w", err)
 	}
@@ -498,7 +498,7 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
 	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
-	cfg, err := loader.LoadConfigPhaseTwo(rawConfig, handle, logger)
+	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)
