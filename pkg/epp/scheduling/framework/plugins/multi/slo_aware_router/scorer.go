@@ -37,7 +37,7 @@ import (
 )
 
 type SLOAwareRouter struct {
-	tn                  plugins.TypedName
+	typedName           plugins.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
 	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
 	sloContextStore     sync.Map // map[string]*SLORequestContext
@@ -108,7 +108,7 @@ func NewSLOAwareRouter(config Config, predictor latencypredictor.PredictorInterf
 	}
 
 	return &SLOAwareRouter{
-		tn:                  plugins.TypedName{Type: SLOAwareRouterPluginType, Name: SLOAwareRouterPluginType},
+		typedName:           plugins.TypedName{Type: SLOAwareRouterPluginType, Name: SLOAwareRouterPluginType},
 		latencypredictor:    predictor,
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		sloContextStore:     sync.Map{},
@@ -132,11 +132,11 @@ func startPredictor(handle plugins.Handle) (latencypredictor.PredictorInterface,
 }
 
 func (s *SLOAwareRouter) TypedName() plugins.TypedName {
-	return s.tn
+	return s.typedName
 }
 
 func (s *SLOAwareRouter) WithName(name string) *SLOAwareRouter {
-	s.tn.Name = name
+	s.typedName.Name = name
 	return s
 }
 

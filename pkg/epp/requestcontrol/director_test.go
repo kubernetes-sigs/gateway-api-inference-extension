@@ -141,19 +141,19 @@ func newMockPrepareDataPlugin(name string) *mockPrepareDataPlugin {
 }
 
 type mockAdmissionPlugin struct {
-	tn          plugins.TypedName
+	typedName   plugins.TypedName
 	denialError error
 }
 
 func newMockAdmissionPlugin(name string, denialError error) *mockAdmissionPlugin {
 	return &mockAdmissionPlugin{
-		tn:          plugins.TypedName{Type: "mock-admit-data", Name: name},
+		typedName:   plugins.TypedName{Type: "mock-admit-data", Name: name},
 		denialError: denialError,
 	}
 }
 
 func (m *mockAdmissionPlugin) TypedName() plugins.TypedName {
-	return m.tn
+	return m.typedName
 }
 
 func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
@@ -1238,51 +1238,51 @@ const (
 )
 
 type testResponseReceived struct {
-	tn                      plugins.TypedName
+	typedName               plugins.TypedName
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
 }
 
 type testResponseStreaming struct {
-	tn                       plugins.TypedName
+	typedName                plugins.TypedName
 	lastRespOnStreaming      *Response
 	lastTargetPodOnStreaming string
 }
 
 type testResponseComplete struct {
-	tn                      plugins.TypedName
+	typedName               plugins.TypedName
 	lastRespOnComplete      *Response
 	lastTargetPodOnComplete string
 }
 
 func newTestResponseReceived(name string) *testResponseReceived {
 	return &testResponseReceived{
-		tn: plugins.TypedName{Type: testResponseReceivedType, Name: name},
+		typedName: plugins.TypedName{Type: testResponseReceivedType, Name: name},
 	}
 }
 
 func newTestResponseStreaming(name string) *testResponseStreaming {
 	return &testResponseStreaming{
-		tn: plugins.TypedName{Type: testPostStreamingType, Name: name},
+		typedName: plugins.TypedName{Type: testPostStreamingType, Name: name},
 	}
 }
 
 func newTestResponseComplete(name string) *testResponseComplete {
 	return &testResponseComplete{
-		tn: plugins.TypedName{Type: testPostCompleteType, Name: name},
+		typedName: plugins.TypedName{Type: testPostCompleteType, Name: name},
 	}
 }
 
 func (p *testResponseReceived) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testResponseStreaming) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testResponseComplete) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
