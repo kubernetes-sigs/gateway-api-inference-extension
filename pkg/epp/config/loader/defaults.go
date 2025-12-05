@@ -17,140 +17,156 @@ limitations under the License.
 package loader
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"fmt"
+
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 )
 
-const (
-	// DefaultScorerWeight is the weight used for scorers referenced in the
-	// configuration without explicit weights.
-	DefaultScorerWeight = 1
-)
-
-// The code below sets the defaults in the configuration. It is done in two parts:
-//   1) Before the plugins are instantiated, for those defaults that can be set
-//      without knowing the concrete type of plugins
-//   2) After the plugins are instantiated, for things that one needs to know the
-//      concrete type of the plugins
+// DefaultScorerWeight is the weight used for scorers referenced in the configuration without explicit weights.
+const DefaultScorerWeight = 1
 
 var defaultScorerWeight = DefaultScorerWeight
 
-// setDefaultsPhaseOne Performs the first phase of setting configuration defaults.
-// In particuylar it:
-//  1. Sets the name of plugins, for which one wasn't specified
-//  2. Sets defaults for the feature gates
-//  3. Sets defaults for the SaturationDetector configuration
-func setDefaultsPhaseOne(cfg *configapi.EndpointPickerConfig) {
-	// If no name was given for the plugin, use it's type as the name
+// applyStaticDefaults standardizes the configuration object before plugin instantiation.
+// It handles simple structural defaults that do not require knowledge of the plugin registry.
+func applyStaticDefaults(cfg *configapi.EndpointPickerConfig) {
+	// Infer plugin names. If a plugin has a Type but no Name, the Type becomes the Name.
 	for idx, pluginConfig := range cfg.Plugins {
 		if pluginConfig.Name == "" {
 			cfg.Plugins[idx].Name = pluginConfig.Type
 		}
 	}
 
-	// If no feature gates were specified, provide a default FeatureGates struct
+	// Initialize feature gates.
 	if cfg.FeatureGates == nil {
 		cfg.FeatureGates = configapi.FeatureGates{}
 	}
-
-	// If the SaturationDetector configuration wasn't specified setup a default one
-	if cfg.SaturationDetector == nil {
-		cfg.SaturationDetector = &configapi.SaturationDetector{}
-	}
-	if cfg.SaturationDetector.QueueDepthThreshold == 0 {
-		cfg.SaturationDetector.QueueDepthThreshold = saturationdetector.DefaultQueueDepthThreshold
-	}
-	if cfg.SaturationDetector.KVCacheUtilThreshold == 0.0 {
-		cfg.SaturationDetector.KVCacheUtilThreshold = saturationdetector.DefaultKVCacheUtilThreshold
-	}
-	if cfg.SaturationDetector.MetricsStalenessThreshold.Duration == 0.0 {
-		cfg.SaturationDetector.MetricsStalenessThreshold =
-			metav1.Duration{Duration: saturationdetector.DefaultMetricsStalenessThreshold}
-	}
 }
 
-// setDefaultsPhaseTwo Performs the second phase of setting configuration defaults.
-// In particular it:
-//  1. Adds a default SchedulingProfile if one wasn't specified.
-//  2. Adds an instance of the SingleProfileHandler, if no profile handler was
-//     specified and the configuration has only one SchedulingProfile
-//  3. Sets a default weight for all scorers without a weight
-//  4. Adds a picker (MaxScorePicker) to all SchedulingProfiles that don't have a picker
-func setDefaultsPhaseTwo(cfg *configapi.EndpointPickerConfig, handle plugins.Handle) {
+// applySystemDefaults injects required architectural components that were omitted from the config.
+// It inspects the instantiated plugins (via the handle) and ensures the system graph is complete.
+func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle plugins.Handle) error {
 	allPlugins := handle.GetAllPluginsWithNames()
 
-	// If No SchedulerProfiles were specified in the confguration,
-	// create one named default with references to all of the scheduling
-	// plugins mentioned in the Plugins section of the configuration.
-	if len(cfg.SchedulingProfiles) == 0 {
-		cfg.SchedulingProfiles = make([]configapi.SchedulingProfile, 1)
-
-		thePlugins := []configapi.SchedulingPlugin{}
-		for pluginName, plugin := range allPlugins {
-			switch plugin.(type) {
-			case framework.Filter, framework.Scorer, framework.Picker:
-				thePlugins = append(thePlugins, configapi.SchedulingPlugin{PluginRef: pluginName})
-			}
-		}
-
-		cfg.SchedulingProfiles[0] = configapi.SchedulingProfile{
-			Name:    "default",
-			Plugins: thePlugins,
-		}
+	// Ensure the scheduling layer has profiles, pickers, and handlers.
+	if err := ensureSchedulingArchitecture(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply scheduling system defaults: %w", err)
 	}
 
-	// Add an instance of the SingleProfileHandler, if no profile handler was
-	// specified and the configuration has only one SchedulingProfile
+	return nil
+}
+
+// ensureSchedulingArchitecture guarantees that a valid scheduling profile exists and that all profiles have valid
+// Pickers and Handlers.
+func ensureSchedulingArchitecture(
+	cfg *configapi.EndpointPickerConfig,
+	handle plugins.Handle,
+	allPlugins map[string]plugins.Plugin,
+) error {
+	// Ensure at least one Scheduling Profile exists.
+	if len(cfg.SchedulingProfiles) == 0 {
+		defaultProfile := configapi.SchedulingProfile{Name: "default"}
+		// Auto-populate the default profile with all Filter, Scorer, and Picker plugins found.
+		for name, p := range allPlugins {
+			switch p.(type) {
+			case framework.Filter, framework.Scorer, framework.Picker:
+				defaultProfile.Plugins = append(defaultProfile.Plugins, configapi.SchedulingPlugin{PluginRef: name})
+			}
+		}
+		cfg.SchedulingProfiles = []configapi.SchedulingProfile{defaultProfile}
+	}
+
+	// Ensure profile handler.
+	// If there is only 1 profile and no handler is explicitly configured, use the SingleProfileHandler.
 	if len(cfg.SchedulingProfiles) == 1 {
-		profileHandlerFound := false
-		for _, plugin := range allPlugins {
-			if _, ok := plugin.(framework.ProfileHandler); ok {
-				profileHandlerFound = true
+		hasHandler := false
+		for _, p := range allPlugins {
+			if _, ok := p.(framework.ProfileHandler); ok {
+				hasHandler = true
 				break
 			}
 		}
-		if !profileHandlerFound {
-			handle.AddPlugin(profile.SingleProfileHandlerType, profile.NewSingleProfileHandler())
-			cfg.Plugins = append(cfg.Plugins,
-				configapi.PluginSpec{Name: profile.SingleProfileHandlerType,
-					Type: profile.SingleProfileHandlerType,
-				})
+		if !hasHandler {
+			if err := registerDefaultPlugin(cfg, handle, profile.SingleProfileHandlerType, profile.SingleProfileHandlerType); err != nil {
+				return err
+			}
 		}
 	}
 
-	var maxScorePicker string
-	for pluginName, plugin := range allPlugins {
-		if _, ok := plugin.(framework.Picker); ok {
-			maxScorePicker = pluginName
+	// Ensure Picker(s) and Scorer weights.
+	// Find or Create a default MaxScorePicker to reuse across profiles.
+	var maxScorePickerName string
+	for name, p := range allPlugins {
+		if _, ok := p.(framework.Picker); ok {
+			maxScorePickerName = name
 			break
 		}
 	}
-	if maxScorePicker == "" {
-		handle.AddPlugin(picker.MaxScorePickerType, picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
-		maxScorePicker = picker.MaxScorePickerType
-		cfg.Plugins = append(cfg.Plugins, configapi.PluginSpec{Name: maxScorePicker, Type: maxScorePicker})
+	// If no Picker exists anywhere, create one.
+	if maxScorePickerName == "" {
+		if err := registerDefaultPlugin(cfg, handle, picker.MaxScorePickerType, picker.MaxScorePickerType); err != nil {
+			return err
+		}
+		maxScorePickerName = picker.MaxScorePickerType
 	}
 
-	for idx, theProfile := range cfg.SchedulingProfiles {
+	// Update profiles.
+	for i, prof := range cfg.SchedulingProfiles {
 		hasPicker := false
-		for pluginIdx, plugin := range theProfile.Plugins {
-			referencedPlugin := handle.Plugin(plugin.PluginRef)
-			if _, ok := referencedPlugin.(framework.Scorer); ok && plugin.Weight == nil {
-				theProfile.Plugins[pluginIdx].Weight = &defaultScorerWeight
-				cfg.SchedulingProfiles[idx] = theProfile
-			} else if _, ok := referencedPlugin.(framework.Picker); ok {
+		for j, pluginRef := range prof.Plugins {
+			p := handle.Plugin(pluginRef.PluginRef)
+
+			// Default Scorer weight.
+			if _, ok := p.(framework.Scorer); ok && pluginRef.Weight == nil {
+				cfg.SchedulingProfiles[i].Plugins[j].Weight = &defaultScorerWeight
+			}
+
+			// Check for Picker.
+			if _, ok := p.(framework.Picker); ok {
 				hasPicker = true
 			}
 		}
+
+		// Inject default Picker if missing.
 		if !hasPicker {
-			theProfile.Plugins =
-				append(theProfile.Plugins, configapi.SchedulingPlugin{PluginRef: maxScorePicker})
-			cfg.SchedulingProfiles[idx] = theProfile
+			cfg.SchedulingProfiles[i].Plugins = append(
+				cfg.SchedulingProfiles[i].Plugins,
+				configapi.SchedulingPlugin{PluginRef: maxScorePickerName},
+			)
 		}
 	}
+
+	return nil
+}
+
+// registerDefaultPlugin instantiates a plugin with empty configuration (defaults) and adds it to both the handle and
+// the config spec.
+func registerDefaultPlugin(
+	cfg *configapi.EndpointPickerConfig,
+	handle plugins.Handle,
+	name string,
+	pluginType string,
+) error {
+	factory, ok := plugins.Registry[pluginType]
+	if !ok {
+		return fmt.Errorf("plugin type '%s' not found in registry", pluginType)
+	}
+
+	// Instantiate with nil config (factory must handle defaults).
+	plugin, err := factory(name, nil, handle)
+	if err != nil {
+		return fmt.Errorf("failed to instantiate default plugin '%s': %w", name, err)
+	}
+
+	handle.AddPlugin(name, plugin)
+	cfg.Plugins = append(cfg.Plugins, configapi.PluginSpec{
+		Name: name,
+		Type: pluginType,
+	})
+
+	return nil
 }
