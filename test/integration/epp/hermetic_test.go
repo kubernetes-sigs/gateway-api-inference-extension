@@ -228,7 +228,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			wantErr: false,
 			wantResponses: integrationutils.NewImmediateErrorResponse(
 				envoyTypePb.StatusCode_BadRequest,
-				"inference gateway: BadRequest - Error unmarshaling request body: no healthy upstream",
+				"inference gateway: BadRequest - Error unmarshaling request body",
 			),
 		},
 		{
@@ -804,7 +804,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					},
 				},
 			},
-			wantResponses: []*extProcPb.ProcessingResponse{},
+			wantResponses: nil,
 			pods: newPodStates(
 				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
 			),
