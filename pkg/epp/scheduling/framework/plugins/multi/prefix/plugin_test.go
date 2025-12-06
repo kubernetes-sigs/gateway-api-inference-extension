@@ -30,8 +30,12 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
+
+// static check to ensure Plugin implements the PrepareDataPlugin interface.
+var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{

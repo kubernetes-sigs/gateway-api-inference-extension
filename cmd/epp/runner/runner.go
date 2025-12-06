@@ -469,6 +469,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 
 	loader.RegisterFeatureGate(datalayer.FeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
+	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
 
 	r.registerInTreePlugins()
 
@@ -508,8 +509,9 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
+
 	// Sort prepare data plugins in DAG order (topological sort). Also check prepare data plugins for cycles.
-	if r.requestControlConfig.PrepareDataPluginGraph() != nil {
+	if r.requestControlConfig.PrepareDataPluginGraph(r.featureGates[datalayer.PrepareDataPluginsFeatureGate]) != nil {
 		return nil, errors.New("failed to load the configuration - prepare data plugins have cyclic dependencies")
 	}
 
