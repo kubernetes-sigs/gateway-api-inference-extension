@@ -41,6 +41,8 @@ import (
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
 
+// --- RegistryShard Mocks ---
+
 // MockRegistryShard is a simple "stub-style" mock for testing.
 // Its methods are implemented as function fields (e.g., `IDFunc`). A test can inject behavior by setting the desired
 // function field in the test setup. If a func is nil, the method will return a zero value.
@@ -111,6 +113,8 @@ func (m *MockRegistryShard) Stats() contracts.ShardStats {
 	return contracts.ShardStats{}
 }
 
+// --- Dependency Mocks ---
+
 // MockSaturationDetector is a simple "stub-style" mock for testing.
 type MockSaturationDetector struct {
 	IsSaturatedFunc func(ctx context.Context, candidatePods []metrics.PodMetrics) bool
@@ -122,6 +126,30 @@ func (m *MockSaturationDetector) IsSaturated(ctx context.Context, candidatePods 
 	}
 	return false
 }
+
+// MockPodLocator provides a mock implementation of the contracts.PodLocator interface.
+// It allows tests to control the exact set of pods returned for a given request.
+type MockPodLocator struct {
+	// LocateFunc allows injecting custom logic.
+	LocateFunc func(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics
+	// Pods is a static return value used if LocateFunc is nil.
+	Pods []metrics.PodMetrics
+}
+
+func (m *MockPodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics {
+	if m.LocateFunc != nil {
+		return m.LocateFunc(ctx, requestMetadata)
+	}
+	// Return copy to be safe
+	if m.Pods == nil {
+		return nil
+	}
+	result := make([]metrics.PodMetrics, len(m.Pods))
+	copy(result, m.Pods)
+	return result
+}
+
+// --- ManagedQueue Mock ---
 
 // MockManagedQueue is a high-fidelity, thread-safe mock of the `contracts.ManagedQueue` interface, designed
 // specifically for testing the concurrent `controller/internal.ShardProcessor`.

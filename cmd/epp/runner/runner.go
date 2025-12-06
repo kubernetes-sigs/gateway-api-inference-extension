@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -328,6 +329,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	saturationDetector := saturationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
+	locator := requestcontrol.NewDatastorePodLocator(ds)
+	cachedLocator := requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 	var admissionController requestcontrol.AdmissionController
 	if r.featureGates[flowcontrol.FeatureGate] {
 		setupLog.Info("Initializing experimental Flow Control layer")
@@ -341,21 +344,28 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
-		fc, err := fccontroller.NewFlowController(ctx, fcCfg.Controller, registry, saturationDetector, setupLog)
+		fc, err := fccontroller.NewFlowController(
+			ctx,
+			fcCfg.Controller,
+			registry, saturationDetector,
+			cachedLocator,
+			setupLog,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
 		}
 		go registry.Run(ctx)
-		admissionController = requestcontrol.NewFlowControlAdmissionController(saturationDetector, fc)
+		admissionController = requestcontrol.NewFlowControlAdmissionController(fc)
 	} else {
 		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
-		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector)
+		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, cachedLocator)
 	}
 
 	director := requestcontrol.NewDirectorWithConfig(
 		ds,
 		scheduler,
 		admissionController,
+		cachedLocator,
 		r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---

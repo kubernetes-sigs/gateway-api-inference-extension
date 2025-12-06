@@ -60,6 +60,7 @@ type shardProcessorFactory func(
 	ctx context.Context,
 	shard contracts.RegistryShard,
 	saturationDetector contracts.SaturationDetector,
+	podLocator contracts.PodLocator,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -95,6 +96,7 @@ type FlowController struct {
 	config                Config
 	registry              registryClient
 	saturationDetector    contracts.SaturationDetector
+	podLocator            contracts.PodLocator
 	clock                 clock.WithTicker
 	logger                logr.Logger
 	shardProcessorFactory shardProcessorFactory
@@ -126,6 +128,7 @@ func NewFlowController(
 	config Config,
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
+	podLocator contracts.PodLocator,
 	logger logr.Logger,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
@@ -133,6 +136,7 @@ func NewFlowController(
 		config:             config,
 		registry:           registry,
 		saturationDetector: sd,
+		podLocator:         podLocator,
 		clock:              clock.RealClock{},
 		logger:             logger.WithName("flow-controller"),
 		parentCtx:          ctx,
@@ -142,6 +146,7 @@ func NewFlowController(
 		ctx context.Context,
 		shard contracts.RegistryShard,
 		saturationDetector contracts.SaturationDetector,
+		podLocator contracts.PodLocator,
 		clock clock.WithTicker,
 		cleanupSweepInterval time.Duration,
 		enqueueChannelBufferSize int,
@@ -151,6 +156,7 @@ func NewFlowController(
 			ctx,
 			shard,
 			saturationDetector,
+			podLocator,
 			clock,
 			cleanupSweepInterval,
 			enqueueChannelBufferSize,
@@ -448,6 +454,7 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 		processorCtx,
 		shard,
 		fc.saturationDetector,
+		fc.podLocator,
 		fc.clock,
 		fc.config.ExpiryCleanupInterval,
 		fc.config.EnqueueChannelBufferSize,
