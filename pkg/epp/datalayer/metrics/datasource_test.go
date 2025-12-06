@@ -50,7 +50,7 @@ func TestDatasource(t *testing.T) {
 
 	ctx := context.Background()
 	factory := datalayer.NewEndpointFactory([]datalayer.DataSource{source}, 100*time.Millisecond)
-	pod := &datalayer.PodInfo{
+	pod := &datalayer.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod1",
 			Namespace: "default",

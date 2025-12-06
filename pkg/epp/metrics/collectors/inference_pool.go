@@ -73,7 +73,7 @@ func (c *inferencePoolMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			prometheus.GaugeValue,
 			float64(pod.GetMetrics().WaitingQueueSize),
 			pool.Name,
-			pod.GetPod().NamespacedName.Name,
+			pod.GetMetadata().NamespacedName.Name,
 		)
 	}
 }

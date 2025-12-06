@@ -54,14 +54,14 @@ func (d *DummySource) Collect(ctx context.Context, ep Endpoint) error {
 }
 
 func defaultEndpoint() Endpoint {
-	pod := &PodInfo{
+	meta := &EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod-name",
 			Namespace: "default",
 		},
 		Address: "1.2.3.4:5678",
 	}
-	ms := NewEndpoint(pod, nil)
+	ms := NewEndpoint(meta, nil)
 	return ms
 }
 

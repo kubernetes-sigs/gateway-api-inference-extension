@@ -267,7 +267,7 @@ func (d *Director) getCandidatePodsForScheduling(ctx context.Context, requestMet
 	podTotalCount := 0
 	podFilteredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
 		podTotalCount++
-		if _, found := endpoints[pm.GetPod().GetIPAddress()]; found {
+		if _, found := endpoints[pm.GetMetadata().GetIPAddress()]; found {
 			return true
 		}
 		return false
@@ -311,9 +311,9 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []sch
 	pm := make([]schedulingtypes.Pod, len(pods))
 	for i, pod := range pods {
 		if pod.GetAttributes() != nil {
-			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
 		} else {
-			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetPod().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
+			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
 		}
 	}
 
@@ -371,7 +371,7 @@ func (d *Director) GetRandomPod() *backend.Pod {
 	}
 	number := rand.Intn(len(pods))
 	pod := pods[number]
-	return pod.GetPod()
+	return pod.GetMetadata()
 }
 
 func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,

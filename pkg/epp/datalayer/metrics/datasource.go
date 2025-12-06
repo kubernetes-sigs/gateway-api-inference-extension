@@ -94,8 +94,8 @@ func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 // Collect is triggered by the data layer framework to fetch potentially new
 // MSP metrics data for an endpoint.
 func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
-	target := dataSrc.getMetricsEndpoint(ep.GetPod())
-	families, err := dataSrc.client.Get(ctx, target, ep.GetPod())
+	target := dataSrc.getMetricsEndpoint(ep.GetMetadata())
+	families, err := dataSrc.client.Get(ctx, target, ep.GetMetadata())
 
 	if err != nil {
 		return err

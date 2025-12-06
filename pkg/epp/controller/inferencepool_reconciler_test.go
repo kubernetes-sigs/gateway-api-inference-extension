@@ -123,7 +123,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
 	endpointPool1 := pool.InferencePoolToEndpointPool(pool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+	if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool1, wantEndpoints: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -141,7 +141,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
 	newEndpointPool1 := pool.InferencePoolToEndpointPool(newPool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -157,7 +157,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
 	newEndpointPool1 = pool.InferencePoolToEndpointPool(newPool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5-rank-0"}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 
@@ -171,14 +171,14 @@ func TestInferencePoolReconciler(t *testing.T) {
 	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
 		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 	}
-	if diff := diffStore(ds, diffStoreParams{wantPods: []string{}}); diff != "" {
+	if diff := diffStore(ds, diffStoreParams{wantEndpoints: []string{}}); diff != "" {
 		t.Errorf("Unexpected diff (+got/-want): %s", diff)
 	}
 }
 
 type diffStoreParams struct {
 	wantPool       *datalayer.EndpointPool
-	wantPods       []string
+	wantEndpoints  []string
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
@@ -189,15 +189,15 @@ func diffStore(store datastore.Datastore, params diffStoreParams) string {
 	}
 
 	// Default wantPods if not set because PodGetAll returns an empty slice when empty.
-	if params.wantPods == nil {
-		params.wantPods = []string{}
+	if params.wantEndpoints == nil {
+		params.wantEndpoints = []string{}
 	}
-	gotPods := []string{}
-	for _, pm := range store.PodList(datastore.AllPodsPredicate) {
-		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
+	gotEndpoints := []string{}
+	for _, em := range store.PodList(datastore.AllPodsPredicate) {
+		gotEndpoints = append(gotEndpoints, em.GetMetadata().NamespacedName.Name)
 	}
-	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-		return "pods:" + diff
+	if diff := cmp.Diff(params.wantEndpoints, gotEndpoints, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+		return "endpoints:" + diff
 	}
 
 	// Default wantModels if not set because ModelGetAll returns an empty slice when empty.
@@ -343,8 +343,8 @@ func xDiffStore(store datastore.Datastore, params xDiffStoreParams) string {
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range store.PodList(datastore.AllPodsPredicate) {
-		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
+	for _, em := range store.PodList(datastore.AllPodsPredicate) {
+		gotPods = append(gotPods, em.GetMetadata().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 		return "pods:" + diff

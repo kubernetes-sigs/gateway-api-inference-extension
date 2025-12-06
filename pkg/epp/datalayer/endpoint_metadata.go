@@ -30,8 +30,8 @@ type Addressable interface {
 	GetNamespacedName() types.NamespacedName
 }
 
-// PodInfo represents the relevant Kubernetes Pod state of an inference server.
-type PodInfo struct {
+// EndpointMetadata represents the relevant Kubernetes Pod state of an inference server.
+type EndpointMetadata struct {
 	NamespacedName types.NamespacedName
 	PodName        string
 	Address        string
@@ -40,16 +40,16 @@ type PodInfo struct {
 	Labels         map[string]string
 }
 
-// String returns a string representation of the pod.
-func (p *PodInfo) String() string {
-	if p == nil {
+// String returns a string representation of the endpoint.
+func (e *EndpointMetadata) String() string {
+	if e == nil {
 		return ""
 	}
-	return fmt.Sprintf("%+v", *p)
+	return fmt.Sprintf("%+v", *e)
 }
 
 // Clone returns a full copy of the object.
-func (p *PodInfo) Clone() *PodInfo {
+func (p *EndpointMetadata) Clone() *EndpointMetadata {
 	if p == nil {
 		return nil
 	}
@@ -58,7 +58,7 @@ func (p *PodInfo) Clone() *PodInfo {
 	for key, value := range p.Labels {
 		clonedLabels[key] = value
 	}
-	return &PodInfo{
+	return &EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      p.NamespacedName.Name,
 			Namespace: p.NamespacedName.Namespace,
@@ -71,22 +71,22 @@ func (p *PodInfo) Clone() *PodInfo {
 	}
 }
 
-// GetNamespacedName gets the namespace name of the Pod.
-func (p *PodInfo) GetNamespacedName() types.NamespacedName {
-	return p.NamespacedName
+// GetNamespacedName gets the namespace name of the Endpoint.
+func (e *EndpointMetadata) GetNamespacedName() types.NamespacedName {
+	return e.NamespacedName
 }
 
-// GetIPAddress returns the Pod's IP address.
-func (p *PodInfo) GetIPAddress() string {
-	return p.Address
+// GetIPAddress returns the Endpoint's IP address.
+func (e *EndpointMetadata) GetIPAddress() string {
+	return e.Address
 }
 
-// GetPort returns the Pod's inference port.
-func (p *PodInfo) GetPort() string {
-	return p.Port
+// GetPort returns the Endpoint's inference port.
+func (e *EndpointMetadata) GetPort() string {
+	return e.Port
 }
 
-// GetMetricsHost returns the pod's metrics host (ip:port)
-func (p *PodInfo) GetMetricsHost() string {
-	return p.MetricsHost
+// GetMetricsHost returns the Endpoint's metrics host (ip:port)
+func (e *EndpointMetadata) GetMetricsHost() string {
+	return e.MetricsHost
 }
