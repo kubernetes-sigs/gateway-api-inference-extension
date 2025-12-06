@@ -30,6 +30,11 @@ import (
 type EndpointPickerConfig struct {
 	metav1.TypeMeta `json:",inline"`
 
+	// +optional
+	// FeatureGates is a set of flags that enable various experimental features with the EPP.
+	// If omitted non of these experimental features will be enabled.
+	FeatureGates FeatureGates `json:"featureGates,omitempty"`
+
 	// +required
 	// +kubebuilder:validation:Required
 	// Plugins is the list of plugins that will be instantiated.
@@ -42,22 +47,22 @@ type EndpointPickerConfig struct {
 	SchedulingProfiles []SchedulingProfile `json:"schedulingProfiles"`
 
 	// +optional
-	// FeatureGates is a set of flags that enable various experimental features with the EPP.
-	// If omitted non of these experimental features will be enabled.
-	FeatureGates FeatureGates `json:"featureGates,omitempty"`
-
-	// +optional
 	// SaturationDetector when present specifies the configuration of the
 	// Saturation detector. If not present, default values are used.
 	SaturationDetector *SaturationDetector `json:"saturationDetector,omitempty"`
+
+	// +optional
+	// Data configures the DataLayer. It is required if the new DataLayer is enabled.
+	Data *DataLayerConfig `json:"data"`
 }
 
 func (cfg EndpointPickerConfig) String() string {
 	return fmt.Sprintf(
-		"{Plugins: %v, SchedulingProfiles: %v, FeatureGates: %v, SaturationDetector: %v}",
+		"{FeatureGates: %v, Plugins: %v, SchedulingProfiles: %v, Data: %v, SaturationDetector: %v}",
+		cfg.FeatureGates,
 		cfg.Plugins,
 		cfg.SchedulingProfiles,
-		cfg.FeatureGates,
+		cfg.Data,
 		cfg.SaturationDetector,
 	)
 }
@@ -192,4 +197,51 @@ func (sd *SaturationDetector) String() string {
 		}
 	}
 	return "{" + result + "}"
+}
+
+// DataLayerConfig contains the configuration of the DataLayer feature
+type DataLayerConfig struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// Sources is the list of sources to define to the DataLayer
+	Sources []DataLayerSource `json:"sources"`
+}
+
+func (dlc DataLayerConfig) String() string {
+	return fmt.Sprintf("{Sources: %v}", dlc.Sources)
+}
+
+// DataLayerSource contains the configuration of a DataSource of the DataLayer feature
+type DataLayerSource struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// PluginRef specifies a partiular Plugin instance to be associated with
+	// this Source. The reference is to the name of an entry of the Plugins
+	// defined in the configuration's Plugins section
+	PluginRef string `json:"pluginRef"`
+
+	// +required
+	// +kubebuilder:validation:Required
+	// Extractors specifies the list of Plugin instances to be associated with
+	// this Source. The entries are references to the names of entries of the Plugins
+	// defined in the configuration's Plugins section
+	Extractors []DataLayerExtractor `json:"extractors"`
+}
+
+func (dls DataLayerSource) String() string {
+	return fmt.Sprintf("{PluginRef: %s, Extractors: %v}", dls.PluginRef, dls.Extractors)
+}
+
+// DataLayerExtractor contains the configuration of an Extractor of the DataLayer feature
+type DataLayerExtractor struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// PluginRef specifies a partiular Plugin instance to be associated with
+	// this Extractor. The reference is to the name of an entry of the Plugins
+	// defined in the configuration's Plugins section
+	PluginRef string `json:"pluginRef"`
+}
+
+func (dle DataLayerExtractor) String() string {
+	return "{PluginRef: " + dle.PluginRef + "}"
 }
