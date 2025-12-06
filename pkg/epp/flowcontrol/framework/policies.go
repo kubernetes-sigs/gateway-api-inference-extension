@@ -25,6 +25,10 @@ const (
 	// EnqueueTimePriorityScoreType indicates that the priority is based on the item's enqueue time, with earlier times
 	// being higher priority.
 	EnqueueTimePriorityScoreType PriorityScoreType = "enqueue_time_ns_asc"
+
+	// DeadlineUrgencyPriorityScoreType indicates that the priority is based on the item's deadline urgency, with more
+	// urgent deadlines being higher priority.
+	DeadlineUrgencyPriorityScoreType PriorityScoreType = "deadline_urgency_desc"
 )
 
 // ItemComparatorFunc defines the function signature for comparing two `types.QueueItemAccessor` instances to determine
