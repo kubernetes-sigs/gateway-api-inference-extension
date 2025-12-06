@@ -37,6 +37,7 @@ const (
 
 	KVCacheUsagePercentKey = "KVCacheUsagePercent"
 	WaitingQueueSizeKey    = "WaitingQueueSize"
+	RunningQueueSizeKey    = "RunningQueueSize"
 	MaxActiveModelsKey     = "MaxActiveModels"
 	ActiveModelsKey        = "ActiveModels"
 	WaitingModelsKey       = "WaitingModels"
