@@ -17,53 +17,62 @@ limitations under the License.
 package loader
 
 import (
-	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 )
 
-func validateSchedulingProfiles(config *configapi.EndpointPickerConfig) error {
-	profileNames := sets.New[string]()
-	for _, profile := range config.SchedulingProfiles {
+// validateConfig performs a deep validation of the configuration integrity.
+// It checks relationships between profiles, plugins, and feature gates.
+func validateConfig(cfg *configapi.EndpointPickerConfig) error {
+	if err := validateFeatureGates(cfg.FeatureGates); err != nil {
+		return fmt.Errorf("feature gate validation failed: %w", err)
+	}
+	if err := validateSchedulingProfiles(cfg); err != nil {
+		return fmt.Errorf("scheduling profile validation failed: %w", err)
+	}
+	return nil
+}
+
+func validateSchedulingProfiles(cfg *configapi.EndpointPickerConfig) error {
+	definedPlugins := sets.New[string]()
+	for _, p := range cfg.Plugins {
+		definedPlugins.Insert(p.Name)
+	}
+	seenProfileNames := sets.New[string]()
+
+	for i, profile := range cfg.SchedulingProfiles {
 		if profile.Name == "" {
-			return errors.New("SchedulingProfile must have a name")
+			return fmt.Errorf("schedulingProfiles[%d] is missing a name", i)
 		}
-
-		if profileNames.Has(profile.Name) {
-			return fmt.Errorf("the name '%s' has been specified for more than one SchedulingProfile", profile.Name)
+		if seenProfileNames.Has(profile.Name) {
+			return fmt.Errorf("schedulingProfiles[%d] has duplicate name '%s'", i, profile.Name)
 		}
-		profileNames.Insert(profile.Name)
+		seenProfileNames.Insert(profile.Name)
 
-		for _, plugin := range profile.Plugins {
-			if len(plugin.PluginRef) == 0 {
-				return fmt.Errorf("SchedulingProfile '%s' plugins must have a plugin reference", profile.Name)
+		for j, pluginRef := range profile.Plugins {
+			if pluginRef.PluginRef == "" {
+				return fmt.Errorf("schedulingProfiles[%s].plugins[%d] is missing a 'pluginRef'", profile.Name, j)
 			}
 
-			notFound := true
-			for _, pluginConfig := range config.Plugins {
-				if plugin.PluginRef == pluginConfig.Name {
-					notFound = false
-					break
-				}
-			}
-			if notFound {
-				return errors.New(plugin.PluginRef + " is a reference to an undefined Plugin")
+			if !definedPlugins.Has(pluginRef.PluginRef) {
+				return fmt.Errorf("schedulingProfiles[%s] references undefined plugin '%s'",
+					profile.Name, pluginRef.PluginRef)
 			}
 		}
 	}
 	return nil
 }
 
-func validateFeatureGates(fg configapi.FeatureGates) error {
-	if fg == nil {
+func validateFeatureGates(gates configapi.FeatureGates) error {
+	if gates == nil {
 		return nil
 	}
 
-	for _, gate := range fg {
+	for _, gate := range gates {
 		if !registeredFeatureGates.Has(gate) {
-			return errors.New(gate + " is an unregistered Feature Gate")
+			return fmt.Errorf("feature gate '%s' is unknown or unregistered", gate)
 		}
 	}
 
