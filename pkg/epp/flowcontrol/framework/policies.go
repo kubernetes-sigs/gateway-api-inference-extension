@@ -25,6 +25,9 @@ const (
 	// EnqueueTimePriorityScoreType indicates that the priority is based on the item's enqueue time, with earlier times
 	// being higher priority.
 	EnqueueTimePriorityScoreType PriorityScoreType = "enqueue_time_ns_asc"
+
+	// EDFPriorityScoreType indicates priority scoring based on the Earliest Deadline First (EDF) scheduling policy.
+	EDFPriorityScoreType PriorityScoreType = "earliest_deadline_first"
 )
 
 // ItemComparatorFunc defines the function signature for comparing two `types.QueueItemAccessor` instances to determine
