@@ -28,7 +28,7 @@ import (
 )
 
 func TestFactory(t *testing.T) {
-	source := &DummySource{}
+	source := &FakeDataSource{}
 	factory := NewEndpointFactory([]DataSource{source}, 100*time.Millisecond)
 
 	pod1 := &PodInfo{

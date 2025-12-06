@@ -17,7 +17,6 @@ limitations under the License.
 package datalayer
 
 import (
-	"context"
 	"reflect"
 	"testing"
 
@@ -30,18 +29,9 @@ const (
 	testType = "test-ds-type"
 )
 
-type mockDataSource struct {
-	typedName plugins.TypedName
-}
-
-func (m *mockDataSource) TypedName() plugins.TypedName                { return m.typedName }
-func (m *mockDataSource) Extractors() []string                        { return []string{} }
-func (m *mockDataSource) AddExtractor(_ Extractor) error              { return nil }
-func (m *mockDataSource) Collect(_ context.Context, _ Endpoint) error { return nil }
-
 func TestRegisterAndGetSource(t *testing.T) {
 	reg := DataSourceRegistry{}
-	ds := &mockDataSource{typedName: plugins.TypedName{Type: testType, Name: testType}}
+	ds := &FakeDataSource{typedName: &plugins.TypedName{Type: testType, Name: testType}}
 
 	err := reg.Register(ds)
 	assert.NoError(t, err, "expected no error on first registration")
