@@ -122,7 +122,7 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 		podTotalCount++
 		// If the pod's IP is in our allowed map, include it.
 		// Note: We use GetIPAddress() which should align with the subset address.
-		if pod := pm.GetPod(); pod != nil {
+		if pod := pm.GetMetadata(); pod != nil {
 			if _, found := endpoints[pod.GetIPAddress()]; found {
 				return true
 			}

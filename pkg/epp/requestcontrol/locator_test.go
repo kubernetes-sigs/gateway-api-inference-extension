@@ -114,7 +114,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 
 			var gotIPs []string
 			for _, pm := range result {
-				gotIPs = append(gotIPs, pm.GetPod().GetIPAddress())
+				gotIPs = append(gotIPs, pm.GetMetadata().GetIPAddress())
 			}
 			assert.ElementsMatch(t, tc.expectedPodIPs, gotIPs, "Locate returned unexpected set of pods")
 		})

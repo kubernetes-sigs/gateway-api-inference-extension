@@ -49,8 +49,8 @@ func (fds *FakeDataSource) AddExtractor(_ Extractor) error { return nil }
 
 func (fds *FakeDataSource) Collect(ctx context.Context, ep Endpoint) error {
 	atomic.AddInt64(&fds.callCount, 1)
-	if metrics, ok := fds.Metrics[ep.GetPod().Clone().NamespacedName]; ok {
-		if _, ok := fds.Errors[ep.GetPod().Clone().NamespacedName]; !ok {
+	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
+		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
 			ep.UpdateMetrics(metrics)
 		}
 	}
