@@ -62,17 +62,32 @@ This configuration is optimized for scenarios where a high cache hit rate is exp
 ```bash
 export IP='<YOUR_IP>'
 export PORT='<YOUR_PORT>'
+
+# HUGGINGFACE PARAMETERS
+# Option A: Pass Token Directly
 export HF_TOKEN='<YOUR_HUGGINGFACE_TOKEN>'
+# Option B: Use Existing Kubernetes Secret
+export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
+export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
+
 helm install high-cache ../inference-perf -f high-cache-values.yaml \
-  --set hfToken=${HF_TOKEN} \
   --set "config.server.base_url=http://${IP}:${PORT}"
+  # ------------------------------------------------
+  # HUGGINGFACE OPTION A
+  --set token.hfToken=${HF_TOKEN} \ 
+  # ------------------------------------------------
+  # HUGGINGFACE OPTION B
+  # --set token.hfSecret.name=${HF_SECRET_NAME} \
+  # --set token.hfSecret.key=${HF_SECRET_KEY} \
+  # ------------------------------------------------
 ```
 
 **Parameters to customize:**
 
 *   `high-cache`: A unique name for this deployment.
-*   `hfTokenSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
-*   `hfTokenSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
+*   `token.hfToken`: Your hugging face token. Inference Perf chart will create a new kubernetes secret containing this token.
+*   `hfSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
+*   `hfSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
 *   `config.server.base_url`: The base URL (IP and port) of your inference server for the high-cache scenario.
 
 ### 4. Deploying the Low-Cache Configuration
@@ -83,17 +98,32 @@ This configuration is designed for scenarios with a lower cache hit rate. It use
 cd gateway-api-inference-extension/benchmarking/prefix-cache-aware
 export IP='<YOUR_IP>'
 export PORT='<YOUR_PORT>'
+
+# HUGGINGFACE PARAMETERS
+# Option A: Pass Token Directly
 export HF_TOKEN='<YOUR_HUGGINGFACE_TOKEN>'
+# Option B: Use Existing Kubernetes Secret
+export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
+export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
+
 helm install low-cache ../inference-perf -f low-cache-values.yaml \
-  --set hfToken=${HF_TOKEN} \
   --set "config.server.base_url=http://${IP}:${PORT}"
+  # ------------------------------------------------
+  # HUGGINGFACE OPTION A
+  --set token.hfToken=${HF_TOKEN} \ 
+  # ------------------------------------------------
+  # HUGGINGFACE OPTION B
+  # --set token.hfSecret.name=${HF_SECRET_NAME} \
+  # --set token.hfSecret.key=${HF_SECRET_KEY} \
+  # ------------------------------------------------
 ```
 
 **Parameters to customize:**
 
 *   `low-cache`: A unique name for this deployment.
-*   `hfTokenSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
-*   `hfTokenSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
+*   `token.hfToken`: Your hugging face token. Inference Perf chart will create a new kubernetes secret containing this token.
+*   `hfSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
+*   `hfSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
 *   `config.server.base_url`: The base URL (IP and port) of your inference server for the high-cache scenario.
 
 ## Clean Up

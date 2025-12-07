@@ -420,6 +420,11 @@ func TestLoadConfig(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name:       "successPickerWeightUnsetScorerText",
+			configText: successPickerWeightUnsetScorerText,
+			wantErr:    false,
+		},
+		{
 			name:       "errorBadYaml",
 			configText: errorBadYamlText,
 			wantErr:    true,
@@ -472,7 +477,7 @@ func TestLoadConfig(t *testing.T) {
 				t.Errorf("LoadConfigPhaseOne returned an unexpected error. error %v", err)
 			}
 			t.Logf("error was %s", err)
-		} else if test.wantErr {
+		} else {
 			handle := utils.NewTestHandle(context.Background())
 			_, err = LoadConfigPhaseTwo(rawConfig, handle, logger)
 			if err != nil {
@@ -943,6 +948,22 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
+`
+
+// success with picker and unset weight scorer
+//
+//nolint:dupword
+const successPickerWeightUnsetScorerText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- type: random-picker
+- type: prefix-cache-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: random-picker
+  - pluginRef: prefix-cache-scorer
 `
 
 // invalid parameter configuration for plugin (string passed, in expected)

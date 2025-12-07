@@ -19,11 +19,22 @@ Make sure you have the following tools installed and configured:
 
 Before deployment, navigate to the **`deploy/inference-perf`** directory and edit the **`values.yaml`** file to customize your deployment and the benchmark parameters.
 
-#### Optional Parameters
+#### Optional Token Parameters
+Hugging Face token can be provided either by providing a value (`hfToken`) or by referencing an existing Kubernetes Secret (`hfSecret.Name` and `hfSecret.Key`).
+
+> If both `hfToken` and the `hfSecret` parameters are provided, the chart logic is configured to prioritize the `hfSecret` reference.
 
 | Key | Description | Default |
 | :--- | :--- | :--- |
 | `hfToken` | Hugging Face API token. If provided, a Kubernetes `Secret` named `hf-token-secret` will be created for authentication. | `""` |
+| `hfSecret.name` | The name of a pre-existing Kubernetes Secret that contains a Hugging Face API token. | `""` |
+| `hfSecret.key` | The key within the pre-existing Kubernetes Secret that holds the token value. | `""` |
+---
+
+#### Optional Job Parameters
+
+| Key | Description | Default |
+| :--- | :--- | :--- |
 | `serviceAccountName` | Standard Kubernetes `serviceAccountName`. If not provided, default service account is used. | `""` |
 | `nodeSelector` |  Standard Kubernetes `nodeSelector` map to constrain pod placement to nodes with matching labels. | `{}` |
 | `resources` | Standard Kubernetes resource requests and limits for the main `inference-perf` container. | `{}` |
@@ -54,7 +65,29 @@ The identity executing the workload (e.g., the associated Kubernetes Service Acc
 
 | Key | Description | Default |
 | :--- | :--- | :--- |
-| `gcsPath` | A GCS URI pointing to the dataset file (e.g., `gs://my-bucket/dataset.json`). The file will be automatically copied to the running pod during initialization. | `""` |
+| `gcsPath` | A GCS bucket name pointing to the dataset file (e.g., `<my-bucket-path-to-file>/dataset.json`). The file will be automatically copied to the running pod during initialization. The file will be copied to `gcsDataset/dataset.json` | `""` |
+
+---
+
+#### AWS Specific Parameters
+
+This section details the necessary configuration and permissions for using an S3 path to manage your dataset, typical for deployments on AWS EKS.
+
+##### Required IAM Permissions
+
+The identity executing the workload (e.g., the associated Kubernetes Service Account, often configured via IRSA - IAM Roles for Service Accounts) must possess an associated AWS IAM Policy that grants the following S3 Actions on the target S3 bucket for data transfer:
+
+* **S3 Read/Download (Object Access)**
+    * Action: `s3:GetObject` (Required to download the input dataset from S3).
+    * Action: `s3:ListBucket` (Often required to check for the file's existence and list bucket contents).
+
+* **S3 Write/Upload (Object Creation)**
+    * Action: `s3:PutObject` (Required to upload benchmark results back to S3).
+
+
+| Key | Description | Default |
+| :--- | :--- | :--- |
+| `s3Path` | An S3 bucket name pointing to the dataset file (e.g., `<my-bucket-path-to-file>/dataset.json`). The file will be automatically copied to the running pod during initialization. The file will be copied to `s3Dataset/dataset.json` | `""` |
 
 ---
 
@@ -80,6 +113,6 @@ Use the **`helm install`** command from the **`deploy/inference-perf`** director
 ### 4. Cleanup
 
 To remove the benchmark deployment.
-    ```bash
+```bash
     helm uninstall test
-    ```
+```

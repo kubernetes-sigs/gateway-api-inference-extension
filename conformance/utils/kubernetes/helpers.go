@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,19 +132,21 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 			if len(lastObservedPool.Status.Parents) == 0 {
 				debugMsg += " (No parent statuses reported)"
 			}
+			builder := strings.Builder{}
 			for i, parentStatus := range lastObservedPool.Status.Parents {
 				namespace := parentStatus.ParentRef.Namespace
 				if namespace == "" {
 					namespace = inferenceapi.Namespace(poolNN.Namespace) // Fallback to the pool's namespace
 				}
-				debugMsg += fmt.Sprintf("\n  Parent %d (Gateway: %s/%s):", i, namespace, parentStatus.ParentRef.Name)
+				fmt.Fprintf(&builder, "\n  Parent %d (Gateway: %s/%s):", i, namespace, parentStatus.ParentRef.Name)
 				if len(parentStatus.Conditions) == 0 {
-					debugMsg += " (No conditions reported for this parent)"
+					builder.WriteString(" (No conditions reported for this parent)")
 				}
 				for _, cond := range parentStatus.Conditions {
-					debugMsg += fmt.Sprintf("\n    - Type: %s, Status: %s, Reason: %s, Message: %s", cond.Type, cond.Status, cond.Reason, cond.Message)
+					fmt.Fprintf(&builder, "\n    - Type: %s, Status: %s, Reason: %s, Message: %s", cond.Type, cond.Status, cond.Reason, cond.Message)
 				}
 			}
+			debugMsg += builder.String()
 		} else if lastError == nil || !apierrors.IsNotFound(lastError) {
 			debugMsg += "\nInferencePool was not found or not observed successfully during polling."
 		}

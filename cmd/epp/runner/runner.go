@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -352,10 +353,13 @@ func (r *Runner) Run(ctx context.Context) error {
 		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector)
 	}
 
+	locator := requestcontrol.NewDatastorePodLocator(ds)
+	cachedLocator := requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 	director := requestcontrol.NewDirectorWithConfig(
 		ds,
 		scheduler,
 		admissionController,
+		cachedLocator,
 		r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
@@ -435,7 +439,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
 	// Latency predictor plugins
 	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, slo_aware_router.SLOAwareRouterFactory)
-	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
+	plugins.Register(slo_aware_router.SLOAwareProfileHandlerType, slo_aware_router.SLOAwareProfileHandlerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)

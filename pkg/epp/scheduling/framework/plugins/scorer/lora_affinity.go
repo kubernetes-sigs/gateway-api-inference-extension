@@ -41,18 +41,18 @@ func LoraAffinityScorerFactory(name string, _ json.RawMessage, _ plugins.Handle)
 // NewLoraAffinityScorer initializes a new LoraAffinityScorer and returns its pointer.
 func NewLoraAffinityScorer() *LoraAffinityScorer {
 	return &LoraAffinityScorer{
-		tn: plugins.TypedName{Type: LoraAffinityScorerType, Name: LoraAffinityScorerType},
+		typedName: plugins.TypedName{Type: LoraAffinityScorerType, Name: LoraAffinityScorerType},
 	}
 }
 
 // LoraAffinityScorer scores list of candidate pods based on Lora affinity and availability.
 type LoraAffinityScorer struct {
-	tn plugins.TypedName
+	typedName plugins.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
 func (s *LoraAffinityScorer) TypedName() plugins.TypedName {
-	return s.tn
+	return s.typedName
 }
 
 // Consumes returns the list of data that is consumed by the plugin.
@@ -65,7 +65,7 @@ func (s *LoraAffinityScorer) Consumes() map[string]any {
 
 // WithName sets the name of the scorer.
 func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
-	s.tn.Name = name
+	s.typedName.Name = name
 	return s
 }
 

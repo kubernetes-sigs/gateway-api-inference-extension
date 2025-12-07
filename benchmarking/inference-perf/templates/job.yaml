@@ -23,19 +23,19 @@ spec:
       initContainers:
         - name: fetch-gcs-dataset
           image: google/cloud-sdk:latest
-          command: ["sh", "-c", "gsutil cp {{ .Values.gcsPath }} /dataset/gcs-dataset.json"]
+          command: ["sh", "-c", "gsutil cp gs://{{ .Values.gcsPath }} /gcsDataset/gcs-dataset.json"]
           volumeMounts:
-            - name: dataset-volume
-              mountPath: /dataset
+            - name: gcs-dataset-volume
+              mountPath: /gcsDataset
 {{- end }}
 {{- if .Values.s3Path}}
       initContainers:
         - name: fetch-s3-dataset
           image: google/cloud-sdk:latest
-          command: ["sh", "-c", "aws s3 cp s3://{{ .Values.s3Path }} /dataset/s3-dataset.json"]
+          command: ["sh", "-c", "aws s3 cp s3://{{ .Values.s3Path }} /s3Dataset/s3-dataset.json"]
           volumeMounts:
-            - name: dataset-volume
-              mountPath: /dataset
+            - name: s3-dataset-volume
+              mountPath: /s3dataset
 {{- end }}
       containers:
         - name: inference-perf-container
@@ -47,20 +47,42 @@ spec:
             - "--log-level"
             - {{ .Values.logLevel }}
           env:
-            {{- if .Values.hfToken }}
+{{- if and .Values.token.hfSecret.name .Values.token.hfSecret.key }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.token.hfSecret.name }}
+                  key: {{ .Values.token.hfSecret.key }}
+{{- else if .Values.token.hfToken }}
             - name: HF_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "inference-perf.hfSecret" . }}
                   key: {{ include "inference-perf.hfKey" . }}
-            {{- end }}
+{{- end }}
           volumeMounts:
             - name: config-volume
               mountPath: {{ include "inference-perf.configMount" . }}
               readOnly: true
+{{- if .Values.gcsPath}}
+            - name: gcs-dataset-volume
+              mountPath: /gcsDataset
+{{- end }}
+{{- if .Values.s3Path}}
+            - name: s3-dataset-volume
+              mountPath: /s3Dataset
+{{- end }}
           resources:
             {{- toYaml .Values.job.resources | nindent 12 }}
       volumes:
         - name: config-volume
           configMap:
             name: {{ include "inference-perf.fullname" . }}-config
+{{- if .Values.gcsPath}}
+        - name: gcs-dataset-volume
+          emptyDir: {}
+{{- end }}
+{{- if .Values.s3Path}}
+        - name: s3-dataset-volume
+          emptyDir: {}
+{{- end }}

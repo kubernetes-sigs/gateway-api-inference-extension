@@ -145,7 +145,6 @@ func setDefaultsPhaseTwo(cfg *configapi.EndpointPickerConfig, handle plugins.Han
 				cfg.SchedulingProfiles[idx] = theProfile
 			} else if _, ok := referencedPlugin.(framework.Picker); ok {
 				hasPicker = true
-				break
 			}
 		}
 		if !hasPicker {

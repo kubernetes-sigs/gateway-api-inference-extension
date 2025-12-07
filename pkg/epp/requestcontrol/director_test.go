@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +41,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -141,19 +139,19 @@ func newMockPrepareDataPlugin(name string) *mockPrepareDataPlugin {
 }
 
 type mockAdmissionPlugin struct {
-	tn          plugins.TypedName
+	typedName   plugins.TypedName
 	denialError error
 }
 
 func newMockAdmissionPlugin(name string, denialError error) *mockAdmissionPlugin {
 	return &mockAdmissionPlugin{
-		tn:          plugins.TypedName{Type: "mock-admit-data", Name: name},
+		typedName:   plugins.TypedName{Type: "mock-admit-data", Name: name},
 		denialError: denialError,
 	}
 }
 
 func (m *mockAdmissionPlugin) TypedName() plugins.TypedName {
-	return m.tn
+	return m.typedName
 }
 
 func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
@@ -654,21 +652,27 @@ func TestDirector_HandleRequest(t *testing.T) {
 		}
 
 		for _, test := range tests {
-			t.Run(test.name, func(t *testing.T) {
-				mockSched := &mockScheduler{}
-				if test.schedulerMockSetup != nil {
-					test.schedulerMockSetup(mockSched)
-				}
-				config := NewConfig()
-				if test.prepareDataPlugin != nil {
-					config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
-				}
-				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
-				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, config)
-				if test.name == "successful request with model rewrite" {
-					director.datastore = &mockDatastore{pods: ds.PodList(datastore.AllPodsPredicate), rewrites: []*v1alpha2.InferenceModelRewrite{rewrite}}
-				}
+		  t.Run(test.name, func(t *testing.T) {
+			  mockSched := &mockScheduler{}
+			  if test.schedulerMockSetup != nil {
+				  test.schedulerMockSetup(mockSched)
+			  }
+			  config := NewConfig()
+			  if test.prepareDataPlugin != nil {
+				  config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
+			  }
+			  config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
+			  locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+			  director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, locator, config)
+			  if test.name == "successful request with model rewrite" {
+				  mockDs := &mockDatastore{
+					  pods:     ds.PodList(datastore.AllPodsPredicate),
+					  rewrites: []*v1alpha2.InferenceModelRewrite{rewrite},
+				  }
+				  director.datastore = mockDs
+				  director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
+			  }
 				reqCtx := &handlers.RequestContext{
 					Request: &handlers.Request{
 						// Create a copy of the map for each test run to avoid mutation issues.
@@ -711,91 +715,6 @@ func TestDirector_HandleRequest(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// TestGetCandidatePodsForScheduling is testing getCandidatePodsForScheduling and more specifically the functionality of SubsetFilter.
-func TestGetCandidatePodsForScheduling(t *testing.T) {
-	var makeFilterMetadata = func(data []any) map[string]any {
-		return map[string]any{
-			metadata.SubsetFilterNamespace: map[string]any{
-				metadata.SubsetFilterKey: data,
-			},
-		}
-	}
-
-	pod1 := &backend.Pod{
-		NamespacedName: types.NamespacedName{Name: "pod1"},
-		Address:        "10.0.0.1",
-		Labels:         map[string]string{},
-	}
-
-	pod2 := &backend.Pod{
-		NamespacedName: types.NamespacedName{Name: "pod2"},
-		Address:        "10.0.0.2",
-		Labels:         map[string]string{},
-	}
-
-	testInput := []backendmetrics.PodMetrics{
-		&backendmetrics.FakePodMetrics{Pod: pod1},
-		&backendmetrics.FakePodMetrics{Pod: pod2},
-	}
-
-	tests := []struct {
-		name     string
-		metadata map[string]any
-		output   []backendmetrics.PodMetrics
-	}{
-		{
-			name:     "SubsetFilter, filter not present — return all pods",
-			metadata: map[string]any{},
-			output:   testInput,
-		},
-		{
-			name:     "SubsetFilter, namespace present filter not present — return all pods",
-			metadata: map[string]any{metadata.SubsetFilterNamespace: map[string]any{}},
-			output:   testInput,
-		},
-		{
-			name:     "SubsetFilter, filter present with empty list — return error",
-			metadata: makeFilterMetadata([]any{}),
-			output:   []backendmetrics.PodMetrics{},
-		},
-		{
-			name:     "SubsetFilter, subset with one matching pod",
-			metadata: makeFilterMetadata([]any{"10.0.0.1"}),
-			output: []backendmetrics.PodMetrics{
-				&backendmetrics.FakePodMetrics{
-					Pod: pod1,
-				},
-			},
-		},
-		{
-			name:     "SubsetFilter, subset with multiple matching pods",
-			metadata: makeFilterMetadata([]any{"10.0.0.1", "10.0.0.2", "10.0.0.3"}),
-			output:   testInput,
-		},
-		{
-			name:     "SubsetFilter, subset with no matching pods",
-			metadata: makeFilterMetadata([]any{"10.0.0.3"}),
-			output:   []backendmetrics.PodMetrics{},
-		},
-	}
-
-	ds := &mockDatastore{pods: testInput}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			director := NewDirectorWithConfig(ds, &mockScheduler{}, &mockAdmissionController{}, NewConfig())
-
-			got := director.getCandidatePodsForScheduling(context.Background(), test.metadata)
-
-			diff := cmp.Diff(test.output, got, cmpopts.SortSlices(func(a, b backendmetrics.PodMetrics) bool {
-				return a.GetPod().NamespacedName.String() < b.GetPod().NamespacedName.String()
-			}))
-			if diff != "" {
-				t.Errorf("Unexpected output (-want +got): %v", diff)
-			}
-		})
 	}
 }
 
@@ -1040,7 +959,8 @@ func TestDirector_ApplyWeightedModelRewrite(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockDs := &mockDatastore{rewrites: test.rewrites}
-			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, NewConfig())
+			locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
+			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, locator, NewConfig())
 
 			reqCtx := &handlers.RequestContext{
 				IncomingModelName: test.incomingModel,
@@ -1140,7 +1060,14 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, NewConfig().WithResponseReceivedPlugins(pr1))
+	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	director := NewDirectorWithConfig(
+		ds,
+		mockSched,
+		&mockAdmissionController{},
+		locator,
+		NewConfig().WithResponseReceivedPlugins(pr1),
+	)
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -1177,7 +1104,8 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseStreamingPlugins(ps1))
+	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	director := NewDirectorWithConfig(ds, mockSched, nil, locator, NewConfig().WithResponseStreamingPlugins(ps1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -1213,7 +1141,8 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	director := NewDirectorWithConfig(ds, mockSched, nil, NewConfig().WithResponseCompletePlugins(pc1))
+	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	director := NewDirectorWithConfig(ds, mockSched, nil, locator, NewConfig().WithResponseCompletePlugins(pc1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -1250,51 +1179,51 @@ const (
 )
 
 type testResponseReceived struct {
-	tn                      plugins.TypedName
+	typedName               plugins.TypedName
 	lastRespOnResponse      *Response
 	lastTargetPodOnResponse string
 }
 
 type testResponseStreaming struct {
-	tn                       plugins.TypedName
+	typedName                plugins.TypedName
 	lastRespOnStreaming      *Response
 	lastTargetPodOnStreaming string
 }
 
 type testResponseComplete struct {
-	tn                      plugins.TypedName
+	typedName               plugins.TypedName
 	lastRespOnComplete      *Response
 	lastTargetPodOnComplete string
 }
 
 func newTestResponseReceived(name string) *testResponseReceived {
 	return &testResponseReceived{
-		tn: plugins.TypedName{Type: testResponseReceivedType, Name: name},
+		typedName: plugins.TypedName{Type: testResponseReceivedType, Name: name},
 	}
 }
 
 func newTestResponseStreaming(name string) *testResponseStreaming {
 	return &testResponseStreaming{
-		tn: plugins.TypedName{Type: testPostStreamingType, Name: name},
+		typedName: plugins.TypedName{Type: testPostStreamingType, Name: name},
 	}
 }
 
 func newTestResponseComplete(name string) *testResponseComplete {
 	return &testResponseComplete{
-		tn: plugins.TypedName{Type: testPostCompleteType, Name: name},
+		typedName: plugins.TypedName{Type: testPostCompleteType, Name: name},
 	}
 }
 
 func (p *testResponseReceived) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testResponseStreaming) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testResponseComplete) TypedName() plugins.TypedName {
-	return p.tn
+	return p.typedName
 }
 
 func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
