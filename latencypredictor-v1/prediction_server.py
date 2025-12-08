@@ -731,6 +731,114 @@ async def readiness_check():
     }
 
 
+# P/D Disaggregation Prediction Models
+
+class PDPredictionRequest(BaseModel):
+    """Request for P/D disaggregation multi-phase prediction."""
+    kv_cache_percentage: float = Field(..., ge=0.0, le=1.0)
+    input_token_length: int = Field(..., ge=0)
+    num_request_waiting: int = Field(..., ge=0)
+    num_request_running: int = Field(..., ge=0)
+    num_tokens_generated: int = Field(..., ge=0, description="For TPOT prediction")
+    prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score")
+    kv_cache_size_mb: float = Field(..., ge=0.0, description="KV cache size in MB for transfer prediction")
+    network_bandwidth_gbps: float = Field(100.0, gt=0.0, description="Network bandwidth in Gbps (default: 100 for RDMA)")
+    pod_role: str = Field(..., pattern="^(prefill|decode)$", description="Pod role: 'prefill' or 'decode'")
+
+
+class PDPredictionResponse(BaseModel):
+    """Response for P/D disaggregation multi-phase prediction."""
+    prefill_ttft_ms: float = Field(..., description="Predicted prefill phase TTFT")
+    kv_transfer_ms: float = Field(..., description="Predicted KV transfer latency")
+    decode_tpot_ms: float = Field(..., description="Predicted decode phase TPOT")
+    total_ttft_ms: float = Field(..., description="Total TTFT (prefill + KV transfer)")
+    predicted_at: datetime
+    model_type: str
+    quantile: float
+    kv_transfer_overhead_ms: float = Field(..., description="Fixed KV transfer overhead")
+
+
+def estimate_kv_transfer_latency(kv_cache_size_mb: float, bandwidth_gbps: float) -> Tuple[float, float]:
+    """
+    Estimate KV transfer latency based on cache size and bandwidth.
+
+    Args:
+        kv_cache_size_mb: Size of KV cache in MB
+        bandwidth_gbps: Network bandwidth in Gbps
+
+    Returns:
+        Tuple of (transfer_time_ms, overhead_ms)
+    """
+    # Fixed overhead for setup (connection, handshake, etc.)
+    overhead_ms = float(os.getenv("KV_TRANSFER_OVERHEAD_MS", "5.0"))
+
+    # Convert bandwidth from Gbps to MB/s: 1 Gbps = 125 MB/s
+    bandwidth_MB_per_sec = bandwidth_gbps * 125.0
+
+    # Transfer time = size / bandwidth (in seconds), convert to ms
+    transfer_time_ms = (kv_cache_size_mb / bandwidth_MB_per_sec) * 1000.0
+
+    return transfer_time_ms, overhead_ms
+
+
+@app.post("/predict/pd", response_model=PDPredictionResponse)
+async def predict_pd_endpoint(request: PDPredictionRequest):
+    """
+    Make multi-phase latency predictions for P/D disaggregation.
+
+    This endpoint predicts:
+    - Prefill phase TTFT
+    - KV transfer latency
+    - Decode phase TPOT
+
+    The predictions account for the role of the pod (prefill vs decode) and
+    estimate KV transfer time based on cache size and network bandwidth.
+    """
+    try:
+        # Get base predictions for prefill and decode
+        features = request.dict()
+
+        # Predict prefill TTFT (with prefix cache score)
+        prefill_ttft, _ = predictor.predict(features)
+        prefill_ttft = max(0, prefill_ttft)
+
+        # Predict decode TPOT (without prefix cache impact)
+        decode_features = features.copy()
+        decode_features['prefix_cache_score'] = 0.0  # Decode doesn't benefit from prefix cache
+        _, decode_tpot = predictor.predict(decode_features)
+        decode_tpot = max(0, decode_tpot)
+
+        # Estimate KV transfer latency
+        transfer_time_ms, overhead_ms = estimate_kv_transfer_latency(
+            request.kv_cache_size_mb,
+            request.network_bandwidth_gbps
+        )
+        kv_transfer_ms = transfer_time_ms + overhead_ms
+
+        # Calculate total TTFT (prefill + KV transfer)
+        total_ttft_ms = prefill_ttft + kv_transfer_ms
+
+        logging.info(f"P/D Prediction: prefill={prefill_ttft:.2f}ms, kv_transfer={kv_transfer_ms:.2f}ms, "
+                    f"decode_tpot={decode_tpot:.2f}ms, total_ttft={total_ttft_ms:.2f}ms")
+
+        return PDPredictionResponse(
+            prefill_ttft_ms=prefill_ttft,
+            kv_transfer_ms=kv_transfer_ms,
+            decode_tpot_ms=decode_tpot,
+            total_ttft_ms=total_ttft_ms,
+            predicted_at=datetime.now(timezone.utc),
+            model_type=predictor.model_type.value,
+            quantile=predictor.quantile,
+            kv_transfer_overhead_ms=overhead_ms
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"P/D prediction failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"P/D prediction failed: {str(e)}")
+
+
 @app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint."""
@@ -741,7 +849,8 @@ async def root():
         "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and TPOT latencies",
         "is_ready": predictor.is_ready,
         "sync_interval": settings.MODEL_SYNC_INTERVAL_SEC,
-        "training_server": settings.TRAINING_SERVER_URL
+        "training_server": settings.TRAINING_SERVER_URL,
+        "pd_support": "enabled"
     }
 
 

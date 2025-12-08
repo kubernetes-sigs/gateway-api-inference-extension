@@ -111,6 +111,29 @@ type RequestContext struct {
 	TPOTObservations          []float64
 	PredictedTPOTObservations []float64
 
+	// -- P/D disaggregation SLO tracking fields --
+	PDMode                   bool      // True if prefill/decode disaggregation is enabled
+	PrefillPodName           string    // Name of the prefill pod
+	DecodePodName            string    // Name of the decode pod
+	PrefillStartTime         time.Time // When prefill phase started
+	PrefillEndTime           time.Time // When prefill phase completed
+	KVTransferStartTime      time.Time // When KV transfer started
+	KVTransferEndTime        time.Time // When KV transfer completed
+	DecodeStartTime          time.Time // When decode phase started
+	PrefillTTFTBudget        float64   // Allocated TTFT budget for prefill phase (ms)
+	KVTransferBudget         float64   // Allocated TTFT budget for KV transfer (ms)
+	DecodeTPOTBudget         float64   // TPOT budget for decode phase (ms)
+	ActualPrefillLatency     float64   // Actual prefill latency (ms)
+	ActualKVTransferLatency  float64   // Actual KV transfer latency (ms)
+	ActualDecodeTPOT         float64   // Actual decode TPOT (ms)
+	RemainingTTFTBudget      float64   // Remaining TTFT budget after prefill and KV transfer (ms)
+	RemainingTPOTBudget      float64   // Remaining TPOT budget (ms)
+	PredictedPrefillTTFT     float64   // Predicted prefill TTFT (ms)
+	PredictedKVTransferMs    float64   // Predicted KV transfer latency (ms)
+	PredictedDecodeTPOT      float64   // Predicted decode TPOT (ms)
+	PDSLOViolation           bool      // True if any phase violated its SLO budget
+	PDSLOViolationPhase      string    // Which phase violated SLO ("prefill", "kv_transfer", "decode")
+
 	Response *Response
 
 	reqHeaderResp  *extProcPb.ProcessingResponse
