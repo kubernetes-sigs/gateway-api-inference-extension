@@ -141,7 +141,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 	}
 }
 
-// --- Test: Phase 2 (Instantiation, Architecture Injection, Deep Validation) ---
+// --- Test: Phase 2 (Instantiation, System Defaulting, Deep Validation) ---
 
 func TestInstantiateAndConfigure(t *testing.T) {
 	// Not parallel because it modifies global plugin registry.
@@ -300,7 +300,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	}
 }
 
-// Add this new test function to verify the builder logic specifically
+// Verify the SaturationConfig builder specifically.
 func TestBuildSaturationConfig(t *testing.T) {
 	t.Parallel()
 

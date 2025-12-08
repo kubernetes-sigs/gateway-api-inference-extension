@@ -52,17 +52,14 @@ func RegisterFeatureGate(gate string) {
 // LoadRawConfig parses the raw configuration bytes, applies initial defaults, and extracts feature gates.
 // It does not instantiate plugins.
 func LoadRawConfig(configBytes []byte, logger logr.Logger) (*configapi.EndpointPickerConfig, map[string]bool, error) {
-	// Decode JSON/YAML.
 	rawConfig, err := decodeRawConfig(configBytes)
 	if err != nil {
 		return nil, nil, err
 	}
-	logger.V(1).Info("Loaded raw configuration", "config", rawConfig)
+	logger.Info("Loaded raw configuration", "config", rawConfig)
 
-	// Sanitize data.
 	applyStaticDefaults(rawConfig)
 
-	// Early validation of Feature Gates.
 	// We validate gates early because they might dictate downstream loading logic.
 	if err := validateFeatureGates(rawConfig.FeatureGates); err != nil {
 		return nil, nil, fmt.Errorf("feature gate validation failed: %w", err)
@@ -80,23 +77,19 @@ func InstantiateAndConfigure(
 	logger logr.Logger,
 ) (*config.Config, error) {
 
-	// Instantiate user-configured plugins.
 	if err := instantiatePlugins(rawConfig.Plugins, handle); err != nil {
 		return nil, fmt.Errorf("plugin instantiation failed: %w", err)
 	}
 
-	// Fill in the architectural gaps (inject required system plugins).
 	if err := applySystemDefaults(rawConfig, handle); err != nil {
 		return nil, fmt.Errorf("system default application failed: %w", err)
 	}
 	logger.Info("Effective configuration loaded", "config", rawConfig)
 
-	// Deep validation checks relationships between now-finalized profiles and plugins.
 	if err := validateConfig(rawConfig); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
-	// Build scheduler config.
 	schedulerConfig, err := buildSchedulerConfig(rawConfig.SchedulingProfiles, handle)
 	if err != nil {
 		return nil, fmt.Errorf("scheduler config build failed: %w", err)
@@ -150,7 +143,6 @@ func buildSchedulerConfig(
 
 	profiles := make(map[string]*framework.SchedulerProfile)
 
-	// Build profiles.
 	for _, cfgProfile := range configProfiles {
 		fwProfile := framework.NewSchedulerProfile()
 
@@ -178,7 +170,6 @@ func buildSchedulerConfig(
 		profiles[cfgProfile.Name] = fwProfile
 	}
 
-	// Find Profile Handler (singleton check).
 	var profileHandler framework.ProfileHandler
 	for name, plugin := range handle.GetAllPluginsWithNames() {
 		if ph, ok := plugin.(framework.ProfileHandler); ok {
@@ -194,7 +185,6 @@ func buildSchedulerConfig(
 		return nil, errors.New("no profile handler configured")
 	}
 
-	// Validate SingleProfileHandler usage.
 	if profileHandler.TypedName().Type == profile.SingleProfileHandlerType && len(profiles) > 1 {
 		return nil, errors.New("SingleProfileHandler cannot support multiple scheduling profiles")
 	}
@@ -203,12 +193,10 @@ func buildSchedulerConfig(
 }
 
 func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
-	// Initialize with all false.
 	config := make(map[string]bool, len(registeredFeatureGates))
 	for gate := range registeredFeatureGates {
 		config[gate] = false
 	}
-	// Apply overrides.
 	for _, gate := range gates {
 		config[gate] = true
 	}
@@ -216,14 +204,12 @@ func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
 }
 
 func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *saturationdetector.Config {
-	// 1. Initialize with Defaults
 	cfg := &saturationdetector.Config{
 		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
 		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
 		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
 	}
 
-	// 2. Apply Overrides (if valid)
 	if apiConfig != nil {
 		if apiConfig.QueueDepthThreshold > 0 {
 			cfg.QueueDepthThreshold = apiConfig.QueueDepthThreshold
