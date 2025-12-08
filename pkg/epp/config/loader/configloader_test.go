@@ -201,6 +201,20 @@ func TestInstantiateAndConfigure(t *testing.T) {
 					"Defaults: SingleProfileHandler was not injected")
 			},
 		},
+		{
+			name:       "Success - Picker Before Scorer",
+			configText: successPickerBeforeScorerText,
+			wantErr:    false,
+			validate: func(t *testing.T, _ plugins.Handle, cfg *configapi.EndpointPickerConfig) {
+				require.Len(t, cfg.SchedulingProfiles, 1)
+				prof := cfg.SchedulingProfiles[0]
+				require.Equal(t, "test-picker", prof.Plugins[0].PluginRef, "Picker should be the first plugin")
+				require.Equal(t, "test-scorer", prof.Plugins[1].PluginRef, "Scorer should be the second plugin")
+				scorerWeight := prof.Plugins[1].Weight
+				require.NotNil(t, scorerWeight, "Scorer weight should be set (defaulted)")
+				require.Equal(t, 1, *scorerWeight, "Scorer weight should default to 1")
+			},
+		},
 
 		// --- Instantiation Errors ---
 		{

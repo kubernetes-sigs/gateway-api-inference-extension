@@ -115,6 +115,22 @@ schedulingProfiles:
   - pluginRef: maxScore
 `
 
+// successPickerBeforeScorerText tests the regression case where a Picker appears before a Scorer (without weight) in
+// the plugin list.
+const successPickerBeforeScorerText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- type: single-profile-handler
+- type: test-picker
+- type: test-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: test-picker
+  - pluginRef: test-scorer
+`
+
 // --- Invalid Configurations (Syntax/Structure) ---
 
 // errorBadYamlText contains invalid YAML syntax.
