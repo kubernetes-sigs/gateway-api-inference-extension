@@ -29,7 +29,7 @@ func TestMetricsClone(t *testing.T) {
 		ActiveModels:            map[string]int{"modelA": 1},
 		WaitingModels:           map[string]int{"modelB": 2},
 		MaxActiveModels:         5,
-		RunningQueueSize:        3,
+		RunningRequestsSize:     3,
 		WaitingQueueSize:        7,
 		KVCacheUsagePercent:     42.5,
 		KvCacheMaxTokenCapacity: 2048,

@@ -103,7 +103,7 @@ func (m *mockPredictor) GetServerStatus(ctx context.Context) (*latencypredictor.
 	return &latencypredictor.ServerStatusResponse{}, nil
 }
 
-func createTestPod(name string, kvCacheUsage float64, runningQueueSize, waitingQueueSize int) schedulingtypes.Pod {
+func createTestPod(name string, kvCacheUsage float64, runningRequestsSize, waitingQueueSize int) schedulingtypes.Pod {
 	return &schedulingtypes.PodMetrics{
 		Pod: &backend.Pod{
 			NamespacedName: types.NamespacedName{
@@ -113,7 +113,7 @@ func createTestPod(name string, kvCacheUsage float64, runningQueueSize, waitingQ
 		},
 		MetricsState: &backendmetrics.MetricsState{
 			KVCacheUsagePercent: kvCacheUsage,
-			RunningQueueSize:    runningQueueSize,
+			RunningRequestsSize: runningRequestsSize,
 			WaitingQueueSize:    waitingQueueSize,
 		},
 	}

@@ -87,7 +87,7 @@ func processHeaderForLatencyPrediction(
 		KVCachePercentage:  m.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: 0,
 		PrefixCacheScore:   prefix_cache_score,
 	}
@@ -174,7 +174,7 @@ func recordTTFTTrainingData(
 		ActualTPOT:         0,
 		Timestamp:          now,
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: 0,
 		PrefixCacheScore:   prefixCacheScore,
 	}
@@ -201,7 +201,7 @@ func predictFirstTPOT(
 		KVCachePercentage:  m.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: sloCtx.generatedTokenCount,
 		PrefixCacheScore:   0,
 	}
@@ -260,7 +260,7 @@ func processTokenForLatencyPrediction(
 		ActualTPOT:         latencyMs,
 		Timestamp:          now,
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: sloCtx.generatedTokenCount - 1,
 		PrefixCacheScore:   0, // TPOT does not use prefix cache score
 	}
@@ -274,7 +274,7 @@ func processTokenForLatencyPrediction(
 			KVCachePercentage:  m.KVCacheUsagePercent,
 			InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
 			NumRequestWaiting:  m.WaitingQueueSize,
-			NumRequestRunning:  m.RunningQueueSize,
+			NumRequestRunning:  m.RunningRequestsSize,
 			NumTokensGenerated: sloCtx.generatedTokenCount,
 			PrefixCacheScore:   0, // TPOT does not use prefix cache score
 		}
@@ -337,7 +337,7 @@ func bulkPredictWithMetrics(
 			KVCachePercentage:  metricsStates[i].KVCacheUsagePercent,
 			InputTokenLength:   len(strings.Fields(prompts[i])),
 			NumRequestWaiting:  metricsStates[i].WaitingQueueSize,
-			NumRequestRunning:  metricsStates[i].RunningQueueSize,
+			NumRequestRunning:  metricsStates[i].RunningRequestsSize,
 			NumTokensGenerated: generatedTokenCounts[i],
 			PrefixCacheScore:   prefixCacheScores[i],
 		}
@@ -385,7 +385,7 @@ func bulkPredictWithMetrics(
 				"generated_tokens", bulkRequests[i].NumTokensGenerated,
 				"kv_cache_percent", bulkRequests[i].KVCachePercentage,
 				"waiting_queue", bulkRequests[i].NumRequestWaiting,
-				"running_queue", bulkRequests[i].NumRequestRunning,
+				"running_requests", bulkRequests[i].NumRequestRunning,
 				"prefix_cache_score", bulkRequests[i].PrefixCacheScore)
 		}
 	}

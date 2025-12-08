@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-func TestRunningQueueSizeScorer(t *testing.T) {
+func TestRunningRequestsSizeScorer(t *testing.T) {
 	tests := []struct {
 		name              string
 		pods              []types.Pod
@@ -36,9 +36,9 @@ func TestRunningQueueSizeScorer(t *testing.T) {
 		{
 			name: "Different running queue sizes",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningQueueSize: 10}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningQueueSize: 5}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningQueueSize: 0}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningRequestsSize: 10}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningRequestsSize: 5}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningRequestsSize: 0}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
@@ -49,8 +49,8 @@ func TestRunningQueueSizeScorer(t *testing.T) {
 		{
 			name: "Same running queue sizes",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningQueueSize: 5}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningQueueSize: 5}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningRequestsSize: 5}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningRequestsSize: 5}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
@@ -60,8 +60,8 @@ func TestRunningQueueSizeScorer(t *testing.T) {
 		{
 			name: "Zero running queue sizes",
 			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningQueueSize: 0}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningQueueSize: 0}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningRequestsSize: 0}},
+				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{RunningRequestsSize: 0}},
 			},
 			expectedScoresPod: map[int]float64{
 				0: 1.0,
@@ -70,7 +70,7 @@ func TestRunningQueueSizeScorer(t *testing.T) {
 		},
 	}
 
-	scorer := &RunningQueueSizeScorer{}
+	scorer := &RunningRequestsSizeScorer{}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

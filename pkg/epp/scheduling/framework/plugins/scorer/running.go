@@ -28,56 +28,56 @@ import (
 )
 
 const (
-	RunningQueueSizeScorerType = "running-queue-size-scorer"
+	RunningRequestsSizeScorerType = "running-requests-size-scorer"
 )
 
 // compile-time type assertion
-var _ framework.Scorer = &RunningQueueSizeScorer{}
+var _ framework.Scorer = &RunningRequestsSizeScorer{}
 
-// RunningQueueSizeScorerFactory defines the factory function for RunningQueueSizeScorer.
-func RunningQueueSizeScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-	return NewRunningQueueSizeScorer().WithName(name), nil
+// RunningRequestsSizeScorerFactory defines the factory function for RunningRequestsSizeScorer.
+func RunningRequestsSizeScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	return NewRunningRequestsSizeScorer().WithName(name), nil
 }
 
-// NewRunningQueueSizeScorer initializes a new RunningQueueSizeScorer and returns its pointer.
-func NewRunningQueueSizeScorer() *RunningQueueSizeScorer {
-	return &RunningQueueSizeScorer{
-		typedName: plugins.TypedName{Type: RunningQueueSizeScorerType, Name: RunningQueueSizeScorerType},
+// NewRunningRequestsSizeScorer initializes a new RunningRequestsSizeScorer and returns its pointer.
+func NewRunningRequestsSizeScorer() *RunningRequestsSizeScorer {
+	return &RunningRequestsSizeScorer{
+		typedName: plugins.TypedName{Type: RunningRequestsSizeScorerType, Name: RunningRequestsSizeScorerType},
 	}
 }
 
-// RunningQueueSizeScorer scores list of candidate pods based on the pod's running request size.
+// RunningRequestsSizeScorer scores list of candidate pods based on the pod's running request size.
 // the less running request size the pod has, the higher score it will get (since it's more available to serve new request).
-type RunningQueueSizeScorer struct {
+type RunningRequestsSizeScorer struct {
 	typedName plugins.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *RunningQueueSizeScorer) TypedName() plugins.TypedName {
+func (s *RunningRequestsSizeScorer) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
 // Consumes returns the list of data that is consumed by the plugin.
-func (s *RunningQueueSizeScorer) Consumes() map[string]any {
+func (s *RunningRequestsSizeScorer) Consumes() map[string]any {
 	return map[string]any{
-		metrics.RunningQueueSizeKey: int(0),
+		metrics.RunningRequestsSizeKey: int(0),
 	}
 }
 
 // WithName sets the name of the scorer.
-func (s *RunningQueueSizeScorer) WithName(name string) *RunningQueueSizeScorer {
+func (s *RunningRequestsSizeScorer) WithName(name string) *RunningRequestsSizeScorer {
 	s.typedName.Name = name
 	return s
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *RunningQueueSizeScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 
 	// Iterate through the remaining pods to find min and max
 	for _, pod := range pods {
-		queueSize := pod.GetMetrics().RunningQueueSize
+		queueSize := pod.GetMetrics().RunningRequestsSize
 		if queueSize < minQueueSize {
 			minQueueSize = queueSize
 		}
@@ -92,7 +92,7 @@ func (s *RunningQueueSizeScorer) Score(_ context.Context, _ *types.CycleState, _
 			// If all pods have the same queue size, return a neutral score
 			return 1.0
 		}
-		return float64(maxQueueSize-pod.GetMetrics().RunningQueueSize) / float64(maxQueueSize-minQueueSize)
+		return float64(maxQueueSize-pod.GetMetrics().RunningRequestsSize) / float64(maxQueueSize-minQueueSize)
 	}
 
 	// Create a map to hold the scores for each pod
