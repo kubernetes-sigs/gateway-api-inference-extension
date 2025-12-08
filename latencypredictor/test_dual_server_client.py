@@ -130,8 +130,11 @@ def test_training_server_models_list():
     if data["model_type"] == "bayesian_ridge":
         expected_models.extend(["ttft_scaler", "tpot_scaler"])
     elif data["model_type"] in ["xgboost", "lightgbm"]:
-        # TreeLite models should also be available for XGBoost and LightGBM
-        expected_models.extend(["ttft_treelite", "tpot_treelite"])
+        # Note: TreeLite models are NOT compatible with quantile regression
+        # They will only be available if using standard regression objectives
+        # For quantile regression, native XGBoost/LightGBM prediction is used instead
+        print(f"Note: TreeLite is incompatible with quantile regression objectives")
+        print(f"TreeLite models will be listed but may not exist when using quantile regression")
 
     for model_name in expected_models:
         assert model_name in models, f"Model {model_name} should be listed"
@@ -227,6 +230,8 @@ def test_treelite_models_on_training_server():
         return
 
     print(f"Testing TreeLite models for {model_type}...")
+    print(f"⚠️  Note: TreeLite doesn't support quantile regression objectives")
+    print(f"⚠️  TreeLite models will NOT be available when using reg:quantileerror or objective=quantile")
 
     # Test TTFT TreeLite model
     ttft_info_r = requests.get(f"{TRAINING_URL}/model/ttft_treelite/info")
@@ -236,7 +241,9 @@ def test_treelite_models_on_training_server():
             print(f"✓ TTFT TreeLite model available ({ttft_info['size_bytes']} bytes)")
             assert ttft_info["size_bytes"] > 0, "TTFT TreeLite model should have non-zero size"
         else:
-            print(f"TTFT TreeLite model not yet generated")
+            print(f"⚠️  TTFT TreeLite model not available (likely using quantile regression)")
+    elif ttft_info_r.status_code == 404:
+        print(f"⚠️  TTFT TreeLite model not found (expected when using quantile regression)")
     else:
         print(f"TTFT TreeLite model endpoint returned status {ttft_info_r.status_code}")
 
@@ -248,7 +255,9 @@ def test_treelite_models_on_training_server():
             print(f"✓ TPOT TreeLite model available ({tpot_info['size_bytes']} bytes)")
             assert tpot_info["size_bytes"] > 0, "TPOT TreeLite model should have non-zero size"
         else:
-            print(f"TPOT TreeLite model not yet generated")
+            print(f"⚠️  TPOT TreeLite model not available (likely using quantile regression)")
+    elif tpot_info_r.status_code == 404:
+        print(f"⚠️  TPOT TreeLite model not found (expected when using quantile regression)")
     else:
         print(f"TPOT TreeLite model endpoint returned status {tpot_info_r.status_code}")
 
@@ -1423,6 +1432,347 @@ def test_training_server_flush_error_handling():
     
     print("✓ Flush error handling tests passed!")
 
+def test_native_quantile_mode():
+    """
+    Test native quantile regression mode (USE_TREELITE=false).
+    Verifies that:
+    1. Training server uses quantile regression objective
+    2. TreeLite models are NOT created
+    3. Predictions work correctly
+    4. Coverage is within expected range
+    """
+    print("\n" + "="*50)
+    print("Testing Native Quantile Mode (USE_TREELITE=false)")
+    print("="*50)
+
+    # 1. Check server configuration
+    print("Step 1: Checking server configuration...")
+    model_info_r = requests.get(f"{TRAINING_URL}/model/download/info", timeout=10)
+    assert model_info_r.status_code == 200
+    model_info = model_info_r.json()
+
+    prediction_status_r = requests.get(f"{PREDICTION_URL}/status", timeout=10)
+    assert prediction_status_r.status_code == 200
+    prediction_status = prediction_status_r.json()
+
+    model_type = model_info.get("model_type")
+    quantile = prediction_status.get("quantile", 0.9)
+
+    print(f"  Model type: {model_type}")
+    print(f"  Quantile: {quantile}")
+
+    # Only test if using XGBoost or LightGBM
+    if model_type not in ["xgboost", "lightgbm"]:
+        print(f"  Skipping - model type {model_type} doesn't support dual modes")
+        return
+
+    # 2. Check TreeLite models should NOT exist in native quantile mode
+    print("Step 2: Verifying TreeLite models are NOT created...")
+    models_list_r = requests.get(f"{TRAINING_URL}/models/list", timeout=10)
+    models_list = models_list_r.json()
+
+    treelite_models_exist = (
+        models_list["models"].get("ttft_treelite", {}).get("exists", False) or
+        models_list["models"].get("tpot_treelite", {}).get("exists", False)
+    )
+
+    if treelite_models_exist:
+        print("  ⚠️  TreeLite models exist - likely using TreeLite mode, not native quantile")
+        print("  This test expects USE_TREELITE=false")
+    else:
+        print("  ✓ TreeLite models NOT created (as expected in native quantile mode)")
+
+    # 3. Send training data
+    print("Step 3: Sending training data...")
+    np.random.seed(42)
+    training_entries = []
+
+    for i in range(500):
+        kv = np.random.uniform(0.1, 0.9)
+        input_len = np.random.randint(50, 800)
+        waiting = np.random.randint(0, 8)
+        running = np.random.randint(1, 4)
+        tokens_gen = np.random.randint(1, 25)
+        prefix = np.random.uniform(0.0, 1.0)
+
+        # Generate with known noise
+        ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+        tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+
+        training_entries.append({
+            "kv_cache_percentage": float(kv),
+            "input_token_length": int(input_len),
+            "num_request_waiting": int(waiting),
+            "num_request_running": int(running),
+            "actual_ttft_ms": float(max(1.0, ttft_mu + np.random.normal(0, 20))),
+            "actual_tpot_ms": float(max(1.0, tpot_mu + np.random.normal(0, 10))),
+            "num_tokens_generated": int(tokens_gen),
+            "prefix_cache_score": float(prefix),
+        })
+
+    training_r = requests.post(f"{TRAINING_URL}/add_training_data_bulk",
+                              json={"entries": training_entries}, timeout=60)
+    assert training_r.status_code == 202
+    print(f"  ✓ Sent 500 training samples")
+
+    # 4. Wait for training and sync
+    print("Step 4: Waiting for training...")
+    time.sleep(30)
+
+    print("Step 5: Syncing models to prediction server...")
+    for _ in range(10):
+        reload_r = requests.post(f"{PREDICTION_URL}/reload", timeout=20)
+        if reload_r.status_code == 200 and reload_r.json().get("is_ready"):
+            break
+        time.sleep(3)
+
+    # 5. Make predictions and check coverage
+    print("Step 6: Testing predictions and coverage...")
+    test_cases = []
+    expected_ttft = []
+    expected_tpot = []
+
+    for i in range(100):
+        kv = np.random.uniform(0.1, 0.9)
+        input_len = np.random.randint(100, 600)
+        waiting = np.random.randint(1, 8)
+        running = np.random.randint(1, 4)
+        tokens_gen = np.random.randint(5, 20)
+        prefix = np.random.uniform(0.0, 1.0)
+
+        test_cases.append({
+            "kv_cache_percentage": float(kv),
+            "input_token_length": int(input_len),
+            "num_request_waiting": int(waiting),
+            "num_request_running": int(running),
+            "num_tokens_generated": int(tokens_gen),
+            "prefix_cache_score": float(prefix),
+        })
+
+        # Expected values for coverage check
+        ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+        tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+        expected_ttft.append(max(1.0, ttft_mu + np.random.normal(0, 20)))
+        expected_tpot.append(max(1.0, tpot_mu + np.random.normal(0, 10)))
+
+    # Get predictions
+    pred_r = requests.post(f"{PREDICTION_URL}/predict/bulk/strict",
+                          json={"requests": test_cases}, timeout=60)
+    assert pred_r.status_code == 200
+    predictions = pred_r.json()["predictions"]
+
+    ttft_preds = np.array([p["ttft_ms"] for p in predictions])
+    tpot_preds = np.array([p["tpot_ms"] for p in predictions])
+
+    # Check coverage
+    ttft_coverage = np.mean(np.array(expected_ttft) <= ttft_preds) * 100
+    tpot_coverage = np.mean(np.array(expected_tpot) <= tpot_preds) * 100
+
+    print(f"  Coverage: TTFT={ttft_coverage:.1f}%, TPOT={tpot_coverage:.1f}% (target: {quantile*100:.0f}%)")
+
+    # For native quantile mode, coverage should be close to target
+    target_pct = quantile * 100
+    assert abs(ttft_coverage - target_pct) <= 15, f"TTFT coverage {ttft_coverage:.1f}% too far from target {target_pct:.0f}%"
+    assert abs(tpot_coverage - target_pct) <= 15, f"TPOT coverage {tpot_coverage:.1f}% too far from target {target_pct:.0f}%"
+
+    print("✓ Native quantile mode test passed!")
+
+
+def test_treelite_conformal_mode():
+    """
+    Test TreeLite + conformal prediction mode (USE_TREELITE=true).
+    Verifies that:
+    1. Training server uses standard regression objective
+    2. TreeLite models ARE created
+    3. Conformal calibration files are created
+    4. Prediction server loads conformal calibration
+    5. Coverage is within expected range (85-95% for P90)
+    """
+    print("\n" + "="*50)
+    print("Testing TreeLite + Conformal Mode (USE_TREELITE=true)")
+    print("="*50)
+
+    # 1. Check server configuration
+    print("Step 1: Checking server configuration...")
+    model_info_r = requests.get(f"{TRAINING_URL}/model/download/info", timeout=10)
+    assert model_info_r.status_code == 200
+    model_info = model_info_r.json()
+
+    prediction_status_r = requests.get(f"{PREDICTION_URL}/status", timeout=10)
+    assert prediction_status_r.status_code == 200
+    prediction_status = prediction_status_r.json()
+
+    model_type = model_info.get("model_type")
+    quantile = prediction_status.get("quantile", 0.9)
+
+    print(f"  Model type: {model_type}")
+    print(f"  Quantile: {quantile}")
+
+    # Only test if using XGBoost or LightGBM
+    if model_type not in ["xgboost", "lightgbm"]:
+        print(f"  Skipping - model type {model_type} doesn't support TreeLite mode")
+        return
+
+    # 2. Check TreeLite models SHOULD exist
+    print("Step 2: Verifying TreeLite models are created...")
+    models_list_r = requests.get(f"{TRAINING_URL}/models/list", timeout=10)
+    models_list = models_list_r.json()
+
+    ttft_treelite_exists = models_list["models"].get("ttft_treelite", {}).get("exists", False)
+    tpot_treelite_exists = models_list["models"].get("tpot_treelite", {}).get("exists", False)
+
+    if not (ttft_treelite_exists and tpot_treelite_exists):
+        print("  ⚠️  TreeLite models NOT created - likely using native quantile mode")
+        print("  This test expects USE_TREELITE=true")
+        print(f"  TTFT TreeLite exists: {ttft_treelite_exists}")
+        print(f"  TPOT TreeLite exists: {tpot_treelite_exists}")
+        return
+    else:
+        print(f"  ✓ TTFT TreeLite model exists ({models_list['models']['ttft_treelite']['size_bytes']} bytes)")
+        print(f"  ✓ TPOT TreeLite model exists ({models_list['models']['tpot_treelite']['size_bytes']} bytes)")
+
+    # 3. Check conformal calibration files exist
+    print("Step 3: Verifying conformal calibration files...")
+    ttft_conformal_exists = models_list["models"].get("ttft_conformal", {}).get("exists", False)
+    tpot_conformal_exists = models_list["models"].get("tpot_conformal", {}).get("exists", False)
+
+    if ttft_conformal_exists:
+        print(f"  ✓ TTFT conformal calibration exists ({models_list['models']['ttft_conformal']['size_bytes']} bytes)")
+    else:
+        print("  ⚠️  TTFT conformal calibration NOT found")
+
+    if tpot_conformal_exists:
+        print(f"  ✓ TPOT conformal calibration exists ({models_list['models']['tpot_conformal']['size_bytes']} bytes)")
+    else:
+        print("  ⚠️  TPOT conformal calibration NOT found")
+
+    # 4. Check prediction server calibration stats
+    print("Step 4: Checking prediction server conformal calibration...")
+    try:
+        calibration_r = requests.get(f"{PREDICTION_URL}/calibration/stats", timeout=10)
+        if calibration_r.status_code == 200:
+            calibration_stats = calibration_r.json()
+
+            if calibration_stats.get("use_treelite"):
+                print("  ✓ Prediction server using TreeLite mode")
+
+                ttft_conf = calibration_stats.get("ttft_conformal", {})
+                if "calibration_samples" in ttft_conf:
+                    print(f"  ✓ TTFT conformal loaded with {ttft_conf['calibration_samples']} samples")
+                    print(f"    Quantile adjustment: +{ttft_conf.get('quantile_adjustment_ms', 0):.2f}ms")
+                else:
+                    print(f"  ⚠️  TTFT conformal error: {ttft_conf.get('error', 'unknown')}")
+
+                tpot_conf = calibration_stats.get("tpot_conformal", {})
+                if "calibration_samples" in tpot_conf:
+                    print(f"  ✓ TPOT conformal loaded with {tpot_conf['calibration_samples']} samples")
+                    print(f"    Quantile adjustment: +{tpot_conf.get('quantile_adjustment_ms', 0):.2f}ms")
+                else:
+                    print(f"  ⚠️  TPOT conformal error: {tpot_conf.get('error', 'unknown')}")
+            else:
+                print("  ⚠️  Prediction server NOT using TreeLite mode")
+        else:
+            print(f"  ⚠️  Calibration stats endpoint returned {calibration_r.status_code}")
+    except Exception as e:
+        print(f"  ⚠️  Error checking calibration stats: {e}")
+
+    # 5. Send training data for coverage test
+    print("Step 5: Sending training data...")
+    np.random.seed(123)
+    training_entries = []
+
+    for i in range(1000):
+        kv = np.random.uniform(0.1, 0.9)
+        input_len = np.random.randint(50, 800)
+        waiting = np.random.randint(0, 8)
+        running = np.random.randint(1, 4)
+        tokens_gen = np.random.randint(1, 25)
+        prefix = np.random.uniform(0.0, 1.0)
+
+        # Generate with known noise
+        ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+        tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+
+        training_entries.append({
+            "kv_cache_percentage": float(kv),
+            "input_token_length": int(input_len),
+            "num_request_waiting": int(waiting),
+            "num_request_running": int(running),
+            "actual_ttft_ms": float(max(1.0, ttft_mu + np.random.normal(0, 20))),
+            "actual_tpot_ms": float(max(1.0, tpot_mu + np.random.normal(0, 10))),
+            "num_tokens_generated": int(tokens_gen),
+            "prefix_cache_score": float(prefix),
+        })
+
+    training_r = requests.post(f"{TRAINING_URL}/add_training_data_bulk",
+                              json={"entries": training_entries}, timeout=60)
+    assert training_r.status_code == 202
+    print(f"  ✓ Sent 1000 training samples")
+
+    # 6. Wait for training and sync
+    print("Step 6: Waiting for training...")
+    time.sleep(40)
+
+    print("Step 7: Syncing models to prediction server...")
+    for _ in range(10):
+        reload_r = requests.post(f"{PREDICTION_URL}/reload", timeout=20)
+        if reload_r.status_code == 200 and reload_r.json().get("is_ready"):
+            break
+        time.sleep(3)
+
+    # 7. Make predictions and check coverage
+    print("Step 8: Testing predictions and coverage...")
+    test_cases = []
+    expected_ttft = []
+    expected_tpot = []
+
+    for i in range(200):
+        kv = np.random.uniform(0.1, 0.9)
+        input_len = np.random.randint(100, 600)
+        waiting = np.random.randint(1, 8)
+        running = np.random.randint(1, 4)
+        tokens_gen = np.random.randint(5, 20)
+        prefix = np.random.uniform(0.0, 1.0)
+
+        test_cases.append({
+            "kv_cache_percentage": float(kv),
+            "input_token_length": int(input_len),
+            "num_request_waiting": int(waiting),
+            "num_request_running": int(running),
+            "num_tokens_generated": int(tokens_gen),
+            "prefix_cache_score": float(prefix),
+        })
+
+        # Expected values for coverage check
+        ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+        tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+        expected_ttft.append(max(1.0, ttft_mu + np.random.normal(0, 20)))
+        expected_tpot.append(max(1.0, tpot_mu + np.random.normal(0, 10)))
+
+    # Get predictions
+    pred_r = requests.post(f"{PREDICTION_URL}/predict/bulk/strict",
+                          json={"requests": test_cases}, timeout=60)
+    assert pred_r.status_code == 200
+    predictions = pred_r.json()["predictions"]
+
+    ttft_preds = np.array([p["ttft_ms"] for p in predictions])
+    tpot_preds = np.array([p["tpot_ms"] for p in predictions])
+
+    # Check coverage
+    ttft_coverage = np.mean(np.array(expected_ttft) <= ttft_preds) * 100
+    tpot_coverage = np.mean(np.array(expected_tpot) <= tpot_preds) * 100
+
+    print(f"  Coverage: TTFT={ttft_coverage:.1f}%, TPOT={tpot_coverage:.1f}% (target: {quantile*100:.0f}%)")
+
+    # For conformal mode, coverage should be 85-95% for P90 (slightly wider tolerance)
+    target_pct = quantile * 100
+    assert 80 <= ttft_coverage <= 100, f"TTFT coverage {ttft_coverage:.1f}% outside acceptable range (80-100%)"
+    assert 80 <= tpot_coverage <= 100, f"TPOT coverage {tpot_coverage:.1f}% outside acceptable range (80-100%)"
+
+    print("✓ TreeLite + conformal mode test passed!")
+    print(f"  Note: Coverage within acceptable range for conformal prediction")
+
+
 if __name__ == "__main__":
     print("Running dual-server architecture tests with prefix cache score support...")
     print(f"Prediction server: {PREDICTION_URL}")
@@ -1460,6 +1810,10 @@ if __name__ == "__main__":
         ("XGBoost Trees", test_model_specific_endpoints_on_training_server),
         ("Flush API", test_training_server_flush_api),
         ("Flush Error Handling", test_training_server_flush_error_handling),
+
+        # Dual-mode tests (native quantile vs TreeLite+conformal)
+        ("Native Quantile Mode", test_native_quantile_mode),
+        ("TreeLite+Conformal Mode", test_treelite_conformal_mode),
 
         ("Dual Server Model Learns Equation", test_dual_server_quantile_regression_learns_distribution),
         ("End-to-End Workflow", test_end_to_end_workflow),

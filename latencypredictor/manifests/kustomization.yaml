@@ -1,0 +1,80 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# List of resources to deploy
+resources:
+  - dual-server-deployment.yaml
+  # Uncomment to include test job
+  - test-dual-server-deployment.yaml
+
+# Namespace for all resources (optional - uncomment to set)
+# namespace: default
+namespace: greg
+
+# Common labels to add to all resources
+labels:
+  - pairs:
+      app.kubernetes.io/name: latency-predictor
+      app.kubernetes.io/component: dual-server
+
+# Image transformations
+# This allows you to specify your own images without modifying the deployment files
+# Kustomize will replace the placeholder images with the ones specified here
+images:
+  - name: training-server
+    newName: quay.io/grpereir/slo-predicter-trainer
+    newTag: v0.0.5
+
+  - name: prediction-server
+    newName: quay.io/grpereir/slo-predicter
+    newTag: latest
+
+  # If using test deployment
+  - name: test-runner
+    newName: quay.io/grpereir/slo-predicter-tester
+    newTag: latest
+
+# ConfigMap generator (optional - use this to override config values)
+# Uncomment and modify to override specific configuration values
+# configMapGenerator:
+#   - name: prediction-server-config
+#     behavior: merge
+#     literals:
+#       - MODEL_SYNC_INTERVAL_SEC=15
+#       - USE_TREELITE=true
+#   - name: latency-predictor-config
+#     behavior: merge
+#     literals:
+#       - LATENCY_RETRAINING_INTERVAL_SEC=5
+#       - LATENCY_MIN_SAMPLES_FOR_RETRAIN=200
+
+# Patches (optional - use this for advanced customizations)
+# Example: Change replica count
+# patches:
+#   - target:
+#       kind: Deployment
+#       name: prediction-server-deployment
+#     patch: |-
+#       - op: replace
+#         path: /spec/replicas
+#         value: 5
+
+# Example: Add resource limits
+# patchesStrategicMerge:
+#   - |-
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     metadata:
+#       name: training-server-deployment
+#     spec:
+#       template:
+#         spec:
+#           containers:
+#           - name: training-server
+#             resources:
+#               requests:
+#                 cpu: "2000m"
+#                 memory: "4Gi"
+#               limits:
+#                 cpu: "4000m"
+#                 memory: "8Gi"

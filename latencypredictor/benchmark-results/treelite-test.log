@@ -1,0 +1,278 @@
+============================= test session starts ==============================
+platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+cachedir: .pytest_cache
+rootdir: /app
+plugins: asyncio-1.2.0, anyio-4.12.0
+asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 28 items
+
+test_dual_server_client.py::test_prediction_server_healthz Waiting for prediction server...
+Waiting for training server...
+PASSED
+test_dual_server_client.py::test_training_server_healthz PASSED
+test_dual_server_client.py::test_prediction_server_readyz PASSED
+test_dual_server_client.py::test_training_server_readyz PASSED
+test_dual_server_client.py::test_prediction_server_status Prediction server using model type: xgboost
+Quantile: 0.9
+Models ready: True
+Models exist: {'ttft_model': True, 'tpot_model': True}
+PASSED
+test_dual_server_client.py::test_training_server_model_info Training server using model type: xgboost
+PASSED
+test_dual_server_client.py::test_training_server_models_list Model ttft: exists=True, size=143390 bytes
+Model tpot: exists=True, size=142823 bytes
+FAILED
+test_dual_server_client.py::test_model_download_from_training_server Successfully downloaded ttft model (143390 bytes)
+Successfully downloaded tpot model (142823 bytes)
+PASSED
+test_dual_server_client.py::test_treelite_models_on_training_server Testing TreeLite models for xgboost...
+TTFT TreeLite model endpoint returned status 404
+TPOT TreeLite model endpoint returned status 404
+PASSED
+test_dual_server_client.py::test_lightgbm_endpoints_on_training_server Skipping LightGBM endpoint tests - not using LightGBM model
+PASSED
+test_dual_server_client.py::test_add_training_data_to_training_server Successfully sent training data to training server
+PASSED
+test_dual_server_client.py::test_prediction_server_model_sync Model reload result: synced=False, loaded=True
+Prediction server models are ready!
+PASSED
+test_dual_server_client.py::test_prediction_via_prediction_server Prediction successful: TTFT=10.00ms, TPOT=10.00ms
+Model type: xgboost
+PASSED
+test_dual_server_client.py::test_bulk_prediction_strict Testing bulk prediction strict endpoint...
+✓ Bulk prediction strict endpoint test passed
+PASSED
+test_dual_server_client.py::test_bulk_prediction_with_validation_errors Testing bulk prediction validation error handling...
+✓ Bulk prediction correctly failed when any request had validation errors
+PASSED
+test_dual_server_client.py::test_bulk_prediction_all_valid Testing bulk prediction with all valid requests...
+✓ Bulk prediction succeeded with all valid requests
+PASSED
+test_dual_server_client.py::test_prediction_missing_prefix_cache_score ✓ Prediction correctly failed when prefix_cache_score was missing
+PASSED
+test_dual_server_client.py::test_training_server_metrics Training server metrics endpoint working correctly
+✓ Prefix cache score feature found in metrics
+PASSED
+test_dual_server_client.py::test_model_consistency_between_servers Model type consistent across servers: xgboost
+PASSED
+test_dual_server_client.py::test_model_specific_endpoints_on_training_server Testing XGBoost tree endpoints on training server...
+✓ TTFT XGBoost trees available: 200 trees
+✓ TPOT XGBoost trees available: 200 trees
+PASSED
+test_dual_server_client.py::test_dual_server_quantile_regression_learns_distribution Relative-err accuracy (≤15%): 89.0%
+Coverage: TTFT=0.880, TPOT=0.890 (target 0.900 ± 0.05)
+PASSED
+test_dual_server_client.py::test_prediction_server_stress_test Running prediction server stress test...
+Waiting for 100007 prediction requests to complete...
+Target QPS: 1000.0, Actual QPS: 1000.1
+
+==================================================
+PREDICTION SERVER STRESS TEST RESULTS
+==================================================
+Total Requests: 100007
+Successful: 100007 (100.0%)
+Failed: 0 (0.0%)
+Average Response Time: 7.64ms
+
+Model Types in Predictions:
+  xgboost: 100007
+
+Status Code Distribution:
+  200: 100007
+
+Response Time Percentiles:
+  P50: 3.80ms
+  P95: 22.62ms
+  P99: 97.71ms
+Prediction server stress test completed with 100.0% success rate
+PASSED
+test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+
+Testing with batch size 5...
+Waiting for 100003 bulk prediction requests to complete...
+Target RPS: 1000.0, Actual RPS: 1000.0
+Total Predictions: 500015, Predictions/sec: 5000.1
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 100003
+Successful: 100003 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 500015
+Total Batch Size: 500015
+Average Response Time: 15.53ms
+Average Batch Size: 5.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 100003
+
+Response Time Percentiles:
+  P50: 7.01ms
+  P95: 66.62ms
+  P99: 158.18ms
+Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+
+Testing with batch size 10...
+Waiting for 100007 bulk prediction requests to complete...
+Target RPS: 1000.0, Actual RPS: 1000.1
+Total Predictions: 1000070, Predictions/sec: 10000.7
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 100007
+Successful: 100007 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 1000070
+Total Batch Size: 1000070
+Average Response Time: 25.95ms
+Average Batch Size: 10.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 100007
+
+Response Time Percentiles:
+  P50: 6.63ms
+  P95: 158.98ms
+  P99: 250.30ms
+Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+
+Testing with batch size 25...
+Waiting for 99999 bulk prediction requests to complete...
+Target RPS: 1000.0, Actual RPS: 1000.0
+Total Predictions: 2499975, Predictions/sec: 24999.8
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 99999
+Successful: 99999 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 2499975
+Total Batch Size: 2499975
+Average Response Time: 46.55ms
+Average Batch Size: 25.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 99999
+
+Response Time Percentiles:
+  P50: 11.99ms
+  P95: 238.05ms
+  P99: 337.65ms
+Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+PASSED
+test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+
+Testing with batch size 1000...
+Waiting for 9999 bulk prediction requests to complete...
+Target RPS: 100.0, Actual RPS: 100.0
+Total Predictions: 9999000, Predictions/sec: 99990.0
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 9999
+Successful: 9999 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 9999000
+Total Batch Size: 9999000
+Average Response Time: 39.14ms
+Average Batch Size: 1000.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 9999
+
+Response Time Percentiles:
+  P50: 30.22ms
+  P95: 94.96ms
+  P99: 164.58ms
+Bulk prediction stress test (batch size 1000) completed with 100.0% success rate
+PASSED
+test_dual_server_client.py::test_end_to_end_workflow Testing end-to-end workflow...
+Step 1: Sending training data to training server...
+Step 2: Waiting for training...
+Step 3: Syncing models to prediction server...
+Step 4: Making predictions...
+  Prediction 1: TTFT=1267.21ms, TPOT=346.60ms (prefix_cache=0.56)
+  Prediction 2: TTFT=1853.93ms, TPOT=561.18ms (prefix_cache=0.95)
+  Prediction 3: TTFT=1978.04ms, TPOT=552.42ms (prefix_cache=0.68)
+  Prediction 4: TTFT=1199.91ms, TPOT=372.78ms (prefix_cache=0.25)
+  Prediction 5: TTFT=802.26ms, TPOT=170.20ms (prefix_cache=0.99)
+✓ End-to-end workflow completed successfully!
+PASSED
+test_dual_server_client.py::test_server_configuration Testing server configuration...
+Prediction server: HTTP-based Quantile Latency Predictor is running
+  Model type: xgboost
+  Is ready: True
+  Sync interval: 10s
+  Training server URL: http://training-service:8000
+Training server: Latency Predictor is running.
+  Model type: xgboost
+PASSED
+test_dual_server_client.py::test_training_server_flush_api Testing training server flush API...
+Step 1: Checking initial data status...
+  Initial training samples: TTFT=2769, TPOT=2769
+  Initial test samples: TTFT=301, TPOT=301
+Step 2: Adding training data...
+  Added 100 training samples
+Step 3: Verifying data was added...
+  After adding - Training: 5720, Test: 620, Total: 6340
+Step 4: Testing flush with only training data...
+  Flushed 2860 TTFT training samples
+  Flushed 2860 TPOT training samples
+  Test samples flushed: 0 TTFT, 0 TPOT (should be 0)
+  After training flush - Training: 0, Test: 620
+Step 5: Adding more training data...
+Step 6: Testing flush everything...
+  Complete flush message: Successfully flushed: 44 TTFT and 44 TPOT training samples, 316 TTFT and 316 TPOT test samples, all metric scores
+  After complete flush - Training: 0, Test: 0
+Step 7: Testing default flush (no body)...
+  Default flush result: Successfully flushed: 18 TTFT and 18 TPOT training samples, 2 TTFT and 2 TPOT test samples, all metric scores
+Step 8: Testing flush with only test data...
+  Test data flush: 4 TTFT, 4 TPOT
+  After test flush - Training: 92, Test: 0
+Step 9: Testing bucket distribution in status...
+  Bucket distribution available: 0 buckets with data
+✓ Flush API tests passed!
+PASSED
+test_dual_server_client.py::test_training_server_flush_error_handling Testing flush API error handling...
+✓ Invalid JSON handled correctly
+✓ Flush error handling tests passed!
+PASSED
+
+=================================== FAILURES ===================================
+_______________________ test_training_server_models_list _______________________
+
+    def test_training_server_models_list():
+        """Test training server models list endpoint."""
+        r = requests.get(f"{TRAINING_URL}/models/list")
+        assert r.status_code == 200
+
+        data = r.json()
+        assert "models" in data
+        assert "model_type" in data
+        assert "server_time" in data
+
+        models = data["models"]
+        expected_models = ["ttft", "tpot"]
+        if data["model_type"] == "bayesian_ridge":
+            expected_models.extend(["ttft_scaler", "tpot_scaler"])
+        elif data["model_type"] in ["xgboost", "lightgbm"]:
+            # TreeLite models should also be available for XGBoost and LightGBM
+            expected_models.extend(["ttft_treelite", "tpot_treelite"])
+
+        for model_name in expected_models:
+>           assert model_name in models, f"Model {model_name} should be listed"
+E           AssertionError: Model ttft_treelite should be listed
+E           assert 'ttft_treelite' in {'tpot': {'exists': True, 'last_modified': '2025-12-06T16:05:48.041792+00:00', 'size_bytes': 142823}, 'tpot_scaler': {'exists': False, 'last_modified': None, 'size_bytes': 0}, 'ttft': {'exists': True, 'last_modified': '2025-12-06T16:05:48.028843+00:00', 'size_bytes': 143390}, 'ttft_scaler': {'exists': False, 'last_modified': None, 'size_bytes': 0}}
+
+test_dual_server_client.py:137: AssertionError
+=========================== short test summary info ============================
+FAILED test_dual_server_client.py::test_training_server_models_list - Asserti...
+=================== 1 failed, 27 passed in 586.88s (0:09:46) ===================

@@ -49,7 +49,14 @@ try:
 except ImportError:
     TREELITE_AVAILABLE = False
     logging.warning("TreeLite runtime not available. Install with: pip install treelite_runtime")
-    
+
+try:
+    from conformal_quantile import ConformalQuantilePredictor
+    CONFORMAL_AVAILABLE = True
+except ImportError:
+    CONFORMAL_AVAILABLE = False
+    logging.warning("ConformalQuantilePredictor not available. Check conformal_quantile.py exists.")
+
 class ModelType(str, Enum):
     BAYESIAN_RIDGE = "bayesian_ridge"
     XGBOOST = "xgboost"
@@ -69,6 +76,8 @@ class PredictSettings:
     LOCAL_TPOT_SCALER_PATH: str = os.getenv("LOCAL_TPOT_SCALER_PATH", "/local_models/tpot_scaler.joblib")
     LOCAL_TTFT_TREELITE_PATH: str = os.getenv("LOCAL_TTFT_TREELITE_PATH", "/local_models/ttft_treelite.so")
     LOCAL_TPOT_TREELITE_PATH: str = os.getenv("LOCAL_TPOT_TREELITE_PATH", "/local_models/tpot_treelite.so")
+    LOCAL_TTFT_CONFORMAL_PATH: str = os.getenv("LOCAL_TTFT_CONFORMAL_PATH", "/local_models/ttft_conformal.json")
+    LOCAL_TPOT_CONFORMAL_PATH: str = os.getenv("LOCAL_TPOT_CONFORMAL_PATH", "/local_models/tpot_conformal.json")
 
     # Use TreeLite for inference (preferred for production)
     USE_TREELITE: bool = os.getenv("USE_TREELITE", "true").lower() == "true"
@@ -171,6 +180,12 @@ class ModelSyncer:
                     ("ttft_treelite", settings.LOCAL_TTFT_TREELITE_PATH),
                     ("tpot_treelite", settings.LOCAL_TPOT_TREELITE_PATH),
                 ]
+                # Also sync conformal calibration for TreeLite mode
+                if CONFORMAL_AVAILABLE:
+                    to_sync += [
+                        ("ttft_conformal", settings.LOCAL_TTFT_CONFORMAL_PATH),
+                        ("tpot_conformal", settings.LOCAL_TPOT_CONFORMAL_PATH),
+                    ]
 
             # Sync scalers only for Bayesian Ridge
             if settings.MODEL_TYPE == ModelType.BAYESIAN_RIDGE:
@@ -235,6 +250,10 @@ class LightweightPredictor:
         # TreeLite predictors (lightweight, compiled models)
         self.ttft_predictor = None
         self.tpot_predictor = None
+
+        # Conformal predictors (for TreeLite mode quantile predictions)
+        self.ttft_conformal = None
+        self.tpot_conformal = None
 
         self.lock = threading.RLock()
         self.last_load: Optional[datetime] = None
@@ -316,6 +335,37 @@ class LightweightPredictor:
                         logging.info("TPOT TreeLite model loaded")
                     else:
                         logging.warning(f"TreeLite model not found: {settings.LOCAL_TPOT_TREELITE_PATH}")
+
+                    # Load conformal calibration for TreeLite mode
+                    if CONFORMAL_AVAILABLE:
+                        import json
+                        # Load TTFT conformal calibration
+                        if os.path.exists(settings.LOCAL_TTFT_CONFORMAL_PATH):
+                            try:
+                                with open(settings.LOCAL_TTFT_CONFORMAL_PATH, 'r') as f:
+                                    ttft_conf_state = json.load(f)
+                                self.ttft_conformal = ConformalQuantilePredictor.from_state(ttft_conf_state)
+                                logging.info(f"TTFT conformal calibration loaded ({len(ttft_conf_state.get('calibration_residuals', []))} samples)")
+                            except Exception as e:
+                                logging.error(f"Error loading TTFT conformal calibration: {e}")
+                                self.ttft_conformal = None
+                        else:
+                            logging.warning(f"TTFT conformal calibration not found: {settings.LOCAL_TTFT_CONFORMAL_PATH}")
+                            self.ttft_conformal = None
+
+                        # Load TPOT conformal calibration
+                        if os.path.exists(settings.LOCAL_TPOT_CONFORMAL_PATH):
+                            try:
+                                with open(settings.LOCAL_TPOT_CONFORMAL_PATH, 'r') as f:
+                                    tpot_conf_state = json.load(f)
+                                self.tpot_conformal = ConformalQuantilePredictor.from_state(tpot_conf_state)
+                                logging.info(f"TPOT conformal calibration loaded ({len(tpot_conf_state.get('calibration_residuals', []))} samples)")
+                            except Exception as e:
+                                logging.error(f"Error loading TPOT conformal calibration: {e}")
+                                self.tpot_conformal = None
+                        else:
+                            logging.warning(f"TPOT conformal calibration not found: {settings.LOCAL_TPOT_CONFORMAL_PATH}")
+                            self.tpot_conformal = None
                 else:
                     # Load XGBoost/LightGBM/BayesianRidge models
                     new_ttft = joblib.load(settings.LOCAL_TTFT_MODEL_PATH) if os.path.exists(settings.LOCAL_TTFT_MODEL_PATH) else None
@@ -392,10 +442,26 @@ class LightweightPredictor:
                     ttft_dmat = treelite_runtime.DMatrix(ttft_arr)
                     tpot_dmat = treelite_runtime.DMatrix(tpot_arr)
 
-                    ttft_pred = self.ttft_predictor.predict(ttft_dmat)
-                    tpot_pred = self.tpot_predictor.predict(tpot_dmat)
+                    # Get mean predictions from TreeLite
+                    ttft_mean = float(self.ttft_predictor.predict(ttft_dmat)[0])
+                    tpot_mean = float(self.tpot_predictor.predict(tpot_dmat)[0])
 
-                    return float(ttft_pred[0]), float(tpot_pred[0])
+                    # Apply conformal correction to get quantile predictions
+                    if self.ttft_conformal:
+                        ttft_pred = self.ttft_conformal.conformalize(ttft_mean)
+                    else:
+                        # Fallback: use mean prediction (not ideal but prevents crashes)
+                        logging.warning("TTFT conformal calibration not loaded, returning mean prediction")
+                        ttft_pred = ttft_mean
+
+                    if self.tpot_conformal:
+                        tpot_pred = self.tpot_conformal.conformalize(tpot_mean)
+                    else:
+                        # Fallback: use mean prediction (not ideal but prevents crashes)
+                        logging.warning("TPOT conformal calibration not loaded, returning mean prediction")
+                        tpot_pred = tpot_mean
+
+                    return ttft_pred, tpot_pred
 
                 elif self.model_type == ModelType.BAYESIAN_RIDGE:
                     ttft_for_scale = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
@@ -799,6 +865,47 @@ async def reload_models():
     except Exception as e:
         logging.error(f"Error reloading models: {e}")
         raise HTTPException(status_code=500, detail=f"Error reloading models: {str(e)}")
+
+@app.get("/calibration/stats")
+async def get_calibration_stats():
+    """Get conformal calibration statistics (TreeLite mode only)."""
+    if not predictor.use_treelite:
+        return {
+            "message": "Conformal calibration only used in TreeLite mode",
+            "use_treelite": False,
+            "model_type": predictor.model_type.value
+        }
+
+    stats = {
+        "use_treelite": True,
+        "model_type": predictor.model_type.value,
+        "quantile": predictor.quantile,
+        "ttft_conformal": None,
+        "tpot_conformal": None
+    }
+
+    if predictor.ttft_conformal:
+        stats["ttft_conformal"] = {
+            "calibration_samples": len(predictor.ttft_conformal.calibration_residuals),
+            "quantile_adjustment_ms": predictor.ttft_conformal._cached_quantile_value if not predictor.ttft_conformal._cache_dirty else None,
+            "target_quantile": predictor.ttft_conformal.quantile,
+            "max_calibration_samples": predictor.ttft_conformal.max_calibration_samples
+        }
+    else:
+        stats["ttft_conformal"] = {"error": "TTFT conformal calibration not loaded"}
+
+    if predictor.tpot_conformal:
+        stats["tpot_conformal"] = {
+            "calibration_samples": len(predictor.tpot_conformal.calibration_residuals),
+            "quantile_adjustment_ms": predictor.tpot_conformal._cached_quantile_value if not predictor.tpot_conformal._cache_dirty else None,
+            "target_quantile": predictor.tpot_conformal.quantile,
+            "max_calibration_samples": predictor.tpot_conformal.max_calibration_samples
+        }
+    else:
+        stats["tpot_conformal"] = {"error": "TPOT conformal calibration not loaded"}
+
+    return stats
+
 
 @app.get("/healthz", status_code=status.HTTP_200_OK)
 async def health_check():

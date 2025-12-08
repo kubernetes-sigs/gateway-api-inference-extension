@@ -5,7 +5,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: latency-predictor-config
-  namespace: default
 data:
   LATENCY_RETRAINING_INTERVAL_SEC: "1"
   LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
@@ -22,7 +21,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prediction-server-config
-  namespace: default
 data:
   MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 10 seconds
   LATENCY_MODEL_TYPE: "xgboost"
@@ -38,18 +36,18 @@ data:
   USE_TREELITE: "true"  # Enable TreeLite for faster inference
   HTTP_TIMEOUT: "30"
 
----
-# --- 2. StorageClass for Hyperdisk ---
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: hyperdisk-balanced-sc
-provisioner: pd.csi.storage.gke.io
-parameters:
-  type: hyperdisk-balanced
-reclaimPolicy: Delete
-allowVolumeExpansion: true
-volumeBindingMode: WaitForFirstConsumer
+# ---
+# # --- 2. StorageClass for Hyperdisk ---
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: hyperdisk-balanced-sc
+# provisioner: pd.csi.storage.gke.io
+# parameters:
+#   type: hyperdisk-balanced
+# reclaimPolicy: Delete
+# allowVolumeExpansion: true
+# volumeBindingMode: WaitForFirstConsumer
 
 ---
 # --- 3. Persistent Volume Claim (PVC) ---
@@ -58,9 +56,8 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: training-models-pvc
-  namespace: default
 spec:
-  storageClassName: hyperdisk-balanced-sc # Explicitly use the compatible StorageClass
+  # storageClassName: hyperdisk-balanced-sc # Explicitly use the compatible StorageClass
   accessModes:
     - ReadWriteOnce # Sufficient since only the leader pod writes to the volume.
   resources:
@@ -72,7 +69,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: training-server-deployment
-  namespace: default
   labels:
     app: training-server
     component: training
@@ -88,12 +84,11 @@ spec:
         app: training-server
         component: training
     spec:
-      nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+      # nodeSelector:
+      #   cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: training-server
-        image: placeholder-for-training-server-image:latest # TODO Replace with actual image
-
+        image: training-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -145,7 +140,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prediction-server-deployment
-  namespace: default
   labels:
     app: prediction-server
     component: prediction
@@ -161,11 +155,11 @@ spec:
         app: prediction-server
         component: prediction
     spec:
-      nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+      # nodeSelector:
+      #   cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: prediction-server
-        image: placeholder-for-prediction-server-image:latest # TODO Replace with actual image
+        image: prediction-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8001
@@ -214,7 +208,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: training-service
-  namespace: default
   labels:
     component: training
 spec:
@@ -233,7 +226,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prediction-service
-  namespace: default
   labels:
     component: prediction
 spec:
@@ -253,7 +245,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: training-service-external
-  namespace: default
 spec:
   type: LoadBalancer
   selector:

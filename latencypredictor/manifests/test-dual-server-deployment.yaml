@@ -15,13 +15,12 @@ spec:
         component: test
     spec:
       # Use the same node pool as your services
-      nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+      # nodeSelector:
+      #   cloud.google.com/gke-nodepool: "pool-2"
       restartPolicy: Never
       containers:
       - name: test-runner
-        # Use your test image here
-        image: placeholder-for-test-image:latest # TODO Replace with actual test image
+        image: test-runner:latest
         imagePullPolicy: Always
         resources:
           requests:
