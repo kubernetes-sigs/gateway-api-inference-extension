@@ -646,42 +646,42 @@ func TestDirector_HandleRequest(t *testing.T) {
 			ds.PodUpdateOrAddIfNotExist(testPod)
 		}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			mockSched := &mockScheduler{}
-			if test.schedulerMockSetup != nil {
-				test.schedulerMockSetup(mockSched)
-			}
-			config := NewConfig()
-			if test.prepareDataPlugin != nil {
-				config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
-			}
-			config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
-
-			locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
-			director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, locator, config)
-			if test.name == "successful request with model rewrite" {
-				mockDs := &mockDatastore{
-					pods:     ds.PodList(datastore.AllPodsPredicate),
-					rewrites: []*v1alpha2.InferenceModelRewrite{rewrite},
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				mockSched := &mockScheduler{}
+				if test.schedulerMockSetup != nil {
+					test.schedulerMockSetup(mockSched)
 				}
-				director.datastore = mockDs
-				director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
-			}
+				config := NewConfig()
+				if test.prepareDataPlugin != nil {
+					config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
+				}
+				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
-			reqCtx := &handlers.RequestContext{
-				Request: &handlers.Request{
-					// Create a copy of the map for each test run to avoid mutation issues.
-					Body: make(map[string]any),
-					Headers: map[string]string{
-						requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
+				locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, locator, config)
+				if test.name == "successful request with model rewrite" {
+					mockDs := &mockDatastore{
+						pods:     ds.PodList(datastore.AllPodsPredicate),
+						rewrites: []*v1alpha2.InferenceModelRewrite{rewrite},
+					}
+					director.datastore = mockDs
+					director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
+				}
+
+				reqCtx := &handlers.RequestContext{
+					Request: &handlers.Request{
+						// Create a copy of the map for each test run to avoid mutation issues.
+						Body: make(map[string]any),
+						Headers: map[string]string{
+							requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
+						},
 					},
-				},
-				ObjectiveKey:    test.inferenceObjectiveName,
-				TargetModelName: test.initialTargetModelName,
-			}
-			// Deep copy the body map.
-			maps.Copy(reqCtx.Request.Body, test.reqBodyMap)
+					ObjectiveKey:    test.inferenceObjectiveName,
+					TargetModelName: test.initialTargetModelName,
+				}
+				// Deep copy the body map.
+				maps.Copy(reqCtx.Request.Body, test.reqBodyMap)
 
 				returnedReqCtx, err := director.HandleRequest(ctx, reqCtx)
 
@@ -704,12 +704,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 					assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
 				}
 
-			if test.wantMutatedBodyModel != "" {
-				assert.NotNil(t, returnedReqCtx.Request.Body, "Expected mutated body, but reqCtx.Request.Body is nil")
-				assert.Equal(t, test.wantMutatedBodyModel, returnedReqCtx.Request.Body["model"],
-					"Mutated reqCtx.Request.Body model mismatch")
-			}
-		})
+				if test.wantMutatedBodyModel != "" {
+					assert.NotNil(t, returnedReqCtx.Request.Body, "Expected mutated body, but reqCtx.Request.Body is nil")
+					assert.Equal(t, test.wantMutatedBodyModel, returnedReqCtx.Request.Body["model"],
+						"Mutated reqCtx.Request.Body model mismatch")
+				}
+			})
+		}
 	}
 }
 
