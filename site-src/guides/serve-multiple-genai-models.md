@@ -8,7 +8,7 @@ Additionally, each base AI model can have multiple Low-Rank Adaptations ([LoRAs]
 
 ## How
 
-[Body-Based Router (BBR)](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) extracts the model name from the request body and adds it to the `X-Gateway-Model-Name` header. This header is then used for matching and routing the request to the appropriate `InferencePool` and its associated Endpoint Picker Extension (EPP) instances.
+The BBR extracts the model name from the request body and adds it to the `X-Gateway-Model-Name` header. This header is then used for matching and routing the request to the appropriate `InferencePool` and its associated Endpoint Picker Extension (EPP) instances.
 
 ### Example Model-Aware Routing using Body-Based Routing (BBR)
 
