@@ -16,7 +16,7 @@ This guide assumes you have already setup the cluster for basic model serving as
 
 ### Deploy Body-Based Routing Extension
 
-To enable body-based routing, deploy the BBR `ext_proc` server using Helm. This server is independent of EPP. Once installed, it is automatically added as the first filter in the gateway’s filter chain, ahead of other `ext_proc` servers such as EPP.
+To enable body-based routing, deploy the BBR server using Helm. This server runs as a gateway extension and is independent of the EPP. Once installed, it is automatically added as the first filter in the gateway’s filter chain, ahead of other gateway extension servers such as the EPP.
 
 Select an appropriate tab depending on your Gateway provider:
 
