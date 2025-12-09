@@ -20,7 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"flag"
+	goflag "flag"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -34,6 +34,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
+	flag "github.com/spf13/pflag"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -200,7 +201,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	opts := zap.Options{
 		Development: true,
 	}
-	opts.BindFlags(flag.CommandLine)
+	gfs := goflag.NewFlagSet("zap", goflag.ExitOnError)
+	opts.BindFlags(gfs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
+	flag.CommandLine.AddGoFlagSet(gfs)
 	flag.Parse()
 	initLogging(&opts)
 

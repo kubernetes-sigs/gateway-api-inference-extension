@@ -18,9 +18,10 @@ package metrics
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"strconv"
+
+	flag "github.com/spf13/pflag"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
