@@ -78,7 +78,7 @@ kubectl get pods
 
 ### Serving a Second Base Model
 
-The example uses a vLLM simulator since this is the least common denominator configuration that can be run in every environment. The model, `deepseek/vllm-deepseek-r1`, will be served from the same `/` L7 path, as in the previous example from the [Getting Started (Latest/Main)](getting-started-latest.md) guide.
+The example uses a vLLM simulator since this is the least common denominator configuration that can be run in every environment. The model, `deepseek/vllm-deepseek-r1`, will be served from the same URL path, as in the previous example from the [Getting Started (Latest/Main)](getting-started-latest.md) guide.
 
 Deploy the second base model:
 
