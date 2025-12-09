@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -44,8 +45,6 @@ var (
 	basePod2  = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2"}, Status: corev1.PodStatus{PodIP: "address-2"}}
 	basePod3  = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod3"}, Status: corev1.PodStatus{PodIP: "address-3"}}
 	basePod11 = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}, Status: corev1.PodStatus{PodIP: "address-11"}}
-	pmc       = &backendmetrics.FakePodMetricsClient{}
-	pmf       = backendmetrics.NewPodMetricsFactory(pmc, time.Second)
 )
 
 func TestPodReconciler(t *testing.T) {
@@ -183,43 +182,50 @@ func TestPodReconciler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// Set up the scheme.
-			scheme := runtime.NewScheme()
-			_ = clientgoscheme.AddToScheme(scheme)
-			initialObjects := []client.Object{}
-			if test.incomingPod != nil {
-				initialObjects = append(initialObjects, test.incomingPod)
-			}
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(initialObjects...).
-				Build()
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				// Set up the scheme.
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				initialObjects := []client.Object{}
+				if test.incomingPod != nil {
+					initialObjects = append(initialObjects, test.incomingPod)
+				}
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(initialObjects...).
+					Build()
 
-			// Configure the initial state of the datastore.
-			store := datastore.NewDatastore(t.Context(), pmf, 0)
-			_ = store.PoolSet(t.Context(), fakeClient, pool.InferencePoolToEndpointPool(test.pool))
-			for _, pod := range test.existingPods {
-				store.PodUpdateOrAddIfNotExist(pod)
-			}
+				// Configure the initial state of the datastore.
+				store := datastore.NewDatastore(t.Context(), epf, 0)
+				_ = store.PoolSet(t.Context(), fakeClient, pool.InferencePoolToEndpointPool(test.pool))
+				for _, pod := range test.existingPods {
+					store.PodUpdateOrAddIfNotExist(pod)
+				}
 
-			podReconciler := &PodReconciler{Reader: fakeClient, Datastore: store}
-			if test.req == nil {
-				namespacedName := types.NamespacedName{Name: test.incomingPod.Name, Namespace: test.incomingPod.Namespace}
-				test.req = &ctrl.Request{NamespacedName: namespacedName}
-			}
-			if _, err := podReconciler.Reconcile(context.Background(), *test.req); err != nil {
-				t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-			}
+				podReconciler := &PodReconciler{Reader: fakeClient, Datastore: store}
+				if test.req == nil {
+					namespacedName := types.NamespacedName{Name: test.incomingPod.Name, Namespace: test.incomingPod.Namespace}
+					test.req = &ctrl.Request{NamespacedName: namespacedName}
+				}
+				if _, err := podReconciler.Reconcile(context.Background(), *test.req); err != nil {
+					t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+				}
 
-			var gotPods []*corev1.Pod
-			for _, pm := range store.PodList(backendmetrics.AllPodsPredicate) {
-				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetPod().PodName, Namespace: pm.GetPod().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetPod().GetIPAddress()}}
-				gotPods = append(gotPods, pod)
-			}
-			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
-				t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
-			}
-		})
+				var gotPods []*corev1.Pod
+				for _, pm := range store.PodList(datastore.AllPodsPredicate) {
+					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetMetadata().PodName, Namespace: pm.GetMetadata().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetMetadata().GetIPAddress()}}
+					gotPods = append(gotPods, pod)
+				}
+				if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
+					t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
+				}
+			})
+		}
 	}
 }

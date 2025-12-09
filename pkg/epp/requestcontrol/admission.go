@@ -20,9 +20,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -40,7 +42,6 @@ type AdmissionController interface {
 	// Args:
 	//   ctx: The request context, carrying deadlines, cancellation signals, and logger.
 	//   reqCtx: The handlers.RequestContext containing details about the incoming request.
-	//   candidatePods: A list of potential backend pods that can serve the request.
 	//   priority: The priority level of the request, as determined by the InferenceObjective.
 	//
 	// Returns:
@@ -49,7 +50,6 @@ type AdmissionController interface {
 	Admit(
 		ctx context.Context,
 		reqCtx *handlers.RequestContext,
-		candidatePods []backendmetrics.PodMetrics,
 		priority int,
 	) error
 }
@@ -65,18 +65,17 @@ type flowController interface {
 	EnqueueAndWait(ctx context.Context, req types.FlowControlRequest) (types.QueueOutcome, error)
 }
 
-// rejectIfSheddableAndSaturated checks if a request should be immediately rejected because it's sheddable
-// (priority < 0) and the system is saturated.
+// rejectIfSheddableAndSaturated checks if a request should be immediately rejected.
 func rejectIfSheddableAndSaturated(
 	ctx context.Context,
 	sd saturationDetector,
+	locator contracts.PodLocator,
 	reqCtx *handlers.RequestContext,
-	candidatePods []backendmetrics.PodMetrics,
 	priority int,
+	logger logr.Logger,
 ) error {
 	if requtil.IsSheddable(priority) {
-		logger := log.FromContext(ctx)
-		if sd.IsSaturated(ctx, candidatePods) {
+		if sd.IsSaturated(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) {
 			logger.V(logutil.TRACE).Info("Request rejected: system saturated and request is sheddable",
 				"requestID", reqCtx.SchedulingRequest.RequestId)
 			return errutil.Error{
@@ -95,11 +94,18 @@ func rejectIfSheddableAndSaturated(
 // saturated. Non-sheddable requests always bypass the saturation check.
 type LegacyAdmissionController struct {
 	saturationDetector saturationDetector
+	podLocator         contracts.PodLocator
 }
 
 // NewLegacyAdmissionController creates a new LegacyAdmissionController.
-func NewLegacyAdmissionController(sd saturationDetector) *LegacyAdmissionController {
-	return &LegacyAdmissionController{saturationDetector: sd}
+func NewLegacyAdmissionController(
+	sd saturationDetector,
+	pl contracts.PodLocator,
+) *LegacyAdmissionController {
+	return &LegacyAdmissionController{
+		saturationDetector: sd,
+		podLocator:         pl,
+	}
 }
 
 // Admit implements the AdmissionController interface for the legacy strategy.
@@ -107,13 +113,18 @@ func NewLegacyAdmissionController(sd saturationDetector) *LegacyAdmissionControl
 func (lac *LegacyAdmissionController) Admit(
 	ctx context.Context,
 	reqCtx *handlers.RequestContext,
-	candidatePods []backendmetrics.PodMetrics,
 	priority int,
 ) error {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.TRACE).Info("Executing LegacyAdmissionController",
 		"priority", priority, "fairnessID", reqCtx.FairnessID)
-	if err := rejectIfSheddableAndSaturated(ctx, lac.saturationDetector, reqCtx, candidatePods, priority); err != nil {
+	if err := rejectIfSheddableAndSaturated(
+		ctx,
+		lac.saturationDetector,
+		lac.podLocator,
+		reqCtx, priority,
+		logger,
+	); err != nil {
 		return err
 	}
 	logger.V(logutil.TRACE).Info("Request admitted", "requestID", reqCtx.SchedulingRequest.RequestId)
@@ -123,19 +134,15 @@ func (lac *LegacyAdmissionController) Admit(
 // --- FlowControlAdmissionController ---
 
 // FlowControlAdmissionController delegates admission decisions to the Flow Control layer.
-// It first checks if the request is sheddable and the system is saturated, rejecting immediately if both conditions are
-// true. Otherwise, it uses the provided flowController to enqueue the request and await an outcome.
+// It uses the provided Flow Controller to enqueue the request and await an outcome.
 type FlowControlAdmissionController struct {
-	saturationDetector saturationDetector
-	flowController     flowController
+	flowController flowController
 }
 
 // NewFlowControlAdmissionController creates a new FlowControlAdmissionController.
-// It requires a SaturationDetector and a flowController instance.
-func NewFlowControlAdmissionController(sd saturationDetector, fc flowController) *FlowControlAdmissionController {
+func NewFlowControlAdmissionController(fc flowController) *FlowControlAdmissionController {
 	return &FlowControlAdmissionController{
-		saturationDetector: sd,
-		flowController:     fc,
+		flowController: fc,
 	}
 }
 
@@ -144,24 +151,18 @@ func NewFlowControlAdmissionController(sd saturationDetector, fc flowController)
 func (fcac *FlowControlAdmissionController) Admit(
 	ctx context.Context,
 	reqCtx *handlers.RequestContext,
-	candidatePods []backendmetrics.PodMetrics,
 	priority int,
 ) error {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.TRACE).Info("Executing FlowControlAdmissionController",
 		"requestID", reqCtx.SchedulingRequest.RequestId, "priority", priority, "fairnessID", reqCtx.FairnessID)
-	if err := rejectIfSheddableAndSaturated(ctx, fcac.saturationDetector, reqCtx, candidatePods, priority); err != nil {
-		return err
-	}
-
-	logger.V(logutil.TRACE).Info("Request proceeding to flow control", "requestID", reqCtx.SchedulingRequest.RequestId)
 
 	fcReq := &flowControlRequest{
 		requestID:       reqCtx.SchedulingRequest.RequestId,
 		fairnessID:      reqCtx.FairnessID,
 		priority:        priority,
 		requestByteSize: uint64(reqCtx.RequestSize),
-		candidatePods:   candidatePods,
+		reqMetadata:     reqCtx.Request.Metadata,
 	}
 
 	outcome, err := fcac.flowController.EnqueueAndWait(ctx, fcReq)
@@ -176,7 +177,7 @@ type flowControlRequest struct {
 	fairnessID      string
 	priority        int
 	requestByteSize uint64
-	candidatePods   []backendmetrics.PodMetrics
+	reqMetadata     map[string]any
 }
 
 var _ types.FlowControlRequest = &flowControlRequest{}
@@ -184,11 +185,11 @@ var _ types.FlowControlRequest = &flowControlRequest{}
 func (r *flowControlRequest) ID() string                         { return r.requestID }
 func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
 func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
-func (r *flowControlRequest) CandidatePodsForScheduling() []backendmetrics.PodMetrics {
-	return r.candidatePods
-}
 func (r *flowControlRequest) FlowKey() types.FlowKey {
 	return types.FlowKey{ID: r.fairnessID, Priority: r.priority}
+}
+func (r *flowControlRequest) GetMetadata() map[string]any {
+	return r.reqMetadata
 }
 
 // translateFlowControlOutcome maps the context-rich outcome of the Flow Control layer to the public errutil.Error

@@ -73,6 +73,7 @@ func TestModelRewriteStore(t *testing.T) {
 		op           func(store *modelRewriteStore)
 		modelToGet   string
 		wantRule     *v1alpha2.InferenceModelRewriteRule
+		wantName     string
 		wantGetAll   []*v1alpha2.InferenceModelRewrite
 	}{
 		{
@@ -80,6 +81,7 @@ func TestModelRewriteStore(t *testing.T) {
 			initialState: []*v1alpha2.InferenceModelRewrite{rewriteOld},
 			modelToGet:   "model1",
 			wantRule:     &ruleModel1V1,
+			wantName:     rewriteOld.Name,
 			wantGetAll:   []*v1alpha2.InferenceModelRewrite{rewriteOld},
 		},
 		{
@@ -87,6 +89,7 @@ func TestModelRewriteStore(t *testing.T) {
 			initialState: []*v1alpha2.InferenceModelRewrite{rewriteGenericOld},
 			modelToGet:   "model2", // A different model to test generic fallback
 			wantRule:     &ruleGeneric,
+			wantName:     rewriteGenericOld.Name,
 			wantGetAll:   []*v1alpha2.InferenceModelRewrite{rewriteGenericOld},
 		},
 		{
@@ -94,6 +97,7 @@ func TestModelRewriteStore(t *testing.T) {
 			initialState: []*v1alpha2.InferenceModelRewrite{rewriteOld},
 			modelToGet:   "model2",
 			wantRule:     nil,
+			wantName:     "",
 			wantGetAll:   []*v1alpha2.InferenceModelRewrite{rewriteOld},
 		},
 		{
@@ -101,6 +105,7 @@ func TestModelRewriteStore(t *testing.T) {
 			initialState: []*v1alpha2.InferenceModelRewrite{rewriteOld, rewriteGenericOld},
 			modelToGet:   "model1",
 			wantRule:     &ruleModel1V1,
+			wantName:     rewriteOld.Name,
 			wantGetAll:   []*v1alpha2.InferenceModelRewrite{rewriteOld, rewriteGenericOld},
 		},
 		{
@@ -108,6 +113,7 @@ func TestModelRewriteStore(t *testing.T) {
 			initialState: []*v1alpha2.InferenceModelRewrite{rewriteOld, rewriteGenericOld},
 			modelToGet:   "model2",
 			wantRule:     &ruleGeneric,
+			wantName:     rewriteGenericOld.Name,
 			wantGetAll:   []*v1alpha2.InferenceModelRewrite{rewriteOld, rewriteGenericOld},
 		},
 		{
@@ -115,6 +121,7 @@ func TestModelRewriteStore(t *testing.T) {
 			initialState: []*v1alpha2.InferenceModelRewrite{rewriteNew, rewriteOld},
 			modelToGet:   "model1",
 			wantRule:     &ruleModel1V1,
+			wantName:     rewriteOld.Name,
 			wantGetAll:   []*v1alpha2.InferenceModelRewrite{rewriteNew, rewriteOld},
 		},
 		{
@@ -122,6 +129,7 @@ func TestModelRewriteStore(t *testing.T) {
 			initialState: []*v1alpha2.InferenceModelRewrite{rewriteGenericNew, rewriteGenericOld},
 			modelToGet:   "any-model",
 			wantRule:     &ruleGeneric,
+			wantName:     rewriteGenericOld.Name,
 			wantGetAll:   []*v1alpha2.InferenceModelRewrite{rewriteGenericNew, rewriteGenericOld},
 		},
 		{
@@ -132,6 +140,7 @@ func TestModelRewriteStore(t *testing.T) {
 			},
 			modelToGet: "model1",
 			wantRule:   &ruleGeneric, // Falls back to generic
+			wantName:   rewriteGenericOld.Name,
 			wantGetAll: []*v1alpha2.InferenceModelRewrite{rewriteGenericOld},
 		},
 		{
@@ -142,6 +151,7 @@ func TestModelRewriteStore(t *testing.T) {
 			},
 			modelToGet: "model1",
 			wantRule:   &ruleModel1V1,
+			wantName:   rewriteOld.Name,
 			wantGetAll: []*v1alpha2.InferenceModelRewrite{rewriteOld},
 		},
 		{
@@ -152,6 +162,7 @@ func TestModelRewriteStore(t *testing.T) {
 			},
 			modelToGet: "model1",
 			wantRule:   &ruleModel1V2,
+			wantName:   rewriteUpdated.Name,
 			wantGetAll: []*v1alpha2.InferenceModelRewrite{rewriteUpdated},
 		},
 	}
@@ -167,9 +178,12 @@ func TestModelRewriteStore(t *testing.T) {
 				tc.op(store)
 			}
 
-			gotRule := store.getRule(tc.modelToGet)
+			gotRule, gotName := store.getRule(tc.modelToGet)
 			if diff := cmp.Diff(tc.wantRule, gotRule); diff != "" {
 				t.Errorf("GetRule() mismatch (-want +got):\n%s", diff)
+			}
+			if gotName != tc.wantName {
+				t.Errorf("GetRule() returned incorrect name: got %s, want %s", gotName, tc.wantName)
 			}
 
 			if tc.wantGetAll != nil {

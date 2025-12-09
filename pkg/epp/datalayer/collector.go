@@ -88,7 +88,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 	started := false
 
 	c.startOnce.Do(func() {
-		logger := log.FromContext(ctx).WithValues("endpoint", ep.GetPod().GetIPAddress())
+		logger := log.FromContext(ctx).WithValues("endpoint", ep.GetMetadata().GetIPAddress())
 		c.ctx, c.cancel = context.WithCancel(ctx)
 		started = true
 		ready = make(chan struct{})

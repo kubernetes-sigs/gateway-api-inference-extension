@@ -46,24 +46,8 @@ func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (fl
 	return parsedFloat, nil
 }
 
-// parseFloatHeader retrieves a header by name, parses it as a bool,
-// and returns the value or an error if the header is missing or invalid.
-func parseBoolHeader(request schedulingtypes.LLMRequest, headerName string) (bool, error) {
-	// 1. Get header value from the map
-	headerValue, ok := request.Headers[headerName]
-	if !ok {
-		return false, nil // Header not found, return 0 and false
-	}
-
-	// 2. Parse the header value to a bool
-	parsedBool, err := strconv.ParseBool(headerValue)
-	if err != nil {
-		return false, errutil.Error{
-			Code: errutil.BadRequest,
-			Msg:  headerName + " must be a bool",
-		}
-	}
-
-	// 3. Return the successfully parsed value
-	return parsedBool, nil
+// hasHeader checks if a header key exists in the request headers map.
+func hasHeader(request schedulingtypes.LLMRequest, headerName string) bool {
+	_, ok := request.Headers[headerName]
+	return ok
 }

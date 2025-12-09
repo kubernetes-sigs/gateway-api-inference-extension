@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
@@ -50,54 +51,64 @@ var (
 )
 
 func TestNoMetricsCollected(t *testing.T) {
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(context.Background(), pmf, 0)
-
-	collector := &inferencePoolMetricsCollector{
-		ds: ds,
+	period := time.Second
+	factories := []datalayer.EndpointFactory{
+		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+		datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
 	}
+	for _, epf := range factories {
+		ds := datastore.NewDatastore(context.Background(), epf, 0)
 
-	if err := testutil.CollectAndCompare(collector, strings.NewReader(""), ""); err != nil {
-		t.Fatal(err)
+		collector := &inferencePoolMetricsCollector{
+			ds: ds,
+		}
+
+		if err := testutil.CollectAndCompare(collector, strings.NewReader(""), ""); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
 func TestMetricsCollected(t *testing.T) {
-	pmc := &backendmetrics.FakePodMetricsClient{
-		Res: map[types.NamespacedName]*backendmetrics.MetricsState{
-			pod1NamespacedName: pod1Metrics,
-		},
+	metrics := map[types.NamespacedName]*backendmetrics.MetricsState{
+		pod1NamespacedName: pod1Metrics,
 	}
-	pmf := backendmetrics.NewPodMetricsFactory(pmc, time.Millisecond)
-	inferencePool := &v1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-pool",
-		},
-		Spec: v1.InferencePoolSpec{
-			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
-		},
+	period := time.Millisecond
+	factories := []datalayer.EndpointFactory{
+		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: metrics}, period),
+		datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{Metrics: metrics}}, period),
 	}
-	ds := datastore.NewDatastore(context.Background(), pmf, 0)
+	for _, epf := range factories {
+		inferencePool := &v1.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-pool",
+			},
+			Spec: v1.InferencePoolSpec{
+				TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
+			},
+		}
+		ds := datastore.NewDatastore(context.Background(), epf, 0)
 
-	scheme := runtime.NewScheme()
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
+		scheme := runtime.NewScheme()
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			Build()
 
-	_ = ds.PoolSet(context.Background(), fakeClient, poolutil.InferencePoolToEndpointPool(inferencePool))
-	_ = ds.PodUpdateOrAddIfNotExist(pod1)
+		_ = ds.PoolSet(context.Background(), fakeClient, poolutil.InferencePoolToEndpointPool(inferencePool))
+		_ = ds.PodUpdateOrAddIfNotExist(pod1)
 
-	time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second)
 
-	collector := &inferencePoolMetricsCollector{
-		ds: ds,
-	}
-	err := testutil.CollectAndCompare(collector, strings.NewReader(`
+		collector := &inferencePoolMetricsCollector{
+			ds: ds,
+		}
+		err := testutil.CollectAndCompare(collector, strings.NewReader(`
 		# HELP inference_pool_per_pod_queue_size [ALPHA] The total number of requests pending in the model server queue for each underlying pod.
 		# TYPE inference_pool_per_pod_queue_size gauge
 		inference_pool_per_pod_queue_size{model_server_pod="pod1-rank-0",name="test-pool"} 100
 `), "inference_pool_per_pod_queue_size")
-	if err != nil {
-		t.Fatal(err)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }

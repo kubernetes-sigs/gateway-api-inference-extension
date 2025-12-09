@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -684,6 +685,50 @@ func TestSchedulerE2ELatency(t *testing.T) {
 	}
 }
 
+func TestSchedulerAttemptsTotal(t *testing.T) {
+
+	scenarios := []struct {
+		name         string
+		successCount int
+		failureCount int
+	}{
+		{
+			name:         "mixed success and failure attempts",
+			successCount: 10,
+			failureCount: 5,
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			Reset()
+			for i := 0; i < scenario.successCount; i++ {
+				RecordSchedulerAttempt(nil)
+			}
+			for i := 0; i < scenario.failureCount; i++ {
+				RecordSchedulerAttempt(errors.New("simulated scheduling failure"))
+			}
+
+			wantMetrics, err := os.Open("testdata/scheduler_attempts_total_metrics")
+			defer func() {
+				if err = wantMetrics.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(
+				metrics.Registry,
+				wantMetrics,
+				"inference_extension_scheduler_attempts_total",
+			); err != nil {
+				t.Errorf("metric comparison failed: %v", err)
+			}
+		})
+	}
+}
+
 func TestPrefixCacheMetrics(t *testing.T) {
 	Reset()
 	const (
@@ -886,4 +931,37 @@ func TestFlowControlQueueSizeMetric(t *testing.T) {
 	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100"))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
+}
+
+func TestInferenceModelRewriteDecisionsTotalMetric(t *testing.T) {
+	Reset()
+
+	RecordInferenceModelRewriteDecision("rewrite-rule-1", "model-a", "model-b")
+	RecordInferenceModelRewriteDecision("rewrite-rule-1", "model-a", "model-b")
+	RecordInferenceModelRewriteDecision("rewrite-rule-2", "model-c", "model-d")
+
+	testCases := []struct {
+		name        string
+		labels      prometheus.Labels
+		expectCount float64
+	}{
+		{
+			name:        "rewrite-rule-1, model-a -> model-b",
+			labels:      prometheus.Labels{"model_rewrite_name": "rewrite-rule-1", "model_name": "model-a", "target_model": "model-b"},
+			expectCount: 2,
+		},
+		{
+			name:        "rewrite-rule-2, model-c -> model-d",
+			labels:      prometheus.Labels{"model_rewrite_name": "rewrite-rule-2", "model_name": "model-c", "target_model": "model-d"},
+			expectCount: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			val, err := testutil.GetCounterMetricValue(inferenceModelRewriteDecisionsTotal.With(tc.labels))
+			require.NoError(t, err, "Failed to get counter value for labels %v", tc.labels)
+			require.Equal(t, tc.expectCount, val, "Counter value mismatch for labels %v", tc.labels)
+		})
+	}
 }

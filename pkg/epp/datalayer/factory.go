@@ -46,7 +46,7 @@ type PoolInfo interface {
 // providing methods to allocate and retire endpoints. This can potentially be used for
 // pooled memory or other management chores in the implementation.
 type EndpointFactory interface {
-	NewEndpoint(parent context.Context, inpod *PodInfo, poolinfo PoolInfo) Endpoint
+	NewEndpoint(parent context.Context, inEnpointMetadata *EndpointMetadata, poolinfo PoolInfo) Endpoint
 	ReleaseEndpoint(ep Endpoint)
 }
 
@@ -71,8 +71,8 @@ func NewEndpointFactory(sources []DataSource, refreshMetricsInterval time.Durati
 // NewEndpoint implements EndpointFactory.NewEndpoint.
 // Creates a new endpoint and starts its associated collector with its own ticker.
 // Guards against multiple concurrent calls for the same endpoint.
-func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *PodInfo, _ PoolInfo) Endpoint {
-	key := types.NamespacedName{Namespace: inpod.GetNamespacedName().Namespace, Name: inpod.GetNamespacedName().Name}
+func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *EndpointMetadata, _ PoolInfo) Endpoint {
+	key := types.NamespacedName{Namespace: inEndpointMetadata.GetNamespacedName().Namespace, Name: inEndpointMetadata.GetNamespacedName().Name}
 	logger := log.FromContext(parent).WithValues("pod", key)
 
 	if _, ok := lc.collectors.Load(key); ok {
@@ -80,7 +80,7 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *PodInfo,
 		return nil
 	}
 
-	endpoint := NewEndpoint(inpod, nil)
+	endpoint := NewEndpoint(inEndpointMetadata, nil)
 	collector := NewCollector() // TODO or full backward compatibility, set the logger and poolinfo
 
 	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {
@@ -102,7 +102,7 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inpod *PodInfo,
 // ReleaseEndpoint implements EndpointFactory.ReleaseEndpoint
 // Stops the collector and cleans up resources for the endpoint
 func (lc *EndpointLifecycle) ReleaseEndpoint(ep Endpoint) {
-	key := ep.GetPod().GetNamespacedName()
+	key := ep.GetMetadata().GetNamespacedName()
 
 	if value, ok := lc.collectors.LoadAndDelete(key); ok {
 		collector := value.(*Collector)

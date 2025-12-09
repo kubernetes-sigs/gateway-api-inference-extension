@@ -25,7 +25,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -35,7 +34,7 @@ const (
 )
 
 type podMetrics struct {
-	pod      atomic.Pointer[backend.Pod]
+	metadata atomic.Pointer[datalayer.EndpointMetadata]
 	metrics  atomic.Pointer[MetricsState]
 	pmc      PodMetricsClient
 	ds       datalayer.PoolInfo
@@ -49,23 +48,23 @@ type podMetrics struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error)
+	FetchMetrics(ctx context.Context, pod *datalayer.EndpointMetadata, existing *MetricsState) (*MetricsState, error)
 }
 
 func (pm *podMetrics) String() string {
-	return fmt.Sprintf("Pod: %v; Metrics: %v", pm.GetPod(), pm.GetMetrics())
+	return fmt.Sprintf("Metadata: %v; Metrics: %v", pm.GetMetadata(), pm.GetMetrics())
 }
 
-func (pm *podMetrics) GetPod() *backend.Pod {
-	return pm.pod.Load()
+func (pm *podMetrics) GetMetadata() *datalayer.EndpointMetadata {
+	return pm.metadata.Load()
 }
 
 func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 
-func (pm *podMetrics) UpdatePod(pod *datalayer.PodInfo) {
-	pm.pod.Store(pod)
+func (pm *podMetrics) UpdateMetadata(pod *datalayer.EndpointMetadata) {
+	pm.metadata.Store(pod)
 }
 
 // start starts a goroutine exactly once to periodically update metrics. The goroutine will be
@@ -73,7 +72,7 @@ func (pm *podMetrics) UpdatePod(pod *datalayer.PodInfo) {
 func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 	pm.startOnce.Do(func() {
 		go func() {
-			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "pod", pm.GetPod())
+			pm.logger.V(logutil.DEFAULT).Info("Starting refresher", "metadata", pm.GetMetadata())
 			ticker := time.NewTicker(pm.interval)
 			defer ticker.Stop()
 			for {
@@ -84,7 +83,7 @@ func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 					return
 				case <-ticker.C: // refresh metrics periodically
 					if err := pm.refreshMetrics(); err != nil {
-						pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "pod", pm.GetPod())
+						pm.logger.V(logutil.TRACE).Error(err, "Failed to refresh metrics", "metadata", pm.GetMetadata())
 					}
 				}
 			}
@@ -95,7 +94,7 @@ func (pm *podMetrics) startRefreshLoop(ctx context.Context) {
 func (pm *podMetrics) refreshMetrics() error {
 	ctx, cancel := context.WithTimeout(context.Background(), fetchMetricsTimeout)
 	defer cancel()
-	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetPod(), pm.GetMetrics())
+	updated, err := pm.pmc.FetchMetrics(ctx, pm.GetMetadata(), pm.GetMetrics())
 	if err != nil {
 		pm.logger.V(logutil.TRACE).Info("Failed to refreshed metrics:", "err", err)
 	}
@@ -115,7 +114,7 @@ func (pm *podMetrics) refreshMetrics() error {
 }
 
 func (pm *podMetrics) stopRefreshLoop() {
-	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "pod", pm.GetPod())
+	pm.logger.V(logutil.DEFAULT).Info("Stopping refresher", "metadata", pm.GetMetadata())
 	pm.stopOnce.Do(func() {
 		close(pm.done)
 	})

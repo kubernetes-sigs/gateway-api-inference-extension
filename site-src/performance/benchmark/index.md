@@ -40,7 +40,9 @@ parallel against different targets.
 For more parameter customizations, refer to inference-perf [guides](https://github.com/kubernetes-sigs/inference-perf/blob/main/docs/config.md)
 
 *   `benchmark`: A unique name for this deployment.
-*   `hfToken`: Your hugging face token.
+*   `token.hfToken`: Your hugging face token
+*   `token.hfSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
+*   `token.hfSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
 *   `config.server.base_url`: The base URL (IP and port) of your inference server.
 
 ### Storage Parameters
@@ -119,16 +121,44 @@ echo $SVC_IP
 
 ```bash
 export PORT='<YOUR_PORT>'
+
+# HUGGINGFACE PARAMETERS
+# Option A: Pass Token Directly
 export HF_TOKEN='<YOUR_HUGGINGFACE_TOKEN>'
+# Option B: Use Existing Kubernetes Secret
+export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
+export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
+
 helm install igw-benchmark inference-perf/ -f benchmark-values.yaml \
---set hfToken=${HF_TOKEN} \
---set "config.server.base_url=http://${GW_IP}:${PORT}"
+--set "config.server.base_url=http://${GW_IP}:${PORT}" \
+# ------------------------------------------------
+# HUGGINGFACE OPTION A
+--set token.hfToken=${HF_TOKEN}
+# ------------------------------------------------
+# HUGGINGFACE OPTION B
+# --set token.hfSecret.name=${HF_SECRET_NAME} \
+# --set token.hfSecret.key=${HF_SECRET_KEY}
+# ------------------------------------------------
 
 export PORT='<YOUR_PORT>'
+
+# HUGGINGFACE OPTIONS
+# Option A: Pass Token Directly
 export HF_TOKEN='<YOUR_HUGGINGFACE_TOKEN>'
+# Option B: Use Existing Kubernetes Secret
+export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
+export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
+
 helm install k8s-benchmark inference-perf/ -f benchmark-values.yaml \
---set hfToken=${HF_TOKEN} \
---set "config.server.base_url=http://${SVC_IP}:${PORT}"
+--set "config.server.base_url=http://${SVC_IP}:${PORT}" \
+# ------------------------------------------------
+# HUGGINGFACE OPTION A
+--set token.hfToken=${HF_TOKEN}
+# ------------------------------------------------
+# HUGGINGFACE OPTION B
+# --set token.hfSecret.name=${HF_SECRET_NAME} \
+# --set token.hfSecret.key=${HF_SECRET_KEY}
+# ------------------------------------------------
 ```
 
 ## Clean Up

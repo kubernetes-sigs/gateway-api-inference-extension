@@ -299,6 +299,16 @@ var (
 		[]string{},
 	)
 
+	// SchedulerAttemptsTotal counts total number of scheduling attempts, labeled by status.
+	SchedulerAttemptsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "scheduler_attempts_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of scheduling attempts.", compbasemetrics.ALPHA),
+		},
+		[]string{"status"}, // "success", "failure"
+	)
+
 	PluginProcessingLatencies = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceExtension,
@@ -373,6 +383,16 @@ var (
 		},
 		[]string{"fairness_id", "priority"},
 	)
+
+	// Inference Model Rewrite Metrics
+	inferenceModelRewriteDecisionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "model_rewrite_decisions_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of inference model rewrite decisions.", compbasemetrics.ALPHA),
+		},
+		[]string{"model_rewrite_name", "model_name", "target_model"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -409,6 +429,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(inferencePoolAvgQueueSize)
 		metrics.Registry.MustRegister(inferencePoolReadyPods)
 		metrics.Registry.MustRegister(SchedulerE2ELatency)
+		metrics.Registry.MustRegister(SchedulerAttemptsTotal)
 		metrics.Registry.MustRegister(PluginProcessingLatencies)
 		metrics.Registry.MustRegister(InferenceExtensionInfo)
 		metrics.Registry.MustRegister(PrefixCacheSize)
@@ -416,6 +437,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(PrefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
+		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
 		}
@@ -453,6 +475,7 @@ func Reset() {
 	inferencePoolAvgQueueSize.Reset()
 	inferencePoolReadyPods.Reset()
 	SchedulerE2ELatency.Reset()
+	SchedulerAttemptsTotal.Reset()
 	PluginProcessingLatencies.Reset()
 	InferenceExtensionInfo.Reset()
 	PrefixCacheSize.Reset()
@@ -460,9 +483,10 @@ func Reset() {
 	PrefixCacheHitLength.Reset()
 	flowControlRequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
+	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
-// RecordRequstCounter records the number of requests.
+// RecordRequestCounter records the number of requests.
 func RecordRequestCounter(modelName, targetModelName string) {
 	requestCounter.WithLabelValues(modelName, targetModelName).Inc()
 }
@@ -684,6 +708,20 @@ func RecordSchedulerE2ELatency(duration time.Duration) {
 	SchedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
 }
 
+// RecordSchedulerAttempt records a scheduling attempt with status.
+func RecordSchedulerAttempt(err error) {
+	if err != nil {
+		SchedulerAttemptsTotal.WithLabelValues(SchedulerStatusFailure).Inc()
+	} else {
+		SchedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess).Inc()
+	}
+}
+
+const (
+	SchedulerStatusSuccess = "success"
+	SchedulerStatusFailure = "failure"
+)
+
 // RecordPluginProcessingLatency records the processing latency for a plugin.
 func RecordPluginProcessingLatency(extensionPoint, pluginType, pluginName string, duration time.Duration) {
 	PluginProcessingLatencies.WithLabelValues(extensionPoint, pluginType, pluginName).Observe(duration.Seconds())
@@ -736,4 +774,9 @@ func SetTTFTSLOThreshold(modelName, targetModelName string, threshold float64) {
 // This allows dynamic threshold management and makes the threshold visible in metrics.
 func SetTPOTSLOThreshold(modelName, targetModelName string, threshold float64) {
 	inferenceGauges.With(prometheus.Labels{"model_name": modelName, "target_model_name": targetModelName, "type": "tpot_slo_threshold"}).Set(threshold)
+}
+
+// RecordInferenceModelRewriteDecision records the routing decision for InferenceModelRewrite.
+func RecordInferenceModelRewriteDecision(modelRewriteName, modelName, targetModel string) {
+	inferenceModelRewriteDecisionsTotal.WithLabelValues(modelRewriteName, modelName, targetModel).Inc()
 }

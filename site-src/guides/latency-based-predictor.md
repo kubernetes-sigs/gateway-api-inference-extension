@@ -8,7 +8,7 @@ Latency-based routing is a feature of the Inference Gateway that enables intelli
 
 The latency-based routing feature is implemented as a plugin for the Endpoint Picker (EPP). When a request is received, the plugin performs the following steps:
 
-1.  **SLO Extraction**: The plugin extracts the TTFT and TPOT SLOs from the request headers (`x-slo-ttft-ms` and `x-slo-tpot-ms`). It also checks for the `x-prediction-based-scheduling` header to determine if latency-based routing should be used for this request.
+1.  **SLO Extraction**: The plugin extracts the TTFT and TPOT SLOs from the request headers (`x-slo-ttft-ms` and `x-slo-tpot-ms`). It also checks for the `x-prediction-based-scheduling-off` header to determine if latency-based routing should be used for this request.
 
 2.  **Latency Prediction**: The plugin uses a latency predictor, deployed as a set of sidecar containers to the EPP, to predict the TTFT and TPOT for the request on each of the available model servers. The prediction is based on the current state of the server, including its KV cache utilization, and the number of running and waiting requests.
 
@@ -22,7 +22,7 @@ The latency-based routing feature is implemented as a plugin for the Endpoint Pi
 
 To use latency-based routing, you need to include the following headers in your inference requests:
 
--   `x-prediction-based-scheduling`: Set to `true` to enable latency-based routing for the request, setting this to false or omiting the header will use non-SLO routing, but will still use the latency data to train the predictor.
+-   `x-prediction-based-scheduling-off`: Include this header to disable predictive routing for that specific request. If omitted, predictive routing is enabled by default.
 -   `x-slo-ttft-ms`: The Time to First Token SLO in milliseconds.
 -   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds (this is vLLMs equivalent of ITL, is it **not** NTPOT).
 
@@ -78,7 +78,7 @@ If you have a standard setup via using the [Getting Started Guide](getting-start
 ```txt
 export GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}'):80
 
-curl -v $GW_IP/v1/completions -H 'Content-Type: application/json' -H 'x-slo-ttft-ms: 100' -H 'x-slo-tpot-ms: 100' -H 'x-prediction-based-scheduling: true' -d '{
+curl -v $GW_IP/v1/completions -H 'Content-Type: application/json' -H 'x-slo-ttft-ms: 100' -H 'x-slo-tpot-ms: 100' -d '{
 "model": "meta-llama/Llama-3.1-8B-Instruct",
 "prompt": "Write as if you were a critic: San Francisco where the ",
 "max_tokens": 100,
