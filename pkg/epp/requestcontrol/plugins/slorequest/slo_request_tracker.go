@@ -104,6 +104,42 @@ func (t *SLORequestTracker) PostResponse(ctx context.Context, reqCtx *handlers.R
 		return
 	}
 
+	// Detect PD disaggregation mode and allocate SLO budgets
+	if reqCtx.SchedulingResult != nil && !reqCtx.PDMode {
+		// Check if both prefill and decode profiles exist in results
+		_, hasPrefill := reqCtx.SchedulingResult.ProfileResults["prefill"]
+		_, hasDecode := reqCtx.SchedulingResult.ProfileResults["decode"]
+
+		if hasPrefill && hasDecode {
+			// PD disaggregation is active
+			reqCtx.PDMode = true
+
+			// Extract pod names from profile results
+			if prefillResult := reqCtx.SchedulingResult.ProfileResults["prefill"]; prefillResult != nil && len(prefillResult.TargetPods) > 0 {
+				reqCtx.PrefillPodName = prefillResult.TargetPods[0].GetPod().NamespacedName.Name
+			}
+			if decodeResult := reqCtx.SchedulingResult.ProfileResults["decode"]; decodeResult != nil && len(decodeResult.TargetPods) > 0 {
+				reqCtx.DecodePodName = decodeResult.TargetPods[0].GetPod().NamespacedName.Name
+			}
+
+			// Allocate PD SLO budgets if SLOs are specified
+			if reqCtx.SchedulingRequest != nil {
+				ttftSLO := reqCtx.SchedulingRequest.TTFTSLO
+				tpotSLO := reqCtx.SchedulingRequest.AvgTPOTSLO
+
+				if ttftSLO > 0 || tpotSLO > 0 {
+					logger.V(logutil.DEBUG).Info("Allocating PD SLO budgets",
+						"ttft_slo", ttftSLO,
+						"tpot_slo", tpotSLO,
+						"prefill_pod", reqCtx.PrefillPodName,
+						"decode_pod", reqCtx.DecodePodName)
+
+					requestcontrol.AllocatePDSLOBudgets(ctx, reqCtx, ttftSLO, tpotSLO)
+				}
+			}
+		}
+	}
+
 	if err := requestcontrol.ProcessHeaderForLatencyPrediction(ctx, t.latencypredictor, reqCtx); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "ProcessHeader in latencypredictor failed")
 	}
@@ -120,7 +156,19 @@ func (t *SLORequestTracker) PostResponseChunk(ctx context.Context, reqCtx *handl
 	now := time.Now()
 
 	if reqCtx.TTFT == 0 {
+		// First token received - this marks end of prefill phase
 		requestcontrol.ProcessFirstTokenForLatencyPrediction(ctx, t.latencypredictor, reqCtx, now)
+
+		// For PD disaggregation, track prefill and KV transfer phases
+		if reqCtx.PDMode {
+			logger.V(logutil.DEBUG).Info("First token received in PD mode, updating prefill and KV transfer phases")
+
+			// Update prefill phase tracking
+			requestcontrol.UpdatePrefillPhase(ctx, reqCtx)
+
+			// Update KV transfer phase tracking
+			requestcontrol.UpdateKVTransferPhase(ctx, reqCtx)
+		}
 	} else {
 		requestcontrol.ProcessTokenForLatencyPrediction(ctx, t.latencypredictor, reqCtx, now)
 	}
@@ -133,6 +181,32 @@ func (t *SLORequestTracker) PostResponseComplete(ctx context.Context, reqCtx *ha
 	targetPod := reqCtx.TargetPod
 	if !t.CheckPredictor(logger, targetPod) {
 		return
+	}
+
+	// For PD disaggregation, update decode phase tracking and check for SLO violations
+	if reqCtx.PDMode {
+		logger.V(logutil.DEBUG).Info("Response complete in PD mode, updating decode phase")
+		requestcontrol.UpdateDecodePhase(ctx, reqCtx, reqCtx.AvgTPOT)
+
+		// Log PD SLO tracking summary
+		if reqCtx.PDSLOViolation {
+			logger.Info("PD SLO violation detected",
+				"violation_phase", reqCtx.PDSLOViolationPhase,
+				"prefill_latency_ms", reqCtx.ActualPrefillLatency,
+				"prefill_budget_ms", reqCtx.PrefillTTFTBudget,
+				"kv_transfer_latency_ms", reqCtx.ActualKVTransferLatency,
+				"kv_transfer_budget_ms", reqCtx.KVTransferBudget,
+				"decode_tpot_ms", reqCtx.ActualDecodeTPOT,
+				"decode_budget_ms", reqCtx.DecodeTPOTBudget)
+		} else {
+			logger.V(logutil.DEBUG).Info("PD SLO met successfully",
+				"prefill_latency_ms", reqCtx.ActualPrefillLatency,
+				"prefill_budget_ms", reqCtx.PrefillTTFTBudget,
+				"kv_transfer_latency_ms", reqCtx.ActualKVTransferLatency,
+				"kv_transfer_budget_ms", reqCtx.KVTransferBudget,
+				"decode_tpot_ms", reqCtx.ActualDecodeTPOT,
+				"decode_budget_ms", reqCtx.DecodeTPOTBudget)
+		}
 	}
 
 	if reqCtx.TTFT > 0 {

@@ -147,7 +147,7 @@ func UpdatePrefillPhase(ctx context.Context, reqCtx *handlers.RequestContext) {
 	if reqCtx.ActualPrefillLatency > reqCtx.PrefillTTFTBudget {
 		reqCtx.PDSLOViolation = true
 		reqCtx.PDSLOViolationPhase = "prefill"
-		logger.V(logutil.INFO).Info("Prefill phase violated SLO budget",
+		logger.Info("Prefill phase violated SLO budget",
 			"actual", reqCtx.ActualPrefillLatency,
 			"budget", reqCtx.PrefillTTFTBudget,
 			"overage", reqCtx.ActualPrefillLatency-reqCtx.PrefillTTFTBudget)
@@ -178,7 +178,7 @@ func UpdateKVTransferPhase(ctx context.Context, reqCtx *handlers.RequestContext)
 	if reqCtx.ActualKVTransferLatency > reqCtx.KVTransferBudget {
 		reqCtx.PDSLOViolation = true
 		reqCtx.PDSLOViolationPhase = "kv_transfer"
-		logger.V(logutil.INFO).Info("KV transfer phase violated SLO budget",
+		logger.Info("KV transfer phase violated SLO budget",
 			"actual", reqCtx.ActualKVTransferLatency,
 			"budget", reqCtx.KVTransferBudget,
 			"overage", reqCtx.ActualKVTransferLatency-reqCtx.KVTransferBudget)
@@ -206,7 +206,7 @@ func UpdateDecodePhase(ctx context.Context, reqCtx *handlers.RequestContext, tpo
 	if reqCtx.ActualDecodeTPOT > reqCtx.DecodeTPOTBudget {
 		reqCtx.PDSLOViolation = true
 		reqCtx.PDSLOViolationPhase = "decode"
-		logger.V(logutil.INFO).Info("Decode phase violated SLO budget",
+		logger.Info("Decode phase violated SLO budget",
 			"actual_tpot", reqCtx.ActualDecodeTPOT,
 			"budget", reqCtx.DecodeTPOTBudget,
 			"overage", reqCtx.ActualDecodeTPOT-reqCtx.DecodeTPOTBudget)
