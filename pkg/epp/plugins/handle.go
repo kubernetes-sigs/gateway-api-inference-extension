@@ -21,104 +21,138 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/types"
+
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 )
 
-// Handle provides plugins a set of standard data and tools to work with
+// Handle provides plugins with access to global EPP state, configuration blueprints, and other singleton plugin
+// instances.
 type Handle interface {
-	// Context returns a context the plugins can use, if they need one
+	// Context returns the root context for the EPP.
 	Context() context.Context
 
+	// PluginSpec returns the raw configuration blueprint for the named plugin.
+	// Returns nil if no such blueprint exists.
+	PluginSpec(name string) *configapi.PluginSpec
+
+	// HandlePlugins embeds access to Singleton plugin instances.
 	HandlePlugins
 
-	// PodList lists pods.
+	// PodList returns the current snapshot of ready backend pods.
 	PodList() []types.NamespacedName
 }
 
-// HandlePlugins defines a set of APIs to work with instantiated plugins
+// HandlePlugins defines the API for accessing instantiated Singleton plugins.
 type HandlePlugins interface {
-	// Plugin returns the named plugin instance
+	// Plugin returns the named plugin instance, or nil if not found.
 	Plugin(name string) Plugin
 
-	// AddPlugin adds a plugin to the set of known plugin instances
+	// AddPlugin adds a plugin to the set of known plugin instances.
+	// Note: This operation modifies the internal map and is not thread-safe.
+	// It should generally be used only during initialization or in single-threaded contexts.
 	AddPlugin(name string, plugin Plugin)
 
-	// GetAllPlugins returns all of the known plugins
+	// GetAllPlugins returns a slice of all registered Singleton plugins.
 	GetAllPlugins() []Plugin
 
-	// GetAllPluginsWithNames returns all of the known plugins with their names
+	// GetAllPluginsWithNames returns a map of all registered Singleton plugins, keyed by TypedName().Name.
 	GetAllPluginsWithNames() map[string]Plugin
 }
 
-// PodListFunc is a function type that filters and returns a list of pod metrics
+// PodListFunc is a function type that returns a filtered list of pod names.
 type PodListFunc func() []types.NamespacedName
 
-// eppHandle is an implementation of the interface plugins.Handle
+// eppHandle implements the Handle interface.
+// Concurrency Note: The pluginSpecs and plugins maps are populated at startup and are strictly read-only thereafter.
+// No mutexes are required for read access.
 type eppHandle struct {
-	ctx context.Context
-	HandlePlugins
-	podList PodListFunc
+	ctx         context.Context
+	pluginSpecs map[string]*configapi.PluginSpec
+	plugins     map[string]Plugin
+	podList     PodListFunc
 }
 
-// Context returns a context the plugins can use, if they need one
+// NewEppHandle creates a new, immutable handle.
+func NewEppHandle(
+	ctx context.Context,
+	specs []configapi.PluginSpec,
+	plugins map[string]Plugin,
+	podList PodListFunc,
+) Handle {
+	// Deep copy specs into a map for O(1) lookup.
+	specMap := make(map[string]*configapi.PluginSpec, len(specs))
+	for i := range specs {
+		s := specs[i]
+		specMap[s.Name] = &s
+	}
+
+	if plugins == nil {
+		plugins = make(map[string]Plugin)
+	}
+
+	return &eppHandle{
+		ctx:         ctx,
+		pluginSpecs: specMap,
+		plugins:     plugins,
+		podList:     podList,
+	}
+}
+
+// Context returns the root context associated with this handle.
 func (h *eppHandle) Context() context.Context {
 	return h.ctx
 }
 
-// eppHandlePlugins implements the set of APIs to work with instantiated plugins
-type eppHandlePlugins struct {
-	plugins map[string]Plugin
+// PluginSpec retrieves the configuration blueprint for a given plugin name.
+func (h *eppHandle) PluginSpec(name string) *configapi.PluginSpec {
+	return h.pluginSpecs[name]
 }
 
-// Plugin returns the named plugin instance
-func (h *eppHandlePlugins) Plugin(name string) Plugin {
+// Plugin retrieves a singleton plugin instance by name.
+func (h *eppHandle) Plugin(name string) Plugin {
 	return h.plugins[name]
 }
 
-// AddPlugin adds a plugin to the set of known plugin instances
-func (h *eppHandlePlugins) AddPlugin(name string, plugin Plugin) {
+// AddPlugin registers a new singleton plugin instance.
+func (h *eppHandle) AddPlugin(name string, plugin Plugin) {
 	h.plugins[name] = plugin
 }
 
-// GetAllPlugins returns all of the known plugins
-func (h *eppHandlePlugins) GetAllPlugins() []Plugin {
-	result := make([]Plugin, 0)
+// GetAllPlugins returns a list of all registered singleton plugins.
+func (h *eppHandle) GetAllPlugins() []Plugin {
+	result := make([]Plugin, 0, len(h.plugins))
 	for _, plugin := range h.plugins {
 		result = append(result, plugin)
 	}
 	return result
 }
 
-// GetAllPluginsWithNames returns al of the known plugins with their names
-func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]Plugin {
+// GetAllPluginsWithNames returns a map of all registered Singleton plugins, keyed by TypedName().Name.
+func (h *eppHandle) GetAllPluginsWithNames() map[string]Plugin {
 	return h.plugins
 }
 
-// PodList lists pods.
+// PodList returns the list of currently ready pods from the underlying watcher.
 func (h *eppHandle) PodList() []types.NamespacedName {
+	if h.podList == nil {
+		return nil
+	}
 	return h.podList()
 }
 
-func NewEppHandle(ctx context.Context, podList PodListFunc) Handle {
-	return &eppHandle{
-		ctx: ctx,
-		HandlePlugins: &eppHandlePlugins{
-			plugins: map[string]Plugin{},
-		},
-		podList: podList,
-	}
-}
+// PluginByType retrieves a Singleton plugin by name and casts it to the expected type T.
+func PluginByType[T Plugin](h HandlePlugins, name string) (T, error) {
+	var zero T
 
-// PluginByType retrieves the specified plugin by name and verifies its type
-func PluginByType[P Plugin](handlePlugins HandlePlugins, name string) (P, error) {
-	var zero P
-
-	rawPlugin := handlePlugins.Plugin(name)
+	rawPlugin := h.Plugin(name)
 	if rawPlugin == nil {
-		return zero, fmt.Errorf("there is no plugin with the name '%s' defined", name)
+		return zero, fmt.Errorf("plugin %q not found", name)
 	}
-	plugin, ok := rawPlugin.(P)
+
+	plugin, ok := rawPlugin.(T)
 	if !ok {
-		return zero, fmt.Errorf("the plugin with the name '%s' is not an instance of %T", name, zero)
+		return zero, fmt.Errorf("plugin %q is type %T, expected %T", name, rawPlugin, zero)
 	}
+
 	return plugin, nil
 }
