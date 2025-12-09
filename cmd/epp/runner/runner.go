@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -59,6 +60,7 @@ import (
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -125,6 +127,7 @@ var (
 	certPath            = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
 		"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
 		"then a self-signed certificate is used.")
+	enableCertReload = flag.Bool("enable-cert-reload", runserver.DefaultCertReload, "Enables certificate reloading of the certificates specified in --cert-path")
 	// metric flags
 	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
 	totalRunningRequestsMetric   = flag.String("total-running-requests-metric", runserver.DefaultTotalRunningRequestsMetric, "Prometheus metric for the number of running requests.")
@@ -328,7 +331,10 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
+	var locator contracts.PodLocator
+	locator = requestcontrol.NewDatastorePodLocator(ds)
 	if r.featureGates[flowcontrol.FeatureGate] {
+		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
 		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
 		if err != nil {
@@ -340,21 +346,28 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
-		fc, err := fccontroller.NewFlowController(ctx, fcCfg.Controller, registry, saturationDetector, setupLog)
+		fc, err := fccontroller.NewFlowController(
+			ctx,
+			fcCfg.Controller,
+			registry, saturationDetector,
+			locator,
+			setupLog,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
 		}
 		go registry.Run(ctx)
-		admissionController = requestcontrol.NewFlowControlAdmissionController(saturationDetector, fc)
+		admissionController = requestcontrol.NewFlowControlAdmissionController(fc)
 	} else {
 		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
-		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector)
+		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, locator)
 	}
 
 	director := requestcontrol.NewDirectorWithConfig(
 		ds,
 		scheduler,
 		admissionController,
+		locator,
 		r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
@@ -366,6 +379,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		SecureServing:                    *secureServing,
 		HealthChecking:                   *healthChecking,
 		CertPath:                         *certPath,
+		EnableCertReload:                 *enableCertReload,
 		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
 		MetricsStalenessThreshold:        *metricsStalenessThreshold,
 		Director:                         director,
@@ -433,7 +447,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
 	// Latency predictor plugins
 	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, slo_aware_router.SLOAwareRouterFactory)
-	plugins.Register(profile.SLOAwareProfileHandlerType, profile.SLOAwareProfileHandlerFactory)
+	plugins.Register(slo_aware_router.SLOAwareProfileHandlerType, slo_aware_router.SLOAwareProfileHandlerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)
@@ -466,7 +480,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 
 	r.registerInTreePlugins()
 
-	rawConfig, featureGates, err := loader.LoadConfigPhaseOne(configBytes, logger)
+	rawConfig, featureGates, err := loader.LoadRawConfig(configBytes, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config - %w", err)
 	}
@@ -479,11 +493,11 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.End
 // Return a function that can be used in the EPP Handle to list pod names.
 func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 	return func() []types.NamespacedName {
-		pods := ds.PodList(backendmetrics.AllPodsPredicate)
+		pods := ds.PodList(datastore.AllPodsPredicate)
 		names := make([]types.NamespacedName, 0, len(pods))
 
 		for _, p := range pods {
-			names = append(names, p.GetPod().NamespacedName)
+			names = append(names, p.GetMetadata().NamespacedName)
 		}
 		return names
 	}
@@ -492,7 +506,7 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
 	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
-	cfg, err := loader.LoadConfigPhaseTwo(rawConfig, handle, logger)
+	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)

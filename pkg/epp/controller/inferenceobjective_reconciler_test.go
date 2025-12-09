@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -143,59 +144,65 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// Create a fake client with no InferenceObjective objects.
-			scheme := runtime.NewScheme()
-			_ = clientgoscheme.AddToScheme(scheme)
-			_ = v1alpha2.Install(scheme)
-			_ = v1.Install(scheme)
-			initObjs := []client.Object{}
-			if test.objective != nil {
-				initObjs = append(initObjs, test.objective)
-			}
-			for _, m := range test.objectivesInAPIServer {
-				initObjs = append(initObjs, m)
-			}
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(initObjs...).
-				Build()
-			pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-			ds := datastore.NewDatastore(t.Context(), pmf, 0)
-			for _, m := range test.objectivessInStore {
-				ds.ObjectiveSet(m)
-			}
-			endpointPool := poolutil.InferencePoolToEndpointPool(inferencePool)
-			_ = ds.PoolSet(context.Background(), fakeClient, endpointPool)
-			reconciler := &InferenceObjectiveReconciler{
-				Reader:    fakeClient,
-				Datastore: ds,
-				PoolGKNN: common.GKNN{
-					NamespacedName: types.NamespacedName{Name: inferencePool.Name, Namespace: inferencePool.Namespace},
-					GroupKind:      schema.GroupKind{Group: inferencePool.GroupVersionKind().Group, Kind: inferencePool.GroupVersionKind().Kind},
-				},
-			}
-			if test.incomingReq == nil {
-				test.incomingReq = &types.NamespacedName{Name: test.objective.Name, Namespace: test.objective.Namespace}
-			}
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				// Create a fake client with no InferenceObjective objects.
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				_ = v1alpha2.Install(scheme)
+				_ = v1.Install(scheme)
+				initObjs := []client.Object{}
+				if test.objective != nil {
+					initObjs = append(initObjs, test.objective)
+				}
+				for _, m := range test.objectivesInAPIServer {
+					initObjs = append(initObjs, m)
+				}
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(initObjs...).
+					Build()
+				ds := datastore.NewDatastore(t.Context(), epf, 0)
+				for _, m := range test.objectivessInStore {
+					ds.ObjectiveSet(m)
+				}
+				endpointPool := poolutil.InferencePoolToEndpointPool(inferencePool)
+				_ = ds.PoolSet(context.Background(), fakeClient, endpointPool)
+				reconciler := &InferenceObjectiveReconciler{
+					Reader:    fakeClient,
+					Datastore: ds,
+					PoolGKNN: common.GKNN{
+						NamespacedName: types.NamespacedName{Name: inferencePool.Name, Namespace: inferencePool.Namespace},
+						GroupKind:      schema.GroupKind{Group: inferencePool.GroupVersionKind().Group, Kind: inferencePool.GroupVersionKind().Kind},
+					},
+				}
+				if test.incomingReq == nil {
+					test.incomingReq = &types.NamespacedName{Name: test.objective.Name, Namespace: test.objective.Namespace}
+				}
 
-			// Call Reconcile.
-			result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: *test.incomingReq})
-			if err != nil {
-				t.Fatalf("expected no error when resource is not found, got %v", err)
-			}
+				// Call Reconcile.
+				result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: *test.incomingReq})
+				if err != nil {
+					t.Fatalf("expected no error when resource is not found, got %v", err)
+				}
 
-			if diff := cmp.Diff(result, test.wantResult); diff != "" {
-				t.Errorf("Unexpected result diff (+got/-want): %s", diff)
-			}
+				if diff := cmp.Diff(result, test.wantResult); diff != "" {
+					t.Errorf("Unexpected result diff (+got/-want): %s", diff)
+				}
 
-			if len(test.wantObjectives) != len(ds.ObjectiveGetAll()) {
-				t.Errorf("Unexpected; want: %d, got:%d", len(test.wantObjectives), len(ds.ObjectiveGetAll()))
-			}
-			if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool, wantObjectives: test.wantObjectives}); diff != "" {
-				t.Errorf("Unexpected diff (+got/-want): %s", diff)
-			}
+				if len(test.wantObjectives) != len(ds.ObjectiveGetAll()) {
+					t.Errorf("Unexpected; want: %d, got:%d", len(test.wantObjectives), len(ds.ObjectiveGetAll()))
+				}
+				if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool, wantObjectives: test.wantObjectives}); diff != "" {
+					t.Errorf("Unexpected diff (+got/-want): %s", diff)
+				}
 
-		})
+			})
+		}
 	}
 }

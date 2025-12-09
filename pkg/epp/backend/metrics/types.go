@@ -27,10 +27,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-var (
-	AllPodsPredicate = func(PodMetrics) bool { return true }
-)
-
 func PodsWithFreshMetrics(stalenessThreshold time.Duration) func(PodMetrics) bool {
 	return func(pm PodMetrics) bool {
 		if pm == nil {
@@ -52,7 +48,7 @@ type PodMetricsFactory struct {
 	refreshMetricsInterval time.Duration
 }
 
-func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, pod *datalayer.PodInfo, ds datalayer.PoolInfo) PodMetrics {
+func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *datalayer.EndpointMetadata, ds datalayer.PoolInfo) datalayer.Endpoint {
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -60,9 +56,9 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, pod *datalaye
 		startOnce: sync.Once{},
 		stopOnce:  sync.Once{},
 		done:      make(chan struct{}),
-		logger:    log.FromContext(parentCtx).WithValues("pod", pod.NamespacedName),
+		logger:    log.FromContext(parentCtx).WithValues("endpoint", metadata.NamespacedName),
 	}
-	pm.pod.Store(pod)
+	pm.metadata.Store(metadata)
 	pm.metrics.Store(NewMetricsState())
 
 	pm.startRefreshLoop(parentCtx)

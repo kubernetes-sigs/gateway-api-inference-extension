@@ -120,17 +120,18 @@ func (ms *modelRewriteStore) deleteInternal(n string) {
 
 // getRule returns the single, highest-precedence rule for a given model name.
 // It prioritizes exact matches over generic ones, and among those, the oldest rule wins.
-func (ms *modelRewriteStore) getRule(modelName string) *v1alpha2.InferenceModelRewriteRule {
+// It also returns the name of the InferenceModelRewrite resource that provided the rule.
+func (ms *modelRewriteStore) getRule(modelName string) (*v1alpha2.InferenceModelRewriteRule, string) {
 	// Exact matches have the highest precedence.
 	if rulesWithMd, ok := ms.rulesByExactModelMatch[modelName]; ok && len(rulesWithMd) > 0 {
-		return &rulesWithMd[0].rule // The list is pre-sorted, so the first element is the oldest.
+		return &rulesWithMd[0].rule, rulesWithMd[0].parentName() // The list is pre-sorted, so the first element is the oldest.
 	}
 
 	// If no exact match, fall back to the oldest generic rule.
 	if len(ms.genericRules) > 0 {
-		return &ms.genericRules[0].rule // The list is pre-sorted.
+		return &ms.genericRules[0].rule, ms.genericRules[0].parentName() // The list is pre-sorted.
 	}
-	return nil
+	return nil, ""
 }
 
 // getAll returns a slice of all InferenceModelRewrite objects currently in the store.

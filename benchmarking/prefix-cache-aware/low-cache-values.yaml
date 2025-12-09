@@ -2,9 +2,9 @@
 job:
   image:
     repository: quay.io/inference-perf/inference-perf
-    tag: "0.2.0" # Defaults to .Chart.AppVersion
-  serviceAccountName: ""
+    tag: "" # Defaults to .Chart.AppVersion
   nodeSelector: {}
+  serviceAccountName: ""
   # Example resources:
   # resources:
   #   requests:
@@ -19,19 +19,27 @@ logLevel: INFO
 
 # A GCS bucket path that points to the dataset file.
 # The file will be copied from this path to the local file system
-# at /dataset/dataset.json for use during the run.
-# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/dataset.json.
+# at /gcsDataset/gcs-dataset.json for use during the run.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /gcsDataset/gcs-dataset.json.
+# Format: bucket-name/folder/to/dataset/file
 gcsPath: ""
 
 # An S3 bucket path that points to the dataset file.
 # The file will be copied from this path to the local file system
-# at /dataset/s3-dataset.json for use during the run.
-# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /dataset/s3-dataset.json.
+# at /s3Dataset/s3-dataset.json for use during the run.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /s3Dataset/s3-dataset.json.
+# Format: bucket-name/folder/to/dataset/file
 s3Path: ""
 
-# hfToken optionally creates a secret with the specified token.
-# Can be set using helm install --set hftoken=<token>
-hfToken: ""
+# Optional Token configuration for Hugging Face authentication.
+# hfSecret: Configures a pre-existing Kubernetes Secret.
+# hfToken: Creates a new kubernetes secret with the specified token.
+# If both specified, 'hfSecret' takes precedence over 'hfToken'.
+token:
+  hfSecret:
+    name: "" # The name of the existing Secret (e.g., 'my-hf-secret').
+    key: ""  # The key within the Secret that holds the token value (e.g., 'token' or 'hf-token').
+  hfToken: ""
 
 config:
   load:
@@ -40,19 +48,9 @@ config:
     stages:
     - rate: 100
       duration: 30
-    - rate: 200
-      duration: 30
     - rate: 300
       duration: 30
-    - rate: 400
-      duration: 30
     - rate: 500
-      duration: 30
-    - rate: 600
-      duration: 30
-    - rate: 700
-      duration: 30
-    - rate: 800
       duration: 30
     worker_max_concurrency: 1000
   api:

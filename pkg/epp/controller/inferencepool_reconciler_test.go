@@ -88,116 +88,122 @@ func TestInferencePoolReconciler(t *testing.T) {
 	pool2 := utiltest.MakeInferencePool("pool2").Namespace("pool2-ns").EndpointPickerRef("epp-service").ObjRef()
 	pool2.SetGroupVersionKind(gvk)
 
-	// Set up the scheme.
-	scheme := runtime.NewScheme()
-	_ = clientgoscheme.AddToScheme(scheme)
-	_ = v1alpha2.Install(scheme)
-	_ = v1.Install(scheme)
-	initialObjects := []client.Object{pool1, pool2}
-	for i := range pods {
-		initialObjects = append(initialObjects, pods[i])
+	period := time.Second
+	factories := []datalayer.EndpointFactory{
+		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+		datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
 	}
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(initialObjects...).
-		Build()
+	for _, epf := range factories {
+		// Set up the scheme.
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		_ = v1alpha2.Install(scheme)
+		_ = v1.Install(scheme)
+		initialObjects := []client.Object{pool1, pool2}
+		for i := range pods {
+			initialObjects = append(initialObjects, pods[i])
+		}
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(initialObjects...).
+			Build()
 
-	// Create a request for the existing resource.
-	namespacedName := types.NamespacedName{Name: pool1.Name, Namespace: pool1.Namespace}
-	gknn := common.GKNN{
-		NamespacedName: namespacedName,
-		GroupKind: schema.GroupKind{
-			Group: pool1.GroupVersionKind().Group,
-			Kind:  pool1.GroupVersionKind().Kind,
-		},
-	}
-	req := ctrl.Request{NamespacedName: namespacedName}
-	ctx := context.Background()
+		// Create a request for the existing resource.
+		namespacedName := types.NamespacedName{Name: pool1.Name, Namespace: pool1.Namespace}
+		gknn := common.GKNN{
+			NamespacedName: namespacedName,
+			GroupKind: schema.GroupKind{
+				Group: pool1.GroupVersionKind().Group,
+				Kind:  pool1.GroupVersionKind().Kind,
+			},
+		}
+		req := ctrl.Request{NamespacedName: namespacedName}
+		ctx := context.Background()
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0)
-	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
+		ds := datastore.NewDatastore(ctx, epf, 0)
+		inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
-	// Step 1: Inception, only ready pods matching pool1 are added to the store.
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	endpointPool1 := pool.InferencePoolToEndpointPool(pool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
-	}
+		// Step 1: Inception, only ready pods matching pool1 are added to the store.
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		endpointPool1 := pool.InferencePoolToEndpointPool(pool1)
+		if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool1, wantEndpoints: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 
-	newPool1 := &v1.InferencePool{}
-	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected inferencePool get error: %v", err)
-	}
-	newPool1.Spec.Selector = v1.LabelSelector{
-		MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"},
-	}
-	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected inferencePool update error: %v", err)
-	}
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	newEndpointPool1 := pool.InferencePoolToEndpointPool(newPool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
-	}
+		newPool1 := &v1.InferencePool{}
+		if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+			t.Errorf("Unexpected inferencePool get error: %v", err)
+		}
+		newPool1.Spec.Selector = v1.LabelSelector{
+			MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm_v2"},
+		}
+		if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
+			t.Errorf("Unexpected inferencePool update error: %v", err)
+		}
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		newEndpointPool1 := pool.InferencePoolToEndpointPool(newPool1)
+		if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5-rank-0"}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 
-	// Step 3: update the inferencePool port
-	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected inferencePool get error: %v", err)
-	}
-	newPool1.Spec.TargetPorts = []v1.Port{{Number: 9090}}
-	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected inferencePool update error: %v", err)
-	}
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	newEndpointPool1 = pool.InferencePoolToEndpointPool(newPool1)
-	if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
-	}
+		// Step 3: update the inferencePool port
+		if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+			t.Errorf("Unexpected inferencePool get error: %v", err)
+		}
+		newPool1.Spec.TargetPorts = []v1.Port{{Number: 9090}}
+		if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
+			t.Errorf("Unexpected inferencePool update error: %v", err)
+		}
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		newEndpointPool1 = pool.InferencePoolToEndpointPool(newPool1)
+		if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5-rank-0"}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 
-	// Step 4: delete the inferencePool to trigger a datastore clear
-	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected inferencePool get error: %v", err)
-	}
-	if err := fakeClient.Delete(ctx, newPool1, &client.DeleteOptions{}); err != nil {
-		t.Errorf("Unexpected inferencePool delete error: %v", err)
-	}
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	if diff := diffStore(ds, diffStoreParams{wantPods: []string{}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		// Step 4: delete the inferencePool to trigger a datastore clear
+		if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+			t.Errorf("Unexpected inferencePool get error: %v", err)
+		}
+		if err := fakeClient.Delete(ctx, newPool1, &client.DeleteOptions{}); err != nil {
+			t.Errorf("Unexpected inferencePool delete error: %v", err)
+		}
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		if diff := diffStore(ds, diffStoreParams{wantEndpoints: []string{}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 	}
 }
 
 type diffStoreParams struct {
 	wantPool       *datalayer.EndpointPool
-	wantPods       []string
+	wantEndpoints  []string
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
-func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
-	gotPool, _ := datastore.PoolGet()
+func diffStore(store datastore.Datastore, params diffStoreParams) string {
+	gotPool, _ := store.PoolGet()
 	if diff := cmp.Diff(params.wantPool, gotPool); diff != "" {
 		return "inferencePool:" + diff
 	}
 
 	// Default wantPods if not set because PodGetAll returns an empty slice when empty.
-	if params.wantPods == nil {
-		params.wantPods = []string{}
+	if params.wantEndpoints == nil {
+		params.wantEndpoints = []string{}
 	}
-	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
-		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
+	gotEndpoints := []string{}
+	for _, em := range store.PodList(datastore.AllPodsPredicate) {
+		gotEndpoints = append(gotEndpoints, em.GetMetadata().NamespacedName.Name)
 	}
-	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-		return "pods:" + diff
+	if diff := cmp.Diff(params.wantEndpoints, gotEndpoints, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+		return "endpoints:" + diff
 	}
 
 	// Default wantModels if not set because ModelGetAll returns an empty slice when empty.
@@ -205,7 +211,7 @@ func diffStore(datastore datastore.Datastore, params diffStoreParams) string {
 		params.wantObjectives = []*v1alpha2.InferenceObjective{}
 	}
 
-	if diff := cmp.Diff(params.wantObjectives, datastore.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
+	if diff := cmp.Diff(params.wantObjectives, store.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
 		return a.Name < b.Name
 	})); diff != "" {
 		return "models:" + diff
@@ -235,90 +241,96 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	pool1.SetGroupVersionKind(gvk)
 	pool2.SetGroupVersionKind(gvk)
 
-	// Set up the scheme.
-	scheme := runtime.NewScheme()
-	_ = clientgoscheme.AddToScheme(scheme)
-	_ = v1alpha2.Install(scheme)
-	_ = v1.Install(scheme)
-	initialObjects := []client.Object{pool1, pool2}
-	for i := range pods {
-		initialObjects = append(initialObjects, pods[i])
+	period := time.Second
+	factories := []datalayer.EndpointFactory{
+		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+		datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
 	}
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(initialObjects...).
-		Build()
+	for _, epf := range factories {
+		// Set up the scheme.
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		_ = v1alpha2.Install(scheme)
+		_ = v1.Install(scheme)
+		initialObjects := []client.Object{pool1, pool2}
+		for i := range pods {
+			initialObjects = append(initialObjects, pods[i])
+		}
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(initialObjects...).
+			Build()
 
-	// Create a request for the existing resource.
-	namespacedName := types.NamespacedName{Name: pool1.Name, Namespace: pool1.Namespace}
-	gknn := common.GKNN{
-		NamespacedName: namespacedName,
-		GroupKind: schema.GroupKind{
-			Group: pool1.GroupVersionKind().Group,
-			Kind:  pool1.GroupVersionKind().Kind,
-		},
-	}
-	req := ctrl.Request{NamespacedName: namespacedName}
-	ctx := context.Background()
+		// Create a request for the existing resource.
+		namespacedName := types.NamespacedName{Name: pool1.Name, Namespace: pool1.Namespace}
+		gknn := common.GKNN{
+			NamespacedName: namespacedName,
+			GroupKind: schema.GroupKind{
+				Group: pool1.GroupVersionKind().Group,
+				Kind:  pool1.GroupVersionKind().Kind,
+			},
+		}
+		req := ctrl.Request{NamespacedName: namespacedName}
+		ctx := context.Background()
 
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second)
-	ds := datastore.NewDatastore(ctx, pmf, 0)
-	inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
+		ds := datastore.NewDatastore(ctx, epf, 0)
+		inferencePoolReconciler := &InferencePoolReconciler{Reader: fakeClient, Datastore: ds, PoolGKNN: gknn}
 
-	// Step 1: Inception, only ready pods matching pool1 are added to the store.
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	endpointPool1 := pool.AlphaInferencePoolToEndpointPool(pool1)
-	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
-	}
+		// Step 1: Inception, only ready pods matching pool1 are added to the store.
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		endpointPool1 := pool.AlphaInferencePoolToEndpointPool(pool1)
+		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 
-	newPool1 := &v1alpha2.InferencePool{}
-	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected inferencePool get error: %v", err)
-	}
-	newPool1.Spec.Selector = map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm_v2"}
-	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected inferencePool update error: %v", err)
-	}
+		newPool1 := &v1alpha2.InferencePool{}
+		if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+			t.Errorf("Unexpected inferencePool get error: %v", err)
+		}
+		newPool1.Spec.Selector = map[v1alpha2.LabelKey]v1alpha2.LabelValue{"app": "vllm_v2"}
+		if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
+			t.Errorf("Unexpected inferencePool update error: %v", err)
+		}
 
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	newEndpointPool1 := pool.AlphaInferencePoolToEndpointPool(newPool1)
-	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
-	}
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		newEndpointPool1 := pool.AlphaInferencePoolToEndpointPool(newPool1)
+		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 
-	// Step 3: update the inferencePool port
-	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected inferencePool get error: %v", err)
-	}
-	newPool1.Spec.TargetPortNumber = 9090
-	if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
-		t.Errorf("Unexpected inferencePool update error: %v", err)
-	}
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	newEndpointPool1 = pool.AlphaInferencePoolToEndpointPool(newPool1)
-	if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
-	}
+		// Step 3: update the inferencePool port
+		if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+			t.Errorf("Unexpected inferencePool get error: %v", err)
+		}
+		newPool1.Spec.TargetPortNumber = 9090
+		if err := fakeClient.Update(ctx, newPool1, &client.UpdateOptions{}); err != nil {
+			t.Errorf("Unexpected inferencePool update error: %v", err)
+		}
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		newEndpointPool1 = pool.AlphaInferencePoolToEndpointPool(newPool1)
+		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 
-	// Step 4: delete the inferencePool to trigger a datastore clear
-	if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
-		t.Errorf("Unexpected inferencePool get error: %v", err)
-	}
-	if err := fakeClient.Delete(ctx, newPool1, &client.DeleteOptions{}); err != nil {
-		t.Errorf("Unexpected inferencePool delete error: %v", err)
-	}
-	if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
-		t.Errorf("Unexpected InferencePool reconcile error: %v", err)
-	}
-	if diff := xDiffStore(ds, xDiffStoreParams{wantPods: []string{}}); diff != "" {
-		t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		// Step 4: delete the inferencePool to trigger a datastore clear
+		if err := fakeClient.Get(ctx, req.NamespacedName, newPool1); err != nil {
+			t.Errorf("Unexpected inferencePool get error: %v", err)
+		}
+		if err := fakeClient.Delete(ctx, newPool1, &client.DeleteOptions{}); err != nil {
+			t.Errorf("Unexpected inferencePool delete error: %v", err)
+		}
+		if _, err := inferencePoolReconciler.Reconcile(ctx, req); err != nil {
+			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
+		}
+		if diff := xDiffStore(ds, xDiffStoreParams{wantPods: []string{}}); diff != "" {
+			t.Errorf("Unexpected diff (+got/-want): %s", diff)
+		}
 	}
 }
 
@@ -328,8 +340,8 @@ type xDiffStoreParams struct {
 	wantObjectives []*v1alpha2.InferenceObjective
 }
 
-func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
-	gotPool, _ := datastore.PoolGet()
+func xDiffStore(store datastore.Datastore, params xDiffStoreParams) string {
+	gotPool, _ := store.PoolGet()
 	if gotPool == nil && params.wantPool == nil {
 		return ""
 	}
@@ -343,8 +355,8 @@ func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
 		params.wantPods = []string{}
 	}
 	gotPods := []string{}
-	for _, pm := range datastore.PodList(backendmetrics.AllPodsPredicate) {
-		gotPods = append(gotPods, pm.GetPod().NamespacedName.Name)
+	for _, em := range store.PodList(datastore.AllPodsPredicate) {
+		gotPods = append(gotPods, em.GetMetadata().NamespacedName.Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 		return "pods:" + diff
@@ -355,7 +367,7 @@ func xDiffStore(datastore datastore.Datastore, params xDiffStoreParams) string {
 		params.wantObjectives = []*v1alpha2.InferenceObjective{}
 	}
 
-	if diff := cmp.Diff(params.wantObjectives, datastore.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
+	if diff := cmp.Diff(params.wantObjectives, store.ObjectiveGetAll(), cmpopts.SortSlices(func(a, b *v1alpha2.InferenceObjective) bool {
 		return a.Name < b.Name
 	})); diff != "" {
 		return "models:" + diff

@@ -1,14 +1,14 @@
 # Serve multiple generative AI models and multiple LoRAs for the base AI models
 
-A company may need to deploy multiple large language models (LLMs) in a cluster to support different workloads. For example, a Llama model could power a chatbot interface, while a DeepSeek model might serve a recommendation application. One approach is to expose these models on separate Layer 7 (L7) URL paths and follow the steps in the [`Getting Started (Latest/Main)`](getting-started-latest.md) guide for each model.
+A company may need to deploy multiple large language models (LLMs) in a cluster to support different workloads. For example, a Llama model could power a chatbot interface, while a DeepSeek model might serve a recommendation application. One approach is to expose these models on separate URL paths and follow the steps in the [`Getting Started (Latest/Main)`](getting-started-latest.md) guide for each model.
 
-However, one may also need to serve multiple models from the same L7 URL path. To achieve this, the system needs to extract information (such as the model name) from the request body (i.e., the LLM prompt). This pattern of serving multiple models behind a single endpoint is common among providers and is generally expected by clients. The OpenAI API format requires the model name to be specified in the request body. For such model-aware routing, use the Body-Based Routing (BBR) feature described in this guide.
+However, one may also need to serve multiple models from the same URL path. To achieve this, the system needs to extract information (such as the model name) from the request body (i.e., the LLM prompt). This pattern of serving multiple models behind a single endpoint is common among providers and is generally expected by clients. The OpenAI API format requires the model name to be specified in the request body. For such model-aware routing, use the Body-Based Routing (BBR) feature described in this guide.
 
 Additionally, each base AI model can have multiple Low-Rank Adaptations ([LoRAs](https://www.ibm.com/think/topics/lora)). LoRAs associated with the same base model are served by the same backend inference server that hosts the base model. A LoRA name is also provided as the model name in the request body.
 
 ## How
 
-[Body-Based Router (BBR)](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/pkg/bbr/README.md) extracts the model name from the request body and adds it to the `X-Gateway-Model-Name` header. This header is then used for matching and routing the request to the appropriate `InferencePool` and its associated Endpoint Picker Extension (EPP) instances.
+The BBR extracts the model name from the request body and adds it to the `X-Gateway-Model-Name` header. This header is then used for matching and routing the request to the appropriate `InferencePool` and its associated Endpoint Picker Extension (EPP) instances.
 
 ### Example Model-Aware Routing using Body-Based Routing (BBR)
 
@@ -16,7 +16,7 @@ This guide assumes you have already setup the cluster for basic model serving as
 
 ### Deploy Body-Based Routing Extension
 
-To enable body-based routing, deploy the BBR `ext_proc` server using Helm. This server is independent of EPP. Once installed, it is automatically added as the first filter in the gateway’s filter chain, ahead of other `ext_proc` servers such as EPP.
+To enable body-based routing, deploy the BBR server using Helm. This server runs as a gateway extension and is independent of the EPP. Once installed, it is automatically added as the first filter in the gateway’s filter chain, ahead of other gateway extension servers such as the EPP.
 
 Select an appropriate tab depending on your Gateway provider:
 
@@ -78,7 +78,7 @@ kubectl get pods
 
 ### Serving a Second Base Model
 
-The example uses a vLLM simulator since this is the least common denominator configuration that can be run in every environment. The model, `deepseek/vllm-deepseek-r1`, will be served from the same `/` L7 path, as in the previous example from the [Getting Started (Latest/Main)](getting-started-latest.md) guide.
+The example uses a vLLM simulator since this is the least common denominator configuration that can be run in every environment. The model, `deepseek/vllm-deepseek-r1`, will be served from the same URL path, as in the previous example from the [Getting Started (Latest/Main)](getting-started-latest.md) guide.
 
 Deploy the second base model:
 

@@ -91,8 +91,8 @@ func (d *Detector) IsSaturated(ctx context.Context, candidatePods []backendmetri
 	for _, podMetric := range candidatePods {
 		metrics := podMetric.GetMetrics()
 		podNn := "unknown-pod"
-		if podMetric.GetPod() != nil {
-			podNn = podMetric.GetPod().NamespacedName.String()
+		if podMetric.GetMetadata() != nil {
+			podNn = podMetric.GetMetadata().NamespacedName.String()
 		}
 
 		if metrics == nil {

@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
   - bases/inference.networking.x-k8s.io_inferencepools.yaml
+  - bases/inference.networking.x-k8s.io_inferencemodelrewrites.yaml
   - bases/inference.networking.x-k8s.io_inferenceobjectives.yaml
   - bases/inference.networking.x-k8s.io_inferencepoolimports.yaml
   - bases/inference.networking.k8s.io_inferencepools.yaml

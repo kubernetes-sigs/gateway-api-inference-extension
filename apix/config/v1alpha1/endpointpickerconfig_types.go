@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -139,11 +140,12 @@ func (fg FeatureGates) String() string {
 		return "{}"
 	}
 
-	result := ""
+	builder := strings.Builder{}
 	for _, gate := range fg {
-		result += gate + ","
+		builder.WriteString(gate + ",")
 	}
 
+	result := builder.String()
 	if len(result) > 0 {
 		result = result[:len(result)-1]
 	}

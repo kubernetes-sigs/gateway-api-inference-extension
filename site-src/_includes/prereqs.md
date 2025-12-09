@@ -6,6 +6,7 @@ A cluster with:
 - Support for [sidecar containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) (enabled by default since Kubernetes v1.29)
   to run the model server deployment.
 
-Tooling:
+Tools:
 
-- [Helm](https://helm.sh/docs/intro/install/) installed.
+- [Helm](https://helm.sh/docs/intro/install/).
+- [jq](https://jqlang.org/download/).

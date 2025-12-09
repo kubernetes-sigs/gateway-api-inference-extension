@@ -44,12 +44,13 @@ type Scheduler struct {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (*types.SchedulingResult, error) {
+func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidatePods []types.Pod) (result *types.SchedulingResult, err error) {
 	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
 
 	scheduleStart := time.Now()
 	defer func() {
 		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
+		metrics.RecordSchedulerAttempt(err)
 	}()
 
 	profileRunResults := map[string]*types.ProfileRunResult{}
@@ -80,12 +81,13 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 	}
 
 	if len(profileRunResults) == 0 {
-		return nil, fmt.Errorf("failed to run any scheduler profile for request %s", request.RequestId)
+		err = fmt.Errorf("failed to run any scheduler profile for request %s", request.RequestId)
+		return nil, err
 	}
 
 	loggerVerbose.Info("Running profile handler, ProcessResults", "plugin", s.profileHandler.TypedName())
 	before := time.Now()
-	result, err := s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
+	result, err = s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
 	metrics.RecordPluginProcessingLatency(framework.ProcessProfilesResultsExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
 	loggerVerbose.Info("Completed running profile handler ProcessResults successfully", "plugin", s.profileHandler.TypedName())
 
