@@ -2,7 +2,7 @@
 
 A company may need to deploy multiple large language models (LLMs) in a cluster to support different workloads. For example, a Llama model could power a chatbot interface, while a DeepSeek model might serve a recommendation application. One approach is to expose these models on separate URL paths and follow the steps in the [`Getting Started (Latest/Main)`](getting-started-latest.md) guide for each model.
 
-However, one may also need to serve multiple models from the same L7 URL path. To achieve this, the system needs to extract information (such as the model name) from the request body (i.e., the LLM prompt). This pattern of serving multiple models behind a single endpoint is common among providers and is generally expected by clients. The OpenAI API format requires the model name to be specified in the request body. For such model-aware routing, use the Body-Based Routing (BBR) feature described in this guide.
+However, one may also need to serve multiple models from the same URL path. To achieve this, the system needs to extract information (such as the model name) from the request body (i.e., the LLM prompt). This pattern of serving multiple models behind a single endpoint is common among providers and is generally expected by clients. The OpenAI API format requires the model name to be specified in the request body. For such model-aware routing, use the Body-Based Routing (BBR) feature described in this guide.
 
 Additionally, each base AI model can have multiple Low-Rank Adaptations ([LoRAs](https://www.ibm.com/think/topics/lora)). LoRAs associated with the same base model are served by the same backend inference server that hosts the base model. A LoRA name is also provided as the model name in the request body.
 
