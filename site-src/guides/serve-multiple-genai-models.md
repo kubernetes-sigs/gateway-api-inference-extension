@@ -313,9 +313,13 @@ kubectl get httproute llm-deepseek-route -o yaml
 
 ### Try the setup
 
+First, make sure that the setup works as before by sending a request to the LoRA of the first model set up in the [`Getting started (Latest/Main)`](getting-started-latest.md) guide.
+
+--8<-- "site-src/_includes/test.md"
+
 === "Chat Completions API"
 
-      1. Send a few requests to Llama model to test that it works as before, as follows:
+      1. Send a few requests to the Llama model directly:
 
           ```bash
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
@@ -426,20 +430,19 @@ kubectl get httproute llm-deepseek-route -o yaml
 
 === "Completions API"
 
-      1. Send a few requests to Llama model's LoRA as follows:
+      1. Send a few requests to the Deepseek model:
 
-         ```bash
-         curl -X POST -i ${IP}:${PORT}/v1/completions \
-              -H "Content-Type: application/json" \
-              -d '{
-                    "model": "food-review-1",
-                    "prompt": "Write as if you were a critic: San Francisco ",
-                    "max_tokens": 100,
-                    "temperature": 0
-             }'
-         ```
-
-      1. Send a few requests to the first Deepseek LoRA as follows:
+           ```bash
+           curl -X POST -i ${IP}:${PORT}/v1/completions \
+                -H "Content-Type: application/json" \
+                -d '{
+                       "model": "deepseek/vllm-deepseek-r1",
+                       "prompt": "What is the best ski resort in Austria?",
+                       "max_tokens": 20,
+                       "temperature": 0
+                }'
+           ```
+     1. Send a few requests to the first Deepseek LoRA as follows:
 
            ```bash
            curl -X POST -i ${IP}:${PORT}/v1/completions \
