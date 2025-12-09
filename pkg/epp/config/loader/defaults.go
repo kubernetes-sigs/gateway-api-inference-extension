@@ -142,12 +142,12 @@ func registerDefaultPlugin(
 	pluginType string,
 ) error {
 	name := pluginType
-	factory, ok := plugins.Registry[pluginType]
+	reg, ok := plugins.Registry[pluginType]
 	if !ok {
 		return fmt.Errorf("plugin type '%s' not found in registry", pluginType)
 	}
 
-	plugin, err := factory(name, nil, handle)
+	plugin, err := reg.Factory(name, nil, handle)
 	if err != nil {
 		return fmt.Errorf("failed to instantiate default plugin '%s': %w", name, err)
 	}

@@ -497,7 +497,7 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
-	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
+	handle := plugins.NewEppHandle(ctx, rawConfig.Plugins, nil, makePodListFunc(ds))
 	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
 	if err != nil {
@@ -513,7 +513,6 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 		return nil, errors.New("failed to load the configuration - prepare data plugins have cyclic dependencies")
 	}
 
-	// Handler deprecated configuration options
 	r.deprecatedConfigurationHelper(cfg, logger)
 
 	logger.Info("loaded configuration from file/text successfully")

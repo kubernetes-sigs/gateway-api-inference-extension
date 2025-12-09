@@ -121,12 +121,18 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins
 		}
 		pluginNames.Insert(spec.Name)
 
-		factory, ok := plugins.Registry[spec.Type]
+		reg, ok := plugins.Registry[spec.Type]
 		if !ok {
 			return fmt.Errorf("plugin type '%s' is not registered", spec.Type)
 		}
 
-		plugin, err := factory(spec.Name, spec.Parameters, handle)
+		// If this is a Transient plugin, we DO NOT instantiate it here.
+		// It sits in the Handle.PluginSpecs() waiting for the Factory to create instances on demand.
+		if reg.Lifecycle == plugins.LifecycleTransient {
+			continue
+		}
+
+		plugin, err := reg.Factory(spec.Name, spec.Parameters, handle)
 		if err != nil {
 			return fmt.Errorf("failed to create plugin '%s' (type: %s): %w", spec.Name, spec.Type, err)
 		}
