@@ -27,7 +27,7 @@ limitations under the License.
 //   - Predictive saturation based on trends.
 //   - Hysteresis bands or other smoothing techniques to prevent rapid
 //     oscillations of the saturation signal.
-package saturationdetector
+package staticthresholdcontroller
 
 import (
 	"context"

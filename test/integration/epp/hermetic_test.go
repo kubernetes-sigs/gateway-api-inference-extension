@@ -66,7 +66,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationcontrol/framework/plugins/staticthresholdcontroller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
@@ -1233,12 +1233,12 @@ func BeforeSuite() func() {
 	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
 	scheduler := scheduling.NewSchedulerWithConfig(schedulerConfig)
 
-	sdConfig := &saturationdetector.Config{
-		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+	sdConfig := &staticthresholdcontroller.Config{
+		QueueDepthThreshold:       staticthresholdcontroller.DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      staticthresholdcontroller.DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: staticthresholdcontroller.DefaultMetricsStalenessThreshold,
 	}
-	detector := saturationdetector.NewDetector(sdConfig, logger.WithName("saturation-detector"))
+	detector := staticthresholdcontroller.NewDetector(sdConfig, logger.WithName("saturation-detector"))
 	serverRunner.SaturationDetector = detector
 	locator := requestcontrol.NewDatastorePodLocator(serverRunner.Datastore)
 	admissionController := requestcontrol.NewLegacyAdmissionController(detector, locator)

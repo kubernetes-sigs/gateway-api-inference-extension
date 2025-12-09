@@ -29,7 +29,7 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationcontrol/framework/plugins/staticthresholdcontroller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -203,11 +203,11 @@ func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
 	return config
 }
 
-func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *saturationdetector.Config {
-	cfg := &saturationdetector.Config{
-		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *staticthresholdcontroller.Config {
+	cfg := &staticthresholdcontroller.Config{
+		QueueDepthThreshold:       staticthresholdcontroller.DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      staticthresholdcontroller.DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: staticthresholdcontroller.DefaultMetricsStalenessThreshold,
 	}
 
 	if apiConfig != nil {

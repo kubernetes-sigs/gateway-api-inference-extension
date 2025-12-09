@@ -69,7 +69,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationcontrol/framework/plugins/staticthresholdcontroller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
@@ -330,7 +330,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	saturationDetector := saturationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
+	saturationDetector := staticthresholdcontroller.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
@@ -556,23 +556,23 @@ func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.L
 	if _, ok := os.LookupEnv(EnvSdQueueDepthThreshold); ok {
 		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
 		cfg.SaturationDetectorConfig.QueueDepthThreshold =
-			env.GetEnvInt(EnvSdQueueDepthThreshold, saturationdetector.DefaultQueueDepthThreshold, logger)
+			env.GetEnvInt(EnvSdQueueDepthThreshold, staticthresholdcontroller.DefaultQueueDepthThreshold, logger)
 		if cfg.SaturationDetectorConfig.QueueDepthThreshold <= 0 {
-			cfg.SaturationDetectorConfig.QueueDepthThreshold = saturationdetector.DefaultQueueDepthThreshold
+			cfg.SaturationDetectorConfig.QueueDepthThreshold = staticthresholdcontroller.DefaultQueueDepthThreshold
 		}
 	}
 	if _, ok := os.LookupEnv(EnvSdKVCacheUtilThreshold); ok {
 		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
-		cfg.SaturationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, saturationdetector.DefaultKVCacheUtilThreshold, logger)
+		cfg.SaturationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, staticthresholdcontroller.DefaultKVCacheUtilThreshold, logger)
 		if cfg.SaturationDetectorConfig.KVCacheUtilThreshold <= 0 || cfg.SaturationDetectorConfig.KVCacheUtilThreshold >= 1 {
-			cfg.SaturationDetectorConfig.KVCacheUtilThreshold = saturationdetector.DefaultKVCacheUtilThreshold
+			cfg.SaturationDetectorConfig.KVCacheUtilThreshold = staticthresholdcontroller.DefaultKVCacheUtilThreshold
 		}
 	}
 	if _, ok := os.LookupEnv(EnvSdMetricsStalenessThreshold); ok {
 		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
-		cfg.SaturationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, saturationdetector.DefaultMetricsStalenessThreshold, logger)
+		cfg.SaturationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, staticthresholdcontroller.DefaultMetricsStalenessThreshold, logger)
 		if cfg.SaturationDetectorConfig.MetricsStalenessThreshold <= 0 {
-			cfg.SaturationDetectorConfig.MetricsStalenessThreshold = saturationdetector.DefaultMetricsStalenessThreshold
+			cfg.SaturationDetectorConfig.MetricsStalenessThreshold = staticthresholdcontroller.DefaultMetricsStalenessThreshold
 		}
 	}
 }
