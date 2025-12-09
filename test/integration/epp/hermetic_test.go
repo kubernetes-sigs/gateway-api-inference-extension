@@ -1241,13 +1241,12 @@ func BeforeSuite() func() {
 	detector := saturationdetector.NewDetector(sdConfig, logger.WithName("saturation-detector"))
 	serverRunner.SaturationDetector = detector
 	locator := requestcontrol.NewDatastorePodLocator(serverRunner.Datastore)
-	cachedLocator := requestcontrol.NewCachedPodLocator(context.Background(), locator, time.Millisecond*50)
-	admissionController := requestcontrol.NewLegacyAdmissionController(detector, cachedLocator)
+	admissionController := requestcontrol.NewLegacyAdmissionController(detector, locator)
 	serverRunner.Director = requestcontrol.NewDirectorWithConfig(
 		serverRunner.Datastore,
 		scheduler,
 		admissionController,
-		cachedLocator,
+		locator,
 		requestcontrol.NewConfig(),
 	)
 	serverRunner.SecureServing = false

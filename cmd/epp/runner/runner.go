@@ -60,6 +60,7 @@ import (
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -329,10 +330,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	saturationDetector := saturationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
-	locator := requestcontrol.NewDatastorePodLocator(ds)
-	cachedLocator := requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 	var admissionController requestcontrol.AdmissionController
+	var locator contracts.PodLocator
+	locator = requestcontrol.NewDatastorePodLocator(ds)
 	if r.featureGates[flowcontrol.FeatureGate] {
+		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
 		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
 		if err != nil {
@@ -348,7 +350,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			ctx,
 			fcCfg.Controller,
 			registry, saturationDetector,
-			cachedLocator,
+			locator,
 			setupLog,
 		)
 		if err != nil {
@@ -358,14 +360,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		admissionController = requestcontrol.NewFlowControlAdmissionController(fc)
 	} else {
 		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
-		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, cachedLocator)
+		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, locator)
 	}
 
 	director := requestcontrol.NewDirectorWithConfig(
 		ds,
 		scheduler,
 		admissionController,
-		cachedLocator,
+		locator,
 		r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
