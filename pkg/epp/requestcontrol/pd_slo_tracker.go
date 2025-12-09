@@ -119,6 +119,12 @@ func AllocatePDSLOBudgets(ctx context.Context, reqCtx *handlers.RequestContext, 
 	reqCtx.RemainingTTFTBudget = ttftSLO
 	reqCtx.RemainingTPOTBudget = tpotSLO
 
+	// Initialize phase start times
+	// Prefill starts immediately when budget is allocated
+	reqCtx.PrefillStartTime = time.Now()
+	// KV transfer will start when prefill completes (set in UpdatePrefillPhase)
+	// Decode starts after KV transfer (set in UpdateKVTransferPhase)
+
 	logger.V(logutil.DEBUG).Info("Allocated P/D SLO budgets",
 		"ttft_slo", ttftSLO,
 		"tpot_slo", tpotSLO,
@@ -139,6 +145,9 @@ func UpdatePrefillPhase(ctx context.Context, reqCtx *handlers.RequestContext) {
 
 	reqCtx.PrefillEndTime = time.Now()
 	reqCtx.ActualPrefillLatency = float64(reqCtx.PrefillEndTime.Sub(reqCtx.PrefillStartTime).Milliseconds())
+
+	// KV transfer starts immediately after prefill completes
+	reqCtx.KVTransferStartTime = reqCtx.PrefillEndTime
 
 	// Update remaining TTFT budget
 	reqCtx.RemainingTTFTBudget -= reqCtx.ActualPrefillLatency
@@ -170,6 +179,9 @@ func UpdateKVTransferPhase(ctx context.Context, reqCtx *handlers.RequestContext)
 
 	reqCtx.KVTransferEndTime = time.Now()
 	reqCtx.ActualKVTransferLatency = float64(reqCtx.KVTransferEndTime.Sub(reqCtx.KVTransferStartTime).Milliseconds())
+
+	// Decode starts immediately after KV transfer completes
+	reqCtx.DecodeStartTime = reqCtx.KVTransferEndTime
 
 	// Update remaining TTFT budget
 	reqCtx.RemainingTTFTBudget -= reqCtx.ActualKVTransferLatency
