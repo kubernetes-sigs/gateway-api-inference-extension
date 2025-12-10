@@ -27,8 +27,6 @@ import (
 	"os"
 	"regexp"
 	"runtime"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -42,7 +40,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -79,7 +76,6 @@ import (
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -112,48 +108,6 @@ var flowControlConfig = flowcontrol.Config{
 }
 
 var (
-	grpcPort            = flag.Int("grpc-port", runserver.DefaultGrpcPort, "The gRPC port used for communicating with Envoy proxy")
-	grpcHealthPort      = flag.Int("grpc-health-port", runserver.DefaultGrpcHealthPort, "The port used for gRPC liveness and readiness probes")
-	metricsPort         = flag.Int("metrics-port", runserver.DefaultMetricsPort, "The metrics port")
-	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
-	enablePprof         = flag.Bool("enable-pprof", runserver.DefaultEnablePprof, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
-	poolName            = flag.String("pool-name", runserver.DefaultPoolName, "Name of the InferencePool this Endpoint Picker is associated with.")
-	poolGroup           = flag.String("pool-group", runserver.DefaultPoolGroup, "group of the InferencePool this Endpoint Picker is associated with.")
-	poolNamespace       = flag.String("pool-namespace", "", "Namespace of the InferencePool this Endpoint Picker is associated with.")
-	endpointSelector    = flag.String("endpoint-selector", "", "selector to filter model server pods on, only key=value paris is supported. Format: a comma-separated list of key value paris,  e.g., 'app=vllm-llama3-8b-instruct,env=prod'.")
-	endpointTargetPorts = flag.String("endpoint-target-ports", "", "target ports of model server pods. Format: a comma-separated list of numbers, e.g., '3000,3001,3002'")
-	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
-	secureServing       = flag.Bool("secure-serving", runserver.DefaultSecureServing, "Enables secure serving. Defaults to true.")
-	healthChecking      = flag.Bool("health-checking", runserver.DefaultHealthChecking, "Enables health checking")
-	certPath            = flag.String("cert-path", runserver.DefaultCertPath, "The path to the certificate for secure serving. The certificate and private key files "+
-		"are assumed to be named tls.crt and tls.key, respectively. If not set, and secureServing is enabled, "+
-		"then a self-signed certificate is used.")
-	enableCertReload = flag.Bool("enable-cert-reload", runserver.DefaultCertReload, "Enables certificate reloading of the certificates specified in --cert-path")
-	// metric flags
-	totalQueuedRequestsMetric    = flag.String("total-queued-requests-metric", runserver.DefaultTotalQueuedRequestsMetric, "Prometheus metric for the number of queued requests.")
-	totalRunningRequestsMetric   = flag.String("total-running-requests-metric", runserver.DefaultTotalRunningRequestsMetric, "Prometheus metric for the number of running requests.")
-	kvCacheUsagePercentageMetric = flag.String("kv-cache-usage-percentage-metric", runserver.DefaultKvCacheUsagePercentageMetric, "Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
-	// LoRA metrics
-	loraInfoMetric = flag.String("lora-info-metric", runserver.DefaultLoraInfoMetric, "Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
-	// Cache info  metrics
-	cacheInfoMetric = flag.String("cache-info-metric", runserver.DefaultCacheInfoMetric, "Prometheus metric for the cache info metrics.")
-	// metrics related flags
-	refreshMetricsInterval           = flag.Duration("refresh-metrics-interval", runserver.DefaultRefreshMetricsInterval, "interval to refresh metrics")
-	refreshPrometheusMetricsInterval = flag.Duration("refresh-prometheus-metrics-interval", runserver.DefaultRefreshPrometheusMetricsInterval, "interval to flush prometheus metrics")
-	metricsStalenessThreshold        = flag.Duration("metrics-staleness-threshold", runserver.DefaultMetricsStalenessThreshold, "Duration after which metrics are considered stale. This is used to determine if a pod's metrics are fresh enough.")
-	// configuration flags
-	configFile = flag.String("config-file", runserver.DefaultConfigFile, "The path to the configuration file")
-	configText = flag.String("config-text", runserver.DefaultConfigText, "The configuration specified as text, in lieu of a file")
-
-	modelServerMetricsPort = flag.Int("model-server-metrics-port", 0, "[DEPRECATED] Port to scrape metrics from pods. "+
-		"Default value will be set to the InferencePool.Spec.TargetPorts[0].Number if not set."+
-		"This option will be removed in the next release.")
-	modelServerMetricsPath                    = flag.String("model-server-metrics-path", "/metrics", "Path to scrape metrics from pods")
-	modelServerMetricsScheme                  = flag.String("model-server-metrics-scheme", "http", "Scheme to scrape metrics from pods")
-	modelServerMetricsHttpsInsecureSkipVerify = flag.Bool("model-server-metrics-https-insecure-skip-verify", true, "When using 'https' scheme for 'model-server-metrics-scheme', configure 'InsecureSkipVerify' (default to true)")
-	haEnableLeaderElection                    = flag.Bool("ha-enable-leader-election", false, "Enables leader election for high availability. When enabled, readiness probes will only pass on the leader.")
-	tracing                                   = flag.Bool("tracing", true, "Enables emitting traces")
-
 	setupLog = ctrl.Log.WithName("setup")
 )
 
@@ -198,18 +152,20 @@ func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runne
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	opts := zap.Options{
+	opts := NewOptions()
+	zapopts := zap.Options{
 		Development: true,
 	}
 	gfs := goflag.NewFlagSet("zap", goflag.ExitOnError)
-	opts.BindFlags(gfs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
+	zapopts.BindFlags(gfs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
 	flag.CommandLine.AddGoFlagSet(gfs)
+	opts.AddFlags(flag.CommandLine)
 	flag.Parse()
-	initLogging(&opts)
+	initLogging(&zapopts, opts)
 
 	r.deprecatedFlagsHandler(setupLog)
 
-	if *tracing {
+	if opts.Tracing {
 		err := common.InitTracing(ctx, setupLog)
 		if err != nil {
 			return err
@@ -219,7 +175,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 
 	// Validate flags
-	if err := validateFlags(); err != nil {
+	if err := opts.Validate(); err != nil {
 		setupLog.Error(err, "Failed to validate flags")
 		return err
 	}
@@ -238,25 +194,26 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	rawConfig, err := r.parseConfigurationPhaseOne(ctx)
+	rawConfig, err := r.parseConfigurationPhaseOne(ctx, opts)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
 		return err
 	}
 
 	// --- Setup Datastore ---
-	epf, err := r.setupMetricsCollection(setupLog, r.featureGates[datalayer.ExperimentalDatalayerFeatureGate])
+	epf, err := r.setupMetricsCollection(setupLog, r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts)
 	if err != nil {
 		return err
 	}
 
-	gknn, err := extractGKNN(*poolName, *poolGroup, *poolNamespace, *endpointSelector)
+	gknn, err := extractGKNN(opts.PoolName, opts.PoolGroup, opts.PoolNamespace, opts.EndpointSelector)
 	if err != nil {
 		setupLog.Error(err, "Failed to extract GKNN")
 		return err
 	}
-	disableK8sCrdReconcile := *endpointSelector != ""
-	ds, err := setupDatastore(setupLog, ctx, epf, int32(*modelServerMetricsPort), disableK8sCrdReconcile, *poolName, *poolNamespace, *endpointSelector, *endpointTargetPorts)
+	disableK8sCrdReconcile := opts.EndpointSelector != ""
+	ds, err := setupDatastore(setupLog, ctx, epf, int32(opts.ModelServerMetricsPort), disableK8sCrdReconcile,
+		opts.PoolName, opts.PoolNamespace, opts.EndpointSelector, opts.EndpointTargetPorts)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup datastore")
 		return err
@@ -277,9 +234,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress: fmt.Sprintf(":%d", *metricsPort),
+		BindAddress: fmt.Sprintf(":%d", opts.MetricsPort),
 		FilterProvider: func() func(c *rest.Config, httpClient *http.Client) (metricsserver.Filter, error) {
-			if *metricsEndpointAuth {
+			if opts.MetricsEndpointAuth {
 				return filters.WithAuthenticationAndAuthorization
 			}
 
@@ -290,13 +247,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(disableK8sCrdReconcile, *gknn, cfg, metricsServerOptions, *haEnableLeaderElection)
+	mgr, err := runserver.NewDefaultManager(disableK8sCrdReconcile, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
 	}
 
-	if *haEnableLeaderElection {
+	if opts.EnableLeaderElection {
 		setupLog.Info("Leader election enabled")
 		go func() {
 			<-mgr.Elected()
@@ -308,7 +265,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		isLeader.Store(true)
 	}
 
-	if *enablePprof {
+	if opts.EnablePprof {
 		setupLog.Info("Enabling pprof handlers")
 		err = setupPprofHandlers(mgr)
 		if err != nil {
@@ -375,16 +332,16 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:                         *grpcPort,
+		GrpcPort:                         opts.GRPCPort,
 		GKNN:                             *gknn,
 		Datastore:                        ds,
 		DisableK8sCrdReconcile:           disableK8sCrdReconcile,
-		SecureServing:                    *secureServing,
-		HealthChecking:                   *healthChecking,
-		CertPath:                         *certPath,
-		EnableCertReload:                 *enableCertReload,
-		RefreshPrometheusMetricsInterval: *refreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:        *metricsStalenessThreshold,
+		SecureServing:                    opts.SecureServing,
+		HealthChecking:                   opts.HealthChecking,
+		CertPath:                         opts.CertPath,
+		EnableCertReload:                 opts.EnableCertReload,
+		RefreshPrometheusMetricsInterval: opts.RefreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:        opts.MetricsStalenessThreshold,
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
@@ -396,7 +353,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, *grpcHealthPort, isLeader, *haEnableLeaderElection); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, opts.GRPCHealthPort, isLeader, opts.EnableLeaderElection); err != nil {
 		return err
 	}
 
@@ -461,21 +418,21 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
 }
 
-func (r *Runner) parseConfigurationPhaseOne(ctx context.Context) (*configapi.EndpointPickerConfig, error) {
-	if *configText == "" && *configFile == "" {
+func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *Options) (*configapi.EndpointPickerConfig, error) {
+	if opts.ConfigText == "" && opts.ConfigFile == "" {
 		return nil, nil // configuring through code, not through file
 	}
 
 	logger := log.FromContext(ctx)
 
 	var configBytes []byte
-	if *configText != "" {
-		configBytes = []byte(*configText)
-	} else if *configFile != "" { // if config was specified through a file
+	if opts.ConfigText != "" {
+		configBytes = []byte(opts.ConfigText)
+	} else if opts.ConfigFile != "" { // if config was specified through a file
 		var err error
-		configBytes, err = os.ReadFile(*configFile)
+		configBytes, err = os.ReadFile(opts.ConfigFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load config from a file '%s' - %w", *configFile, err)
+			return nil, fmt.Errorf("failed to load config from a file '%s' - %w", opts.ConfigFile, err)
 		}
 	}
 
@@ -585,24 +542,24 @@ func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.L
 	}
 }
 
-func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool) (datalayer.EndpointFactory, error) {
+func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool, opts *Options) (datalayer.EndpointFactory, error) {
 	if useExperimentalDatalayer {
-		return setupDatalayer(setupLog)
+		return setupDatalayer(setupLog, opts)
 	}
 
 	if len(datalayer.GetSources()) != 0 {
 		setupLog.Info("data sources registered but pluggable datalayer is disabled")
 	}
-	return setupMetricsV1(setupLog)
+	return setupMetricsV1(setupLog, opts)
 }
 
-func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
+func setupMetricsV1(setupLog logr.Logger, opts *Options) (datalayer.EndpointFactory, error) {
 	mapping, err := backendmetrics.NewMetricMapping(
-		*totalQueuedRequestsMetric,
-		*totalRunningRequestsMetric,
-		*kvCacheUsagePercentageMetric,
-		*loraInfoMetric,
-		*cacheInfoMetric,
+		opts.TotalQueuedRequestsMetric,
+		opts.TotalRunningRequestsMetric,
+		opts.KVCacheUsagePercentageMetric,
+		opts.LoRAInfoMetric,
+		opts.CacheInfoMetric,
 	)
 	if err != nil {
 		setupLog.Error(err, "Failed to create metric mapping from flags.")
@@ -611,11 +568,11 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 	verifyMetricMapping(*mapping, setupLog)
 
 	var metricsHttpClient *http.Client
-	if *modelServerMetricsScheme == "https" {
+	if opts.ModelServerMetricsScheme == "https" {
 		metricsHttpClient = &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: *modelServerMetricsHttpsInsecureSkipVerify,
+					InsecureSkipVerify: opts.ModelServerMetricsHTTPSInsecure,
 				},
 			},
 		}
@@ -625,11 +582,11 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 
 	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
 		MetricMapping:            mapping,
-		ModelServerMetricsPath:   *modelServerMetricsPath,
-		ModelServerMetricsScheme: *modelServerMetricsScheme,
+		ModelServerMetricsPath:   opts.ModelServerMetricsPath,
+		ModelServerMetricsScheme: opts.ModelServerMetricsScheme,
 		Client:                   metricsHttpClient,
 	},
-		*refreshMetricsInterval)
+		opts.RefreshMetricsInterval)
 	return pmf, nil
 }
 
@@ -641,15 +598,15 @@ func setupMetricsV1(setupLog logr.Logger) (datalayer.EndpointFactory, error) {
 // endpoint factory) should be moved accordingly.
 // Regardless, registration of all sources (e.g., if additional sources
 // are to be configured), must be done before the EndpointFactory is initialized.
-func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
+func setupDatalayer(logger logr.Logger, opts *Options) (datalayer.EndpointFactory, error) {
 	// create and register a metrics data source and extractor.
-	source := dlmetrics.NewMetricsDataSource(*modelServerMetricsScheme,
-		*modelServerMetricsPath,
-		*modelServerMetricsHttpsInsecureSkipVerify)
-	extractor, err := dlmetrics.NewModelServerExtractor(*totalQueuedRequestsMetric,
-		*totalRunningRequestsMetric,
-		*kvCacheUsagePercentageMetric,
-		*loraInfoMetric, *cacheInfoMetric)
+	source := dlmetrics.NewMetricsDataSource(opts.ModelServerMetricsScheme,
+		opts.ModelServerMetricsPath,
+		opts.ModelServerMetricsHTTPSInsecure)
+	extractor, err := dlmetrics.NewModelServerExtractor(opts.TotalQueuedRequestsMetric,
+		opts.TotalRunningRequestsMetric,
+		opts.KVCacheUsagePercentageMetric,
+		opts.LoRAInfoMetric, opts.CacheInfoMetric)
 
 	if err != nil {
 		return nil, err
@@ -666,11 +623,11 @@ func setupDatalayer(logger logr.Logger) (datalayer.EndpointFactory, error) {
 	for _, src := range sources {
 		logger.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
 	}
-	factory := datalayer.NewEndpointFactory(sources, *refreshMetricsInterval)
+	factory := datalayer.NewEndpointFactory(sources, opts.RefreshMetricsInterval)
 	return factory, nil
 }
 
-func initLogging(opts *zap.Options) {
+func initLogging(opts *zap.Options, cliopts *Options) {
 	// Unless -zap-log-level is explicitly set, use -v
 	useV := true
 	flag.Visit(func(f *flag.Flag) {
@@ -680,7 +637,7 @@ func initLogging(opts *zap.Options) {
 	})
 	if useV {
 		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-		lvl := -1 * (*logVerbosity)
+		lvl := -1 * (cliopts.LogVerbosity)
 		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
 	}
 
@@ -713,58 +670,6 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		return err
 	}
 	return nil
-}
-
-func validateFlags() error {
-	if (*poolName != "" && *endpointSelector != "") || (*poolName == "" && *endpointSelector == "") {
-		return errors.New("either pool-name or endpoint-selector must be set")
-	}
-	if *endpointSelector != "" {
-		targetPortsList, err := strToUniqueIntSlice(*endpointTargetPorts)
-		if err != nil {
-			return fmt.Errorf("unexpected value for %q flag with error %w", "endpoint-target-ports", err)
-		}
-		if len(targetPortsList) == 0 || len(targetPortsList) > 8 {
-			return fmt.Errorf("flag %q should have length from 1 to 8", "endpoint-target-ports")
-		}
-	}
-
-	if *configText != "" && *configFile != "" {
-		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
-	}
-	if *modelServerMetricsScheme != "http" && *modelServerMetricsScheme != "https" {
-		return fmt.Errorf("unexpected %q value for %q flag, it can only be set to 'http' or 'https'", *modelServerMetricsScheme, "model-server-metrics-scheme")
-	}
-
-	return nil
-}
-
-func strToUniqueIntSlice(s string) ([]int, error) {
-	seen := sets.NewInt()
-	var intList []int
-
-	if s == "" {
-		return intList, nil
-	}
-
-	strList := strings.Split(s, ",")
-
-	for _, str := range strList {
-		trimmedStr := strings.TrimSpace(str)
-		if trimmedStr == "" {
-			continue
-		}
-		portInt, err := strconv.Atoi(trimmedStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid number: '%s' is not an integer", trimmedStr)
-		}
-
-		if _, ok := seen[portInt]; !ok {
-			seen[portInt] = struct{}{}
-			intList = append(intList, portInt)
-		}
-	}
-	return intList, nil
 }
 
 func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logger) {
