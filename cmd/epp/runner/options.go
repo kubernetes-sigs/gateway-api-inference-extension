@@ -17,9 +17,14 @@ limitations under the License.
 package runner
 
 import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -174,6 +179,54 @@ func (opts *Options) Complete() error {
 }
 
 func (opts *Options) Validate() error {
-	// TODO: copy from runner
+	if (opts.PoolName != "" && opts.EndpointSelector != "") || (opts.PoolName == "" && opts.EndpointSelector == "") {
+		return errors.New("either pool-name or endpoint-selector must be set")
+	}
+	if opts.EndpointSelector != "" {
+		targetPortsList, err := strToUniqueIntSlice(opts.EndpointTargetPorts)
+		if err != nil {
+			return fmt.Errorf("unexpected value for %q flag with error %w", "endpoint-target-ports", err)
+		}
+		if len(targetPortsList) == 0 || len(targetPortsList) > 8 {
+			return fmt.Errorf("flag %q should have length from 1 to 8", "endpoint-target-ports")
+		}
+	}
+
+	if opts.ConfigText != "" && opts.ConfigFile != "" {
+		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
+	}
+	if opts.ModelServerMetricsScheme != "http" && opts.ModelServerMetricsScheme != "https" {
+		return fmt.Errorf("unexpected %q value for %q flag, it can only be set to 'http' or 'https'",
+			opts.ModelServerMetricsScheme, "model-server-metrics-scheme")
+	}
+
 	return nil
+}
+
+func strToUniqueIntSlice(s string) ([]int, error) {
+	seen := sets.NewInt()
+	var intList []int
+
+	if s == "" {
+		return intList, nil
+	}
+
+	strList := strings.Split(s, ",")
+
+	for _, str := range strList {
+		trimmedStr := strings.TrimSpace(str)
+		if trimmedStr == "" {
+			continue
+		}
+		portInt, err := strconv.Atoi(trimmedStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid number: '%s' is not an integer", trimmedStr)
+		}
+
+		if _, ok := seen[portInt]; !ok {
+			seen[portInt] = struct{}{}
+			intList = append(intList, portInt)
+		}
+	}
+	return intList, nil
 }
