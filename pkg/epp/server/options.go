@@ -14,13 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package runner
+package server
 
 import (
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -46,7 +44,7 @@ type Options struct {
 	// Endpoints (in lieu of using an InferencePool for service discovery).
 	//
 	EndpointSelector    string // Selector to filter model server pods on, only 'key=value' pairs are supported. (TODO: k8s.Selector, pflag.StringSlice?)
-	EndpointTargetPorts string // Target ports of model server pods. (TODO: []int in Complete or use pflag.IntSlice)
+	EndpointTargetPorts []int  // Target ports of model server pods.
 	//
 	// MSP metrics scraping.
 	//
@@ -85,8 +83,9 @@ type Options struct {
 // NewOptions returns a new Options struct initialized with the default values.
 func NewOptions() *Options {
 	return &Options{ // "zero" values are no explicitly set
-		GRPCPort:                         9002,
+		GRPCPort:                         DefaultGrpcPort,
 		PoolGroup:                        "inference.networking.k8s.io",
+		EndpointTargetPorts:              []int{},
 		ModelServerMetricsScheme:         "http",
 		ModelServerMetricsPath:           "/metrics",
 		ModelServerMetricsHTTPSInsecure:  true,
@@ -124,7 +123,7 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&opts.EndpointSelector, "endpoint-selector", opts.EndpointSelector,
 		"Selector to filter model server pods on, only 'key=value' pairs are supported. "+
 			"Format: a comma-separated list of key=value pairs without whitespace (e.g., 'app=vllm-llama3-8b-instruct,env=prod').")
-	fs.StringVar(&opts.EndpointTargetPorts, "endpoint-target-ports", opts.EndpointTargetPorts, "Target ports of model server pods. "+
+	fs.IntSliceVar(&opts.EndpointTargetPorts, "endpoint-target-ports", opts.EndpointTargetPorts, "Target ports of model server pods. "+
 		"Format: a comma-separated list of numbers without whitespace (e.g., '3000,3001,3002').")
 	fs.StringVar(&opts.ModelServerMetricsScheme, "model-server-metrics-scheme", opts.ModelServerMetricsScheme,
 		"Protocol scheme used in scraping metrics from endpoints.")
@@ -172,8 +171,9 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 
 func (opts *Options) Complete() error {
 	// TODO: postprocessing or command line arguments. For example, convert EndpointSelector
-	// and EndpointTargetPorts from raw string to k8s.LabelSelector, []int array, load ConfigFile
-	// into ConfigText, etc.
+	// from raw string to k8s.LabelSelector, load ConfigFile into ConfigText, etc.
+
+	opts.EndpointTargetPorts = removeDuplicatePorts(opts.EndpointTargetPorts)
 
 	return nil
 }
@@ -183,11 +183,7 @@ func (opts *Options) Validate() error {
 		return errors.New("either pool-name or endpoint-selector must be set")
 	}
 	if opts.EndpointSelector != "" {
-		targetPortsList, err := strToUniqueIntSlice(opts.EndpointTargetPorts)
-		if err != nil {
-			return fmt.Errorf("unexpected value for %q flag with error %w", "endpoint-target-ports", err)
-		}
-		if len(targetPortsList) == 0 || len(targetPortsList) > 8 {
+		if len(opts.EndpointTargetPorts) == 0 || len(opts.EndpointTargetPorts) > 8 {
 			return fmt.Errorf("flag %q should have length from 1 to 8", "endpoint-target-ports")
 		}
 	}
@@ -203,30 +199,15 @@ func (opts *Options) Validate() error {
 	return nil
 }
 
-func strToUniqueIntSlice(s string) ([]int, error) {
+func removeDuplicatePorts(ports []int) []int {
 	seen := sets.NewInt()
-	var intList []int
+	unique := make([]int, 0, len(ports))
 
-	if s == "" {
-		return intList, nil
-	}
-
-	strList := strings.Split(s, ",")
-
-	for _, str := range strList {
-		trimmedStr := strings.TrimSpace(str)
-		if trimmedStr == "" {
-			continue
-		}
-		portInt, err := strconv.Atoi(trimmedStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid number: '%s' is not an integer", trimmedStr)
-		}
-
-		if _, ok := seen[portInt]; !ok {
-			seen[portInt] = struct{}{}
-			intList = append(intList, portInt)
+	for _, val := range ports {
+		if !seen.Has(val) {
+			unique = append(unique, val)
+			seen.Insert(val)
 		}
 	}
-	return intList, nil
+	return unique
 }

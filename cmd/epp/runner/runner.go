@@ -20,7 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	goflag "flag"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -32,7 +32,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
-	flag "github.com/spf13/pflag"
+	"github.com/spf13/pflag"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -152,14 +152,14 @@ func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runne
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	opts := NewOptions()
+	opts := runserver.NewOptions()
 	zapopts := zap.Options{
 		Development: true,
 	}
-	gfs := goflag.NewFlagSet("zap", goflag.ExitOnError)
+	gfs := flag.NewFlagSet("zap", flag.ExitOnError)
 	zapopts.BindFlags(gfs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
-	flag.CommandLine.AddGoFlagSet(gfs)
-	opts.AddFlags(flag.CommandLine)
+	pflag.CommandLine.AddGoFlagSet(gfs)
+	opts.AddFlags(pflag.CommandLine)
 	flag.Parse()
 	initLogging(&zapopts, opts)
 
@@ -373,7 +373,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, disableK8sCrdReconcile bool, namespace, name, endpointSelector, endpointTargetPorts string) (datastore.Datastore, error) {
+func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32,
+	disableK8sCrdReconcile bool, namespace, name, endpointSelector string, endpointTargetPorts []int) (datastore.Datastore, error) {
 	if !disableK8sCrdReconcile {
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort), nil
 	} else {
@@ -384,11 +385,7 @@ func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalay
 			return nil, err
 		}
 		endpointPool.Selector = labelsMap
-		endpointPool.TargetPorts, err = strToUniqueIntSlice(endpointTargetPorts)
-		if err != nil {
-			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-target-ports", err)
-			return nil, err
-		}
+		_ = copy(endpointPool.TargetPorts, endpointTargetPorts)
 
 		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
@@ -418,7 +415,7 @@ func (r *Runner) registerInTreePlugins() {
 	plugins.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
 }
 
-func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *Options) (*configapi.EndpointPickerConfig, error) {
+func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver.Options) (*configapi.EndpointPickerConfig, error) {
 	if opts.ConfigText == "" && opts.ConfigFile == "" {
 		return nil, nil // configuring through code, not through file
 	}
@@ -542,7 +539,7 @@ func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.L
 	}
 }
 
-func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool, opts *Options) (datalayer.EndpointFactory, error) {
+func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
 	if useExperimentalDatalayer {
 		return setupDatalayer(setupLog, opts)
 	}
@@ -553,7 +550,7 @@ func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDat
 	return setupMetricsV1(setupLog, opts)
 }
 
-func setupMetricsV1(setupLog logr.Logger, opts *Options) (datalayer.EndpointFactory, error) {
+func setupMetricsV1(setupLog logr.Logger, opts *runserver.Options) (datalayer.EndpointFactory, error) {
 	mapping, err := backendmetrics.NewMetricMapping(
 		opts.TotalQueuedRequestsMetric,
 		opts.TotalRunningRequestsMetric,
@@ -598,7 +595,7 @@ func setupMetricsV1(setupLog logr.Logger, opts *Options) (datalayer.EndpointFact
 // endpoint factory) should be moved accordingly.
 // Regardless, registration of all sources (e.g., if additional sources
 // are to be configured), must be done before the EndpointFactory is initialized.
-func setupDatalayer(logger logr.Logger, opts *Options) (datalayer.EndpointFactory, error) {
+func setupDatalayer(logger logr.Logger, opts *runserver.Options) (datalayer.EndpointFactory, error) {
 	// create and register a metrics data source and extractor.
 	source := dlmetrics.NewMetricsDataSource(opts.ModelServerMetricsScheme,
 		opts.ModelServerMetricsPath,
@@ -627,7 +624,7 @@ func setupDatalayer(logger logr.Logger, opts *Options) (datalayer.EndpointFactor
 	return factory, nil
 }
 
-func initLogging(opts *zap.Options, cliopts *Options) {
+func initLogging(opts *zap.Options, cliopts *runserver.Options) {
 	// Unless -zap-log-level is explicitly set, use -v
 	useV := true
 	flag.Visit(func(f *flag.Flag) {

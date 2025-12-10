@@ -66,49 +66,35 @@ type ExtProcServerRunner struct {
 	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
 }
 
-// Default values for CLI flags in main
+// TODO: the following defaults are still accessed directly by other packages
 const (
-	DefaultGrpcPort                         = 9002                          // default for --grpc-port
-	DefaultGrpcHealthPort                   = 9003                          // default for --grpc-health-port
-	DefaultMetricsPort                      = 9090                          // default for --metrics-port
-	DefaultPoolName                         = ""                            // required but no default
-	DefaultPoolNamespace                    = "default"                     // default for --pool-namespace
-	DefaultRefreshMetricsInterval           = 50 * time.Millisecond         // default for --refresh-metrics-interval
-	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second               // default for --refresh-prometheus-metrics-interval
-	DefaultSecureServing                    = true                          // default for --secure-serving
-	DefaultHealthChecking                   = false                         // default for --health-checking
-	DefaultEnablePprof                      = true                          // default for --enable-pprof
-	DefaultTotalQueuedRequestsMetric        = "vllm:num_requests_waiting"   // default for --total-queued-requests-metric
-	DefaultTotalRunningRequestsMetric       = "vllm:num_requests_running"   // default for --total-running-requests-metric
-	DefaultKvCacheUsagePercentageMetric     = "vllm:kv_cache_usage_perc"    // default for --kv-cache-usage-percentage-metric
-	DefaultLoraInfoMetric                   = "vllm:lora_requests_info"     // default for --lora-info-metric
-	DefaultCacheInfoMetric                  = "vllm:cache_config_info"      // default for --cache-info-metric
-	DefaultCertPath                         = ""                            // default for --cert-path
-	DefaultCertReload                       = false                         // default for --enable-cert-reload
-	DefaultConfigFile                       = ""                            // default for --config-file
-	DefaultConfigText                       = ""                            // default for --config-text
-	DefaultPoolGroup                        = "inference.networking.k8s.io" // default for --pool-group
-	DefaultMetricsStalenessThreshold        = 2 * time.Second
+	DefaultGrpcPort      = 9002
+	DefaultPoolNamespace = "default" // default when pool namespace is empty (CLI flag default is empty)
 )
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
+	opts := NewOptions()
+	if opts.PoolNamespace == "" {
+		opts.PoolNamespace = DefaultPoolNamespace
+	}
+
 	gknn := common.GKNN{
-		NamespacedName: types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
+		NamespacedName: types.NamespacedName{Name: opts.PoolName, Namespace: opts.PoolNamespace},
 		GroupKind: schema.GroupKind{
-			Group: DefaultPoolGroup,
+			Group: opts.PoolGroup,
 			Kind:  "InferencePool",
 		},
 	}
 	return &ExtProcServerRunner{
-		GrpcPort:                         DefaultGrpcPort,
+		GrpcPort:                         opts.GRPCPort,
 		GKNN:                             gknn,
 		DisableK8sCrdReconcile:           false,
-		SecureServing:                    DefaultSecureServing,
-		HealthChecking:                   DefaultHealthChecking,
-		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:        DefaultMetricsStalenessThreshold,
+		SecureServing:                    opts.SecureServing,
+		HealthChecking:                   opts.HealthChecking,
+		RefreshPrometheusMetricsInterval: opts.RefreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:        opts.MetricsStalenessThreshold,
 		// Dependencies can be assigned later.
 	}
 }
