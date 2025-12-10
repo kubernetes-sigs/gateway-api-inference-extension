@@ -18,9 +18,11 @@ package bbr
 
 import (
 	"context"
-	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/stretchr/testify/require"
@@ -54,6 +56,7 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 	tcpAddr, err := integration.GetFreePort()
 	require.NoError(t, err, "failed to acquire free port for BBR server")
 	port := tcpAddr.Port
+	serverAddr := net.JoinHostPort(tcpAddr.IP.String(), strconv.Itoa(tcpAddr.Port))
 
 	// 2. Configure BBR Server
 	// BBR is simpler than EPP; it doesn't need a K8s Manager.
@@ -63,20 +66,45 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 
 	// 3. Start Server in Background
 	serverCtx, serverCancel := context.WithCancel(ctx)
+
+	// Channel to signal if the server dies immediately (e.g., port binding error)
+	serverErrChan := make(chan error, 1)
+
 	go func() {
-		logger.Info("Starting BBR server", "port", port, "streaming", streaming)
+		logger.Info("Starting BBR server", "address", serverAddr, "streaming", streaming)
 		if err := runner.AsRunnable(logger.WithName("bbr-server")).Start(serverCtx); err != nil {
-			// Context cancellation is expected during teardown.
 			if !strings.Contains(err.Error(), "context canceled") {
 				logger.Error(err, "BBR server stopped unexpectedly")
+				select {
+				case serverErrChan <- err:
+				default:
+				}
 			}
 		}
 	}()
 
-	// 4. Connect Client
+	// 4. Wait for Server Readiness
+	// We must poll the port until the server successfully binds and listens.
+	require.Eventually(t, func() bool {
+		// Check for premature crash.
+		select {
+		case err := <-serverErrChan:
+			t.Fatalf("Server failed to start: %v", err)
+		default:
+		}
+
+		// Check for TCP readiness.
+		conn, err := net.DialTimeout("tcp", serverAddr, 100*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		conn.Close()
+		return true
+	}, 5*time.Second, 50*time.Millisecond, "BBR Server failed to bind port %s", serverAddr)
+
+	// 5. Connect Client
 	// Blocking dial ensures the server is reachable before the test logic begins.
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err, "failed to create grpc connection to BBR server")
 
 	extProcClient, err := extProcPb.NewExternalProcessorClient(conn).Process(ctx)
@@ -90,7 +118,7 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 		grpcConn: conn,
 	}
 
-	// 5. Register Cleanup
+	// 6. Register Cleanup
 	t.Cleanup(func() {
 		logger.Info("Tearing down BBR server", "port", port)
 		serverCancel()
