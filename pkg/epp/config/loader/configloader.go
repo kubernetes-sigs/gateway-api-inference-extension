@@ -96,7 +96,8 @@ func InstantiateAndConfigure(
 		return nil, fmt.Errorf("scheduler config build failed: %w", err)
 	}
 
-	dataConfig, err := buildDataLayerConfig(rawConfig.Data, rawConfig.FeatureGates, handle)
+	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
+	dataConfig, err := buildDataLayerConfig(rawConfig.Data, featureGates[datalayer.FeatureGate], handle)
 	if err != nil {
 		return nil, fmt.Errorf("data layer config build failed: %w", err)
 	}
@@ -232,9 +233,8 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *saturationd
 	return cfg
 }
 
-func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, rawFeatureGates configapi.FeatureGates, handle plugins.Handle) (*datalayer.Config, error) {
-	featureGates := loadFeatureConfig(rawFeatureGates)
-	if !featureGates[datalayer.FeatureGate] {
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle plugins.Handle) (*datalayer.Config, error) {
+	if !dataLayerEnabled {
 		if rawDataConfig != nil {
 			return nil, errors.New("the Datalayer has not been enabled, but you specified a configuration for it")
 		}
