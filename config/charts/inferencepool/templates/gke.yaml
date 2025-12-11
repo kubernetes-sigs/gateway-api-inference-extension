@@ -49,6 +49,7 @@ spec:
 {{- $isAutopilot := false -}}
 {{- with .Values.provider.gke }}
   {{- $isAutopilot = .autopilot | default false -}}
+{{- end }}
 {{- if $isAutopilot -}}
 {{-   $gmpNamespace = "gke-gmp-system" -}}
 {{- end -}}
@@ -140,5 +141,4 @@ subjects:
 - name: collector
   namespace: {{ $gmpNamespace }}
   kind: ServiceAccount
-{{- end }}
 {{- end }}
