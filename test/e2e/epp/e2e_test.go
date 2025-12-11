@@ -17,11 +17,15 @@ limitations under the License.
 package epp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -31,12 +35,22 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
+)
+
+const (
+	firstPort             = 8000
+	numPorts              = 2
+	maxConcurrentRequests = 2 // prevent hammering Envoy and backend
+	maxRetries            = 3
+	backoff               = 1 * time.Second
+	safetyMult            = 3 // increase number of batches to account for retries
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
@@ -44,6 +58,67 @@ var _ = ginkgo.Describe("InferencePool", func() {
 	ginkgo.BeforeEach(func() {
 		ginkgo.By("Waiting for the namespace to exist.")
 		namespaceExists(testConfig)
+
+		ginkgo.By("Modifying deployment using local image for testing (temporary).")
+		deploy := &appsv1.Deployment{}
+		key := types.NamespacedName{Name: modelServerName, Namespace: testConfig.NsName}
+
+		gomega.Eventually(func() error {
+			err := testConfig.K8sClient.Get(testConfig.Context, key, deploy)
+			if err != nil {
+				return err
+			}
+
+			// Instead of hardcoding arguments, we can instead replace the arguments that need
+			// to be changed, preserving any others that may exist.
+			var newArgs []string
+			skipNext := false
+			for _, arg := range deploy.Spec.Template.Spec.Containers[0].Args {
+				if skipNext {
+					skipNext = false
+					continue
+				}
+				// If this is one of the arguments we are updating, skip it AND its value
+				if arg == "--port" || arg == "--data-parallel-size" {
+					skipNext = true
+					continue
+				}
+				newArgs = append(newArgs, arg)
+			} // contains only the args we want to keep
+
+			// add new arguments to open proper ports
+			newArgs = append(newArgs, "--port", strconv.Itoa(firstPort))
+			newArgs = append(newArgs, "--data-parallel-size", strconv.Itoa(numPorts))
+			deploy.Spec.Template.Spec.Containers[0].Args = newArgs
+			deploy.Spec.Template.Spec.Containers[0].Ports = buildContainerPorts(firstPort, numPorts)
+
+			return testConfig.K8sClient.Update(testConfig.Context, deploy)
+
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
+
+		waitForDeploymentRollout(testConfig, deploy)
+
+		pool := &v1.InferencePool{}
+		gomega.Eventually(func() error {
+			err := testConfig.K8sClient.Get(testConfig.Context, key, pool)
+			if err != nil {
+				return err
+			}
+
+			pool.Spec.TargetPorts = buildTargetPorts(firstPort, numPorts)
+
+			return testConfig.K8sClient.Update(testConfig.Context, pool)
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
+
+		ginkgo.By("Restarting EPP to force configuration reload")
+		// We delete the EPP *POD*, not the deployment. The Deployment will recreate it immediately.
+		// This forces the new EPP process to read the Multi-Port InferencePool from scratch.
+		eppLabels := client.MatchingLabels{"app": inferExtName}
+		gomega.Expect(testConfig.K8sClient.DeleteAllOf(testConfig.Context, &corev1.Pod{}, client.InNamespace(testConfig.NsName), eppLabels)).To(gomega.Succeed())
+
+		// Wait for the new EPP to be ready
+		eppDeploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: inferExtName, Namespace: testConfig.NsName}}
+		waitForDeploymentReady(testConfig, eppDeploy)
 
 		ginkgo.By("Creating an InferenceObjective resource")
 		infObjective = newInferenceObjective(testConfig.NsName)
@@ -58,6 +133,8 @@ var _ = ginkgo.Describe("InferencePool", func() {
 	ginkgo.AfterEach(func() {
 		ginkgo.By("Deleting the InferenceObjective test resource.")
 		cleanupInferModelResources()
+
+		// Wait for InferenceObjective to be fully deleted.
 		gomega.Eventually(func() error {
 			err := testConfig.K8sClient.Get(testConfig.Context, types.NamespacedName{Namespace: infObjective.Namespace, Name: infObjective.Name}, infObjective)
 			if err == nil {
@@ -68,6 +145,53 @@ var _ = ginkgo.Describe("InferencePool", func() {
 			}
 			return nil
 		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
+
+		ginkgo.By("Restoring vLLM Deployment and InferencePool.")
+		key := types.NamespacedName{Name: modelServerName, Namespace: testConfig.NsName}
+
+		// Restore InferencePool
+		pool := &v1.InferencePool{}
+		gomega.Eventually(func() error {
+			if err := testConfig.K8sClient.Get(testConfig.Context, key, pool); err != nil {
+				return err
+			}
+			pool.Spec.TargetPorts = []v1.Port{{Number: 8000}}
+			return testConfig.K8sClient.Update(testConfig.Context, pool)
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
+
+		// Restore Deployment Args
+		deploy := &appsv1.Deployment{}
+		gomega.Eventually(func() error {
+			if err := testConfig.K8sClient.Get(testConfig.Context, key, deploy); err != nil {
+				return err
+			}
+
+			// Filter out the custom args we added in BeforeEach
+			var originalArgs []string
+			skipNext := false
+			for _, arg := range deploy.Spec.Template.Spec.Containers[0].Args {
+				if skipNext {
+					skipNext = false
+					continue
+				}
+				if arg == "--port" || arg == "--data-parallel-size" {
+					skipNext = true
+					continue
+				}
+				originalArgs = append(originalArgs, arg)
+			}
+			deploy.Spec.Template.Spec.Containers[0].Args = originalArgs
+
+			// Restore container ports to just 8000
+			deploy.Spec.Template.Spec.Containers[0].Ports = []corev1.ContainerPort{
+				{Name: "http-8000", ContainerPort: 8000, Protocol: corev1.ProtocolTCP},
+			}
+
+			return testConfig.K8sClient.Update(testConfig.Context, deploy)
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
+
+		// Wait for rollback to finish.
+		waitForDeploymentRollout(testConfig, deploy)
 	})
 
 	ginkgo.When("The Inference Extension is running", func() {
@@ -204,33 +328,79 @@ func verifyTrafficRouting() {
 	} {
 		ginkgo.By(fmt.Sprintf("Verifying connectivity through the inference extension with %s api and prompt/messages: %v", t.api, t.promptOrMessages))
 
-		// Ensure the expected responses include the InferenceObjective target model names.
-		var expected []string
-		expected = append(expected, targetModelName)
-		curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
+		// Expected ports and InferenceObjective target models
+		expectedPort := generateSequence(firstPort, numPorts)
+		expectedModel := []string{targetModelName}
 
-		actual := make(map[string]int)
+		// Observed ports and InferenceObjective target models
+		actualModel := make(map[string]int)
+		actualPort := make(map[int]int)
+		// Probability: need to compute estimate of number of batches to send to have high confidence of hitting all ports.
+		// Using the Coupon Collector's Problem formula: n * H_n, where H_n is the nth harmonic number.
+		// This gives us an expected number of trials to collect all coupons (ports).
+		batches := int(math.Ceil(numPorts * harmonicNumber(numPorts)))
+		// Send curl requests to verify routing to all target ports in the InferencePool.
 		gomega.Eventually(func() error {
-			resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
-			if err != nil {
-				return err
-			}
-			if !strings.Contains(resp, "200 OK") {
-				return fmt.Errorf("did not get 200 OK: %s", resp)
-			}
-			for _, m := range expected {
-				if strings.Contains(resp, m) {
-					actual[m] = 0
+			// Run a small batch per retry (e.g., 5) to keep the test active
+			for i := range batches {
+				uniqueID := time.Now().UnixNano()
+				dynamicHashValue := fmt.Sprintf("Nonce-%d", uniqueID)
+				currentPromptOrMessages := t.promptOrMessages // Start with the original
+
+				// Check if the payload is a slice of maps (e.g., for /chat/completions)
+				if originalMessages, ok := currentPromptOrMessages.([]map[string]any); ok {
+					messagesCopy := make([]map[string]any, len(originalMessages))
+					for idx, msg := range originalMessages {
+						msgCopy := make(map[string]any, len(msg))
+						maps.Copy(msgCopy, msg)
+						// Inject a unique nonce into the content of *EACH* message
+						if content, ok := msgCopy["content"].(string); ok {
+							msgCopy["content"] = fmt.Sprintf("(TestNonce: %s-%d-msg%d) %s", dynamicHashValue, i, idx, content)
+						}
+						messagesCopy[idx] = msgCopy
+					}
+					currentPromptOrMessages = messagesCopy // Use the modified messages for getCurlCommand
+				}
+
+				curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, currentPromptOrMessages, false)
+
+				resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
+				if err != nil {
+					return err
+				}
+
+				if !strings.Contains(resp, "200 OK") {
+					return fmt.Errorf("did not get 200 OK: %s", resp)
+				}
+
+				for _, m := range expectedModel {
+					if strings.Contains(resp, m) {
+						actualModel[m] = 0
+					}
+				}
+				for _, p := range expectedPort {
+					if strings.Contains(resp, fmt.Sprintf("x-inference-port: %d", p)) {
+						actualPort[p] = 0
+					}
 				}
 			}
-			var got []string
-			for m := range actual {
-				got = append(got, m)
+
+			var gotModel []string
+			for m := range actualModel {
+				gotModel = append(gotModel, m)
 			}
-			// Compare ignoring order
-			if !cmp.Equal(got, expected, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
-				return fmt.Errorf("actual (%v) != expected (%v); resp=%q", got, expected, resp)
+			var gotPort []int
+			for p := range actualPort {
+				gotPort = append(gotPort, p)
 			}
+
+			if !cmp.Equal(gotModel, expectedModel, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
+				return fmt.Errorf("collecting models... have %v, want %v", gotModel, expectedModel)
+			}
+			if !cmp.Equal(gotPort, expectedPort, cmpopts.SortSlices(func(a, b int) bool { return a < b })) {
+				return fmt.Errorf("collecting ports... have %v, want %v", gotPort, expectedPort)
+			}
+
 			return nil
 		}, testConfig.ReadyTimeout, curlInterval).Should(gomega.Succeed())
 	}
@@ -257,28 +427,31 @@ func verifyMetrics() {
 		"inference_extension_info",
 	}
 
-	// Generate traffic by sending requests through the inference extension
+	// Generate traffic by sending requests through the inference extension.
 	ginkgo.By("Generating traffic through the inference extension")
 	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
 
-	// Run the curl command multiple times to generate some metrics data
-	for i := 0; i < 5; i++ {
-		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	}
+	// Run the curl command multiple times to generate some metrics data.
+	// Use the coupon collector computation.
+	// The problem with the expected number of trials is that it is just an average. We should use a number in the
+	// extreme tail to reduce the probability of missing any ports close to 0.
+	batches := int(math.Ceil(numPorts*harmonicNumber(numPorts))) * safetyMult
 
-	// modify the curl command to generate some error metrics
+	semaphore := make(chan struct{}, maxConcurrentRequests)
+
+	errorGood := generateTraffic(curlCmd, batches, semaphore)
+	gomega.Expect(errorGood).NotTo(gomega.HaveOccurred(), "Expected good traffic generation to succeed")
+
+	// Modify the curl command to generate some error metrics.
 	curlCmd[len(curlCmd)-1] = "invalid input"
-	for i := 0; i < 5; i++ {
-		_, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	}
+	errorBad := generateTraffic(curlCmd, batches, semaphore)
+	gomega.Expect(errorBad).NotTo(gomega.HaveOccurred(), "Expected bad traffic generation to succeed")
 
-	// Now scrape metrics from the EPP endpoint via the curl pod
-	ginkgo.By("Scraping metrics from the EPP endpoint")
+	// Now scrape metrics from the EPP endpoint via the curl pod.
+	ginkgo.By("Scraping metrics from the EPP endpoint and verifying all backends were hit")
 	podIP := findReadyPod().Status.PodIP
 
-	// Get the authorization token for reading metrics
+	// Get the authorization token for reading metrics.
 	token := ""
 	gomega.Eventually(func(g gomega.Gomega) {
 		t, err := getMetricsReaderToken(testConfig.K8sClient)
@@ -287,21 +460,36 @@ func verifyMetrics() {
 		token = t
 	}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 
-	// Construct the metric scraping curl command using Pod IP
+	// Construct the metric scraping curl command using Pod IP.
 	metricScrapeCmd := getMetricsScrapeCommand(podIP, token)
+
+	modelServerPods, err := getPodsByLabel(testConfig.K8sClient, testConfig.Context, testConfig.NsName, "app", modelServerName)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Expected to find model server pods")
+
+	for _, modelServerPod := range modelServerPods {
+		for rank := range numPorts {
+			metricQueueSize := fmt.Sprintf(
+				"inference_pool_per_pod_queue_size{model_server_pod=\"%s-rank-%d\",name=\"%s\"}",
+				modelServerPod.Name,
+				rank,
+				modelServerName,
+			)
+			expectedMetrics = append(expectedMetrics, metricQueueSize)
+		}
+	}
 
 	ginkgo.By("Verifying that all expected metrics are present.")
 	gomega.Eventually(func() error {
-		// Execute the metrics scrape command inside the curl pod
+		// Execute the metrics scrape command inside the curl pod.
 		resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", metricScrapeCmd)
 		if err != nil {
 			return err
 		}
-		// Verify that we got a 200 OK responsecurl
+		// Verify that we got a 200 OK response.
 		if !strings.Contains(resp, "200 OK") {
 			return fmt.Errorf("did not get 200 OK: %s", resp)
 		}
-		// Check if all expected metrics are present in the metrics output
+		// Check if all expected metrics are present in the metrics output.
 		for _, metric := range expectedMetrics {
 			if !strings.Contains(resp, metric) {
 				return fmt.Errorf("expected metric %s not found in metrics output", metric)
@@ -352,13 +540,14 @@ func findReadyPod() *corev1.Pod {
 // getMetricsScrapeCommand returns the command to scrape the /metrics endpoint.
 func getMetricsScrapeCommand(podIP, token string) []string {
 	return []string{
-		"curl", "-i", "--max-time", strconv.Itoa((int)(curlTimeout.Seconds())),
+		"curl", "-i", "--max-time", strconv.Itoa((int)(4 * curlTimeout.Seconds())),
 		"-H", "Authorization: Bearer " + token, fmt.Sprintf("http://%s:%d/metrics", podIP, 9090),
 	}
 }
 
 // getCurlCommand returns the command, as a slice of strings, for curl'ing
 // the test model server at the given name, namespace, port, and model name.
+// This command gets executed by a dummy pod that communicates with Envoy
 func getCurlCommand(name, ns, port, model string, timeout time.Duration, api string, promptOrMessages any, streaming bool) []string {
 	body := map[string]any{
 		"model":       model,
@@ -389,10 +578,184 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		"-H",
 		"Content-Type: application/json",
 		"-H",
+		"Cache-Control: no-cache",
+		"-H",
 		fmt.Sprintf("%v: inferenceobjective-sample", metadata.ObjectiveKey),
 		"-H",
 		fmt.Sprintf("%v: %s", metadata.ModelNameRewriteKey, targetModelName),
+		"-H",
+		"Connection: close",
 		"-d",
 		string(b),
 	}
+}
+
+// buildContainerPorts constructs a slice of corev1.ContainerPort starting from 'start' with 'count' ports.
+func buildContainerPorts(start int, count int) []corev1.ContainerPort {
+	ports := make([]corev1.ContainerPort, count)
+	for i := range count {
+		portNum := int32(start + i)
+		ports[i] = corev1.ContainerPort{
+			Name:          fmt.Sprintf("http-%d", portNum),
+			ContainerPort: portNum,
+			Protocol:      corev1.ProtocolTCP,
+		}
+	}
+	return ports
+}
+
+// buildTargetPorts constructs a slice of v1.Port starting from 'start' with 'count' ports.
+func buildTargetPorts(start int, count int) []v1.Port {
+	ports := make([]v1.Port, count)
+	for i := range count {
+		ports[i] = v1.Port{
+			Number: v1.PortNumber(start + i),
+		}
+	}
+	return ports
+}
+
+// waitForDeploymentRollout waits until the Deployment has completed its update.
+// It ensures that the new version is fully rolled out and available.
+func waitForDeploymentRollout(tc *testutils.TestConfig, deploy *appsv1.Deployment) {
+	ginkgo.By(fmt.Sprintf("Waiting for Deployment %s/%s to complete rollout", deploy.Namespace, deploy.Name))
+
+	key := types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}
+
+	gomega.Eventually(func() error {
+		currentDeploy := &appsv1.Deployment{}
+		if err := tc.K8sClient.Get(tc.Context, key, currentDeploy); err != nil {
+			return err
+		}
+
+		if currentDeploy.Generation > currentDeploy.Status.ObservedGeneration {
+			return errors.New("deployment generation not observed yet")
+		}
+
+		desiredReplicas := *currentDeploy.Spec.Replicas
+
+		if currentDeploy.Status.UpdatedReplicas < desiredReplicas {
+			return fmt.Errorf("waiting for updated replicas: %d/%d", currentDeploy.Status.UpdatedReplicas, desiredReplicas)
+		}
+
+		if currentDeploy.Status.AvailableReplicas < desiredReplicas {
+			return fmt.Errorf("waiting for available replicas: %d/%d", currentDeploy.Status.AvailableReplicas, desiredReplicas)
+		}
+
+		if currentDeploy.Status.Replicas > desiredReplicas {
+			return fmt.Errorf("waiting for old replicas to terminate: %d > %d", currentDeploy.Status.Replicas, desiredReplicas)
+		}
+
+		return nil
+	}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed(), "Deployment failed to roll out within timeout")
+
+	ginkgo.By("Deployment rollout complete")
+}
+
+// waitForDeploymentReady waits for the Deployment to have all replicas ready.
+func waitForDeploymentReady(tc *testutils.TestConfig, deploy *appsv1.Deployment) {
+	ginkgo.By(fmt.Sprintf("waiting for Deployment %s/%s to be ready", deploy.Namespace, deploy.Name))
+
+	key := types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}
+
+	gomega.Eventually(func() error {
+		current := &appsv1.Deployment{}
+		if err := tc.K8sClient.Get(tc.Context, key, current); err != nil {
+			return err
+		}
+
+		if current.Status.Replicas != current.Status.ReadyReplicas {
+			return fmt.Errorf("replicas mismatch: expected %d, got %d ready",
+				current.Status.Replicas, current.Status.ReadyReplicas)
+		}
+
+		if current.Status.ReadyReplicas == 0 {
+			return errors.New("no replicas are ready yet")
+		}
+
+		return nil
+	}, testConfig.ReadyTimeout, testConfig.Interval).Should(gomega.Succeed())
+}
+
+// generateTraffic sends multiple concurrent requests using the provided curl command.
+func generateTraffic(
+	curlCmd []string,
+	batches int,
+	semaphore chan struct{},
+) error {
+	var wg sync.WaitGroup
+	errorCh := make(chan error, batches)
+
+	for i := 0; i < batches; i++ {
+		wg.Add(1)
+		semaphore <- struct{}{}
+
+		go func(requestNum int) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			var err error
+			// RETRY LOOP
+			for attempt := 0; attempt <= maxRetries; attempt++ {
+				_, err = testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
+				if err == nil {
+					return // Success!
+				}
+
+				time.Sleep(backoff)
+			}
+
+			// If we get here, we failed all retries
+			errorCh <- fmt.Errorf("request %d failed: %w", requestNum, err)
+		}(i)
+	}
+
+	wg.Wait()
+	close(errorCh)
+
+	// Collect any errors that occurred
+	failures := make([]error, 0, batches)
+	for err := range errorCh {
+		failures = append(failures, err)
+	}
+
+	if len(failures) > 0 {
+		return fmt.Errorf("found %d failed requests: %v", len(failures), failures)
+	}
+
+	return nil
+}
+
+// getPodsByLabel lists pods in a given namespace that have a specific label key-value pair.
+func getPodsByLabel(k8sClient client.Client, ctx context.Context, namespace, labelKey, labelValue string) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	labels := map[string]string{labelKey: labelValue}
+
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(labels),
+	}
+
+	if err := k8sClient.List(ctx, podList, listOptions...); err != nil {
+		return nil, fmt.Errorf("failed to list pods with label %s=%s in namespace %s: %w", labelKey, labelValue, namespace, err)
+	}
+	return podList.Items, nil
+}
+
+// generateSequence generates a sequence of integers starting from 'start' with 'count' numbers.
+func generateSequence(start int, count int) []int {
+	nums := make([]int, count)
+	for i := range count {
+		nums[i] = start + i
+	}
+	return nums
+}
+
+// Calculates the nth harmonic number.
+func harmonicNumber(n int) float64 {
+	h := float64(0.0)
+	for i := 1; i <= n; i++ {
+		h += 1 / float64(i)
+	}
+	return h
 }
