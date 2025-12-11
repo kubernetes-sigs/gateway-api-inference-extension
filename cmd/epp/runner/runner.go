@@ -161,9 +161,16 @@ func (r *Runner) Run(ctx context.Context) error {
 	pflag.CommandLine.AddGoFlagSet(gfs)
 	opts.AddFlags(pflag.CommandLine)
 	pflag.Parse()
-	initLogging(&zapopts, opts)
 
-	r.deprecatedFlagsHandler(setupLog)
+	if err := opts.Complete(); err != nil {
+		return err
+	}
+	if err := opts.Validate(); err != nil {
+		setupLog.Error(err, "Failed to validate flags")
+		return err
+	}
+
+	initLogging(&zapopts, opts)
 
 	if opts.Tracing {
 		err := common.InitTracing(ctx, setupLog)
@@ -173,12 +180,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
-
-	// Validate flags
-	if err := opts.Validate(); err != nil {
-		setupLog.Error(err, "Failed to validate flags")
-		return err
-	}
 
 	// Print all flag values
 	flags := make(map[string]any)
@@ -491,14 +492,6 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	logger.Info("loaded configuration from file/text successfully")
 	return cfg, nil
-}
-
-func (r *Runner) deprecatedFlagsHandler(logger logr.Logger) {
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "model-server-metrics-port" { // future: use  map/set to store deprecated flags (and replacements?)
-			logger.Info("deprecated option will be removed in the next release.", "option", f.Name)
-		}
-	})
 }
 
 func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.Logger) {
