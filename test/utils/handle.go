@@ -21,12 +21,14 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-// testHandle is an implmentation of plugins.Handle for test purposes
+// testHandle is an implementation of plugins.Handle for test purposes
 type testHandle struct {
-	ctx context.Context
+	ctx         context.Context
+	pluginSpecs map[string]*configapi.PluginSpec
 	plugins.HandlePlugins
 }
 
@@ -37,6 +39,16 @@ func (h *testHandle) Context() context.Context {
 
 func (h *testHandle) PodList() []types.NamespacedName {
 	return []types.NamespacedName{}
+}
+
+// PluginSpec returns the spec for the given name
+func (h *testHandle) PluginSpec(name string) *configapi.PluginSpec {
+	return h.pluginSpecs[name]
+}
+
+// AddPluginSpec is a helper to inject specs during tests
+func (h *testHandle) AddPluginSpec(spec configapi.PluginSpec) {
+	h.pluginSpecs[spec.Name] = &spec
 }
 
 type testHandlePlugins struct {
@@ -63,9 +75,10 @@ func (h *testHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
 	return h.plugins
 }
 
-func NewTestHandle(ctx context.Context) plugins.Handle {
+func NewTestHandle(ctx context.Context) *testHandle {
 	return &testHandle{
-		ctx: ctx,
+		ctx:         ctx,
+		pluginSpecs: map[string]*configapi.PluginSpec{},
 		HandlePlugins: &testHandlePlugins{
 			plugins: map[string]plugins.Plugin{},
 		},
