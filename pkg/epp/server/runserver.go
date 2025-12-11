@@ -66,12 +66,6 @@ type ExtProcServerRunner struct {
 	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
 }
 
-// TODO: the following defaults are still accessed directly by other packages
-const (
-	DefaultGrpcPort      = 9002
-	DefaultPoolNamespace = "default" // default when pool namespace is empty (CLI flag default is empty)
-)
-
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {

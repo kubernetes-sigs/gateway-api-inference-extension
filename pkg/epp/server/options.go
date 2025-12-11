@@ -27,6 +27,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
+const (
+	DefaultGrpcPort      = 9002
+	DefaultPoolNamespace = "default" // default when pool namespace is empty (CLI flag default is empty)
+)
+
 // Options contains configuration values necessary to create and run the EPP.
 type Options struct {
 	//
