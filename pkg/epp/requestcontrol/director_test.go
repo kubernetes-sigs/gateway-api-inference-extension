@@ -36,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -70,9 +69,9 @@ type mockScheduler struct {
 	dataProduced    bool // denotes whether data production is expected.
 }
 
-func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) (*schedulingtypes.SchedulingResult, error) {
-	if pods != nil && m.dataProduced {
-		data, ok := pods[0].Get(mockProducedDataKey)
+func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) (*schedulingtypes.SchedulingResult, error) {
+	if endpoints != nil && m.dataProduced {
+		data, ok := endpoints[0].Get(mockProducedDataKey)
 		if !ok || data.(mockProducedDataType).value != 42 {
 			return nil, errors.New("expected produced data not found in pod")
 		}
@@ -120,8 +119,8 @@ func (m *mockPrepareDataPlugin) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
-	pods[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
+func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+	endpoints[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
 	return nil
 }
 
@@ -149,7 +148,7 @@ func (m *mockAdmissionPlugin) TypedName() plugins.TypedName {
 	return m.typedName
 }
 
-func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	return m.denialError
 }
 
@@ -258,11 +257,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"testProfile": {
-				TargetPods: []schedulingtypes.Pod{
-					&schedulingtypes.ScoredPod{
-						Pod: &schedulingtypes.PodMetrics{
+				TargetEndpoints: []schedulingtypes.Endpoint{
+					&schedulingtypes.ScoredEndpoint{
+						Endpoint: &schedulingtypes.PodMetrics{
 							AttributeMap: datalayer.NewAttributes(),
-							Pod: &backend.Pod{
+							EndpointMetadata: &datalayer.EndpointMetadata{
 								Address:        "192.168.1.100",
 								Port:           "8000",
 								MetricsHost:    "192.168.1.100:8000",
@@ -270,10 +269,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 							},
 						},
 					},
-					&schedulingtypes.ScoredPod{
-						Pod: &schedulingtypes.PodMetrics{
+					&schedulingtypes.ScoredEndpoint{
+						Endpoint: &schedulingtypes.PodMetrics{
 							AttributeMap: datalayer.NewAttributes(),
-							Pod: &backend.Pod{
+							EndpointMetadata: &datalayer.EndpointMetadata{
 								Address:        "192.168.2.100",
 								Port:           "8000",
 								MetricsHost:    "192.168.2.100:8000",
@@ -281,10 +280,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 							},
 						},
 					},
-					&schedulingtypes.ScoredPod{
-						Pod: &schedulingtypes.PodMetrics{
+					&schedulingtypes.ScoredEndpoint{
+						Endpoint: &schedulingtypes.PodMetrics{
 							AttributeMap: datalayer.NewAttributes(),
-							Pod: &backend.Pod{
+							EndpointMetadata: &datalayer.EndpointMetadata{
 								Address:        "192.168.4.100",
 								Port:           "8000",
 								MetricsHost:    "192.168.4.100:8000",
@@ -326,7 +325,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -350,7 +349,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    model,
 				TargetModelName: modelRewritten,
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -378,7 +377,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			initialTargetModelName: model,
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -407,7 +406,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -436,7 +435,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -491,7 +490,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -514,7 +513,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    objectiveNameResolve,
 				TargetModelName: "resolved-target-model-A",
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -534,7 +533,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    "food-review-1",
 				TargetModelName: "food-review-1",
-				TargetPod: &backend.Pod{
+				TargetPod: &datalayer.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -714,7 +713,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	}
 }
 
-func TestGetRandomPod(t *testing.T) {
+func TestGetRandomEndpoint(t *testing.T) {
 	tests := []struct {
 		name      string
 		storePods []*corev1.Pod
@@ -776,12 +775,12 @@ func TestGetRandomPod(t *testing.T) {
 					ds.PodUpdateOrAddIfNotExist(pod)
 				}
 				d := &Director{datastore: ds}
-				gotPod := d.GetRandomPod()
+				gotEndpoint := d.GetRandomEndpoint()
 
-				if test.expectNil && gotPod != nil {
-					t.Errorf("expected nil pod, got: %v", gotPod)
+				if test.expectNil && gotEndpoint != nil {
+					t.Errorf("expected nil pod, got: %v", gotEndpoint)
 				}
-				if !test.expectNil && gotPod == nil {
+				if !test.expectNil && gotEndpoint == nil {
 					t.Errorf("expected non-nil pod, got nil")
 				}
 			})
@@ -1075,7 +1074,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 			Headers: map[string]string{"X-Test-Response-Header": "TestValue"},
 		},
 
-		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+		TargetPod: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseReceived(ctx, reqCtx)
@@ -1112,7 +1111,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 		Response: &handlers.Response{
 			Headers: map[string]string{"X-Test-Streaming-Header": "StreamValue"},
 		},
-		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+		TargetPod: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseBodyStreaming(ctx, reqCtx)
@@ -1149,7 +1148,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 		Response: &handlers.Response{
 			Headers: map[string]string{"X-Test-Complete-Header": "CompleteValue"},
 		},
-		TargetPod: &backend.Pod{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+		TargetPod: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseBodyComplete(ctx, reqCtx)
@@ -1222,17 +1221,17 @@ func (p *testResponseComplete) TypedName() plugins.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnComplete = response
 	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }

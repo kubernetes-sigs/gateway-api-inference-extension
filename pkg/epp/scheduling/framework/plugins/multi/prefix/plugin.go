@@ -207,9 +207,9 @@ func (p *Plugin) WithName(name string) *Plugin {
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config), p.config.MaxPrefixBlocksToMatch)
+	hashes := hashPrompt(ctx, request, getBlockSize(endpoints, p.config), p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
@@ -219,18 +219,18 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
 	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of pods
-	scores := make(map[types.Pod]float64, len(pods))
+	scores := make(map[types.Endpoint]float64, len(endpoints))
 
 	total := len(state.PrefixHashes)
-	podScoreFunc := func(pod types.Pod) float64 {
+	podScoreFunc := func(endpoint types.Endpoint) float64 {
 		if total == 0 {
 			return 0
 		}
-		matchLen := state.PrefixCacheServers[ServerID(pod.GetPod().NamespacedName)]
+		matchLen := state.PrefixCacheServers[ServerID(endpoint.GetMetadata().NamespacedName)]
 		return float64(matchLen) / float64(total)
 	}
 
-	for _, pod := range pods {
+	for _, pod := range endpoints {
 		scores[pod] = podScoreFunc(pod)
 	}
 	return scores
@@ -239,11 +239,11 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 // PreRequest records in the plugin cache the result of the scheduling selection.
 func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
-	targetPod := primaryProfileResult.TargetPods[0] // get the first pod of the primary profile
+	targetEndpoint := primaryProfileResult.TargetEndpoints[0] // get the first endpoint of the primary profile
 
 	gpuBlocks := p.config.LRUCapacityPerServer
-	if p.config.AutoTune && targetPod.GetMetrics().CacheNumGPUBlocks > 0 {
-		gpuBlocks = targetPod.GetMetrics().CacheNumGPUBlocks
+	if p.config.AutoTune && targetEndpoint.GetMetrics().CacheNumGPUBlocks > 0 {
+		gpuBlocks = targetEndpoint.GetMetrics().CacheNumGPUBlocks
 	}
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
@@ -260,16 +260,16 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	p.wg.Add(1)
 	go func() {
 		p.indexer.Add(state.PrefixHashes, Server{
-			ServerID(targetPod.GetPod().NamespacedName),
+			ServerID(targetEndpoint.GetMetadata().NamespacedName),
 			gpuBlocks,
 		})
 		p.wg.Done()
 	}()
 
 	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[ServerID(targetPod.GetPod().NamespacedName)]
+	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
 
-	blockSize := getBlockSize(primaryProfileResult.TargetPods, p.config)
+	blockSize := getBlockSize(primaryProfileResult.TargetEndpoints, p.config)
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
 }
 
@@ -383,20 +383,20 @@ func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
 	return json.Marshal(request.Body.ChatCompletions.Messages)
 }
 
-func getBlockSize(pods []types.Pod, config Config) int {
+func getBlockSize(endpoints []types.Endpoint, config Config) int {
 	if !config.AutoTune {
 		return config.BlockSize
 	}
 
 	// Fallback to BlockSize if no metrics are available.
-	if len(pods) == 0 {
+	if len(endpoints) == 0 {
 		return config.BlockSize
 	}
 
-	// Since all PODs originate from the same inference pool, they are considered to have identical configurations.
-	// Therefore, using the CacheBlockSize value from the first POD suffices.
-	if pod := pods[0]; pod.GetMetrics() != nil {
-		cacheBlockSize := pod.GetMetrics().CacheBlockSize
+	// Since all Endpoints originate from the same inference pool, they are considered to have identical configurations.
+	// Therefore, using the CacheBlockSize value from the first Endpoint suffices.
+	if endpoint := endpoints[0]; endpoint.GetMetrics() != nil {
+		cacheBlockSize := endpoint.GetMetrics().CacheBlockSize
 		if cacheBlockSize > 0 {
 			return cacheBlockSize * averageCharactersPerToken
 		}
