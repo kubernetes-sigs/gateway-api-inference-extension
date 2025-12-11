@@ -64,14 +64,6 @@ const (
 	clientManifest = "../../testdata/client.yaml"
 	// modelServerSecretManifest is the manifest for the model server secret resource.
 	modelServerSecretManifest = "../../testdata/model-secret.yaml"
-	// xInferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.x-k8s.io' group.
-	xInferPoolManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml"
-	// xInferObjectiveManifest is the manifest for the inference model CRD with 'inference.networking.x-k8s.io' group.
-	xInferObjectiveManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml"
-	// xInferenceModelRewritesManifest is the manifest for the inference rewrites CRD with 'inference.networking.x-k8s.io' group.
-	xInferenceModelRewritesManifest = "../../../config/crd/bases/inference.networking.x-k8s.io_inferencemodelrewrites.yaml"
-	// inferPoolManifest is the manifest for the inference pool CRD with 'inference.networking.k8s.io' group.
-	inferPoolManifest = "../../../config/crd/bases/inference.networking.k8s.io_inferencepools.yaml"
 	// inferExtManifestDefault is the manifest for the default inference extension test resources (single replica).
 	inferExtManifestDefault = "../../testdata/inferencepool-e2e.yaml"
 	// inferExtManifestLeaderElection is the manifest for the inference extension test resources with leader election enabled (3 replicas).
@@ -82,6 +74,8 @@ const (
 	metricsRbacManifest = "../../testdata/metrics-rbac.yaml"
 	// modelServerManifestFilepathEnvVar is the env var that holds absolute path to the manifest for the model server test resource.
 	modelServerManifestFilepathEnvVar = "MANIFEST_PATH"
+	// crdKustomizePath is the kustomize folder path for the required CRDs.
+	crdKustomizePath = "../../../config/crd/"
 )
 
 const e2eLeaderElectionEnabledEnvVar = "E2E_LEADER_ELECTION_ENABLED"
@@ -133,14 +127,7 @@ func setupInfra() {
 	if strings.Contains(modelServerManifestArray[0], "hf-token") {
 		createHfSecret(testConfig, modelServerSecretManifest)
 	}
-	crds := map[string]string{
-		"inferencepools.inference.networking.x-k8s.io":         xInferPoolManifest,
-		"inferenceobjectives.inference.networking.x-k8s.io":    xInferObjectiveManifest,
-		"inferencemodelrewrites.inference.networking.x-k8s.io": xInferenceModelRewritesManifest,
-		"inferencepools.inference.networking.k8s.io":           inferPoolManifest,
-	}
-
-	createCRDs(testConfig, crds)
+	testutils.CreateCrdsFromKustomize(testConfig, crdKustomizePath)
 
 	inferExtManifestPath := inferExtManifestDefault
 	if leaderElectionEnabled {
@@ -201,7 +188,7 @@ func cleanupResources() {
 	gomega.Expect(testutils.DeleteNamespacedResources(testConfig)).To(gomega.Succeed())
 }
 
-func cleanupInferModelResources() {
+func cleanupInferObjectiveResources() {
 	gomega.Expect(testutils.DeleteInferenceObjectiveResources(testConfig)).To(gomega.Succeed())
 }
 
@@ -243,14 +230,6 @@ func getYamlsFromModelServerManifest(modelServerManifestPath string) []string {
 	modelServerManifestArray := testutils.ReadYaml(modelServerManifestPath)
 	gomega.Expect(modelServerManifestArray).NotTo(gomega.BeEmpty())
 	return modelServerManifestArray
-}
-
-// createCRDs creates the Inference Extension CRDs used for testing.
-func createCRDs(testConfig *testutils.TestConfig, crds map[string]string) {
-	for _, path := range crds {
-		ginkgo.By("Creating CRD resource from manifest: " + path)
-		testutils.ApplyYAMLFile(testConfig, path)
-	}
 }
 
 // createClient creates the client pod used for testing from the given filePath.
