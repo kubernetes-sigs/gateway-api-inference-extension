@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
     {{- with .Values.inferenceExtension.monitoring.prometheus.extraLabels }}
-    {{- toYaml . | nindent 4 }}
+    {{- . | toYaml | nindent 4 }}
     {{- end }}
 spec:
   endpoints:
