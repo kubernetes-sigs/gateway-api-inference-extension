@@ -36,10 +36,10 @@ import (
 )
 
 const (
-	testModelName = "test-model"
-	kvUsage       = 1
+	testModelName   = "test-model"
+	kvUsage         = 1
 	runningRequests = 1
-	waitingQueue  = 1
+	waitingQueue    = 1
 )
 
 // Helper functions
