@@ -30,6 +30,7 @@ import (
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
+	utils "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/utils"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -176,9 +177,15 @@ func TestHandleRequestBody(t *testing.T) {
 		},
 	}
 
+	//Initialize PluginRegistry and request/response PluginsChain instances based on the minimal configuration setting vi env vars
+	registry, requestChain, responseChain, err := utils.InitPlugins()
+	if err != nil {
+		t.Fatalf("processRequestBody(): %v", err)
+	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &Server{streaming: test.streaming}
+			server := NewServer(test.streaming, registry, requestChain, responseChain)
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, bodyBytes)
 			if err != nil {

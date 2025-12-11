@@ -1,6 +1,6 @@
 # Body-Based Routing
-This package provides an extension that can be deployed to write the `model`
-HTTP body parameter as a header (X-Gateway-Model-Name) so as to enable routing capabilities on the
+By deafult this package provides a plugable extension that can be to set the `model`
+HTTP body parameter as a header (`X-Gateway-Model-Name`) so as to enable routing capabilities on the
 model name.
 
 As per OpenAI spec, it is standard for the model name to be included in the
