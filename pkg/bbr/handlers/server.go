@@ -27,18 +27,29 @@ import (
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-func NewServer(streaming bool) *Server {
-	return &Server{streaming: streaming}
+func NewServer(streaming bool,
+	reg framework.PluginRegistry,
+	reqChain framework.PluginsChain,
+	respChain framework.PluginsChain) *Server {
+	return &Server{streaming: streaming,
+		registry:      reg,
+		requestChain:  reqChain,
+		responseChain: respChain,
+	}
 }
 
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
-	streaming bool
+	streaming     bool
+	registry      framework.PluginRegistry
+	requestChain  framework.PluginsChain
+	responseChain framework.PluginsChain
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {

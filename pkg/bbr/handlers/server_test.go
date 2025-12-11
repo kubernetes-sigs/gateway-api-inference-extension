@@ -26,11 +26,18 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	bbrplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	utils "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/utils"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func TestProcessRequestBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	//set environment variables expected by the code under test
+	//testing a minimal configuration
+	//request plugin chain always contains the default bbr plugin that extracts a model name and sets it on the X-Gateway-Model-Name header
+	t.Setenv("REQUEST_PLUGINS_CHAIN", "simple_model_extractor")
 
 	cases := []struct {
 		desc      string
@@ -58,7 +65,7 @@ func TestProcessRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      modelHeader,
+												Key:      bbrplugins.ModelHeader,
 												RawValue: []byte("foo"),
 											},
 										},
@@ -93,7 +100,7 @@ func TestProcessRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      modelHeader,
+												Key:      bbrplugins.ModelHeader,
 												RawValue: []byte("foo"),
 											},
 										},
@@ -125,9 +132,15 @@ func TestProcessRequestBody(t *testing.T) {
 		},
 	}
 
+	//Initialize PluginRegistry and request/response PluginsChain instances based on the minimal configuration setting vi env vars
+	registry, requestChain, responseChain, err := utils.InitPlugins()
+	if err != nil {
+		t.Fatalf("processRequestBody(): %v", err)
+	}
+
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			srv := NewServer(tc.streaming)
+			srv := NewServer(tc.streaming, registry, requestChain, responseChain)
 			streamedBody := &streamedBody{}
 			for i, body := range tc.bodys {
 				got, err := srv.processRequestBody(context.Background(), body, streamedBody, log.FromContext(ctx))

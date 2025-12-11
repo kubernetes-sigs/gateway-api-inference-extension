@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/utils"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -60,7 +61,16 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 
 	// 2. Configure BBR Server
 	// BBR is simpler than EPP; it doesn't need a K8s Manager.
-	runner := runserver.NewDefaultExtProcServerRunner(port, false)
+
+	// 2.1 Configure pluggable BBR framework
+	//Initialize PluginRegistry and request/response PluginsChain instances based on the minimal configuration setting vi env vars
+	registry, requestChain, responseChain, err := utils.InitPlugins()
+	if err != nil {
+		logutil.Fatal(logger, err, "failed to initialize BBR pluggable framework: %v", err)
+	}
+
+	runner := runserver.NewDefaultExtProcServerRunner(port, false, registry, requestChain, responseChain, metaDataKeys)
+	//runner := runserver.NewDefaultExtProcServerRunner(port, false)
 	runner.SecureServing = false
 	runner.Streaming = streaming
 
