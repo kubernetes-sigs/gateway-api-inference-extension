@@ -160,7 +160,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	zapopts.BindFlags(gfs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
 	pflag.CommandLine.AddGoFlagSet(gfs)
 	opts.AddFlags(pflag.CommandLine)
-	flag.Parse()
+	pflag.Parse()
 	initLogging(&zapopts, opts)
 
 	r.deprecatedFlagsHandler(setupLog)
