@@ -10,3 +10,5 @@ requests
 xgboost
 aiohttp
 lightgbm
+treelite
+treelite_runtime
