@@ -21,14 +21,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
-	"math"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -48,9 +45,9 @@ const (
 	firstPort             = 8000
 	numPorts              = 2
 	maxConcurrentRequests = 2 // prevent hammering Envoy and backend
-	maxRetries            = 3
-	backoff               = 1 * time.Second
-	safetyMult            = 3 // increase number of batches to account for retries
+	maxRetries            = 5
+	backoff               = 5 * time.Second
+	batches               = 20
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
@@ -335,74 +332,73 @@ func verifyTrafficRouting() {
 		// Observed ports and InferenceObjective target models
 		actualModel := make(map[string]int)
 		actualPort := make(map[int]int)
-		// Probability: need to compute estimate of number of batches to send to have high confidence of hitting all ports.
-		// Using the Coupon Collector's Problem formula: n * H_n, where H_n is the nth harmonic number.
-		// This gives us an expected number of trials to collect all coupons (ports).
-		batches := int(math.Ceil(numPorts * harmonicNumber(numPorts)))
+
 		// Send curl requests to verify routing to all target ports in the InferencePool.
-		gomega.Eventually(func() error {
-			// Run a small batch per retry (e.g., 5) to keep the test active
-			for i := range batches {
-				uniqueID := time.Now().UnixNano()
-				dynamicHashValue := fmt.Sprintf("Nonce-%d", uniqueID)
-				currentPromptOrMessages := t.promptOrMessages // Start with the original
+		// Run a small batch per retry (e.g., 5) to keep the test active
+		for i := range batches {
+			uniqueID := time.Now().UnixNano()
+			dynamicHashValue := fmt.Sprintf("Nonce-%d", uniqueID)
+			currentPromptOrMessages := t.promptOrMessages // Start with the original
 
-				// Check if the payload is a slice of maps (e.g., for /chat/completions)
-				if originalMessages, ok := currentPromptOrMessages.([]map[string]any); ok {
-					messagesCopy := make([]map[string]any, len(originalMessages))
-					for idx, msg := range originalMessages {
-						msgCopy := make(map[string]any, len(msg))
-						maps.Copy(msgCopy, msg)
-						// Inject a unique nonce into the content of *EACH* message
-						if content, ok := msgCopy["content"].(string); ok {
-							msgCopy["content"] = fmt.Sprintf("(TestNonce: %s-%d-msg%d) %s", dynamicHashValue, i, idx, content)
-						}
-						messagesCopy[idx] = msgCopy
-					}
-					currentPromptOrMessages = messagesCopy // Use the modified messages for getCurlCommand
+			// Check if the payload is a slice of maps (e.g., for /chat/completions)
+			if originalMessages, ok := currentPromptOrMessages.([]map[string]any); ok {
+				nonceMsg := map[string]any{
+					"role":    "system",
+					"content": fmt.Sprintf("TestNonce: %s-%d", dynamicHashValue, i),
 				}
 
-				curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, currentPromptOrMessages, false)
+				currentPromptOrMessages = append([]map[string]any{nonceMsg}, originalMessages...)
+			} else if originalString, ok := t.promptOrMessages.(string); ok {
+				currentPromptOrMessages = fmt.Sprintf("[TestNonce: %s-%d] %s", dynamicHashValue, i, originalString)
+			} else {
+				currentPromptOrMessages = t.promptOrMessages
+			}
 
-				resp, err := testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
-				if err != nil {
-					return err
+			curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, currentPromptOrMessages, false)
+
+			var resp string
+			var err error
+			// Repeatedly send a message until we get a successful response.
+			for attempt := 0; attempt <= maxRetries; attempt++ {
+				resp, err = testutils.ExecCommandInPod(testConfig, "curl", "curl", curlCmd)
+				if err == nil && strings.Contains(resp, "200 OK") {
+					break // Success!
 				}
 
-				if !strings.Contains(resp, "200 OK") {
-					return fmt.Errorf("did not get 200 OK: %s", resp)
-				}
-
-				for _, m := range expectedModel {
-					if strings.Contains(resp, m) {
-						actualModel[m] = 0
-					}
-				}
-				for _, p := range expectedPort {
-					if strings.Contains(resp, fmt.Sprintf("x-inference-port: %d", p)) {
-						actualPort[p] = 0
-					}
+				if attempt < maxRetries {
+					time.Sleep(backoff)
 				}
 			}
 
-			var gotModel []string
-			for m := range actualModel {
-				gotModel = append(gotModel, m)
-			}
-			var gotPort []int
-			for p := range actualPort {
-				gotPort = append(gotPort, p)
-			}
+			gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Expected curl command to succeed")
+			gomega.Expect(resp).To(gomega.ContainSubstring("200 OK"), "Expected to receive a 200 OK response...")
 
-			if !cmp.Equal(gotModel, expectedModel, cmpopts.SortSlices(func(a, b string) bool { return a < b })) {
-				return fmt.Errorf("collecting models... have %v, want %v", gotModel, expectedModel)
+			for _, m := range expectedModel {
+				if strings.Contains(resp, m) {
+					actualModel[m] = 0
+				}
 			}
-			if !cmp.Equal(gotPort, expectedPort, cmpopts.SortSlices(func(a, b int) bool { return a < b })) {
-				return fmt.Errorf("collecting ports... have %v, want %v", gotPort, expectedPort)
+			for _, p := range expectedPort {
+				if strings.Contains(resp, fmt.Sprintf("x-inference-port: %d", p)) {
+					actualPort[p] = 0
+				}
 			}
+		}
 
-			return nil
-		}, testConfig.ReadyTimeout, curlInterval).Should(gomega.Succeed())
+		var gotModel []string
+		for m := range actualModel {
+			gotModel = append(gotModel, m)
+		}
+		var gotPort []int
+		for p := range actualPort {
+			gotPort = append(gotPort, p)
+		}
+
+		ginkgo.GinkgoWriter.Printf("Port distribution: %v\n", actualPort)
+		ginkgo.GinkgoWriter.Printf("Model distribution: %v\n", actualModel)
+
+		gomega.Expect(gotModel).To(gomega.BeComparableTo(expectedModel, cmpopts.SortSlices(func(a, b string) bool { return a < b })))
+		gomega.Expect(gotPort).To(gomega.BeComparableTo(expectedPort, cmpopts.SortSlices(func(a, b int) bool { return a < b })))
 	}
 }
 
@@ -432,10 +428,6 @@ func verifyMetrics() {
 	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
 
 	// Run the curl command multiple times to generate some metrics data.
-	// Use the coupon collector computation.
-	// The problem with the expected number of trials is that it is just an average. We should use a number in the
-	// extreme tail to reduce the probability of missing any ports close to 0.
-	batches := int(math.Ceil(numPorts*harmonicNumber(numPorts))) * safetyMult
 
 	semaphore := make(chan struct{}, maxConcurrentRequests)
 
