@@ -47,6 +47,13 @@ Supports both legacy mode (single predictor) and PD mode (multiple predictors)
 - name: training-server-{{ $predictorName }}
   image: {{ $predictorConfig.trainingServer.image.hub | default $.Values.inferenceExtension.latencyPredictor.trainingServer.image.hub }}/{{ $predictorConfig.trainingServer.image.name | default $.Values.inferenceExtension.latencyPredictor.trainingServer.image.name }}:{{ $predictorConfig.trainingServer.image.tag | default $.Values.inferenceExtension.latencyPredictor.trainingServer.image.tag }}
   imagePullPolicy: {{ $predictorConfig.trainingServer.image.pullPolicy | default $.Values.inferenceExtension.latencyPredictor.trainingServer.image.pullPolicy }}
+  command: ["uvicorn"]
+  args:
+  - "training_server:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "{{ $predictorConfig.trainingServer.port }}"
   ports:
   - containerPort: {{ $predictorConfig.trainingServer.port }}
     name: train-{{ $predictorName }}
@@ -127,6 +134,13 @@ Supports both legacy mode (single predictor) and PD mode (multiple predictors)
 - name: training-server
   image: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.hub }}/{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.name }}:{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.tag }}
   imagePullPolicy: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.pullPolicy }}
+  command: ["uvicorn"]
+  args:
+  - "training_server:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "{{ .Values.inferenceExtension.latencyPredictor.trainingServer.port }}"
   ports:
   - containerPort: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.port }}
     name: training-port
