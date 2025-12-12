@@ -446,6 +446,11 @@ $(GOLANGCI_API_LINT):
 yq: ## Download yq locally if necessary.
 	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
 
+.PHONY: tidy
+tidy:
+	go work sync
+	find . -name go.mod -execdir sh -c 'go mod tidy' \;
+
 .PHONY: helm-install
 helm-install: $(HELM) ## Download helm locally if necessary.
 $(HELM): $(LOCALBIN)
