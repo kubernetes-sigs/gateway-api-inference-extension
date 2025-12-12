@@ -24,7 +24,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.39.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/sync v0.19.0
+	golang.org/x/sync v0.19.0 // indirect
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.10
 	k8s.io/api v0.34.2
@@ -37,7 +37,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.22.4
 	// Update the CONTROLLER_TOOLS_VERSION in Makefile when bumping controller-tools.
 	sigs.k8s.io/controller-tools v0.19.0
-	sigs.k8s.io/gateway-api v1.3.1-0.20251106052652-079e4774d76b
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.1
 	sigs.k8s.io/yaml v1.6.0
 )
