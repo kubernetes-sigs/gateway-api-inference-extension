@@ -1,32 +1,15 @@
 # PD-SLO Chart Configuration Guide
 
-This guide explains how to configure the inferencepool Helm chart for PD (Prefill-Decode) disaggregated scheduling with SLO-aware optimization.
+Configure the inferencepool Helm chart for PD (Prefill-Decode) disaggregated scheduling with SLO-aware optimization.
 
-## Overview
+## Modes
 
-The chart now supports **two modes** for latency predictors:
+**Legacy Mode** (default): Single predictor, 1 training + N prediction servers
+**PD Mode**: Two predictors (prefill + decode), 4 sidecar containers total
 
-1. **Legacy Mode** (default): Single predictor for unified TTFT/TPOT prediction
-2. **PD Mode**: Separate predictors for prefill and decode pods (required for PD-SLO scheduling)
-
-## Architecture Comparison
-
-### Legacy Mode (Non-PD)
+### PD Mode Architecture
 ```
-EPP Pod
-├─ EPP Container
-└─ Sidecars:
-   ├─ 1 Training Server (port 8000)
-   └─ N Prediction Servers (ports 8001+)
-
-Environment Variables:
-- TRAINING_SERVER_URL=http://localhost:8000
-- PREDICTION_SERVER_URL=http://localhost:8001,...
-```
-
-### PD Mode (PD-SLO)
-```
-EPP Pod
+EPP Pod (5 containers)
 ├─ EPP Container
 └─ Sidecars:
    ├─ Prefill Training Server (port 8000)
@@ -34,30 +17,16 @@ EPP Pod
    ├─ Decode Training Server (port 8010)
    └─ Decode Prediction Server (port 8011)
 
-Environment Variables:
+Environment Variables (auto-generated):
 - PREFILL_TRAINING_URL=http://localhost:8000
 - PREFILL_PREDICTION_URL=http://localhost:8001
 - DECODE_TRAINING_URL=http://localhost:8010
 - DECODE_PREDICTION_URL=http://localhost:8011
 ```
 
-## Enabling PD Mode
+## Quick Start
 
-### Step 1: Set `pdMode.enabled=true`
-
-```yaml
-inferenceExtension:
-  latencyPredictor:
-    enabled: true
-
-    pdMode:
-      enabled: true  # Enable PD mode
-```
-
-### Step 2: Configure Predictor Types
-
-Configure each predictor type (prefill, decode) with separate ports and configurations:
-
+**Minimal Configuration**:
 ```yaml
 inferenceExtension:
   latencyPredictor:
@@ -67,268 +36,121 @@ inferenceExtension:
       predictors:
         prefill:
           trainingServer:
-            port: 8000  # Unique port for prefill training
-            # ... config
+            port: 8000
+            resources:
+              requests: {cpu: "500m", memory: "1Gi"}
           predictionServers:
             count: 1
             startPort: 8001
-            # ... config
-
+            resources:
+              requests: {cpu: "250m", memory: "512Mi"}
         decode:
           trainingServer:
-            port: 8010  # Different port from prefill
-            # ... config
+            port: 8010  # Must differ from prefill!
+            resources:
+              requests: {cpu: "500m", memory: "1Gi"}
           predictionServers:
             count: 1
             startPort: 8011
-            # ... config
+            resources:
+              requests: {cpu: "250m", memory: "512Mi"}
 ```
 
-### Step 3: Deploy with PD-SLO values
-
+**Deploy**:
 ```bash
-helm install my-pool ./inferencepool \
-  --values values-pd-slo-example.yaml \
-  --namespace llm-d
+helm install my-pool ./inferencepool -f values-pd-slo.yaml -n llm-d
 ```
 
-## Key Configuration Points
+## Configuration Details
 
-### Port Allocation
+### Required Settings
 
-**Default Port Ranges** (adjust if you have conflicts):
+| Component | Setting | Value | Notes |
+|-----------|---------|-------|-------|
+| Prefill Training | `port` | 8000 | Must differ from decode |
+| Prefill Prediction | `startPort` | 8001 | |
+| Decode Training | `port` | 8010 | Must differ from prefill |
+| Decode Prediction | `startPort` | 8011 | |
+| Prediction Count | `count` | 1 | Can increase for production |
 
-| Predictor | Training Port | Prediction Ports |
-|-----------|---------------|------------------|
-| Prefill   | 8000          | 8001             |
-| Decode    | 8010          | 8011             |
+### Health Probes (Required)
 
-**Important**: Ports must not conflict! Each predictor needs unique ports.
-
-### Replica Counts
-
-**Recommended for MVP**:
-- Training servers: `count: 1` (one per predictor type)
-- Prediction servers: `count: 1` (one per predictor type)
-
-**Total sidecars**: 4 containers (2 training + 2 prediction)
-
-**For production**, you can increase prediction server replicas for higher throughput:
-```yaml
-predictionServers:
-  count: 3  # 3 prediction server replicas
-  startPort: 8001  # Ports: 8001, 8002, 8003
-```
-
-### Image Configuration
-
-You can override images per predictor type or use global defaults:
-
-**Option 1: Use global defaults** (recommended)
-```yaml
-# Set global defaults in legacy section
-trainingServer:
-  image:
-    hub: your-docker-repo
-    name: latencypredictor-training-server
-    tag: latest
-
-# PD predictors will inherit these by default
-pdMode:
-  enabled: true
-  predictors:
-    prefill:
-      trainingServer:
-        port: 8000
-        # No image specified - uses global default
-```
-
-**Option 2: Override per predictor**
-```yaml
-pdMode:
-  predictors:
-    prefill:
-      trainingServer:
-        image:
-          hub: custom-repo
-          name: prefill-training-server
-          tag: v2.0
-```
-
-### Resource Configuration
-
-Similarly, resources can be global or per-predictor:
+Both training and prediction servers **must** have `livenessProbe` and `readinessProbe` configured with `httpGet.path` and `port`:
 
 ```yaml
-# Global defaults
-trainingServer:
-  resources:
-    requests:
-      cpu: "2000m"
-      memory: "4Gi"
-
-# Override for specific predictor
-pdMode:
-  predictors:
-    decode:
-      trainingServer:
-        resources:
-          requests:
-            cpu: "4000m"  # Decode needs more CPU
-            memory: "8Gi"
+prefill:
+  trainingServer:
+    livenessProbe:
+      httpGet: {path: /healthz, port: 8000}
+      initialDelaySeconds: 30
+    readinessProbe:
+      httpGet: {path: /readyz, port: 8000}
+      initialDelaySeconds: 45
+  predictionServers:
+    livenessProbe:
+      httpGet: {path: /healthz}
+      initialDelaySeconds: 15
+    readinessProbe:
+      httpGet: {path: /readyz}
+      initialDelaySeconds: 10
 ```
 
-## ConfigMaps Generated
+### Images and Resources
 
-In PD mode, the chart creates separate ConfigMaps for each predictor:
+**Override per predictor** or **use global defaults** from legacy section (see `values.yaml`).
 
-**Legacy Mode**:
-- `<epp-name>-latency-predictor-training`
-- `<epp-name>-latency-predictor-prediction`
+## Generated Resources
 
-**PD Mode**:
-- `<epp-name>-latency-predictor-prefill-training`
-- `<epp-name>-latency-predictor-prefill-prediction`
-- `<epp-name>-latency-predictor-decode-training`
-- `<epp-name>-latency-predictor-decode-prediction`
-
-## Integration with llm-d-inference-scheduler
-
-The environment variables generated by this chart are consumed by `llm-d-inference-scheduler`'s `PDPredictorSet`:
-
-**File**: `llm-d-inference-scheduler/pkg/predictors/pd_predictors.go`
-
-```go
-func NewPDPredictorSet(logger logr.Logger) (*PDPredictorSet, error) {
-    prefillConfig := &latencypredictor.Config{
-        TrainingURL:    getEnvOrDefault("PREFILL_TRAINING_URL", ""),
-        PredictionURLs: getPredictionURLs("PREFILL_PREDICTION_URL"),
-        // ...
-    }
-
-    decodeConfig := &latencypredictor.Config{
-        TrainingURL:    getEnvOrDefault("DECODE_TRAINING_URL", ""),
-        PredictionURLs: getPredictionURLs("DECODE_PREDICTION_URL"),
-        // ...
-    }
-    // ...
-}
-```
-
-## Validation
-
-After deployment, verify the sidecars are running:
-
-```bash
-# Check pod has 5 containers (1 EPP + 4 sidecars)
-kubectl get pods -n llm-d
-
-# Describe pod to see all containers
-kubectl describe pod <epp-pod-name> -n llm-d
-
-# Check environment variables in EPP container
-kubectl exec <epp-pod-name> -n llm-d -c epp -- env | grep -E "PREFILL|DECODE"
-
-# Expected output:
-# PREFILL_TRAINING_URL=http://localhost:8000
-# PREFILL_PREDICTION_URL=http://localhost:8001
-# DECODE_TRAINING_URL=http://localhost:8010
-# DECODE_PREDICTION_URL=http://localhost:8011
-
-# Check predictor health
-kubectl exec <epp-pod-name> -n llm-d -c training-server-prefill -- curl http://localhost:8000/healthz
-kubectl exec <epp-pod-name> -n llm-d -c training-server-decode -- curl http://localhost:8010/healthz
-```
-
-## Backward Compatibility
-
-**Important**: Legacy mode continues to work unchanged. To use legacy mode:
-
-```yaml
-inferenceExtension:
-  latencyPredictor:
-    enabled: true
-
-    # Do NOT set pdMode.enabled or set it to false
-    pdMode:
-      enabled: false
-
-    # Use legacy configuration
-    trainingServer:
-      port: 8000
-      # ...
-
-    predictionServers:
-      count: 10
-      startPort: 8001
-      # ...
-```
-
-This will create the same deployment as before PD mode was added.
-
-## Troubleshooting
-
-### Port Conflicts
-
-**Symptom**: Containers failing to start with "address already in use"
-
-**Solution**: Ensure each predictor uses unique ports. Check:
-```yaml
-prefill.trainingServer.port != decode.trainingServer.port
-prefill.predictionServers.startPort != decode.predictionServers.startPort
-```
-
-### Missing Environment Variables
-
-**Symptom**: llm-d-inference-scheduler logs show "PREFILL_TRAINING_URL must be set"
-
-**Solution**: Verify `pdMode.enabled=true` and check EPP pod environment:
-```bash
-kubectl exec <epp-pod> -c epp -- env | grep -E "PREFILL|DECODE"
-```
-
-### ConfigMap Not Found
-
-**Symptom**: Containers failing with "configmap not found"
-
-**Solution**: Verify ConfigMaps were created:
-```bash
-kubectl get configmaps -n llm-d | grep latency-predictor
-```
-
-Should show:
+**ConfigMaps** (4 in PD mode):
 - `<epp>-latency-predictor-prefill-training`
 - `<epp>-latency-predictor-prefill-prediction`
 - `<epp>-latency-predictor-decode-training`
 - `<epp>-latency-predictor-decode-prediction`
 
-## Example Deployment
+**Environment Variables** (auto-injected into EPP container):
+- `PREFILL_TRAINING_URL`, `PREFILL_PREDICTION_URL`
+- `DECODE_TRAINING_URL`, `DECODE_PREDICTION_URL`
 
-See `values-pd-slo-example.yaml` for a complete working configuration.
+These are consumed by `llm-d-inference-scheduler`'s `PDPredictorSet` for latency prediction.
+
+## Validation
 
 ```bash
-# Deploy with PD-SLO mode
-helm install llm-d-epp ./inferencepool \
-  --values values-pd-slo-example.yaml \
-  --namespace llm-d \
-  --create-namespace
-
-# Verify deployment
+# Check 5 containers (1 EPP + 4 sidecars)
 kubectl get pods -n llm-d
-kubectl logs -n llm-d <epp-pod> -c epp | grep "PD predictor"
+kubectl describe pod <epp-pod> -n llm-d
+
+# Verify environment variables
+kubectl exec <epp-pod> -n llm-d -c epp -- env | grep -E "PREFILL|DECODE"
+# Expected: PREFILL_TRAINING_URL=http://localhost:8000, etc.
+
+# Test predictor health
+kubectl exec <epp-pod> -n llm-d -c training-server-prefill -- curl http://localhost:8000/healthz
+kubectl exec <epp-pod> -n llm-d -c training-server-decode -- curl http://localhost:8010/healthz
 ```
 
-## Summary
+## Troubleshooting
 
-| Feature | Legacy Mode | PD Mode |
-|---------|-------------|---------|
-| Enable flag | `latencyPredictor.enabled=true` | `latencyPredictor.pdMode.enabled=true` |
-| Training servers | 1 | 2 (prefill + decode) |
-| Prediction servers | N (configurable) | 1 per predictor type |
-| Environment vars | `TRAINING_SERVER_URL`, `PREDICTION_SERVER_URL` | `PREFILL_*`, `DECODE_*` |
-| ConfigMaps | 2 | 4 |
-| Use case | Non-disaggregated scheduling | PD-SLO disaggregated scheduling |
+| Issue | Symptom | Solution |
+|-------|---------|----------|
+| Port conflict | `address already in use` | Ensure prefill/decode ports differ (8000 vs 8010) |
+| Missing env vars | `PREFILL_TRAINING_URL must be set` | Verify `pdMode.enabled=true`, check `kubectl exec <pod> -c epp -- env` |
+| ConfigMap missing | `configmap not found` | Check `kubectl get cm -n llm-d \| grep latency-predictor` (should show 4) |
+| Pod pending | `Insufficient cpu/memory` | Reduce resource requests (500m/1Gi for training, 250m/512Mi for prediction) |
+| Probe failures | Containers restarting | Verify probe paths (`/healthz`, `/readyz`) and ports are configured |
 
----
+## Important Notes
 
-**Next Steps**: After deploying the EPP with PD mode, configure `llm-d-inference-scheduler` to use PD-SLO scheduling. See `llm-d-inference-scheduler/README-PD-SLO.md`.
+1. **PD Mode**: Set `pdMode.enabled=true` to enable dual-predictor architecture
+2. **Ports**: Training servers must use different ports (prefill: 8000, decode: 8010)
+3. **Probes**: Both `livenessProbe` and `readinessProbe` with `httpGet.path` and `port` are required
+4. **Resources**: Start with 500m/1Gi (training), 250m/512Mi (prediction) for MVP
+5. **Prediction Count**: `count: 1` for MVP, increase for production throughput
+6. **Backward Compatibility**: Legacy mode (single predictor) still works when `pdMode.enabled=false`
+7. **Joint Optimization**: Currently uses fallback (best pod from each profile). Full joint optimization TBD.
+
+## Reference
+
+- Chart values: `values.yaml`
+- Scheduler guide: `llm-d-inference-scheduler/PD-SLO-GUIDE.md`
+- Chart template: `templates/_latency-predictor.tpl`
