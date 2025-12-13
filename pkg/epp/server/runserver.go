@@ -49,7 +49,7 @@ import (
 type ExtProcServerRunner struct {
 	GrpcPort                         int
 	GKNN                             common.GKNN
-	DisableK8sCrdReconcile           bool
+	ControllerCfg                    ControllerConfig
 	Datastore                        datastore.Datastore
 	SecureServing                    bool
 	HealthChecking                   bool
@@ -104,7 +104,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	return &ExtProcServerRunner{
 		GrpcPort:                         DefaultGrpcPort,
 		GKNN:                             gknn,
-		DisableK8sCrdReconcile:           false,
+		ControllerCfg:                    ControllerConfig{true, true, true},
 		SecureServing:                    DefaultSecureServing,
 		HealthChecking:                   DefaultHealthChecking,
 		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
@@ -116,7 +116,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if !r.DisableK8sCrdReconcile {
+	if r.ControllerCfg.startCrdReconcilers {
 		if err := (&controller.InferencePoolReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),
@@ -125,21 +125,24 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 			return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
 		}
 
-		if err := (&controller.InferenceObjectiveReconciler{
-			Datastore: r.Datastore,
-			Reader:    mgr.GetClient(),
-			PoolGKNN:  r.GKNN,
-		}).SetupWithManager(ctx, mgr); err != nil {
-			return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
+		if r.ControllerCfg.hasInferenceObjective {
+			if err := (&controller.InferenceObjectiveReconciler{
+				Datastore: r.Datastore,
+				Reader:    mgr.GetClient(),
+				PoolGKNN:  r.GKNN,
+			}).SetupWithManager(ctx, mgr); err != nil {
+				return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
+			}
 		}
-	}
-
-	if err := (&controller.InferenceModelRewriteReconciler{
-		Datastore: r.Datastore,
-		Reader:    mgr.GetClient(),
-		PoolGKNN:  r.GKNN,
-	}).SetupWithManager(ctx, mgr); err != nil {
-		return fmt.Errorf("failed setting up InferenceModelRewriteReconciler: %w", err)
+		if r.ControllerCfg.hasInferenceModelRewrites {
+			if err := (&controller.InferenceModelRewriteReconciler{
+				Datastore: r.Datastore,
+				Reader:    mgr.GetClient(),
+				PoolGKNN:  r.GKNN,
+			}).SetupWithManager(ctx, mgr); err != nil {
+				return fmt.Errorf("failed setting up InferenceModelRewriteReconciler: %w", err)
+			}
+		}
 	}
 
 	if err := (&controller.PodReconciler{

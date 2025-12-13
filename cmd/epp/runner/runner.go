@@ -255,8 +255,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Error(err, "Failed to extract GKNN")
 		return err
 	}
-	disableK8sCrdReconcile := *endpointSelector != ""
-	ds, err := setupDatastore(setupLog, ctx, epf, int32(*modelServerMetricsPort), disableK8sCrdReconcile, *poolName, *poolNamespace, *endpointSelector, *endpointTargetPorts)
+	startCrdReconcilers := *endpointSelector == "" // If endpointSelector is empty, it means it's not in the standalone mode. Then we should start the inferencePool and other CRD Reconciler.
+	controllerCfg := runserver.NewControllerConfig(startCrdReconcilers)
+
+	ds, err := setupDatastore(setupLog, ctx, epf, int32(*modelServerMetricsPort), startCrdReconcilers, *poolName, *poolNamespace, *endpointSelector, *endpointTargetPorts)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup datastore")
 		return err
@@ -290,7 +292,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(disableK8sCrdReconcile, *gknn, cfg, metricsServerOptions, *haEnableLeaderElection)
+	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, *haEnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return err
@@ -378,7 +380,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		GrpcPort:                         *grpcPort,
 		GKNN:                             *gknn,
 		Datastore:                        ds,
-		DisableK8sCrdReconcile:           disableK8sCrdReconcile,
+		ControllerCfg:                    controllerCfg,
 		SecureServing:                    *secureServing,
 		HealthChecking:                   *healthChecking,
 		CertPath:                         *certPath,
@@ -416,8 +418,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, disableK8sCrdReconcile bool, namespace, name, endpointSelector, endpointTargetPorts string) (datastore.Datastore, error) {
-	if !disableK8sCrdReconcile {
+func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, startCrdReconcilers bool, namespace, name, endpointSelector, endpointTargetPorts string) (datastore.Datastore, error) {
+	if startCrdReconcilers {
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort), nil
 	} else {
 		endpointPool := datalayer.NewEndpointPool(namespace, name)
