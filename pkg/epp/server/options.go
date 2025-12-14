@@ -26,8 +26,8 @@ import (
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/util/sets"
-
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
