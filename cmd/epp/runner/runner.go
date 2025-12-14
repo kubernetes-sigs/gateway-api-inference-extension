@@ -163,6 +163,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
+	// Print all flag values
+	flags := make(map[string]any)
+	flag.VisitAll(func(f *flag.Flag) {
+		flags[f.Name] = f.Value
+	})
+	setupLog.Info("Flags processed", "flags", flags)
+
 	initLogging(&opts.ZapOptions)
 
 	if opts.Tracing {
@@ -171,15 +179,6 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 	}
-
-	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
-
-	// Print all flag values
-	flags := make(map[string]any)
-	flag.VisitAll(func(f *flag.Flag) {
-		flags[f.Name] = f.Value
-	})
-	setupLog.Info("Flags processed", "flags", flags)
 
 	// --- Get Kubernetes Config ---
 	cfg, err := ctrl.GetConfig()
