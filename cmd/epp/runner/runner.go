@@ -34,7 +34,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -153,12 +152,6 @@ func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runne
 
 func (r *Runner) Run(ctx context.Context) error {
 	opts := runserver.NewOptions()
-	zapopts := zap.Options{
-		Development: true,
-	}
-	gfs := flag.NewFlagSet("zap", flag.ExitOnError)
-	zapopts.BindFlags(gfs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
-	pflag.CommandLine.AddGoFlagSet(gfs)
 	opts.AddFlags(pflag.CommandLine)
 	pflag.Parse()
 
@@ -170,7 +163,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	initLogging(&zapopts, opts)
+	initLogging(&opts.ZapOptions)
 
 	if opts.Tracing {
 		err := common.InitTracing(ctx, setupLog)
@@ -617,20 +610,7 @@ func setupDatalayer(logger logr.Logger, opts *runserver.Options) (datalayer.Endp
 	return factory, nil
 }
 
-func initLogging(opts *zap.Options, cliopts *runserver.Options) {
-	// Unless -zap-log-level is explicitly set, use -v
-	useV := true
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "zap-log-level" {
-			useV = false
-		}
-	})
-	if useV {
-		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-		lvl := -1 * (cliopts.LogVerbosity)
-		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
-	}
-
+func initLogging(opts *zap.Options) {
 	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
 }
