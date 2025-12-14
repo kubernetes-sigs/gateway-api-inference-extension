@@ -742,12 +742,3 @@ func generateSequence(start int, count int) []int {
 	}
 	return nums
 }
-
-// Calculates the nth harmonic number.
-func harmonicNumber(n int) float64 {
-	h := float64(0.0)
-	for i := 1; i <= n; i++ {
-		h += 1 / float64(i)
-	}
-	return h
-}
