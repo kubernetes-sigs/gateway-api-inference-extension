@@ -93,9 +93,15 @@ inferencePool:
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 
-  # Optional: Set priority for this InferencePool via an InferenceObjective.
-  # When defined, an InferenceObjective resource will be created with this priority value for the given inferencepool.
-  # priority: 2
+  # Optional: Define multiple InferenceObjectives for this InferencePool.
+  # Each InferenceObjective associates a name and priority with this InferencePool.
+  # Users reference these objectives by name in their request headers.
+  # inferenceObjectives:
+  #   - name: high-priority
+  #     priority: 1
+  #   - name: low-priority
+  #     priority: 5
+  inferenceObjectives: []
 
 # Options: ["gke", "istio", "none"]
 provider:

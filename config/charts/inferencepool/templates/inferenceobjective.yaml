@@ -1,18 +1,19 @@
-{{- if .Values.inferencePool.priority }}
+{{- range .Values.inferencePool.inferenceObjectives }}
 {{- $group := "inference.networking.k8s.io" -}}
-{{- if eq .Values.inferencePool.apiVersion "inference.networking.x-k8s.io/v1alpha2" -}}
+{{- if eq $.Values.inferencePool.apiVersion "inference.networking.x-k8s.io/v1alpha2" -}}
 {{- $group = "inference.networking.x-k8s.io" -}}
 {{- end -}}
+---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: {{ .Release.Name }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+    {{- include "gateway-api-inference-extension.labels" $ | nindent 4 }}
 spec:
-  priority: {{ .Values.inferencePool.priority }}
+  priority: {{ .priority }}
   poolRef:
     group: {{ $group }}
-    name: {{ .Release.Name }}
+    name: {{ $.Release.Name }}
 {{- end }}
