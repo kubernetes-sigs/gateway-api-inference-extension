@@ -38,7 +38,7 @@ spec:
         {{- with .Values.inferenceExtension.sidecar.args }}
         args:
           {{- range . }}
-            - {{ tpl . $ | quote }}
+              - {{ . | quote }}
           {{- end }}
         {{- end }}
         {{- with .Values.inferenceExtension.sidecar.env }}
