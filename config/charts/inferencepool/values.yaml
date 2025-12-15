@@ -208,6 +208,6 @@ istio:
 # Users reference these objectives by name in their request headers.
 inferenceObjectives: []
 #   - name: high-priority
-#     priority: 1
-#   - name: low-priority
 #     priority: 5
+#   - name: low-priority
+#     priority: 1

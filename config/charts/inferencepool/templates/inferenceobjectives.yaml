@@ -10,6 +10,6 @@ metadata:
 spec:
   priority: {{ .priority }}
   poolRef:
-    group: {{ $group }}
-    name: {{ $.Release.Name }}
+    group: {{ .Values.inferenceExtension.apiVersion }}
+    name: {{ .name }}
 {{- end }}
