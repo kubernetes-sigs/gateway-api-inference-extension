@@ -104,12 +104,8 @@ func must[T any](t T, err error) T {
 
 // TODO: This is hardcoded for POC only. This needs to be hooked up to our text-based config story.
 var flowControlConfig = flowcontrol.Config{
-	Controller: fccontroller.Config{}, // Use all defaults.
-	Registry: must(fcregistry.NewConfig(
-		fcregistry.WithPriorityBand(
-			must(fcregistry.NewPriorityBandConfig(0, "Default")),
-		),
-	)),
+	Controller: fccontroller.Config{},        // Use all defaults.
+	Registry:   must(fcregistry.NewConfig()), // Use all defaults.
 }
 
 var (
