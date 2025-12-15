@@ -30,6 +30,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -147,8 +149,8 @@ func withClock(clk clock.WithTickerAndDelayedExecution) RegistryOption {
 }
 
 // NewFlowRegistry creates and initializes a new `FlowRegistry` instance.
-func NewFlowRegistry(config Config, logger logr.Logger, opts ...RegistryOption) (*FlowRegistry, error) {
-	cfg := config.deepCopy()
+func NewFlowRegistry(config *Config, logger logr.Logger, opts ...RegistryOption) (*FlowRegistry, error) {
+	cfg := config.Clone()
 	fr := &FlowRegistry{
 		config:               cfg,
 		logger:               logger.WithName("flow-registry"),
@@ -164,9 +166,8 @@ func NewFlowRegistry(config Config, logger logr.Logger, opts ...RegistryOption) 
 		fr.clock = &clock.RealClock{}
 	}
 
-	for i := range config.PriorityBands {
-		band := &config.PriorityBands[i]
-		fr.perPriorityBandStats[band.Priority] = &bandStats{}
+	for prio := range cfg.PriorityBands {
+		fr.perPriorityBandStats[prio] = &bandStats{}
 	}
 
 	if err := fr.updateShardCount(cfg.InitialShardCount); err != nil {
@@ -277,7 +278,6 @@ func (fr *FlowRegistry) prepareNewFlow(key types.FlowKey) (*flowState, error) {
 //
 // Statistics are aggregated using high-performance, lock-free atomic updates.
 // The returned stats represent a near-consistent snapshot of the system's state.
-// It is not perfectly atomic because the various counters are loaded independently without a global lock.
 func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 	// Casts from `int64` to `uint64` are safe because the non-negativity invariant is strictly enforced at the
 	// `managedQueue` level.
@@ -289,10 +289,7 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 	}
 
 	for p, s := range fr.perPriorityBandStats {
-		bandCfg, err := fr.config.getBandConfig(p)
-		if err != nil {
-			panic(fmt.Sprintf("invariant violation: priority band config (%d) missing during stats aggregation: %v", p, err))
-		}
+		bandCfg := fr.config.PriorityBands[p]
 		stats.PerPriorityBandStats[p] = contracts.PriorityBandStats{
 			Priority:      p,
 			PriorityName:  bandCfg.PriorityName,
@@ -465,7 +462,6 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 			partitionedConfig,
 			fr.logger,
 			fr.propagateStatsDelta,
-			fr.config.interFlowDispatchPolicyFactory,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create new shard object %s: %w", shardID, err)
@@ -544,19 +540,19 @@ type flowComponents struct {
 // buildFlowComponents instantiates the necessary plugin components for a new flow instance.
 // It creates a distinct instance of each component for each shard to ensure state isolation.
 func (fr *FlowRegistry) buildFlowComponents(key types.FlowKey, numInstances int) ([]flowComponents, error) {
-	bandConfig, err := fr.config.getBandConfig(key.Priority)
-	if err != nil {
-		return nil, err
+	bandConfig, ok := fr.config.PriorityBands[key.Priority]
+	if !ok {
+		return nil, fmt.Errorf("priority band %d not found: %w", key.Priority, contracts.ErrPriorityBandNotFound)
 	}
 
 	allComponents := make([]flowComponents, numInstances)
 	for i := range numInstances {
-		policy, err := fr.config.intraFlowDispatchPolicyFactory(bandConfig.IntraFlowDispatchPolicy)
+		policy, err := intra.NewPolicyFromName(bandConfig.IntraFlowDispatchPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to instantiate intra-flow policy %q for flow %s: %w",
 				bandConfig.IntraFlowDispatchPolicy, key, err)
 		}
-		q, err := fr.config.queueFactory(bandConfig.Queue, policy.Comparator())
+		q, err := queue.NewQueueFromName(bandConfig.Queue, policy.Comparator())
 		if err != nil {
 			return nil, fmt.Errorf("failed to instantiate queue %q for flow %s: %w",
 				bandConfig.Queue, key, err)

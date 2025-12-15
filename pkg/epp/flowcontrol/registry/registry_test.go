@@ -18,7 +18,6 @@ package registry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -30,9 +29,8 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -57,28 +55,37 @@ type harnessOptions struct {
 func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarness {
 	t.Helper()
 
-	var config Config
-	if opts.config != nil {
-		config = *opts.config
-	} else {
-		config = Config{
-			FlowGCTimeout: 5 * time.Minute, // Use a realistic but controllable GC time.
-			PriorityBands: []PriorityBandConfig{
-				{Priority: highPriority, PriorityName: "High"},
-				{Priority: lowPriority, PriorityName: "Low"},
-			},
-		}
-	}
-	if opts.initialShardCount > 0 {
-		config.InitialShardCount = opts.initialShardCount
-	}
+	var cfg *Config
+	var err error
 
-	validatedCfg, err := config.ValidateAndApplyDefaults()
-	require.NoError(t, err, "Test setup: validating config should not fail")
+	if opts.config != nil {
+		cfg = opts.config.Clone()
+		if opts.initialShardCount > 0 {
+			cfg.InitialShardCount = opts.initialShardCount
+		}
+	} else {
+		shardCount := 1
+		if opts.initialShardCount > 0 {
+			shardCount = opts.initialShardCount
+		}
+
+		highBand, err := NewPriorityBandConfig(highPriority, "High")
+		require.NoError(t, err)
+		lowBand, err := NewPriorityBandConfig(lowPriority, "Low")
+		require.NoError(t, err)
+
+		cfg, err = NewConfig(
+			WithInitialShardCount(shardCount),
+			WithFlowGCTimeout(5*time.Minute),
+			WithPriorityBand(highBand),
+			WithPriorityBand(lowBand),
+		)
+		require.NoError(t, err, "Test setup: failed to create default config")
+	}
 
 	fakeClock := testclock.NewFakeClock(time.Now())
 	registryOpts := []RegistryOption{withClock(fakeClock)}
-	fr, err := NewFlowRegistry(*validatedCfg, logr.Discard(), registryOpts...)
+	fr, err := NewFlowRegistry(cfg, logr.Discard(), registryOpts...)
 	require.NoError(t, err, "Test setup: NewFlowRegistry should not fail")
 
 	// Start the GC loop in the background.
@@ -137,17 +144,18 @@ func TestFlowRegistry_New(t *testing.T) {
 
 	t.Run("ShouldFail_WhenInitialShardCreationFails", func(t *testing.T) {
 		t.Parallel()
-		config, err := newConfig(
-			Config{PriorityBands: []PriorityBandConfig{{Priority: highPriority, PriorityName: "A"}}},
-			withInterFlowDispatchPolicyFactory(func(interflow.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
-				return nil, errors.New("injected factory failure")
-			}),
-		)
+
+		badBand, err := NewPriorityBandConfig(highPriority, "A", WithInterFlowPolicy("non-existent-policy"))
+		require.NoError(t, err)
+
+		config, err := NewConfig(WithPriorityBand(badBand))
 		require.NoError(t, err, "Test setup: creating the config object itself should not fail")
-		_, err = NewFlowRegistry(*config, logr.Discard())
+
+		_, err = NewFlowRegistry(config, logr.Discard())
+
 		require.Error(t, err, "NewFlowRegistry should fail when initial shard setup fails")
-		assert.Contains(t, err.Error(), "injected factory failure",
-			"Error message should reflect the root cause from the failing plugin factory")
+		assert.Contains(t, err.Error(), "failed to create inter-flow policy",
+			"Error message should reflect the root cause (policy creation failure)")
 	})
 }
 
@@ -189,19 +197,35 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 
 	t.Run("ShouldFail_WhenJITFails", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
-		h.fr.config.intraFlowDispatchPolicyFactory = func(intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
-			return nil, errors.New("injected factory failure")
-		}
+
+		badPolicyName := intra.RegisteredPolicyName("non-existent-policy")
+		badBand, err := NewPriorityBandConfig(highPriority, "High", WithIntraFlowPolicy(badPolicyName))
+		require.NoError(t, err)
+
+		// Create a Config that uses a mock checker to bypass the strict validation.
+		// The default checker would reject "non-existent-policy", but our mock says it's fine.
+		// This allows us to instantiate the Registry with a latent configuration bomb.
+		cfg, err := NewConfig(
+			WithPriorityBand(badBand),
+			withCapabilityChecker(&mockCapabilityChecker{
+				checkCompatibilityFunc: func(_ intra.RegisteredPolicyName, _ queue.RegisteredQueueName) error {
+					return nil // Approve everything.
+				},
+			}),
+		)
+		require.NoError(t, err)
+
+		h := newRegistryTestHarness(t, harnessOptions{config: cfg})
 		key := types.FlowKey{ID: "test-flow", Priority: highPriority}
 
-		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
-			t.Fatal("Callback must not be executed when the flow failes to register JIT")
+		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			t.Fatal("Callback must not be executed when the flow fails to register JIT")
 			return nil
 		})
 
 		require.Error(t, err, "WithConnection must return an error for a failed flow JIT registration")
-		assert.ErrorContains(t, err, "injected factory failure", "The returned error must propagate the reason")
+		assert.ErrorContains(t, err, "no IntraFlowDispatchPolicy registered",
+			"The returned error must propagate the reason")
 	})
 
 	t.Run("Handle_Shards_ShouldReturnAllActiveShardsAndBeACopy", func(t *testing.T) {
@@ -518,19 +542,22 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			config := Config{
-				MaxBytes: globalCapacity,
-				PriorityBands: []PriorityBandConfig{
-					{Priority: highPriority, PriorityName: "A", MaxBytes: bandCapacity},
-				},
-				InitialShardCount: tc.initialShardCount,
-			}
 
-			h := newRegistryTestHarness(t, harnessOptions{config: &config})
+			band, err := NewPriorityBandConfig(highPriority, "A", WithBandMaxBytes(bandCapacity))
+			require.NoError(t, err)
+
+			config, err := NewConfig(
+				WithMaxBytes(globalCapacity),
+				WithInitialShardCount(tc.initialShardCount),
+				WithPriorityBand(band),
+			)
+			require.NoError(t, err, "Test setup: creating config should not fail")
+
+			h := newRegistryTestHarness(t, harnessOptions{config: config})
 			key := types.FlowKey{ID: "flow", Priority: highPriority}
 			h.openConnectionOnFlow(key)
 
-			err := h.fr.updateShardCount(tc.targetShardCount)
+			err = h.fr.updateShardCount(tc.targetShardCount)
 			if tc.expectErrIs != nil {
 				require.Error(t, err, "UpdateShardCount should have returned an error")
 				assert.ErrorIs(t, err, tc.expectErrIs, "Error should be the expected type")

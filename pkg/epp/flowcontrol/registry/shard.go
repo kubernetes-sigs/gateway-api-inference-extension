@@ -26,14 +26,19 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // priorityBand holds all `managedQueues` and configuration for a single priority level within a shard.
 type priorityBand struct {
+	// config points to the current partitioned configuration for this band.
+	// It is updated during dynamic scaling events (updateConfig), protected by the parent shard's mutex.
+	config *PriorityBandConfig
+
 	// --- Immutable (set at construction) ---
-	config                  ShardPriorityBandConfig
+
 	interFlowDispatchPolicy framework.InterFlowDispatchPolicy
 
 	// --- State Protected by the parent shard's `mu` ---
@@ -108,19 +113,19 @@ func newShard(
 	config *ShardConfig,
 	logger logr.Logger,
 	onStatsDelta propagateStatsDeltaFunc,
-	interFlowFactory interFlowDispatchPolicyFactory,
 ) (*registryShard, error) {
 	shardLogger := logger.WithName("registry-shard").WithValues("shardID", id)
 	s := &registryShard{
-		id:            id,
-		logger:        shardLogger,
-		config:        config,
-		onStatsDelta:  onStatsDelta,
-		priorityBands: make(map[int]*priorityBand, len(config.PriorityBands)),
+		id:                    id,
+		logger:                shardLogger,
+		config:                config,
+		onStatsDelta:          onStatsDelta,
+		priorityBands:         make(map[int]*priorityBand, len(config.PriorityBands)),
+		orderedPriorityLevels: make([]int, 0, len(config.PriorityBands)),
 	}
 
 	for _, bandConfig := range config.PriorityBands {
-		interPolicy, err := interFlowFactory(bandConfig.InterFlowDispatchPolicy)
+		interPolicy, err := interflow.NewPolicyFromName(bandConfig.InterFlowDispatchPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create inter-flow policy %q for priority band %d: %w",
 				bandConfig.InterFlowDispatchPolicy, bandConfig.Priority, err)
@@ -310,15 +315,8 @@ func (s *registryShard) updateConfig(newConfig *ShardConfig) {
 	defer s.mu.Unlock()
 
 	s.config = newConfig
-	// Update the partitioned config for each priority band as well.
 	for priority, band := range s.priorityBands {
-		newBandConfig, err := newConfig.getBandConfig(priority)
-		if err != nil {
-			// An invariant was violated: a priority exists in the shard but not in the new config.
-			panic(fmt.Errorf("invariant violation: priority band (%d) missing in new shard configuration during update: %w",
-				priority, err))
-		}
-		band.config = *newBandConfig
+		band.config = newConfig.PriorityBands[priority]
 	}
 	s.logger.Info("Shard configuration updated")
 }

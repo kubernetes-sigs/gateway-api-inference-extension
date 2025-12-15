@@ -94,16 +94,22 @@ const (
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
-// TODO: this is hardcoded for POC only. This needs to be hooked up to our text-based config story.
+// TODO: This is a bad pattern. Remove this once we hook Flow Control into the config loading path.
+func must[T any](t T, err error) T {
+	if err != nil {
+		panic(fmt.Sprintf("static initialization failed: %v", err))
+	}
+	return t
+}
+
+// TODO: This is hardcoded for POC only. This needs to be hooked up to our text-based config story.
 var flowControlConfig = flowcontrol.Config{
 	Controller: fccontroller.Config{}, // Use all defaults.
-	Registry: fcregistry.Config{
-		// Define domain of accepted priority levels as this field is required. Use defaults for all optional fields.
-		// TODO: this should not be hardcoded.
-		PriorityBands: []fcregistry.PriorityBandConfig{
-			{Priority: 0, PriorityName: "Default"},
-		},
-	},
+	Registry: must(fcregistry.NewConfig(
+		fcregistry.WithPriorityBand(
+			must(fcregistry.NewPriorityBandConfig(0, "Default")),
+		),
+	)),
 }
 
 var (
