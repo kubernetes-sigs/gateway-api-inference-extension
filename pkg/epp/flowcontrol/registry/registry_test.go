@@ -592,6 +592,91 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 	}
 }
 
+// --- Dynamic Provisioning Tests ---
+
+func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ShouldCreateBand_WhenPriorityIsUnknown", func(t *testing.T) {
+		t.Parallel()
+		// Start with 2 shards to ensure propagation works across the cluster.
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		dynamicPrio := 55
+		key := types.FlowKey{ID: "dynamic-flow", Priority: dynamicPrio}
+
+		// Connect with a new priority.
+		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			return nil
+		})
+		require.NoError(t, err, "WithConnection should succeed for dynamic priority")
+
+		h.fr.mu.RLock()
+		_, existsInConfig := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, existsInConfig, "Dynamic priority must be added to global config definition")
+
+		stats := h.fr.Stats()
+		_, existsInStats := stats.PerPriorityBandStats[dynamicPrio]
+		assert.True(t, existsInStats, "Dynamic priority must appear in global stats")
+
+		for _, shard := range h.fr.activeShards {
+			_, err := shard.ManagedQueue(key)
+			assert.NoError(t, err, "Dynamic band must be provisioned on shard %s", shard.ID())
+		}
+	})
+
+	t.Run("ShouldHandleConcurrentDynamicCreation", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		dynamicPrio := 77
+		key := types.FlowKey{ID: "race-flow", Priority: dynamicPrio}
+
+		var wg sync.WaitGroup
+		concurrency := 10
+		wg.Add(concurrency)
+
+		for range concurrency {
+			go func() {
+				defer wg.Done()
+				// Everyone tries to trigger provisioning simultaneously.
+				_ = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error { return nil })
+			}()
+		}
+		wg.Wait()
+
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, exists, "Band should exist after concurrent creation attempts")
+	})
+
+	t.Run("ShouldPersistDynamicBands_AcrossScalingEvents", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 1})
+		dynamicPrio := 88
+		key := types.FlowKey{ID: "scaling-flow", Priority: dynamicPrio}
+
+		// Create dynamic band on Shard 0.
+		h.openConnectionOnFlow(key)
+
+		// Scale Up -> Shard 1 created.
+		err := h.fr.updateShardCount(2)
+		require.NoError(t, err)
+
+		// The repartition logic should have carried the dynamic band definition to the new shard config.
+		h.fr.mu.RLock()
+		newShard := h.fr.activeShards[1]
+		h.fr.mu.RUnlock()
+
+		_, policyErr := newShard.InterFlowDispatchPolicy(dynamicPrio)
+		assert.NoError(t, policyErr, "New shard must have the dynamic priority band configured")
+
+		mq, err := newShard.ManagedQueue(key)
+		require.NoError(t, err, "Existing flows should be auto-synced to new shards during scale-up")
+		require.NotNil(t, mq)
+	})
+}
+
 // --- Concurrency Tests ---
 
 func TestFlowRegistry_Concurrency(t *testing.T) {

@@ -107,6 +107,38 @@ func TestNewConfig(t *testing.T) {
 				assert.Equal(t, defaultIntraFlowDispatchPolicy, band.IntraFlowDispatchPolicy)
 			},
 		},
+		{
+			name: "ShouldSucceed_WhenNoPriorityBandsDefined_WithDynamicDefaults",
+			opts: []ConfigOption{
+				// No WithPriorityBand options provided.
+				// This relies entirely on dynamic provisioning.
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Empty(t, cfg.PriorityBands, "PriorityBands map should be empty")
+				require.NotNil(t, cfg.DefaultPriorityBand, "DefaultPriorityBand template must be initialized")
+				assert.Equal(t, "Dynamic-Default", cfg.DefaultPriorityBand.PriorityName)
+				assert.Equal(t, defaultQueue, cfg.DefaultPriorityBand.Queue)
+			},
+		},
+		{
+			name: "ShouldRespectCustomDefaultPriorityBand",
+			opts: []ConfigOption{
+				WithDefaultPriorityBand(&PriorityBandConfig{
+					PriorityName: "My-Custom-Template",
+					Queue:        "CustomQueue",
+				}),
+				withCapabilityChecker(&mockCapabilityChecker{
+					checkCompatibilityFunc: func(_ intra.RegisteredPolicyName, _ queue.RegisteredQueueName) error { return nil },
+				}),
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.DefaultPriorityBand)
+				assert.Equal(t, "My-Custom-Template", cfg.DefaultPriorityBand.PriorityName)
+				assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), cfg.DefaultPriorityBand.Queue)
+				// Assert other defaults were applied to the template.
+				assert.Equal(t, defaultIntraFlowDispatchPolicy, cfg.DefaultPriorityBand.IntraFlowDispatchPolicy)
+			},
+		},
 
 		// --- Validation Errors (Global) ---
 		{
@@ -327,5 +359,22 @@ func TestConfig_Clone(t *testing.T) {
 		assert.Equal(t, "A", original.PriorityBands[1].PriorityName)
 		assert.Equal(t, uint64(99999), clone.PriorityBands[1].MaxBytes)
 		assert.Equal(t, "Modified", clone.PriorityBands[1].PriorityName)
+	})
+
+	t.Run("ShouldDeepCopyDefaultPriorityBand", func(t *testing.T) {
+		t.Parallel()
+		original, err := NewConfig()
+		require.NoError(t, err)
+
+		clone := original.Clone()
+
+		require.NotSame(t, original.DefaultPriorityBand, clone.DefaultPriorityBand,
+			"Clone should have a distinct pointer for DefaultPriorityBand")
+		assert.Equal(t, original.DefaultPriorityBand.PriorityName, clone.DefaultPriorityBand.PriorityName)
+
+		// Modify Clone.
+		clone.DefaultPriorityBand.PriorityName = "Hacked"
+		assert.Equal(t, "Dynamic-Default", original.DefaultPriorityBand.PriorityName,
+			"Modifying clone template should not affect original")
 	})
 }

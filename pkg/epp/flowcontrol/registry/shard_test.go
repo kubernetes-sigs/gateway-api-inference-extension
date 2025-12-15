@@ -93,9 +93,9 @@ func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 	h.t.Helper()
 	spec := types.FlowSpecification{Key: key}
 	policy, err := intra.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
-	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
+	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
 	q, err := queue.NewQueueFromName(defaultQueue, policy.Comparator())
-	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
+	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
 	h.shard.synchronizeFlow(spec, policy, q)
 }
 
@@ -444,6 +444,63 @@ func TestShard_MarkAsDraining(t *testing.T) {
 	assert.False(t, h.shard.IsActive(), "Marking as draining should be idempotent")
 }
 
+func TestShard_DynamicProvisioning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ShouldAddBandDynamically", func(t *testing.T) {
+		t.Parallel()
+		h := newShardTestHarness(t)
+
+		// Update the config definition first (simulating the Registry's job).
+		dynamicPrio := 15
+		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
+		newBandCfg.applyDefaults()
+		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
+
+		h.shard.addPriorityBand(dynamicPrio)
+
+		expectedLevels := []int{highPriority, dynamicPrio, lowPriority} // 20, 15, 10
+		assert.Equal(t, expectedLevels, h.shard.AllOrderedPriorityLevels(),
+			"New priority must be inserted into the sorted order correctly")
+
+		accessor, err := h.shard.PriorityBandAccessor(dynamicPrio)
+		require.NoError(t, err, "Accessor should be available for the new band")
+		assert.Equal(t, "Dynamic-15", accessor.PriorityName())
+	})
+
+	t.Run("ShouldBeIdempotent", func(t *testing.T) {
+		t.Parallel()
+		h := newShardTestHarness(t)
+
+		// Prepare config.
+		dynamicPrio := 15
+		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
+		newBandCfg.applyDefaults()
+		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
+
+		// Call twice.
+		h.shard.addPriorityBand(dynamicPrio)
+		h.shard.addPriorityBand(dynamicPrio)
+
+		levelCount := 0
+		for _, p := range h.shard.AllOrderedPriorityLevels() {
+			if p == dynamicPrio {
+				levelCount++
+			}
+		}
+		assert.Equal(t, 1, levelCount, "Priority level should appear exactly once in ordered list")
+	})
+
+	t.Run("ShouldPanic_WhenConfigMissing", func(t *testing.T) {
+		t.Parallel()
+		h := newShardTestHarness(t)
+
+		// Try to add a band that is not in h.shard.config.
+		assert.Panics(t, func() { h.shard.addPriorityBand(nonExistentPriority) },
+			"Should fail if the definition layer hasn't been updated first")
+	})
+}
+
 // --- Concurrency Test ---
 
 // TestShard_Concurrency_MixedWorkload is a general stability test that simulates a realistic workload by having
@@ -511,33 +568,4 @@ func TestShard_Concurrency_MixedWorkload(t *testing.T) {
 	finalStats := h.shard.Stats()
 	assert.Zero(t, finalStats.TotalLen, "After all paired add/remove operations, the total length should be zero")
 	assert.Zero(t, finalStats.TotalByteSize, "After all paired add/remove operations, the total byte size should be zero")
-}
-
-// --- Invariant Tests ---
-
-func TestShard_InvariantPanics(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name   string
-		action func(h *shardTestHarness)
-	}{
-		{
-			name:   "OnStatsPropagatedForUnknownPriority",
-			action: func(h *shardTestHarness) { h.shard.propagateStatsDelta(nonExistentPriority, 1, 1) },
-		},
-		{
-			name:   "OnSynchronizingFlowWithMissingPriority",
-			action: func(h *shardTestHarness) { h.synchronizeFlow(types.FlowKey{ID: "flow", Priority: nonExistentPriority}) },
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			h := newShardTestHarness(t)
-			assert.Panics(t, func() { tc.action(h) },
-				"The action must trigger a panic when a critical system invariant is violated")
-		})
-	}
 }
