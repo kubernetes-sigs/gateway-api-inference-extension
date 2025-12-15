@@ -38,32 +38,32 @@ spec:
         {{- with .Values.inferenceExtension.sidecar.args }}
         args:
           {{- range . }}
-            - {{ . | quote }}
+            - {{ tpl . $ | quote }}
           {{- end }}
         {{- end }}
         {{- with .Values.inferenceExtension.sidecar.env }}
         env:
-          {{- . | toYaml | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
           {{- end }}
         {{- with .Values.inferenceExtension.sidecar.ports }}
         ports:
-          {{- . | toYaml | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         {{- with .Values.inferenceExtension.sidecar.livenessProbe }}
         livenessProbe:
-          {{- . | toYaml | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         {{- with .Values.inferenceExtension.sidecar.readinessProbe }}
         readinessProbe:
-          {{- . | toYaml | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         {{- with .Values.inferenceExtension.sidecar.resources }}
         resources:
-          {{- . | toYaml | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         {{- with .Values.inferenceExtension.sidecar.volumeMounts }}
         volumeMounts:
-          {{- . | toYaml | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         {{- end }}
       - name: epp
@@ -117,7 +117,7 @@ spec:
         - name: metrics
           containerPort: 9090
         {{- if .Values.inferenceExtension.extraContainerPorts }}
-        {{- .Values.inferenceExtension.extraContainerPorts | toYaml | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.extraContainerPorts | nindent 8 }}
         {{- end }}
         livenessProbe:
           {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
@@ -177,21 +177,21 @@ spec:
           value: {{ .Values.inferenceExtension.tracing.sampling.samplerArg | quote }}
         {{- end }}
         {{- if .Values.inferenceExtension.env }}
-        {{- .Values.inferenceExtension.env | toYaml | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
         {{- end }}
         volumeMounts:
         - name: plugins-config-volume
           mountPath: "/config"
         {{- if .Values.inferenceExtension.volumeMounts }}
-        {{- .Values.inferenceExtension.volumeMounts | toYaml | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.volumeMounts | nindent 8 }}
         {{- end }}
       {{- include "gateway-api-inference-extension.latencyPredictor.containers" . | nindent 6 }}
       volumes:
       {{- if .Values.inferenceExtension.volumes }}
-      {{- .Values.inferenceExtension.volumes | toYaml | nindent 6 }}
+      {{- toYaml .Values.inferenceExtension.volumes | nindent 6 }}
       {{- end }}
       {{- if .Values.inferenceExtension.sidecar.volumes }}
-      {{- .Values.inferenceExtension.sidecar.volumes | toYaml | nindent 6 }}
+      {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 6 }}
       {{- end }}
       - name: plugins-config-volume
         configMap:
@@ -199,9 +199,9 @@ spec:
       {{- include "gateway-api-inference-extension.latencyPredictor.volumes" . | nindent 6 }}
       {{- if .Values.inferenceExtension.affinity }}
       affinity:
-        {{- .Values.inferenceExtension.affinity | toYaml | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.affinity | nindent 8 }}
       {{- end }}
       {{- if .Values.inferenceExtension.tolerations }}
       tolerations:
-        {{- .Values.inferenceExtension.tolerations | toYaml | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.tolerations | nindent 8 }}
       {{- end }}
