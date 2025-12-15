@@ -110,12 +110,6 @@ func TestNewConfig(t *testing.T) {
 
 		// --- Validation Errors (Global) ---
 		{
-			name:          "ShouldError_WhenNoPriorityBandsDefined",
-			opts:          []ConfigOption{WithInitialShardCount(1)},
-			expectErr:     true,
-			expectedErrIs: nil, // Generic error expected.
-		},
-		{
 			name:      "ShouldError_WhenInitialShardCountIsInvalid",
 			opts:      []ConfigOption{WithInitialShardCount(0)}, // Option itself should return error.
 			expectErr: true,

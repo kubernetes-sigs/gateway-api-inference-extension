@@ -112,16 +112,20 @@ type Config struct {
 
 	// PriorityBands defines the set of priority band templates managed by the `FlowRegistry`.
 	// It is a map keyed by Priority level, providing O(1) access and ensuring priority uniqueness by definition.
-	// Required: At least one `PriorityBandConfig` must be provided for a functional registry.
 	PriorityBands map[int]*PriorityBandConfig
+
+	// DefaultPriorityBand serves as a template for dynamically provisioning priority bands when a request arrives with a
+	// priority level that was not explicitly configured.
+	// If nil, it is automatically populated with system defaults during NewConfig.
+	DefaultPriorityBand *PriorityBandConfig
 
 	// InitialShardCount specifies the number of parallel shards to create when the registry is initialized.
 	// This value must be greater than zero.
 	// Optional: Defaults to `defaultInitialShardCount` (1).
 	InitialShardCount int
 
-	// FlowGCTimeout defines the interval at which the registry scans for and garbage collects idle flows. A flow is
-	// collected if it has been observed to be Idle for at least one full scan interval.
+	// FlowGCTimeout defines the interval at which the registry scans for and garbage collects idle flows.
+	// A flow is collected if it has been observed to be Idle for at least one full scan interval.
 	// Optional: Defaults to `defaultFlowGCTimeout` (5 minutes).
 	FlowGCTimeout time.Duration
 
@@ -223,6 +227,14 @@ func WithPriorityBand(band *PriorityBandConfig) ConfigOption {
 	}
 }
 
+// WithDefaultPriorityBand sets the template configuration used for dynamically provisioning priority bands.
+func WithDefaultPriorityBand(band *PriorityBandConfig) ConfigOption {
+	return func(b *configBuilder) error {
+		b.config.DefaultPriorityBand = band
+		return nil
+	}
+}
+
 // withCapabilityChecker overrides the compatibility checker used during validation.
 // It is intended for use only in internal unit tests.
 // test-only
@@ -304,8 +316,19 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 		}
 	}
 
-	// Apply defaults to all bands.
-	// This covers the case where a user passed a raw struct literal via WithPriorityBand.
+	// Initialize DefaultPriorityBand if missing.
+	// This ensures we always have a template for dynamic provisioning.
+	if builder.config.DefaultPriorityBand == nil {
+		builder.config.DefaultPriorityBand = &PriorityBandConfig{}
+	}
+
+	// Apply defaults to the template.
+	builder.config.DefaultPriorityBand.applyDefaults()
+	if builder.config.DefaultPriorityBand.PriorityName == "" {
+		builder.config.DefaultPriorityBand.PriorityName = "Dynamic-Default"
+	}
+
+	// Apply defaults to all explicitly configured bands.
 	for _, band := range builder.config.PriorityBands {
 		band.applyDefaults()
 	}
@@ -317,7 +340,7 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 }
 
 // NewPriorityBandConfig creates a new band configuration with the required fields.
-// It applies system defaults first, then applies any provided options to override those defaults
+// It applies system defaults first, then applies any provided options to override those defaults.
 func NewPriorityBandConfig(priority int, name string, opts ...PriorityBandConfigOption) (*PriorityBandConfig, error) {
 	pb := &PriorityBandConfig{
 		Priority:     priority,
@@ -387,10 +410,15 @@ func (c *Config) validate(checker capabilityChecker) error {
 		return errors.New("eventChannelBufferSize must be greater than 0")
 	}
 
-	if len(c.PriorityBands) == 0 {
-		return errors.New("at least one priority band must be defined")
+	// Validate the dynamic template.
+	// We use a dummy priority since the template itself doesn't have a fixed priority.
+	templateValidationCopy := *c.DefaultPriorityBand
+	templateValidationCopy.Priority = 0
+	if err := templateValidationCopy.validate(checker); err != nil {
+		return fmt.Errorf("invalid DefaultPriorityBand configuration: %w", err)
 	}
 
+	// Validate statically configured bands.
 	names := make(map[string]struct{}, len(c.PriorityBands))
 	for _, band := range c.PriorityBands {
 		if _, exists := names[band.PriorityName]; exists {
@@ -462,6 +490,12 @@ func (c *Config) Clone() *Config {
 	}
 
 	clone := *c
+
+	if c.DefaultPriorityBand != nil {
+		val := *c.DefaultPriorityBand
+		clone.DefaultPriorityBand = &val
+	}
+
 	if c.PriorityBands != nil {
 		clone.PriorityBands = make(map[int]*PriorityBandConfig, len(c.PriorityBands))
 		for prio, band := range c.PriorityBands {

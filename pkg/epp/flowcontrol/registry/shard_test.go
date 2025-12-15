@@ -132,7 +132,8 @@ func TestShard_New(t *testing.T) {
 		assert.Equal(t, []int{highPriority, lowPriority}, h.shard.AllOrderedPriorityLevels(),
 			"Shard must report configured priority levels sorted numerically (highest priority first)")
 
-		bandHigh, ok := h.shard.priorityBands[highPriority]
+		val, ok := h.shard.priorityBands.Load(highPriority)
+		bandHigh := val.(*priorityBand)
 		require.True(t, ok, "Priority band %d (High) must be initialized", highPriority)
 		assert.Equal(t, "High", bandHigh.config.PriorityName, "Priority band name must match the configuration")
 		require.NotNil(t, bandHigh.interFlowDispatchPolicy, "Inter-flow policy must be instantiated during construction")
