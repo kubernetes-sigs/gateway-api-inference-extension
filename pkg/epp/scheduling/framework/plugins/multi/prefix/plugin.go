@@ -236,10 +236,11 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMReque
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
-	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config), p.config.MaxPrefixBlocksToMatch)
+	blockSize := getBlockSize(pods, p.config)
+	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
-		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
+		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes, blockSize),
 	}
 
 	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
@@ -302,22 +303,22 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
 }
 
-// matchLongestPrefix returns a map of servers and length of prefix that each server caches.
-func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map[ServerID]int {
+// matchLongestPrefix returns a map of servers and length of prefix that each server caches, prefix length is defined in characters.
+// blockSize - the block size in characters
+func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash, blockSize int) map[ServerID]int {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	res := make(map[ServerID]int)
 	// Use a greedy strategy to search from the longest prefix.
 	// NOTE: It's possible to further optimize this with a binary search.
-	for i := 0; i < len(hashes); i++ {
-		hash := hashes[i]
+	for i, hash := range hashes {
 		cachedServers := p.indexer.Get(hash)
 		if len(cachedServers) == 0 {
 			break
 		} else {
 			loggerTrace.Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
 			for server := range cachedServers {
-				// Update servers with their longest prefix match.
-				res[server]++
+				// Update servers with their longest prefix match, prefix length is in characters.
+				res[server] += blockSize
 			}
 		}
 	}
@@ -368,11 +369,11 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 	}
 
 	if len(userInput) < cacheBlockSize {
-		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size", cacheBlockSize)
+		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", cacheBlockSize)
 		return nil
 	}
 	if len(userInput) > cacheBlockSize*maxPrefixBlocks {
-		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size", cacheBlockSize)
+		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", cacheBlockSize)
 		userInput = userInput[:maxPrefixBlocks*cacheBlockSize]
 	}
 	// Split the body into blocks of size cacheBlockSize.
@@ -412,14 +413,19 @@ func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
 	return json.Marshal(request.Body.ChatCompletions.Messages)
 }
 
+// getBlockSize returns block size in characters
+// in case of auto-tune - use block size from the first pod
+// otherwise use block size from configuration
 func getBlockSize(pods []types.Pod, config Config) int {
+	defaultBlockSize := config.BlockSize * averageCharactersPerToken
+
 	if !config.AutoTune {
-		return config.BlockSize
+		return defaultBlockSize
 	}
 
 	// Fallback to BlockSize if no metrics are available.
 	if len(pods) == 0 {
-		return config.BlockSize
+		return defaultBlockSize
 	}
 
 	// Since all PODs originate from the same inference pool, they are considered to have identical configurations.
@@ -430,5 +436,5 @@ func getBlockSize(pods []types.Pod, config Config) int {
 			return cacheBlockSize * averageCharactersPerToken
 		}
 	}
-	return config.BlockSize
+	return defaultBlockSize
 }
