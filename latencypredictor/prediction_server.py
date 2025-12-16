@@ -348,10 +348,17 @@ class LightweightPredictor:
                 #df_tpot = pd.DataFrame([tpot_raw_data])
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    
+                    # Bayesian Ridge can't handle categorical features directly
+                    # Drop categorical bucket, but one-hot encode pod_type
                     ttft_for_scale = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
+                    if 'pod_type_cat' in ttft_for_scale.columns:
+                        ttft_for_scale = pd.get_dummies(ttft_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                     ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
-                    tpot_scaled = self.tpot_scaler.transform(df_tpot)
+
+                    tpot_for_scale = df_tpot.copy()
+                    if 'pod_type_cat' in tpot_for_scale.columns:
+                        tpot_for_scale = pd.get_dummies(tpot_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
+                    tpot_scaled = self.tpot_scaler.transform(tpot_for_scale)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
                     tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
@@ -431,9 +438,17 @@ class LightweightPredictor:
                 #df_tpot_batch = pd.DataFrame(tpot_raw_data)
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    # Bayesian Ridge can't handle categorical features directly
+                    # Drop categorical bucket, but one-hot encode pod_type
                     ttft_for_scale = df_ttft_batch.drop(columns=['prefill_score_bucket'], errors='ignore')
+                    if 'pod_type_cat' in ttft_for_scale.columns:
+                        ttft_for_scale = pd.get_dummies(ttft_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                     ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
-                    tpot_scaled = self.tpot_scaler.transform(df_tpot_batch)
+
+                    tpot_for_scale = df_tpot_batch.copy()
+                    if 'pod_type_cat' in tpot_for_scale.columns:
+                        tpot_for_scale = pd.get_dummies(tpot_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
+                    tpot_scaled = self.tpot_scaler.transform(tpot_for_scale)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
                     tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)

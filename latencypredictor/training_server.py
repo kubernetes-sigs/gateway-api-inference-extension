@@ -434,11 +434,22 @@ class LatencyPredictor:
                 raise ValueError("Empty training data")
             if features.isnull().any().any() or target.isnull().any():
                 raise ValueError("Training data contains NaN values")
-            if np.isinf(features.values).any() or np.isinf(target.values).any():
+            # Check only numeric columns for infinity (categorical columns cause isinf to fail)
+            numeric_features = features.select_dtypes(include=[np.number])
+            if len(numeric_features.columns) > 0 and np.isinf(numeric_features.values).any():
                 raise ValueError("Training data contains infinite values")
+            if np.isinf(target.values).any():
+                raise ValueError("Target data contains infinite values")
 
             if self.model_type == ModelType.BAYESIAN_RIDGE:
+                # Bayesian Ridge can't handle categorical features directly
+                # Drop categorical bucket, but one-hot encode pod_type to preserve the information
                 features = features.drop(columns=['prefill_score_bucket'], errors='ignore')
+
+                # One-hot encode pod_type_cat if it exists (converts to numeric 0/1 columns)
+                if 'pod_type_cat' in features.columns:
+                    features = pd.get_dummies(features, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
+
                 scaler = StandardScaler()
                 features_scaled = scaler.fit_transform(features)
                 if np.isnan(features_scaled).any() or np.isinf(features_scaled).any():
@@ -851,9 +862,14 @@ class LatencyPredictor:
                 df_tpot = self._prepare_features_with_interaction(df_tpot, model_type="tpot")
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    # Use scaling for Bayesian Ridge
+                    # Use scaling for Bayesian Ridge - drop categorical bucket, one-hot encode pod_type
                     df_ttft = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
+                    if 'pod_type_cat' in df_ttft.columns:
+                        df_ttft = pd.get_dummies(df_ttft, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                     ttft_scaled = self.ttft_scaler.transform(df_ttft)
+
+                    if 'pod_type_cat' in df_tpot.columns:
+                        df_tpot = pd.get_dummies(df_tpot, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                     tpot_scaled = self.tpot_scaler.transform(df_tpot)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
