@@ -45,9 +45,3 @@ func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (fl
 	// 3. Return the successfully parsed value
 	return parsedFloat, nil
 }
-
-// hasHeader checks if a header key exists in the request headers map.
-func hasHeader(request schedulingtypes.LLMRequest, headerName string) bool {
-	_, ok := request.Headers[headerName]
-	return ok
-}
