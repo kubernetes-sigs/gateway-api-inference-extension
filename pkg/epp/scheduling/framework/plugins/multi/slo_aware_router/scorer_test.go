@@ -119,7 +119,7 @@ func createTestPod(name string, kvCacheUsage float64, runningRequestsSize, waiti
 	}
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64, predictionBased bool) *schedulingtypes.LLMRequest {
+func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *schedulingtypes.LLMRequest {
 	headers := make(map[string]string)
 	headers[requtil.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -127,9 +127,6 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64, predictionBase
 	}
 	if tpotSLO > 0 {
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
-	}
-	if !predictionBased {
-		headers["x-prediction-based-scheduling-off"] = "true"
 	}
 
 	return &schedulingtypes.LLMRequest{
@@ -156,7 +153,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name:      "No predictor configured",
 			predictor: nil,
 			strategy:  headroomStrategyLeast,
-			request:   createTestLLMRequest("test", 1.0, 0.05, true),
+			request:   createTestLLMRequest("test", 1.0, 0.05),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
 			},
@@ -172,7 +169,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1), // 50% KV cache
 				createTestPod("pod2", 0.6, 3, 2), // 60% KV cache
@@ -192,7 +189,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.8, 5, 3), // 80% KV cache, high load
 				createTestPod("pod2", 0.9, 6, 4), // 90% KV cache, very high load
@@ -209,7 +206,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod-positive", 0.3, 1, 0), // Low KV cache, positive headroom
 				createTestPod("pod-negative", 0.9, 6, 4), // High KV cache, negative headroom
@@ -223,7 +220,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				err: errors.New("prediction failed"),
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05, true),
+			request:  createTestLLMRequest("test", 1.0, 0.05),
 			pods: []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
 				createTestPod("pod2", 0.6, 3, 2),
@@ -237,7 +234,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name:      "Empty pod list",
 			predictor: &mockPredictor{},
 			strategy:  headroomStrategyLeast,
-			request:   createTestLLMRequest("test", 1.0, 0.05, true),
+			request:   createTestLLMRequest("test", 1.0, 0.05),
 			pods:      []schedulingtypes.Pod{},
 			// Should return empty scores map
 			expectedScores: map[string]float64{},
@@ -337,7 +334,7 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 			cfg.HeadroomSelectionStrategy = string(tt.strategy)
 			router := NewSLOAwareRouter(cfg, predictor)
 
-			request := createTestLLMRequest("test", 1.0, 0.05, true)
+			request := createTestLLMRequest("test", 1.0, 0.05)
 			pods := []schedulingtypes.Pod{
 				createTestPod("pod1", 0.5, 2, 1),
 				createTestPod("pod2", 0.6, 3, 2),

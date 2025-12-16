@@ -33,7 +33,7 @@ func (s *SLOAwareRouter) PrepareRequestData(ctx context.Context, request *schedu
 	sloCtx := s.getOrMakeSLORequestContext(request)
 
 	s.parseSLOHeaders(ctx, request, sloCtx)
-	var prefixCacheScore = 0.0
+	var prefixCacheScore float64
 	for _, pod := range pods {
 		prefixCacheInfoRaw, ok := pod.Get(approximateprefix.PrefixCacheMatchInfoKey)
 		prefixCacheInfo := prefixCacheInfoRaw.(*approximateprefix.PrefixCacheMatchInfo)
