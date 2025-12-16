@@ -158,7 +158,11 @@ func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
 
 	duration := time.Since(fi.enqueueTime)
 	flowKey := fi.originalRequest.FlowKey()
-	metrics.RecordFlowControlRequestQueueDuration(flowKey.ID, strconv.Itoa(flowKey.Priority), outcome.String(), duration)
+	metrics.RecordFlowControlRequestQueueDuration(
+		flowKey.ID, strconv.Itoa(flowKey.Priority), outcome.String(),
+		fi.originalRequest.InferencePoolName(),
+		fi.OriginalRequest().ModelName(), fi.OriginalRequest().TargetModelName(),
+		duration)
 
 	fi.done <- finalState
 	close(fi.done)

@@ -212,10 +212,15 @@ func (fc *FlowController) EnqueueAndWait(
 	req types.FlowControlRequest,
 ) (types.QueueOutcome, error) {
 	flowKey := req.FlowKey()
-	fairnessID := flowKey.ID
 	priority := strconv.Itoa(flowKey.Priority)
-	metrics.IncFlowControlQueueSize(fairnessID, priority)
-	defer metrics.DecFlowControlQueueSize(fairnessID, priority)
+	metrics.IncFlowControlQueueSize(
+		flowKey.ID, priority,
+		req.InferencePoolName(),
+		req.ModelName(), req.TargetModelName())
+	defer metrics.DecFlowControlQueueSize(
+		flowKey.ID, priority,
+		req.InferencePoolName(),
+		req.ModelName(), req.TargetModelName())
 
 	// 1. Create the derived context that governs this request's lifecycle (Parent Cancellation + TTL).
 	reqCtx, cancel, enqueueTime := fc.createRequestContext(ctx, req)

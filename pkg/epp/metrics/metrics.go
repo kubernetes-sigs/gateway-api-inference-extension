@@ -396,7 +396,7 @@ var (
 				0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
 			},
 		},
-		[]string{"fairness_id", "priority", "outcome"},
+		append([]string{"fairness_id", "priority", "outcome", "inference_pool"}, ModelLabels...),
 	)
 
 	flowControlQueueSize = prometheus.NewGaugeVec(
@@ -405,7 +405,7 @@ var (
 			Name:      "flow_control_queue_size",
 			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
 		},
-		[]string{"fairness_id", "priority"},
+		append([]string{"fairness_id", "priority", "inference_pool"}, ModelLabels...),
 	)
 )
 
@@ -774,18 +774,27 @@ func RecordInferenceExtensionInfo(commitSha, buildRef string) {
 }
 
 // RecordFlowControlRequestQueueDuration records the duration a request spent in the Flow Control layer.
-func RecordFlowControlRequestQueueDuration(fairnessID, priority, outcome string, duration time.Duration) {
-	flowControlRequestQueueDuration.WithLabelValues(fairnessID, priority, outcome).Observe(duration.Seconds())
+func RecordFlowControlRequestQueueDuration(
+	fairnessID, priority, outcome,
+	inferencePool,
+	modelName, targetModelName string,
+	duration time.Duration,
+) {
+	flowControlRequestQueueDuration.WithLabelValues(
+		fairnessID, priority, outcome,
+		inferencePool,
+		modelName, targetModelName,
+	).Observe(duration.Seconds())
 }
 
 // IncFlowControlQueueSize increments the Flow Control queue size gauge.
-func IncFlowControlQueueSize(fairnessID, priority string) {
-	flowControlQueueSize.WithLabelValues(fairnessID, priority).Inc()
+func IncFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, targetModelName string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Inc()
 }
 
 // DecFlowControlQueueSize decrements the Flow Control queue size gauge.
-func DecFlowControlQueueSize(fairnessID, priority string) {
-	flowControlQueueSize.WithLabelValues(fairnessID, priority).Dec()
+func DecFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, targetModelName string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Dec()
 }
 
 // SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
