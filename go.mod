@@ -44,7 +44,7 @@ require (
 
 require (
 	github.com/go-logr/zapr v1.3.0
-	github.com/spf13/pflag v1.0.7
+	github.com/spf13/pflag v1.0.10
 	sigs.k8s.io/kustomize/api v0.21.0
 	sigs.k8s.io/kustomize/kyaml v0.21.0
 )
