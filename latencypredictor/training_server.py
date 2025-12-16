@@ -595,23 +595,24 @@ class LatencyPredictor:
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     feature_cols = [
                         'kv_cache_percentage','input_token_length','num_request_waiting',
-                        'num_request_running','prefix_cache_score','effective_input_tokens'
+                        'num_request_running','prefix_cache_score','effective_input_tokens','pod_type_cat'
                     ]
                 else:  # XGBoost or LightGBM
                     feature_cols = [
                         'kv_cache_percentage','input_token_length','num_request_waiting',
-                        'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket'
+                        'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket','pod_type_cat'
                     ]
             else:  # tpot
-                feature_cols = ['kv_cache_percentage', 'input_token_length', 
-                   'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                feature_cols = ['kv_cache_percentage', 'input_token_length',
+                               'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'pod_type_cat']
 
-            X = df_features[feature_cols]  # ✅ Now has properly typed categorical!
-            
+            X = df_features[feature_cols]
 
-            
-
+            # For Bayesian Ridge, one-hot encode pod_type_cat before scaling
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
+                # One-hot encode pod_type_cat (Bayesian Ridge can't handle categorical features)
+                if 'pod_type_cat' in X.columns:
+                    X = pd.get_dummies(X, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                 X = scaler.transform(X)
 
             y_true = df_raw[target_col].values
@@ -1211,12 +1212,13 @@ class LatencyPredictor:
             if self.model_type == ModelType.BAYESIAN_RIDGE:
                 ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
                   "num_request_running","prefix_cache_score","effective_input_tokens"]
+                tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                  "num_request_running","num_tokens_generated"]
             else:
                 ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
-                  "num_request_running","prefix_cache_score","effective_input_tokens","prefill_score_bucket"]
-
-            tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
-              "num_request_running","num_tokens_generated"]
+                  "num_request_running","prefix_cache_score","effective_input_tokens","prefill_score_bucket","pod_type_cat"]
+                tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                  "num_request_running","num_tokens_generated","pod_type_cat"]
             emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
             emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
 
