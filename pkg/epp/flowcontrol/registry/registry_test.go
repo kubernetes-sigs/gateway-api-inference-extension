@@ -367,37 +367,41 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 		key := types.FlowKey{ID: "re-activated-flow", Priority: highPriority}
 		h.openConnectionOnFlow(key)
 
-		// Make the flow a candidate for GC.
-		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
-		candidates := []types.FlowKey{key}
-
 		// Get the flow's state so we can manipulate its lock.
 		val, ok := h.fr.flowStates.Load(key)
 		require.True(t, ok, "Test setup: flow state must exist")
 		state := val.(*flowState)
 
-		// Lock the flow's `gcLock` to pause the GC.
+		// Acquire the lock before stepping the clock.
+		// This ensures the Background GC (which wakes up on Step) is blocked and cannot touch our flow until we release
+		// this lock.
 		state.gcLock.Lock()
 		defer state.gcLock.Unlock()
 
-		// Start the sweep in the background; it will block.
+		// Now step the clock to mark the flow as a candidate for GC.
+		// The Background GC wakes up but hangs on the lock.
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		candidates := []types.FlowKey{key}
+
+		// Start the manual sweep in the background; it will also block on the lock.
 		sweepDone := make(chan struct{})
 		go func() {
 			defer close(sweepDone)
 			h.fr.verifyAndSweepFlows(candidates)
 		}()
 
-		// While the sweep is blocked, make the flow Active again.
-		// This simulates a new connection arriving just in time.
+		// While the sweeps are blocked, simulate the flow becoming Active.
 		state.leaseCount.Add(1)
 
-		// Unblock the sweep.
+		// Unblock the sweeps.
+		// The Background GC and Manual Sweep will now race for the lock.
+		// Since leaseCount is now 1, whoever wins will see it is Active and abort.
 		state.gcLock.Unlock()
 
-		// Wait for the sweep to complete.
+		// Wait for the manual sweep to complete.
 		select {
 		case <-sweepDone:
-			// Continue to assertion.
+			// Success
 		case <-time.After(time.Second):
 			t.Fatal("verifyAndSweepFlows deadlocked or timed out")
 		}
