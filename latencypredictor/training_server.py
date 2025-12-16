@@ -336,14 +336,27 @@ class LatencyPredictor:
     def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
         """
         Prepare features with interaction terms for better model learning.
-    
+
         Args:
             df: DataFrame with raw features
             model_type: 'ttft' or 'tpot'
-    
+
         Returns:
             DataFrame with engineered features including interactions
         """
+        # Encode pod_type as categorical (common for both TTFT and TPOT)
+        # Convert to categorical with known categories for consistent encoding
+        if 'pod_type' in df.columns:
+            df['pod_type'] = df['pod_type'].fillna('')  # Handle NaN
+            df['pod_type_cat'] = pd.Categorical(
+                df['pod_type'],
+                categories=['', 'prefill', 'decode'],  # '' = monolithic, prefill, decode
+                ordered=False
+            )
+        else:
+            # If pod_type column doesn't exist, create it as empty (monolithic)
+            df['pod_type_cat'] = pd.Categorical([''] * len(df), categories=['', 'prefill', 'decode'], ordered=False)
+
         if model_type == "ttft":
             # Create interaction: prefix score * input length
             # This captures that prefix caching benefit scales with input size
@@ -358,7 +371,7 @@ class LatencyPredictor:
             df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
 
 
-            # Return TTFT features with interaction
+            # Return TTFT features with interaction and pod_type
             feature_cols = [
             'kv_cache_percentage',
             'input_token_length',
@@ -366,11 +379,12 @@ class LatencyPredictor:
             'num_request_running',
             'prefix_cache_score',
             'effective_input_tokens',
-            'prefill_score_bucket'
+            'prefill_score_bucket',
+            'pod_type_cat'
             ]
-        
+
             return df[feature_cols]
-        
+
         else:  # tpot
             # TPOT doesn't use prefix_cache_score, so no interaction needed
             feature_cols = [
@@ -378,9 +392,10 @@ class LatencyPredictor:
                 'input_token_length',
                 'num_request_waiting',
                 'num_request_running',
-                'num_tokens_generated'
+                'num_tokens_generated',
+                'pod_type_cat'
             ]
-        
+
             return df[feature_cols]
 
 
@@ -816,15 +831,24 @@ class LatencyPredictor:
                     if not isinstance(features[f], (int, float)):
                         raise ValueError(f"Invalid type for feature {f}: expected number")
 
-                # Updated TTFT features to include prefix_cache_score
+                # Updated TTFT features to include prefix_cache_score and pod_type
                 ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
                 tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
-                
+
                 # Create DataFrames for predictions
                 df_ttft = pd.DataFrame([{col: features[col] for col in ttft_cols}])
-                # Add interaction term for TTFT
+                # Add pod_type if present (otherwise _prepare_features_with_interaction will default to '')
+                if 'pod_type' in features:
+                    df_ttft['pod_type'] = features['pod_type']
+                # Add interaction term for TTFT (includes pod_type encoding)
                 df_ttft = self._prepare_features_with_interaction(df_ttft, model_type="ttft")
+
                 df_tpot = pd.DataFrame([{col: features[col] for col in tpot_cols}])
+                # Add pod_type if present
+                if 'pod_type' in features:
+                    df_tpot['pod_type'] = features['pod_type']
+                # Add pod_type encoding for TPOT
+                df_tpot = self._prepare_features_with_interaction(df_tpot, model_type="tpot")
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     # Use scaling for Bayesian Ridge
@@ -1302,6 +1326,7 @@ class TrainingEntry(BaseModel):
     actual_tpot_ms: float = Field(..., ge=0.0)
     num_tokens_generated: int = Field(..., ge=0)
     prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
+    pod_type: Optional[str] = Field(default="", description="Pod type: 'prefill', 'decode', or '' for monolithic")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class PredictionRequest(BaseModel):
@@ -1311,6 +1336,7 @@ class PredictionRequest(BaseModel):
     num_request_running: int = Field(..., ge=0)
     num_tokens_generated: int = Field(..., ge=0)
     prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
+    pod_type: Optional[str] = Field(default="", description="Pod type: 'prefill', 'decode', or '' for monolithic")
 
 class PredictionResponse(BaseModel):
     ttft_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TTFT in milliseconds")

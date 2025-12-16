@@ -219,14 +219,27 @@ class LightweightPredictor:
     def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
         """
         Prepare features with interaction terms to match training server.
-        
+
         Args:
             df: DataFrame with raw features
             model_type: 'ttft' or 'tpot'
-        
+
         Returns:
             DataFrame with engineered features including interactions
         """
+        # Encode pod_type as categorical (common for both TTFT and TPOT)
+        # Convert to categorical with known categories for consistent encoding
+        if 'pod_type' in df.columns:
+            df['pod_type'] = df['pod_type'].fillna('')  # Handle NaN
+            df['pod_type_cat'] = pd.Categorical(
+                df['pod_type'],
+                categories=['', 'prefill', 'decode'],  # '' = monolithic, prefill, decode
+                ordered=False
+            )
+        else:
+            # If pod_type column doesn't exist, create it as empty (monolithic)
+            df['pod_type_cat'] = pd.Categorical([''] * len(df), categories=['', 'prefill', 'decode'], ordered=False)
+
         if model_type == "ttft":
             # Create interaction: prefix score * input length
             df['effective_input_tokens'] = (1-df['prefix_cache_score']) * df['input_token_length']
@@ -238,9 +251,9 @@ class LightweightPredictor:
 
             # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
             df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
- 
-            
-            # Return TTFT features with interaction
+
+
+            # Return TTFT features with interaction and pod_type
             feature_cols = [
                 'kv_cache_percentage',
                 'input_token_length',
@@ -248,11 +261,12 @@ class LightweightPredictor:
                 'num_request_running',
                 'prefix_cache_score',
                 'effective_input_tokens',
-                'prefill_score_bucket'
+                'prefill_score_bucket',
+                'pod_type_cat'
             ]
-            
+
             return df[feature_cols]
-            
+
         else:  # tpot
             # TPOT doesn't use prefix_cache_score, so no interaction needed
             feature_cols = [
@@ -260,9 +274,10 @@ class LightweightPredictor:
                 'input_token_length',
                 'num_request_waiting',
                 'num_request_running',
-                'num_tokens_generated'
+                'num_tokens_generated',
+                'pod_type_cat'
             ]
-            
+
             return df[feature_cols]
 
     def load_models(self) -> bool:
@@ -471,6 +486,7 @@ class PredictionRequest(BaseModel):
     num_request_running: int = Field(..., ge=0)
     num_tokens_generated: int = Field(..., ge=0)
     prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
+    pod_type: Optional[str] = Field(default="", description="Pod type: 'prefill', 'decode', or '' for monolithic")
 
 
 class PredictionResponse(BaseModel):
