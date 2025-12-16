@@ -464,10 +464,10 @@ class LatencyPredictor:
 
             elif self.model_type == ModelType.XGBOOST:  # XGBoost with quantile regression
                 if model_name == "ttft":
-                     # enforce your TTFT feature order
+                     # enforce your TTFT feature order (including pod_type_cat)
                         ttft_order = [
                             "kv_cache_percentage", "input_token_length", "num_request_waiting",
-                            "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket"
+                            "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"
                         ]
                         if list(features.columns) != ttft_order:
                             try:
@@ -517,15 +517,15 @@ class LatencyPredictor:
 
 
                 elif model_name == "tpot":
-                    tpot_order = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated"]
+                    tpot_order = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated","pod_type_cat"]
                     if list(features.columns) != tpot_order:
                         try:
                             features = features[tpot_order]
                         except Exception as _:
                             raise ValueError(f"TPOT features must be exactly {tpot_order}; got {list(features.columns)}")
-                    mono_str = "(1,1,1,1,1)" 
+                    mono_str = "(1,1,1,1,1,0)"  # pod_type_cat has no monotone constraint
                 else:
-                    mono_str = "(0,0,0,0,0)"  # default
+                    mono_str = "(0,0,0,0,0,0)"  # default (6 features with pod_type_cat)
                 model = xgb.XGBRegressor(
                 n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
                 max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
@@ -689,10 +689,10 @@ class LatencyPredictor:
                 df_ttft = self._prepare_features_with_interaction(raw_ttft.copy(), model_type="ttft")
                 print(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
                 if len(df_ttft) >= settings.MIN_SAMPLES_FOR_RETRAIN:
-                    # Updated TTFT features to include prefix_cache_score
+                    # Updated TTFT features to include prefix_cache_score and pod_type_cat
                     ttft_feature_cols_tree = [
                     'kv_cache_percentage','input_token_length','num_request_waiting',
-                    'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket'
+                    'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket','pod_type_cat'
                 ]
                     ttft_feature_cols_br = [
                     'kv_cache_percentage','input_token_length','num_request_waiting',
@@ -702,7 +702,8 @@ class LatencyPredictor:
                     # Build X_ttft for all model types, then trim for BR
                     X_ttft = df_ttft[ttft_feature_cols_tree]
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
-                        X_ttft = X_ttft[ttft_feature_cols_br]
+                        # For Bayesian Ridge, drop categorical features (handled by one-hot encoding in _train_model_with_scaling)
+                        X_ttft = df_ttft  # Use full df_ttft which will be processed by _train_model_with_scaling
 
                     y_ttft = raw_ttft['actual_ttft_ms']
 
@@ -761,8 +762,8 @@ class LatencyPredictor:
                 df_tpot = pd.DataFrame(tpot_snap).dropna()
                 df_tpot = df_tpot[df_tpot['actual_tpot_ms'] > 0]
                 if len(df_tpot) >= settings.MIN_SAMPLES_FOR_RETRAIN:
-                    # TPOT features remain unchanged
-                    X_tpot = df_tpot[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
+                    # TPOT features - use feature preparation to add pod_type_cat
+                    X_tpot = self._prepare_features_with_interaction(df_tpot.copy(), model_type="tpot")
                     y_tpot = df_tpot['actual_tpot_ms']
                     try:
                         result = self._train_model_with_scaling(X_tpot, y_tpot, model_name="tpot")
