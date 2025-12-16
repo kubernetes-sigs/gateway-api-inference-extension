@@ -661,6 +661,7 @@ class LatencyPredictor:
                     'num_request_running': [0, ],
                     'num_tokens_generated': [1,]
                 })
+                features = self._prepare_features_with_interaction(features, "tpot")
                 target = pd.Series([10.0])
             return self._train_model_with_scaling(features, target, model_name=model_type)
         except Exception as e:
