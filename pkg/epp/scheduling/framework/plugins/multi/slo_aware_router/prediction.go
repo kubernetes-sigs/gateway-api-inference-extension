@@ -41,7 +41,7 @@ type podPredictionResult struct {
 }
 
 // generatePredictions creates prediction results for all candidate pods
-func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, sloCtx *sloRequestContext, candidatePods []schedulingtypes.Pod) ([]podPredictionResult, error) {
+func (s *SLOAwareRouter) generatePredictions(ctx context.Context, request *schedulingtypes.LLMRequest, sloCtx *sloRequestContext, candidatePods []schedulingtypes.Pod) ([]podPredictionResult, error) {
 	logger := log.FromContext(ctx)
 	predictions := make([]podPredictionResult, 0, len(candidatePods))
 
@@ -55,7 +55,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 		logger.V(logutil.TRACE).Info("Candidate pod for scheduling", "pod", pod.GetPod().String(), "metrics", pod.GetMetrics().String())
 
 		// Get prefix cache score for the pod
-		prefixCacheScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
+		prefixCacheScore := sloCtx.prefixCacheScoresForPods[pod.GetPod().String()]
 		sloCtx.prefixCacheScoresForPods[pod.GetPod().String()] = prefixCacheScore
 
 		logger.V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", pod.GetPod().String(), "prefixCacheScore", prefixCacheScore)
@@ -108,19 +108,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 
 // updateRequestContextWithPredictions updates the request context with prediction data
 func (s *SLOAwareRouter) updateRequestContextWithPredictions(sloCtx *sloRequestContext, predictions []podPredictionResult) {
-	for _, pred := range predictions {
-		if pred.Error == nil {
-			podKey := pred.Pod.GetPod().String()
-			if sloCtx.predictedTTFTForScheduling == nil {
-				sloCtx.predictedTTFTForScheduling = make(map[string]float64)
-			}
-			if sloCtx.predictedTPOTForScheduling == nil {
-				sloCtx.predictedTPOTForScheduling = make(map[string]float64)
-			}
-			sloCtx.predictedTTFTForScheduling[podKey] = pred.TTFT
-			sloCtx.predictedTPOTForScheduling[podKey] = pred.TPOT
-		}
-	}
+	sloCtx.predictionsForScheduling = predictions
 }
 
 func (s *SLOAwareRouter) validatePrediction(

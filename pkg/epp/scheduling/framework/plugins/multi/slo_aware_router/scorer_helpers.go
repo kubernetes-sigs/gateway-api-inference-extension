@@ -41,7 +41,6 @@ func (s *SLOAwareRouter) parseSLOHeaders(ctx context.Context, request *schedulin
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TPOT SLO from header")
 	}
-	sloCtx.predictorBasedScheduling = !hasHeader(*request, "x-prediction-based-scheduling-off")
 }
 
 func (s *SLOAwareRouter) classifyPodsByHeadroom(allPreds []podPredictionResult) (posHeadroomPods, negHeadroomPods []podPredictionResult) {

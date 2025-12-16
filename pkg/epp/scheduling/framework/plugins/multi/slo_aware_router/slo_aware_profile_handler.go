@@ -28,13 +28,8 @@ import (
 )
 
 const (
-	SLOAwareProfileHandlerType  = "predicted-latency-profile-handler"
-	NoLatencyRoutingProfileName = "predicted-latency-no-routing"
-	PrefixProfileName           = "predicted-latency-prefix"
-	LatencyRoutingProfileName   = "predicted-latency-routing"
-
-	// Boolean header string for whether to use predictor based scheduling
-	PreictionBasedSchedulingHeaderKey = "x-prediction-based-scheduling-off"
+	SLOAwareProfileHandlerType = "predicted-latency-profile-handler"
+	LatencyRoutingProfileName  = "predicted-latency-routing"
 )
 
 // compile-time type assertion
@@ -74,37 +69,11 @@ func (h *SLOAwareProfileHandler) WithName(name string) *SLOAwareProfileHandler {
 // previously executed cycles along with their results.
 func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
 	profileResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
-
-	predictorBasedScheduling := !isHeaderPresent(*request, PreictionBasedSchedulingHeaderKey)
-
-	_, prefixExecuted := profileResults[PrefixProfileName]
-	// if prefix profile was not executed yet, first let the scheduler run it
-	if !prefixExecuted {
-		return map[string]*framework.SchedulerProfile{
-			PrefixProfileName: profiles[PrefixProfileName],
-		}
+	if len(profiles) == len(profileResults) { // all profiles have been executed already in previous call
+		return map[string]*framework.SchedulerProfile{}
 	}
-
-	if predictorBasedScheduling {
-		_, routingExecuted := profileResults[LatencyRoutingProfileName]
-		// routing profile has not been executed yet
-		if !routingExecuted {
-			return map[string]*framework.SchedulerProfile{
-				LatencyRoutingProfileName: profiles[LatencyRoutingProfileName],
-			}
-		}
-	} else {
-		_, defaultExecuted := profileResults[NoLatencyRoutingProfileName]
-		// predictorBasedScheduling is off, and NoLatencyRoutingProfileName profile has not been executed yet
-		if !defaultExecuted {
-			return map[string]*framework.SchedulerProfile{
-				NoLatencyRoutingProfileName: profiles[NoLatencyRoutingProfileName],
-			}
-		}
-	}
-
-	// all previous profiles have been executed, nothing more to run
-	return map[string]*framework.SchedulerProfile{}
+	// return all profiles
+	return profiles
 }
 
 // ProcessResults handles the outcome of the profile runs after all profiles ran.
@@ -113,37 +82,14 @@ func (h *SLOAwareProfileHandler) Pick(ctx context.Context, _ *types.CycleState, 
 // When a profile run fails, its result in the profileResults map is nil.
 func (h *SLOAwareProfileHandler) ProcessResults(ctx context.Context, _ *types.CycleState, request *types.LLMRequest, profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
 
-	predictorBasedScheduling := !isHeaderPresent(*request, PreictionBasedSchedulingHeaderKey)
-
-	if predictorBasedScheduling { // TODO grab header directly from request.Headers instead of request field
-		if len(profileResults) < 2 {
-			return nil, errors.New("SLOAwareProfileHandler requires at least two profiles to operate when predictorBasedScheduling is true")
-		}
-		if profileResults[LatencyRoutingProfileName] == nil { // there was an error while running the SLO profile
-			return nil, fmt.Errorf("failed to run scheduler profile '%s'", LatencyRoutingProfileName)
-		}
-		return &types.SchedulingResult{
-			ProfileResults:     profileResults,
-			PrimaryProfileName: LatencyRoutingProfileName,
-		}, nil
+	if len(profileResults) < 2 {
+		return nil, errors.New("SLOAwareProfileHandler requires at least two profiles to operate when predictorBasedScheduling is true")
 	}
-	if len(profileResults) < 1 {
-		return nil, errors.New("SLOAwareProfileHandler requires at least one profiles to operate when predictorBasedScheduling is false")
+	if profileResults[LatencyRoutingProfileName] == nil { // there was an error while running the SLO profile
+		return nil, fmt.Errorf("failed to run scheduler profile '%s'", LatencyRoutingProfileName)
 	}
-
-	if profileResults[NoLatencyRoutingProfileName] == nil { // there was an error while running the default profile
-		return nil, fmt.Errorf("failed to run scheduler profile '%s'", NoLatencyRoutingProfileName)
-	}
-
 	return &types.SchedulingResult{
 		ProfileResults:     profileResults,
-		PrimaryProfileName: NoLatencyRoutingProfileName,
+		PrimaryProfileName: LatencyRoutingProfileName,
 	}, nil
-}
-
-// isHeaderPresent checks if a header key exists in the request headers map.
-func isHeaderPresent(request types.LLMRequest, headerName string) bool {
-	// 1. Get header value from the map
-	_, ok := request.Headers[headerName]
-	return ok
 }

@@ -77,8 +77,7 @@ func TestNewSLORequestContext(t *testing.T) {
 	assert.Equal(t, *request, ctx.schedulingRequest)
 	assert.NotNil(t, ctx.lastSeenMetrics)
 	assert.NotNil(t, ctx.prefixCacheScoresForPods)
-	assert.NotNil(t, ctx.predictedTTFTForScheduling)
-	assert.NotNil(t, ctx.predictedTPOTForScheduling)
+	assert.NotNil(t, ctx.predictionsForScheduling)
 	assert.Empty(t, ctx.lastSeenMetrics)
 	assert.Empty(t, ctx.prefixCacheScoresForPods)
 }
@@ -653,8 +652,7 @@ func TestSLORequestContext_Fields(t *testing.T) {
 	// Test all field initialization
 	assert.NotNil(t, ctx.lastSeenMetrics)
 	assert.NotNil(t, ctx.prefixCacheScoresForPods)
-	assert.NotNil(t, ctx.predictedTTFTForScheduling)
-	assert.NotNil(t, ctx.predictedTPOTForScheduling)
+	assert.NotNil(t, ctx.predictionsForScheduling)
 	assert.Empty(t, ctx.tpotObservations)
 	assert.Empty(t, ctx.predictedTPOTObservations)
 	assert.Zero(t, ctx.generatedTokenCount)
@@ -685,16 +683,15 @@ func TestSLORequestContext_PredictionData(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50, true)
 	ctx := newSLORequestContext(request)
 
-	// Set prediction data
-	ctx.predictedTTFTForScheduling["pod1"] = 80.0
-	ctx.predictedTPOTForScheduling["pod1"] = 30.0
-	ctx.predictedTTFTForScheduling["pod2"] = 90.0
-	ctx.predictedTPOTForScheduling["pod2"] = 35.0
+	ctx.predictionsForScheduling = make([]podPredictionResult, 0)
 
-	assert.Len(t, ctx.predictedTTFTForScheduling, 2)
-	assert.Len(t, ctx.predictedTPOTForScheduling, 2)
-	assert.Equal(t, 80.0, ctx.predictedTTFTForScheduling["pod1"])
-	assert.Equal(t, 30.0, ctx.predictedTPOTForScheduling["pod1"])
+	// Set prediction data
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, podPredictionResult{Pod: createTestPod("pod1", 0, 0, 0), TTFT: 80.0, TPOT: 25.0})
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, podPredictionResult{Pod: createTestPod("pod1", 0, 0, 0), TPOT: 30.0, TTFT: 85.0})
+
+	assert.Len(t, ctx.predictionsForScheduling, 2)
+	assert.Equal(t, 80.0, ctx.predictionsForScheduling[0].TTFT)
+	assert.Equal(t, 30.0, ctx.predictionsForScheduling[1].TPOT)
 }
 
 func TestSLORequestContext_PrefixCacheScores(t *testing.T) {

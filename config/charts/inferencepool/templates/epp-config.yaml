@@ -15,7 +15,7 @@ data:
     - type: predicted-latency-scorer
       parameters:
         {{- with .Values.inferenceExtension.latencyPredictor.sloAwareRouting | default dict }}
-        samplingMean: {{ .samplingMean | default 100.0 }}
+        samplingMean: {{ .samplingMean | default 1000.0 }}
         maxSampledTokens: {{ .maxSampledTokens | default 20 }}
         sloBufferFactor: {{ .sloBufferFactor | default 1.0 }}
         negHeadroomTTFTWeight: {{ .negHeadroomTTFTWeight | default 0.8 }}
@@ -39,16 +39,11 @@ data:
     - name: predicted-latency-prefix
       plugins:
       - pluginRef: prefix-cache-scorer
-    - name: predicted-latency-no-routing
-      plugins:
-      - pluginRef: prefix-cache-scorer
-      - pluginRef: predicted-latency-scorer
-        weight: 0
-      - pluginRef: queue-scorer
-      - pluginRef: kv-cache-utilization-scorer
     - name: predicted-latency-routing
       plugins:
       - pluginRef: predicted-latency-scorer
+    featureGates:
+      - prepareDataPlugins
     {{- else }}
     - name: default
       plugins:

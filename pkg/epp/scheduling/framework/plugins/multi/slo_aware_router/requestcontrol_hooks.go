@@ -64,12 +64,8 @@ type sloRequestContext struct {
 	// TPOTSLO is the target time per output token SLO for the request.
 	avgTPOTSLO float64
 
-	// predictorBasedScheduling indicates whether to use predictor based scheduling.
-	predictorBasedScheduling bool
 	// predictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
-	predictedTTFTForScheduling map[string]float64
-	// predictedTPOTForScheduling is the map of pod names to predicted TPOT values for scheduling.
-	predictedTPOTForScheduling map[string]float64
+	predictionsForScheduling []podPredictionResult
 
 	// boolean set if request has valid pod based on predictions
 	hasValidPod bool
@@ -77,11 +73,10 @@ type sloRequestContext struct {
 
 func newSLORequestContext(request *schedulingtypes.LLMRequest) *sloRequestContext {
 	return &sloRequestContext{
-		schedulingRequest:          *request,
-		lastSeenMetrics:            make(map[string]*backendmetrics.MetricsState),
-		prefixCacheScoresForPods:   make(map[string]float64),
-		predictedTTFTForScheduling: make(map[string]float64),
-		predictedTPOTForScheduling: make(map[string]float64),
+		schedulingRequest:        *request,
+		lastSeenMetrics:          make(map[string]*backendmetrics.MetricsState),
+		prefixCacheScoresForPods: make(map[string]float64),
+		predictionsForScheduling: make([]podPredictionResult, 0),
 	}
 }
 
@@ -244,8 +239,6 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 			metrics.RecordRequestTPOTWithSLO(ctx, sloCtx.incomingModelName, request.TargetModel, sloCtx.avgTPOT, sloCtx.avgTPOTSLO)
 		}
 	}
-
-	logger.V(logutil.TRACE).Info("SLO Aware Routing Mode", "PredictorBasedScheduling", sloCtx.predictorBasedScheduling)
 
 	podName := types.NamespacedName{
 		Name:      targetPod.NamespacedName.Name,

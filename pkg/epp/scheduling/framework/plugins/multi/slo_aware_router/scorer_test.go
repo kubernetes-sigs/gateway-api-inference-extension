@@ -153,17 +153,6 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 		expectNil      bool
 	}{
 		{
-			name:      "Prediction-based scheduling disabled",
-			predictor: &mockPredictor{},
-			strategy:  headroomStrategyLeast,
-			request:   createTestLLMRequest("test", 1.0, 0.05, false), // predictionBased = false
-			pods: []schedulingtypes.Pod{
-				createTestPod("pod1", 0.5, 2, 1), // 50% KV cache, 2 running, 1 waiting
-				createTestPod("pod2", 0.7, 3, 2), // 70% KV cache, 3 running, 2 waiting
-			},
-			expectNil: true,
-		},
-		{
 			name:      "No predictor configured",
 			predictor: nil,
 			strategy:  headroomStrategyLeast,
