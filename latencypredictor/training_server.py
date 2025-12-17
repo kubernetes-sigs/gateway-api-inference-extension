@@ -336,11 +336,9 @@ class LatencyPredictor:
     def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
         """
         Prepare features with interaction terms for better model learning.
-
         Args:
             df: DataFrame with raw features
             model_type: 'ttft' or 'tpot'
-
         Returns:
             DataFrame with engineered features including interactions
         """
@@ -382,9 +380,7 @@ class LatencyPredictor:
             'prefill_score_bucket',
             'pod_type_cat'
             ]
-
             return df[feature_cols]
-
         else:  # tpot
             # TPOT doesn't use prefix_cache_score, so no interaction needed
             feature_cols = [
@@ -395,9 +391,7 @@ class LatencyPredictor:
                 'num_tokens_generated',
                 'pod_type_cat'
             ]
-
             return df[feature_cols]
-
 
     def shutdown(self):
         """Signal the training thread to exit and join it."""
@@ -848,7 +842,6 @@ class LatencyPredictor:
                 # Updated TTFT features to include prefix_cache_score and pod_type
                 ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
                 tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
-
                 # Create DataFrames for predictions
                 df_ttft = pd.DataFrame([{col: features[col] for col in ttft_cols}])
                 # Add pod_type if present (otherwise _prepare_features_with_interaction will default to '')

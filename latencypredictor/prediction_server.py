@@ -219,11 +219,9 @@ class LightweightPredictor:
     def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
         """
         Prepare features with interaction terms to match training server.
-
         Args:
             df: DataFrame with raw features
             model_type: 'ttft' or 'tpot'
-
         Returns:
             DataFrame with engineered features including interactions
         """
@@ -277,7 +275,6 @@ class LightweightPredictor:
                 'num_tokens_generated',
                 'pod_type_cat'
             ]
-
             return df[feature_cols]
 
     def load_models(self) -> bool:
