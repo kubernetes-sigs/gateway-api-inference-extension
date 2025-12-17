@@ -75,78 +75,9 @@ inferenceExtension:
   latencyPredictor:
     enabled: false
 
-    # PD (Prefill-Decode) Disaggregation Mode
-    # When enabled, deploys separate predictors for prefill and decode pods
-    # Required for PD-SLO scheduling in llm-d-inference-scheduler
-    pdMode:
-      enabled: false  # Set to true to enable PD-SLO architecture
-      predictors:
-        # Prefill predictor (predicts prefill pod TTFT)
-        prefill:
-          trainingServer:
-            port: 8000
-            # Optional: Override global image/resources (falls back to global if not specified)
-            # image:
-            #   hub: path/to/your/docker/repo
-            #   name: latencypredictor-training-server
-            #   tag: latest
-            #   pullPolicy: Always
-            # resources:
-            #   requests:
-            #     cpu: "2000m"
-            #     memory: "4Gi"
-            volumeSize: "20Gi"
-            config:
-              LATENCY_RETRAINING_INTERVAL_SEC: "1"
-              LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
-              LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
-              LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
-              LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
-              LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
-              LATENCY_MODEL_TYPE: "xgboost"
-              LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
-              LATENCY_QUANTILE_ALPHA: "0.9"
-          predictionServers:
-            count: 1  # Number of prefill prediction server replicas
-            startPort: 8001
-            volumeSize: "10Gi"
-            config:
-              LATENCY_MODEL_TYPE: "xgboost"
-              PREDICT_HOST: "0.0.0.0"
-              LOCAL_TTFT_MODEL_PATH: "/server_models/ttft.joblib"
-              LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
-              LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
-              LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
-
-        # Decode predictor (predicts decode pod TTFT + TPOT)
-        decode:
-          trainingServer:
-            port: 8010  # Different port from prefill
-            volumeSize: "20Gi"
-            config:
-              LATENCY_RETRAINING_INTERVAL_SEC: "1"
-              LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
-              LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
-              LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
-              LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
-              LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
-              LATENCY_MODEL_TYPE: "xgboost"
-              LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
-              LATENCY_QUANTILE_ALPHA: "0.9"
-          predictionServers:
-            count: 1  # Number of decode prediction server replicas
-            startPort: 8011
-            volumeSize: "10Gi"
-            config:
-              LATENCY_MODEL_TYPE: "xgboost"
-              PREDICT_HOST: "0.0.0.0"
-              LOCAL_TTFT_MODEL_PATH: "/server_models/ttft.joblib"
-              LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
-              LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
-              LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
-
-    # Legacy Mode: Single Predictor Configuration (used when pdMode.enabled=false)
     # Training Server Configuration
+    # Single unified predictor for both monolithic and PD disaggregation modes
+    # Uses pod_type feature to differentiate prefill vs decode training data
     trainingServer:
       image:
         hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
