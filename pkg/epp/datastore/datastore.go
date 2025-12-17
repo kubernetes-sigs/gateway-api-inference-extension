@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"strconv"
 	"sync"
 
@@ -142,7 +141,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 
 	oldEndpointPool := ds.pool
 	ds.pool = endpointPool
-	if oldEndpointPool == nil || !reflect.DeepEqual(oldEndpointPool.Selector, endpointPool.Selector) {
+
+	if oldEndpointPool == nil || !labels.Equals(oldEndpointPool.Selector, endpointPool.Selector) {
 		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endpointPool.Selector)
 		// A full resync is required to address two cases:
 		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
