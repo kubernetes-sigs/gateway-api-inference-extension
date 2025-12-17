@@ -74,10 +74,8 @@ inferenceExtension:
   # Latency Predictor Configuration
   latencyPredictor:
     enabled: false
-
+    
     # Training Server Configuration
-    # Single unified predictor for both monolithic and PD disaggregation modes
-    # Uses pod_type feature to differentiate prefill vs decode training data
     trainingServer:
       image:
         hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars

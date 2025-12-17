@@ -1,6 +1,5 @@
 {{/*
-Latency Predictor Environment Variables
-Generates environment variables for training and prediction server URLs
+Latency Predictor Env
 */}}
 {{- define "gateway-api-inference-extension.latencyPredictor.env" -}}
 {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
@@ -21,7 +20,6 @@ Generates environment variables for training and prediction server URLs
 
 {{/*
 Latency Predictor Sidecar Containers
-Creates training and prediction server sidecar containers
 */}}
 {{- define "gateway-api-inference-extension.latencyPredictor.containers" -}}
 {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
@@ -29,13 +27,6 @@ Creates training and prediction server sidecar containers
 - name: training-server
   image: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.hub }}/{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.name }}:{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.tag }}
   imagePullPolicy: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.pullPolicy }}
-  command: ["uvicorn"]
-  args:
-  - "training_server:app"
-  - "--host"
-  - "0.0.0.0"
-  - "--port"
-  - "{{ .Values.inferenceExtension.latencyPredictor.trainingServer.port }}"
   ports:
   - containerPort: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.port }}
     name: training-port
@@ -106,16 +97,15 @@ Creates training and prediction server sidecar containers
 
 {{/*
 Latency Predictor Volumes
-Creates emptyDir volumes for training and prediction server storage
 */}}
 {{- define "gateway-api-inference-extension.latencyPredictor.volumes" -}}
 {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
 - name: training-server-storage
-  emptyDir:
+  emptyDir: 
     sizeLimit: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.volumeSize }}
 {{- range $i := until (int .Values.inferenceExtension.latencyPredictor.predictionServers.count) }}
 - name: prediction-server-{{ add $i 1 }}-storage
-  emptyDir:
+  emptyDir: 
     sizeLimit: {{ $.Values.inferenceExtension.latencyPredictor.predictionServers.volumeSize }}
 {{- end }}
 {{- end }}
