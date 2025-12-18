@@ -218,7 +218,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				// Body stream complete. Allocate empty slice for response to use.
+				// Body stream complete. Capture raw size for flow control.
+				reqCtx.RequestSize = len(body)
 				body = []byte{}
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
@@ -227,12 +228,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				// Populate the ExtProc protocol responses for the request body.
-				requestBodyBytes, err := json.Marshal(reqCtx.Request.Body)
+				// Marshal after HandleRequest to include modifications (e.g., model rewriting).
+				var requestBodyBytes []byte
+				requestBodyBytes, err = json.Marshal(reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
 					break
 				}
+				// Update RequestSize to match marshalled body for Content-Length header.
 				reqCtx.RequestSize = len(requestBodyBytes)
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
