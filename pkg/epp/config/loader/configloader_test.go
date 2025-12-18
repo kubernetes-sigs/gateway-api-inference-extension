@@ -32,7 +32,7 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -339,7 +339,7 @@ func TestBuildSaturationConfig(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    *configapi.SaturationDetector
-		expected *saturationdetector.Config
+		expected *utilizationdetector.Config
 	}{
 		{
 			name: "Valid Configuration",
@@ -348,7 +348,7 @@ func TestBuildSaturationConfig(t *testing.T) {
 				KVCacheUtilThreshold:      0.9,
 				MetricsStalenessThreshold: metav1.Duration{Duration: 500 * time.Millisecond},
 			},
-			expected: &saturationdetector.Config{
+			expected: &utilizationdetector.Config{
 				QueueDepthThreshold:       20,
 				KVCacheUtilThreshold:      0.9,
 				MetricsStalenessThreshold: 500 * time.Millisecond,
@@ -357,10 +357,10 @@ func TestBuildSaturationConfig(t *testing.T) {
 		{
 			name:  "Nil Input (Defaults)",
 			input: nil,
-			expected: &saturationdetector.Config{
-				QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+			expected: &utilizationdetector.Config{
+				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
+				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
+				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
 			},
 		},
 		{
@@ -370,10 +370,10 @@ func TestBuildSaturationConfig(t *testing.T) {
 				KVCacheUtilThreshold:      1.5,
 				MetricsStalenessThreshold: metav1.Duration{Duration: -10 * time.Second},
 			},
-			expected: &saturationdetector.Config{
-				QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+			expected: &utilizationdetector.Config{
+				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
+				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
+				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
 			},
 		},
 	}

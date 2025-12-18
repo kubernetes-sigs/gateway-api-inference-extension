@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package saturationdetector implements a mechanism to determine if the
+// Package utilizationdetector implements a mechanism to determine if the
 // backend model servers are considered saturated based on observed metrics.
 //
 // The current implementation provides a saturation signal (IsSaturated)
@@ -27,7 +27,7 @@ limitations under the License.
 //   - Predictive saturation based on trends.
 //   - Hysteresis bands or other smoothing techniques to prevent rapid
 //     oscillations of the saturation signal.
-package saturationdetector
+package utilizationdetector
 
 import (
 	"context"
