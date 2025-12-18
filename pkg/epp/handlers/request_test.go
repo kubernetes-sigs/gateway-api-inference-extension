@@ -29,11 +29,10 @@ func TestHandleRequestHeaders(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name            string
-		headers         []*configPb.HeaderValue
-		wantHeaders     map[string]string
-		wantFairnessID  string
-		wantDeletedKeys []string
+		name           string
+		headers        []*configPb.HeaderValue
+		wantHeaders    map[string]string
+		wantFairnessID string
 	}{
 		{
 			name: "Extracts Fairness ID and Removes Header",
@@ -41,17 +40,15 @@ func TestHandleRequestHeaders(t *testing.T) {
 				{Key: "x-test", Value: "val"},
 				{Key: metadata.FlowFairnessIDKey, Value: "user-123"},
 			},
-			wantHeaders:     map[string]string{"x-test": "val"},
-			wantFairnessID:  "user-123",
-			wantDeletedKeys: []string{metadata.FlowFairnessIDKey},
+			wantHeaders:    map[string]string{"x-test": "val"},
+			wantFairnessID: "user-123",
 		},
 		{
 			name: "Prefers RawValue over Value",
 			headers: []*configPb.HeaderValue{
 				{Key: metadata.FlowFairnessIDKey, RawValue: []byte("binary-id"), Value: "wrong-id"},
 			},
-			wantFairnessID:  "binary-id",
-			wantDeletedKeys: []string{metadata.FlowFairnessIDKey},
+			wantFairnessID: "binary-id",
 		},
 	}
 
@@ -77,11 +74,34 @@ func TestHandleRequestHeaders(t *testing.T) {
 					assert.Equal(t, v, reqCtx.Request.Headers[k], "Header %q should match expected value", k)
 				}
 			}
-
-			for _, key := range tc.wantDeletedKeys {
-				_, exists := reqCtx.Request.Headers[key]
-				assert.False(t, exists, "Expected header %q to be removed from map", key)
-			}
 		})
 	}
+}
+
+func TestGenerateHeaders_Sanitization(t *testing.T) {
+	server := &StreamingServer{}
+	reqCtx := &RequestContext{
+		TargetEndpoint: "1.2.3.4:8080",
+		RequestSize:    123,
+		Request: &Request{
+			Headers: map[string]string{
+				"x-user-data":                   "important",              // should passthrough
+				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
+				metadata.DestinationEndpointKey: "1.1.1.1:666",            // should be stripped
+				"content-length":                "99999",                  // should be stripped (re-added by logic)
+			},
+		},
+	}
+
+	results := server.generateHeaders(reqCtx)
+
+	gotHeaders := make(map[string]string)
+	for _, h := range results {
+		gotHeaders[h.Header.Key] = string(h.Header.RawValue)
+	}
+
+	assert.Contains(t, gotHeaders, "x-user-data")
+	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
+	assert.Equal(t, "1.2.3.4:8080", gotHeaders[metadata.DestinationEndpointKey])
+	assert.Equal(t, "123", gotHeaders["Content-Length"])
 }

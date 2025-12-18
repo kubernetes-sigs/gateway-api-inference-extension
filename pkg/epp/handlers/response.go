@@ -155,8 +155,11 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 		},
 	}
 
-	// include all headers
+	// Include any non-system-owned headers.
 	for key, value := range reqCtx.Response.Headers {
+		if request.IsSystemOwnedHeader(key) {
+			continue
+		}
 		headers = append(headers, &configPb.HeaderValueOption{
 			Header: &configPb.HeaderValue{
 				Key:      key,

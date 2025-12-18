@@ -60,20 +60,10 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		switch header.Key {
 		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
-			// remove the fairness ID header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			// It is only used for flow control.
-			delete(reqCtx.Request.Headers, header.Key)
 		case metadata.ObjectiveKey:
 			reqCtx.ObjectiveKey = reqCtx.Request.Headers[header.Key]
-			// remove the objective header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			delete(reqCtx.Request.Headers, header.Key)
 		case metadata.ModelNameRewriteKey:
 			reqCtx.TargetModelName = reqCtx.Request.Headers[header.Key]
-			// remove the rewrite header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			delete(reqCtx.Request.Headers, header.Key)
 		}
 	}
 
@@ -140,8 +130,11 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 		})
 	}
 
-	// include all headers
+	// Include any non-system-owned headers.
 	for key, value := range reqCtx.Request.Headers {
+		if request.IsSystemOwnedHeader(key) {
+			continue
+		}
 		headers = append(headers, &configPb.HeaderValueOption{
 			Header: &configPb.HeaderValue{
 				Key:      key,

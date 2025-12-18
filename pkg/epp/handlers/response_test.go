@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -297,4 +298,31 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 			assert.True(t, reqCtx.ResponseComplete, "Response should be marked complete after [DONE]")
 		})
 	}
+}
+
+func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
+	server := &StreamingServer{}
+	reqCtx := &RequestContext{
+		Response: &Response{
+			Headers: map[string]string{
+				"x-backend-server":              "vllm-v0.6.3",            // should passthrough
+				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
+				metadata.DestinationEndpointKey: "10.2.0.5:8080",          // should be stripped
+				"content-length":                "500",                    // hould be stripped
+			},
+		},
+	}
+
+	results := server.generateResponseHeaders(reqCtx)
+
+	gotHeaders := make(map[string]string)
+	for _, h := range results {
+		gotHeaders[h.Header.Key] = string(h.Header.RawValue)
+	}
+
+	assert.Contains(t, gotHeaders, "x-backend-server")
+	assert.Contains(t, gotHeaders, "x-went-into-resp-headers")
+	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
+	assert.NotContains(t, gotHeaders, metadata.DestinationEndpointKey)
+	assert.NotContains(t, gotHeaders, "content-length")
 }
