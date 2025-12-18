@@ -28,71 +28,60 @@ import (
 func TestHandleRequestHeaders(t *testing.T) {
 	t.Parallel()
 
-	// Setup a mock server and request context
-	server := &StreamingServer{}
-
-	reqCtx := &RequestContext{
-		Request: &Request{
-			Headers: make(map[string]string),
-		},
-	}
-
-	req := &extProcPb.ProcessingRequest_RequestHeaders{
-		RequestHeaders: &extProcPb.HttpHeaders{
-			Headers: &configPb.HeaderMap{
-				Headers: []*configPb.HeaderValue{
-					{
-						Key:   "x-test-header",
-						Value: "test-value",
-					},
-					{
-						Key:   metadata.FlowFairnessIDKey,
-						Value: "test-fairness-id-value",
-					},
-				},
+	tests := []struct {
+		name            string
+		headers         []*configPb.HeaderValue
+		wantHeaders     map[string]string
+		wantFairnessID  string
+		wantDeletedKeys []string
+	}{
+		{
+			name: "Extracts Fairness ID and Removes Header",
+			headers: []*configPb.HeaderValue{
+				{Key: "x-test", Value: "val"},
+				{Key: metadata.FlowFairnessIDKey, Value: "user-123"},
 			},
-			EndOfStream: false,
+			wantHeaders:     map[string]string{"x-test": "val"},
+			wantFairnessID:  "user-123",
+			wantDeletedKeys: []string{metadata.FlowFairnessIDKey},
 		},
-	}
-
-	err := server.HandleRequestHeaders(reqCtx, req)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if reqCtx.FairnessID != "test-fairness-id-value" {
-		t.Errorf("expected fairness ID to be 'test-fairness-id-value', got %s", reqCtx.FairnessID)
-	}
-	if reqCtx.Request.Headers[metadata.FlowFairnessIDKey] == "test-fairness-id-value" {
-		t.Errorf("expected fairness ID header to be removed from request headers, but it was not")
-	}
-}
-
-func TestHandleRequestHeaders_DefaultFairnessID(t *testing.T) {
-	t.Parallel()
-
-	server := &StreamingServer{}
-	reqCtx := &RequestContext{
-		Request: &Request{
-			Headers: make(map[string]string),
-		},
-	}
-
-	req := &extProcPb.ProcessingRequest_RequestHeaders{
-		RequestHeaders: &extProcPb.HttpHeaders{
-			Headers: &configPb.HeaderMap{
-				Headers: []*configPb.HeaderValue{
-					{
-						Key:   "x-test-header",
-						Value: "test-value",
-					},
-				},
+		{
+			name: "Prefers RawValue over Value",
+			headers: []*configPb.HeaderValue{
+				{Key: metadata.FlowFairnessIDKey, RawValue: []byte("binary-id"), Value: "wrong-id"},
 			},
-			EndOfStream: false,
+			wantFairnessID:  "binary-id",
+			wantDeletedKeys: []string{metadata.FlowFairnessIDKey},
 		},
 	}
 
-	err := server.HandleRequestHeaders(reqCtx, req)
-	assert.NoError(t, err, "expected no error")
-	assert.Equal(t, defaultFairnessID, reqCtx.FairnessID, "expected fairness ID to be defaulted")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := &StreamingServer{}
+			reqCtx := &RequestContext{
+				Request: &Request{Headers: make(map[string]string)},
+			}
+			req := &extProcPb.ProcessingRequest_RequestHeaders{
+				RequestHeaders: &extProcPb.HttpHeaders{
+					Headers: &configPb.HeaderMap{Headers: tc.headers},
+				},
+			}
+
+			err := server.HandleRequestHeaders(reqCtx, req)
+			assert.NoError(t, err, "HandleRequestHeaders should not return an error")
+
+			assert.Equal(t, tc.wantFairnessID, reqCtx.FairnessID, "FairnessID should match expected value")
+
+			if tc.wantHeaders != nil {
+				for k, v := range tc.wantHeaders {
+					assert.Equal(t, v, reqCtx.Request.Headers[k], "Header %q should match expected value", k)
+				}
+			}
+
+			for _, key := range tc.wantDeletedKeys {
+				_, exists := reqCtx.Request.Headers[key]
+				assert.False(t, exists, "Expected header %q to be removed from map", key)
+			}
+		})
+	}
 }

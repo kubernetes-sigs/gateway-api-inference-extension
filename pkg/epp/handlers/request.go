@@ -26,6 +26,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -55,11 +56,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 	}
 
 	for _, header := range req.RequestHeaders.Headers.Headers {
-		if header.RawValue != nil {
-			reqCtx.Request.Headers[header.Key] = string(header.RawValue)
-		} else {
-			reqCtx.Request.Headers[header.Key] = header.Value
-		}
+		reqCtx.Request.Headers[header.Key] = request.GetHeaderValue(header)
 		switch header.Key {
 		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]

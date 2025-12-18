@@ -28,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -100,11 +101,7 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
 	for _, header := range resp.ResponseHeaders.Headers.Headers {
-		if header.RawValue != nil {
-			reqCtx.Response.Headers[header.Key] = string(header.RawValue)
-		} else {
-			reqCtx.Response.Headers[header.Key] = header.Value
-		}
+		reqCtx.Response.Headers[header.Key] = request.GetHeaderValue(header)
 	}
 
 	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)

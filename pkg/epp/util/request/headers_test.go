@@ -54,6 +54,14 @@ func TestExtractHeaderValue(t *testing.T) {
 			key:      "x-request-id",
 			expected: "",
 		},
+		{
+			name: "String value fallback",
+			headers: []*corev3.HeaderValue{
+				{Key: "fallback-test", Value: "only-string"},
+			},
+			key:      "fallback-test",
+			expected: "only-string",
+		},
 	}
 
 	for _, tt := range tests {
@@ -69,6 +77,60 @@ func TestExtractHeaderValue(t *testing.T) {
 			result := ExtractHeaderValue(req, tt.key)
 			if result != tt.expected {
 				t.Errorf("ExtractHeaderValue() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetHeaderValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		header   *corev3.HeaderValue
+		expected string
+	}{
+		{
+			name: "Prefers RawValue when present",
+			header: &corev3.HeaderValue{
+				Key:      "x-test",
+				RawValue: []byte("raw-content"),
+				Value:    "string-content", // Should be ignored
+			},
+			expected: "raw-content",
+		},
+		{
+			name: "Falls back to Value when RawValue is nil",
+			header: &corev3.HeaderValue{
+				Key:      "x-test",
+				RawValue: nil,
+				Value:    "string-content",
+			},
+			expected: "string-content",
+		},
+		{
+			name: "Falls back to Value when RawValue is empty slice",
+			header: &corev3.HeaderValue{
+				Key:      "x-test",
+				RawValue: []byte{},
+				Value:    "string-content",
+			},
+			expected: "string-content",
+		},
+		{
+			name: "Returns empty if both are empty",
+			header: &corev3.HeaderValue{
+				Key:      "x-test",
+				RawValue: []byte{},
+				Value:    "",
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetHeaderValue(tt.header)
+			if result != tt.expected {
+				t.Errorf("GetHeaderValue() = %v, want %v", result, tt.expected)
 			}
 		})
 	}
