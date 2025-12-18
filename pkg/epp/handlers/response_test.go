@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -233,6 +234,67 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
 			}
+		})
+	}
+}
+
+func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		chunks    []string
+		wantUsage Usage
+	}{
+		{
+			name: "Standard: Usage and DONE in same chunk",
+			chunks: []string{
+				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`,
+			},
+			wantUsage: Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+		},
+		{
+			name: "Split: Usage in Chunk 1, DONE in Chunk 2",
+			chunks: []string{
+				// Chunk 1: Usage data arrives
+				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n",
+				// Chunk 2: Stream termination. Should NOT overwrite the usage from Chunk 1.
+				`data: [DONE]`,
+			},
+			wantUsage: Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+		},
+		{
+			name: "Fragmented: Content -> Usage -> DONE",
+			chunks: []string{
+				`data: {"choices":[{"text":"Hello"}]}` + "\n",
+				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n",
+				`data: [DONE]`,
+			},
+			wantUsage: Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+		},
+		{
+			name: "No Usage Data",
+			chunks: []string{
+				`data: {"choices":[{"text":"Hello"}]}` + "\n",
+				`data: [DONE]`,
+			},
+			wantUsage: Usage{}, // Zero values
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := &StreamingServer{
+				director: &mockDirector{},
+			}
+			reqCtx := &RequestContext{}
+
+			for _, chunk := range tc.chunks {
+				server.HandleResponseBodyModelStreaming(context.Background(), reqCtx, chunk)
+			}
+
+			assert.Equal(t, tc.wantUsage, reqCtx.Usage, "Usage data should match expected accumulation")
+			assert.True(t, reqCtx.ResponseComplete, "Response should be marked complete after [DONE]")
 		})
 	}
 }
