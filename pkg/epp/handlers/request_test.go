@@ -23,6 +23,7 @@ import (
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -105,4 +106,47 @@ func TestGenerateHeaders_Sanitization(t *testing.T) {
 	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
 	assert.Equal(t, "1.2.3.4:8080", gotHeaders[metadata.DestinationEndpointKey])
 	assert.Equal(t, "123", gotHeaders["Content-Length"])
+}
+
+func TestGenerateRequestHeaderResponse_MergeMetadata(t *testing.T) {
+	t.Parallel()
+
+	server := &StreamingServer{}
+	reqCtx := &RequestContext{
+		TargetEndpoint: "1.2.3.4:8080",
+		Request: &Request{
+			Headers: make(map[string]string),
+		},
+		Response: &Response{
+			DynamicMetadata: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					"existing_namespace": {
+						Kind: &structpb.Value_StructValue{
+							StructValue: &structpb.Struct{
+								Fields: map[string]*structpb.Value{
+									"existing_key": {Kind: &structpb.Value_StringValue{StringValue: "existing_value"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	resp := server.generateRequestHeaderResponse(context.Background(), reqCtx)
+
+	// Check that the existing metadata is preserved
+	existingNamespace, ok := resp.DynamicMetadata.Fields["existing_namespace"]
+	assert.True(t, ok, "Expected existing_namespace to be in DynamicMetadata")
+	existingKey, ok := existingNamespace.GetStructValue().Fields["existing_key"]
+	assert.True(t, ok, "Expected existing_key to be in existing_namespace")
+	assert.Equal(t, "existing_value", existingKey.GetStringValue(), "Unexpected value for existing_key")
+
+	// Check that the new metadata is added
+	endpointNamespace, ok := resp.DynamicMetadata.Fields[metadata.DestinationEndpointNamespace]
+	assert.True(t, ok, "Expected DestinationEndpointNamespace to be in DynamicMetadata")
+	endpointKey, ok := endpointNamespace.GetStructValue().Fields[metadata.DestinationEndpointKey]
+	assert.True(t, ok, "Expected DestinationEndpointKey to be in DestinationEndpointNamespace")
+	assert.Equal(t, "1.2.3.4:8080", endpointKey.GetStringValue(), "Unexpected value for DestinationEndpointKey")
 }

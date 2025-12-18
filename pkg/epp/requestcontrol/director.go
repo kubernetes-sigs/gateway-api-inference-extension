@@ -314,8 +314,10 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyComplete")
 	response := &Response{
-		RequestId: reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:   reqCtx.Response.Headers,
+		RequestId:       reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:         reqCtx.Response.Headers,
+		DynamicMetadata: reqCtx.Response.DynamicMetadata,
+		Usage:           reqCtx.Usage,
 	}
 
 	d.runResponseCompletePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)

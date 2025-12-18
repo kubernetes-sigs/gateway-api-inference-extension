@@ -26,6 +26,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -119,13 +120,13 @@ func TestHandleResponseBody(t *testing.T) {
 		name    string
 		body    []byte
 		reqCtx  *RequestContext
-		want    Usage
+		want    handlerstypes.Usage
 		wantErr bool
 	}{
 		{
 			name: "success",
 			body: []byte(body),
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
@@ -134,11 +135,11 @@ func TestHandleResponseBody(t *testing.T) {
 		{
 			name: "success with cached tokens",
 			body: []byte(bodyWithCachedTokens),
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
-				PromptTokenDetails: &PromptTokenDetails{
+				PromptTokenDetails: &handlerstypes.PromptTokenDetails{
 					CachedTokens: 10,
 				},
 			},
@@ -179,7 +180,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 		name    string
 		body    string
 		reqCtx  *RequestContext
-		want    Usage
+		want    handlerstypes.Usage
 		wantErr bool
 	}{
 		{
@@ -198,7 +199,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 				modelServerStreaming: true,
 			},
 			wantErr: false,
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
 				CompletionTokens: 10,
@@ -211,11 +212,11 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 				modelServerStreaming: true,
 			},
 			wantErr: false,
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
 				CompletionTokens: 10,
-				PromptTokenDetails: &PromptTokenDetails{
+				PromptTokenDetails: &handlerstypes.PromptTokenDetails{
 					CachedTokens: 5,
 				},
 			},
@@ -245,14 +246,14 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 	tests := []struct {
 		name      string
 		chunks    []string
-		wantUsage Usage
+		wantUsage handlerstypes.Usage
 	}{
 		{
 			name: "Standard: Usage and DONE in same chunk",
 			chunks: []string{
 				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`,
 			},
-			wantUsage: Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+			wantUsage: handlerstypes.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Split: Usage in Chunk 1, DONE in Chunk 2",
@@ -262,7 +263,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 				// Chunk 2: Stream termination. Should NOT overwrite the usage from Chunk 1.
 				`data: [DONE]`,
 			},
-			wantUsage: Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+			wantUsage: handlerstypes.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Fragmented: Content -> Usage -> DONE",
@@ -271,7 +272,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n",
 				`data: [DONE]`,
 			},
-			wantUsage: Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+			wantUsage: handlerstypes.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "No Usage Data",
@@ -279,7 +280,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 				`data: {"choices":[{"text":"Hello"}]}` + "\n",
 				`data: [DONE]`,
 			},
-			wantUsage: Usage{}, // Zero values
+			wantUsage: handlerstypes.Usage{}, // Zero values
 		},
 	}
 
