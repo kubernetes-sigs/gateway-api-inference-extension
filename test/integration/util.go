@@ -30,6 +30,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,13 +38,16 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-// --- Request Builders (High-Level DSL) ---
+// --- Request Builders (Protocol Level) ---
 
 // ReqLLM creates a sequence of gRPC messages representing a standard, streamed LLM inference request.
 // It generates:
@@ -205,7 +209,7 @@ func GenerateRequestMetadata(filterMetadata []string) map[string]*structpb.Struc
 	return requestMetadata
 }
 
-// --- Response Builders ---
+// --- Response Builders (Protocol Level) ---
 
 // NewRequestBufferedResponse creates a complete set of responses for the Request phase.
 // It simulates the EPP deciding to:
@@ -433,17 +437,82 @@ func StreamedRequest(
 
 // --- System Utilities ---
 
+// StartExtProcServer handles the lifecycle of starting a gRPC server in the background and connecting to it.
+// It guarantees that the server is listening on the specified port before returning.
+//
+// serverRunner: A function that blocks until the server exits (e.g. Runnable.Start).
+// port: The port the server is configured to listen on.
+func StartExtProcServer(
+	t *testing.T,
+	ctx context.Context,
+	serverRunner func(context.Context) error,
+	port int,
+	logger logr.Logger,
+) (extProcPb.ExternalProcessor_ProcessClient, *grpc.ClientConn) {
+	t.Helper()
+
+	// Force IPv4 to match GetFreePort's binding and avoid IPv6 race conditions in CI.
+	serverAddr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	// Channel to signal if the server dies immediately (e.g., port binding error/panic)
+	serverErrChan := make(chan error, 1)
+
+	// Start server in background.
+	go func() {
+		logger.Info("Starting ExtProc server", "address", serverAddr)
+		if err := serverRunner(ctx); err != nil {
+			// Ignore expected cancellations during teardown.
+			if !strings.Contains(err.Error(), "context canceled") {
+				logger.Error(err, "Server stopped unexpectedly")
+				select {
+				case serverErrChan <- err:
+				default:
+				}
+			}
+		}
+	}()
+
+	// Wait for TCP readiness.
+	// We must poll the port until the server successfully binds and listens.
+	require.Eventually(t, func() bool {
+		// Fast-fail if the server crashed immediately.
+		select {
+		case err := <-serverErrChan:
+			t.Fatalf("Server failed to start: %v", err)
+		default:
+		}
+
+		// Check if the port is open.
+		conn, err := net.DialTimeout("tcp", serverAddr, 50*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		conn.Close()
+		return true
+	}, 5*time.Second, 50*time.Millisecond, "Server failed to bind port %s", serverAddr)
+
+	// Connect client.
+	// Blocking dial is safe because we know the port is open.
+	conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err, "failed to create grpc connection")
+
+	extProcClient, err := extProcPb.NewExternalProcessorClient(conn).Process(ctx)
+	require.NoError(t, err, "failed to initialize ext_proc stream client")
+
+	return extProcClient, conn
+}
+
 // GetFreePort finds an available IPv4 TCP port on localhost.
 // It works by asking the OS to allocate a port by listening on port 0, capturing the assigned address, and then
 // immediately closing the listener.
 //
 // Note: There is a theoretical race condition where another process grabs the port between the Close() call and the
 // subsequent usage, but this is generally acceptable in hermetic test environments.
-func GetFreePort() (*net.TCPAddr, error) {
+func GetFreePort() (int, error) {
 	// Force IPv4 to prevent flakes on dual-stack CI environments
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on a free port: %w", err)
+		return 0, fmt.Errorf("failed to listen on a free port: %w", err)
 	}
 
 	// Critical: Close the listener immediately so the caller can bind to it.
@@ -451,9 +520,9 @@ func GetFreePort() (*net.TCPAddr, error) {
 
 	addr, ok := listener.Addr().(*net.TCPAddr)
 	if !ok {
-		return nil, errors.New("failed to cast listener address to TCPAddr")
+		return 0, errors.New("failed to cast listener address to TCPAddr")
 	}
-	return addr, nil
+	return addr.Port, nil
 }
 
 // --- Internal Helpers ---
