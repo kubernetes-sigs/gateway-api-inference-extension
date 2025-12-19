@@ -32,14 +32,10 @@ data:
         affinityGateTauGlobal: {{ .affinityGateTauGlobal | default 0.99 }}
         selectionMode: {{ .selectionMode | default "linear" | quote }}
         {{- end }}
-    - type: predicted-latency-profile-handler
     {{- end }}
     schedulingProfiles:
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
-    - name: predicted-latency-prefix
-      plugins:
-      - pluginRef: prefix-cache-scorer
-    - name: predicted-latency-routing
+    - name: default
       plugins:
       - pluginRef: predicted-latency-scorer
     featureGates:

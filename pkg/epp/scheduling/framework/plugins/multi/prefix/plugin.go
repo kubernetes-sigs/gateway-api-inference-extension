@@ -228,6 +228,8 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMReque
 		matchLen := state.PrefixCacheServers[ServerID(pod.GetPod().NamespacedName)]
 		pod.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total))
 	}
+	// Store the state in plugin state for later use.
+	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
 	return nil
 }
 
@@ -241,6 +243,8 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 	}
 
 	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
+
+	// store the state in plugin state for later use in PreRequest. This may go away once we default to prepare request data plugin hook.
 	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
 	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of pods
