@@ -35,10 +35,9 @@ func (s *SLOAwareRouter) PrepareRequestData(ctx context.Context, request *schedu
 	s.parseSLOHeaders(ctx, request, sloCtx)
 	var prefixCacheScore float64
 	for _, pod := range pods {
-		prefixCacheInfoRaw, ok := pod.Get(approximateprefix.PrefixCacheMatchInfoKey)
-		prefixCacheInfo := prefixCacheInfoRaw.(*approximateprefix.PrefixCacheMatchInfo)
 
-		if ok {
+		if prefixCacheInfoRaw, ok := pod.Get(approximateprefix.PrefixCacheMatchInfoKey); ok {
+			prefixCacheInfo := prefixCacheInfoRaw.(*approximateprefix.PrefixCacheMatchInfo)
 			prefixCacheScore = float64(prefixCacheInfo.MatchLength()) / float64(prefixCacheInfo.TotalLength())
 			if !math.IsNaN(prefixCacheScore) {
 				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", pod.GetPod().String(), "score", prefixCacheScore)
