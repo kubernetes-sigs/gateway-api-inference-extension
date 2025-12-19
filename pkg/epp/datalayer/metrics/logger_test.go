@@ -65,7 +65,7 @@ func TestLogger(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = logr.NewContext(ctx, logger)
 
-	StartMetricsLogger(ctx, &fakeDataStore{}, 100*time.Millisecond, 100*time.Millisecond)
+	StartMetricsLogger(ctx, &FakeLoggerDataStore{}, 100*time.Millisecond, 100*time.Millisecond)
 
 	time.Sleep(6 * time.Second)
 	cancel()
@@ -94,14 +94,16 @@ var pod2 = &datalayer.EndpointMetadata{
 	Address: "1.2.3.4:5679",
 }
 
-type fakeDataStore struct{}
+type FakeLoggerDataStore struct{}
 
-func (f *fakeDataStore) PoolGet() (*datalayer.EndpointPool, error) {
+var _ datalayer.DataStore = (*FakeLoggerDataStore)(nil)
+
+func (f *FakeLoggerDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	pool := &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}
 	return poolutil.InferencePoolToEndpointPool(pool), nil
 }
 
-func (f *fakeDataStore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
+func (f *FakeLoggerDataStore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
 	var m = &datalayer.Metrics{
 		ActiveModels:            map[string]int{"modelA": 1},
 		WaitingModels:           map[string]int{"modelB": 2},
