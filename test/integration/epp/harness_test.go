@@ -45,7 +45,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
@@ -144,12 +144,12 @@ func NewTestHarness(t *testing.T, ctx context.Context) *TestHarness {
 	profileHandler := profile.NewSingleProfileHandler()
 	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
 
-	sdConfig := &saturationdetector.Config{
-		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+	sdConfig := &utilizationdetector.Config{
+		QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
 	}
-	runner.SaturationDetector = saturationdetector.NewDetector(sdConfig, logger.WithName("sd"))
+	runner.SaturationDetector = utilizationdetector.NewDetector(sdConfig, logger.WithName("sd"))
 	locator := requestcontrol.NewDatastorePodLocator(runner.Datastore)
 	runner.Director = requestcontrol.NewDirectorWithConfig(
 		runner.Datastore,
