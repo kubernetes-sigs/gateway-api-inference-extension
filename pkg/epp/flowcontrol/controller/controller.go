@@ -33,6 +33,7 @@ import (
 
 	"github.com/go-logr/logr"
 	k8srand "k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/clock"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
@@ -494,15 +495,15 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 // It identifies and stops workers whose corresponding shards have been removed from the registry.
 func (fc *FlowController) reconcileProcessors() {
 	stats := fc.registry.ShardStats()
-	shards := make(map[string]struct{}, len(stats)) // map[shardID] -> isActive
+	activeShards := sets.New[string]()
 	for _, s := range stats {
-		shards[s.ID] = struct{}{}
+		activeShards.Insert(s.ID)
 	}
 
 	fc.workers.Range(func(key, value any) bool {
 		shardID := key.(string)
 		worker := value.(*managedWorker)
-		if _, exists := shards[shardID]; !exists {
+		if !activeShards.Has(shardID) {
 			fc.logger.V(logutil.DEFAULT).Info("Stale worker detected for GC'd shard, initiating shutdown.",
 				"shardID", shardID)
 			worker.cancel()            // Cancel the worker's context, initiating the Processor's graceful shutdown sequence.

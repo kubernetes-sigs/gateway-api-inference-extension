@@ -21,6 +21,7 @@ import (
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -31,29 +32,27 @@ const (
 var (
 	// InputControlHeaders are sent by the Gateway/User to control EPP behavior.
 	// We must extract these, then strip them so they don't leak to the backend.
-	InputControlHeaders = map[string]bool{
-		strings.ToLower(metadata.FlowFairnessIDKey):   true,
-		strings.ToLower(metadata.ObjectiveKey):        true,
-		strings.ToLower(metadata.ModelNameRewriteKey): true,
-		strings.ToLower(metadata.SubsetFilterKey):     true,
-	}
+	InputControlHeaders = sets.New(
+		strings.ToLower(metadata.FlowFairnessIDKey),
+		strings.ToLower(metadata.ObjectiveKey),
+		strings.ToLower(metadata.ModelNameRewriteKey),
+		strings.ToLower(metadata.SubsetFilterKey),
+	)
 
 	// OutputInjectionHeaders are headers EPP injects for the backend.
 	// If the user sends these, they must be stripped to prevent ambiguity.
-	OutputInjectionHeaders = map[string]bool{
-		strings.ToLower(metadata.DestinationEndpointKey):       true,
-		strings.ToLower(metadata.DestinationEndpointServedKey): true,
-	}
+	OutputInjectionHeaders = sets.New(
+		strings.ToLower(metadata.DestinationEndpointKey),
+		strings.ToLower(metadata.DestinationEndpointServedKey),
+	)
 
 	// ProtocolHeaders are managed by the proxy layer (Envoy/EPP).
-	ProtocolHeaders = map[string]bool{
-		"content-length": true,
-	}
+	ProtocolHeaders = sets.New("content-length")
 )
 
 func IsSystemOwnedHeader(key string) bool {
 	k := strings.ToLower(key)
-	return InputControlHeaders[k] || OutputInjectionHeaders[k] || ProtocolHeaders[k]
+	return InputControlHeaders.Has(k) || OutputInjectionHeaders.Has(k) || ProtocolHeaders.Has(k)
 }
 
 // GetHeaderValue safely extracts the string value from an Envoy HeaderValue field.

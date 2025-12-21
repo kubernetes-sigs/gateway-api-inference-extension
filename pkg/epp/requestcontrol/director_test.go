@@ -31,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -973,14 +974,14 @@ func TestDirector_SelectWeightedModel(t *testing.T) {
 	tests := []struct {
 		name           string
 		targets        []v1alpha2.TargetModel
-		possibleModels map[string]bool // For probabilistic cases
+		possibleModels sets.Set[string] // For probabilistic cases
 	}{
 		{
 			name: "single target",
 			targets: []v1alpha2.TargetModel{
 				{ModelRewrite: "model-a", Weight: 100},
 			},
-			possibleModels: map[string]bool{"model-a": true},
+			possibleModels: sets.New("model-a"),
 		},
 		{
 			name: "multiple targets, equal weight",
@@ -988,7 +989,7 @@ func TestDirector_SelectWeightedModel(t *testing.T) {
 				{ModelRewrite: "model-a", Weight: 50},
 				{ModelRewrite: "model-b", Weight: 50},
 			},
-			possibleModels: map[string]bool{"model-a": true, "model-b": true},
+			possibleModels: sets.New("model-a", "model-b"),
 		},
 		{
 			name: "multiple targets, different weights",
@@ -996,7 +997,7 @@ func TestDirector_SelectWeightedModel(t *testing.T) {
 				{ModelRewrite: "model-x", Weight: 70},
 				{ModelRewrite: "model-y", Weight: 30},
 			},
-			possibleModels: map[string]bool{"model-x": true, "model-y": true},
+			possibleModels: sets.New("model-x", "model-y"),
 		},
 		{
 			name: "zero total weight, distribute evenly",
@@ -1004,7 +1005,7 @@ func TestDirector_SelectWeightedModel(t *testing.T) {
 				{ModelRewrite: "model-z1", Weight: 0},
 				{ModelRewrite: "model-z2", Weight: 0},
 			},
-			possibleModels: map[string]bool{"model-z1": true, "model-z2": true},
+			possibleModels: sets.New("model-z1", "model-z2"),
 		},
 	}
 
@@ -1015,14 +1016,14 @@ func TestDirector_SelectWeightedModel(t *testing.T) {
 			// Run multiple times to check distribution
 			counter := make(map[string]int)
 			numRuns := 1000
-			for i := 0; i < numRuns; i++ {
+			for range numRuns {
 				selected := director.selectWeightedModel(test.targets)
 				counter[selected]++
 			}
 
 			// Assert that all selected models are within the possible models
 			for model := range counter {
-				if _, ok := test.possibleModels[model]; !ok {
+				if !test.possibleModels.Has(model) {
 					t.Errorf("Selected model %s is not in possible models %v", model, test.possibleModels)
 				}
 			}

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -101,7 +102,7 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 	// Build a lookup map for efficient filtering.
 	// The subset list contains strings in the format "<address>:<port>" (e.g., "10.0.1.0:8080").
 	// We only care about the IP address for matching against PodMetrics.
-	endpoints := make(map[string]bool, len(endpointSubsetList))
+	endpoints := sets.New[string]()
 	for _, endpoint := range endpointSubsetList {
 		epStr, ok := endpoint.(string)
 		if !ok {
@@ -110,9 +111,9 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 		}
 		// Extract address from endpoint string.
 		if idx := strings.LastIndexByte(epStr, ':'); idx >= 0 {
-			endpoints[epStr[:idx]] = true
+			endpoints.Insert(epStr[:idx])
 		} else {
-			endpoints[epStr] = true
+			endpoints.Insert(epStr)
 		}
 	}
 

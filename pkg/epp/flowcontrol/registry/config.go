@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
@@ -418,12 +419,12 @@ func (c *Config) validate(checker capabilityChecker) error {
 	}
 
 	// Validate statically configured bands.
-	names := make(map[string]struct{}, len(c.PriorityBands))
+	names := sets.New[string]()
 	for _, band := range c.PriorityBands {
-		if _, exists := names[band.PriorityName]; exists {
+		if names.Has(band.PriorityName) {
 			return fmt.Errorf("duplicate priority name %q found", band.PriorityName)
 		}
-		names[band.PriorityName] = struct{}{}
+		names.Insert(band.PriorityName)
 
 		if err := band.validate(checker); err != nil {
 			return err
