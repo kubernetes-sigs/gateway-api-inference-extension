@@ -38,23 +38,23 @@ const (
 // lower enqueue time) are defined by the `IntraFlowDispatchPolicy` that vends this function via an `ItemComparator`.
 type ItemComparatorFunc func(a, b types.QueueItemAccessor) bool
 
-// ItemComparator encapsulates the logic for comparing two `types.QueueItemAccessor` instances to determine their
-// relative dispatch priority. It is the definitive source of ordering truth for a flow's queue.
+// ItemComparator encapsulates the logic for comparing two QueueItemAccessor instances to determine their relative
+// dispatch priority. It is the definitive source of ordering truth for a flow's queue.
 //
-// It is vended by an `IntraFlowDispatchPolicy` to make its internal ordering logic explicit and available to other
-// components. It is used by `SafeQueue` implementations that support the `CapabilityPriorityConfigurable` capability
-// and can also be used by inter-flow policies to compare items from different queues.
+// It is vended by an IntraFlowDispatchPolicy to make its internal ordering logic explicit and available to other
+// components. It is used by SafeQueue implementations that support the CapabilityPriorityConfigurable capability and
+// can also be used by FairnessPolicies to compare items from different queues.
 //
 // Design Justification: This design treats item priority as a relational concept defined by a policy, rather than a
 // static attribute on the item itself. This allows for sophisticated, dynamic priority evaluation (e.g., based on
 // real-time SLO attainment), as the comparison logic can be stateful.
 type ItemComparator interface {
-	// Func returns the core comparison logic as an `ItemComparatorFunc`.
+	// Func returns the core comparison logic as an ItemComparatorFunc.
 	//
-	// This function is the single source of truth for determining the relative priority between two items. A `SafeQueue`
-	// that declares `CapabilityPriorityConfigurable` MUST use this function for its internal ordering. Inter-flow
-	// policies MAY use this function to compare items from different queues, but only after verifying that their
-	// `ScoreType()` values are identical, ensuring the comparison is meaningful.
+	// This function is the single source of truth for determining the relative priority between two items. A SafeQueue
+	// that declares CapabilityPriorityConfigurable MUST use this function for its internal ordering. FairnessPolicies
+	// MAY use this function to compare items from different queues, but only after verifying that their ScoreType()
+	// values are identical, ensuring the comparison is meaningful.
 	//
 	// Conformance: MUST NOT return nil.
 	Func() ItemComparatorFunc
@@ -62,21 +62,21 @@ type ItemComparator interface {
 	// ScoreType returns a string descriptor that defines the semantic meaning and domain of the comparison logic.
 	//
 	// A non-empty, descriptive string is required for two primary reasons:
-	//  1. Comparability Check: Inter-flow policies that compare items across different queues (e.g., a "BestHead" policy)
-	//     MUST check for identical `ScoreType` strings before using the comparator functions. A comparison is only
-	//     meaningful if the underlying scoring logic is the same.
+	//  1. Comparability Check: Fairness policies that compare items across different queues MUST check for identical
+	//     ScoreType strings before using the comparator functions. A comparison is only meaningful if the underlying
+	//     scoring logic is the same.
 	//  2. Introspectability: The string makes the priority scheme human-readable for debugging and observability.
 	//
 	// Examples: "enqueue_time_ns_asc", "slo_urgency_score_desc".
 	//
 	// Future Considerations: While currently a simple string for initial simplicity, a future enhancement could introduce
-	// a more structured `ScoreType`. Such a structure might explicitly encode ordering (ascending/descending) and value
-	// semantics (e.g., time, custom_metric), potentially enabling advanced features like cross-`ScoreType` normalization
+	// a more structured ScoreType. Such a structure might explicitly encode ordering (ascending/descending) and value
+	// semantics (e.g., time, custom_metric), potentially enabling advanced features like cross-ScoreType normalization
 	// plugins.
 	//
 	// Conformance:
 	//   - MUST return a non-empty, meaningful string that describes the domain or unit of comparison.
-	//   - For the present, policies MUST NOT assume any implicit cross-`ScoreType` normalization capabilities.
+	//   - For the present, policies MUST NOT assume any implicit cross-ScoreType normalization capabilities.
 	ScoreType() string
 }
 
@@ -142,57 +142,4 @@ type InterFlowDispatchPolicy interface {
 	//
 	// Conformance: Implementations MUST be goroutine-safe if they maintain internal state.
 	SelectQueue(band PriorityBandAccessor) (selectedQueue FlowQueueAccessor, err error)
-}
-
-// FlowQueueAccessor provides a policy-facing, read-only view of a single flow's queue.
-// It combines general queue inspection methods (embedded via `QueueInspectionMethods`) with flow-specific metadata.
-//
-// Instances of `FlowQueueAccessor` are typically obtained via a `PriorityBandAccessor` and are the primary means by
-// which policies inspect individual queue state.
-//
-// Conformance: Implementations MUST ensure all methods (including those embedded from `QueueInspectionMethods`) are
-// goroutine-safe for concurrent access.
-type FlowQueueAccessor interface {
-	QueueInspectionMethods
-
-	// Comparator returns the `ItemComparator` that defines the ordering logic of the items within this queue.
-	// This is determined by the `IntraFlowDispatchPolicy` associated with this queue's flow.
-	Comparator() ItemComparator
-
-	// FlowKey returns the unique, immutable `types.FlowKey` of the flow instance this queue accessor is associated with.
-	// This provides essential context (like the logical grouping `ID` and `Priority`) to policies.
-	FlowKey() types.FlowKey
-}
-
-// PriorityBandAccessor provides a read-only view into a specific priority band within the `contracts.FlowRegistry`.
-// It allows the `controller.FlowController` and inter-flow policies to inspect the state of all flow queues within that
-// band.
-//
-// Conformance: Implementations MUST ensure all methods are goroutine-safe for concurrent access.
-type PriorityBandAccessor interface {
-	// Priority returns the numerical priority level of this band.
-	Priority() int
-
-	// PriorityName returns the human-readable name of this priority band.
-	PriorityName() string
-
-	// FlowKeys returns a slice of the composite `types.FlowKey`s for every flow instance currently active within this
-	// priority band.
-	// This method provides the complete, canonical identifiers for all flows in the band. The caller can use the `ID`
-	// field from each key to look up a specific queue via the `Queue(id string)` method.
-	// The order of keys in the returned slice is not guaranteed unless specified by the implementations (e.g., for
-	// deterministic testing scenarios).
-	FlowKeys() []types.FlowKey
-
-	// Queue returns a `FlowQueueAccessor` for the specified logical grouping `ID` within this priority band.
-	// Note: This uses the logical `ID` string (`types.FlowKey.ID`), not the full `types.FlowKey`, as the priority is
-	// already defined by the accessor's scope.
-	//
-	// Conformance: Implementations MUST return nil if the `ID` is not found in this band.
-	Queue(id string) FlowQueueAccessor
-
-	// IterateQueues executes the given `callback` for each `FlowQueueAccessor` in this priority band.
-	// Iteration stops if the `callback` returns false. The order of iteration is not guaranteed unless specified by the
-	// implementation (e.g., for deterministic testing scenarios).
-	IterateQueues(callback func(queue FlowQueueAccessor) (keepIterating bool))
 }
