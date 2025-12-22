@@ -32,6 +32,7 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -59,6 +60,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 
 	// Register known feature gates for validation.
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	tests := []struct {
 		name       string
@@ -90,7 +92,10 @@ func TestLoadRawConfiguration(t *testing.T) {
 						},
 					},
 				},
-				FeatureGates: configapi.FeatureGates{datalayer.ExperimentalDatalayerFeatureGate},
+				FeatureGates: configapi.FeatureGates{
+					datalayer.ExperimentalDatalayerFeatureGate,
+					flowcontrol.FeatureGate,
+				},
 				SaturationDetector: &configapi.SaturationDetector{
 					QueueDepthThreshold:       10,
 					KVCacheUtilThreshold:      0.8,
@@ -151,6 +156,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	registerTestPlugins(t)
 
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	tests := []struct {
 		name       string

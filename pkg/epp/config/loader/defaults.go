@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -53,6 +54,9 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle plugins.Han
 	allPlugins := handle.GetAllPluginsWithNames()
 	if err := ensureSchedulingLayer(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply scheduling system defaults: %w", err)
+	}
+	if err := ensureFlowControlLayer(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply flow control system defaults: %w", err)
 	}
 	return nil
 }
@@ -132,6 +136,15 @@ func ensureSchedulingLayer(
 	}
 
 	return nil
+}
+
+// ensureFlowControlLayer guarantees that the flow control subsystem is structurally complete.
+func ensureFlowControlLayer(
+	cfg *configapi.EndpointPickerConfig,
+	handle plugins.Handle,
+	_ map[string]plugins.Plugin,
+) error {
+	return registerDefaultPlugin(cfg, handle, interflow.GlobalStrictFairnessPolicyType)
 }
 
 // registerDefaultPlugin instantiates a plugin with empty configuration (defaults) and adds it to both the handle and

@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 // --- Defaults ---
@@ -38,8 +39,8 @@ const (
 	defaultPriorityBandMaxBytes uint64 = 1_000_000_000
 	// defaultIntraFlowDispatchPolicy is the default policy for selecting items within a single flow's queue.
 	defaultIntraFlowDispatchPolicy intraflow.RegisteredPolicyName = intraflow.FCFSPolicyName
-	// defaultInterFlowDispatchPolicy is the default policy for selecting which flow's queue to service next.
-	defaultInterFlowDispatchPolicy interflow.RegisteredPolicyName = interflow.BestHeadPolicyName
+	// defaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
+	defaultFairnessPolicyRef string = interflow.GlobalStrictFairnessPolicyType
 	// defaultQueue is the default queue implementation for flows.
 	defaultQueue queue.RegisteredQueueName = queue.ListQueueName
 	// defaultInitialShardCount is the default number of parallel shards to create when the registry is initialized.
@@ -159,10 +160,10 @@ type PriorityBandConfig struct {
 	// Optional: Defaults to defaultIntraFlowDispatchPolicy ("FCFS").
 	IntraFlowDispatchPolicy intraflow.RegisteredPolicyName
 
-	// InterFlowDispatchPolicy specifies the name of the policy used to select which flow's queue to service next from
-	// this band.
-	// Optional: Defaults to defaultInterFlowDispatchPolicy ("BestHead").
-	InterFlowDispatchPolicy interflow.RegisteredPolicyName
+	// FairnessPolicy is the hydrated singleton instance of the policy.
+	// This field is populated either via WithFairnessPolicy (using a handle lookup) or via applyDefaults.
+	// Optional: Defaults to defaultFairnessPolicyRef ("global-strict-fairness-policy").
+	FairnessPolicy framework.FairnessPolicy
 
 	// Queue specifies the default name of the `framework.SafeQueue` implementation for flow queues in this band.
 	// Optional: Defaults to defaultQueue ("ListQueue").
@@ -267,15 +268,28 @@ func WithIntraFlowPolicy(name intraflow.RegisteredPolicyName) PriorityBandConfig
 	}
 }
 
-// WithInterFlowPolicy sets the inter-flow dispatch policy (e.g., "RoundRobin").
-func WithInterFlowPolicy(name interflow.RegisteredPolicyName) PriorityBandConfigOption {
+// WithFairnessPolicy sets the name/reference of the inter-flow fairness policy (e.g., "RoundRobin").
+func WithFairnessPolicy(ref string, handle plugins.Handle) PriorityBandConfigOption {
 	return func(p *PriorityBandConfig) error {
-		if name == "" {
-			return errors.New("InterFlowDispatchPolicy cannot be empty")
+		policy, err := fairnessPolicy(ref, handle)
+		if err != nil {
+			return err
 		}
-		p.InterFlowDispatchPolicy = name
+		p.FairnessPolicy = policy
 		return nil
 	}
+}
+
+func fairnessPolicy(ref string, handle plugins.Handle) (framework.FairnessPolicy, error) {
+	v := handle.Plugin(ref)
+	if v == nil {
+		return nil, fmt.Errorf("no fairness policy registered for name %q", ref)
+	}
+	policy, ok := v.(framework.FairnessPolicy)
+	if !ok {
+		return nil, fmt.Errorf("plugin %q is not a framework.FairnessPolicy (type: %T)", ref, v)
+	}
+	return policy, nil
 }
 
 // WithQueue sets the queue implementation (e.g., "ListQueue") for flows in this band.
@@ -301,7 +315,11 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 
 // NewConfig creates a new Config populated with system defaults, applies the provided options, and enforces strict
 // validation.
-func NewConfig(opts ...ConfigOption) (*Config, error) {
+//
+// Arguments:
+//   - handle: A plugins.Handle required to resolve the default policies.
+//   - opts: Optional configuration overrides.
+func NewConfig(handle plugins.Handle, opts ...ConfigOption) (*Config, error) {
 	builder := &configBuilder{
 		config: &Config{
 			MaxBytes:               0, // no limit enforced
@@ -322,18 +340,22 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 	// Initialize DefaultPriorityBand if missing.
 	// This ensures we always have a template for dynamic provisioning.
 	if builder.config.DefaultPriorityBand == nil {
-		builder.config.DefaultPriorityBand = &PriorityBandConfig{}
-	}
-
-	// Apply defaults to the template.
-	builder.config.DefaultPriorityBand.applyDefaults()
-	if builder.config.DefaultPriorityBand.PriorityName == "" {
-		builder.config.DefaultPriorityBand.PriorityName = "Dynamic-Default"
+		template, err := NewPriorityBandConfig(handle, 0, "Dynamic-Default")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create default priority band: %w", err)
+		}
+		builder.config.DefaultPriorityBand = template
+	} else {
+		if err := builder.config.DefaultPriorityBand.applyDefaults(handle); err != nil {
+			return nil, fmt.Errorf("failed to apply defaults to DefaultPriorityBand: %w", err)
+		}
 	}
 
 	// Apply defaults to all explicitly configured bands.
 	for _, band := range builder.config.PriorityBands {
-		band.applyDefaults()
+		if err := band.applyDefaults(handle); err != nil {
+			return nil, fmt.Errorf("failed to apply defaults to priority band %d: %w", band.Priority, err)
+		}
 	}
 
 	if err := builder.config.validate(builder.checker); err != nil {
@@ -344,13 +366,20 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 
 // NewPriorityBandConfig creates a new band configuration with the required fields.
 // It applies system defaults first, then applies any provided options to override those defaults.
-func NewPriorityBandConfig(priority int, name string, opts ...PriorityBandConfigOption) (*PriorityBandConfig, error) {
+func NewPriorityBandConfig(
+	handle plugins.Handle,
+	priority int,
+	name string,
+	opts ...PriorityBandConfigOption,
+) (*PriorityBandConfig, error) {
 	pb := &PriorityBandConfig{
 		Priority:     priority,
 		PriorityName: name,
 	}
 
-	pb.applyDefaults()
+	if err := pb.applyDefaults(handle); err != nil {
+		return nil, err
+	}
 
 	for _, opt := range opts {
 		if err := opt(pb); err != nil {
@@ -361,14 +390,11 @@ func NewPriorityBandConfig(priority int, name string, opts ...PriorityBandConfig
 	return pb, nil
 }
 
-// --- Validation & Defaults ---
+// --- Validation, Defaults & Hydration ---
 
-func (p *PriorityBandConfig) applyDefaults() {
+func (p *PriorityBandConfig) applyDefaults(handle plugins.Handle) error {
 	if p.IntraFlowDispatchPolicy == "" {
 		p.IntraFlowDispatchPolicy = defaultIntraFlowDispatchPolicy
-	}
-	if p.InterFlowDispatchPolicy == "" {
-		p.InterFlowDispatchPolicy = defaultInterFlowDispatchPolicy
 	}
 	if p.Queue == "" {
 		p.Queue = defaultQueue
@@ -376,6 +402,14 @@ func (p *PriorityBandConfig) applyDefaults() {
 	if p.MaxBytes == 0 {
 		p.MaxBytes = defaultPriorityBandMaxBytes
 	}
+	if p.FairnessPolicy == nil {
+		policy, err := fairnessPolicy(defaultFairnessPolicyRef, handle)
+		if err != nil {
+			return err
+		}
+		p.FairnessPolicy = policy
+	}
+	return nil
 }
 
 // validate checks the integrity of a single band's configuration.
@@ -386,8 +420,8 @@ func (p *PriorityBandConfig) validate(checker capabilityChecker) error {
 	if p.IntraFlowDispatchPolicy == "" {
 		return fmt.Errorf("IntraFlowDispatchPolicy required for priority band %d", p.Priority)
 	}
-	if p.InterFlowDispatchPolicy == "" {
-		return fmt.Errorf("InterFlowDispatchPolicy required for priority band %d", p.Priority)
+	if p.FairnessPolicy == nil {
+		return fmt.Errorf("FairnessPolicy instance is missing for priority band %d", p.Priority)
 	}
 	if p.Queue == "" {
 		return fmt.Errorf("Queue required for priority band %d", p.Priority)
@@ -458,7 +492,7 @@ func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 			Priority:                template.Priority,
 			PriorityName:            template.PriorityName,
 			IntraFlowDispatchPolicy: template.IntraFlowDispatchPolicy,
-			InterFlowDispatchPolicy: template.InterFlowDispatchPolicy,
+			FairnessPolicy:          template.FairnessPolicy,
 			Queue:                   template.Queue,
 			MaxBytes:                partitionUint64(template.MaxBytes, shardIndex, totalShards),
 		}

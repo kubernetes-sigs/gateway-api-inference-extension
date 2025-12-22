@@ -29,6 +29,9 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
@@ -102,10 +105,27 @@ func InstantiateAndConfigure(
 		return nil, fmt.Errorf("data layer config build failed: %w", err)
 	}
 
+	var flowControlConfig *flowcontrol.Config
+	if featureGates[flowcontrol.FeatureGate] {
+		registryConfig, err := registry.NewConfig(handle)
+		if err != nil {
+			return nil, fmt.Errorf("flow registgry config build failed: %w", err)
+		}
+		cfg := &flowcontrol.Config{
+			Controller: fccontroller.Config{},
+			Registry:   registryConfig,
+		}
+		flowControlConfig, err = cfg.ValidateAndApplyDefaults()
+		if err != nil {
+			return nil, fmt.Errorf("flow control config build failed: %w", err)
+		}
+	}
+
 	return &config.Config{
 		SchedulerConfig:          schedulerConfig,
 		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
 		DataConfig:               dataConfig,
+		FlowControlConfig:        flowControlConfig,
 	}, nil
 }
 
