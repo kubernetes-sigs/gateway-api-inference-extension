@@ -344,7 +344,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	// Remove pods that don't belong to the pool or not ready any more.
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(datalayer.Endpoint)
-		if activePods.Has(ep.GetMetadata().PodName) {
+		if !activePods.Has(ep.GetMetadata().PodName) {
 			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", ep.GetMetadata().PodName)
 			ds.PodDelete(ep.GetMetadata().PodName)
 		}
