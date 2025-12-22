@@ -275,13 +275,15 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 		return nil
 	}
 
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	sloCtx := s.getOrMakeSLORequestContext(request)
 
 	predictions, err := s.generatePredictions(ctx, request, sloCtx, pods)
 	if err != nil || len(predictions) == 0 {
 		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Error generating predictions, falling back to composite-only scoring")
 		s.setSLOContextForRequest(request, sloCtx)
-		return s.scoreWithoutPredictions(ctx, sloCtx, pods, rand.New(rand.NewSource(time.Now().UnixNano())))
+		return s.scoreWithoutPredictions(ctx, sloCtx, pods, rng)
 	}
 	s.updateRequestContextWithPredictions(sloCtx, predictions)
 
@@ -291,7 +293,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 		scores[pod] = 0
 	}
 	allPreds := append([]podPredictionResult(nil), predictions...)
-	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rand.New(rand.NewSource(time.Now().UnixNano())), "overall", AffinityGateTauGlobal)
+	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
 	allPodsInvalid := (sloCtx.ttftSLO > 0 && sloCtx.avgTPOTSLO > 0)
@@ -321,7 +323,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 		"positivePods", len(posHeadroomPods),
 		"negativePods", len(negHeadroomPods))
 
-	selectedPod := s.selectPodBasedOnStrategy(ctx, rand.New(rand.NewSource(time.Now().UnixNano())), allPreds, posHeadroomPods, negHeadroomPods)
+	selectedPod := s.selectPodBasedOnStrategy(ctx, rng, allPreds, posHeadroomPods, negHeadroomPods)
 
 	// Set score = 1 for selected pod, 0 for all others
 	if selectedPod != nil {
