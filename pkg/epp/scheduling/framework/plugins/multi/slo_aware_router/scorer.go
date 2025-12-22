@@ -140,7 +140,7 @@ func (c *Config) validate() error {
 	if c.AffinityGateTau < 0 || c.AffinityGateTau > 1 {
 		errs = append(errs, fmt.Errorf("affinityGateTau must be in [0, 1], got %f", c.AffinityGateTau))
 	}
-	if c.AffinityGateTauGlobal <= 0 || c.AffinityGateTauGlobal > 1 {
+	if c.AffinityGateTauGlobal < 0 || c.AffinityGateTauGlobal > 1 {
 		errs = append(errs, fmt.Errorf("affinityGateTauGlobal must be in (0, 1], got %f", c.AffinityGateTauGlobal))
 	}
 

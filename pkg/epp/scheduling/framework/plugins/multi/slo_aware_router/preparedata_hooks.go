@@ -51,7 +51,7 @@ func (s *SLOAwareRouter) PrepareRequestData(ctx context.Context, request *schedu
 		}
 		sloCtx.prefixCacheScoresForPods[pod.GetPod().String()] = prefixCacheScore
 	}
-
+	s.setSLOContextForRequest(request, sloCtx)
 	return nil
 }
 

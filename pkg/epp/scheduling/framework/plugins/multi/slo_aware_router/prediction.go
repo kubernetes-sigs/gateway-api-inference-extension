@@ -56,7 +56,6 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, request *sched
 
 		// Get prefix cache score for the pod
 		prefixCacheScore := sloCtx.prefixCacheScoresForPods[pod.GetPod().String()]
-		sloCtx.prefixCacheScoresForPods[pod.GetPod().String()] = prefixCacheScore
 
 		logger.V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", pod.GetPod().String(), "prefixCacheScore", prefixCacheScore)
 
