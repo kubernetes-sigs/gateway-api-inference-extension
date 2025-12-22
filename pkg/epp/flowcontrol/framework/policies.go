@@ -121,25 +121,3 @@ type IntraFlowDispatchPolicy interface {
 	// by this policy then defines that behavior.
 	RequiredQueueCapabilities() []QueueCapability
 }
-
-// InterFlowDispatchPolicy selects which flow's queue to service next from a given priority band.
-// Implementations define the fairness or dispatch ordering logic between different flows that share the same priority
-// level.
-type InterFlowDispatchPolicy interface {
-	// Name returns a string identifier for the concrete policy implementation type (e.g., "RoundRobin").
-	Name() string
-
-	// SelectQueue inspects the flow queues within the provided `PriorityBandAccessor` and returns the `FlowQueueAccessor`
-	// of the queue chosen for the next dispatch attempt.
-	//
-	// Returns:
-	//   - `FlowQueueAccessor`: The selected queue, or nil if no queue is chosen.
-	//   - error: Non-nil if an unrecoverable error occurs. A nil error is returned if no queue is selected (e.g., all
-	//     queues in the band are empty or the policy logic determines a pause is appropriate).
-	//
-	// Policies should be resilient to transient issues (like a queue becoming empty during inspection) and select from
-	// other available queues if possible, rather than returning an error for such conditions.
-	//
-	// Conformance: Implementations MUST be goroutine-safe if they maintain internal state.
-	SelectQueue(band PriorityBandAccessor) (selectedQueue FlowQueueAccessor, err error)
-}
