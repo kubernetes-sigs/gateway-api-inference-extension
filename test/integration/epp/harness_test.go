@@ -188,7 +188,7 @@ func NewTestHarness(t *testing.T, ctx context.Context) *TestHarness {
 
 	h := &TestHarness{
 		t:            t,
-		ctx:          ctx,
+		ctx:          serverCtx,
 		Namespace:    nsName,
 		Mgr:          mgr,
 		ServerRunner: runner,

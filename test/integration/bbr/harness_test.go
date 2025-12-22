@@ -34,7 +34,6 @@ var logger = logutil.NewTestLogger().V(logutil.VERBOSE)
 // BBRHarness encapsulates the environment for a single isolated BBR test run.
 type BBRHarness struct {
 	t      *testing.T
-	ctx    context.Context
 	Client extProcPb.ExternalProcessor_ProcessClient
 
 	// Internal handles for cleanup
@@ -71,7 +70,6 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 
 	h := &BBRHarness{
 		t:        t,
-		ctx:      ctx,
 		Client:   client,
 		server:   runner,
 		grpcConn: conn,
