@@ -17,6 +17,7 @@ limitations under the License.
 package interflow
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -38,13 +39,16 @@ var (
 
 func TestRoundRobin_Name(t *testing.T) {
 	t.Parallel()
-	policy := newRoundRobin()
-	assert.Equal(t, RoundRobinPolicyName, policy.Name(), "Name should match the policy's constant")
+	policy := newRoundRobin("test-rr")
+	assert.Equal(t, "test-rr", policy.TypedName().Name)
+	assert.Equal(t, RoundRobinFairnessPolicyType, policy.TypedName().Type)
 }
 
-func TestRoundRobin_SelectQueue_Logic(t *testing.T) {
+func TestRoundRobin_Pick_Logic(t *testing.T) {
 	t.Parallel()
-	policy := newRoundRobin()
+	policy := newRoundRobin("")
+	ctx := context.Background()
+	state := policy.NewState(ctx)
 
 	// Setup: Three non-empty queues
 	queue1 := &frameworkmocks.MockFlowQueueAccessor{LenV: 1, FlowKeyV: flow1Key}
@@ -52,6 +56,7 @@ func TestRoundRobin_SelectQueue_Logic(t *testing.T) {
 	queue3 := &frameworkmocks.MockFlowQueueAccessor{LenV: 3, FlowKeyV: flow3Key}
 
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
+		PolicyStateV: state,
 		FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow3Key, flow1Key, flow2Key} }, // Unsorted to test sorting
 		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			switch id {
@@ -71,26 +76,28 @@ func TestRoundRobin_SelectQueue_Logic(t *testing.T) {
 
 	// First cycle
 	for i := range expectedOrder {
-		selected, err := policy.SelectQueue(mockBand)
-		require.NoError(t, err, "SelectQueue should not error on a valid band")
-		require.NotNil(t, selected, "SelectQueue should have selected a queue")
+		selected, err := policy.Pick(ctx, mockBand)
+		require.NoError(t, err, "Pick should not error on a valid band")
+		require.NotNil(t, selected, "Pick should have selected a queue")
 		assert.Equal(t, expectedOrder[i], selected.FlowKey().ID,
 			"Cycle 1, selection %d should be %s", i+1, expectedOrder[i])
 	}
 
 	// Second cycle (wraps around)
 	for i := range expectedOrder {
-		selected, err := policy.SelectQueue(mockBand)
-		require.NoError(t, err, "SelectQueue should not error on a valid band")
-		require.NotNil(t, selected, "SelectQueue should have selected a queue")
+		selected, err := policy.Pick(ctx, mockBand)
+		require.NoError(t, err, "Pick should not error on a valid band")
+		require.NotNil(t, selected, "Pick should have selected a queue")
 		assert.Equal(t, expectedOrder[i], selected.FlowKey().ID,
 			"Cycle 2, selection %d should be %s", i+1, expectedOrder[i])
 	}
 }
 
-func TestRoundRobin_SelectQueue_SkipsEmptyQueues(t *testing.T) {
+func TestRoundRobin_Pick_SkipsEmptyQueues(t *testing.T) {
 	t.Parallel()
-	policy := newRoundRobin()
+	policy := newRoundRobin("")
+	ctx := context.Background()
+	state := policy.NewState(ctx)
 
 	// Setup: Two non-empty queues and one empty queue
 	flowEmptyKey := types.FlowKey{ID: "flowEmpty", Priority: 0}
@@ -99,6 +106,7 @@ func TestRoundRobin_SelectQueue_SkipsEmptyQueues(t *testing.T) {
 	queue3 := &frameworkmocks.MockFlowQueueAccessor{LenV: 3, FlowKeyV: flow3Key}
 
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
+		PolicyStateV: state,
 		FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow1Key, flowEmptyKey, flow3Key} },
 		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			switch id {
@@ -114,30 +122,33 @@ func TestRoundRobin_SelectQueue_SkipsEmptyQueues(t *testing.T) {
 	}
 
 	// Expected order: flow1, flow3, flow1, flow3, ...
-	selected, err := policy.SelectQueue(mockBand)
-	require.NoError(t, err, "SelectQueue should not error when skipping queues")
-	require.NotNil(t, selected, "SelectQueue should select the first non-empty queue")
+	selected, err := policy.Pick(ctx, mockBand)
+	require.NoError(t, err, "Pick should not error when skipping queues")
+	require.NotNil(t, selected, "Pick should select the first non-empty queue")
 	assert.Equal(t, "flow1", selected.FlowKey().ID, "First selection should be flow1")
 
-	selected, err = policy.SelectQueue(mockBand)
-	require.NoError(t, err, "SelectQueue should not error when skipping queues")
-	require.NotNil(t, selected, "SelectQueue should select the second non-empty queue")
+	selected, err = policy.Pick(ctx, mockBand)
+	require.NoError(t, err, "Pick should not error when skipping queues")
+	require.NotNil(t, selected, "Pick should select the second non-empty queue")
 	assert.Equal(t, "flow3", selected.FlowKey().ID, "Second selection should be flow3, skipping flowEmpty")
 
-	selected, err = policy.SelectQueue(mockBand)
-	require.NoError(t, err, "SelectQueue should not error when wrapping around")
-	require.NotNil(t, selected, "SelectQueue should wrap around and select a queue")
+	selected, err = policy.Pick(ctx, mockBand)
+	require.NoError(t, err, "Pick should not error when wrapping around")
+	require.NotNil(t, selected, "Pick should wrap around and select a queue")
 	assert.Equal(t, "flow1", selected.FlowKey().ID, "Should wrap around and select flow1 again")
 }
 
-func TestRoundRobin_SelectQueue_HandlesDynamicFlows(t *testing.T) {
+func TestRoundRobin_Pick_HandlesDynamicFlows(t *testing.T) {
 	t.Parallel()
-	policy := newRoundRobin()
+	policy := newRoundRobin("")
+	ctx := context.Background()
+	state := policy.NewState(ctx)
 
 	// Initial setup
 	queue1 := &frameworkmocks.MockFlowQueueAccessor{LenV: 1, FlowKeyV: flow1Key}
 	queue2 := &frameworkmocks.MockFlowQueueAccessor{LenV: 1, FlowKeyV: flow2Key}
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
+		PolicyStateV: state,
 		FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow1Key, flow2Key} },
 		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			if id == "flow1" {
@@ -148,9 +159,9 @@ func TestRoundRobin_SelectQueue_HandlesDynamicFlows(t *testing.T) {
 	}
 
 	// First selection
-	selected, err := policy.SelectQueue(mockBand)
-	require.NoError(t, err, "SelectQueue should not error on initial selection")
-	require.NotNil(t, selected, "SelectQueue should select a queue initially")
+	selected, err := policy.Pick(ctx, mockBand)
+	require.NoError(t, err, "Pick should not error on initial selection")
+	require.NotNil(t, selected, "Pick should select a queue initially")
 	assert.Equal(t, "flow1", selected.FlowKey().ID, "First selection should be flow1")
 
 	// --- Simulate adding a flow ---
@@ -169,34 +180,36 @@ func TestRoundRobin_SelectQueue_HandlesDynamicFlows(t *testing.T) {
 	}
 
 	// Next selection should be flow2 (continues from last index)
-	selected, err = policy.SelectQueue(mockBand)
-	require.NoError(t, err, "SelectQueue should not error after adding a flow")
-	require.NotNil(t, selected, "SelectQueue should select a queue after adding a flow")
+	selected, err = policy.Pick(ctx, mockBand)
+	require.NoError(t, err, "Pick should not error after adding a flow")
+	require.NotNil(t, selected, "Pick should select a queue after adding a flow")
 	assert.Equal(t, "flow2", selected.FlowKey().ID, "Next selection should be flow2")
 
 	// Next selection should be flow3
-	selected, err = policy.SelectQueue(mockBand)
-	require.NoError(t, err, "SelectQueue should not error on the third selection")
-	require.NotNil(t, selected, "SelectQueue should select the new flow")
+	selected, err = policy.Pick(ctx, mockBand)
+	require.NoError(t, err, "Pick should not error on the third selection")
+	require.NotNil(t, selected, "Pick should select the new flow")
 	assert.Equal(t, "flow3", selected.FlowKey().ID, "Next selection should be the new flow3")
 
 	// --- Simulate removing a flow ---
 	mockBand.FlowKeysFunc = func() []types.FlowKey { return []types.FlowKey{flow1Key, flow3Key} } // flow2 is removed
 
 	// Next selection should wrap around and pick flow1
-	selected, err = policy.SelectQueue(mockBand)
-	require.NoError(t, err, "SelectQueue should not error after removing a flow")
-	require.NotNil(t, selected, "SelectQueue should select a queue after removing a flow")
+	selected, err = policy.Pick(ctx, mockBand)
+	require.NoError(t, err, "Pick should not error after removing a flow")
+	require.NotNil(t, selected, "Pick should select a queue after removing a flow")
 	assert.Equal(t, "flow1", selected.FlowKey().ID, "Next selection should wrap around to flow1 after a removal")
 }
 
-func TestRoundRobin_SelectQueue_Concurrency(t *testing.T) {
+func TestRoundRobin_Pick_Concurrency(t *testing.T) {
 	t.Parallel()
 	// Run this test multiple times to increase the chance of catching race conditions.
 	for i := range 5 {
 		t.Run(fmt.Sprintf("Iteration%d", i), func(t *testing.T) {
 			t.Parallel()
-			policy := newRoundRobin()
+			policy := newRoundRobin("")
+			ctx := context.Background()
+			state := policy.NewState(ctx) // Shared state for all goroutines
 
 			// Setup: Three non-empty queues
 			queues := []*frameworkmocks.MockFlowQueueAccessor{
@@ -207,6 +220,7 @@ func TestRoundRobin_SelectQueue_Concurrency(t *testing.T) {
 			numQueues := int64(len(queues))
 
 			mockBand := &frameworkmocks.MockPriorityBandAccessor{
+				PolicyStateV: state,
 				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow1Key, flow2Key, flow3Key} },
 				QueueFunc: func(id string) framework.FlowQueueAccessor {
 					for _, q := range queues {
@@ -230,7 +244,7 @@ func TestRoundRobin_SelectQueue_Concurrency(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for range selectionsPerGoroutine {
-						selected, err := policy.SelectQueue(mockBand)
+						selected, err := policy.Pick(ctx, mockBand)
 						if err == nil && selected != nil {
 							val, _ := selectionCounts.LoadOrStore(selected.FlowKey().ID, new(atomic.Int64))
 							val.(*atomic.Int64).Add(1)

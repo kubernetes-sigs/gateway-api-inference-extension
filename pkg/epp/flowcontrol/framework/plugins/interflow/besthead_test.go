@@ -17,6 +17,7 @@ limitations under the License.
 package interflow
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -29,11 +30,7 @@ import (
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
 
-const (
-	flow1ID         = "flow1"
-	flow2ID         = "flow2"
-	commonScoreType = "enqueue_time_ns_asc"
-)
+const commonScoreType = "enqueue_time_ns_asc"
 
 // enqueueTimeComparatorFunc is a test utility. Lower enqueue time is better.
 func enqueueTimeComparatorFunc(a, b types.QueueItemAccessor) bool {
@@ -60,7 +57,7 @@ func newTestBand(queues ...framework.FlowQueueAccessor) *frameworkmocks.MockPrio
 		QueueFunc: func(id string) framework.FlowQueueAccessor {
 			return queuesByID[id]
 		},
-		IterateQueuesFunc: func(iterator func(queue framework.FlowQueueAccessor) bool) {
+		IterateQueuesFunc: func(iterator func(flow framework.FlowQueueAccessor) bool) {
 			for _, key := range flowKeys {
 				if !iterator(queuesByID[key.ID]) {
 					break
@@ -70,15 +67,19 @@ func newTestBand(queues ...framework.FlowQueueAccessor) *frameworkmocks.MockPrio
 	}
 }
 
-func TestBestHead_Name(t *testing.T) {
+func TestGlobalStrict_Name(t *testing.T) {
 	t.Parallel()
-	policy := newBestHead()
-	assert.Equal(t, BestHeadPolicyName, policy.Name(), "Name should match the policy's constant")
+	policy := newGlobalStrict("test-gs")
+	assert.Equal(t, "test-gs", policy.TypedName().Name)
+	assert.Equal(t, GlobalStrictFairnessPolicyType, policy.TypedName().Type)
 }
 
-func TestBestHead_SelectQueue(t *testing.T) {
+func TestGlobalStrict_Pick(t *testing.T) {
 	t.Parallel()
-	policy := newBestHead()
+
+	const flow1ID = "flow1"
+	policy := newGlobalStrict("")
+	ctx := context.Background()
 	now := time.Now()
 
 	itemBetter := typesmocks.NewMockQueueItemAccessor(10, "itemBetter", flow1Key)
@@ -194,18 +195,18 @@ func TestBestHead_SelectQueue(t *testing.T) {
 			t.Parallel()
 
 			if tc.shouldPanic {
-				assert.Panics(t, func() { _, _ = policy.SelectQueue(tc.band) }, "SelectQueue should panic for this edge case")
+				assert.Panics(t, func() { _, _ = policy.Pick(ctx, tc.band) }, "Pick should panic for this edge case")
 				return
 			}
 
-			selected, err := policy.SelectQueue(tc.band)
+			selected, err := policy.Pick(ctx, tc.band)
 
 			if tc.expectedErr != nil {
-				require.Error(t, err, "SelectQueue should return an error")
+				require.Error(t, err, "Pick should return an error")
 				assert.ErrorIs(t, err, tc.expectedErr, "The returned error should match the expected error type")
 				assert.Nil(t, selected, "No queue should be selected when an error occurs")
 			} else {
-				require.NoError(t, err, "SelectQueue should not return an error for valid inputs")
+				require.NoError(t, err, "Pick should not return an error for valid inputs")
 				if tc.expectedQueueID == "" {
 					assert.Nil(t, selected, "No queue should be selected")
 				} else {
