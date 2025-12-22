@@ -498,21 +498,12 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	numToAdd := newTotalActive - currentActive
 	fr.logger.Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
 
-	// Prepare new shards.
+	// Prepare All New Shard Objects (Infallible):
 	newShards := make([]*registryShard, numToAdd)
 	for i := range numToAdd {
 		shardID := fmt.Sprintf("shard-%04d", fr.nextShardID+uint64(i))
 		partitionedConfig := fr.config.partition(currentActive+i, newTotalActive)
-		shard, err := newShard(
-			shardID,
-			partitionedConfig,
-			fr.logger,
-			fr.propagateStatsDelta,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create new shard object %s: %w", shardID, err)
-		}
-		newShards[i] = shard
+		newShards[i] = newShard(shardID, partitionedConfig, fr.logger, fr.propagateStatsDelta)
 	}
 
 	// Prepare All Components for All New Shards (Fallible):

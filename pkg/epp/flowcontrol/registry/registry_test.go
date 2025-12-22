@@ -69,16 +69,12 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 			shardCount = opts.initialShardCount
 		}
 
-		highBand, err := NewPriorityBandConfig(highPriority, "High")
-		require.NoError(t, err)
-		lowBand, err := NewPriorityBandConfig(lowPriority, "Low")
-		require.NoError(t, err)
-
 		cfg, err = NewConfig(
+			newTestPluginsHandle(t),
 			WithInitialShardCount(shardCount),
 			WithFlowGCTimeout(5*time.Minute),
-			WithPriorityBand(highBand),
-			WithPriorityBand(lowBand),
+			WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
+			WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
 		)
 		require.NoError(t, err, "Test setup: failed to create default config")
 	}
@@ -137,28 +133,6 @@ func (h *registryTestHarness) openConnectionOnFlow(key types.FlowKey) {
 	h.assertFlowExists(key, "Flow %s should exist after registration", key)
 }
 
-// --- Constructor and Lifecycle Tests ---
-
-func TestFlowRegistry_New(t *testing.T) {
-	t.Parallel()
-
-	t.Run("ShouldFail_WhenInitialShardCreationFails", func(t *testing.T) {
-		t.Parallel()
-
-		badBand, err := NewPriorityBandConfig(highPriority, "A", WithInterFlowPolicy("non-existent-policy"))
-		require.NoError(t, err)
-
-		config, err := NewConfig(WithPriorityBand(badBand))
-		require.NoError(t, err, "Test setup: creating the config object itself should not fail")
-
-		_, err = NewFlowRegistry(config, logr.Discard())
-
-		require.Error(t, err, "NewFlowRegistry should fail when initial shard setup fails")
-		assert.Contains(t, err.Error(), "failed to create inter-flow policy",
-			"Error message should reflect the root cause (policy creation failure)")
-	})
-}
-
 // --- `FlowRegistryClient` API Tests ---
 
 func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
@@ -198,14 +172,16 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 	t.Run("ShouldFail_WhenJITFails", func(t *testing.T) {
 		t.Parallel()
 
+		handle := newTestPluginsHandle(t)
 		badPolicyName := intraflow.RegisteredPolicyName("non-existent-policy")
-		badBand, err := NewPriorityBandConfig(highPriority, "High", WithIntraFlowPolicy(badPolicyName))
+		badBand, err := NewPriorityBandConfig(handle, highPriority, "High", WithIntraFlowPolicy(badPolicyName))
 		require.NoError(t, err)
 
 		// Create a Config that uses a mock checker to bypass the strict validation.
 		// The default checker would reject "non-existent-policy", but our mock says it's fine.
 		// This allows us to instantiate the Registry with a latent configuration bomb.
 		cfg, err := NewConfig(
+			handle,
 			WithPriorityBand(badBand),
 			withCapabilityChecker(&mockCapabilityChecker{
 				checkCompatibilityFunc: func(_ intraflow.RegisteredPolicyName, _ queue.RegisteredQueueName) error {
@@ -486,10 +462,12 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			band, err := NewPriorityBandConfig(highPriority, "A", WithBandMaxBytes(bandCapacity))
+			handle := newTestPluginsHandle(t)
+			band, err := NewPriorityBandConfig(handle, highPriority, "A", WithBandMaxBytes(bandCapacity))
 			require.NoError(t, err)
 
 			config, err := NewConfig(
+				handle,
 				WithMaxBytes(globalCapacity),
 				WithInitialShardCount(tc.initialShardCount),
 				WithPriorityBand(band),
@@ -611,7 +589,7 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		newShard := h.fr.activeShards[1]
 		h.fr.mu.RUnlock()
 
-		_, policyErr := newShard.InterFlowDispatchPolicy(dynamicPrio)
+		_, policyErr := newShard.FairnessPolicy(dynamicPrio)
 		assert.NoError(t, policyErr, "New shard must have the dynamic priority band configured")
 
 		mq, err := newShard.ManagedQueue(key)

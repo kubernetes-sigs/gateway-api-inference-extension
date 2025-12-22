@@ -94,23 +94,6 @@ const (
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
-// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
-// Remove this static initialization helper once Flow Control is integrated
-// into the EPP YAML-based plugin configuration path.
-func must[T any](t T, err error) T {
-	if err != nil {
-		panic(fmt.Sprintf("static initialization failed: %v", err))
-	}
-	return t
-}
-
-// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
-// Remove hardcoded configuration. Priorities, fairness policies, and limits should be loaded from the standard EPP
-// configuration system.
-var flowControlConfig = flowcontrol.Config{
-	Controller: fccontroller.Config{},        // Use all defaults.
-	Registry:   must(fcregistry.NewConfig()), // Use all defaults.
-}
 
 var (
 	setupLog = ctrl.Log.WithName("setup")
@@ -312,19 +295,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.featureGates[flowcontrol.FeatureGate] {
 		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
-		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
-		if err != nil {
-			setupLog.Error(err, "failed to initialize Flow Control layer")
-			return fmt.Errorf("invalid Flow Control config: %w", err)
-		}
-
-		registry, err := fcregistry.NewFlowRegistry(fcCfg.Registry, setupLog)
+		registry, err := fcregistry.NewFlowRegistry(eppConfig.FlowControlConfig.Registry, setupLog)
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
 		fc, err := fccontroller.NewFlowController(
 			ctx,
-			fcCfg.Controller,
+			eppConfig.FlowControlConfig.Controller,
 			registry, saturationDetector,
 			locator,
 		)
