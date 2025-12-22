@@ -612,9 +612,9 @@ func TestSLOAwareRouterFactory(t *testing.T) {
 			expectErr:  true,
 		},
 		{
-			name:       "affinityGateTauGlobal <= 0",
+			name:       "affinityGateTauGlobal < 0",
 			pluginName: "tau-global-zero",
-			jsonParams: `{"affinityGateTauGlobal": 0}`,
+			jsonParams: `{"affinityGateTauGlobal": -0.2}`,
 			expectErr:  true,
 		},
 		{
