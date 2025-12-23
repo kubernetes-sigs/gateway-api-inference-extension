@@ -64,7 +64,7 @@ func TestMetricsRefresh(t *testing.T) {
 	pmf := NewPodMetricsFactory(pmc, time.Millisecond)
 
 	// The refresher is initialized with empty metrics.
-	pm := pmf.NewEndpoint(ctx, pod1Info, &FakePodMetricsDataStore{})
+	pm := pmf.NewEndpoint(ctx, pod1Info, &FakeRefresherDataStore{})
 
 	// Use SetRes to simulate an update of metrics from the pod.
 	// Verify that the metrics are updated.
@@ -83,15 +83,15 @@ func TestMetricsRefresh(t *testing.T) {
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 }
 
-type FakePodMetricsDataStore struct{}
+type FakeRefresherDataStore struct{}
 
-var _ datalayer.DataStore = (*FakePodMetricsDataStore)(nil)
+var _ datalayer.DataStore = (*FakeRefresherDataStore)(nil)
 
-func (f *FakePodMetricsDataStore) PoolGet() (*datalayer.EndpointPool, error) {
+func (f *FakeRefresherDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	return &datalayer.EndpointPool{}, nil
 }
 
-func (f *FakePodMetricsDataStore) PodList(func(PodMetrics) bool) []PodMetrics {
+func (f *FakeRefresherDataStore) PodList(func(PodMetrics) bool) []PodMetrics {
 	// Not implemented.
 	return nil
 }
