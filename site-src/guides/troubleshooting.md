@@ -124,9 +124,9 @@ inferenceExtension:
       - type: kv-cache-utilization-scorer
       - type: prefix-cache-scorer
         parameters:
-          blockSize: 64 # Match your model server
-          maxPrefixBlocksToMatch: 512
-          lruCapacityPerServer: 31250
+          blockSize: 64 # Match your setup
+          maxPrefixBlocksToMatch: 512 # Match your setup
+          lruCapacityPerServer: 31250 # Match your setup
       schedulingProfiles:
       - name: default
         plugins:
@@ -153,9 +153,9 @@ inferenceExtension:
       - type: kv-cache-utilization-scorer
       - type: prefix-cache-scorer
         parameters:
-          blockSize: 64 # Match your model server
-          maxPrefixBlocksToMatch: 512
-          lruCapacityPerServer: 31250
+          blockSize: 64 # Match your setup
+          maxPrefixBlocksToMatch: 512 # Match your setup
+          lruCapacityPerServer: 31250 # Match your setup
       - type: predicted-latency-scorer
         parameters:
           # Include your latency predictor parameters here
