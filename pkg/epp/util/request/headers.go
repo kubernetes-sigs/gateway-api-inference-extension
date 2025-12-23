@@ -22,6 +22,7 @@ import (
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"k8s.io/apimachinery/pkg/util/sets"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
