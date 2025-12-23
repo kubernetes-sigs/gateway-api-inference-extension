@@ -85,8 +85,6 @@ func TestMetricsRefresh(t *testing.T) {
 
 type FakeRefresherDataStore struct{}
 
-var _ datalayer.DataStore = (*FakeRefresherDataStore)(nil)
-
 func (f *FakeRefresherDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	return &datalayer.EndpointPool{}, nil
 }

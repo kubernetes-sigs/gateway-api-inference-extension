@@ -96,8 +96,6 @@ var pod2 = &datalayer.EndpointMetadata{
 
 type FakeLoggerDataStore struct{}
 
-var _ datalayer.DataStore = (*FakeLoggerDataStore)(nil)
-
 func (f *FakeLoggerDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	pool := &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}
 	return poolutil.InferencePoolToEndpointPool(pool), nil
