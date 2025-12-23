@@ -97,3 +97,75 @@ For more information, check out [EPP scale testing](https://docs.google.com/docu
 When performance degrades under high load (for example high-latency tail or significantly lower-than-expected successful QPS) with underutilized resources, the issue may be related to excessive logging in the endpoint picker (EPP). Higher verbosity levels (e.g., `--v=2` or greater) generate a large volume of logs. This floods the log buffer and standard output, leading to heavy writelock contention. In extreme cases, this can cause the kubelet to kill the pod due to health check timeouts, leading to a restart cycle. 
 
 **Solution**: Ensure log level for the EPP is set to `--v=1`.
+
+## TTFT Latency Spikes Under Low Concurrency
+
+Experiencing high spikes in Time to First Token (TTFT) under low concurrency, despite having underutilized resources, often points to a mismatch between the EPP's `prefix-cache-scorer` configuration and your model server's actual state.
+
+This mismatch causes the EPP to fundamentally misunderstand the caching behavior of your backend:
+
+*   **Overpredicting Cache Hits (Hotspots):** If EPP believes a pod has a prefix match when it doesn't (e.g., due to an incorrect `blockSize` or `lruCapacityPerServer` that is too large), it will aggressively funnel requests to that single pod. The pod effectively experiences a cache miss for every request, recalculating the full prompt while other pods sit idle.
+*   **Underpredicting Cache Hits (Missed Opportunities):** Conversely, if `lruCapacityPerServer` is too small, EPP may believe a pod has evicted a prefix that is actually still present. This leads to inefficient routing where requests are sent to suboptimal pods, missing out on "free" acceleration.
+
+**Solution**: Ensure that your prefix cache scorer parameters are tuned to match your model server's settings. You can override these in your `values.yaml` by providing a custom plugin configuration that matches your existing profile structure:
+
+#### Example: Classic Routing (Latency Predictor Disabled)
+Use this if you are using the default queue and cache-based scorers.
+
+```yaml
+inferenceExtension:
+  pluginsConfigFile: "custom-plugins.yaml"
+  pluginsCustomConfig:
+    custom-plugins.yaml: |
+      apiVersion: inference.networking.x-k8s.io/v1alpha1
+      kind: EndpointPickerConfig
+      plugins:
+      - type: queue-scorer
+      - type: kv-cache-utilization-scorer
+      - type: prefix-cache-scorer
+        parameters:
+          blockSize: 64 # Match your model server
+          maxPrefixBlocksToMatch: 512
+          lruCapacityPerServer: 31250
+      schedulingProfiles:
+      - name: default
+        plugins:
+        - pluginRef: queue-scorer
+          weight: 2
+        - pluginRef: kv-cache-utilization-scorer
+          weight: 2
+        - pluginRef: prefix-cache-scorer
+          weight: 3
+```
+
+#### Example: Latency-Based Routing Enabled
+Use this if `inferenceExtension.latencyPredictor.enabled` is set to `true`. Note the inclusion of `featureGates`.
+
+```yaml
+inferenceExtension:
+  pluginsConfigFile: "custom-plugins.yaml"
+  pluginsCustomConfig:
+    custom-plugins.yaml: |
+      apiVersion: inference.networking.x-k8s.io/v1alpha1
+      kind: EndpointPickerConfig
+      plugins:
+      - type: queue-scorer
+      - type: kv-cache-utilization-scorer
+      - type: prefix-cache-scorer
+        parameters:
+          blockSize: 64 # Match your model server
+          maxPrefixBlocksToMatch: 512
+          lruCapacityPerServer: 31250
+      - type: predicted-latency-scorer
+        parameters:
+          # Include your latency predictor parameters here
+          samplingMean: 1000.0 
+      schedulingProfiles:
+      - name: default
+        plugins:
+        - pluginRef: predicted-latency-scorer
+      featureGates:
+      - prepareDataPlugins
+```
+
+See the [Prefix Cache Aware Plugin Customization](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/prefix-aware/#customize-the-prefix-cache-plugin) for a detailed explanation of each parameter.
