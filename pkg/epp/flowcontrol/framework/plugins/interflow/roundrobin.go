@@ -14,90 +14,98 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package roundrobin provides a `framework.InterFlowDispatchPolicy` that selects a queue from a priority band using a
-// simple round-robin strategy.
 package interflow
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-// RoundRobinPolicyName is the name of the Round Robin policy implementation.
-const RoundRobinPolicyName = "RoundRobin"
+// RoundRobinFairnessPolicyType represents a fairness policy that selects a queue from a priority band using a simple
+// round-robin strategy.
+const RoundRobinFairnessPolicyType = "round-robin-fairness-policy"
 
 func init() {
-	MustRegisterPolicy(RegisteredPolicyName(RoundRobinPolicyName),
-		func() (framework.InterFlowDispatchPolicy, error) {
-			return newRoundRobin(), nil
-		})
+	plugins.Register(
+		RoundRobinFairnessPolicyType,
+		func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+			return newRoundRobin(name), nil
+		},
+	)
 }
 
-// roundRobin implements the `framework.InterFlowDispatchPolicy` interface using a round-robin strategy.
+// roundRobin implements FairnessPolicy.
 type roundRobin struct {
-	iterator *iterator
+	name string
 }
 
-func newRoundRobin() framework.InterFlowDispatchPolicy {
-	return &roundRobin{
-		iterator: newIterator(),
+func newRoundRobin(name string) *roundRobin {
+	if name == "" {
+		name = RoundRobinFairnessPolicyType
+	}
+	return &roundRobin{name}
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *roundRobin) TypedName() plugins.TypedName {
+	return plugins.TypedName{
+		Type: RoundRobinFairnessPolicyType,
+		Name: p.name,
 	}
 }
 
-// Name returns the name of the policy.
-func (p *roundRobin) Name() string {
-	return RoundRobinPolicyName
-}
-
-// SelectQueue selects the next flow queue in a round-robin fashion from the given priority band.
-// It returns nil if all queues in the band are empty or if an error occurs.
-func (p *roundRobin) SelectQueue(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
-	if band == nil {
-		return nil, nil
-	}
-	selectedQueue := p.iterator.selectNextQueue(band)
-	return selectedQueue, nil
-}
-
-// iterator implements a thread-safe round-robin selection logic. It maintains the ID of the last selected flow to
-// ensure the selection order is correct even when the set of available flows changes dynamically.
-//
-// This is kept as a private, nested type as its logic is specific to this policy. This structure is a deliberate
-// choice for future refactoring; the iterator logic can be easily extracted into a shared internal package if a
-// "RoundRobin" displacement policy is introduced, while keeping the dispatch policy's public API stable.
-type iterator struct {
+// roundRobinCursor holds the mutable cursor for a specific priority band.
+// It is initialized via NewState and stored on the PriorityBandAccessor.
+type roundRobinCursor struct {
 	mu           sync.Mutex
 	lastSelected *types.FlowKey
 }
 
-// newIterator creates a new round-robin Iterator.
-func newIterator() *iterator {
-	return &iterator{}
+// NewState initializes the policy state for a specific priority band.
+func (p *roundRobin) NewState(_ context.Context) any {
+	return &roundRobinCursor{}
 }
 
-// selectNextQueue iterates through the flow queues in a round-robin fashion, starting from the flow after the one
-// selected in the previous call. It sorts the flow IDs to ensure a deterministic ordering. If no non-empty queue is
-// found after a full cycle, it returns nil.
-func (r *iterator) selectNextQueue(band framework.PriorityBandAccessor) framework.FlowQueueAccessor {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	keys := band.FlowKeys()
-	if len(keys) == 0 {
-		r.lastSelected = nil // Reset state if no flows are present
-		return nil
+// Pick selects the next flow queue in a round-robin fashion from the given priority band.
+// It retrieves the band-specific state, locks it, and advances the cursor.
+func (p *roundRobin) Pick(
+	_ context.Context,
+	flowGroup framework.PriorityBandAccessor,
+) (framework.FlowQueueAccessor, error) {
+	if flowGroup == nil {
+		return nil, nil
 	}
+
+	v := flowGroup.PolicyState()
+	c, ok := v.(*roundRobinCursor)
+	if !ok {
+		return nil, fmt.Errorf("invalid state type for RoundRobin policy: expected *roundRobinCursor, got %T", v)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	keys := flowGroup.FlowKeys()
+	if len(keys) == 0 {
+		c.lastSelected = nil // Reset cursor if no flows are present.
+		return nil, nil
+	}
+
 	// Sort for deterministic ordering.
 	slices.SortFunc(keys, func(a, b types.FlowKey) int { return a.Compare(b) })
 
 	startIndex := 0
-	if r.lastSelected != nil {
+	if c.lastSelected != nil {
 		// Find the index of the last selected flow.
-		// If it's not found (e.g., the flow was removed), we'll start from the beginning.
-		if idx := slices.Index(keys, *r.lastSelected); idx != -1 {
+		// If it's not found (e.g., the flow was removed), we'll start from the beginning (index 0).
+		if idx := slices.Index(keys, *c.lastSelected); idx != -1 {
 			startIndex = (idx + 1) % len(keys)
 		}
 	}
@@ -106,14 +114,14 @@ func (r *iterator) selectNextQueue(band framework.PriorityBandAccessor) framewor
 	for i := range numFlows {
 		currentIdx := (startIndex + i) % numFlows
 		currentKey := keys[currentIdx]
-		queue := band.Queue(currentKey.ID)
+		queue := flowGroup.Queue(currentKey.ID)
 		if queue != nil && queue.Len() > 0 {
-			r.lastSelected = &currentKey
-			return queue
+			c.lastSelected = &currentKey
+			return queue, nil
 		}
 	}
 
 	// No non-empty queue was found.
-	r.lastSelected = nil
-	return nil
+	c.lastSelected = nil
+	return nil, nil
 }

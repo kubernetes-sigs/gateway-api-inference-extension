@@ -51,7 +51,7 @@ type MockRegistryShard struct {
 	IsActiveFunc                 func() bool
 	ManagedQueueFunc             func(key types.FlowKey) (contracts.ManagedQueue, error)
 	IntraFlowDispatchPolicyFunc  func(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
-	InterFlowDispatchPolicyFunc  func(priority int) (framework.InterFlowDispatchPolicy, error)
+	FairnessPolicyFunc           func(priority int) (framework.FairnessPolicy, error)
 	PriorityBandAccessorFunc     func(priority int) (framework.PriorityBandAccessor, error)
 	AllOrderedPriorityLevelsFunc func() []int
 	StatsFunc                    func() contracts.ShardStats
@@ -85,9 +85,9 @@ func (m *MockRegistryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framewor
 	return nil, nil
 }
 
-func (m *MockRegistryShard) InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error) {
-	if m.InterFlowDispatchPolicyFunc != nil {
-		return m.InterFlowDispatchPolicyFunc(priority)
+func (m *MockRegistryShard) FairnessPolicy(priority int) (framework.FairnessPolicy, error) {
+	if m.FairnessPolicyFunc != nil {
+		return m.FairnessPolicyFunc(priority)
 	}
 	return nil, nil
 }
@@ -112,6 +112,8 @@ func (m *MockRegistryShard) Stats() contracts.ShardStats {
 	}
 	return contracts.ShardStats{}
 }
+
+var _ contracts.RegistryShard = &MockRegistryShard{}
 
 // --- Dependency Mocks ---
 

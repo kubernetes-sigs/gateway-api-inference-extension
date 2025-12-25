@@ -14,55 +14,85 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package besthead provides a `framework.InterFlowDispatchPolicy` that selects the queue containing the single "best"
-// item from across all queues in a priority band.
 package interflow
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-// BestHeadPolicyName is the name of the Best Head policy implementation.
-const BestHeadPolicyName = "BestHead"
+// GlobalStrictFairnessPolicyType represents a fairness policy that enforces a strict global ordering across all flows.
+// By ignoring flow boundaries and always selecting the absolute "best" item from any available queue, this policy
+// effectively transforms the multi-queue Priority Band into a single logical Priority Queue.
+// TODO: rename files to `global_strict.go` and `global_strict_test.go`.
+const GlobalStrictFairnessPolicyType = "global-strict-fairness-policy"
 
 func init() {
-	MustRegisterPolicy(RegisteredPolicyName(BestHeadPolicyName),
-		func() (framework.InterFlowDispatchPolicy, error) {
-			return newBestHead(), nil
-		})
+	plugins.Register(GlobalStrictFairnessPolicyType, GlobalStrictFairnessPolicyFactory)
 }
 
-type bestHead struct{}
-
-func newBestHead() *bestHead {
-	return &bestHead{}
+func GlobalStrictFairnessPolicyFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	return newGlobalStrict(name), nil
 }
 
-// Name returns the name of the policy.
-func (p *bestHead) Name() string {
-	return BestHeadPolicyName
+// globalStrict implements FairnessPolicy.
+// It selects the queue containing the single "best" item from across all queues in a priority band.
+type globalStrict struct {
+	name string
 }
 
-// SelectQueue implements a greedy strategy that bypasses fairness concerns to select the queue containing the single
-// "best" item from across all queues in the priority band. It iterates through all non-empty queues, peeks at their
-// head items, and uses the `framework.ItemComparator` from each queue to find the highest-priority item overall.
+func newGlobalStrict(name string) *globalStrict {
+	if name == "" {
+		name = GlobalStrictFairnessPolicyType
+	}
+	return &globalStrict{name}
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *globalStrict) TypedName() plugins.TypedName {
+	return plugins.TypedName{
+		Type: GlobalStrictFairnessPolicyType,
+		Name: p.name,
+	}
+}
+
+// NewState initializes the policy state for a specific priority band.
+// globalStrict is purely greedy and stateless, so it returns nil.
+func (p *globalStrict) NewState(_ context.Context) any {
+	return nil
+}
+
+// Pick executes the global strict strategy.
 //
-// This policy is useful for maximizing utilization when fairness between flows is not a concern. It requires that all
-// queues being compared have a compatible `framework.ScoreType` to ensure the comparison is meaningful. If an
-// incompatible comparator is found, the selection fails with an error.
-func (p *bestHead) SelectQueue(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
-	if band == nil {
+// It iterates over every active flow in the band, inspecting the head of each queue to find the single highest-priority
+// item currently waiting in the entire pool.
+//
+// Behavior:
+//   - Fairness: Ignored. A single flow with a burst of high-priority traffic can starve others.
+//   - Ordering: Strict. The system behaves as if all requests were in one global queue.
+//
+// Requirements:
+// All flows in the band MUST use compatible ItemComparators (i.e., identical ScoreTypes).
+// If incompatible comparators are detected (e.g., comparing "Timestamp" vs "UrgencyScore"), the method returns an error
+// as a strict comparison is impossible.
+func (p *globalStrict) Pick(
+	_ context.Context,
+	flowGroup framework.PriorityBandAccessor,
+) (framework.FlowQueueAccessor, error) {
+	if flowGroup == nil {
 		return nil, nil
 	}
 
 	var bestQueue framework.FlowQueueAccessor
 	var bestItem types.QueueItemAccessor
-
 	var iterationErr error
-	band.IterateQueues(func(queue framework.FlowQueueAccessor) (keepIterating bool) {
+
+	flowGroup.IterateQueues(func(queue framework.FlowQueueAccessor) (keepIterating bool) {
 		if queue == nil || queue.Len() == 0 {
 			return true
 		}

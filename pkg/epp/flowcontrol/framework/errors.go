@@ -38,8 +38,7 @@ var (
 
 // Policy Errors
 var (
-	// ErrIncompatiblePriorityType indicates that an `InterFlowDispatchPolicy` (like "BestHead") attempted to compare
-	// items from two different flow queues whose `ItemComparator`s have different `ScoreType` values, making a
-	// meaningful comparison impossible.
+	// ErrIncompatiblePriorityType indicates that a FairnessPolicy attempted to compare items from two different flow
+	// queues whose ItemComparators have different ScoreType values, making a meaningful comparison impossible.
 	ErrIncompatiblePriorityType = errors.New("incompatible priority score type for comparison")
 )
