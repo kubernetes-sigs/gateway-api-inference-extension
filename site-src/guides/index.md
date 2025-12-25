@@ -30,6 +30,12 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/gpu-deployment.yaml
     ```
 
+--8<-- "site-src/_includes/sglang-gpu.md"
+
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/sglang/gpu-deployment.yaml
+   ```
+
 --8<-- "site-src/_includes/model-server-cpu.md"
 
     ```bash
@@ -129,6 +135,11 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 --8<-- "site-src/_includes/epp.md"
 
+   For sglang deployment:
+
+--8<-- "site-src/_includes/epp-sglang.md"
+
+
 ### Deploy an Inference Gateway
 
    Choose one of the following options to deploy an Inference Gateway.
@@ -153,11 +164,15 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
       1. Deploy the HTTPRoute:
-
+      
+         For vllm deployment:
          ```bash
          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/gateway/gke/httproute.yaml
          ```
-
+         For sglang deployment:
+         ```bash
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/gateway/gke/httproute-sglang.yaml
+         ```
       1. Confirm that the HTTPRoute status conditions include `Accepted=True` and `ResolvedRefs=True`:
 
          ```bash
@@ -270,6 +285,12 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl describe inferencepools.inference.networking.k8s.io vllm-llama3-8b-instruct
          ```
 
+         For sglang deployment:
+
+         ```bash
+         kubectl describe inferencepools.inference.networking.k8s.io sglang-llama3-8b-instruct
+        ```
+
          Check that the status shows Accepted=True and ResolvedRefs=True. This confirms the InferencePool is ready to handle traffic.
       
        For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
@@ -306,6 +327,14 @@ You have now deployed a basic Inference Gateway with a simple routing strategy. 
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
+      kubectl delete secret hf-token --ignore-not-found
+      ```
+
+      For Sglang deployment:
+      
+      ```bash
+      helm uninstall sglang-llama3-8b-instruct
+      kubectl delete -f       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/sglang/gpu-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
       ```
 
