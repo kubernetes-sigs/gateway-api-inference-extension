@@ -23,24 +23,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 func TestLoraAffinityScorer(t *testing.T) {
 	tests := []struct {
-		name              string
-		request           *types.LLMRequest
-		pods              []types.Pod
-		expectedScoresPod map[string]float64 // Map of pod name to expected score
+		name                   string
+		request                *types.LLMRequest
+		endpoints              []types.Endpoint
+		expectedScoresEndpoint map[string]float64 // Map of endpoint name to expected score
 	}{
 		{
 			name:    "Target model is active",
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
-			pods: []types.Pod{
+			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-1": 1},
 						WaitingModels:   map[string]int{},
@@ -48,16 +48,16 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 			},
-			expectedScoresPod: map[string]float64{
+			expectedScoresEndpoint: map[string]float64{
 				"pod1": 1.0,
 			},
 		},
 		{
 			name:    "Target model is waiting",
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
-			pods: []types.Pod{
+			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-2": 2},
 						WaitingModels:   map[string]int{"active-model-1": 1},
@@ -65,16 +65,16 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 			},
-			expectedScoresPod: map[string]float64{
+			expectedScoresEndpoint: map[string]float64{
 				"pod1": 0.6,
 			},
 		},
 		{
-			name:    "Pods have no space for new model",
+			name:    "Endpoints have no space for new model",
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
-			pods: []types.Pod{
+			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-2": 2},
 						WaitingModels:   map[string]int{"active-model-3": 1},
@@ -82,7 +82,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{},
 						WaitingModels:   map[string]int{},
@@ -90,17 +90,17 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 			},
-			expectedScoresPod: map[string]float64{
+			expectedScoresEndpoint: map[string]float64{
 				"pod1": 0.0,
 				"pod2": 0.0,
 			},
 		},
 		{
-			name:    "Multiple pods with mixed active and waiting models",
+			name:    "Multipleendpoints with mixed active and waiting models",
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
-			pods: []types.Pod{
+			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-1": 1},
 						WaitingModels:   map[string]int{},
@@ -108,7 +108,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-2": 4},
 						WaitingModels:   map[string]int{"active-model-1": 1},
@@ -116,7 +116,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-2": 1},
 						WaitingModels:   map[string]int{},
@@ -124,7 +124,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-3": 1},
 						WaitingModels:   map[string]int{"active-model-1": 1},
@@ -132,7 +132,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}},
 					MetricsState: &backendmetrics.MetricsState{
 						ActiveModels:    map[string]int{"active-model-4": 1, "active-model-5": 1},
 						WaitingModels:   map[string]int{},
@@ -140,7 +140,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 			},
-			expectedScoresPod: map[string]float64{
+			expectedScoresEndpoint: map[string]float64{
 				"pod1": 1.0,
 				"pod2": 0.8,
 				"pod3": 0.8,
@@ -149,26 +149,26 @@ func TestLoraAffinityScorer(t *testing.T) {
 			},
 		},
 		{
-			name:              "Empty pods slice",
-			request:           &types.LLMRequest{TargetModel: "modelA"},
-			pods:              []types.Pod{},
-			expectedScoresPod: map[string]float64{}, // No pods, no scores
+			name:                   "Empty pods slice",
+			request:                &types.LLMRequest{TargetModel: "modelA"},
+			endpoints:              []types.Endpoint{},
+			expectedScoresEndpoint: map[string]float64{}, // No pods, no scores
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scorer := &LoraAffinityScorer{}
-			scores := scorer.Score(context.Background(), types.NewCycleState(), test.request, test.pods)
+			scores := scorer.Score(context.Background(), types.NewCycleState(), test.request, test.endpoints)
 
-			for _, pod := range test.pods {
-				expectedScore, ok := test.expectedScoresPod[pod.GetPod().NamespacedName.Name]
+			for _, endpoint := range test.endpoints {
+				expectedScore, ok := test.expectedScoresEndpoint[endpoint.GetMetadata().NamespacedName.Name]
 				if !ok {
-					t.Fatalf("Expected score not found for pod %s in test %s", pod.GetPod().NamespacedName, test.name)
+					t.Fatalf("Expected score not found for endpoint %s in test %s", endpoint.GetMetadata().NamespacedName, test.name)
 				}
-				assert.InDelta(t, expectedScore, scores[pod], 0.0001, "Pod %s should have score %f", pod.GetPod().NamespacedName.Name, expectedScore)
+				assert.InDelta(t, expectedScore, scores[endpoint], 0.0001, "Endpoint %s should have score %f", endpoint.GetMetadata().NamespacedName.Name, expectedScore)
 			}
-			assert.Len(t, scores, len(test.expectedScoresPod), "Number of scored pods should match expected")
+			assert.Len(t, scores, len(test.expectedScoresEndpoint), "Number of scored endpoints should match expected")
 		})
 	}
 }

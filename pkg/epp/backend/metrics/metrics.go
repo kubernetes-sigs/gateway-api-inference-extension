@@ -28,7 +28,7 @@ import (
 	"github.com/prometheus/common/model"
 	"go.uber.org/multierr"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
 const (
@@ -50,22 +50,22 @@ type PodMetricsClientImpl struct {
 }
 
 // FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an updated one.
-func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error) {
-	url := p.getMetricEndpoint(pod)
+func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, metadata *datalayer.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
+	url := p.getMetricEndpoint(metadata)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", pod.NamespacedName, err)
+		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", metadata.NamespacedName, err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code from %s: %v", pod.NamespacedName, resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code from %s: %v", metadata.NamespacedName, resp.StatusCode)
 	}
 
 	parser := expfmt.NewTextParser(model.LegacyValidation)
@@ -76,8 +76,8 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, pod *backend.Po
 	return p.promToPodMetrics(metricFamilies, existing)
 }
 
-func (p *PodMetricsClientImpl) getMetricEndpoint(pod *backend.Pod) string {
-	return p.ModelServerMetricsScheme + "://" + pod.GetMetricsHost() + p.ModelServerMetricsPath
+func (p *PodMetricsClientImpl) getMetricEndpoint(metadata *datalayer.EndpointMetadata) string {
+	return p.ModelServerMetricsScheme + "://" + metadata.GetMetricsHost() + p.ModelServerMetricsPath
 }
 
 // promToPodMetrics updates internal pod metrics with scraped Prometheus metrics.

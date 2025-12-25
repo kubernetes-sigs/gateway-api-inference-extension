@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -57,7 +56,7 @@ type Director interface {
 	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	GetRandomPod() *backend.Pod
+	GetRandomEndpoint() *datalayer.EndpointMetadata
 }
 
 type Datastore interface {
@@ -76,7 +75,7 @@ type StreamingServer struct {
 // Specifically, there are fields related to the ext-proc protocol, and then fields related to the lifecycle of the request.
 // We should split these apart as this monolithic object exposes too much data to too many layers.
 type RequestContext struct {
-	TargetPod                 *backend.Pod
+	TargetPod                 *datalayer.EndpointMetadata
 	TargetEndpoint            string
 	IncomingModelName         string
 	TargetModelName           string

@@ -60,8 +60,8 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -153,7 +153,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 	tests := []struct {
 		name              string
 		requests          []*extProcPb.ProcessingRequest
-		pods              map[*backend.Pod]*backendmetrics.MetricsState
+		endpoints         map[*datalayer.EndpointMetadata]*backendmetrics.MetricsState
 		wantResponses     []*extProcPb.ProcessingResponse
 		wantMetrics       map[string]string
 		wantErr           bool
@@ -163,11 +163,11 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{
 			name:     "select lower queue and kv cache, no active lora",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test1", modelMyModel, modelMyModelTarget, nil),
-			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 3, kvCacheUsage: 0.2},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2},
+			// Endpoint 1 will be picked because it has relatively low queue size and low KV cache.
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 3, kvCacheUsage: 0.2},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.1},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.2},
 			),
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
@@ -219,11 +219,11 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					},
 				},
 			},
-			// Pod 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			// Endpoint 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
 			),
 			wantErr: false,
 			wantResponses: integrationutils.NewImmediateErrorResponse(
@@ -234,11 +234,11 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{
 			name:     "select active lora, low queue",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test2", modelSQLLora, modelSQLLoraTarget, nil),
-			// Pod 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			// Endpoint 1 will be picked because it has relatively low queue size, the requested model active, and low KV cache.
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
 			),
 
 			wantMetrics: map[string]string{
@@ -268,13 +268,13 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{
 			name:     "select lora despite higher kv cache usage",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test3", modelSQLLora, modelSQLLoraTarget, nil),
-			// Pod 2 will be picked despite NOT having the requested model active as it is above the affinity for queue size.
+			// Endpoint 2 will be picked despite NOT having the requested model active as it is above the affinity for queue size.
 			// Also it is critical, so we should still admit the request despite all queue sizes being greater than the queue
 			// size threshold.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 10, kvCacheUsage: 0.4, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.3, activeModels: []string{"foo"}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				endpointState{index: 1, queueSize: 10, kvCacheUsage: 0.4, activeModels: []string{"foo", modelSQLLoraTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.3, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
@@ -306,10 +306,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			// pod 0: excluded; above queue size threshold
 			// pod 1: excluded; above KV cache threshold
 			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSQLLoraTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo"}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo"}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 6, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSQLLoraTarget}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo"}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo"}},
 			),
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
@@ -374,11 +374,11 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					},
 				},
 			},
-			// Pod 1 will be picked because it has relatively low queue size and low KV cache.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 4, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
+			// Endpoint 1 will be picked because it has relatively low queue size and low KV cache.
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
+				endpointState{index: 1, queueSize: 4, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
@@ -449,10 +449,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				},
 			},
 			// pod 0: selected due to low queue size and kv cache usage
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
@@ -510,10 +510,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			// pod 0: selected
 			// pod 1: excluded; above KV cache threshold
 			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantErr: false,
 			wantResponses: integrationutils.NewResponseBufferedResponse(
@@ -558,10 +558,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			// pod 0: selected
 			// pod 1: excluded; above KV cache threshold
 			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantErr: false,
 			wantResponses: integrationutils.NewResponseBufferedResponse(
@@ -611,10 +611,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			// pod 0: selected
 			// pod 1: excluded; above KV cache threshold
 			// pod 2: excluded; above queue size threshold
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.85, activeModels: []string{"foo", modelSheddableTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.9, activeModels: []string{"foo", modelSheddableTarget}},
 			),
 			wantErr: false,
 			wantResponses: integrationutils.NewResponseBufferedResponse(
@@ -805,8 +805,8 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				},
 			},
 			wantResponses: nil,
-			pods: newPodStates(
-				podState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 4, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar", modelSheddableTarget}},
 			),
 			wantMetrics: map[string]string{},
 		},
@@ -818,11 +818,11 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				modelSQLLora,
 				modelSQLLoraTarget,
 				[]string{"192.168.1.1:8000", "192.168.1.2:8000", "192.168.1.3:8000"}),
-			// Pod 1 will be picked because it has relatively low queue size, the requested model active, low KV cache, and within subset.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			// Endpoint 1 will be picked because it has relatively low queue size, the requested model active, low KV cache, and within subset.
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
 			),
 
 			wantMetrics: map[string]string{
@@ -857,11 +857,11 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				modelSQLLora,
 				modelSQLLoraTarget,
 				[]string{"192.168.1.3:8000"}),
-			// Pod 3 has high queue and kv cache utilization, but it will still be picked because it is the only one matching subsetting target.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			// Endpoint 3 has high queue and kv cache utilization, but it will still be picked because it is the only one matching subsetting target.
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
 			),
 
 			wantMetrics: map[string]string{
@@ -897,10 +897,10 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				modelSQLLoraTarget,
 				[]string{"192.168.1.4:8000", "192.168.1.5:8000", "192.168.1.6:8000"}),
 			// No pods will be picked as none are within the subset.
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
-				podState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
-				podState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 0, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
+				endpointState{index: 1, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", modelSQLLoraTarget}},
+				endpointState{index: 2, queueSize: 10, kvCacheUsage: 0.2, activeModels: []string{"foo", "bar"}},
 			),
 
 			wantMetrics: map[string]string{},
@@ -941,7 +941,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					},
 				},
 			},
-			pods:        nil,
+			endpoints:   nil,
 			wantMetrics: map[string]string{},
 			wantErr:     true,
 			wantResponses: []*extProcPb.ProcessingResponse{
@@ -986,13 +986,13 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{
 			name:     "rewrite request model",
 			requests: integrationutils.GenerateStreamedRequestSet(logger, "test-rewrite", modelToBeWritten, modelToBeWritten, nil),
-			// Pod 0 will be picked.
+			// Endpoint 0 will be picked.
 			// Expected flow:
 			// 1. Request asks for "model-to-be-rewritten"
 			// 2. Rewrite rule transforms "model-to-be-rewritten" -> "rewritten-model"
 			// 3. EPP sends request to backend with model "rewritten-model"
-			pods: newPodStates(
-				podState{index: 0, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", "rewritten-model"}},
+			endpoints: newEndpointStates(
+				endpointState{index: 0, queueSize: 0, kvCacheUsage: 0.1, activeModels: []string{"foo", "rewritten-model"}},
 			),
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": inferenceObjectiveRequestTotal([]label{
@@ -1023,7 +1023,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(t, test.pods)
+			client, cleanup := setUpHermeticServer(t, test.endpoints)
 			t.Cleanup(cleanup)
 			responses, err := integrationutils.StreamedRequest(t, client, test.requests, len(test.wantResponses))
 
@@ -1051,7 +1051,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 	}
 }
 
-func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendmetrics.MetricsState) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+func setUpHermeticServer(t *testing.T, podAndMetrics map[*datalayer.EndpointMetadata]*backendmetrics.MetricsState) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
 	// Reconfigure the TestPodMetricsClient.
 	res := map[types.NamespacedName]*backendmetrics.MetricsState{}
 	for pod, metrics := range podAndMetrics {
@@ -1121,14 +1121,14 @@ func setUpHermeticServer(t *testing.T, podAndMetrics map[*backend.Pod]*backendme
 				Namespace(pod.NamespacedName.Namespace).Complete().ObjRef()
 
 			if err := k8sClient.Delete(context.Background(), pod); err != nil {
-				logutil.Fatal(logger, err, "Failed to delete pod", "pod", fakePod)
+				logutil.Fatal(logger, err, "Failed to delete pod", "pod", fakeMetadata)
 			}
 		}
 	}
 }
 
-func fakePod(index int) *backend.Pod {
-	return &backend.Pod{
+func fakeMetadata(index int) *datalayer.EndpointMetadata {
+	return &datalayer.EndpointMetadata{
 		NamespacedName: types.NamespacedName{Name: fmt.Sprintf("pod-%v-rank-0", index), Namespace: testNamespace},
 		Address:        fmt.Sprintf("192.168.1.%d", index+1),
 		PodName:        fmt.Sprintf("pod-%v", index),
@@ -1136,19 +1136,19 @@ func fakePod(index int) *backend.Pod {
 	}
 }
 
-// podState is a descriptor for a pod's simulated metrics.
-type podState struct {
+// endpointState is a descriptor for a pod's simulated metrics.
+type endpointState struct {
 	index        int
 	queueSize    int
 	kvCacheUsage float64
 	activeModels []string
 }
 
-// newPodStates generates the backend metrics map required by the test setup.
-func newPodStates(states ...podState) map[*backend.Pod]*backendmetrics.MetricsState {
-	res := make(map[*backend.Pod]*backendmetrics.MetricsState)
+// newEndpointStates generates the backend metrics map required by the test setup.
+func newEndpointStates(states ...endpointState) map[*datalayer.EndpointMetadata]*backendmetrics.MetricsState {
+	res := make(map[*datalayer.EndpointMetadata]*backendmetrics.MetricsState)
 	for _, s := range states {
-		pod := fakePod(s.index)
+		pod := fakeMetadata(s.index)
 		activeModelsMap := make(map[string]int)
 		for _, model := range s.activeModels {
 			activeModelsMap[model] = 1

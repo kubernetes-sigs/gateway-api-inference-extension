@@ -22,7 +22,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -71,7 +71,7 @@ func NewDestinationEndpointServedVerifier() *DestinationEndpointServedVerifier {
 }
 
 // ResponseReceived is the handler for the ResponseReceived extension point.
-func (p *DestinationEndpointServedVerifier) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *backend.Pod) {
+func (p *DestinationEndpointServedVerifier) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *datalayer.EndpointMetadata) {
 	logger := log.FromContext(ctx).WithName(p.TypedName().String())
 	logger.V(logging.DEBUG).Info("Verifying destination endpoint served")
 

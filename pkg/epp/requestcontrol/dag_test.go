@@ -45,8 +45,8 @@ func (m *mockPrepareRequestDataP) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Pod) error {
-	pods[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
+func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *types.LLMRequest, endpoints []types.Endpoint) error {
+	endpoints[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
 	return nil
 }
 
