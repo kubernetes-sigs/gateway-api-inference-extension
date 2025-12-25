@@ -19,12 +19,19 @@ package bbr
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
+	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/utils"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
@@ -135,5 +142,48 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}
 		})
+	}
+}
+
+func setUpHermeticServer(streaming bool) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
+	port := 9004
+
+	serverCtx, stopServer := context.WithCancel(context.Background())
+
+	//Initialize PluginRegistry and request/response PluginsChain instances based on the minimal configuration setting vi env vars
+	registry, requestChain, responseChain, err := utils.InitPlugins()
+	if err != nil {
+		logutil.Fatal(logger, err, "failed to initialize BBR pluggable framework: %v", err)
+	}
+
+	serverRunner := runserver.NewDefaultExtProcServerRunner(port, false, registry, requestChain, responseChain)
+	serverRunner.SecureServing = false
+	serverRunner.Streaming = streaming
+
+	go func() {
+		if err := serverRunner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
+			logutil.Fatal(logger, err, "Failed to start ext-proc server")
+		}
+	}()
+
+	address := fmt.Sprintf("localhost:%v", port)
+	// Create a grpc connection
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logutil.Fatal(logger, err, "Failed to connect", "address", address)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	client, err = extProcPb.NewExternalProcessorClient(conn).Process(ctx)
+	if err != nil {
+		logutil.Fatal(logger, err, "Failed to create client")
+	}
+	return client, func() {
+		cancel()
+		conn.Close()
+		stopServer()
+
+		// wait a little until the goroutines actually exit
+		time.Sleep(5 * time.Second)
 	}
 }

@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
+	bbrutils "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/utils"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -102,8 +103,24 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	//Initialize PluginRegistry and request/response PluginsChain instances
+	registry, requestChain, responseChain, err := bbrutils.InitPlugins()
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize plugins")
+		return err
+	}
+
+	setupLog.Info("BBR started with:",
+		"registry", registry,
+		"requestChain", requestChain,
+		"responseChain", responseChain)
+
 	// Setup runner.
-	serverRunner := runserver.NewDefaultExtProcServerRunner(*grpcPort, *streaming)
+	serverRunner := runserver.NewDefaultExtProcServerRunner(*grpcPort,
+		*streaming,
+		registry,
+		requestChain,
+		responseChain)
 
 	// Register health server.
 	if err := registerHealthServer(mgr, *grpcHealthPort); err != nil {
