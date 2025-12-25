@@ -239,7 +239,9 @@ func (fr *FlowRegistry) WithConnection(key types.FlowKey, fn func(conn contracts
 		if state.leaseCount.Add(-1) == 0 {
 			// This was the last active lease; mark the flow as Idle.
 			state.gcLock.Lock()
-			state.becameIdleAt = fr.clock.Now()
+			if state.leaseCount.Load() == 0 {
+				state.becameIdleAt = fr.clock.Now()
+			}
 			state.gcLock.Unlock()
 		}
 	}()
