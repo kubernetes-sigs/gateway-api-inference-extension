@@ -52,11 +52,20 @@ except ImportError:
     LIGHTGBM_AVAILABLE = False
     logging.warning("LightGBM not available. Please install with: pip install lightgbm")
 
+try:
+    import treelite
+    import treelite.sklearn
+    TREELITE_AVAILABLE = True
+except ImportError:
+    TREELITE_AVAILABLE = False
+    logging.warning("TreeLite not available. Please install with: pip install treelite treelite_runtime")
+
 
 class ModelType(str, Enum):
     BAYESIAN_RIDGE = "bayesian_ridge"
     XGBOOST = "xgboost"
     LIGHTGBM = "lightgbm"
+    TREELITE = "treelite"
 
 
 class RandomDropDeque(deque):
@@ -97,6 +106,8 @@ class Settings:
     TPOT_MODEL_PATH: str = os.getenv("LATENCY_TPOT_MODEL_PATH", "/tmp/models/tpot.joblib")
     TTFT_SCALER_PATH: str = os.getenv("LATENCY_TTFT_SCALER_PATH", "/tmp/models/ttft_scaler.joblib")
     TPOT_SCALER_PATH: str = os.getenv("LATENCY_TPOT_SCALER_PATH", "/tmp/models/tpot_scaler.joblib")
+    TTFT_TREELITE_PATH: str = os.getenv("LATENCY_TTFT_TREELITE_PATH", "/tmp/models/ttft_treelite.so")
+    TPOT_TREELITE_PATH: str = os.getenv("LATENCY_TPOT_TREELITE_PATH", "/tmp/models/tpot_treelite.so")
     RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))
     MIN_SAMPLES_FOR_RETRAIN_FRESH: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN_FRESH", 10))
     MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 1000))
@@ -211,16 +222,16 @@ class LatencyPredictor:
         if model_type is None:
             model_type = settings.MODEL_TYPE
     
-        if model_type not in [ModelType.BAYESIAN_RIDGE, ModelType.XGBOOST, ModelType.LIGHTGBM]:
-            raise ValueError(f"Invalid model_type: {model_type}. Must be one of {list(ModelType)}")
-    
-        if model_type == ModelType.XGBOOST and not XGBOOST_AVAILABLE:
-            logging.warning("XGBoost requested but not available. Falling back to Bayesian Ridge.")
-            model_type = ModelType.BAYESIAN_RIDGE
+        if model_type not in [e.value for e in ModelType]:
+            raise ValueError(f"Invalid model_type: {model_type}. Must be one of {[e.value for e in ModelType]}")
 
-        if model_type == ModelType.LIGHTGBM and not LIGHTGBM_AVAILABLE:
+        if model_type == ModelType.XGBOOST.value and not XGBOOST_AVAILABLE:
+            logging.warning("XGBoost requested but not available. Falling back to Bayesian Ridge.")
+            model_type = ModelType.BAYESIAN_RIDGE.value
+
+        if model_type == ModelType.LIGHTGBM.value and not LIGHTGBM_AVAILABLE:
             logging.warning("LightGBM requested but not available. Falling back to Bayesian Ridge.")
-            model_type = ModelType.BAYESIAN_RIDGE
+            model_type = ModelType.BAYESIAN_RIDGE.value
 
         self.model_type = ModelType(model_type)
         self.quantile = settings.QUANTILE_ALPHA
@@ -395,8 +406,11 @@ class LatencyPredictor:
         """Checks if all models and scalers are loaded/trained."""
         if self.model_type == ModelType.BAYESIAN_RIDGE:
             return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
-        else:  # XGBoost or LightGBM
+        elif self.model_type in (ModelType.XGBOOST, ModelType.LIGHTGBM):
             return all([self.ttft_model, self.tpot_model])
+        else:
+            # TREELITE is not a valid training model type
+            raise ValueError(f"Invalid model_type: {self.model_type}. Use XGBOOST, LIGHTGBM, or BAYESIAN_RIDGE.")
 
     @is_ready.setter
     def is_ready(self, value: bool):
@@ -928,18 +942,32 @@ class LatencyPredictor:
                 os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
                 joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
                 logging.info("TTFT model saved.")
-        
+
                 # Save model-specific exports
                 if self.model_type == ModelType.XGBOOST:
                     try:
                         booster = self.ttft_model.get_booster()
                         raw_trees = booster.get_dump(dump_format="json")
                         trees = [json.loads(t) for t in raw_trees]
-                
+
                         ttft_json_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_trees.json')
                         with open(ttft_json_path, 'w') as f:
                             json.dump(trees, f, indent=2)
                         logging.info(f"TTFT XGBoost trees saved to {ttft_json_path}")
+
+                        # Export to TreeLite for production inference
+                        if TREELITE_AVAILABLE:
+                            try:
+                                tl_model = treelite.frontend.from_xgboost(booster)
+                                tl_model.export_lib(
+                                    toolchain='gcc',
+                                    libpath=settings.TTFT_TREELITE_PATH,
+                                    params={'parallel_comp': 8},
+                                    verbose=False
+                                )
+                                logging.info(f"TTFT TreeLite model exported to {settings.TTFT_TREELITE_PATH}")
+                            except Exception as e:
+                                logging.error(f"Error exporting TTFT to TreeLite: {e}", exc_info=True)
                     except Exception as e:
                         logging.error(f"Error saving TTFT XGBoost trees: {e}", exc_info=True)
             
@@ -948,18 +976,32 @@ class LatencyPredictor:
                         # Save LightGBM model as text format
                         ttft_txt_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_lgb.txt')
                         self.ttft_model.booster_.save_model(ttft_txt_path)
-                    
+
                         # Save feature importances as JSON
-                        feature_names = ['kv_cache_percentage', 'input_token_length', 
+                        feature_names = ['kv_cache_percentage', 'input_token_length',
                                        'num_request_waiting', 'num_request_running', 'prefix_cache_score', 'effective_input_tokens', 'prefill_score_bucket']
                         importances = dict(zip(feature_names, self.ttft_model.feature_importances_))
-                    
+
                         ttft_imp_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_importances.json')
                         with open(ttft_imp_path, 'w') as f:
                             json.dump(importances, f, indent=2)
-                    
+
                         logging.info(f"TTFT LightGBM model saved to {ttft_txt_path}")
                         logging.info(f"TTFT LightGBM importances saved to {ttft_imp_path}")
+
+                        # Export to TreeLite for production inference
+                        if TREELITE_AVAILABLE:
+                            try:
+                                tl_model = treelite.frontend.from_lightgbm(self.ttft_model.booster_)
+                                tl_model.export_lib(
+                                    toolchain='gcc',
+                                    libpath=settings.TTFT_TREELITE_PATH,
+                                    params={'parallel_comp': 8},
+                                    verbose=False
+                                )
+                                logging.info(f"TTFT TreeLite model exported to {settings.TTFT_TREELITE_PATH}")
+                            except Exception as e:
+                                logging.error(f"Error exporting TTFT to TreeLite: {e}", exc_info=True)
                     except Exception as e:
                         logging.error(f"Error saving TTFT LightGBM exports: {e}", exc_info=True)
         
@@ -972,18 +1014,32 @@ class LatencyPredictor:
                 os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
                 joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
                 logging.info("TPOT model saved.")
-        
+
                 # Save model-specific exports
                 if self.model_type == ModelType.XGBOOST:
                     try:
                         booster = self.tpot_model.get_booster()
                         raw_trees = booster.get_dump(dump_format="json")
                         trees = [json.loads(t) for t in raw_trees]
-                
+
                         tpot_json_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_trees.json')
                         with open(tpot_json_path, 'w') as f:
                             json.dump(trees, f, indent=2)
                         logging.info(f"TPOT XGBoost trees saved to {tpot_json_path}")
+
+                        # Export to TreeLite for production inference
+                        if TREELITE_AVAILABLE:
+                            try:
+                                tl_model = treelite.frontend.from_xgboost(booster)
+                                tl_model.export_lib(
+                                    toolchain='gcc',
+                                    libpath=settings.TPOT_TREELITE_PATH,
+                                    params={'parallel_comp': 8},
+                                    verbose=False
+                                )
+                                logging.info(f"TPOT TreeLite model exported to {settings.TPOT_TREELITE_PATH}")
+                            except Exception as e:
+                                logging.error(f"Error exporting TPOT to TreeLite: {e}", exc_info=True)
                     except Exception as e:
                         logging.error(f"Error saving TPOT XGBoost trees: {e}", exc_info=True)
             
@@ -992,18 +1048,32 @@ class LatencyPredictor:
                         # Save LightGBM model as text format
                         tpot_txt_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_lgb.txt')
                         self.tpot_model.booster_.save_model(tpot_txt_path)
-                    
+
                         # Save feature importances as JSON
-                        feature_names = ['kv_cache_percentage', 'input_token_length', 
+                        feature_names = ['kv_cache_percentage', 'input_token_length',
                                        'num_request_waiting', 'num_request_running', 'num_tokens_generated']
                         importances = dict(zip(feature_names, self.tpot_model.feature_importances_))
-                    
+
                         tpot_imp_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_importances.json')
                         with open(tpot_imp_path, 'w') as f:
                             json.dump(importances, f, indent=2)
-                    
+
                         logging.info(f"TPOT LightGBM model saved to {tpot_txt_path}")
                         logging.info(f"TPOT LightGBM importances saved to {tpot_imp_path}")
+
+                        # Export to TreeLite for production inference
+                        if TREELITE_AVAILABLE:
+                            try:
+                                tl_model = treelite.frontend.from_lightgbm(self.tpot_model.booster_)
+                                tl_model.export_lib(
+                                    toolchain='gcc',
+                                    libpath=settings.TPOT_TREELITE_PATH,
+                                    params={'parallel_comp': 8},
+                                    verbose=False
+                                )
+                                logging.info(f"TPOT TreeLite model exported to {settings.TPOT_TREELITE_PATH}")
+                            except Exception as e:
+                                logging.error(f"Error exporting TPOT to TreeLite: {e}", exc_info=True)
                     except Exception as e:
                         logging.error(f"Error saving TPOT LightGBM exports: {e}", exc_info=True)
         
@@ -1630,7 +1700,9 @@ async def model_info(model_name: str):
         "ttft": settings.TTFT_MODEL_PATH,
         "tpot": settings.TPOT_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "tpot_scaler": settings.TPOT_SCALER_PATH,
+        "ttft_treelite": settings.TTFT_TREELITE_PATH,
+        "tpot_treelite": settings.TPOT_TREELITE_PATH,
     }
     
     if model_name not in model_paths:
@@ -1663,22 +1735,30 @@ async def download_model(model_name: str):
         "ttft": settings.TTFT_MODEL_PATH,
         "tpot": settings.TPOT_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "tpot_scaler": settings.TPOT_SCALER_PATH,
+        "ttft_treelite": settings.TTFT_TREELITE_PATH,
+        "tpot_treelite": settings.TPOT_TREELITE_PATH,
     }
-    
+
     if model_name not in model_paths:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
-    
+
     model_path = model_paths[model_name]
-    
+
     if not os.path.exists(model_path):
         raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
-    
+
     # Return the file
-    filename = f"{model_name}.joblib"
+    if model_name.endswith('_treelite'):
+        filename = f"{model_name}.so"
+        media_type = 'application/octet-stream'
+    else:
+        filename = f"{model_name}.joblib"
+        media_type = 'application/octet-stream'
+
     return FileResponse(
         model_path,
-        media_type='application/octet-stream',
+        media_type=media_type,
         filename=filename
     )
 

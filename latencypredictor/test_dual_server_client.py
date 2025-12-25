@@ -119,17 +119,20 @@ def test_training_server_models_list():
     """Test training server models list endpoint."""
     r = requests.get(f"{TRAINING_URL}/models/list")
     assert r.status_code == 200
-    
+
     data = r.json()
     assert "models" in data
     assert "model_type" in data
     assert "server_time" in data
-    
+
     models = data["models"]
     expected_models = ["ttft", "tpot"]
     if data["model_type"] == "bayesian_ridge":
         expected_models.extend(["ttft_scaler", "tpot_scaler"])
-    
+    elif data["model_type"] in ["xgboost", "lightgbm"]:
+        # TreeLite models should also be available for XGBoost and LightGBM
+        expected_models.extend(["ttft_treelite", "tpot_treelite"])
+
     for model_name in expected_models:
         assert model_name in models, f"Model {model_name} should be listed"
         print(f"Model {model_name}: exists={models[model_name]['exists']}, size={models[model_name]['size_bytes']} bytes")
@@ -140,7 +143,8 @@ def test_model_download_from_training_server():
     # First check what models are available
     models_r = requests.get(f"{TRAINING_URL}/models/list")
     models_data = models_r.json()
-    
+
+    # Test basic models (ttft, tpot)
     for model_name in ["ttft", "tpot"]:
         if models_data["models"][model_name]["exists"]:
             # Test model info endpoint
@@ -149,13 +153,13 @@ def test_model_download_from_training_server():
             info_data = info_r.json()
             assert info_data["exists"] == True
             assert info_data["size_bytes"] > 0
-            
+
             # Test model download with retry and streaming
             max_retries = 3
             for attempt in range(max_retries):
                 try:
                     download_r = requests.get(
-                        f"{TRAINING_URL}/model/{model_name}/download", 
+                        f"{TRAINING_URL}/model/{model_name}/download",
                         timeout=30,
                         stream=True  # Use streaming to handle large files better
                     )
@@ -164,7 +168,7 @@ def test_model_download_from_training_server():
                         content_length = 0
                         for chunk in download_r.iter_content(chunk_size=8192):
                             content_length += len(chunk)
-                        
+
                         assert content_length > 0, f"Downloaded {model_name} model is empty"
                         print(f"Successfully downloaded {model_name} model ({content_length} bytes)")
                         break
@@ -175,6 +179,79 @@ def test_model_download_from_training_server():
                         # Don't fail the test - this might be a network/server issue
                         continue
                     time.sleep(2)  # Wait before retry
+
+    # Test TreeLite models for XGBoost and LightGBM
+    model_type = models_data["model_type"]
+    if model_type in ["xgboost", "lightgbm"]:
+        for model_name in ["ttft_treelite", "tpot_treelite"]:
+            if models_data["models"].get(model_name, {}).get("exists"):
+                # Test model info endpoint
+                info_r = requests.get(f"{TRAINING_URL}/model/{model_name}/info")
+                assert info_r.status_code == 200
+                info_data = info_r.json()
+                assert info_data["exists"] == True
+                assert info_data["size_bytes"] > 0
+
+                # Test model download with retry and streaming
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        download_r = requests.get(
+                            f"{TRAINING_URL}/model/{model_name}/download",
+                            timeout=30,
+                            stream=True
+                        )
+                        if download_r.status_code == 200:
+                            # Read content in chunks to avoid memory issues
+                            content_length = 0
+                            for chunk in download_r.iter_content(chunk_size=8192):
+                                content_length += len(chunk)
+
+                            assert content_length > 0, f"Downloaded {model_name} model is empty"
+                            print(f"Successfully downloaded {model_name} TreeLite model ({content_length} bytes)")
+                            break
+                    except requests.exceptions.ChunkedEncodingError as e:
+                        print(f"Download attempt {attempt + 1}/{max_retries} failed for {model_name}: {e}")
+                        if attempt == max_retries - 1:
+                            print(f"⚠️ TreeLite model download test skipped for {model_name} due to connection issues")
+                            continue
+                        time.sleep(2)  # Wait before retry
+
+def test_treelite_models_on_training_server():
+    """Test TreeLite model endpoints on training server for XGBoost and LightGBM."""
+    model_info_r = requests.get(f"{TRAINING_URL}/model/download/info")
+    model_type = model_info_r.json().get("model_type")
+
+    if model_type not in ["xgboost", "lightgbm"]:
+        print(f"Skipping TreeLite tests - model type is {model_type}")
+        return
+
+    print(f"Testing TreeLite models for {model_type}...")
+
+    # Test TTFT TreeLite model
+    ttft_info_r = requests.get(f"{TRAINING_URL}/model/ttft_treelite/info")
+    if ttft_info_r.status_code == 200:
+        ttft_info = ttft_info_r.json()
+        if ttft_info.get("exists"):
+            print(f"✓ TTFT TreeLite model available ({ttft_info['size_bytes']} bytes)")
+            assert ttft_info["size_bytes"] > 0, "TTFT TreeLite model should have non-zero size"
+        else:
+            print(f"TTFT TreeLite model not yet generated")
+    else:
+        print(f"TTFT TreeLite model endpoint returned status {ttft_info_r.status_code}")
+
+    # Test TPOT TreeLite model
+    tpot_info_r = requests.get(f"{TRAINING_URL}/model/tpot_treelite/info")
+    if tpot_info_r.status_code == 200:
+        tpot_info = tpot_info_r.json()
+        if tpot_info.get("exists"):
+            print(f"✓ TPOT TreeLite model available ({tpot_info['size_bytes']} bytes)")
+            assert tpot_info["size_bytes"] > 0, "TPOT TreeLite model should have non-zero size"
+        else:
+            print(f"TPOT TreeLite model not yet generated")
+    else:
+        print(f"TPOT TreeLite model endpoint returned status {tpot_info_r.status_code}")
+
 
 def test_lightgbm_endpoints_on_training_server():
     """Test LightGBM endpoints on training server if LightGBM is being used."""
@@ -1370,6 +1447,7 @@ if __name__ == "__main__":
         ("Training Server Model Info", test_training_server_model_info),
         ("Training Server Models List", test_training_server_models_list),
         ("Model Download", test_model_download_from_training_server),
+        ("TreeLite Models", test_treelite_models_on_training_server),
         ("Send Training Data", test_add_training_data_to_training_server),
         ("Model Sync", test_prediction_server_model_sync),
         ("Predictions", test_prediction_via_prediction_server),
@@ -1380,9 +1458,9 @@ if __name__ == "__main__":
         ("Training Metrics", test_training_server_metrics),
         ("Model Consistency", test_model_consistency_between_servers),
         ("XGBoost Trees", test_model_specific_endpoints_on_training_server),
-        ("Flush API", test_training_server_flush_api),  
+        ("Flush API", test_training_server_flush_api),
         ("Flush Error Handling", test_training_server_flush_error_handling),
-        
+
         ("Dual Server Model Learns Equation", test_dual_server_quantile_regression_learns_distribution),
         ("End-to-End Workflow", test_end_to_end_workflow),
         ("Prediction Stress Test", test_prediction_server_stress_test),
