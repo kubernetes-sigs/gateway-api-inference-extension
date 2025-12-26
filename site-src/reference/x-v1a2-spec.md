@@ -11,6 +11,7 @@ inference.networking.x-k8s.io API group.
 
 
 ### Resource Types
+- [InferenceModelRewrite](#inferencemodelrewrite)
 - [InferenceObjective](#inferenceobjective)
 - [InferencePool](#inferencepool)
 
@@ -84,6 +85,82 @@ _Appears in:_
 - [ParentGatewayReference](#parentgatewayreference)
 - [PoolObjectReference](#poolobjectreference)
 
+
+
+#### InferenceModelRewrite
+
+
+
+InferenceModelRewrite is the Schema for the InferenceModelRewrite API.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `inference.networking.x-k8s.io/v1alpha2` | | |
+| `kind` _string_ | `InferenceModelRewrite` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[InferenceModelRewriteSpec](#inferencemodelrewritespec)_ |  |  |  |
+| `status` _[InferenceModelRewriteStatus](#inferencemodelrewritestatus)_ |  |  |  |
+
+
+
+
+
+
+#### InferenceModelRewriteRule
+
+
+
+InferenceModelRewriteRule defines the match criteria and corresponding action.
+For details on how precedence is determined across multiple rules and
+InferenceModelRewrite resources, see the "Precedence and Conflict Resolution"
+section in InferenceModelRewriteSpec.
+
+
+
+_Appears in:_
+- [InferenceModelRewriteSpec](#inferencemodelrewritespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `matches` _[Match](#match) array_ |  |  |  |
+| `targets` _[TargetModel](#targetmodel) array_ |  |  | MinItems: 1 <br /> |
+
+
+#### InferenceModelRewriteSpec
+
+
+
+InferenceModelRewriteSpec defines the desired state of InferenceModelRewrite.
+
+
+
+_Appears in:_
+- [InferenceModelRewrite](#inferencemodelrewrite)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `poolRef` _[PoolObjectReference](#poolobjectreference)_ | PoolRef is a reference to the inference pool. |  | Required: \{\} <br /> |
+| `rules` _[InferenceModelRewriteRule](#inferencemodelrewriterule) array_ |  |  |  |
+
+
+#### InferenceModelRewriteStatus
+
+
+
+InferenceModelRewriteStatus defines the observed state of InferenceModelRewrite.
+
+
+
+_Appears in:_
+- [InferenceModelRewrite](#inferencemodelrewrite)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#condition-v1-meta) array_ | Conditions track the state of the InferenceModelRewrite.<br />Known condition types are:<br />* "Accepted" | [map[lastTransitionTime:1970-01-01T00:00:00Z message:Waiting for controller reason:Pending status:Unknown type:Accepted]] | MaxItems: 8 <br /> |
 
 
 #### InferenceObjective
@@ -293,6 +370,56 @@ _Appears in:_
 
 
 
+#### Match
+
+
+
+Match defines the criteria for matching the LLM requests.
+
+
+
+_Appears in:_
+- [InferenceModelRewriteRule](#inferencemodelrewriterule)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `model` _[ModelMatch](#modelmatch)_ | Model specifies the criteria for matching the 'model' field<br />within the JSON request body. |  |  |
+
+
+#### MatchValidationType
+
+_Underlying type:_ _string_
+
+MatchValidationType specifies the type of string matching to use.
+
+_Validation:_
+- Enum: [Exact]
+
+_Appears in:_
+- [ModelMatch](#modelmatch)
+
+| Field | Description |
+| --- | --- |
+| `Exact` | MatchExact indicates that the model name must match exactly.<br /> |
+
+
+#### ModelMatch
+
+
+
+ModelMatch defines how to match against the model name in the request body.
+
+
+
+_Appears in:_
+- [Match](#match)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _[MatchValidationType](#matchvalidationtype)_ | Type specifies the kind of string matching to use.<br />Supported value is "Exact". Defaults to "Exact". | Exact | Enum: [Exact] <br /> |
+| `value` _string_ | Value is the model name string to match against. |  | MinLength: 1 <br /> |
+
+
 #### Namespace
 
 _Underlying type:_ _string_
@@ -372,6 +499,7 @@ referrer.
 
 
 _Appears in:_
+- [InferenceModelRewriteSpec](#inferencemodelrewritespec)
 - [InferenceObjectiveSpec](#inferenceobjectivespec)
 
 | Field | Description | Default | Validation |
@@ -411,5 +539,22 @@ _Validation:_
 _Appears in:_
 - [Extension](#extension)
 
+
+
+#### TargetModel
+
+
+
+TargetModel defines a weighted model destination for traffic distribution.
+
+
+
+_Appears in:_
+- [InferenceModelRewriteRule](#inferencemodelrewriterule)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `weight` _integer_ | (The following comment is copied from the original targetModel)<br />Weight is used to determine the proportion of traffic that should be<br />sent to this model when multiple target models are specified.<br />Weight defines the proportion of requests forwarded to the specified<br />model. This is computed as weight/(sum of all weights in this<br />TargetModels list). For non-zero values, there may be some epsilon from<br />the exact proportion defined here depending on the precision an<br />implementation supports. Weight is not a percentage and the sum of<br />weights does not need to equal 100.<br />If a weight is set for any targetModel, it must be set for all targetModels.<br />Conversely weights are optional, so long as ALL targetModels do not specify a weight. |  | Maximum: 1e+06 <br />Minimum: 1 <br /> |
+| `modelRewrite` _string_ |  |  |  |
 
 

@@ -15,11 +15,10 @@ limitations under the License.
 */
 
 // Package fcfs provides a First-Come, First-Served implementation of the `framework.IntraFlowDispatchPolicy`.
-package fcfs
+package intraflow
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
@@ -53,7 +52,7 @@ import (
 const FCFSPolicyName = "FCFS"
 
 func init() {
-	dispatch.MustRegisterPolicy(dispatch.RegisteredPolicyName(FCFSPolicyName),
+	MustRegisterPolicy(RegisteredPolicyName(FCFSPolicyName),
 		func() (framework.IntraFlowDispatchPolicy, error) {
 			return newFCFS(), nil
 		})

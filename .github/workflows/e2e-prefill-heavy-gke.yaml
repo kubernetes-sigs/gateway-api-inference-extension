@@ -45,12 +45,6 @@ jobs:
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
             user="${{ github.event.comment.user.login }}"
             role="${{ github.event.comment.author_association }}"
-
-            if [[ "${{ github.event.issue.pull_request.base.ref }}" != "main" ]]; then
-              echo "PR base is not 'main'."
-              echo "authorized=false" >> "$GITHUB_OUTPUT"
-              exit 1
-            fi
             
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             user="${{ github.actor }}"

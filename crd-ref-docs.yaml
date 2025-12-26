@@ -4,7 +4,7 @@
 
 processor:
   ignoreTypes:
-    - "(InferencePool|InferenceObjective|InferencePoolImport)List$"
+    - "(InferencePool|InferenceObjective|InferencePoolImport|InferenceModelRewrite)List$"
   # RE2 regular expressions describing type fields that should be excluded from the generated documentation.
   ignoreFields:
     - "TypeMeta$"

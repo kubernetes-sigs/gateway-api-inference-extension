@@ -17,7 +17,7 @@ limitations under the License.
 // Package dispatch provides the factory and registration mechanism for all `framework.IntraFlowDispatchPolicy`
 // implementations.
 // It allows new policies to be added to the system and instantiated by name.
-package dispatch
+package intraflow
 
 import (
 	"fmt"

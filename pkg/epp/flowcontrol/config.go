@@ -32,7 +32,7 @@ const (
 // and initialization.
 type Config struct {
 	Controller controller.Config
-	Registry   registry.Config
+	Registry   *registry.Config
 }
 
 // ValidateAndApplyDefaults checks the configuration for validity and populates any empty fields with system defaults.
@@ -43,12 +43,8 @@ func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("controller config validation failed: %w", err)
 	}
-	validatedRegistryCfg, err := c.Registry.ValidateAndApplyDefaults()
-	if err != nil {
-		return nil, fmt.Errorf("registry config validation failed: %w", err)
-	}
 	return &Config{
 		Controller: *validatedControllerCfg,
-		Registry:   *validatedRegistryCfg,
+		Registry:   c.Registry,
 	}, nil
 }

@@ -31,20 +31,54 @@ type MockFlowControlRequest struct {
 	InitialEffectiveTTLV time.Duration
 	IDV                  string
 	MetadataV            map[string]any
+	InferencePoolNameV   string
+	ModelNameV           string
+	TargetModelNameV     string
 }
 
-// NewMockFlowControlRequest creates a new MockFlowControlRequest instance.
+// MockRequestOption is a functional option for configuring a MockFlowControlRequest.
+type MockRequestOption func(*MockFlowControlRequest)
+
+// WithInferencePoolName sets the InferencePoolName for the mock request.
+func WithInferencePoolName(name string) MockRequestOption {
+	return func(m *MockFlowControlRequest) {
+		m.InferencePoolNameV = name
+	}
+}
+
+// WithModelName sets the ModelName for the mock request.
+func WithModelName(name string) MockRequestOption {
+	return func(m *MockFlowControlRequest) {
+		m.ModelNameV = name
+	}
+}
+
+// WithTargetModelName sets the TargetModelName for the mock request.
+func WithTargetModelName(name string) MockRequestOption {
+	return func(m *MockFlowControlRequest) {
+		m.TargetModelNameV = name
+	}
+}
+
+// NewMockFlowControlRequest creates a new MockFlowControlRequest instance with optional configuration.
 func NewMockFlowControlRequest(
 	byteSize uint64,
 	id string,
 	key types.FlowKey,
+	opts ...MockRequestOption,
 ) *MockFlowControlRequest {
-	return &MockFlowControlRequest{
+	m := &MockFlowControlRequest{
 		ByteSizeV: byteSize,
 		IDV:       id,
 		FlowKeyV:  key,
 		MetadataV: make(map[string]any),
 	}
+
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	return m
 }
 
 func (m *MockFlowControlRequest) FlowKey() types.FlowKey             { return m.FlowKeyV }
@@ -52,6 +86,9 @@ func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.
 func (m *MockFlowControlRequest) InitialEffectiveTTL() time.Duration { return m.InitialEffectiveTTLV }
 func (m *MockFlowControlRequest) ID() string                         { return m.IDV }
 func (m *MockFlowControlRequest) GetMetadata() map[string]any        { return m.MetadataV }
+func (m *MockFlowControlRequest) InferencePoolName() string          { return m.InferencePoolNameV }
+func (m *MockFlowControlRequest) ModelName() string                  { return m.ModelNameV }
+func (m *MockFlowControlRequest) TargetModelName() string            { return m.TargetModelNameV }
 
 var _ types.FlowControlRequest = &MockFlowControlRequest{}
 
@@ -92,13 +129,20 @@ var _ types.QueueItemAccessor = &MockQueueItemAccessor{}
 
 // NewMockQueueItemAccessor is a constructor for `MockQueueItemAccessor` that initializes the mock with a default
 // `MockFlowControlRequest` and `MockQueueItemHandle` to prevent nil pointer dereferences in tests.
-func NewMockQueueItemAccessor(byteSize uint64, reqID string, key types.FlowKey) *MockQueueItemAccessor {
+// It accepts MockRequestOptions to configure the underlying request.
+func NewMockQueueItemAccessor(
+	byteSize uint64,
+	reqID string,
+	key types.FlowKey,
+	opts ...MockRequestOption,
+) *MockQueueItemAccessor {
 	return &MockQueueItemAccessor{
 		EnqueueTimeV: time.Now(),
 		OriginalRequestV: NewMockFlowControlRequest(
 			byteSize,
 			reqID,
 			key,
+			opts...,
 		),
 		HandleV: &MockQueueItemHandle{},
 	}

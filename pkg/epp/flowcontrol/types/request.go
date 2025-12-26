@@ -52,6 +52,18 @@ type FlowControlRequest interface {
 	// This data is passed transparently to components like the contracts.PodLocator to resolve resources (candidate pods)
 	// lazily during the dispatch cycle.
 	GetMetadata() map[string]any
+
+	// --- Passthrough for Observability ---
+
+	// InferencePoolName returns the name of the backend pool this request is targeting.
+	// This is used for observability (metrics labeling) to correlate queue depth with specific backend pools.
+	InferencePoolName() string
+
+	// ModelName returns the name of the base model being requested (e.g., "llama-2-70b").
+	ModelName() string
+
+	// TargetModelName returns the name of the specific adapter or traffic target (e.g., "finance-lora-v1").
+	TargetModelName() string
 }
 
 // QueueItemHandle is an opaque handle to an item that has been successfully added to a `framework.SafeQueue`. It acts

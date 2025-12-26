@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
@@ -146,15 +147,8 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		}`
 
 		// Build quick lookup sets for attributing each hit to a pool by backend pod name.
-		primarySet := make(map[string]struct{}, len(primaryPodNames))
-		for _, n := range primaryPodNames {
-			primarySet[n] = struct{}{}
-		}
-		secondarySet := make(map[string]struct{}, len(secondaryPodNames))
-		for _, n := range secondaryPodNames {
-			secondarySet[n] = struct{}{}
-		}
-
+		primarySet := sets.New(primaryPodNames...)
+		secondarySet := sets.New(secondaryPodNames...)
 		headers := map[string]string{
 			test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 		}
@@ -177,7 +171,7 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		var g errgroup.Group
 		g.SetLimit(concurrentRequests)
 
-		for i := 0; i < totalRequests; i++ {
+		for range totalRequests {
 			g.Go(func() error {
 				cReq, cRes, err := s.RoundTripper.CaptureRoundTrip(req)
 				if err != nil {
@@ -188,9 +182,9 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 				}
 
 				// Attribute response to pool by backend pod name.
-				if _, ok := primarySet[cReq.Pod]; ok {
+				if primarySet.Has(cReq.Pod) {
 					primaryHits.Add(1)
-				} else if _, ok := secondarySet[cReq.Pod]; ok {
+				} else if secondarySet.Has(cReq.Pod) {
 					secondaryHits.Add(1)
 				} else {
 					return fmt.Errorf("request was handled by unexpected pod %q (not in either pool)", cReq.Pod)

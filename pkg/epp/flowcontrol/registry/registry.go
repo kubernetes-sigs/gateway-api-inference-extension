@@ -30,6 +30,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -118,9 +120,14 @@ type FlowRegistry struct {
 	flowStates sync.Map // stores `types.FlowKey` -> *flowState
 
 	// Globally aggregated statistics, updated atomically via lock-free propagation.
-	totalByteSize        atomic.Int64
-	totalLen             atomic.Int64
-	perPriorityBandStats map[int]*bandStats // Keyed by priority.
+	totalByteSize atomic.Int64
+	totalLen      atomic.Int64
+
+	// perPriorityBandStats tracks aggregated stats per priority.
+	// Key: int (priority), Value: *bandStats
+	// We use sync.Map here to allow for lock-free reads on the hot path (Stats) while allowing dynamic provisioning to
+	// add new keys safely.
+	perPriorityBandStats sync.Map
 
 	// --- Administrative state (protected by `mu`) ---
 
@@ -147,14 +154,13 @@ func withClock(clk clock.WithTickerAndDelayedExecution) RegistryOption {
 }
 
 // NewFlowRegistry creates and initializes a new `FlowRegistry` instance.
-func NewFlowRegistry(config Config, logger logr.Logger, opts ...RegistryOption) (*FlowRegistry, error) {
-	cfg := config.deepCopy()
+func NewFlowRegistry(config *Config, logger logr.Logger, opts ...RegistryOption) (*FlowRegistry, error) {
+	cfg := config.Clone()
 	fr := &FlowRegistry{
-		config:               cfg,
-		logger:               logger.WithName("flow-registry"),
-		activeShards:         []*registryShard{},
-		drainingShards:       make(map[string]*registryShard),
-		perPriorityBandStats: make(map[int]*bandStats, len(cfg.PriorityBands)),
+		config:         cfg,
+		logger:         logger.WithName("flow-registry"),
+		activeShards:   []*registryShard{},
+		drainingShards: make(map[string]*registryShard),
 	}
 
 	for _, opt := range opts {
@@ -164,9 +170,8 @@ func NewFlowRegistry(config Config, logger logr.Logger, opts ...RegistryOption) 
 		fr.clock = &clock.RealClock{}
 	}
 
-	for i := range config.PriorityBands {
-		band := &config.PriorityBands[i]
-		fr.perPriorityBandStats[band.Priority] = &bandStats{}
+	for prio := range cfg.PriorityBands {
+		fr.perPriorityBandStats.Store(prio, &bandStats{})
 	}
 
 	if err := fr.updateShardCount(cfg.InitialShardCount); err != nil {
@@ -251,9 +256,18 @@ func (fr *FlowRegistry) WithConnection(key types.FlowKey, fn func(conn contracts
 
 // prepareNewFlow creates a new `flowState` and synchronizes its queues and policies onto all existing shards.
 func (fr *FlowRegistry) prepareNewFlow(key types.FlowKey) (*flowState, error) {
-	// Get a stable snapshot of the shard topology.
-	// An RLock is sufficient because while the list of shards must be stable, the internal state of each shard is
-	// protected by its own lock.
+	fr.mu.RLock()
+	_, exists := fr.config.PriorityBands[key.Priority]
+	fr.mu.RUnlock()
+
+	// If the band was missing, we must acquire the Write Lock to create it.
+	if !exists {
+		if err := fr.ensurePriorityBand(key.Priority); err != nil {
+			return nil, err
+		}
+	}
+
+	// Now we know the band exists (or we errored). Re-acquire Read Lock to safely read the topology and build components.
 	fr.mu.RLock()
 	defer fr.mu.RUnlock()
 
@@ -271,13 +285,40 @@ func (fr *FlowRegistry) prepareNewFlow(key types.FlowKey) (*flowState, error) {
 	return &flowState{key: key}, nil
 }
 
+// ensurePriorityBand safely provisions a new priority band.
+func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+
+	// Double-Check: Someone might have created it while we swapped locks in prepareNewFlow.
+	if _, ok := fr.config.PriorityBands[priority]; ok {
+		return nil
+	}
+
+	fr.logger.Info("Dynamically provisioning new priority band", "priority", priority)
+
+	newBand := *fr.config.DefaultPriorityBand
+	newBand.Priority = priority
+	newBand.PriorityName = fmt.Sprintf("Dynamic-%d", priority)
+	fr.config.PriorityBands[priority] = &newBand
+
+	fr.perPriorityBandStats.LoadOrStore(priority, &bandStats{})
+
+	fr.repartitionShardConfigsLocked()
+
+	for _, shard := range fr.activeShards {
+		shard.addPriorityBand(priority)
+	}
+
+	return nil
+}
+
 // --- `contracts.FlowRegistryObserver` Implementation ---
 
 // Stats returns globally aggregated statistics for the entire `FlowRegistry`.
 //
 // Statistics are aggregated using high-performance, lock-free atomic updates.
 // The returned stats represent a near-consistent snapshot of the system's state.
-// It is not perfectly atomic because the various counters are loaded independently without a global lock.
 func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 	// Casts from `int64` to `uint64` are safe because the non-negativity invariant is strictly enforced at the
 	// `managedQueue` level.
@@ -288,19 +329,19 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 		PerPriorityBandStats: make(map[int]contracts.PriorityBandStats, len(fr.config.PriorityBands)),
 	}
 
-	for p, s := range fr.perPriorityBandStats {
-		bandCfg, err := fr.config.getBandConfig(p)
-		if err != nil {
-			panic(fmt.Sprintf("invariant violation: priority band config (%d) missing during stats aggregation: %v", p, err))
-		}
-		stats.PerPriorityBandStats[p] = contracts.PriorityBandStats{
-			Priority:      p,
+	fr.perPriorityBandStats.Range(func(key, value any) bool {
+		priority := key.(int)
+		bandStats := value.(*bandStats)
+		bandCfg := fr.config.PriorityBands[priority]
+		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
+			Priority:      priority,
 			PriorityName:  bandCfg.PriorityName,
 			CapacityBytes: bandCfg.MaxBytes,
-			ByteSize:      uint64(s.byteSize.Load()),
-			Len:           uint64(s.len.Load()),
+			ByteSize:      uint64(bandStats.byteSize.Load()),
+			Len:           uint64(bandStats.len.Load()),
 		}
-	}
+		return true
+	})
 	return stats
 }
 
@@ -465,7 +506,6 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 			partitionedConfig,
 			fr.logger,
 			fr.propagateStatsDelta,
-			fr.config.interFlowDispatchPolicyFactory,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create new shard object %s: %w", shardID, err)
@@ -544,19 +584,19 @@ type flowComponents struct {
 // buildFlowComponents instantiates the necessary plugin components for a new flow instance.
 // It creates a distinct instance of each component for each shard to ensure state isolation.
 func (fr *FlowRegistry) buildFlowComponents(key types.FlowKey, numInstances int) ([]flowComponents, error) {
-	bandConfig, err := fr.config.getBandConfig(key.Priority)
-	if err != nil {
-		return nil, err
+	bandConfig, ok := fr.config.PriorityBands[key.Priority]
+	if !ok {
+		return nil, fmt.Errorf("priority band %d not found: %w", key.Priority, contracts.ErrPriorityBandNotFound)
 	}
 
 	allComponents := make([]flowComponents, numInstances)
 	for i := range numInstances {
-		policy, err := fr.config.intraFlowDispatchPolicyFactory(bandConfig.IntraFlowDispatchPolicy)
+		policy, err := intraflow.NewPolicyFromName(bandConfig.IntraFlowDispatchPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to instantiate intra-flow policy %q for flow %s: %w",
 				bandConfig.IntraFlowDispatchPolicy, key, err)
 		}
-		q, err := fr.config.queueFactory(bandConfig.Queue, policy.Comparator())
+		q, err := queue.NewQueueFromName(bandConfig.Queue, policy.Comparator())
 		if err != nil {
 			return nil, fmt.Errorf("failed to instantiate queue %q for flow %s: %w",
 				bandConfig.Queue, key, err)
@@ -589,11 +629,8 @@ func (fr *FlowRegistry) updateAllShardsCacheLocked() {
 
 // propagateStatsDelta is the top-level, lock-free aggregator for all statistics.
 func (fr *FlowRegistry) propagateStatsDelta(priority int, lenDelta, byteSizeDelta int64) {
-	stats, ok := fr.perPriorityBandStats[priority]
-	if !ok {
-		panic(fmt.Sprintf("invariant violation: priority band (%d) stats missing during propagation", priority))
-	}
-
+	val, _ := fr.perPriorityBandStats.Load(priority)
+	stats := val.(*bandStats)
 	stats.len.Add(lenDelta)
 	stats.byteSize.Add(byteSizeDelta)
 	fr.totalLen.Add(lenDelta)

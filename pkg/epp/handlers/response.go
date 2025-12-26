@@ -28,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -80,15 +81,19 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 	if err != nil {
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
+
+	// Parse usage on EVERY chunk to catch split streams (where usage and [DONE] are in different chunks).
+	if resp := parseRespForUsage(ctx, responseText); resp.Usage.TotalTokens > 0 {
+		reqCtx.Usage = resp.Usage
+	}
+
 	if strings.Contains(responseText, streamingEndMsg) {
 		reqCtx.ResponseComplete = true
-		resp := parseRespForUsage(ctx, responseText)
-		reqCtx.Usage = resp.Usage
-		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.PromptTokens)
-		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, resp.Usage.CompletionTokens)
+		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
+		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
 		cachedToken := 0
-		if resp.Usage.PromptTokenDetails != nil {
-			cachedToken = resp.Usage.PromptTokenDetails.CachedTokens
+		if reqCtx.Usage.PromptTokenDetails != nil {
+			cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
 		}
 		metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 		_, err := s.director.HandleResponseBodyComplete(ctx, reqCtx)
@@ -100,11 +105,7 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
 	for _, header := range resp.ResponseHeaders.Headers.Headers {
-		if header.RawValue != nil {
-			reqCtx.Response.Headers[header.Key] = string(header.RawValue)
-		} else {
-			reqCtx.Response.Headers[header.Key] = header.Value
-		}
+		reqCtx.Response.Headers[header.Key] = request.GetHeaderValue(header)
 	}
 
 	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)
@@ -154,8 +155,11 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 		},
 	}
 
-	// include all headers
+	// Include any non-system-owned headers.
 	for key, value := range reqCtx.Response.Headers {
+		if request.IsSystemOwnedHeader(key) {
+			continue
+		}
 		headers = append(headers, &configPb.HeaderValueOption{
 			Header: &configPb.HeaderValue{
 				Key:      key,
@@ -181,8 +185,8 @@ func parseRespForUsage(ctx context.Context, responseText string) ResponseBody {
 	response := ResponseBody{}
 	logger := log.FromContext(ctx)
 
-	lines := strings.Split(responseText, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(responseText, "\n")
+	for line := range lines {
 		if !strings.HasPrefix(line, streamingRespPrefix) {
 			continue
 		}

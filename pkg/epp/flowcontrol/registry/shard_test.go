@@ -17,7 +17,6 @@ limitations under the License.
 package registry
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -28,8 +27,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
@@ -59,12 +57,11 @@ type shardTestHarness struct {
 // newShardTestHarness initializes a `shardTestHarness` with a default configuration.
 func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
-	globalConfig, err := newConfig(Config{
-		PriorityBands: []PriorityBandConfig{
-			{Priority: highPriority, PriorityName: "High"},
-			{Priority: lowPriority, PriorityName: "Low"},
-		},
-	})
+
+	globalConfig, err := NewConfig(
+		WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
+		WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
+	)
 	require.NoError(t, err, "Test setup: validating and defaulting config should not fail")
 
 	statsPropagator := &mockStatsPropagator{}
@@ -73,7 +70,6 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 		"test-shard-1",
 		shardConfig, logr.Discard(),
 		statsPropagator.propagate,
-		interflow.NewPolicyFromName,
 	)
 	require.NoError(t, err, "Test setup: newShard should not return an error with valid configuration")
 
@@ -96,10 +92,10 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 	h.t.Helper()
 	spec := types.FlowSpecification{Key: key}
-	policy, err := intra.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
-	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
+	policy, err := intraflow.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
+	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
 	q, err := queue.NewQueueFromName(defaultQueue, policy.Comparator())
-	require.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
+	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
 	h.shard.synchronizeFlow(spec, policy, q)
 }
 
@@ -136,7 +132,8 @@ func TestShard_New(t *testing.T) {
 		assert.Equal(t, []int{highPriority, lowPriority}, h.shard.AllOrderedPriorityLevels(),
 			"Shard must report configured priority levels sorted numerically (highest priority first)")
 
-		bandHigh, ok := h.shard.priorityBands[highPriority]
+		val, ok := h.shard.priorityBands.Load(highPriority)
+		bandHigh := val.(*priorityBand)
 		require.True(t, ok, "Priority band %d (High) must be initialized", highPriority)
 		assert.Equal(t, "High", bandHigh.config.PriorityName, "Priority band name must match the configuration")
 		require.NotNil(t, bandHigh.interFlowDispatchPolicy, "Inter-flow policy must be instantiated during construction")
@@ -146,14 +143,21 @@ func TestShard_New(t *testing.T) {
 
 	t.Run("ShouldFail_WhenInterFlowPolicyFactoryFails", func(t *testing.T) {
 		t.Parallel()
-		shardConfig, _ := newConfig(Config{PriorityBands: []PriorityBandConfig{
-			{Priority: highPriority, PriorityName: "High"},
-		}})
-		failingFactory := func(interflow.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
-			return nil, errors.New("policy not found")
-		}
-		_, err := newShard("test-shard-1", shardConfig.partition(0, 1), logr.Discard(), nil, failingFactory)
-		require.Error(t, err, "newShard must fail if the inter-flow policy cannot be instantiated during initialization")
+
+		badConfig, err := NewConfig(
+			WithPriorityBand(&PriorityBandConfig{
+				Priority:                highPriority,
+				PriorityName:            "High",
+				InterFlowDispatchPolicy: "non-existent-policy",
+			}),
+		)
+		require.NoError(t, err, "Config validation currently validates IntraFlow policies, but not InterFlow policies")
+
+		_, err = newShard("test-shard-1", badConfig.partition(0, 1), logr.Discard(), nil)
+
+		require.Error(t, err, "newShard must fail if the inter-flow policy cannot be instantiated")
+		assert.Contains(t, err.Error(), "failed to create inter-flow policy",
+			"Error message should indicate policy creation failure")
 	})
 }
 
@@ -440,6 +444,63 @@ func TestShard_MarkAsDraining(t *testing.T) {
 	assert.False(t, h.shard.IsActive(), "Marking as draining should be idempotent")
 }
 
+func TestShard_DynamicProvisioning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ShouldAddBandDynamically", func(t *testing.T) {
+		t.Parallel()
+		h := newShardTestHarness(t)
+
+		// Update the config definition first (simulating the Registry's job).
+		dynamicPrio := 15
+		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
+		newBandCfg.applyDefaults()
+		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
+
+		h.shard.addPriorityBand(dynamicPrio)
+
+		expectedLevels := []int{highPriority, dynamicPrio, lowPriority} // 20, 15, 10
+		assert.Equal(t, expectedLevels, h.shard.AllOrderedPriorityLevels(),
+			"New priority must be inserted into the sorted order correctly")
+
+		accessor, err := h.shard.PriorityBandAccessor(dynamicPrio)
+		require.NoError(t, err, "Accessor should be available for the new band")
+		assert.Equal(t, "Dynamic-15", accessor.PriorityName())
+	})
+
+	t.Run("ShouldBeIdempotent", func(t *testing.T) {
+		t.Parallel()
+		h := newShardTestHarness(t)
+
+		// Prepare config.
+		dynamicPrio := 15
+		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
+		newBandCfg.applyDefaults()
+		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
+
+		// Call twice.
+		h.shard.addPriorityBand(dynamicPrio)
+		h.shard.addPriorityBand(dynamicPrio)
+
+		levelCount := 0
+		for _, p := range h.shard.AllOrderedPriorityLevels() {
+			if p == dynamicPrio {
+				levelCount++
+			}
+		}
+		assert.Equal(t, 1, levelCount, "Priority level should appear exactly once in ordered list")
+	})
+
+	t.Run("ShouldPanic_WhenConfigMissing", func(t *testing.T) {
+		t.Parallel()
+		h := newShardTestHarness(t)
+
+		// Try to add a band that is not in h.shard.config.
+		assert.Panics(t, func() { h.shard.addPriorityBand(nonExistentPriority) },
+			"Should fail if the definition layer hasn't been updated first")
+	})
+}
+
 // --- Concurrency Test ---
 
 // TestShard_Concurrency_MixedWorkload is a general stability test that simulates a realistic workload by having
@@ -507,33 +568,4 @@ func TestShard_Concurrency_MixedWorkload(t *testing.T) {
 	finalStats := h.shard.Stats()
 	assert.Zero(t, finalStats.TotalLen, "After all paired add/remove operations, the total length should be zero")
 	assert.Zero(t, finalStats.TotalByteSize, "After all paired add/remove operations, the total byte size should be zero")
-}
-
-// --- Invariant Tests ---
-
-func TestShard_InvariantPanics(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name   string
-		action func(h *shardTestHarness)
-	}{
-		{
-			name:   "OnStatsPropagatedForUnknownPriority",
-			action: func(h *shardTestHarness) { h.shard.propagateStatsDelta(nonExistentPriority, 1, 1) },
-		},
-		{
-			name:   "OnSynchronizingFlowWithMissingPriority",
-			action: func(h *shardTestHarness) { h.synchronizeFlow(types.FlowKey{ID: "flow", Priority: nonExistentPriority}) },
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			h := newShardTestHarness(t)
-			assert.Panics(t, func() { tc.action(h) },
-				"The action must trigger a panic when a critical system invariant is violated")
-		})
-	}
 }
