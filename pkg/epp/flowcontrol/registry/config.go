@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
@@ -146,11 +144,6 @@ type PriorityBandConfig struct {
 	// Convention: Highest numeric value corresponds to highest priority (centered on 0).
 	// Required.
 	Priority int
-
-	// PriorityName is a human-readable name for this priority band (e.g., "Critical", "Standard").
-	// It must be unique across all priority bands in the configuration.
-	// Required.
-	PriorityName string
 
 	// IntraFlowDispatchPolicy specifies the default name of the policy used to select a request from within a single
 	// flow's queue in this band.
@@ -325,9 +318,6 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 
 	// Apply defaults to the template.
 	builder.config.DefaultPriorityBand.applyDefaults()
-	if builder.config.DefaultPriorityBand.PriorityName == "" {
-		builder.config.DefaultPriorityBand.PriorityName = "Dynamic-Default"
-	}
 
 	// Apply defaults to all explicitly configured bands.
 	for _, band := range builder.config.PriorityBands {
@@ -342,10 +332,9 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 
 // NewPriorityBandConfig creates a new band configuration with the required fields.
 // It applies system defaults first, then applies any provided options to override those defaults.
-func NewPriorityBandConfig(priority int, name string, opts ...PriorityBandConfigOption) (*PriorityBandConfig, error) {
+func NewPriorityBandConfig(priority int, opts ...PriorityBandConfigOption) (*PriorityBandConfig, error) {
 	pb := &PriorityBandConfig{
-		Priority:     priority,
-		PriorityName: name,
+		Priority: priority,
 	}
 
 	pb.applyDefaults()
@@ -378,9 +367,6 @@ func (p *PriorityBandConfig) applyDefaults() {
 
 // validate checks the integrity of a single band's configuration.
 func (p *PriorityBandConfig) validate(checker capabilityChecker) error {
-	if p.PriorityName == "" {
-		return fmt.Errorf("PriorityName is required for priority band %d", p.Priority)
-	}
 	if p.IntraFlowDispatchPolicy == "" {
 		return fmt.Errorf("IntraFlowDispatchPolicy required for priority band %d", p.Priority)
 	}
@@ -392,8 +378,8 @@ func (p *PriorityBandConfig) validate(checker capabilityChecker) error {
 	}
 	if checker != nil {
 		if err := checker.CheckCompatibility(p.IntraFlowDispatchPolicy, p.Queue); err != nil {
-			return fmt.Errorf("priority band %d (%s) configuration error: %w",
-				p.Priority, p.PriorityName, err)
+			return fmt.Errorf("priority band %d configuration error: %w",
+				p.Priority, err)
 		}
 	}
 	return nil
@@ -420,13 +406,7 @@ func (c *Config) validate(checker capabilityChecker) error {
 	}
 
 	// Validate statically configured bands.
-	names := sets.New[string]()
 	for _, band := range c.PriorityBands {
-		if names.Has(band.PriorityName) {
-			return fmt.Errorf("duplicate priority name %q found", band.PriorityName)
-		}
-		names.Insert(band.PriorityName)
-
 		if err := band.validate(checker); err != nil {
 			return err
 		}
@@ -454,7 +434,6 @@ func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 	for _, template := range c.PriorityBands {
 		shardBand := &PriorityBandConfig{
 			Priority:                template.Priority,
-			PriorityName:            template.PriorityName,
 			IntraFlowDispatchPolicy: template.IntraFlowDispatchPolicy,
 			InterFlowDispatchPolicy: template.InterFlowDispatchPolicy,
 			Queue:                   template.Queue,

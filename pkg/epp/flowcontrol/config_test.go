@@ -31,7 +31,7 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 
 	// A minimal valid registry config, which is required for the success case.
 	validRegistryConfig, err := registry.NewConfig(registry.WithPriorityBand(
-		&registry.PriorityBandConfig{Priority: 1, PriorityName: "TestBand"},
+		&registry.PriorityBandConfig{Priority: 1},
 	))
 	require.NoError(t, err)
 

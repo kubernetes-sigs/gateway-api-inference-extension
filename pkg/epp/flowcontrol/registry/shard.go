@@ -283,7 +283,6 @@ func (s *registryShard) Stats() contracts.ShardStats {
 
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
 			Priority:      priority,
-			PriorityName:  band.config.PriorityName,
 			CapacityBytes: band.config.MaxBytes, // This is the partitioned capacity.
 			ByteSize:      uint64(band.byteSize.Load()),
 			Len:           uint64(band.len.Load()),
@@ -394,13 +393,6 @@ func (a *priorityBandAccessor) Priority() int {
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
 	return a.band.config.Priority
-}
-
-// PriorityName returns the human-readable name of this priority band.
-func (a *priorityBandAccessor) PriorityName() string {
-	a.shard.mu.RLock()
-	defer a.shard.mu.RUnlock()
-	return a.band.config.PriorityName
 }
 
 // FlowKeys returns a slice of all flow keys within this priority band.

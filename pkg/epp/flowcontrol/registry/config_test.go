@@ -42,8 +42,8 @@ func (m *mockCapabilityChecker) CheckCompatibility(p intraflow.RegisteredPolicyN
 
 // mustBand is a helper to simplify test table setup.
 // It panics if the band config creation fails, which should not happen with valid static inputs.
-func mustBand(t *testing.T, priority int, name string, opts ...PriorityBandConfigOption) *PriorityBandConfig {
-	pb, err := NewPriorityBandConfig(priority, name, opts...)
+func mustBand(t *testing.T, priority int, opts ...PriorityBandConfigOption) *PriorityBandConfig {
+	pb, err := NewPriorityBandConfig(priority, opts...)
 	require.NoError(t, err, "failed to create test band")
 	return pb
 }
@@ -62,7 +62,7 @@ func TestNewConfig(t *testing.T) {
 		{
 			name: "ShouldApplySystemDefaults_WhenNoOptionsProvided",
 			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "Default")),
+				WithPriorityBand(mustBand(t, 1)),
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, defaultInitialShardCount, cfg.InitialShardCount, "InitialShardCount should be defaulted")
@@ -85,7 +85,7 @@ func TestNewConfig(t *testing.T) {
 				WithInitialShardCount(10),
 				WithMaxBytes(5000),
 				WithFlowGCTimeout(1 * time.Hour),
-				WithPriorityBand(mustBand(t, 1, "High")),
+				WithPriorityBand(mustBand(t, 1)),
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, 10, cfg.InitialShardCount)
@@ -97,7 +97,7 @@ func TestNewConfig(t *testing.T) {
 			name: "ShouldApplyBandDefaults_WithRawStructLiterals",
 			opts: []ConfigOption{
 				// Simulate a user passing a manually constructed struct (bypassing NewPriorityBandConfig).
-				WithPriorityBand(&PriorityBandConfig{Priority: 1, PriorityName: "Raw"}),
+				WithPriorityBand(&PriorityBandConfig{Priority: 1}),
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				require.Contains(t, cfg.PriorityBands, 1)
@@ -115,7 +115,6 @@ func TestNewConfig(t *testing.T) {
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Empty(t, cfg.PriorityBands, "PriorityBands map should be empty")
 				require.NotNil(t, cfg.DefaultPriorityBand, "DefaultPriorityBand template must be initialized")
-				assert.Equal(t, "Dynamic-Default", cfg.DefaultPriorityBand.PriorityName)
 				assert.Equal(t, defaultQueue, cfg.DefaultPriorityBand.Queue)
 			},
 		},
@@ -123,8 +122,7 @@ func TestNewConfig(t *testing.T) {
 			name: "ShouldRespectCustomDefaultPriorityBand",
 			opts: []ConfigOption{
 				WithDefaultPriorityBand(&PriorityBandConfig{
-					PriorityName: "My-Custom-Template",
-					Queue:        "CustomQueue",
+					Queue: "CustomQueue",
 				}),
 				withCapabilityChecker(&mockCapabilityChecker{
 					checkCompatibilityFunc: func(_ intraflow.RegisteredPolicyName, _ queue.RegisteredQueueName) error { return nil },
@@ -132,7 +130,6 @@ func TestNewConfig(t *testing.T) {
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				require.NotNil(t, cfg.DefaultPriorityBand)
-				assert.Equal(t, "My-Custom-Template", cfg.DefaultPriorityBand.PriorityName)
 				assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), cfg.DefaultPriorityBand.Queue)
 				// Assert other defaults were applied to the template.
 				assert.Equal(t, defaultIntraFlowDispatchPolicy, cfg.DefaultPriorityBand.IntraFlowDispatchPolicy)
@@ -155,16 +152,8 @@ func TestNewConfig(t *testing.T) {
 		{
 			name: "ShouldError_WhenDuplicatePriorityLevelAdded",
 			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "A")),
-				WithPriorityBand(mustBand(t, 1, "B")), // Same priority level
-			},
-			expectErr: true,
-		},
-		{
-			name: "ShouldError_WhenDuplicatePriorityNameAdded",
-			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "High")),
-				WithPriorityBand(mustBand(t, 2, "High")), // Same name
+				WithPriorityBand(mustBand(t, 1)),
+				WithPriorityBand(mustBand(t, 1)), // Same priority level
 			},
 			expectErr: true,
 		},
@@ -175,20 +164,12 @@ func TestNewConfig(t *testing.T) {
 			},
 			expectErr: true,
 		},
-		{
-			name: "ShouldError_WhenBandNameMissing",
-			opts: []ConfigOption{
-				// Use raw struct to bypass NewPriorityBandConfig validation.
-				WithPriorityBand(&PriorityBandConfig{Priority: 1}),
-			},
-			expectErr: true,
-		},
 
 		// --- Compatibility Checks ---
 		{
 			name: "ShouldError_WhenCapabilityCheckerFails",
 			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "High")),
+				WithPriorityBand(mustBand(t, 1)),
 				withCapabilityChecker(&mockCapabilityChecker{
 					checkCompatibilityFunc: func(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
 						return contracts.ErrPolicyQueueIncompatible
@@ -201,14 +182,14 @@ func TestNewConfig(t *testing.T) {
 		{
 			name: "ShouldError_WhenDefaultRuntimeCheckerDetectsUnknownPolicy",
 			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "BadBand", WithIntraFlowPolicy("non-existent-policy"))),
+				WithPriorityBand(mustBand(t, 1, WithIntraFlowPolicy("non-existent-policy"))),
 			},
 			expectErr: true,
 		},
 		{
 			name: "ShouldError_WhenDefaultRuntimeCheckerDetectsUnknownQueue",
 			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "BadBand",
+				WithPriorityBand(mustBand(t, 1,
 					WithIntraFlowPolicy(intraflow.FCFSPolicyName),
 					WithQueue("non-existent-queue"),
 				)),
@@ -245,7 +226,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 
 	t.Run("ShouldApplyUserOverrides", func(t *testing.T) {
 		t.Parallel()
-		pb, err := NewPriorityBandConfig(1, "Custom",
+		pb, err := NewPriorityBandConfig(1,
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
 			WithIntraFlowPolicy("CustomPolicy"),
@@ -259,7 +240,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 
 	t.Run("ShouldError_OnInvalidOptions", func(t *testing.T) {
 		t.Parallel()
-		pb, err := NewPriorityBandConfig(1, "Bad", WithQueue(""))
+		pb, err := NewPriorityBandConfig(1, WithQueue(""))
 		assert.Error(t, err, "Should error when setting empty queue")
 		assert.Nil(t, pb)
 	})
@@ -275,9 +256,9 @@ func TestConfig_Partition(t *testing.T) {
 	// Band 3: 20 MaxBytes.
 	cfg, err := NewConfig(
 		WithMaxBytes(103),
-		WithPriorityBand(mustBand(t, 1, "Band1", WithBandMaxBytes(55))),
-		WithPriorityBand(mustBand(t, 2, "Band2", WithBandMaxBytes(0))), // Explicit 0 implies default behavior via logic.
-		WithPriorityBand(mustBand(t, 3, "Band3", WithBandMaxBytes(20))),
+		WithPriorityBand(mustBand(t, 1, WithBandMaxBytes(55))),
+		WithPriorityBand(mustBand(t, 2, WithBandMaxBytes(0))), // Explicit 0 implies default behavior via logic.
+		WithPriorityBand(mustBand(t, 3, WithBandMaxBytes(20))),
 	)
 	require.NoError(t, err)
 
@@ -327,8 +308,8 @@ func TestConfig_Clone(t *testing.T) {
 
 	original, err := NewConfig(
 		WithMaxBytes(1000),
-		WithPriorityBand(mustBand(t, 1, "A")),
-		WithPriorityBand(mustBand(t, 2, "B")),
+		WithPriorityBand(mustBand(t, 1)),
+		WithPriorityBand(mustBand(t, 2)),
 	)
 	require.NoError(t, err, "Setup failed")
 
@@ -344,7 +325,7 @@ func TestConfig_Clone(t *testing.T) {
 		require.NotSame(t, original.PriorityBands[1], clone.PriorityBands[1],
 			"Map values (pointers to bands) should differ")
 		assert.Equal(t, original.MaxBytes, clone.MaxBytes)
-		assert.Equal(t, original.PriorityBands[1].PriorityName, clone.PriorityBands[1].PriorityName)
+		assert.Equal(t, original.PriorityBands[1].Priority, clone.PriorityBands[1].Priority)
 	})
 
 	t.Run("ShouldIsolateModifications", func(t *testing.T) {
@@ -352,12 +333,9 @@ func TestConfig_Clone(t *testing.T) {
 
 		// Modify the clone's map entry.
 		clone.PriorityBands[1].MaxBytes = 99999
-		clone.PriorityBands[1].PriorityName = "Modified"
 
 		assert.Equal(t, defaultPriorityBandMaxBytes, original.PriorityBands[1].MaxBytes)
-		assert.Equal(t, "A", original.PriorityBands[1].PriorityName)
 		assert.Equal(t, uint64(99999), clone.PriorityBands[1].MaxBytes)
-		assert.Equal(t, "Modified", clone.PriorityBands[1].PriorityName)
 	})
 
 	t.Run("ShouldDeepCopyDefaultPriorityBand", func(t *testing.T) {
@@ -369,11 +347,6 @@ func TestConfig_Clone(t *testing.T) {
 
 		require.NotSame(t, original.DefaultPriorityBand, clone.DefaultPriorityBand,
 			"Clone should have a distinct pointer for DefaultPriorityBand")
-		assert.Equal(t, original.DefaultPriorityBand.PriorityName, clone.DefaultPriorityBand.PriorityName)
-
-		// Modify Clone.
-		clone.DefaultPriorityBand.PriorityName = "Hacked"
-		assert.Equal(t, "Dynamic-Default", original.DefaultPriorityBand.PriorityName,
-			"Modifying clone template should not affect original")
+		assert.Equal(t, original.DefaultPriorityBand.Priority, clone.DefaultPriorityBand.Priority)
 	})
 }
