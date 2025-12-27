@@ -69,9 +69,9 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 			shardCount = opts.initialShardCount
 		}
 
-		highBand, err := NewPriorityBandConfig(highPriority, "High")
+		highBand, err := NewPriorityBandConfig(highPriority)
 		require.NoError(t, err)
-		lowBand, err := NewPriorityBandConfig(lowPriority, "Low")
+		lowBand, err := NewPriorityBandConfig(lowPriority)
 		require.NoError(t, err)
 
 		cfg, err = NewConfig(
@@ -145,7 +145,7 @@ func TestFlowRegistry_New(t *testing.T) {
 	t.Run("ShouldFail_WhenInitialShardCreationFails", func(t *testing.T) {
 		t.Parallel()
 
-		badBand, err := NewPriorityBandConfig(highPriority, "A", WithInterFlowPolicy("non-existent-policy"))
+		badBand, err := NewPriorityBandConfig(highPriority, WithInterFlowPolicy("non-existent-policy"))
 		require.NoError(t, err)
 
 		config, err := NewConfig(WithPriorityBand(badBand))
@@ -199,7 +199,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		t.Parallel()
 
 		badPolicyName := intraflow.RegisteredPolicyName("non-existent-policy")
-		badBand, err := NewPriorityBandConfig(highPriority, "High", WithIntraFlowPolicy(badPolicyName))
+		badBand, err := NewPriorityBandConfig(highPriority, WithIntraFlowPolicy(badPolicyName))
 		require.NoError(t, err)
 
 		// Create a Config that uses a mock checker to bypass the strict validation.
@@ -547,7 +547,7 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			band, err := NewPriorityBandConfig(highPriority, "A", WithBandMaxBytes(bandCapacity))
+			band, err := NewPriorityBandConfig(highPriority, WithBandMaxBytes(bandCapacity))
 			require.NoError(t, err)
 
 			config, err := NewConfig(

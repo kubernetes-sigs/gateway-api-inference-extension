@@ -170,9 +170,6 @@ type PriorityBandAccessor interface {
 	// Priority returns the numerical priority level of this band.
 	Priority() int
 
-	// PriorityName returns the human-readable name of this priority band.
-	PriorityName() string
-
 	// FlowKeys returns a slice of the composite `types.FlowKey`s for every flow instance currently active within this
 	// priority band.
 	// This method provides the complete, canonical identifiers for all flows in the band. The caller can use the `ID`
