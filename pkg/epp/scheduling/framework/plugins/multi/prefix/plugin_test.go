@@ -41,7 +41,8 @@ var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		AutoTune:               false,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -207,7 +208,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 func TestPrefixPluginChatCompletions(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -241,7 +242,8 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 
 func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	config := Config{
-		BlockSize:              8, // Use larger block size for more predictable JSON marshaling
+		BlockSize:              2, // Use larger block size for more predictable JSON marshaling
+		AutoTune:               false,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -308,8 +310,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// Calculate expected score - pod1 should have cached the initial prefix
-	cachedBlocks := state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
-	expectedScore := float64(cachedBlocks) / float64(extendedHashCount)
+	cachedChars := state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
+	expectedScore := float64(cachedChars) / float64(extendedHashCount*state.BlockSize)
 	assert.Equal(t, expectedScore, scores[pod1], "pod1 should have prefix cache hit")
 	assert.Equal(t, float64(0), scores[pod2], "pod2 should have no cache hit")
 
@@ -338,13 +340,13 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
-	longHashCount := len(state.PrefixHashes)
+	longHashCount := len(state.PrefixHashes) * state.BlockSize
 	assert.Greater(t, longHashCount, extendedHashCount, "long conversation should have even more hashes")
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// pod1 should have an even higher cache hit rate now
-	cachedBlocks = state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
-	expectedScore = float64(cachedBlocks) / float64(longHashCount)
+	cachedChars = state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
+	expectedScore = float64(cachedChars) / float64(longHashCount)
 	assert.Equal(t, expectedScore, scores[pod1], "pod1 should have higher prefix cache hit")
 	assert.Greater(t, scores[pod1], float64(0.5), "cache hit rate should be substantial for growing conversation")
 	assert.Equal(t, float64(0), scores[pod2], "pod2 should still have no cache hit")
@@ -352,10 +354,9 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
 func BenchmarkPrefixPluginStress(b *testing.B) {
-	blockSize := 4
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -535,7 +536,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Disabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               false,
-			BlockSize:              32, // Should be used (32 chars)
+			BlockSize:              8, // Should be used (32 chars, 8 tokens)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			LRUCapacityPerServer:   1, // Should be used, and the first hash should be evicted due to the small
 		}
@@ -548,10 +549,10 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 
 		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
-		// Block size from config is 32 chars.
+		// Block size from config is 8 tokens (32 chars).
 		// Prompt is 128 chars.
 		// 128 / 32 = 4 chunks.
-		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (32 chars) -> 4 body blocks")
+		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (8 tokens) -> 4 body blocks")
 
 		// 2. Verify PreRequest uses config LRUCapacityPerServer
 		schedulingResult := &types.SchedulingResult{
@@ -579,7 +580,7 @@ func randomPrompt(n int) string {
 
 func TestPrepareRequestData(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -627,8 +628,8 @@ func TestPrepareRequestData(t *testing.T) {
 	info1, ok := pod1.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
-	assert.Equal(t, 1, prefixInfo1.MatchLength()) // "aaaa" matches
-	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 blocks
+	assert.Equal(t, 1, prefixInfo1.MatchLength()) // one token ("aaaa") matches
+	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 tokens
 
 	// Verify pod2 has no match info
 	info2, ok := pod2.Get(dplugins.PrefixCacheMatchInfoKey)
@@ -640,10 +641,9 @@ func TestPrepareRequestData(t *testing.T) {
 
 // BenchmarkPrefixPluginChatCompletionsStress is a stress test for chat completions with varying message counts and lengths
 func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
-	blockSize := 8
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSize:              2,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
