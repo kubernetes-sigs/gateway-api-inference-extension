@@ -39,7 +39,8 @@ var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		AutoTune:               false,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -208,7 +209,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 func TestPrefixPluginChatCompletions(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -242,7 +243,8 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 
 func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	config := Config{
-		BlockSize:              8, // Use larger block size for more predictable JSON marshaling
+		BlockSize:              2, // Use larger block size for more predictable JSON marshaling
+		AutoTune:               false,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -339,7 +341,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
-	longHashCount := len(state.PrefixHashes)
+	longHashCount := len(state.PrefixHashes) * state.BlockSize
 	assert.Greater(t, longHashCount, extendedHashCount, "long conversation should have even more hashes")
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
@@ -353,10 +355,9 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
 func BenchmarkPrefixPluginStress(b *testing.B) {
-	blockSize := 4
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -536,7 +537,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Disabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               false,
-			BlockSize:              32, // Should be used (32 chars)
+			BlockSize:              8, // Should be used (32 chars, 8 tokens)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			LRUCapacityPerServer:   1, // Should be used, and the first hash should be evicted due to the small
 		}
@@ -549,10 +550,10 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 
 		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
-		// Block size from config is 32 chars.
+		// Block size from config is 8 tokens (32 chars).
 		// Prompt is 128 chars.
 		// 128 / 32 = 4 chunks.
-		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (32 chars) -> 4 body blocks")
+		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (8 tokens) -> 4 body blocks")
 
 		// 2. Verify PreRequest uses config LRUCapacityPerServer
 		schedulingResult := &types.SchedulingResult{
@@ -580,7 +581,7 @@ func randomPrompt(n int) string {
 
 func TestPrepareRequestData(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSize:              1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -628,8 +629,8 @@ func TestPrepareRequestData(t *testing.T) {
 	info1, ok := endpoint1.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
-	assert.Equal(t, 1, prefixInfo1.MatchLength()) // "aaaa" matches
-	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 blocks
+	assert.Equal(t, 1, prefixInfo1.MatchLength()) // one token ("aaaa") matches
+	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 tokens
 
 	// Verify pod2 has no match info
 	info2, ok := endpoint2.Get(dplugins.PrefixCacheMatchInfoKey)
@@ -641,10 +642,9 @@ func TestPrepareRequestData(t *testing.T) {
 
 // BenchmarkPrefixPluginChatCompletionsStress is a stress test for chat completions with varying message counts and lengths
 func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
-	blockSize := 8
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSize:              2,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}

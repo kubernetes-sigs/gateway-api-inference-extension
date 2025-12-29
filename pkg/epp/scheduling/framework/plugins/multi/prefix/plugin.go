@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/mayabar/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -37,8 +38,8 @@ import (
 )
 
 const (
-	// vLLM default token block size is 16, and a good guess of average characters per token is 4.
-	DefaultBlockSize = 64
+	// vLLM default token block size is 16 tokens
+	DefaultBlockSize = 16
 	// The maximum number of blocks to match. Two long requests with the same prefix up to this
 	// limit will be indistinguishable.
 	// This parameter provides a trade-off between cache size, prefix matching speed and matching
@@ -68,7 +69,7 @@ const (
 	PodActiveCheckInterval = 2 * time.Minute
 
 	// An estimated average characters per token, used since the request we cached is not tokenized.
-	averageCharactersPerToken = 4
+	AverageCharactersPerToken = 4
 )
 
 var DefaultConfig = Config{
@@ -133,6 +134,8 @@ type SchedulingContextState struct {
 	PrefixHashes []BlockHash
 	// A map of server to its longest prefix cache match length.
 	PrefixCacheServers map[ServerID]int
+	// Size of a block in tokens
+	BlockSize int
 }
 
 func (s *SchedulingContextState) Clone() plugin.StateData {
@@ -146,6 +149,7 @@ func (s *SchedulingContextState) Clone() plugin.StateData {
 	return &SchedulingContextState{
 		PrefixHashes:       prefixHashes,
 		PrefixCacheServers: prefixCacheServers,
+		BlockSize:          s.BlockSize,
 	}
 }
 
@@ -227,7 +231,8 @@ func (p *Plugin) Consumes() map[string]any {
 
 // PrepareRequestData hashes prompt, finds longest prefix match and stores it in endpoint as attribute.
 func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMRequest, endpoints []framework.Endpoint) error {
-	hashes := hashPrompt(ctx, request, getBlockSize(endpoints, p.config), p.config.MaxPrefixBlocksToMatch)
+	blockSize := getBlockSize(endpoints, p.config)
+	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
@@ -236,7 +241,7 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMR
 
 	for _, endpoint := range endpoints {
 		matchLen := state.PrefixCacheServers[ServerID(endpoint.GetMetadata().NamespacedName)]
-		endpoint.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total))
+		endpoint.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total, blockSize))
 	}
 	// Store the state in plugin state for later use.
 	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
@@ -251,6 +256,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes, blockSize),
+		BlockSize:          blockSize,
 	}
 
 	cycleState.Write(plugin.StateKey(p.TypedName().String()), state)
@@ -261,6 +267,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 	// calculate the scores of endpoints
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 
+	// total prefix length in tokens
 	total := len(state.PrefixHashes)
 	endpointScoreFunc := func(endpoint framework.Endpoint) float64 {
 		if total == 0 {
@@ -309,7 +316,8 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
 
 	blockSize := getBlockSize(primaryProfileResult.TargetEndpoints, p.config)
-	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
+	// report matched and total prefix length in chars
+	metrics.RecordPrefixCacheMatch(matchLen*blockSize*averageCharactersPerToken, total*blockSize*averageCharactersPerToken)
 }
 
 func (p *Plugin) makeServer(targetEndpoint framework.Endpoint) Server {
@@ -324,7 +332,7 @@ func (p *Plugin) makeServer(targetEndpoint framework.Endpoint) Server {
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches, prefix length is defined in characters.
-// blockSize - the block size in characters
+// blockSize - the block size in tokens
 func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash, blockSize int) map[ServerID]int {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	res := make(map[ServerID]int)
@@ -337,7 +345,7 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash, blo
 		} else {
 			loggerTrace.Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
 			for server := range cachedServers {
-				// Update servers with their longest prefix match, prefix length is in characters.
+				// Update servers with their longest prefix match, prefix length is in tokens.
 				res[server] += blockSize
 			}
 		}
@@ -375,7 +383,7 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *framework.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
+func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
@@ -387,6 +395,15 @@ func hashPrompt(ctx context.Context, request *framework.LLMRequest, cacheBlockSi
 		loggerDebug.Error(err, "Failed to get user input bytes")
 		return nil
 	}
+
+	shortInput := userInput
+	if len(shortInput) > 10 {
+		shortInput = shortInput[:10]
+	}
+	fmt.Printf("in hashPrompt: user input len=%d, block sz=%d tokens, user input: %s\n", len(userInput), cacheBlockSize, shortInput)
+
+	// convert block size from tokens to characters
+	cacheBlockSize *= AverageCharactersPerToken
 
 	if len(userInput) < cacheBlockSize {
 		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", cacheBlockSize)
@@ -415,6 +432,8 @@ func hashPrompt(ctx context.Context, request *framework.LLMRequest, cacheBlockSi
 
 		prevBlockHash = res[len(res)-1]
 	}
+
+	fmt.Printf("in hashPrompt: created %d hashes for user input: %s\n", len(res), shortInput)
 	return res
 }
 
@@ -452,6 +471,7 @@ func getBlockSize(endpoints []framework.Endpoint, config Config) int {
 		cacheBlockSize := endpoint.GetMetrics().CacheBlockSize
 		if cacheBlockSize > 0 {
 			return cacheBlockSize
+		}
 	}
 	return config.BlockSizeTokens
 }

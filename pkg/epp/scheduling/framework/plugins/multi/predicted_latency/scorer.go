@@ -373,7 +373,7 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 		return 0.0
 	}
 
-	total := len(prefixCacheState.PrefixHashes)
+	total := len(prefixCacheState.PrefixHashes) * prefixCacheState.BlockSize
 	if total == 0 {
 		// if the request has no prefixes, return 0.0
 		log.FromContext(ctx).V(logutil.DEBUG).Info("No prefixes found in request, returning prefix cache score of 0.0")
