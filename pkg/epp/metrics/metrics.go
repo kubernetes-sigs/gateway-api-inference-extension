@@ -407,6 +407,15 @@ var (
 		},
 		append([]string{"fairness_id", "priority", "inference_pool"}, ModelLabels...),
 	)
+
+	flowControlQueueBytes = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_queue_bytes",
+			Help:      metricsutil.HelpMsgWithStability("Current number of bytes being actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+		},
+		append([]string{"fairness_id", "priority", "inference_pool"}, ModelLabels...),
+	)
 )
 
 // --- Inference Model Rewrite Metrics ---
@@ -461,6 +470,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(PrefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
+		metrics.Registry.MustRegister(flowControlQueueBytes)
 		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
@@ -507,6 +517,7 @@ func Reset() {
 	PrefixCacheHitLength.Reset()
 	flowControlRequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
+	flowControlQueueBytes.Reset()
 	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
@@ -795,6 +806,16 @@ func IncFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, tar
 // DecFlowControlQueueSize decrements the Flow Control queue size gauge.
 func DecFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, targetModelName string) {
 	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Dec()
+}
+
+// AddFlowControlQueueBytes increments the Flow Control queue bytes gauge.
+func AddFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, targetModelName string, bytes uint64) {
+	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Add(float64(bytes))
+}
+
+// SubFlowControlQueueBytes decrements the Flow Control queue bytes gauge.
+func SubFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, targetModelName string, bytes uint64) {
+	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Sub(float64(bytes))
 }
 
 // SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
