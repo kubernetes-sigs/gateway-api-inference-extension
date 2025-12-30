@@ -18,53 +18,49 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
+	"strings"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
+	bbrplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	helpers "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/utils"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
-
-const modelHeader = "X-Gateway-Model-Name"
-
-type RequestBody struct {
-	Model string `json:"model"`
-}
 
 // HandleRequestBody handles request bodies.
 func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
 
-	var requestBody RequestBody
-	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
-		metrics.RecordModelNotParsedCounter()
-		return nil, err
-	}
+	allHeaders, mutatedBodyBytes, err := s.requestChain.Run(requestBodyBytes, s.registry)
 
-	if requestBody.Model == "" {
-		metrics.RecordModelNotInBodyCounter()
-		logger.V(logutil.DEFAULT).Info("Request body does not contain model parameter")
-		if s.streaming {
-			ret = append(ret, &eppb.ProcessingResponse{
-				Response: &eppb.ProcessingResponse_RequestHeaders{
-					RequestHeaders: &eppb.HeadersResponse{},
-				},
-			})
-			ret = addStreamedBodyResponse(ret, requestBodyBytes)
-			return ret, nil
-		} else {
-			ret = append(ret, &eppb.ProcessingResponse{
-				Response: &eppb.ProcessingResponse_RequestBody{
-					RequestBody: &eppb.BodyResponse{},
-				},
-			})
-		}
+	if err != nil {
+		//TODO: add metric in metrics.go to count "other errors"
+		logger.V(logutil.DEFAULT).Info("error processing body", "error", err)
+		ret, _ := buildEmptyResponsesForMissingModel(s.streaming, requestBodyBytes)
 		return ret, nil
 	}
+
+	model, ok := allHeaders[bbrplugins.ModelHeader]
+
+	if !ok {
+		//TODO: add metric in metrics.go to count "other errors"
+		logger.V(logutil.DEFAULT).Info("manadatory header X-Gateway-Model-Name value is undetermined")
+		ret, _ := buildEmptyResponsesForMissingModel(s.streaming, requestBodyBytes)
+		return ret, nil
+	}
+
+	if strings.TrimSpace(model) == "" {
+		metrics.RecordModelNotInBodyCounter()
+		ret, _ := buildEmptyResponsesForMissingModel(s.streaming, requestBodyBytes)
+		return ret, nil
+	}
+
+	//TODO: change to DEBUG
+	logger.V(logutil.DEFAULT).Info("model extracted from request body", "model", model)
 
 	metrics.RecordSuccessCounter()
 
@@ -78,8 +74,8 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 							SetHeaders: []*basepb.HeaderValueOption{
 								{
 									Header: &basepb.HeaderValue{
-										Key:      modelHeader,
-										RawValue: []byte(requestBody.Model),
+										Key:      bbrplugins.ModelHeader,
+										RawValue: []byte(model),
 									},
 								},
 							},
@@ -88,7 +84,11 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 				},
 			},
 		})
-		ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		ret = addStreamedBodyResponse(ret, mutatedBodyBytes)
+
+		//TODO: change to DEBUG
+		logger.V(logutil.DEFAULT).Info("RESPONSE", "response", helpers.PrettyPrintResponses(ret))
+
 		return ret, nil
 	}
 
@@ -103,10 +103,15 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 							SetHeaders: []*basepb.HeaderValueOption{
 								{
 									Header: &basepb.HeaderValue{
-										Key:      modelHeader,
-										RawValue: []byte(requestBody.Model),
+										Key:      bbrplugins.ModelHeader,
+										RawValue: []byte(model),
 									},
 								},
+							},
+						},
+						BodyMutation: &eppb.BodyMutation{
+							Mutation: &eppb.BodyMutation_Body{
+								Body: mutatedBodyBytes,
 							},
 						},
 					},
@@ -116,7 +121,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 	}, nil
 }
 
-func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
+func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, mutatedBodyBytes []byte) []*eppb.ProcessingResponse {
 	return append(responses, &eppb.ProcessingResponse{
 		Response: &eppb.ProcessingResponse_RequestBody{
 			RequestBody: &eppb.BodyResponse{
@@ -124,7 +129,7 @@ func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBy
 					BodyMutation: &eppb.BodyMutation{
 						Mutation: &eppb.BodyMutation_StreamedResponse{
 							StreamedResponse: &eppb.StreamedBodyResponse{
-								Body:        requestBodyBytes,
+								Body:        mutatedBodyBytes,
 								EndOfStream: true,
 							},
 						},
@@ -155,4 +160,32 @@ func (s *Server) HandleRequestTrailers(trailers *eppb.HttpTrailers) ([]*eppb.Pro
 			},
 		},
 	}, nil
+}
+
+// buildEmptyResponsesForMissingModel is a local helper that returns the appropriate empty responses
+// for the "model not found" branch depending on streaming mode.
+// It is also used to create empty responses in case of other errors related to running plugins on the body
+// This is not very clean and MUST be segregated in the future.
+// Corresponding metrics should be defined to make different errors observable
+func buildEmptyResponsesForMissingModel(streaming bool, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
+	var ret []*eppb.ProcessingResponse
+
+	if streaming {
+		// Emit empty headers response, then stream body unchanged.
+		ret = append(ret, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &eppb.HeadersResponse{},
+			},
+		})
+		ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		return ret, nil
+	}
+
+	// Non-streaming: emit empty body response.
+	ret = append(ret, &eppb.ProcessingResponse{
+		Response: &eppb.ProcessingResponse_RequestBody{
+			RequestBody: &eppb.BodyResponse{},
+		},
+	})
+	return ret, nil
 }
