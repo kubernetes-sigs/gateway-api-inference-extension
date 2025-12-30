@@ -412,7 +412,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferenceExtension,
 			Name:      "flow_control_queue_bytes",
-			Help:      metricsutil.HelpMsgWithStability("Current number of bytes being actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Current number of bytes associated with requests actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
 		},
 		append([]string{"fairness_id", "priority", "inference_pool"}, ModelLabels...),
 	)
