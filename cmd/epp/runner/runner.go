@@ -285,6 +285,23 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
+	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] { // initialize the data layer from configuration
+		if err := datalayer.WithConfig(eppConfig.DataConfig, setupLog); err != nil {
+			setupLog.Error(err, "failed to initialize data layer")
+			return err
+		}
+		sources := datalayer.GetSources()
+		if len(sources) == 0 {
+			err := errors.New("data layer enabled but no data sources configured")
+			setupLog.Error(err, "failed to initialize data layer")
+			return err
+		}
+		epf.SetSources(sources)
+		for _, src := range sources {
+			setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
+		}
+	}
+
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
@@ -530,7 +547,7 @@ func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.L
 
 func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
 	if useExperimentalDatalayer {
-		return setupDatalayer(setupLog, opts)
+		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval), nil
 	}
 
 	if len(datalayer.GetSources()) != 0 {
@@ -574,43 +591,6 @@ func setupMetricsV1(setupLog logr.Logger, opts *runserver.Options) (datalayer.En
 	},
 		opts.RefreshMetricsInterval)
 	return pmf, nil
-}
-
-// This function serves two (independent) purposes:
-// - creating data sources and configuring their extractors.
-// - configuring endpoint factory with the provided source.
-// In the future, data sources and extractors might be configured via
-// a file. Once done, this (and registering the sources with the
-// endpoint factory) should be moved accordingly.
-// Regardless, registration of all sources (e.g., if additional sources
-// are to be configured), must be done before the EndpointFactory is initialized.
-func setupDatalayer(logger logr.Logger, opts *runserver.Options) (datalayer.EndpointFactory, error) {
-	// create and register a metrics data source and extractor.
-	source := dlmetrics.NewMetricsDataSource(opts.ModelServerMetricsScheme,
-		opts.ModelServerMetricsPath,
-		opts.ModelServerMetricsHTTPSInsecure)
-	extractor, err := dlmetrics.NewModelServerExtractor(opts.TotalQueuedRequestsMetric,
-		opts.TotalRunningRequestsMetric,
-		opts.KVCacheUsagePercentageMetric,
-		opts.LoRAInfoMetric, opts.CacheInfoMetric)
-
-	if err != nil {
-		return nil, err
-	}
-	if err := source.AddExtractor(extractor); err != nil {
-		return nil, err
-	}
-	if err := datalayer.RegisterSource(source); err != nil {
-		return nil, err
-	}
-
-	// TODO: this could be moved to the configuration loading functions once ported over.
-	sources := datalayer.GetSources()
-	for _, src := range sources {
-		logger.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
-	}
-	factory := datalayer.NewEndpointFactory(sources, opts.RefreshMetricsInterval)
-	return factory, nil
 }
 
 func initLogging(opts *zap.Options) {
