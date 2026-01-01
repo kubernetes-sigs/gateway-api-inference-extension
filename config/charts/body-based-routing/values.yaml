@@ -8,6 +8,7 @@ bbr:
     pullPolicy: Always
   port: 9004
   healthCheckPort: 9005
+  multiNamespace: false
 
   flags:
     # Log verbosity
