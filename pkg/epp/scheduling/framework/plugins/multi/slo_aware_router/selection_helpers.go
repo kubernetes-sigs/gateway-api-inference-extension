@@ -57,6 +57,11 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 	// Precompute blend weights (renormalize if user sets both to 0)
 	alpha := s.config.HeadroomTTFTWeight
 	beta := s.config.HeadroomTPOTWeight
+
+	if s.config.StreamingMode == false{
+		alpha  = 1
+		beta = 0
+	}
 	if alpha+beta <= 0 {
 		alpha = 1.0
 		beta = 0.0

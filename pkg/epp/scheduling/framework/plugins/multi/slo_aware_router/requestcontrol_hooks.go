@@ -125,6 +125,7 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 	logger.V(logutil.TRACE).Info("request ID for SLO tracking", "requestID", request.Headers[requtil.RequestIdHeaderKey], "podName", podName)
 	if request.Headers[requtil.RequestIdHeaderKey] == "" {
 		logger.V(logutil.DEBUG).Error(errors.New("missing request ID"), "SLOAwareRouter.PreRequest: Request is missing request ID header")
+		return
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
@@ -152,39 +153,28 @@ func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtype
 	sloCtx.requestReceivedTimestamp = time.Now()
 	refreshLastSeenMetrics(ctx, sloCtx)
 	t.setSLOContextForRequest(request, sloCtx)
+
+	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, sloCtx); err != nil {
+		logger.V(logutil.DEBUG).Error(err, "Process PreRequest in latencypredictor failed")
+	}
 }
 
+// --- Response Hooks when header received---
 func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetPod *backend.Pod) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("SLOAwareRouter.ResponseReceived: request is nil, skipping")
 		return
 	}
-	if !t.checkPredictor(logger, targetPod) {
-		return
-	}
-
-	id := request.Headers[requtil.RequestIdHeaderKey]
-
-	sloCtx, err := t.getSLOContextForRequest(request)
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Failed to get SLO context for request", "requestID", id)
-		return
-	}
-
-	if err := processHeaderForLatencyPrediction(ctx, t.latencypredictor, sloCtx); err != nil {
-		logger.V(logutil.DEBUG).Error(err, "ProcessHeader in latencypredictor failed")
-	}
-
 }
-
+// --- Response Hooks when body chunks received---
 func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("SLOAwareRouter.ResponseStreaming: request is nil, skipping")
 		return
 	}
-	if !t.checkPredictor(logger, pod) || response.EndOfStream {
+	if !t.checkPredictor(logger, pod) || response.EndOfStream || !t.config.StreamingMode {
 		return
 	}
 
@@ -197,7 +187,7 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 	}
 
 	if sloCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now)
 	} else {
 		processTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now)
 	}
@@ -214,12 +204,16 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	if !t.checkPredictor(logger, targetPod) {
 		return
 	}
-
+	
 	sloCtx, err := t.getSLOContextForRequest(request)
 	if err != nil {
 		id := request.Headers[requtil.RequestIdHeaderKey]
 		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter.ResponseComplete: Failed to get SLO context for request", "requestID", id)
 		return
+	}
+    now := time.Now()
+	if t.config.StreamingMode == false {
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now)
 	}
 
 	if sloCtx.ttft > 0 {
@@ -250,6 +244,7 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	if !ok {
 		err := fmt.Errorf("no running request list found for pod %s", podName.String())
 		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Failed to remove request from queue", "requestID", id)
+		return
 	}
 
 	_, removed := podRequestList.Remove(id)

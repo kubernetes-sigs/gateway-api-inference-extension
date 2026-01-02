@@ -261,21 +261,27 @@ func (s *SLOAwareRouter) handleNegativeHeadroomPodsHierarchical(
 		"nonNegTTFT_nonNegTPOT", len(nonNegTTFTNonNegTPOT))
 
 	// Priority 1: both TTFT and TPOT negative -> blended deficits (both active)
+	alpha := s.config.NegHeadroomTTFTWeight
+	beta := s.config.NegHeadroomTPOTWeight
+	if s.config.StreamingMode == false{
+		alpha  = 1
+		beta = 0
+	}
 	if len(negTTFTNegTPOT) > 0 {
 		s.weightPodsByBlendedDeficit(ctx, negTTFTNegTPOT, choices, total, minWeightForNegative,
-			s.config.NegHeadroomTTFTWeight, s.config.NegHeadroomTPOTWeight, "both_negative")
+			alpha, beta, "both_negative")
 	}
 
 	// Priority 2: TTFT negative, TPOT non-negative -> blended still works (TPOT deficit=0)
 	if len(negTTFTNonNegTPOT) > 0 {
 		s.weightPodsByBlendedDeficit(ctx, negTTFTNonNegTPOT, choices, total, minWeightForNegative,
-			s.config.NegHeadroomTTFTWeight, s.config.NegHeadroomTPOTWeight, "ttft_negative")
+			alpha, beta, "ttft_negative")
 	}
 
 	// Priority 3: TTFT non-negative, TPOT negative -> blended (TTFT deficit=0)
 	if len(nonNegTTFTNegTPOT) > 0 {
 		s.weightPodsByBlendedDeficit(ctx, nonNegTTFTNegTPOT, choices, total, minWeightForNegative,
-			s.config.NegHeadroomTTFTWeight, s.config.NegHeadroomTPOTWeight, "tpot_negative")
+			alpha, beta, "tpot_negative")
 	}
 
 	// Priority 4: edge-case bucket -> minimal weight

@@ -65,6 +65,7 @@ type Config struct {
 	AffinityGateTau           float64 `json:"affinityGateTau,omitempty"`
 	AffinityGateTauGlobal     float64 `json:"affinityGateTauGlobal,omitempty"`
 	SelectionMode             string  `json:"selectionMode,omitempty"`
+	StreamingMode 			bool    `json:"streamingMode,omitempty"`
 }
 
 var DefaultConfig = Config{
@@ -84,6 +85,7 @@ var DefaultConfig = Config{
 	AffinityGateTau:           AffinityGateTau,
 	AffinityGateTauGlobal:     AffinityGateTauGlobal,
 	SelectionMode:             string(SelectionMode),
+	StreamingMode: 			   StreamingMode,
 }
 
 func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
@@ -296,7 +298,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
-	allPodsInvalid := (sloCtx.ttftSLO > 0 && sloCtx.avgTPOTSLO > 0)
+	allPodsInvalid := (sloCtx.ttftSLO > 0 && (sloCtx.avgTPOTSLO > 0 || s.config.StreamingMode == false))
 	allPodsHaveRunningRequests := true
 
 	for _, pred := range allPreds {

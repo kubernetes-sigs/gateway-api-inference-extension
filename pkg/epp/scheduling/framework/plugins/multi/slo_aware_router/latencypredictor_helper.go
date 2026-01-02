@@ -62,8 +62,8 @@ func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.Metr
 	return nil, fmt.Errorf("no metrics found for primary profile %s", primaryProfileName)
 }
 
-// ProcessHeader refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
-func processHeaderForLatencyPrediction(
+// ProcessPreRequest refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
+func processPreRequestForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	sloCtx *sloRequestContext,
@@ -112,7 +112,7 @@ func processHeaderForLatencyPrediction(
 
 	// Advance timestamp for first token reference
 	sloCtx.lastTokenTimestamp = time.Now()
-	refreshLastSeenMetrics(ctx, sloCtx)
+	//refreshLastSeenMetrics(ctx, sloCtx)
 	return err
 }
 
@@ -120,6 +120,7 @@ func processHeaderForLatencyPrediction(
 func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
+	streamingMode bool,
 	sloCtx *sloRequestContext,
 	now time.Time,
 ) {
@@ -140,7 +141,9 @@ func processFirstTokenForLatencyPrediction(
 
 	recordTTFTTrainingData(ctx, predictor, sloCtx, m, now, prefixCacheScore)
 
-	predictFirstTPOT(ctx, predictor, sloCtx)
+	if streamingMode {
+		predictFirstTPOT(ctx, predictor, sloCtx)
+	}
 
 	// Advance timestamp
 	sloCtx.lastTokenTimestamp = now
