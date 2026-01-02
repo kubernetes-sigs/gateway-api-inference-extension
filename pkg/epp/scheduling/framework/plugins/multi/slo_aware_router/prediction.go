@@ -122,7 +122,7 @@ func (s *SLOAwareRouter) validatePrediction(
 	tpotOk = true
 	headroom = 0.0
 
-	if s.config.StreamingMode == true {
+	if s.config.StreamingMode {
 		bufferedTPOT := sloCtx.avgTPOTSLO * s.config.SLOBufferFactor
 		// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
 		if podMinTPOTSLO > 0 {

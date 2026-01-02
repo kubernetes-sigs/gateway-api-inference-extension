@@ -112,7 +112,6 @@ func processPreRequestForLatencyPrediction(
 
 	// Advance timestamp for first token reference
 	sloCtx.lastTokenTimestamp = time.Now()
-	//refreshLastSeenMetrics(ctx, sloCtx)
 	return err
 }
 

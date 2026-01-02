@@ -298,7 +298,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
-	allPodsInvalid := (sloCtx.ttftSLO > 0 && (sloCtx.avgTPOTSLO > 0 || s.config.StreamingMode == false))
+	allPodsInvalid := (sloCtx.ttftSLO > 0 && (sloCtx.avgTPOTSLO > 0 || !s.config.StreamingMode))
 	allPodsHaveRunningRequests := true
 
 	for _, pred := range allPreds {

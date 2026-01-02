@@ -213,7 +213,7 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 		return
 	}
 	now := time.Now()
-	if t.config.StreamingMode == false {
+	if !t.config.StreamingMode {
 		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now)
 	}
 
