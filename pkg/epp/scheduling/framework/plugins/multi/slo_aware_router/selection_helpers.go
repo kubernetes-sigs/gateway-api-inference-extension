@@ -58,7 +58,7 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 	alpha := s.config.HeadroomTTFTWeight
 	beta := s.config.HeadroomTPOTWeight
 
-	if s.config.StreamingMode == false{
+	if s.config.StreamingMode == false {
 		alpha  = 1
 		beta = 0
 	}
