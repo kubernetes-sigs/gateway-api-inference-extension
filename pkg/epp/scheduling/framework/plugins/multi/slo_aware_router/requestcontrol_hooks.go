@@ -167,6 +167,7 @@ func (t *SLOAwareRouter) ResponseReceived(ctx context.Context, request *scheduli
 		return
 	}
 }
+
 // --- Response Hooks when body chunks received---
 func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, pod *backend.Pod) {
 	logger := log.FromContext(ctx)
@@ -204,14 +205,14 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	if !t.checkPredictor(logger, targetPod) {
 		return
 	}
-	
+
 	sloCtx, err := t.getSLOContextForRequest(request)
 	if err != nil {
 		id := request.Headers[requtil.RequestIdHeaderKey]
 		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter.ResponseComplete: Failed to get SLO context for request", "requestID", id)
 		return
 	}
-    now := time.Now()
+	now := time.Now()
 	if t.config.StreamingMode == false {
 		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now)
 	}

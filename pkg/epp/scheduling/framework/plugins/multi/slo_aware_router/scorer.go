@@ -65,7 +65,7 @@ type Config struct {
 	AffinityGateTau           float64 `json:"affinityGateTau,omitempty"`
 	AffinityGateTauGlobal     float64 `json:"affinityGateTauGlobal,omitempty"`
 	SelectionMode             string  `json:"selectionMode,omitempty"`
-	StreamingMode 			bool    `json:"streamingMode,omitempty"`
+	StreamingMode             bool    `json:"streamingMode,omitempty"`
 }
 
 var DefaultConfig = Config{
@@ -85,7 +85,7 @@ var DefaultConfig = Config{
 	AffinityGateTau:           AffinityGateTau,
 	AffinityGateTauGlobal:     AffinityGateTauGlobal,
 	SelectionMode:             string(SelectionMode),
-	StreamingMode: 			   StreamingMode,
+	StreamingMode:             StreamingMode,
 }
 
 func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {

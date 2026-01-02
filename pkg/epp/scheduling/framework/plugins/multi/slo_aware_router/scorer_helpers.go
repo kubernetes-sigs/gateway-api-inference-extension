@@ -46,7 +46,7 @@ func (s *SLOAwareRouter) parseSLOHeaders(ctx context.Context, request *schedulin
 func (s *SLOAwareRouter) classifyPodsByHeadroom(allPreds []podPredictionResult) (posHeadroomPods, negHeadroomPods []podPredictionResult) {
 	for _, p := range allPreds {
 		// A pod has positive headroom only if BOTH TTFT and TPOT have positive headroom
-		if ( p.Headroom >= 0 ) && p.TTFTHeadroom >= 0 {
+		if (p.Headroom >= 0) && p.TTFTHeadroom >= 0 {
 			posHeadroomPods = append(posHeadroomPods, p)
 		} else {
 			// A pod has negative headroom if EITHER TTFT or TPOT has negative/zero headroom

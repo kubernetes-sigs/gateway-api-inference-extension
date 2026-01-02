@@ -63,7 +63,7 @@ func createTestRouter() *SLOAwareRouter {
 		sloContextStore:     sync.Map{},
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		latencypredictor:    nil,
-		config:             DefaultConfig,
+		config:              DefaultConfig,
 	}
 }
 

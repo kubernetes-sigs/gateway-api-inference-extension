@@ -124,22 +124,19 @@ func (s *SLOAwareRouter) validatePrediction(
 
 	if s.config.StreamingMode == true {
 		bufferedTPOT := sloCtx.avgTPOTSLO * s.config.SLOBufferFactor
-	// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
-	if podMinTPOTSLO > 0 {
-		if podMinTPOTSLO < sloCtx.avgTPOTSLO {
-			log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", sloCtx.avgTPOTSLO)
+		// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
+		if podMinTPOTSLO > 0 {
+			if podMinTPOTSLO < sloCtx.avgTPOTSLO {
+				log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", sloCtx.avgTPOTSLO)
+			}
+			bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*s.config.SLOBufferFactor)
 		}
-		bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*s.config.SLOBufferFactor)
-	}
 
-	tpotOk = pred.TPOT < bufferedTPOT
-	headroom = bufferedTPOT - pred.TPOT
+		tpotOk = pred.TPOT < bufferedTPOT
+		headroom = bufferedTPOT - pred.TPOT
 	}
-	
-
 
 	isValid = ttftOk && tpotOk
-	
-	
+
 	return
 }

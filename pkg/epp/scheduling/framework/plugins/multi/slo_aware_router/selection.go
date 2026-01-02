@@ -263,8 +263,8 @@ func (s *SLOAwareRouter) handleNegativeHeadroomPodsHierarchical(
 	// Priority 1: both TTFT and TPOT negative -> blended deficits (both active)
 	alpha := s.config.NegHeadroomTTFTWeight
 	beta := s.config.NegHeadroomTPOTWeight
-	if s.config.StreamingMode == false{
-		alpha  = 1
+	if s.config.StreamingMode == false {
+		alpha = 1
 		beta = 0
 	}
 	if len(negTTFTNegTPOT) > 0 {

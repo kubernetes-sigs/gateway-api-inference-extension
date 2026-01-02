@@ -190,7 +190,7 @@ var SelectionMode = func() podSelectionMode {
 	return podSelectionLinear
 }()
 
-// StreamingMode indicates if the router should operate in streaming mode. If off only train 
+// StreamingMode indicates if the router should operate in streaming mode. If off only train
 var StreamingMode = func() bool {
 	if v, ok := os.LookupEnv("STREAMING_MODE"); ok {
 		lowerV := strings.ToLower(v)
