@@ -188,9 +188,9 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 	}
 
 	if sloCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
@@ -214,7 +214,7 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	}
 	now := time.Now()
 	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if sloCtx.ttft > 0 {

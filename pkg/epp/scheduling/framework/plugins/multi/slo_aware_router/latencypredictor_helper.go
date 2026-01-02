@@ -122,11 +122,12 @@ func processFirstTokenForLatencyPrediction(
 	streamingMode bool,
 	sloCtx *sloRequestContext,
 	now time.Time,
+	samplingMean float64,
+	maxSampledTokens int,
 ) {
 	logger := log.FromContext(ctx)
 
-	initializeSampler(ctx, sloCtx)
-
+	initializeSampler(ctx, sloCtx, samplingMean, maxSampledTokens)
 	// Actual TTFT
 	sloCtx.ttft = float64(now.Sub(sloCtx.requestReceivedTimestamp).Milliseconds())
 	sloCtx.generatedTokenCount = 1
@@ -150,11 +151,11 @@ func processFirstTokenForLatencyPrediction(
 	refreshLastSeenMetrics(ctx, sloCtx)
 }
 
-func initializeSampler(ctx context.Context, sloCtx *sloRequestContext) {
+func initializeSampler(ctx context.Context, sloCtx *sloRequestContext, samplingMean float64, maxSampledTokens int) {
 	if sloCtx.tokenSampler == nil {
 		logger := log.FromContext(ctx)
 		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
+		sloCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
 	}
 }
@@ -228,13 +229,15 @@ func processTokenForLatencyPrediction(
 	predictor latencypredictor.PredictorInterface,
 	sloCtx *sloRequestContext,
 	now time.Time,
+	samplingMean float64,
+	maxSampledTokens int,
 ) {
 	logger := log.FromContext(ctx)
 
 	// Initialize sampler if not yet
 	if sloCtx.tokenSampler == nil {
 		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
+		sloCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
 	}
 

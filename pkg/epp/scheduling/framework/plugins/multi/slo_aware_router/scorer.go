@@ -69,23 +69,23 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	SamplingMean:              DefaultSamplingMean,
-	MaxSampledTokens:          MaxSampledTokens,
-	SLOBufferFactor:           SLOBufferFactor,
-	NegHeadroomTTFTWeight:     NegHeadroomTTFTWeight,
-	NegHeadroomTPOTWeight:     NegHeadroomTPOTWeight,
-	HeadroomTTFTWeight:        HeadroomTTFTWeight,
-	HeadroomTPOTWeight:        HeadroomTPOTWeight,
-	HeadroomSelectionStrategy: string(HeadroomSelectionStrategy),
-	CompositeKVWeight:         CompositeKVWeight,
-	CompositeQueueWeight:      CompositeQueueWeight,
-	CompositePrefixWeight:     CompositePrefixWeight,
-	EpsilonExploreSticky:      EpsilonExploreSticky,
-	EpsilonExploreNeg:         EpsilonExploreNeg,
-	AffinityGateTau:           AffinityGateTau,
-	AffinityGateTauGlobal:     AffinityGateTauGlobal,
-	SelectionMode:             string(SelectionMode),
-	StreamingMode:             StreamingMode,
+	SamplingMean:              1000,
+	MaxSampledTokens:          5,
+	SLOBufferFactor:           1,
+	NegHeadroomTTFTWeight:     0.8,
+	NegHeadroomTPOTWeight:     0.2,
+	HeadroomTTFTWeight:        0.8,
+	HeadroomTPOTWeight:        0.2,
+	HeadroomSelectionStrategy: "least",
+	CompositeKVWeight:         1,
+	CompositeQueueWeight:      1,
+	CompositePrefixWeight:     1,
+	EpsilonExploreSticky:      0.01,
+	EpsilonExploreNeg:         0.01,
+	AffinityGateTau:           0.80,
+	AffinityGateTauGlobal:     0.99,
+	SelectionMode:             "linear",
+	StreamingMode:             true,
 }
 
 func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
@@ -217,9 +217,9 @@ func (s *SLOAwareRouter) epsilonGreedyAffinityGate(
 	}
 
 	// ε-exploration branch
-	if r.Float64() < EpsilonExploreSticky {
+	if r.Float64() < s.config.EpsilonExploreSticky {
 		logger.V(logutil.DEBUG).Info("ε-greedy: exploring (ignoring affinity gate)",
-			"path", label, "epsilon", EpsilonExploreSticky, "eligibleCount", len(eligible))
+			"path", label, "epsilon", s.config.EpsilonExploreSticky, "eligibleCount", len(eligible))
 		return candidates, false
 	}
 
@@ -295,7 +295,7 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 		scores[pod] = 0
 	}
 	allPreds := append([]podPredictionResult(nil), predictions...)
-	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", AffinityGateTauGlobal)
+	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", s.config.AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
 	allPodsInvalid := (sloCtx.ttftSLO > 0 && (sloCtx.avgTPOTSLO > 0 || !s.config.StreamingMode))

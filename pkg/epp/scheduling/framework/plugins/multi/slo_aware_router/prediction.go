@@ -89,7 +89,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, request *sched
 			"prefixCacheScore", predResult.PrefixCacheScore,
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
-			"buffer", SLOBufferFactor,
+			"buffer", s.config.SLOBufferFactor,
 			"podMinTPOTSLO", podMinTPOTSLO,
 			"ttftSLO", sloCtx.ttftSLO,
 			"requestTPOTSLO", sloCtx.avgTPOTSLO,
