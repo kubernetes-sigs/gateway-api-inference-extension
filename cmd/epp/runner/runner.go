@@ -286,7 +286,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] { // initialize the data layer from configuration
-		if err := datalayer.WithConfig(eppConfig.DataConfig, setupLog); err != nil {
+		if err := datalayer.WithConfig(eppConfig.DataConfig); err != nil {
 			setupLog.Error(err, "failed to initialize data layer")
 			return err
 		}

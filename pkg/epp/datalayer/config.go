@@ -18,8 +18,6 @@ package datalayer
 
 import (
 	"fmt"
-
-	"github.com/go-logr/logr"
 )
 
 // Config defines the configuration of EPP data layer, as the set of DataSources and
@@ -35,7 +33,7 @@ type DataSourceConfig struct {
 }
 
 // WithConfig sets up the data layer based on the provided configuration.
-func WithConfig(cfg *Config, log logr.Logger) error {
+func WithConfig(cfg *Config) error {
 	for _, srcCfg := range cfg.Sources {
 		for _, extractor := range srcCfg.Extractors {
 			if err := srcCfg.Plugin.AddExtractor(extractor); err != nil {
