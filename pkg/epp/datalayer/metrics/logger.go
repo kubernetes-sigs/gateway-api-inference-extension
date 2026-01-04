@@ -109,17 +109,17 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore datalayer.PoolInfo, 
 
 	podMetrics := datastore.PodList(podsWithFreshMetrics(stalenessThreshold))
 	logger.V(logutil.TRACE).Info("Refreshing Prometheus Metrics", "ReadyPods", len(podMetrics))
+	podCount := len(podMetrics)
+	metrics.RecordInferencePoolReadyPods(pool.Name, float64(podCount))
 
-	if len(podMetrics) == 0 {
+	if podCount == 0 {
 		return
 	}
 
 	totals := calculateTotals(podMetrics)
-	podCount := len(podMetrics)
 
 	metrics.RecordInferencePoolAvgKVCache(pool.Name, totals.kvCache/float64(podCount))
 	metrics.RecordInferencePoolAvgQueueSize(pool.Name, float64(totals.queueSize/podCount))
-	metrics.RecordInferencePoolReadyPods(pool.Name, float64(podCount))
 }
 
 // totals holds aggregated metric values
