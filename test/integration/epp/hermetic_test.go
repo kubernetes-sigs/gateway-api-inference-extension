@@ -1251,7 +1251,7 @@ func BeforeSuite() func() {
 	)
 	serverRunner.SecureServing = false
 
-	if err := serverRunner.SetupWithManager(context.Background(), mgr); err != nil {
+	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		logutil.Fatal(logger, err, "Failed to setup server runner")
 	}
 

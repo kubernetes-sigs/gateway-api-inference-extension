@@ -58,7 +58,7 @@ func (c *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
-func (c *ConfigMapReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (c *ConfigMapReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.ConfigMap{}).
 		Complete(c)

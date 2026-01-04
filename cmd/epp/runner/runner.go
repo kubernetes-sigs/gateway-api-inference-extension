@@ -153,6 +153,8 @@ func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runne
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
+
 	opts := runserver.NewOptions()
 	opts.AddFlags(pflag.CommandLine)
 	pflag.Parse()
@@ -165,7 +167,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 	// Print all flag values
 	flags := make(map[string]any)
 	flag.VisitAll(func(f *flag.Flag) {
@@ -338,12 +339,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, locator)
 	}
 
-	director := requestcontrol.NewDirectorWithConfig(
-		ds,
-		scheduler,
-		admissionController,
-		locator,
-		r.requestControlConfig)
+	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, locator, r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -361,7 +357,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
 	}
-	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
+	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
 		return err
 	}
