@@ -174,5 +174,5 @@ func (ds *datastore) parseBaseModelFromConfigMap(configmap *corev1.ConfigMap) (s
 		return "", errors.New("missing or empty baseModel in configmap")
 	}
 
-	return baseModel, nil
+	return strings.TrimSpace(baseModel), nil
 }
