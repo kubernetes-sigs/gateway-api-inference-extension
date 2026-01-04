@@ -53,7 +53,7 @@ func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunne
 }
 
 // SetupWithManager sets up the runner with the given manager.
-func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 	// Create the configmap controller and register it with the manager
 	if err := (&controller.ConfigMapReconciler{
 		Datastore: r.Datastore,
@@ -61,6 +61,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("failed setting up ConfigMap Reconciler - %w", err)
 	}
+
 	return nil
 }
 
