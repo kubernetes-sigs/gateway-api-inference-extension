@@ -158,10 +158,11 @@ func (ds *datastore) parseConfigMap(configmap *corev1.ConfigMap) (string, sets.S
 		}
 
 		for _, adapter := range list {
-			if strings.TrimSpace(adapter) == "" {
+			trimmedAdapter := strings.TrimSpace(adapter)
+			if trimmedAdapter == "" {
 				continue // skip empty entries
 			}
-			adapters.Insert(adapter)
+			adapters.Insert(trimmedAdapter)
 		}
 	}
 
