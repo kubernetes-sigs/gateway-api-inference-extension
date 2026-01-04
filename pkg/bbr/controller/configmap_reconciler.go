@@ -27,7 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 type ConfigMapReconciler struct {
@@ -36,9 +35,7 @@ type ConfigMapReconciler struct {
 }
 
 func (c *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).V(logutil.DEFAULT)
-	ctx = ctrl.LoggerInto(ctx, logger)
-
+	logger := log.FromContext(ctx)
 	logger.Info("Reconciling ConfigMap")
 
 	configmap := &corev1.ConfigMap{}
