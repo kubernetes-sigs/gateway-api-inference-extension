@@ -13,7 +13,7 @@
       Make sure the `InferencePool` is active before sending traffic.
 
       ```bash
-      kubectl describe inferencepools.inference.networking.k8s.io vllm-llama3-8b-instruct
+      kubectl get inferencepool vllm-llama3-8b-instruct -o yaml
       ```
 
-      Check that the status shows `Accepted=True` and `ResolvedRefs=True`. This confirms the InferencePool is ready to handle traffic.
+      The `InferencePool` status should include `Accepted=True` and `ResolvedRefs=True`.
