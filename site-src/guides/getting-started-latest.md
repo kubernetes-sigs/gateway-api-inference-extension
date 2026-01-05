@@ -226,7 +226,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       kubectl describe inferencepools.inference.networking.k8s.io vllm-llama3-8b-instruct
       ```
 
-   Check that the status shows Accepted=True and ResolvedRefs=True. This confirms the InferencePool is ready to handle traffic.
+      Check that the status shows Accepted=True and ResolvedRefs=True. This confirms the InferencePool is ready to handle traffic.
 
 ### Deploy InferenceObjective (Optional)
 
