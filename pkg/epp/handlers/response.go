@@ -129,7 +129,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 }
 
 func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(responseBodyBytes, bodyByteLimit, setEoS)
+	commonResponses := common.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
 	responses := []*extProcPb.ProcessingResponse{}
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{

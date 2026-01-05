@@ -20,9 +20,15 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 )
 
-// BuildChunkedBodyResponses splits the bodyBytes into chunks of size byteLimit and returns a slice of CommonResponse.
+const (
+	// BodyByteLimit is the max limit of 62Kb per streamed chunk.
+	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
+	BodyByteLimit = 62000
+)
+
+// BuildChunkedBodyResponses splits the bodyBytes into chunks of size BodyByteLimit and returns a slice of CommonResponse.
 // If setEos is true, the last chunk will have EndOfStream set to true.
-func BuildChunkedBodyResponses(bodyBytes []byte, byteLimit int, setEos bool) []*extProcPb.CommonResponse {
+func BuildChunkedBodyResponses(bodyBytes []byte, setEos bool) []*extProcPb.CommonResponse {
 	responses := []*extProcPb.CommonResponse{}
 	startingIndex := 0
 	bodyLen := len(bodyBytes)
@@ -44,7 +50,7 @@ func BuildChunkedBodyResponses(bodyBytes []byte, byteLimit int, setEos bool) []*
 
 	for startingIndex < bodyLen {
 		eos := false
-		len := min(bodyLen-startingIndex, byteLimit)
+		len := min(bodyLen-startingIndex, BodyByteLimit)
 		chunk := bodyBytes[startingIndex : len+startingIndex]
 		if setEos && len+startingIndex >= bodyLen {
 			eos = true

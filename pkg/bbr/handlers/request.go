@@ -31,8 +31,6 @@ import (
 
 const (
 	modelHeader = "X-Gateway-Model-Name"
-	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
-	bodyByteLimit = 62000
 )
 
 type RequestBody struct {
@@ -122,7 +120,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, bodyByteLimit, true)
+	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
 	for _, commonResp := range commonResponses {
 		responses = append(responses, &eppb.ProcessingResponse{
 			Response: &eppb.ProcessingResponse_RequestBody{

@@ -21,11 +21,6 @@ import (
 	"testing"
 )
 
-const (
-	// copy from pkg/epp/handlers/server.go
-	bodyByteLimit = 62000
-)
-
 func TestBuildChunkedBodyResponses(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -39,34 +34,34 @@ func TestBuildChunkedBodyResponses(t *testing.T) {
 		},
 		{
 			name:                 "below limit",
-			count:                bodyByteLimit - 1000,
+			count:                BodyByteLimit - 1000,
 			expectedMessageCount: 1,
 		},
 		{
 			name:                 "at limit",
-			count:                bodyByteLimit,
+			count:                BodyByteLimit,
 			expectedMessageCount: 1,
 		},
 		{
 			name:                 "off by one error?",
-			count:                bodyByteLimit + 1,
+			count:                BodyByteLimit + 1,
 			expectedMessageCount: 2,
 		},
 		{
 			name:                 "above limit",
-			count:                bodyByteLimit + 1000,
+			count:                BodyByteLimit + 1000,
 			expectedMessageCount: 2,
 		},
 		{
 			name:                 "above limit",
-			count:                (bodyByteLimit * 2) + 1000,
+			count:                (BodyByteLimit * 2) + 1000,
 			expectedMessageCount: 3,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			arr := generateBytes(test.count)
-			responses := BuildChunkedBodyResponses(arr, bodyByteLimit, true)
+			responses := BuildChunkedBodyResponses(arr, true)
 			for i, response := range responses {
 				eos := response.BodyMutation.GetStreamedResponse().GetEndOfStream()
 				if eos == true && i+1 != len(responses) {

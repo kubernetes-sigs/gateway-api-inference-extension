@@ -40,11 +40,6 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-const (
-	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
-	bodyByteLimit = 62000
-)
-
 func NewStreamingServer(datastore Datastore, director Director) *StreamingServer {
 	return &StreamingServer{
 		director:  director,
