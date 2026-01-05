@@ -39,7 +39,7 @@ import (
 
 const (
 	// vLLM default token block size is 16 tokens
-	DefaultBlockSize = 16
+	DefaultBlockSizeTokens = 16
 	// The maximum number of blocks to match. Two long requests with the same prefix up to this
 	// limit will be indistinguishable.
 	// This parameter provides a trade-off between cache size, prefix matching speed and matching
@@ -68,7 +68,7 @@ const (
 
 var DefaultConfig = Config{
 	AutoTune:               true,
-	BlockSize:              DefaultBlockSize,
+	BlockSizeTokens:        DefaultBlockSizeTokens,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 }
@@ -77,9 +77,9 @@ type Config struct {
 	// If set to true, the plugin will automatically adjust the configuration based on various
 	// metrics from the model servers.
 	AutoTune bool `json:"autoTune"`
-	// The input prompt is broken into sizes of BlockSize to calculate block hashes . Requests
+	// The input prompt is broken into sizes of BlockSizeTokens to calculate block hashes . Requests
 	// with length shorter than the block size will be ignored.
-	BlockSize int `json:"blockSize"`
+	BlockSizeTokens int `json:"blockSize"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
@@ -178,10 +178,10 @@ func New(ctx context.Context, config Config) *Plugin {
 		)
 	}
 
-	if config.BlockSize <= 0 {
-		config.BlockSize = DefaultBlockSize
+	if config.BlockSizeTokens <= 0 {
+		config.BlockSizeTokens = DefaultBlockSizeTokens
 		log.FromContext(ctx).V(logutil.DEFAULT).Info("BlockSize is not positive, using default value",
-			"default", DefaultBlockSize)
+			"default", DefaultBlockSizeTokens)
 	}
 
 	if config.MaxPrefixBlocksToMatch <= 0 {
@@ -430,12 +430,12 @@ func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
 // otherwise use block size from the configuration
 func getBlockSize(pods []types.Pod, config Config) int {
 	if !config.AutoTune {
-		return config.BlockSize
+		return config.BlockSizeTokens
 	}
 
 	// Fallback to BlockSize if no metrics are available.
 	if len(pods) == 0 {
-		return config.BlockSize
+		return config.BlockSizeTokens
 	}
 
 	// Since all PODs originate from the same inference pool, they are considered to have identical configurations.
@@ -446,5 +446,5 @@ func getBlockSize(pods []types.Pod, config Config) int {
 			return cacheBlockSize
 		}
 	}
-	return config.BlockSize
+	return config.BlockSizeTokens
 }
