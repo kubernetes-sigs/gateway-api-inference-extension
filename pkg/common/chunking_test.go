@@ -14,14 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package handlers
+package common
 
 import (
 	"crypto/rand"
 	"testing"
 )
 
-func TestBuildCommonResponses(t *testing.T) {
+const (
+	// copy from pkg/epp/handlers/server.go
+	bodyByteLimit = 62000
+)
+
+func TestBuildChunkedBodyResponses(t *testing.T) {
 	tests := []struct {
 		name                 string
 		count                int
@@ -61,7 +66,7 @@ func TestBuildCommonResponses(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			arr := generateBytes(test.count)
-			responses := buildCommonResponses(arr, bodyByteLimit, true)
+			responses := BuildChunkedBodyResponses(arr, bodyByteLimit, true)
 			for i, response := range responses {
 				eos := response.BodyMutation.GetStreamedResponse().GetEndOfStream()
 				if eos == true && i+1 != len(responses) {

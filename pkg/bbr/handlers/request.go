@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -121,7 +122,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
-	commonResponses := buildChunkedBodyResponses(requestBodyBytes, bodyByteLimit, true)
+	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, bodyByteLimit, true)
 	for _, commonResp := range commonResponses {
 		responses = append(responses, &eppb.ProcessingResponse{
 			Response: &eppb.ProcessingResponse_RequestBody{
@@ -131,51 +132,6 @@ func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBy
 			},
 		})
 	}
-	return responses
-}
-
-func buildChunkedBodyResponses(bodyBytes []byte, byteLimit int, setEos bool) []*eppb.CommonResponse {
-	responses := []*eppb.CommonResponse{}
-	startingIndex := 0
-	bodyLen := len(bodyBytes)
-
-	if bodyLen == 0 {
-		return []*eppb.CommonResponse{
-			{
-				BodyMutation: &eppb.BodyMutation{
-					Mutation: &eppb.BodyMutation_StreamedResponse{
-						StreamedResponse: &eppb.StreamedBodyResponse{
-							Body:        bodyBytes,
-							EndOfStream: setEos,
-						},
-					},
-				},
-			},
-		}
-	}
-
-	for startingIndex < bodyLen {
-		eos := false
-		len := min(bodyLen-startingIndex, byteLimit)
-		chunk := bodyBytes[startingIndex : len+startingIndex]
-		if setEos && len+startingIndex >= bodyLen {
-			eos = true
-		}
-
-		commonResp := &eppb.CommonResponse{
-			BodyMutation: &eppb.BodyMutation{
-				Mutation: &eppb.BodyMutation_StreamedResponse{
-					StreamedResponse: &eppb.StreamedBodyResponse{
-						Body:        chunk,
-						EndOfStream: eos,
-					},
-				},
-			},
-		}
-		responses = append(responses, commonResp)
-		startingIndex += len
-	}
-
 	return responses
 }
 
