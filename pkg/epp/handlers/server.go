@@ -165,6 +165,17 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		if reqCtx.RequestRunning {
 			metrics.DecRunningRequests(reqCtx.IncomingModelName)
 		}
+
+		// If we scheduled a pod (TargetPod != nil) but never marked the response  as complete (e.g. error, disconnect,
+		// panic), force the completion hooks to run.
+		if reqCtx.TargetPod != nil && !reqCtx.ResponseComplete {
+			// Use a fresh context as the request context might be canceled (Client Disconnect).
+			// We only need logging from the original context.
+			cleanupCtx := log.IntoContext(context.Background(), logger)
+			if _, err := s.director.HandleResponseBodyComplete(cleanupCtx, reqCtx); err != nil {
+				logger.Error(err, "error in HandleResponseBodyComplete")
+			}
+		}
 	}(err, reqCtx)
 
 	for {
@@ -275,6 +286,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
 				if v.ResponseBody.EndOfStream {
 					loggerTrace.Info("stream completed")
+					reqCtx.ResponseComplete = true
+					if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
+						logger.Error(err, "error in HandleResponseBodyComplete")
+					}
 
 					reqCtx.ResponseCompleteTimestamp = time.Now()
 					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
