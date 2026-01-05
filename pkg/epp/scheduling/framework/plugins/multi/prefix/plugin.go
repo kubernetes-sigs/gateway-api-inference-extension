@@ -307,7 +307,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	matchLen := state.PrefixCacheServers[ServerID(targetPod.GetPod().NamespacedName)]
 
 	blockSize := getBlockSize(primaryProfileResult.TargetPods, p.config)
-	// report matched abd total prefix length in chars
+	// report matched and total prefix length in chars
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize*AverageCharactersPerToken, total*blockSize*AverageCharactersPerToken)
 }
 
