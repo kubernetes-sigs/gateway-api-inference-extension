@@ -244,10 +244,6 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMR
 		endpoint.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total, blockSize))
 	}
 
-	state := &SchedulingContextState{
-		PrefixHashes:       hashes,
-		PrefixCacheServers: prefixCacheServers,
-	}
 	// Store the state in plugin state for later use.
 	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
 	return nil
@@ -401,12 +397,6 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 		return nil
 	}
 
-	shortInput := userInput
-	if len(shortInput) > 10 {
-		shortInput = shortInput[:10]
-	}
-	fmt.Printf("in hashPrompt: user input len=%d, block sz=%d tokens, user input: %s\n", len(userInput), cacheBlockSize, shortInput)
-
 	// convert block size from tokens to characters
 	cacheBlockSize *= AverageCharactersPerToken
 
@@ -438,7 +428,6 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 		prevBlockHash = res[len(res)-1]
 	}
 
-	fmt.Printf("in hashPrompt: created %d hashes for user input: %s\n", len(res), shortInput)
 	return res
 }
 
