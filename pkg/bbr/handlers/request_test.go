@@ -173,7 +173,6 @@ func TestHandleRequestBody(t *testing.T) {
 					},
 				},
 			},
-
 		},
 		{
 			name: "success-with-streaming-large-body",
