@@ -229,6 +229,11 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMReque
 		matchLen := prefixCacheServers[ServerID(pod.GetPod().NamespacedName)]
 		pod.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total))
 	}
+
+	state := &SchedulingContextState{
+		PrefixHashes:       hashes,
+		PrefixCacheServers: prefixCacheServers,
+	}
 	// Store the state in plugin state for later use.
 	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
 	return nil
