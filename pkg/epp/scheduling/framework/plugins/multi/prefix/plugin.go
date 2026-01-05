@@ -223,17 +223,16 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMReque
 	blockSize := getBlockSize(pods, p.config)
 	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	total := len(hashes) * blockSize
-	prefixCacheServers := p.matchLongestPrefix(ctx, hashes, blockSize)
+	state := &SchedulingContextState{
+		PrefixHashes:       hashes,
+		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes, blockSize),
+	}
 
 	for _, pod := range pods {
-		matchLen := prefixCacheServers[ServerID(pod.GetPod().NamespacedName)]
+		matchLen := state.PrefixCacheServers[ServerID(pod.GetPod().NamespacedName)]
 		pod.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total))
 	}
 
-	state := &SchedulingContextState{
-		PrefixHashes:       hashes,
-		PrefixCacheServers: prefixCacheServers,
-	}
 	// Store the state in plugin state for later use.
 	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
 	return nil
@@ -365,8 +364,7 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle)
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
 func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
-	// fmt.Printf("in hashPrompt\n")
-	loggerDebug := log.FromContext(ctx) //.V(logutil.DEBUG)
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
 		return nil
@@ -377,12 +375,6 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 		loggerDebug.Error(err, "Failed to get user input bytes")
 		return nil
 	}
-
-	shortInput := userInput
-	if len(shortInput) > 10 {
-		shortInput = shortInput[:10]
-	}
-	fmt.Printf("in hashPrompt: user input len=%d, block sz=%d tokens, user input: %s\n", len(userInput), cacheBlockSize, shortInput)
 
 	// convert block size from tokens to characters
 	cacheBlockSize *= AverageCharactersPerToken
@@ -415,7 +407,6 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 		prevBlockHash = res[len(res)-1]
 	}
 
-	fmt.Printf("in hashPrompt: created %d hashes for user input: %s\n", len(res), shortInput)
 	return res
 }
 
