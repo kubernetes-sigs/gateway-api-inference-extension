@@ -28,7 +28,11 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const modelHeader = "X-Gateway-Model-Name"
+const (
+	modelHeader = "X-Gateway-Model-Name"
+	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
+	bodyByteLimit = 62000
+)
 
 type RequestBody struct {
 	Model string `json:"model"`
@@ -117,22 +121,62 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
-	return append(responses, &eppb.ProcessingResponse{
-		Response: &eppb.ProcessingResponse_RequestBody{
-			RequestBody: &eppb.BodyResponse{
-				Response: &eppb.CommonResponse{
-					BodyMutation: &eppb.BodyMutation{
-						Mutation: &eppb.BodyMutation_StreamedResponse{
-							StreamedResponse: &eppb.StreamedBodyResponse{
-								Body:        requestBodyBytes,
-								EndOfStream: true,
-							},
+	commonResponses := buildChunkedBodyResponses(requestBodyBytes, bodyByteLimit, true)
+	for _, commonResp := range commonResponses {
+		responses = append(responses, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_RequestBody{
+				RequestBody: &eppb.BodyResponse{
+					Response: commonResp,
+				},
+			},
+		})
+	}
+	return responses
+}
+
+func buildChunkedBodyResponses(bodyBytes []byte, byteLimit int, setEos bool) []*eppb.CommonResponse {
+	responses := []*eppb.CommonResponse{}
+	startingIndex := 0
+	bodyLen := len(bodyBytes)
+
+	if bodyLen == 0 {
+		return []*eppb.CommonResponse{
+			{
+				BodyMutation: &eppb.BodyMutation{
+					Mutation: &eppb.BodyMutation_StreamedResponse{
+						StreamedResponse: &eppb.StreamedBodyResponse{
+							Body:        bodyBytes,
+							EndOfStream: setEos,
 						},
 					},
 				},
 			},
-		},
-	})
+		}
+	}
+
+	for startingIndex < bodyLen {
+		eos := false
+		len := min(bodyLen-startingIndex, byteLimit)
+		chunk := bodyBytes[startingIndex : len+startingIndex]
+		if setEos && len+startingIndex >= bodyLen {
+			eos = true
+		}
+
+		commonResp := &eppb.CommonResponse{
+			BodyMutation: &eppb.BodyMutation{
+				Mutation: &eppb.BodyMutation_StreamedResponse{
+					StreamedResponse: &eppb.StreamedBodyResponse{
+						Body:        chunk,
+						EndOfStream: eos,
+					},
+				},
+			},
+		}
+		responses = append(responses, commonResp)
+		startingIndex += len
+	}
+
+	return responses
 }
 
 // HandleRequestHeaders handles request headers.
