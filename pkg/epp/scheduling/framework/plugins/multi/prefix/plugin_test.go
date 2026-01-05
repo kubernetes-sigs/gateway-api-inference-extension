@@ -40,7 +40,7 @@ var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
 		AutoTune:               false,
-		BlockSize:              1,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -209,7 +209,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 func TestPrefixPluginChatCompletions(t *testing.T) {
 	config := Config{
-		BlockSize:              1,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -243,7 +243,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 
 func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	config := Config{
-		BlockSize:              2, // Use larger block size for more predictable JSON marshaling
+		BlockSizeTokens:        2, // Use larger block size for more predictable JSON marshaling
 		AutoTune:               false,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
@@ -357,7 +357,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 func BenchmarkPrefixPluginStress(b *testing.B) {
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              1,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -417,29 +417,29 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 		{
 			name: "all zero",
 			config: Config{
-				BlockSize:              0,
+				BlockSizeTokens:        0,
 				MaxPrefixBlocksToMatch: 0,
 				LRUCapacityPerServer:   0,
 			},
-			expectBlock:    DefaultBlockSize,
+			expectBlock:    DefaultBlockSizeTokens,
 			expectMaxMatch: DefaultMaxPrefixBlocks,
 			expectCapacity: DefaultLRUCapacityPerServer,
 		},
 		{
 			name: "negative values",
 			config: Config{
-				BlockSize:              -5,
+				BlockSizeTokens:        -5,
 				MaxPrefixBlocksToMatch: -10,
 				LRUCapacityPerServer:   -100,
 			},
-			expectBlock:    DefaultBlockSize,
+			expectBlock:    DefaultBlockSizeTokens,
 			expectMaxMatch: DefaultMaxPrefixBlocks,
 			expectCapacity: DefaultLRUCapacityPerServer,
 		},
 		{
 			name: "mixed valid and invalid",
 			config: Config{
-				BlockSize:              32,    // valid
+				BlockSizeTokens:        32,    // valid
 				MaxPrefixBlocksToMatch: -1,    // invalid
 				LRUCapacityPerServer:   50000, // valid
 			},
@@ -450,7 +450,7 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 		{
 			name: "all valid",
 			config: Config{
-				BlockSize:              64,
+				BlockSizeTokens:        64,
 				MaxPrefixBlocksToMatch: 200,
 				LRUCapacityPerServer:   30000,
 			},
@@ -467,7 +467,7 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 
 			assert.NotEmpty(t, plugin)
 			assert.NotEmpty(t, plugin.indexer)
-			assert.Equal(t, tt.expectBlock, plugin.config.BlockSize)
+			assert.Equal(t, tt.expectBlock, plugin.config.BlockSizeTokens)
 			assert.Equal(t, tt.expectMaxMatch, plugin.config.MaxPrefixBlocksToMatch)
 			assert.Equal(t, tt.expectCapacity, plugin.config.LRUCapacityPerServer)
 		})
@@ -502,7 +502,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Enabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               true,
-			BlockSize:              32, // Should be ignored in favor of pod metrics (64)
+			BlockSizeTokens:        32, // Should be ignored in favor of pod metrics (64)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			// Should be ignored in favor of pod metrics (1000)
 			LRUCapacityPerServer: 1,
@@ -537,7 +537,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Disabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               false,
-			BlockSize:              8, // Should be used (32 chars, 8 tokens)
+			BlockSizeTokens:        8, // Should be used (32 chars, 8 tokens)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			LRUCapacityPerServer:   1, // Should be used, and the first hash should be evicted due to the small
 		}
@@ -581,7 +581,7 @@ func randomPrompt(n int) string {
 
 func TestPrepareRequestData(t *testing.T) {
 	config := Config{
-		BlockSize:              1,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
@@ -644,7 +644,7 @@ func TestPrepareRequestData(t *testing.T) {
 func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              2,
+		BlockSizeTokens:        2,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
