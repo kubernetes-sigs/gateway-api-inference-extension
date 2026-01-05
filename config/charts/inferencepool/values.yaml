@@ -185,6 +185,9 @@ provider:
         #   http:
         #     maxRequestsPerConnection: 256000
 
+inferenceGateway:
+  name: inference-gateway
+
 # DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
 istio:
   destinationRule:

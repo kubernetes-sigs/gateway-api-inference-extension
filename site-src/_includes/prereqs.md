@@ -8,5 +8,5 @@ A cluster with:
 
 Tools:
 
-- [Helm](https://helm.sh/docs/intro/install/).
-- [jq](https://jqlang.org/download/).
+- [Helm](https://helm.sh/docs/intro/install/)
+- [jq](https://jqlang.org/download/)
