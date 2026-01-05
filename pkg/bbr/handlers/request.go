@@ -29,9 +29,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-const (
-	modelHeader = "X-Gateway-Model-Name"
-)
+const modelHeader = "X-Gateway-Model-Name"
 
 type RequestBody struct {
 	Model string `json:"model"`
