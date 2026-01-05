@@ -126,7 +126,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/gke/gateway.yaml
          ```
 
-         Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
+      1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
 
          ```bash
          $ kubectl get gateway inference-gateway
@@ -169,7 +169,9 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
 
          ```bash
-         kubectl get gateway inference-gateway
+         $ kubectl get gateway inference-gateway
+         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
+         inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
 === "NGINX Gateway Fabric"
@@ -182,15 +184,13 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/gateway.yaml
          ```
 
-      1. Verify the Gateway status
-         
-         Ensure that the Gateway is running and has been assigned an address:
+      1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
 
          ```bash
-         kubectl get gateway inference-gateway
+         $ kubectl get gateway inference-gateway
+         NAME                CLASS               ADDRESS         PROGRAMMED   AGE
+         inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
-
-         Check that the Gateway has been successfully provisioned and that its status shows Programmed=True
       
        For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
 
@@ -208,25 +208,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 ### Verify HttpRoute and InferencePool Status
 
-   1. Verify the `HttpRoute` status
-
-      Check that the HTTPRoute was successfully configured and references were resolved:
-
-      ```bash
-      kubectl get httproute vllm-llama3-8b-instruct -o yaml
-      ```
-
-      The route status should include Accepted=True and ResolvedRefs=True.
-
-   1. Verify the `InferencePool` Status
-
-      Make sure the InferencePool is active before sending traffic.
-
-      ```bash
-      kubectl describe inferencepools.inference.networking.k8s.io vllm-llama3-8b-instruct
-      ```
-
-      Check that the status shows Accepted=True and ResolvedRefs=True. This confirms the InferencePool is ready to handle traffic.
+--8<-- "site-src/_includes/verify-status.md"
 
 ### Deploy InferenceObjective (Optional)
 
