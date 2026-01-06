@@ -17,5 +17,11 @@ spec:
     - path:
         type: PathPrefix
         value: /
+      {{- if .Values.inferenceExtension.baseModel }}
+      headers:
+        - type: Exact
+          name: X-Gateway-Base-Model-Name
+          value: {{ .Values.inferenceExtension.baseModel }}
+      {{- end }}
     timeouts:
       request: 300s
