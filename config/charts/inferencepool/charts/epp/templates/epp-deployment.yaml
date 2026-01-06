@@ -70,39 +70,37 @@ spec:
         image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
         imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "IfNotPresent" }}
         args:
-        {{- if .Values.inferenceExtension.standaloneMode.enabled }}
-        - --endpoint-selector
-        - {{ .Values.inferenceExtension.endpointSelector.modelServer.matchLabels }}
-        - --endpoint-target-ports
-        - {{ .Values.inferenceExtension.endpointSelector.modelServers.targetPorts}}
-        {{- if eq (.Values.inferenceExtension.standaloneMode.modelServerType | default "vllm") "triton-tensorrt-llm" }}
-        - --total-queued-requests-metric
-        - "nv_trt_llm_request_metrics{request_type=waiting}"
-        - --kv-cache-usage-percentage-metric
-        - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
-        - --lora-info-metric
-        - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
+        {{- /* 1. Determine Model Server Type Logic */ -}}
+        {{- $modelServerType := "vllm" }}
+        {{- if .Values.inferenceExtension.endpointsServer.standalone }}
+          {{- $modelServerType = .Values.inferenceExtension.endpointsServer.modelServerType | default "vllm" }}
+        {{- else }}
+          {{- $modelServerType = .Values.global.inferencePool.modelServerType | default "vllm" }}
         {{- end }}
+        {{- /* 2. Mode Specific Flags */ -}}
+        {{- if .Values.inferenceExtension.endpointsServer.standalone }}
+        - --endpoint-selector
+        - {{ .Values.inferenceExtension.endpointsServer.modelServers.matchLabels }}
+        - --endpoint-target-ports
+        - {{ .Values.inferenceExtension.endpointsServer.targetPorts}}
         {{- else }}
         - --pool-name
         - {{ .Release.Name }}
         # The pool namespace is optional because EPP can default to the NAMESPACE env var.
-        # We still keep this here so that the template works with older versions of EPP, or other
-        # distros of EPP which may not have implemented the NAMESPACE env var defaulting behavior.
         - --pool-namespace
         - {{ .Release.Namespace }}
         {{- if ne .Values.global.inferencePool.apiVersion "inference.networking.k8s.io" }}
         - --pool-group
         - "{{ (split "/" .Values.global.inferencePool.apiVersion)._0 }}"
         {{- end }}
-        {{- if eq (.Values.global.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
+        {{- end }}
+        {{- if eq $modelServerType "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
         - "nv_trt_llm_request_metrics{request_type=waiting}"
         - --kv-cache-usage-percentage-metric
         - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
         - --lora-info-metric
         - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
-        {{- end }}
         {{- end }}
         - --zap-encoder
         - "json"

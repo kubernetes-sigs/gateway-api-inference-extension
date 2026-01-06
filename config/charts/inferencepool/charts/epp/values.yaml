@@ -9,13 +9,11 @@ inferenceExtension:
   env: []
   pluginsConfigFile: "default-plugins.yaml"
 
-  standaloneMode:
-    enabled: true
-    endpointSelector:
-      modelServers: # REQUIRED when standalone mode is true
-      # matchLabels:
-      #   app: vllm-llama3-8b-instruct
-      targetPorts: 8000
+  endpointsServer:
+    standalone: true
+#    endpointSelector: #required when standalone is true
+#      app: vllm-llama3-8b-instruct
+    targetPorts: 8000
     modelServerType: vllm # vllm, triton-tensorrt-llm
 
 

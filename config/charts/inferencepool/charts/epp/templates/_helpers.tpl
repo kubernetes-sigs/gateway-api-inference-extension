@@ -26,7 +26,7 @@ Cluster RBAC unique name
 {{- end -}}
 
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
-{{- if .Values.inferenceExtension.standaloneMode.enabled -}}
+{{- if .Values.inferenceExtension.endpointsServer.standalone -}}
 {{- /* LOGIC FOR STANDALONE EPP MODE */ -}}
 epp: {{ include "gateway-api-inference-extension.name" . }}
 {{- else -}}
