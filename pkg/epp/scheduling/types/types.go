@@ -56,7 +56,7 @@ func (r *LLMRequest) String() string {
 type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
-	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat_completions request body.
+	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat/completions request body.
 	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
 }
 
