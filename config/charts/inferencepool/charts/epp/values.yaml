@@ -11,8 +11,8 @@ inferenceExtension:
 
   endpointsServer:
     standalone: true
-#    endpointSelector: #required when standalone is true
-#      app: vllm-llama3-8b-instruct
+    # Required when standalone is true
+#    endpointSelector: app=vllm-llama3-8b-instruct
     targetPorts: 8000
     modelServerType: vllm # vllm, triton-tensorrt-llm
 
@@ -250,7 +250,7 @@ inferenceExtension:
       - containerPort: 8081
         name: http-8081
       - containerPort: 19001
-        name: metrics
+        name: metrics-19001
     resources:
       requests:
         cpu: 100m

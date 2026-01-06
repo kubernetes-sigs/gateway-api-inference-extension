@@ -80,9 +80,9 @@ spec:
         {{- /* 2. Mode Specific Flags */ -}}
         {{- if .Values.inferenceExtension.endpointsServer.standalone }}
         - --endpoint-selector
-        - {{ .Values.inferenceExtension.endpointsServer.modelServers.matchLabels }}
+        - {{ .Values.inferenceExtension.endpointsServer.endpointSelector | quote }}
         - --endpoint-target-ports
-        - {{ .Values.inferenceExtension.endpointsServer.targetPorts}}
+        - {{ .Values.inferenceExtension.endpointsServer.targetPorts | quote }}
         {{- else }}
         - --pool-name
         - {{ .Release.Name }}
