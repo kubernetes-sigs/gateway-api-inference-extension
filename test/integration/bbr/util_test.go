@@ -40,6 +40,12 @@ func ExpectBBRHeader(modelName string) *extProcPb.ProcessingResponse {
 									RawValue: []byte(modelName),
 								},
 							},
+							{
+								Header: &envoyCorev3.HeaderValue{
+									Key:      "X-Gateway-Base-Model-Name",
+									RawValue: []byte(""),
+								},
+							},
 						},
 					},
 				},
@@ -104,6 +110,12 @@ func ExpectBBRUnaryResponse(modelName string) *extProcPb.ProcessingResponse {
 								Header: &envoyCorev3.HeaderValue{
 									Key:      "X-Gateway-Model-Name",
 									RawValue: []byte(modelName),
+								},
+							},
+							{
+								Header: &envoyCorev3.HeaderValue{
+									Key:      "X-Gateway-Base-Model-Name",
+									RawValue: []byte(""),
 								},
 							},
 						},
