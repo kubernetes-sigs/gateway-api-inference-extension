@@ -192,11 +192,14 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		runner.Datastore = datastore.NewDatastore(ctx, pmf, 0)
 	}
 
+	prefixPlugin, err := prefix.New(ctx, prefix.DefaultConfig)
+	require.NoError(t, err)
+
 	defaultProfile := framework.NewSchedulerProfile().
 		WithScorers(
 			framework.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(), 1),
 			framework.NewWeightedScorer(scorer.NewQueueScorer(), 1),
-			framework.NewWeightedScorer(prefix.New(ctx, prefix.DefaultConfig), 1),
+			framework.NewWeightedScorer(prefixPlugin, 1),
 			framework.NewWeightedScorer(scorer.NewLoraAffinityScorer(), 1),
 		).
 		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
