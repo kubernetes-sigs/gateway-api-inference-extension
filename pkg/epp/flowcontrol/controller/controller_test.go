@@ -1133,9 +1133,9 @@ func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey types.Flow
 					},
 				}, nil
 			},
-			InterFlowDispatchPolicyFunc: func(_ int) (framework.InterFlowDispatchPolicy, error) {
-				return &frameworkmocks.MockInterFlowDispatchPolicy{
-					SelectQueueFunc: func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
+			FairnessPolicyFunc: func(_ int) (framework.FairnessPolicy, error) {
+				return &frameworkmocks.MockFairnessPolicy{
+					PickFunc: func(_ context.Context, _ framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
 						return currentQueue.FlowQueueAccessor(), nil
 					},
 				}, nil

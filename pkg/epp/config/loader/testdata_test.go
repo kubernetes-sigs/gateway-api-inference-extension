@@ -44,6 +44,7 @@ schedulingProfiles:
   - pluginRef: testPicker
 featureGates:
 - dataLayer
+- flowControl
 saturationDetector:
   queueDepthThreshold: 10
   kvCacheUtilThreshold: 0.8
@@ -92,6 +93,7 @@ data:
     - pluginRef: testExtractor
 featureGates:
 - dataLayer
+- flowControl
 `
 
 // successWithNoWeightText tests that scorers receive the default weight if unspecified.
@@ -394,6 +396,7 @@ data:
   - pluginRef: test-one
 featureGates:
 - dataLayer
+- flowControl
 `
 
 // errorBadExtractorReferenceText has a bad Extractor plugin reference
@@ -417,4 +420,5 @@ data:
     - test-one
 featureGates:
 - dataLayer
+- flowControl
 `

@@ -119,15 +119,20 @@ type RegistryShard interface {
 	// Returns an error wrapping `ErrFlowInstanceNotFound` if the flow instance does not exist.
 	IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
 
-	// InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy` for this shard.
-	// The registry guarantees that a non-nil default policy is returned if none is configured for the band.
-	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
-	InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error)
+	// FairnessPolicy retrieves the FairnessPolicy singleton configured for the specified priority band on this shard.
+	// This method provides access to the immutable logic component that governs inter-flow contention.
+	// The registry guarantees that a non-nil policy is returned for any active priority band.
+	//
+	// Returns:
+	//   - FairnessPolicy: The active policy instance.
+	//   - error: A wrapped ErrPriorityBandNotFound if the priority level is not configured on this shard.
+	FairnessPolicy(priority int) (framework.FairnessPolicy, error)
 
-	// PriorityBandAccessor retrieves a read-only accessor for a given priority level, providing a view of the band's
-	// state as seen by this specific shard. This is the primary entry point for inter-flow dispatch policies that need to
-	// inspect and compare multiple flow queues within the same priority band.
-	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
+	// PriorityBandAccessor retrieves the read-only view of the "Flow Group" for a specific priority level.
+	// This accessor provides the state of all contending flows within the band (as seen by this shard) and serves as the
+	// primary input for FairnessPolicy execution.
+	//
+	// Returns an error wrapping ErrPriorityBandNotFound if the priority level is not configured.
 	PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error)
 
 	// AllOrderedPriorityLevels returns all configured priority levels that this shard is aware of, sorted in descending

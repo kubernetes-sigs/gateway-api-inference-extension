@@ -298,7 +298,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			continue
 		}
 
-		item, err := sp.selectItem(originalBand)
+		item, err := sp.selectItem(ctx, originalBand)
 		if err != nil {
 			sp.logger.Error(err, "Failed to select item, skipping priority band for this cycle",
 				"priority", priority, "priorityName", originalBand.PriorityName())
@@ -330,15 +330,18 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	return false
 }
 
-// selectItem applies the configured inter- and intra-flow dispatch policies to select a single item.
-func (sp *ShardProcessor) selectItem(band framework.PriorityBandAccessor) (types.QueueItemAccessor, error) {
-	interP, err := sp.shard.InterFlowDispatchPolicy(band.Priority())
+// selectItem applies the configured fairness and intra-flow dispatch policies to select a single item.
+func (sp *ShardProcessor) selectItem(
+	ctx context.Context,
+	flowGroup framework.PriorityBandAccessor,
+) (types.QueueItemAccessor, error) {
+	fairnessP, err := sp.shard.FairnessPolicy(flowGroup.Priority())
 	if err != nil {
 		return nil, fmt.Errorf("could not get InterFlowDispatchPolicy: %w", err)
 	}
-	queue, err := interP.SelectQueue(band)
+	queue, err := fairnessP.Pick(ctx, flowGroup)
 	if err != nil {
-		return nil, fmt.Errorf("InterFlowDispatchPolicy %q failed to select queue: %w", interP.Name(), err)
+		return nil, fmt.Errorf("FairnessPolicy %q failed to select queue: %w", fairnessP.TypedName(), err)
 	}
 	if queue == nil {
 		return nil, nil

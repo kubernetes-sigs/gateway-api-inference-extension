@@ -29,11 +29,7 @@ import (
 func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 	t.Parallel()
 
-	// A minimal valid registry config, which is required for the success case.
-	validRegistryConfig, err := registry.NewConfig(registry.WithPriorityBand(
-		&registry.PriorityBandConfig{Priority: 1, PriorityName: "TestBand"},
-	))
-	require.NoError(t, err)
+	validRegistryConfig := &registry.Config{}
 
 	testCases := []struct {
 		name          string

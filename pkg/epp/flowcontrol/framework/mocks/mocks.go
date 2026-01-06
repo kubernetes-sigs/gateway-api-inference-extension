@@ -17,8 +17,11 @@ limitations under the License.
 package mocks
 
 import (
+	"context"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 // MockItemComparator is a simple stub mock for the `framework.ItemComparator` interface.
@@ -30,9 +33,9 @@ type MockItemComparator struct {
 func (m *MockItemComparator) Func() framework.ItemComparatorFunc { return m.FuncV }
 func (m *MockItemComparator) ScoreType() string                  { return m.ScoreTypeV }
 
-// MockFlowQueueAccessor is a simple stub mock for the `framework.FlowQueueAccessor` interface.
+// MockFlowQueueAccessor is a simple stub mock for the FlowQueueAccessor interface.
 // It is used for tests that require static, predictable return values from a queue accessor.
-// For complex, stateful queue behavior, use the mock in `contracts/mocks.MockManagedQueue`.
+// For complex, stateful queue behavior, use the mock in ../../contracts/mocks.MockManagedQueue.
 type MockFlowQueueAccessor struct {
 	NameV         string
 	LenV          int
@@ -61,19 +64,21 @@ func (m *MockFlowQueueAccessor) PeekTail() types.QueueItemAccessor {
 
 var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
 
-// MockPriorityBandAccessor is a behavioral mock for the `framework.MockPriorityBandAccessor` interface.
-// Simple accessors are configured with public value fields (e.g., `PriorityV`).
-// Complex methods with logic are configured with function fields (e.g., `IterateQueuesFunc`).
+// MockPriorityBandAccessor is a behavioral mock for the PriorityBandAccessor interface.
+// Simple accessors are configured with public value fields (e.g., PriorityV).
+// Complex methods with logic are configured with function fields (e.g., IterateQueuesFunc).
 type MockPriorityBandAccessor struct {
 	PriorityV         int
 	PriorityNameV     string
+	PolicyStateV      any
 	FlowKeysFunc      func() []types.FlowKey
 	QueueFunc         func(flowID string) framework.FlowQueueAccessor
-	IterateQueuesFunc func(callback func(queue framework.FlowQueueAccessor) (keepIterating bool))
+	IterateQueuesFunc func(callback func(flow framework.FlowQueueAccessor) (keepIterating bool))
 }
 
 func (m *MockPriorityBandAccessor) Priority() int        { return m.PriorityV }
 func (m *MockPriorityBandAccessor) PriorityName() string { return m.PriorityNameV }
+func (m *MockPriorityBandAccessor) PolicyState() any     { return m.PolicyStateV }
 
 func (m *MockPriorityBandAccessor) FlowKeys() []types.FlowKey {
 	if m.FlowKeysFunc != nil {
@@ -89,7 +94,7 @@ func (m *MockPriorityBandAccessor) Queue(id string) framework.FlowQueueAccessor 
 	return nil
 }
 
-func (m *MockPriorityBandAccessor) IterateQueues(callback func(queue framework.FlowQueueAccessor) bool) {
+func (m *MockPriorityBandAccessor) IterateQueues(callback func(flow framework.FlowQueueAccessor) bool) {
 	if m.IterateQueuesFunc != nil {
 		m.IterateQueuesFunc(callback)
 	}
@@ -180,23 +185,29 @@ func (m *MockIntraFlowDispatchPolicy) SelectItem(queue framework.FlowQueueAccess
 
 var _ framework.IntraFlowDispatchPolicy = &MockIntraFlowDispatchPolicy{}
 
-// MockInterFlowDispatchPolicy is a behavioral mock for the `framework.InterFlowDispatchPolicy` interface.
-// Simple accessors are configured with public value fields (e.g., `NameV`).
-// Complex methods with logic are configured with function fields (e.g., `SelectQueueFunc`).
-type MockInterFlowDispatchPolicy struct {
-	NameV           string
-	SelectQueueFunc func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
+// MockFairnessPolicy is a behavioral mock for the FairnessPolicy interface.
+// Simple accessors are configured with public value fields (e.g., NameV).
+// Complex methods with logic are configured with function fields (e.g., PickFunc).
+type MockFairnessPolicy struct {
+	TypedNameV   plugins.TypedName
+	NewStateFunc func(ctx context.Context) any
+	PickFunc     func(ctx context.Context, flowGroup framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
 }
 
-func (m *MockInterFlowDispatchPolicy) Name() string {
-	return m.NameV
+func (m *MockFairnessPolicy) TypedName() plugins.TypedName { return m.TypedNameV }
+
+func (m *MockFairnessPolicy) NewState(ctx context.Context) any {
+	if m.NewStateFunc != nil {
+		return m.NewStateFunc(ctx)
+	}
+	return nil
 }
 
-func (m *MockInterFlowDispatchPolicy) SelectQueue(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
-	if m.SelectQueueFunc != nil {
-		return m.SelectQueueFunc(band)
+func (m *MockFairnessPolicy) Pick(ctx context.Context, flowGroup framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
+	if m.PickFunc != nil {
+		return m.PickFunc(ctx, flowGroup)
 	}
 	return nil, nil
 }
 
-var _ framework.InterFlowDispatchPolicy = &MockInterFlowDispatchPolicy{}
+var _ framework.FairnessPolicy = &MockFairnessPolicy{}
