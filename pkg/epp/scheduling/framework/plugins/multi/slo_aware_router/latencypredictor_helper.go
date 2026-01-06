@@ -48,7 +48,7 @@ func refreshLastSeenMetrics(ctx context.Context, sloCtx *sloRequestContext) {
 	}
 }
 
-// GetMetricsForPrediction retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
+// getLatestMetricsForProfile retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
 func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.MetricsState, error) {
 	if len(sloCtx.lastSeenMetrics) == 0 {
 		return nil, errors.New("no last seen metrics available for prediction")
@@ -62,7 +62,7 @@ func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.Metr
 	return nil, fmt.Errorf("no metrics found for primary profile %s", primaryProfileName)
 }
 
-// ProcessPreRequest refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
+// processPreRequestForLatencyPrediction refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
 func processPreRequestForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
@@ -115,7 +115,7 @@ func processPreRequestForLatencyPrediction(
 	return err
 }
 
-// ProcessFirstToken records actual TTFT, trains, predicts first TPOT, updates sloCtx, and advances timestamp.
+// processFirstTokenForLatencyPrediction records actual TTFT, trains, predicts first TPOT, updates sloCtx, and advances timestamp.
 func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
@@ -223,7 +223,7 @@ func predictFirstTPOT(
 	metrics.RecordRequestTPOTPredictionDuration(ctx, sloCtx.schedulingRequest.TargetModel, sloCtx.incomingModelName, dur.Seconds())
 }
 
-// ProcessToken records actual inter-token latency, trains, predicts sampled TPOT, updates sloCtx, and advances timestamp.
+// processTokenForLatencyPrediction records actual inter-token latency, trains, predicts sampled TPOT, updates sloCtx, and advances timestamp.
 func processTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
