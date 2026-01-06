@@ -51,5 +51,5 @@ roleRef:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ Values.bbr.name}}-{{ .Release.Name }}
+  name: {{ .Values.bbr.name}}-{{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
