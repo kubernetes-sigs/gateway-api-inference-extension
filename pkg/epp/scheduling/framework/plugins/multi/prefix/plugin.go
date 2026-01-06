@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -74,7 +75,8 @@ const (
 
 var DefaultConfig = Config{
 	AutoTune:               true,
-	BlockSizeTokens:        DefaultBlockSizeTokens,
+	BlockSize:              0,
+	BlockSizeTokens:        0,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 }
@@ -83,9 +85,13 @@ type Config struct {
 	// If set to true, the plugin will automatically adjust the configuration based on various
 	// metrics from the model servers.
 	AutoTune bool `json:"autoTune"`
-	// The input prompt is broken into sizes of BlockSizeTokens to calculate block hashes . Requests
+	// The input prompt is broken into sizes of BlockSizeTokens to calculate block hashes. Requests
 	// with length shorter than the block size will be ignored.
-	BlockSizeTokens int `json:"blockSize"`
+	BlockSizeTokens int `json:"blockSizeTokens"`
+	// Depricated: Legacy block size defined in number of characters.
+	// In case only BlockSize is defined in the configuration - plugin initialization will fail.
+	// In case both BlockSize and BlockSizeTokens are defined - BlockSizeTokens is used.
+	BlockSize int `json:"blockSize"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
 	// be ignored.
 	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
@@ -169,13 +175,25 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 		}
 	}
 
-	p := New(handle.Context(), parameters).WithName(name)
+	p, err := New(handle.Context(), parameters)
+	if err != nil {
+		return nil, err
+	}
+
+	p.WithName(name)
 	go p.CleanUpInactivePods(handle.Context(), handle)
 	return p, nil
 }
 
 // New initializes a new prefix Plugin and returns its pointer.
-func New(ctx context.Context, config Config) *Plugin {
+func New(ctx context.Context, config Config) (*Plugin, error) {
+	// invalid configuration: only BlockSize is defined
+	if config.BlockSize > 0 && config.BlockSizeTokens <= 0 {
+		err := errors.New("BlockSize is depricated, use BlockSizeTokens instead, the value should be defined in tokens")
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "invalid prefix plugin configuration")
+		return nil, err
+	}
+
 	if config.LRUCapacityPerServer <= 0 {
 		config.LRUCapacityPerServer = DefaultLRUCapacityPerServer
 		log.FromContext(ctx).V(logutil.DEFAULT).Info(
@@ -202,7 +220,7 @@ func New(ctx context.Context, config Config) *Plugin {
 		config:      config,
 		pluginState: plugin.NewPluginState(ctx),
 		indexer:     newIndexer(ctx, config.LRUCapacityPerServer),
-	}
+	}, nil
 }
 
 // TypedName returns the type and name tuple of this plugin instance.

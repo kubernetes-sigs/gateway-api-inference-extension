@@ -37,6 +37,37 @@ import (
 // static check to ensure Plugin implements the PrepareDataPlugin interface.
 var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 
+func TestPrefixPluginValidation(t *testing.T) {
+	validConfigs := []Config{{
+		AutoTune:               false,
+		BlockSizeTokens:        1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}, {
+		AutoTune:               false,
+		BlockSize:              1,
+		BlockSizeTokens:        1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}}
+	invalidConfigs := []Config{{
+		AutoTune:               false,
+		BlockSize:              1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}}
+
+	for _, config := range validConfigs {
+		_, err := New(context.Background(), config)
+		assert.NoError(t, err)
+	}
+
+	for _, config := range invalidConfigs {
+		_, err := New(context.Background(), config)
+		assert.Error(t, err)
+	}
+}
+
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
 		AutoTune:               false,
@@ -44,7 +75,8 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics()}
 	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics()}
@@ -213,7 +245,8 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
 	endpoints := []types.Endpoint{endpoint1}
@@ -248,7 +281,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
 	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: &datalayer.Metrics{}}
@@ -362,7 +396,8 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(b, err)
 	types.NewCycleState()
 	var promptLen []int
 	for i := 1; i <= 1024; {
@@ -463,8 +498,9 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			plugin := New(context.Background(), tt.config)
+			plugin, err := New(context.Background(), tt.config)
 
+			assert.NoError(t, err)
 			assert.NotEmpty(t, plugin)
 			assert.NotEmpty(t, plugin.indexer)
 			assert.Equal(t, tt.expectBlock, plugin.config.BlockSizeTokens)
@@ -507,7 +543,8 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 			// Should be ignored in favor of pod metrics (1000)
 			LRUCapacityPerServer: 1,
 		}
-		plugin := New(context.Background(), config)
+		plugin, err := New(context.Background(), config)
+		assert.NoError(t, err)
 
 		// 1. Verify Score uses pod metrics for block size
 		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
@@ -541,7 +578,8 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			LRUCapacityPerServer:   1, // Should be used, and the first hash should be evicted due to the small
 		}
-		plugin := New(context.Background(), config)
+		plugin, err := New(context.Background(), config)
+		assert.NoError(t, err)
 
 		// 1. Verify Score uses config BlockSize
 		req.RequestId = uuid.NewString() // New request ID
@@ -585,7 +623,8 @@ func TestPrepareRequestData(t *testing.T) {
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
 	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
@@ -622,7 +661,7 @@ func TestPrepareRequestData(t *testing.T) {
 		},
 	}
 
-	err := plugin.PrepareRequestData(context.Background(), req2, endpoints)
+	err = plugin.PrepareRequestData(context.Background(), req2, endpoints)
 	assert.NoError(t, err)
 
 	// Verify pod1 has the correct prefix match info
@@ -648,7 +687,8 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(b, err)
 
 	// Test scenarios: varying number of messages and message lengths
 	scenarios := []struct {
