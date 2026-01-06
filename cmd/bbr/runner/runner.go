@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -106,18 +107,24 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	// label "inference-gateway.k8s.io/managed" = "true" is used for server-side filtering of configmaps.
 	// only the configmap objects with this label will be tracked by bbr.
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
-				&corev1.ConfigMap{}: {
-					Label: labels.SelectorFromSet(labels.Set{
-						"inference-gateway.k8s.io/managed": "true",
-					}),
-				},
+	cacheOptions := cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.ConfigMap{}: {
+				Label: labels.SelectorFromSet(labels.Set{
+					"inference-gateway.k8s.io/managed": "true",
+				}),
 			},
 		},
-		Metrics: metricsServerOptions,
-	})
+	}
+	// Apply namespace filtering only if env var is set
+	namespace := os.Getenv("NAMESPACE")
+	if namespace != "" {
+		cacheOptions.DefaultNamespaces = map[string]cache.Config{
+			namespace: {},
+		}
+	}
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Cache: cacheOptions, Metrics: metricsServerOptions})
 	if err != nil {
 		setupLog.Error(err, "Failed to create manager", "config", cfg)
 		return err
