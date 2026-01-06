@@ -6,6 +6,7 @@ app.kubernetes.io/name: {{ include "gateway-api-inference-extension.name" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
+inference-gateway.k8s.io/managed: "true"
 {{- end }}
 
 {{/*

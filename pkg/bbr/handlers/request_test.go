@@ -114,8 +114,14 @@ func TestHandleRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      "X-Gateway-Model-Name",
+												Key:      modelHeader,
 												RawValue: []byte("foo"),
+											},
+										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      baseModelHeader,
+												RawValue: []byte(""),
 											},
 										},
 									},
@@ -143,8 +149,14 @@ func TestHandleRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      "X-Gateway-Model-Name",
+												Key:      modelHeader,
 												RawValue: []byte("foo"),
+											},
+										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      baseModelHeader,
+												RawValue: []byte(""),
 											},
 										},
 									},
@@ -200,8 +212,14 @@ func TestHandleRequestBody(t *testing.T) {
 										SetHeaders: []*basepb.HeaderValueOption{
 											{
 												Header: &basepb.HeaderValue{
-													Key:      "X-Gateway-Model-Name",
+													Key:      modelHeader,
 													RawValue: []byte("foo"),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      baseModelHeader,
+													RawValue: []byte(""),
 												},
 											},
 										},
@@ -249,7 +267,7 @@ func TestHandleRequestBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &Server{streaming: test.streaming}
+			server := NewServer(test.streaming, &fakeDatastore{})
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, bodyBytes)
 			if err != nil {

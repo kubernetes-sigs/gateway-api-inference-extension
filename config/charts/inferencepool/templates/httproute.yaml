@@ -3,6 +3,8 @@ kind: HTTPRoute
 metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   parentRefs:
   - group: gateway.networking.k8s.io

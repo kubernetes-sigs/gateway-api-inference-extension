@@ -25,16 +25,22 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
 var (
@@ -66,6 +72,7 @@ func (r *Runner) WithExecutableName(exeName string) *Runner {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	setupLog.Info(r.bbrExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -85,8 +92,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	metrics.Register()
+	ds := datastore.NewDatastore()
 
+	metrics.Register()
 	// Register metrics handler.
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
@@ -96,14 +104,36 @@ func (r *Runner) Run(ctx context.Context) error {
 		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Metrics: metricsServerOptions})
+	// label "inference-gateway.k8s.io/managed" = "true" is used for server-side filtering of configmaps.
+	// only the configmap objects with this label will be tracked by bbr.
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.ConfigMap{}: {
+					Label: labels.SelectorFromSet(labels.Set{
+						"inference-gateway.k8s.io/managed": "true",
+					}),
+				},
+			},
+		},
+		Metrics: metricsServerOptions,
+	})
 	if err != nil {
 		setupLog.Error(err, "Failed to create manager", "config", cfg)
 		return err
 	}
 
-	// Setup runner.
-	serverRunner := runserver.NewDefaultExtProcServerRunner(*grpcPort, *streaming)
+	// Setup ExtProc Server Runner
+	serverRunner := &runserver.ExtProcServerRunner{
+		GrpcPort:      *grpcPort,
+		Datastore:     ds,
+		SecureServing: true,
+		Streaming:     *streaming,
+	}
+	if err := serverRunner.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to setup BBR controllers")
+		return err
+	}
 
 	// Register health server.
 	if err := registerHealthServer(mgr, *grpcHealthPort); err != nil {
