@@ -117,7 +117,7 @@ kind: EndpointPickerConfig
 plugins:
 - type: prefix-cache-scorer
   parameters:
-    blockSize: 5
+    blockSizeTokens: 5
     maxPrefixBlocksToMatch: 256
     lruCapacityPerServer: 31250
 schedulingProfiles:
@@ -184,7 +184,7 @@ spec:
           plugins:
           - type: prefix-cache-scorer
             parameters:
-              blockSize: 5
+              blockSizeTokens: 5
               maxPrefixBlocksToMatch: 256
               lruCapacityPerServer: 31250
           schedulingProfiles:
@@ -203,7 +203,7 @@ kind: EndpointPickerConfig
 plugins:
 - type: prefix-cache-scorer
   parameters:
-    blockSize: 5
+    blockSizeTokens: 5
     maxPrefixBlocksToMatch: 256
     lruCapacityPerServer: 31250
 - type: single-profile-handler
