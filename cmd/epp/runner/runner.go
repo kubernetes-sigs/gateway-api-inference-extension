@@ -94,7 +94,9 @@ const (
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
-// TODO: This is a bad pattern. Remove this once we hook Flow Control into the config loading path.
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
+// Remove this static initialization helper once Flow Control is integrated
+// into the EPP YAML-based plugin configuration path.
 func must[T any](t T, err error) T {
 	if err != nil {
 		panic(fmt.Sprintf("static initialization failed: %v", err))
@@ -102,7 +104,9 @@ func must[T any](t T, err error) T {
 	return t
 }
 
-// TODO: This is hardcoded for POC only. This needs to be hooked up to our text-based config story.
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
+// Remove hardcoded configuration. Priorities, fairness policies, and limits should be loaded from the standard EPP
+// configuration system.
 var flowControlConfig = flowcontrol.Config{
 	Controller: fccontroller.Config{},        // Use all defaults.
 	Registry:   must(fcregistry.NewConfig()), // Use all defaults.

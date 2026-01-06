@@ -21,12 +21,6 @@ limitations under the License.
 // primarily based on backend queue depths and KV cache utilization, reflecting
 // the saturation signals previously used by the Scheduler before the
 // introduction of the FlowController.
-//
-// TODO: Explore more advanced saturation signals in the future, such as:
-//   - Latency-objective-based saturation.
-//   - Predictive saturation based on trends.
-//   - Hysteresis bands or other smoothing techniques to prevent rapid
-//     oscillations of the saturation signal.
 package utilizationdetector
 
 import (

@@ -298,14 +298,12 @@ func (s *registryShard) Stats() contracts.ShardStats {
 // synchronizeFlow is the internal administrative method for creating a flow instance on this shard.
 // It is an idempotent "create if not exists" operation.
 func (s *registryShard) synchronizeFlow(
-	spec types.FlowSpecification,
+	key types.FlowKey,
 	policy framework.IntraFlowDispatchPolicy,
 	q framework.SafeQueue,
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	key := spec.Key
 
 	val, _ := s.priorityBands.Load(key.Priority)
 	band := val.(*priorityBand)
@@ -323,7 +321,7 @@ func (s *registryShard) synchronizeFlow(
 		return s.isDraining.Load()
 	}
 
-	mq := newManagedQueue(q, policy, spec.Key, s.logger, s.propagateStatsDelta, isDrainingFunc)
+	mq := newManagedQueue(q, policy, key, s.logger, s.propagateStatsDelta, isDrainingFunc)
 	band.queues[key.ID] = mq
 }
 

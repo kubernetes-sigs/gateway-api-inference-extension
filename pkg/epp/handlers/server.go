@@ -67,9 +67,10 @@ type StreamingServer struct {
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
-// TODO: The requestContext is gathering a ton of fields. A future refactor needs to tease these fields apart.
-// Specifically, there are fields related to the ext-proc protocol, and then fields related to the lifecycle of the request.
-// We should split these apart as this monolithic object exposes too much data to too many layers.
+//
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2082):
+// Refactor this monolithic struct. Fields related to the Envoy ext-proc protocol should be decoupled from the internal
+// request lifecycle state.
 type RequestContext struct {
 	TargetPod                 *backend.Pod
 	TargetEndpoint            string

@@ -279,7 +279,7 @@ func (fr *FlowRegistry) prepareNewFlow(key types.FlowKey) (*flowState, error) {
 	}
 
 	for i, shard := range fr.allShards {
-		shard.synchronizeFlow(types.FlowSpecification{Key: key}, components[i].policy, components[i].queue)
+		shard.synchronizeFlow(key, components[i].policy, components[i].queue)
 	}
 
 	fr.logger.Info("Successfully prepared and synchronized new flow instance",
@@ -538,7 +538,7 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	// Commit (Infallible):
 	for i, shard := range newShards {
 		for key, components := range allComponents {
-			shard.synchronizeFlow(types.FlowSpecification{Key: key}, components[i].policy, components[i].queue)
+			shard.synchronizeFlow(key, components[i].policy, components[i].queue)
 		}
 	}
 	fr.activeShards = append(fr.activeShards, newShards...)

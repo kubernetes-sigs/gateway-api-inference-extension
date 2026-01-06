@@ -57,7 +57,9 @@ type ResponseStreaming interface {
 //
 // Plugins should assume this is the final cleanup hook for a request.
 //
-// TODO: Consider passing an error or success bool; however, this is a breaking change and is deffered for now.
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2079):
+// Update signature to pass error/termination state. This is a breaking change required for plugins to distinguish
+// between success, errors, and disconnects.
 type ResponseComplete interface {
 	plugins.Plugin
 	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)

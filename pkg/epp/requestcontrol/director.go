@@ -42,7 +42,9 @@ import (
 )
 
 const (
-	// TODO: Make these configurable per plugin via config.
+	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2081):
+	// Make this timeout configurable per-plugin or globally via the Director configuration to support plugins with
+	// varying latency profiles.
 	prepareDataTimeout = 400 * time.Millisecond
 )
 
