@@ -180,3 +180,17 @@ func metricReadyPods(count int) string {
 		inference_pool_ready_pods{%s} %d
 		`, labelsToString([]label{{"name", testPoolName}}), count)
 }
+
+// cleanMetric removes indentation from multiline metric strings and ensures a trailing newline exists, which is
+// required by the Prometheus text parser.
+func cleanMetric(s string) string {
+	lines := strings.Split(s, "\n")
+	var cleaned []string
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	return strings.Join(cleaned, "\n") + "\n"
+}
