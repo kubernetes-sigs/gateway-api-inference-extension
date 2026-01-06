@@ -70,6 +70,12 @@ spec:
         image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
         imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "IfNotPresent" }}
         args:
+        {{- if .Values.inferenceExtension.endpointSelector.standalone }}
+        - --endpoint-selector
+        - {{ .Values.inferenceExtension.endpointSelector.modelServer.matchLabels }}
+        - --endpoint-target-ports
+        - {{ .Values.inferenceExtension.endpointSelector.modelServers.targetPorts}}
+        {{- else }}
         - --pool-name
         - {{ .Release.Name }}
         # The pool namespace is optional because EPP can default to the NAMESPACE env var.
@@ -77,9 +83,10 @@ spec:
         # distros of EPP which may not have implemented the NAMESPACE env var defaulting behavior.
         - --pool-namespace
         - {{ .Release.Namespace }}
-        {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
+        {{- if ne .Values.inferenceExtension.endpointSelector.inferencePool.apiVersion "inference.networking.k8s.io" }}
         - --pool-group
-        - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+        - "{{ (split "/" .Values.inferenceExtension.endpointSelector.inferencePool.apiVersion)._0 }}"
+        {{- end }}
         {{- end }}
         - --zap-encoder
         - "json"
