@@ -70,11 +70,19 @@ spec:
         image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
         imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "IfNotPresent" }}
         args:
-        {{- if .Values.inferenceExtension.endpointSelector.standalone }}
+        {{- if .Values.inferenceExtension.standaloneMode.enabled }}
         - --endpoint-selector
         - {{ .Values.inferenceExtension.endpointSelector.modelServer.matchLabels }}
         - --endpoint-target-ports
         - {{ .Values.inferenceExtension.endpointSelector.modelServers.targetPorts}}
+        {{- if eq (.Values.inferenceExtension.standaloneMode.modelServerType | default "vllm") "triton-tensorrt-llm" }}
+        - --total-queued-requests-metric
+        - "nv_trt_llm_request_metrics{request_type=waiting}"
+        - --kv-cache-usage-percentage-metric
+        - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
+        - --lora-info-metric
+        - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
+        {{- end }}
         {{- else }}
         - --pool-name
         - {{ .Release.Name }}
@@ -83,16 +91,11 @@ spec:
         # distros of EPP which may not have implemented the NAMESPACE env var defaulting behavior.
         - --pool-namespace
         - {{ .Release.Namespace }}
-        {{- if ne .Values.inferenceExtension.endpointSelector.inferencePool.apiVersion "inference.networking.k8s.io" }}
+        {{- if ne .Values.global.inferencePool.apiVersion "inference.networking.k8s.io" }}
         - --pool-group
-        - "{{ (split "/" .Values.inferenceExtension.endpointSelector.inferencePool.apiVersion)._0 }}"
+        - "{{ (split "/" .Values.global.inferencePool.apiVersion)._0 }}"
         {{- end }}
-        {{- end }}
-        - --zap-encoder
-        - "json"
-        - --config-file
-        - "/config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
-        {{- if eq (.Values.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
+        {{- if eq (.Values.global.inferencePool.modelServerType | default "vllm") "triton-tensorrt-llm" }}
         - --total-queued-requests-metric
         - "nv_trt_llm_request_metrics{request_type=waiting}"
         - --kv-cache-usage-percentage-metric
@@ -100,6 +103,11 @@ spec:
         - --lora-info-metric
         - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
         {{- end }}
+        {{- end }}
+        - --zap-encoder
+        - "json"
+        - --config-file
+        - "/config/{{ .Values.inferenceExtension.pluginsConfigFile }}"
         {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
         - --ha-enable-leader-election
         {{- end }}

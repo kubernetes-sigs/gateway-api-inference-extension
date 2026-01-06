@@ -9,7 +9,7 @@ rules:
   - apiGroups: ["inference.networking.x-k8s.io"]
     resources: ["inferenceobjectives", "inferencemodelrewrites"]
     verbs: ["get", "watch", "list"]
-  - apiGroups: ["{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"]
+  - apiGroups: ["{{ (split "/" .Values.global.inferencePool.apiVersion)._0 }}"]
     resources: ["inferencepools"]
     verbs: ["get", "watch", "list"]
 ---

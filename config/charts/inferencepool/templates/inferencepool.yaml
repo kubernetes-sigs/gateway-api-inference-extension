@@ -1,5 +1,5 @@
-{{ if eq .Values.inferencePool.apiVersion "inference.networking.x-k8s.io/v1alpha2"}}
-apiVersion: {{ .Values.inferencePool.apiVersion }}
+{{ if eq .Values.global.inferencePool.apiVersion "inference.networking.x-k8s.io/v1alpha2"}}
+apiVersion: {{ .Values.global.inferencePool.apiVersion }}
 kind: InferencePool
 metadata:
   name: {{ .Release.Name }}
@@ -7,10 +7,10 @@ metadata:
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
-  targetPortNumber: {{ .Values.inferencePool.targetPortNumber | default 8000 }}
+  targetPortNumber: {{ .Values.global.inferencePool.targetPortNumber | default 8000 }}
   selector:
-    {{- if .Values.inferencePool.modelServers.matchLabels }}
-    {{- range $key, $value := .Values.inferencePool.modelServers.matchLabels }}
+    {{- if .Values.global.inferencePool.modelServers.matchLabels }}
+    {{- range $key, $value := .Values.global.inferencePool.modelServers.matchLabels }}
     {{ $key }}: {{ quote $value }}
     {{- end }}
     {{- end }}
@@ -29,13 +29,13 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetPorts:
-    {{- range .Values.inferencePool.targetPorts }}
+    {{- range .Values.global.inferencePool.targetPorts }}
       - number: {{ .number }}
     {{- end }}
   selector:
     matchLabels:
-      {{- if .Values.inferencePool.modelServers.matchLabels }}
-      {{- range $key, $value := .Values.inferencePool.modelServers.matchLabels }}
+      {{- if .Values.global.inferencePool.modelServers.matchLabels }}
+      {{- range $key, $value := .Values.global.inferencePool.modelServers.matchLabels }}
       {{ $key }}: {{ quote $value }}
       {{- end }}
       {{- end }}

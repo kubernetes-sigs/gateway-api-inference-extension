@@ -1,10 +1,6 @@
 epp:
   inferenceExtension:
-    endpointSelector:
-      standalone: false
-      inferencePool:
-        apiVersion: inference.networking.k8s.io/v1
-
+    standaloneMode: false
     replicas: 1
     image:
       name: epp
@@ -156,20 +152,20 @@ epp:
       eppEnv:
         LATENCY_MAX_SAMPLE_SIZE: "10000"
 
-inferencePool:
-  targetPorts:
-    - number: 8000
-  modelServerType: vllm # vllm, triton-tensorrt-llm
-  apiVersion: inference.networking.k8s.io/v1
-  # modelServers: # REQUIRED
-  #   matchLabels:
-  #     app: vllm-llama3-8b-instruct
-
-  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
-  # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
-  targetPortNumber: 8000
-
 global:
+  inferencePool:
+    targetPorts:
+      - number: 8000
+    modelServerType: vllm # vllm, triton-tensorrt-llm
+    apiVersion: inference.networking.k8s.io/v1
+    # modelServers: # REQUIRED
+    #   matchLabels:
+    #     app: vllm-llama3-8b-instruct
+
+    # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
+    # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
+    targetPortNumber: 8000
+
   provider:
     name: none
 
