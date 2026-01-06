@@ -25,9 +25,13 @@ Cluster RBAC unique name
 {{- printf "%s-%s-epp" $base $ns | quote | trunc 84 }}
 {{- end -}}
 
-{{/*
-Selector labels
-*/}}
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
+{{- if .Values.useParentLabels -}}
+{{- /* LOGIC FOR PARENT (INFERENCEPOOL) MODE */ -}}
 inferencepool: {{ include "gateway-api-inference-extension.name" . }}
+{{- else -}}
+{{- /* LOGIC FOR STANDALONE EPP MODE */ -}}
+epp: {{ include "gateway-api-inference-extension.name" . }}
 {{- end -}}
+{{- end -}}
+

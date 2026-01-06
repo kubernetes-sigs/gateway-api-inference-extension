@@ -1,154 +1,156 @@
-inferenceExtension:
-  replicas: 1
-  image:
-    name: epp
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
-    tag: main
-    pullPolicy: Always
-  extProcPort: 9002
-  env: []
-  pluginsConfigFile: "default-plugins.yaml"
-  # Define additional container ports
-  extraContainerPorts: []
-  # Define additional service ports
-  extraServicePorts: []
-#  extraServicePorts:
-#    - name: http
-#      port: 8081
-#      protocol: TCP
-#      targetPort: 8081
+epp:
+  useParentLabels: true
+  inferenceExtension:
+    replicas: 1
+    image:
+      name: epp
+      hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+      tag: main
+      pullPolicy: Always
+    extProcPort: 9002
+    env: []
+    pluginsConfigFile: "default-plugins.yaml"
+    # Define additional container ports
+    extraContainerPorts: []
+    # Define additional service ports
+    extraServicePorts: []
+  #  extraServicePorts:
+  #    - name: http
+  #      port: 8081
+  #      protocol: TCP
+  #      targetPort: 8081
 
-  # This is the plugins configuration file.
-  # pluginsCustomConfig:
-  #   custom-plugins.yaml: |
-  #     apiVersion: inference.networking.x-k8s.io/v1alpha1
-  #     kind: EndpointPickerConfig
-  #     plugins:
-  #     - type: custom-scorer
-  #       parameters:
-  #         custom-threshold: 64
-  #     schedulingProfiles:
-  #     - name: default
-  #       plugins:
-  #       - pluginRef: custom-scorer
+    # This is the plugins configuration file.
+    # pluginsCustomConfig:
+    #   custom-plugins.yaml: |
+    #     apiVersion: inference.networking.x-k8s.io/v1alpha1
+    #     kind: EndpointPickerConfig
+    #     plugins:
+    #     - type: custom-scorer
+    #       parameters:
+    #         custom-threshold: 64
+    #     schedulingProfiles:
+    #     - name: default
+    #       plugins:
+    #       - pluginRef: custom-scorer
 
-  # Example environment variables:
-  # env:
-  #   ENABLE_EXPERIMENTAL_FEATURE: "true"
+    # Example environment variables:
+    # env:
+    #   ENABLE_EXPERIMENTAL_FEATURE: "true"
 
-  flags:
-    # Log verbosity
-    v: 1
+    flags:
+      # Log verbosity
+      v: 1
 
-  affinity: {}
+    affinity: {}
 
-  tolerations: []
-  
-  # Sidecar configuration for EPP
-  sidecar:
-    enabled: false
+    tolerations: []
 
-  # Monitoring configuration for EPP
-  monitoring:
-    interval: "10s"
-    # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
-    prometheus:
+    # Sidecar configuration for EPP
+    sidecar:
       enabled: false
-      auth:
-        enabled: true
-        # Service account token secret for authentication
-        secretName: inference-gateway-sa-metrics-reader-secret
-      # additional labels for the ServiceMonitor
-      extraLabels: {}
-  tracing:
-    enabled: false
-    otelExporterEndpoint: "http://localhost:4317"
-    sampling:
-      sampler: "parentbased_traceidratio"
-      samplerArg: "0.1"
 
-  # Latency Predictor Configuration
-  latencyPredictor:
-    enabled: false
-    
-    # Training Server Configuration
-    trainingServer:
-      image:
-        hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-        name: latencypredictor-training-server
-        tag: latest
-        pullPolicy: Always
-      port: 8000
-      resources:
-        requests:
-          cpu: "2000m"
-          memory: "4Gi"
-        limits:
-          cpu: "4000m"
-          memory: "8Gi"
-      livenessProbe:
-        httpGet:
-          path: /healthz
-          port: 8000
-        initialDelaySeconds: 30
-        periodSeconds: 20
-      readinessProbe:
-        httpGet:
-          path: /readyz
-          port: 8000
-        initialDelaySeconds: 45
-        periodSeconds: 10
-      volumeSize: "20Gi"
-      config:
-        LATENCY_RETRAINING_INTERVAL_SEC: "1"
-        LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
-        LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
-        LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
-        LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
-        LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
-        LATENCY_MODEL_TYPE: "xgboost"
-        LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
-        LATENCY_QUANTILE_ALPHA: "0.9"
+    # Monitoring configuration for EPP
+    monitoring:
+      interval: "10s"
+      # Prometheus ServiceMonitor will be created when enabled for EPP metrics collection
+      prometheus:
+        enabled: false
+        auth:
+          enabled: true
+          # Service account token secret for authentication
+          secretName: inference-gateway-sa-metrics-reader-secret
+        # additional labels for the ServiceMonitor
+        extraLabels: {}
+    tracing:
+      enabled: false
+      otelExporterEndpoint: "http://localhost:4317"
+      sampling:
+        sampler: "parentbased_traceidratio"
+        samplerArg: "0.1"
 
-    # Prediction Server Configuration
-    predictionServers:
-      count: 10
-      startPort: 8001
-      image:
-        hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-        name: latencypredictor-prediction-server
-        tag: latest
-        pullPolicy: Always
-      resources:
-        requests:
-          cpu: "500m"
-          memory: "1Gi"
-        limits:
-          cpu: "1000m"
-          memory: "2Gi"
-      livenessProbe:
-        httpGet:
-          path: /healthz
-        initialDelaySeconds: 15
-        periodSeconds: 15
-      readinessProbe:
-        httpGet:
-          path: /readyz
-        initialDelaySeconds: 10
-        periodSeconds: 5
-        failureThreshold: 10
-      volumeSize: "10Gi"
-      config:
-        LATENCY_MODEL_TYPE: "xgboost"
-        PREDICT_HOST: "0.0.0.0"
-        LOCAL_TTFT_MODEL_PATH: "/server_models/ttft.joblib"
-        LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
-        LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
-        LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
+    # Latency Predictor Configuration
+    latencyPredictor:
+      enabled: false
 
-    # EPP Environment Variables for Latency Predictor
-    eppEnv:
-      LATENCY_MAX_SAMPLE_SIZE: "10000"
+      # Training Server Configuration
+      trainingServer:
+        image:
+          hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+          name: latencypredictor-training-server
+          tag: latest
+          pullPolicy: Always
+        port: 8000
+        resources:
+          requests:
+            cpu: "2000m"
+            memory: "4Gi"
+          limits:
+            cpu: "4000m"
+            memory: "8Gi"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+        volumeSize: "20Gi"
+        config:
+          LATENCY_RETRAINING_INTERVAL_SEC: "1"
+          LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
+          LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
+          LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
+          LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
+          LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
+          LATENCY_MODEL_TYPE: "xgboost"
+          LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
+          LATENCY_QUANTILE_ALPHA: "0.9"
+
+      # Prediction Server Configuration
+      predictionServers:
+        count: 10
+        startPort: 8001
+        image:
+          hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+          name: latencypredictor-prediction-server
+          tag: latest
+          pullPolicy: Always
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 10
+        volumeSize: "10Gi"
+        config:
+          LATENCY_MODEL_TYPE: "xgboost"
+          PREDICT_HOST: "0.0.0.0"
+          LOCAL_TTFT_MODEL_PATH: "/server_models/ttft.joblib"
+          LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
+          LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
+          LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
+
+      # EPP Environment Variables for Latency Predictor
+      eppEnv:
+        LATENCY_MAX_SAMPLE_SIZE: "10000"
 
 inferencePool:
   targetPorts:
@@ -164,26 +166,27 @@ inferencePool:
   targetPortNumber: 8000
 
 # Options: ["gke", "istio", "none"]
-provider:
-  name: none
+global:
+  provider:
+    name: none
 
-  # GKE-specific configuration.
-  # This block is only used if name is "gke".
-  gke:
-    # Set to true if the cluster is an Autopilot cluster.
-    autopilot: false
+    # GKE-specific configuration.
+    # This block is only used if name is "gke".
+    gke:
+      # Set to true if the cluster is an Autopilot cluster.
+      autopilot: false
 
-  # Istio-specific configuration.
-  # This block is only used if name is "istio".
-  istio:
-    destinationRule:
-      # Provide a way to override the default calculated host
-      host: ""
-      # Optional: Enables customization of the traffic policy
-      trafficPolicy: {}
-        # connectionPool:
-        #   http:
-        #     maxRequestsPerConnection: 256000
+    # Istio-specific configuration.
+    # This block is only used if name is "istio".
+    istio:
+      destinationRule:
+        # Provide a way to override the default calculated host
+        host: ""
+        # Optional: Enables customization of the traffic policy
+        trafficPolicy: {}
+          # connectionPool:
+          #   http:
+          #     maxRequestsPerConnection: 256000
 
 inferenceGateway:
   name: inference-gateway
