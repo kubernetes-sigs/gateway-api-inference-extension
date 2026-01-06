@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/clock"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller/internal"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
@@ -130,7 +131,6 @@ func NewFlowController(
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
 	podLocator contracts.PodLocator,
-	logger logr.Logger,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
@@ -139,7 +139,7 @@ func NewFlowController(
 		saturationDetector: sd,
 		podLocator:         podLocator,
 		clock:              clock.RealClock{},
-		logger:             logger.WithName("flow-controller"),
+		logger:             log.FromContext(ctx).WithName("flow-controller"),
 		parentCtx:          ctx,
 	}
 
