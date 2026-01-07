@@ -8,14 +8,14 @@ To install an InferencePool named `vllm-llama3-8b-instruct`  that selects from e
 
 ```txt
 $ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
 ```
 
 To install via the latest published chart in staging  (--version v0 indicates latest dev version), you can run the following command:
 
 ```txt
 $ helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
   --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
@@ -28,7 +28,7 @@ To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
 
 ```txt
 $ helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
   --set inferenceExtension.flags.<FLAG_NAME>=<FLAG_VALUE>
   --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
@@ -115,7 +115,7 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install for Tri
 
 ```txt
 $ helm install triton-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
+  --set global.inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
   --set inferencePool.modelServerType=triton-tensorrt-llm \
   --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
@@ -160,7 +160,7 @@ To enable HA, set `inferenceExtension.replicas` to a number greater than 1.
 
   ```txt
   helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
   --set inferenceExtension.replicas=3 \
   --set provider=[none|gke] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
@@ -224,7 +224,7 @@ The following table list the configurable parameters of the chart.
 | `inferencePool.apiVersion`                                 | The API version of the InferencePool resource. Defaults to `inference.networking.k8s.io/v1`. This can be changed to `inference.networking.x-k8s.io/v1alpha2` to support older API versions.                                                        |
 | `inferencePool.targetPortNumber`                           | Target port number for the vllm backends, will be used to scrape metrics by the inference extension. Defaults to 8000.                                                                                                                             |
 | `inferencePool.modelServerType`                            | Type of the model servers in the pool, valid options are [vllm, triton-tensorrt-llm], default is vllm.                                                                                                                                             |
-| `inferencePool.modelServers.matchLabels`                   | Label selector to match vllm backends managed by the inference pool.                                                                                                                                                                               |
+| `global.inferencePool.modelServers.matchLabels`                   | Label selector to match vllm backends managed by the inference pool.                                                                                                                                                                               |
 | `inferenceExtension.replicas`                              | Number of replicas for the endpoint picker extension service. If More than one replica is used, EPP will run in HA active-passive mode. Defaults to `1`.                                                                                           |
 | `inferenceExtension.image.name`                            | Name of the container image used for the endpoint picker.                                                                                                                                                                                          |
 | `inferenceExtension.image.hub`                             | Registry URL where the endpoint picker image is hosted.                                                                                                                                                                                            |

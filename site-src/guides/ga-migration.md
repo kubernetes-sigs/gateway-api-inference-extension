@@ -139,7 +139,7 @@ Use Helm to install a new `v1` `InferencePool` with a distinct release name (e.g
 
 ```bash
 helm install vllm-llama3-8b-instruct-ga \
-  --set inferencePool.modelServers.matchLabels.app=<the_label_you_used_for_the_model_server_deployment> \
+  --set global.inferencePool.modelServers.matchLabels.app=<the_label_you_used_for_the_model_server_deployment> \
   --set provider.name=<YOUR_PROVIDER> \
   --version $RELEASE \
   oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool

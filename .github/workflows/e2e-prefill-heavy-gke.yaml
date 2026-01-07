@@ -172,7 +172,7 @@ jobs:
           export IGW_CHART_VERSION=v1.1.0
           helm install vllm-llama3-8b-instruct \
           --namespace $NAMESPACE \
-          --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+          --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
           --set provider.name=$GATEWAY_TYPE \
           --version $IGW_CHART_VERSION \
           oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-prefill-heavy-deployment.log

@@ -58,7 +58,7 @@ To enable latency-based routing, you must enable the latency predictor in the ch
 
 ```txt
 helm install vllm-llama3-8b-instruct . \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
   --set inferenceExtension.monitoring.prometheus.enabled=true \
   --set inferenceExtension.latencyPredictor.enabled=true \
   --set provider.name=gke \
