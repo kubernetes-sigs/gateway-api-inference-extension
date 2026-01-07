@@ -20,8 +20,8 @@ declare -A test_cases_inference_pool
 
 # InferencePool Helm Chart test cases
 test_cases_inference_pool["basic"]="--set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
-test_cases_inference_pool["gke-provider"]="--set provider.name=gke --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
-test_cases_inference_pool["multiple-replicas"]="--set inferencePool.replicas=3 --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_inference_pool["gke-provider"]="--set global.provider.name=gke --set global.inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_inference_pool["multiple-replicas"]="--set global.inferencePool.replicas=3 --set global.inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 
 # Run the install command in case this script runs from a different bash
 # source (such as in the verify-all script)
