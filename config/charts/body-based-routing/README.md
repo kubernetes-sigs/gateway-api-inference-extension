@@ -21,7 +21,7 @@ To install via the latest published chart in staging  (--version v0 indicates la
 ```txt
 $ helm install body-based-router oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing \ 
     --version v0
-    --set global.provider.name=[gke|istio]
+    --set provider.name=[gke|istio]
 ```
 
 ### Install with Custom Cmd-line Flags
@@ -30,7 +30,7 @@ To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
 
 ```txt
 $ helm install body-based-router ./config/charts/body-based-routing \
-    --set global.provider.name=[gke|istio] \
+    --set provider.name=[gke|istio] \
     --set inferenceGateway.name=inference-gateway
     --set bbr.flags.<FLAG_NAME>=<FLAG_VALUE>
 ```
@@ -57,14 +57,14 @@ $ helm uninstall body-based-router
 
 The following table list the configurable parameters of the chart.
 
-| **Parameter Name**                         | **Description**                                                                                    |
-|--------------------------------------------|----------------------------------------------------------------------------------------------------|
+| **Parameter Name**                          | **Description**                                                                                    |
+|---------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `bbr.name`                   | Name for the deployment and service.                                                                              |
 | `bbr.replicas`               | Number of replicas for the deployment. Defaults to `1`.                                                           |
 | `bbr.port`                   | Port serving ext_proc. Defaults to `9004`.                                                                        |
 | `bbr.healthCheckPort`        | Port for health checks. Defaults to `9005`.                                                                       |
 | `bbr.multiNamespace`         | Boolean flag to indicate whether BBR should watch cross namesapce configmaps or only within the namespace it is deployed.
-Defaults to `false`.                                                                      |
+Defaults to `false`.                                                                       |
 | `bbr.image.name`             | Name of the container image used.                                                                                 |
 | `bbr.image.hub`              | Registry URL where the image is hosted.                                                                           | 
 | `bbr.image.tag`              | Image tag.                                                                                                        |

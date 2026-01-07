@@ -25,6 +25,9 @@ Cluster RBAC unique name
 {{- printf "%s-%s-epp" $base $ns | quote | trunc 84 }}
 {{- end -}}
 
+{{/*
+Selector labels
+*/}}
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
 {{- if .Values.inferenceExtension.endpointsServer.standalone -}}
 {{- /* LOGIC FOR STANDALONE EPP MODE */ -}}
