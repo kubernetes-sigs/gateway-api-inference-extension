@@ -6,6 +6,11 @@ inferenceExtension:
     tag: main
     pullPolicy: Always
   extProcPort: 9002
+  extraServicePorts:
+    - name: http
+      port: 8081
+      protocol: TCP
+      targetPort: 8081
   env: []
   pluginsConfigFile: "default-plugins.yaml"
 
