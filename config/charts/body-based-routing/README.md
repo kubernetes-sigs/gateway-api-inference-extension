@@ -9,7 +9,7 @@ To install a body-based router named `body-based-router`, you can run the follow
 
 ```txt
 $ helm install body-based-router ./config/charts/body-based-routing \
-    --set global.provider.name=[gke|istio] \
+    --set provider.name=[gke|istio] \
     --set inferenceGateway.name=inference-gateway
 ```
 
@@ -57,20 +57,20 @@ $ helm uninstall body-based-router
 
 The following table list the configurable parameters of the chart.
 
-| **Parameter Name**                          | **Description**                                                                                    |
-|---------------------------------------------|----------------------------------------------------------------------------------------------------|
+| **Parameter Name**                         | **Description**                                                                                    |
+|--------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `bbr.name`                   | Name for the deployment and service.                                                                              |
 | `bbr.replicas`               | Number of replicas for the deployment. Defaults to `1`.                                                           |
 | `bbr.port`                   | Port serving ext_proc. Defaults to `9004`.                                                                        |
 | `bbr.healthCheckPort`        | Port for health checks. Defaults to `9005`.                                                                       |
 | `bbr.multiNamespace`         | Boolean flag to indicate whether BBR should watch cross namesapce configmaps or only within the namespace it is deployed.
-Defaults to `false`.                                                                       |
+Defaults to `false`.                                                                      |
 | `bbr.image.name`             | Name of the container image used.                                                                                 |
 | `bbr.image.hub`              | Registry URL where the image is hosted.                                                                           | 
 | `bbr.image.tag`              | Image tag.                                                                                                        |
 | `bbr.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`. |
 | `bbr.flags`                  | map of flags which are passed through to bbr. Refer to [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/bbr/runner/runner.go) for complete list. |
-| `global.provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
+| `provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
 | `inferenceGateway.name`      | The name of the Gateway. Defaults to `inference-gateway`.                                                         |                        
 
 ## Notes

@@ -1,4 +1,4 @@
-{{- if eq .Values.global.provider.name "istio" }}
+{{- if eq .Values.provider.name "istio" }}
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
