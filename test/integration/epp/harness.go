@@ -27,15 +27,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	crconfig "sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -53,9 +59,21 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
+
+// Global State (Initialized in TestMain)
+var (
+	k8sClient     client.Client
+	testEnv       *envtest.Environment
+	testScheme    = runtime.NewScheme()
+	logger        = zap.New(zap.UseDevMode(true), zap.Level(zapcore.Level(logutil.DEFAULT)))
+	baseResources []*unstructured.Unstructured
+)
+
+const testPoolName = "vllm-llama3-8b-instruct-pool"
 
 // TestHarness encapsulates the environment for a single isolated EPP test run.
 // It manages the lifecycle of the controller manager, the EPP server, and the K8s namespace.

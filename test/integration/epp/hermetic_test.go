@@ -30,29 +30,24 @@ import (
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/testing/protocmp"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
 const (
-	testPoolName         = "vllm-llama3-8b-instruct-pool"
 	modelMyModel         = "my-model"
 	modelMyModelTarget   = "my-model-12345"
 	modelSQLLora         = "sql-lora"
@@ -62,15 +57,6 @@ const (
 	modelDirect          = "direct-model"
 	modelToBeWritten     = "model-to-be-rewritten"
 	modelAfterRewrite    = "rewritten-model"
-)
-
-// Global State (Initialized in TestMain)
-var (
-	k8sClient     client.Client
-	testEnv       *envtest.Environment
-	testScheme    = runtime.NewScheme()
-	logger        = zap.New(zap.UseDevMode(true), zap.Level(zapcore.Level(logutil.DEFAULT)))
-	baseResources []*unstructured.Unstructured
 )
 
 func TestMain(m *testing.M) {
@@ -445,18 +431,4 @@ func loadBaseResources() []*unstructured.Unstructured {
 		objs = append(objs, u)
 	}
 	return objs
-}
-
-// cleanMetric removes indentation from multiline metric strings and ensures a trailing newline exists, which is
-// required by the Prometheus text parser.
-func cleanMetric(s string) string {
-	lines := strings.Split(s, "\n")
-	var cleaned []string
-	for _, l := range lines {
-		trimmed := strings.TrimSpace(l)
-		if trimmed != "" {
-			cleaned = append(cleaned, trimmed)
-		}
-	}
-	return strings.Join(cleaned, "\n") + "\n"
 }
