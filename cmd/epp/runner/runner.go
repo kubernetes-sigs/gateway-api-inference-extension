@@ -391,7 +391,7 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 			return nil, err
 		}
 		endpointPool.Selector = labelsMap
-		_ = copy(endpointPool.TargetPorts, endpointTargetPorts)
+		endpointPool.TargetPorts = append(endpointPool.TargetPorts, endpointTargetPorts...)
 
 		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
