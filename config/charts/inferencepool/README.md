@@ -16,7 +16,7 @@ To install via the latest published chart in staging  (--version v0 indicates la
 ```txt
 $ helm install vllm-llama3-8b-instruct \
   --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set provider.name=[none|gke|istio] \
+  --set global.provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
@@ -30,7 +30,7 @@ To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
 $ helm install vllm-llama3-8b-instruct \
   --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
   --set inferenceExtension.flags.<FLAG_NAME>=<FLAG_VALUE>
-  --set provider.name=[none|gke|istio] \
+  --set global.provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
@@ -117,7 +117,7 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install for Tri
 $ helm install triton-llama3-8b-instruct \
   --set global.inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
   --set inferencePool.modelServerType=triton-tensorrt-llm \
-  --set provider.name=[none|gke|istio] \
+  --set global.provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
 
@@ -197,7 +197,7 @@ inferenceExtension:
 
 **Note:** Prometheus monitoring requires the Prometheus Operator and ServiceMonitor CRD to be installed in the cluster.
 
-For GKE environments, you need to set `provider.name` to `gke` firstly. This will create the necessary `PodMonitoring` and RBAC resources for metrics collection.
+For GKE environments, you need to set `global.provider.name` to `gke` firstly. This will create the necessary `PodMonitoring` and RBAC resources for metrics collection.
 
 If you are using a GKE Autopilot cluster, you also need to set `provider.gke.autopilot` to `true`.
 
@@ -264,8 +264,8 @@ The following table list the configurable parameters of the chart.
 | `inferenceExtension.sidecar.volumeMounts`                  | List of volume mounts for the sidecar container. Optional.                                                                                                                                                                                        |
 | `inferenceExtension.sidecar.volumes`                       | List of volumes for the sidecar container. Optional.                                                                                                                                                                                              |
 | `inferenceExtension.sidecar.configMapData`                 | Custom key-value pairs to be included in a ConfigMap created for the sidecar container. Only used when `inferenceExtension.sidecar.enabled` is `true`. Optional.                                                                                           |
-| `provider.name`                                            | Name of the Inference Gateway implementation being used. Possible values: [`none`, `gke`, or `istio`]. Defaults to `none`.                                                                                                                         |
-| `provider.gke.autopilot`                                   | Set to `true` if the cluster is a GKE Autopilot cluster. This is only used if `provider.name` is `gke`. Defaults to `false`.                                                                                                                       |
+| `global.provider.name`                                            | Name of the Inference Gateway implementation being used. Possible values: [`none`, `gke`, or `istio`]. Defaults to `none`.                                                                                                                         |
+| `provider.gke.autopilot`                                   | Set to `true` if the cluster is a GKE Autopilot cluster. This is only used if `global.provider.name` is `gke`. Defaults to `false`.                                                                                                                       |
 
 ### Provider Specific Configuration
 
@@ -273,7 +273,7 @@ This section should document any Gateway provider specific values configurations
 
 #### Istio
 
-These are the options available to you with `provider.name` set to `istio`:
+These are the options available to you with `global.provider.name` set to `istio`:
 
 | **Parameter Name**                          | **Description**                                                                                                        |
 |---------------------------------------------|------------------------------------------------------------------------------------------------------------------------|

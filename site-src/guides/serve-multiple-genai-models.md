@@ -24,7 +24,7 @@ Select an appropriate tab depending on your Gateway provider:
 
       ```bash
       helm install body-based-router \
-      --set provider.name=gke \
+      --set global.provider.name=gke \
       --version v0 \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing
       ```
@@ -33,7 +33,7 @@ Select an appropriate tab depending on your Gateway provider:
 
       ```bash
       helm install body-based-router \
-      --set provider.name=istio \
+      --set global.provider.name=istio \
       --version v0 \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing
       ```
@@ -161,7 +161,7 @@ Select a tab to follow the provider-specific instructions.
       export GATEWAY_PROVIDER=gke
       helm install vllm-deepseek-r1 \
       --set global.inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
-      --set provider.name=$GATEWAY_PROVIDER \
+      --set global.provider.name=$GATEWAY_PROVIDER \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -172,7 +172,7 @@ Select a tab to follow the provider-specific instructions.
       export GATEWAY_PROVIDER=istio
       helm install vllm-deepseek-r1 \
       --set global.inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
-      --set provider.name=$GATEWAY_PROVIDER \
+      --set global.provider.name=$GATEWAY_PROVIDER \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -182,7 +182,7 @@ Select a tab to follow the provider-specific instructions.
       export GATEWAY_PROVIDER=none
       helm install vllm-deepseek-r1 \
       --set global.inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
-      --set provider.name=$GATEWAY_PROVIDER \
+      --set global.provider.name=$GATEWAY_PROVIDER \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -193,7 +193,7 @@ Select a tab to follow the provider-specific instructions.
       export GATEWAY_PROVIDER=none
       helm install vllm-deepseek-r1 \
       --set global.inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
-      --set provider.name=$GATEWAY_PROVIDER \
+      --set global.provider.name=$GATEWAY_PROVIDER \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```

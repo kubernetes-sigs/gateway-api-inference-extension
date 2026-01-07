@@ -9,7 +9,7 @@ To install a body-based router named `body-based-router`, you can run the follow
 
 ```txt
 $ helm install body-based-router ./config/charts/body-based-routing \
-    --set provider.name=[gke|istio] \
+    --set global.provider.name=[gke|istio] \
     --set inferenceGateway.name=inference-gateway
 ```
 
@@ -21,7 +21,7 @@ To install via the latest published chart in staging  (--version v0 indicates la
 ```txt
 $ helm install body-based-router oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing \ 
     --version v0
-    --set provider.name=[gke|istio]
+    --set global.provider.name=[gke|istio]
 ```
 
 ### Install with Custom Cmd-line Flags
@@ -30,7 +30,7 @@ To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
 
 ```txt
 $ helm install body-based-router ./config/charts/body-based-routing \
-    --set provider.name=[gke|istio] \
+    --set global.provider.name=[gke|istio] \
     --set inferenceGateway.name=inference-gateway
     --set bbr.flags.<FLAG_NAME>=<FLAG_VALUE>
 ```
@@ -70,7 +70,7 @@ Defaults to `false`.                                                            
 | `bbr.image.tag`              | Image tag.                                                                                                        |
 | `bbr.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`. |
 | `bbr.flags`                  | map of flags which are passed through to bbr. Refer to [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/bbr/runner/runner.go) for complete list. |
-| `provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
+| `global.provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
 | `inferenceGateway.name`      | The name of the Gateway. Defaults to `inference-gateway`.                                                         |                        
 
 ## Notes

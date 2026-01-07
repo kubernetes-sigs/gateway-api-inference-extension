@@ -1,4 +1,4 @@
-{{- if eq .Values.provider.name "gke" }}
+{{- if eq .Values.global.provider.name "gke" }}
 ---
 kind: GCPRoutingExtension
 apiVersion: networking.gke.io/v1

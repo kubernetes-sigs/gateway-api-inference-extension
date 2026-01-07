@@ -173,7 +173,7 @@ jobs:
           helm install vllm-llama3-8b-instruct \
           --namespace $NAMESPACE \
           --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-          --set provider.name=$GATEWAY_TYPE \
+          --set global.provider.name=$GATEWAY_TYPE \
           --version $IGW_CHART_VERSION \
           oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-prefix-cache-deployment.log
           echo "---------------------------------------" >> ~/igw-prefix-cache-deployment.log
