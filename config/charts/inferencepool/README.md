@@ -29,7 +29,7 @@ To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
 ```txt
 $ helm install vllm-llama3-8b-instruct \
   --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set inferenceExtension.flags.<FLAG_NAME>=<FLAG_VALUE>
+  --set epp.inferenceExtension.flags.<FLAG_NAME>=<FLAG_VALUE>
   --set global.provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
@@ -37,11 +37,12 @@ $ helm install vllm-llama3-8b-instruct \
 Alternatively, you can define flags in the `values.yaml` file:
 
 ```yaml
-inferenceExtension:
-  flags:
-    FLAG_NAME: <FLAG_VALUE>
-    v: 3 ## Log verbosity
-    ...
+epp:
+  inferenceExtension:
+    flags:
+      FLAG_NAME: <FLAG_VALUE>
+      v: 3 ## Log verbosity
+      ...
 ```
 
 ### Install with Custom Environment Variables
@@ -49,16 +50,17 @@ inferenceExtension:
 To set custom environment variables for the EndpointPicker deployment, you can define them as free-form YAML in the `values.yaml` file:
 
 ```yaml
-inferenceExtension:
-  env:
-    - name: FEATURE_FLAG_ENABLED
-      value: "true"
-    - name: CUSTOM_ENV_VAR
-      value: "custom_value"
-    - name: POD_IP
-      valueFrom:
-        fieldRef:
-          fieldPath: status.podIP
+epp:
+  inferenceExtension:
+    env:
+      - name: FEATURE_FLAG_ENABLED
+        value: "true"
+      - name: CUSTOM_ENV_VAR
+        value: "custom_value"
+      - name: POD_IP
+        valueFrom:
+          fieldRef:
+            fieldPath: status.podIP
 ```
 
 Then apply it with:
@@ -72,6 +74,7 @@ $ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.y
 To set custom EPP plugin config, you can pass it as an inline yaml. For example:
 
 ```yaml
+epp:
   inferenceExtension:
     pluginsCustomConfig:
       custom-plugins.yaml: |
@@ -92,15 +95,16 @@ To set custom EPP plugin config, you can pass it as an inline yaml. For example:
 To expose additional ports (e.g., for ZMQ), you can define them in the `values.yaml` file:
 
 ```yaml
-inferenceExtension:
-  extraContainerPorts:
-    - name: zmq
-      containerPort: 5557
-      protocol: TCP
-  extraServicePorts: # if need to expose the port for external communication
-    - name: zmq
-      port: 5557
-      protocol: TCP
+epp:
+  inferenceExtension:
+    extraContainerPorts:
+      - name: zmq
+        containerPort: 5557
+        protocol: TCP
+    extraServicePorts: # if need to expose the port for external communication
+      - name: zmq
+        port: 5557
+        protocol: TCP
 ```
 
 Then apply it with:
@@ -161,7 +165,7 @@ To enable HA, set `inferenceExtension.replicas` to a number greater than 1.
   ```txt
   helm install vllm-llama3-8b-instruct \
   --set global.inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-  --set inferenceExtension.replicas=3 \
+  --set epp.inferenceExtension.replicas=3 \
   --set provider=[none|gke] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
   ```
@@ -184,15 +188,16 @@ To enable HA, set `inferenceExtension.replicas` to a number greater than 1.
 To enable metrics collection and monitoring for the EndpointPicker, you can configure Prometheus ServiceMonitor creation:
 
 ```yaml
-inferenceExtension:
-  monitoring:
-    interval: "10s"
-    prometheus:
-      enabled: false
-      auth:
-        enabled: true
-        secretName: inference-gateway-sa-metrics-reader-secret
-      extraLabels: {}
+epp:
+  inferenceExtension:
+    monitoring:
+      interval: "10s"
+      prometheus:
+        enabled: false
+        auth:
+          enabled: true
+          secretName: inference-gateway-sa-metrics-reader-secret
+        extraLabels: {}
 ```
 
 **Note:** Prometheus monitoring requires the Prometheus Operator and ServiceMonitor CRD to be installed in the cluster.
@@ -284,13 +289,14 @@ These are the options available to you with `global.provider.name` set to `istio
 
 The EndpointPicker supports OpenTelemetry-based tracing. To enable trace collection, use the following configuration:
 ```yaml
-inferenceExtension:
-  tracing:
-    enabled: true
-    otelExporterEndpoint: "http://localhost:4317"
-    sampling:
-      sampler: "parentbased_traceidratio"
-      samplerArg: "0.1"
+epp:
+  inferenceExtension:
+    tracing:
+      enabled: true
+      otelExporterEndpoint: "http://localhost:4317"
+      sampling:
+        sampler: "parentbased_traceidratio"
+        samplerArg: "0.1"
 ```
 Make sure that the `otelExporterEndpoint` points to your OpenTelemetry collector endpoint. 
 Current only the `parentbased_traceidratio` sampler is supported. You can adjust the base sampling ratio using the `samplerArg` (e.g., 0.1 means 10% of traces will be sampled).
