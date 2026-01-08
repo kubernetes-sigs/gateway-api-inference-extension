@@ -173,6 +173,40 @@ func (s *registryShard) addPriorityBand(priority int) {
 	s.logger.Info("Dynamically added priority band", "priority", priority)
 }
 
+// deletePriorityBand removes a priority band from this shard.
+// This method should only be called by FlowRegistry.deletePriorityBand with FlowRegistry.mu held.
+func (s *registryShard) deletePriorityBand(priority int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Remove from sync.Map
+	s.priorityBands.Delete(priority)
+
+	// Remove from config
+	delete(s.config.PriorityBands, priority)
+
+	// Remove from ordered list
+	for i, p := range s.orderedPriorityLevels {
+		if p == priority {
+			s.orderedPriorityLevels = append(
+				s.orderedPriorityLevels[:i],
+				s.orderedPriorityLevels[i+1:]...,
+			)
+			break
+		}
+	}
+
+	s.logger.V(logging.DEBUG).Info("Removed priority band from shard", "priority", priority)
+}
+
+// sortPriorityLevels sorts the orderedPriorityLevels slice in descending order (highest priority first).
+// Expects the shard lock to be held.
+func (s *registryShard) sortPriorityLevels() {
+	sort.Slice(s.orderedPriorityLevels, func(i, j int) bool {
+		return s.orderedPriorityLevels[i] > s.orderedPriorityLevels[j]
+	})
+}
+
 // ID returns the unique identifier for this shard.
 func (s *registryShard) ID() string { return s.id }
 

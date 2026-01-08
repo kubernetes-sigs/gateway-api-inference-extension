@@ -47,9 +47,10 @@ const (
 	defaultInitialShardCount int = 1
 	// defaultFlowGCTimeout is the default duration of inactivity after which an idle flow is garbage collected.
 	// This also serves as the interval for the periodic garbage collection scan.
-	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1982) revert to 5m once this GC
-	// race condition is properly resolved.
-	defaultFlowGCTimeout time.Duration = 1 * time.Hour
+	defaultFlowGCTimeout time.Duration = 5 * time.Minute
+	// defaultPriorityBandGCTimeout is the default duration of inactivity after which a dynamically provisioned
+	// priority band is garbage collected. Set to 2x flow GC timeout to ensure flows are cleaned up first.
+	defaultPriorityBandGCTimeout time.Duration = 2 * defaultFlowGCTimeout
 	// defaultEventChannelBufferSize is the default size of the buffered channel for control plane events.
 	defaultEventChannelBufferSize int = 4096
 )
@@ -133,6 +134,12 @@ type Config struct {
 	// Optional: Defaults to `defaultFlowGCTimeout` (1 hour).
 	FlowGCTimeout time.Duration
 
+	// PriorityBandGCTimeout defines the duration of inactivity after which a dynamically provisioned priority band
+	// is garbage collected. A band is considered idle when it has no flows and no buffered requests across all shards.
+	// Must be >= FlowGCTimeout to ensure flows are collected before bands.
+	// Optional: Defaults to `defaultPriorityBandGCTimeout` (10 minutes).
+	PriorityBandGCTimeout time.Duration
+
 	// EventChannelBufferSize defines the size of the buffered channel used for internal control plane events.
 	// A larger buffer can absorb larger bursts of events (e.g., from many queues becoming non-empty simultaneously)
 	// without blocking the data path, but consumes more memory.
@@ -214,6 +221,20 @@ func WithFlowGCTimeout(d time.Duration) ConfigOption {
 			return errors.New("flowGCTimeout must be positive")
 		}
 		b.config.FlowGCTimeout = d
+		return nil
+	}
+}
+
+// WithPriorityBandGCTimeout sets the idle priority band garbage collection timeout.
+func WithPriorityBandGCTimeout(d time.Duration) ConfigOption {
+	return func(b *configBuilder) error {
+		if d <= 0 {
+			return errors.New("priorityBandGCTimeout must be positive")
+		}
+		if b.config.FlowGCTimeout > 0 && d < b.config.FlowGCTimeout {
+			return errors.New("priorityBandGCTimeout must be >= flowGCTimeout")
+		}
+		b.config.PriorityBandGCTimeout = d
 		return nil
 	}
 }
@@ -329,6 +350,7 @@ func NewConfig(handle plugins.Handle, opts ...ConfigOption) (*Config, error) {
 			MaxBytes:               0, // no limit enforced
 			InitialShardCount:      defaultInitialShardCount,
 			FlowGCTimeout:          defaultFlowGCTimeout,
+			PriorityBandGCTimeout:  defaultPriorityBandGCTimeout,
 			EventChannelBufferSize: defaultEventChannelBufferSize,
 			PriorityBands:          make(map[int]*PriorityBandConfig),
 		},
@@ -446,6 +468,12 @@ func (c *Config) validate(checker capabilityChecker) error {
 	}
 	if c.FlowGCTimeout <= 0 {
 		return errors.New("flowGCTimeout must be positive")
+	}
+	if c.PriorityBandGCTimeout <= 0 {
+		return errors.New("priorityBandGCTimeout must be positive")
+	}
+	if c.PriorityBandGCTimeout < c.FlowGCTimeout {
+		return errors.New("priorityBandGCTimeout must be >= flowGCTimeout")
 	}
 	if c.EventChannelBufferSize <= 0 {
 		return errors.New("eventChannelBufferSize must be greater than 0")

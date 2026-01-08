@@ -79,6 +79,24 @@ type flowState struct {
 	initialized sync.Once
 }
 
+// priorityBandState tracks the lifecycle state for a dynamically provisioned priority band.
+// Unlike flowState, which tracks individual flows, this tracks an entire priority level and persists
+// after all flows at that priority are garbage collected to enforce idle timeout before band deletion.
+type priorityBandState struct {
+	priority int
+
+	// gcLock protects the band's lifecycle state during GC operations.
+	// - The Garbage Collector takes an exclusive write lock to safely delete the band.
+	// - Concurrent flow creation at this priority takes a shared read lock to prevent deletion
+	//   while allowing other operations to proceed concurrently.
+	gcLock sync.RWMutex
+
+	// becameIdleAt tracks the time at which all flows and queues at this priority became empty.
+	// A zero value indicates the band currently has active flows or buffered requests.
+	// This field is always protected by the gcLock's exclusive write lock during modifications.
+	becameIdleAt time.Time
+}
+
 // FlowRegistry is the concrete implementation of the contracts.FlowRegistry interface.
 //
 // The FlowRegistry manages the mapping between abstract FlowKeys and the concrete managed queues distributed across
@@ -103,6 +121,9 @@ type FlowRegistry struct {
 	// flowStates tracks all active flow instances, keyed by FlowKey.
 	// Access to this map is lock-free; lifecycle management is handled via the flowState atomics.
 	flowStates sync.Map // FlowKey -> *flowState
+
+	// priorityBandStates tracks dynamically provisioned bands, keyed by priority (int)
+	priorityBandStates sync.Map // stores `int` -> *priorityBandState
 
 	// Globally aggregated statistics, updated atomically via lock-free propagation.
 	totalByteSize atomic.Int64
@@ -321,6 +342,11 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 
 	fr.perPriorityBandStats.LoadOrStore(priority, &bandStats{})
 
+	fr.priorityBandStates.Store(priority, &priorityBandState{
+		priority:     priority,
+		becameIdleAt: time.Time{}, // Mark the priority band as Active.
+	})
+
 	fr.repartitionShardConfigsLocked()
 
 	for _, shard := range fr.activeShards {
@@ -328,6 +354,63 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 	}
 
 	return nil
+}
+
+// isBandEmpty returns true if the priority band has no flows and no buffered items across all shards.
+// This method checks both structural emptiness (no queues) and statistical emptiness (zero bytes/items).
+// The caller is responsible for holding appropriate locks if needed.
+func (fr *FlowRegistry) isBandEmpty(priority int) bool {
+	// Get stable shard snapshot
+	fr.mu.RLock()
+	shards := fr.allShards
+	fr.mu.RUnlock()
+
+	for _, shard := range shards {
+		// If the band doesn't exist on this shard it is not partitioned here.
+		if val, ok := shard.priorityBands.Load(priority); ok {
+			band := val.(*priorityBand)
+
+			// Check queue count under lock
+			shard.mu.RLock()
+			queueCount := len(band.queues)
+			shard.mu.RUnlock()
+
+			if queueCount > 0 {
+				return false
+			}
+
+			// Check atomic statistics (lock-free)
+			if band.len.Load() > 0 || band.byteSize.Load() > 0 {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// deletePriorityBand removes a priority band from the registry and all shards.
+// This method should only be called after verifying the band is safe to delete (empty across all shards).
+// Follows locking order: FlowRegistry.mu → registryShard.mu
+func (fr *FlowRegistry) deletePriorityBand(priority int) {
+	fr.mu.Lock()
+	defer fr.mu.Unlock()
+
+	// Delete from registry config
+	delete(fr.config.PriorityBands, priority)
+
+	// Delete from stats tracking
+	fr.perPriorityBandStats.Delete(priority)
+
+	// Delete from all shards (both active and draining)
+	for _, shard := range fr.allShards {
+		shard.deletePriorityBand(priority)
+	}
+
+	// Delete lifecycle state
+	fr.priorityBandStates.Delete(priority)
+
+	fr.logger.Info("Successfully deleted priority band", "priority", priority)
 }
 
 // --- `contracts.FlowRegistryObserver` Implementation ---
@@ -377,10 +460,33 @@ func (fr *FlowRegistry) ShardStats() []contracts.ShardStats {
 
 // --- Garbage Collection ---
 
-// executeGCCycle orchestrates the periodic GC of Idle flows and Drained shards.
+// executeGCCycle orchestrates the periodic GC of Idle flows, idle priority bands, and Drained shards.
 func (fr *FlowRegistry) executeGCCycle() {
 	fr.logger.V(logging.DEBUG).Info("Starting periodic GC scan")
 	fr.gcFlows()
+
+	// After flows are collected, update which bands have become empty
+	fr.updateIdleBands()
+
+	// Scan and collect idle priority bands
+	var bandCandidates []int
+	fr.priorityBandStates.Range(func(priority, value interface{}) bool {
+		state := value.(*priorityBandState)
+		state.gcLock.RLock()
+		// A band is a candidate if it has been idle for longer than the timeout
+		if !state.becameIdleAt.IsZero() {
+			if fr.clock.Since(state.becameIdleAt) > fr.config.PriorityBandGCTimeout {
+				bandCandidates = append(bandCandidates, priority.(int))
+			}
+		}
+		state.gcLock.RUnlock()
+		return true
+	})
+	if len(bandCandidates) > 0 {
+		fr.verifyAndSweepPriorityBands(bandCandidates)
+	}
+
+	// Sweep draining shards
 	fr.sweepDrainingShards()
 }
 
@@ -440,6 +546,72 @@ func (fr *FlowRegistry) cleanupFlowResources(keys []types.FlowKey) {
 			shard.deleteFlow(key)
 		}
 	}
+}
+
+// updateIdleBands updates the becameIdleAt timestamp for dynamically provisioned priority bands.
+// Called after flow GC to mark bands that have become empty.
+func (fr *FlowRegistry) updateIdleBands() {
+	fr.priorityBandStates.Range(func(key, value interface{}) bool {
+		priority := key.(int)
+		state := value.(*priorityBandState)
+
+		state.gcLock.Lock()
+
+		isEmpty := fr.isBandEmpty(priority)
+
+		if isEmpty && state.becameIdleAt.IsZero() {
+			state.becameIdleAt = fr.clock.Now()
+			fr.logger.V(logging.DEBUG).Info("Priority band became idle",
+				"priority", priority, "becameIdleAt", state.becameIdleAt)
+		} else if !isEmpty && !state.becameIdleAt.IsZero() {
+			// Band became active again: reset timestamp
+			state.becameIdleAt = time.Time{}
+			fr.logger.V(logging.DEBUG).Info("Priority band became active again",
+				"priority", priority)
+		}
+
+		state.gcLock.Unlock()
+		return true
+	})
+}
+
+// verifyAndSweepPriorityBands performs the "verify" and "sweep" phases of GC for idle priority bands.
+// For each candidate, it acquires an exclusive lock on that band's state, re-verifies it is still empty, and
+// then safely performs the deletion.
+func (fr *FlowRegistry) verifyAndSweepPriorityBands(candidates []int) {
+	fr.logger.V(logging.DEBUG).Info("Starting GC Verify and Sweep phase for priority bands", "candidateCount", len(candidates))
+
+	var collectedCount int
+	for _, priority := range candidates {
+		val, ok := fr.priorityBandStates.Load(priority)
+		if !ok {
+			// Benign race: the band was already deleted by a previous GC cycle or another process. We can safely ignore it.
+			continue
+		}
+		state := val.(*priorityBandState)
+
+		// Acquire the exclusive write lock for this specific band, ensuring the state is stable for our check.
+		state.gcLock.Lock()
+
+		// Verify Phase: Double-check band is still empty
+		if !fr.isBandEmpty(priority) {
+			// Verification failed. The band became non-empty between our initial scan and acquiring the lock.
+			// The band is Active again, so we leave it alone.
+			fr.logger.V(logging.DEBUG).Info("GC of priority band aborted: re-verification failed (band is not empty)",
+				"priority", priority, "becameIdleAt", state.becameIdleAt)
+			state.gcLock.Unlock()
+			continue
+		}
+
+		// Sweep Phase: Safe to delete
+		fr.deletePriorityBand(priority)
+		fr.logger.V(logging.VERBOSE).Info("Successfully verified and swept priority band",
+			"priority", priority, "becameIdleAt", state.becameIdleAt)
+		collectedCount++
+		state.gcLock.Unlock()
+	}
+
+	fr.logger.V(logging.DEBUG).Info("GC Verify and Sweep phase completed for priority bands", "bandsCollected", collectedCount)
 }
 
 // sweepDrainingShards finalizes the removal of drained shards.
