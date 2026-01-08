@@ -55,6 +55,12 @@ const (
 	// token is about 128KB in size, so we can cache 500K tokens. Using the default block size of 16
 	// in vLLM, we will have 250K / 16 = 31.25K blocks.
 	DefaultLRUCapacityPerServer = 31250
+	// In P/D disaggregation mode, the prefill and decode are usually represented as two different scheduling profiles to pick
+	// the prefill and decode endpoints. This constant defines the prefill profile name to ensure that the index is updated
+	// for the prefill endpoint and not only for the primary endpoint that will initially handle the request.
+	// This is hardcoded for now until we land on a canonical approach for plugins to identify prefill and decode endpoints
+	// (See https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2080)
+	Experimental_DefaultPrefillProfile = "prefill"
 
 	PrefixCachePluginType = "prefix-cache-scorer"
 )
@@ -269,10 +275,10 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
 	targetPod := primaryProfileResult.TargetPods[0] // get the first pod of the primary profile
+	servers := []Server{p.makeServer(targetPod)}
 
-	gpuBlocks := p.config.LRUCapacityPerServer
-	if p.config.AutoTune && targetPod.GetMetrics().CacheNumGPUBlocks > 0 {
-		gpuBlocks = targetPod.GetMetrics().CacheNumGPUBlocks
+	if pr, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && len(pr.TargetPods) > 0 {
+		servers = append(servers, p.makeServer(pr.TargetPods[0]))
 	}
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
@@ -288,10 +294,9 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	// WaitGroup is added to the Plugin struct to allow waiting in tests.
 	p.wg.Add(1)
 	go func() {
-		p.indexer.Add(state.PrefixHashes, Server{
-			ServerID(targetPod.GetPod().NamespacedName),
-			gpuBlocks,
-		})
+		for _, s := range servers {
+			p.indexer.Add(state.PrefixHashes, s)
+		}
 		p.wg.Done()
 	}()
 
@@ -300,6 +305,17 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 
 	blockSize := getBlockSize(primaryProfileResult.TargetPods, p.config)
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
+}
+
+func (p *Plugin) makeServer(targetPod types.Pod) Server {
+	gpuBlocks := p.config.LRUCapacityPerServer
+	if p.config.AutoTune && targetPod.GetMetrics().CacheNumGPUBlocks > 0 {
+		gpuBlocks = targetPod.GetMetrics().CacheNumGPUBlocks
+	}
+	return Server{
+		ServerID(targetPod.GetPod().NamespacedName),
+		gpuBlocks,
+	}
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches.
