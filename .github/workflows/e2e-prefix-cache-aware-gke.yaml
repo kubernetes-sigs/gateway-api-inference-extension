@@ -16,24 +16,59 @@ permissions:
   contents: read
 
 jobs:
+  # Authorization Job: Ensures only authorized users can execute workflow
+  # Note, even if user checks out branch to modify access, user will need to provide correct secret keys to deploy to GCP.
+  check_access:
+    runs-on: ubuntu-latest
+    
+    if: |
+      (github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/run-gke-prefix-cache')) || github.event_name == 'workflow_dispatch'
+    
+    outputs:
+      authorized: ${{ steps.auth_logic.outputs.authorized }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Authorization Logic
+        id: auth_logic
+        shell: bash
+        run: |
+          authorized='false'
+          auth_file=".github/authorized_workflow_users.txt"
+          user=""
+          role=""
+          
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            user="${{ github.event.comment.user.login }}"
+            role="${{ github.event.comment.author_association }}"
+            
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            user="${{ github.actor }}"
+          fi
+
+          if [[ "$role" == "OWNER" || "$role" == "MAINTAINER" ]]; then
+            echo "User authorized by role: $role"
+            authorized='true'          
+          
+          elif grep -Fxq "$user" "$auth_file"; then
+            echo "User authorized by file lookup: $auth_file"
+            authorized='true'
+          fi
+          
+          echo "authorized=$authorized" >> "$GITHUB_OUTPUT"
+
   deploy_and_validate:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request &&
-        github.event.issue.pull_request.base.ref == 'main' &&
-        contains(github.event.comment.body, '/run-gke-prefix-cache')
-        &&
-        (
-          github.event.comment.author_association == 'OWNER' ||
-          github.event.comment.author_association == 'MEMBER' ||
-          github.event.comment.author_association == 'COLLABORATOR'
-        )
-      )
+    needs: [check_access]
+    if: |
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'issue_comment') &&
+        needs.check_access.outputs.authorized == 'true'
+      
     name: Test on ${{ matrix.accelerator.name }}
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -221,7 +256,7 @@ jobs:
             --set hfToken="${HF_TOKEN}" \
             --set "config.server.base_url=http://${svc_host}" \
             --set "job.serviceAccountName=$KSA_NAME" \
-            --set "job.image.tag=v0.2.0" \
+            --set "job.image.tag=latest" \
             --set "config.storage.google_cloud_storage.bucket_name=${GCS_BUCKET}" \
             --set "config.storage.google_cloud_storage.path=${NAMESPACE}/${TIMESTAMP}" \
             --set-string 'job.resources.limits.nvidia\.com/gpu=1'

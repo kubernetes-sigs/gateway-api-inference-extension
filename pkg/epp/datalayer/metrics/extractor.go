@@ -56,6 +56,7 @@ type Extractor struct {
 func Produces() map[string]any {
 	return map[string]any{
 		metrics.WaitingQueueSizeKey:    int(0),
+		metrics.RunningRequestsSizeKey: int(0),
 		metrics.KVCacheUsagePercentKey: float64(0),
 		metrics.ActiveModelsKey:        map[string]int{},
 		metrics.WaitingModelsKey:       map[string]int{},
@@ -119,7 +120,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		if metric, err := spec.getLatestMetric(families); err != nil {
 			errs = append(errs, err)
 		} else {
-			clone.RunningQueueSize = int(extractValue(metric))
+			clone.RunningRequestsSize = int(extractValue(metric))
 			updated = true
 		}
 	}

@@ -68,7 +68,7 @@ func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-func (c *InferenceObjectiveReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (c *InferenceObjectiveReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferenceObjective{}).
 		WithEventFilter(predicate.Funcs{

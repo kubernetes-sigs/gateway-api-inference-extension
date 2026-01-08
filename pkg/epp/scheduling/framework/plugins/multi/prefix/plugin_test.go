@@ -29,9 +29,15 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
+
+// static check to ensure Plugin implements the PrepareDataPlugin interface.
+var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
@@ -569,6 +575,67 @@ func randomPrompt(n int) string {
 		sb.WriteRune(runes[rand.Intn(len(runes))])
 	}
 	return sb.String()
+}
+
+func TestPrepareRequestData(t *testing.T) {
+	config := Config{
+		BlockSize:              4,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}
+	plugin := New(context.Background(), config)
+
+	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
+	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
+	pods := []types.Pod{pod1, pod2}
+
+	// First request to populate cache.
+	req1 := &types.LLMRequest{
+		RequestId:   uuid.NewString(),
+		TargetModel: "test-model1",
+		Body: &types.LLMRequestBody{
+			Completions: &types.CompletionsRequest{
+				Prompt: "aaaabbbb",
+			},
+		},
+	}
+	_ = plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	schedulingResult := &types.SchedulingResult{
+		PrimaryProfileName: "default",
+		ProfileResults: map[string]*types.ProfileRunResult{
+			"default": {TargetPods: []types.Pod{pod1}},
+		},
+	}
+	plugin.PreRequest(context.Background(), req1, schedulingResult)
+	plugin.wg.Wait()
+
+	// Second request that shares a prefix.
+	req2 := &types.LLMRequest{
+		RequestId:   uuid.NewString(),
+		TargetModel: "test-model1",
+		Body: &types.LLMRequestBody{
+			Completions: &types.CompletionsRequest{
+				Prompt: "aaaacccc",
+			},
+		},
+	}
+
+	err := plugin.PrepareRequestData(context.Background(), req2, pods)
+	assert.NoError(t, err)
+
+	// Verify pod1 has the correct prefix match info
+	info1, ok := pod1.Get(dplugins.PrefixCacheMatchInfoKey)
+	assert.True(t, ok)
+	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
+	assert.Equal(t, 1, prefixInfo1.MatchLength()) // "aaaa" matches
+	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 blocks
+
+	// Verify pod2 has no match info
+	info2, ok := pod2.Get(dplugins.PrefixCacheMatchInfoKey)
+	assert.True(t, ok)
+	prefixInfo2 := info2.(*dplugins.PrefixCacheMatchInfo)
+	assert.Equal(t, 0, prefixInfo2.MatchLength()) // No match for pod2
+	assert.Equal(t, 2, prefixInfo2.TotalLength())
 }
 
 // BenchmarkPrefixPluginChatCompletionsStress is a stress test for chat completions with varying message counts and lengths

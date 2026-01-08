@@ -28,71 +28,80 @@ import (
 func TestHandleRequestHeaders(t *testing.T) {
 	t.Parallel()
 
-	// Setup a mock server and request context
-	server := &StreamingServer{}
-
-	reqCtx := &RequestContext{
-		Request: &Request{
-			Headers: make(map[string]string),
-		},
-	}
-
-	req := &extProcPb.ProcessingRequest_RequestHeaders{
-		RequestHeaders: &extProcPb.HttpHeaders{
-			Headers: &configPb.HeaderMap{
-				Headers: []*configPb.HeaderValue{
-					{
-						Key:   "x-test-header",
-						Value: "test-value",
-					},
-					{
-						Key:   metadata.FlowFairnessIDKey,
-						Value: "test-fairness-id-value",
-					},
-				},
+	tests := []struct {
+		name           string
+		headers        []*configPb.HeaderValue
+		wantHeaders    map[string]string
+		wantFairnessID string
+	}{
+		{
+			name: "Extracts Fairness ID and Removes Header",
+			headers: []*configPb.HeaderValue{
+				{Key: "x-test", Value: "val"},
+				{Key: metadata.FlowFairnessIDKey, Value: "user-123"},
 			},
-			EndOfStream: false,
+			wantHeaders:    map[string]string{"x-test": "val"},
+			wantFairnessID: "user-123",
+		},
+		{
+			name: "Prefers RawValue over Value",
+			headers: []*configPb.HeaderValue{
+				{Key: metadata.FlowFairnessIDKey, RawValue: []byte("binary-id"), Value: "wrong-id"},
+			},
+			wantFairnessID: "binary-id",
 		},
 	}
 
-	err := server.HandleRequestHeaders(reqCtx, req)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := &StreamingServer{}
+			reqCtx := &RequestContext{
+				Request: &Request{Headers: make(map[string]string)},
+			}
+			req := &extProcPb.ProcessingRequest_RequestHeaders{
+				RequestHeaders: &extProcPb.HttpHeaders{
+					Headers: &configPb.HeaderMap{Headers: tc.headers},
+				},
+			}
 
-	if reqCtx.FairnessID != "test-fairness-id-value" {
-		t.Errorf("expected fairness ID to be 'test-fairness-id-value', got %s", reqCtx.FairnessID)
-	}
-	if reqCtx.Request.Headers[metadata.FlowFairnessIDKey] == "test-fairness-id-value" {
-		t.Errorf("expected fairness ID header to be removed from request headers, but it was not")
+			err := server.HandleRequestHeaders(reqCtx, req)
+			assert.NoError(t, err, "HandleRequestHeaders should not return an error")
+
+			assert.Equal(t, tc.wantFairnessID, reqCtx.FairnessID, "FairnessID should match expected value")
+
+			if tc.wantHeaders != nil {
+				for k, v := range tc.wantHeaders {
+					assert.Equal(t, v, reqCtx.Request.Headers[k], "Header %q should match expected value", k)
+				}
+			}
+		})
 	}
 }
 
-func TestHandleRequestHeaders_DefaultFairnessID(t *testing.T) {
-	t.Parallel()
-
+func TestGenerateHeaders_Sanitization(t *testing.T) {
 	server := &StreamingServer{}
 	reqCtx := &RequestContext{
+		TargetEndpoint: "1.2.3.4:8080",
+		RequestSize:    123,
 		Request: &Request{
-			Headers: make(map[string]string),
-		},
-	}
-
-	req := &extProcPb.ProcessingRequest_RequestHeaders{
-		RequestHeaders: &extProcPb.HttpHeaders{
-			Headers: &configPb.HeaderMap{
-				Headers: []*configPb.HeaderValue{
-					{
-						Key:   "x-test-header",
-						Value: "test-value",
-					},
-				},
+			Headers: map[string]string{
+				"x-user-data":                   "important",              // should passthrough
+				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
+				metadata.DestinationEndpointKey: "1.1.1.1:666",            // should be stripped
+				"content-length":                "99999",                  // should be stripped (re-added by logic)
 			},
-			EndOfStream: false,
 		},
 	}
 
-	err := server.HandleRequestHeaders(reqCtx, req)
-	assert.NoError(t, err, "expected no error")
-	assert.Equal(t, defaultFairnessID, reqCtx.FairnessID, "expected fairness ID to be defaulted")
+	results := server.generateHeaders(reqCtx)
+
+	gotHeaders := make(map[string]string)
+	for _, h := range results {
+		gotHeaders[h.Header.Key] = string(h.Header.RawValue)
+	}
+
+	assert.Contains(t, gotHeaders, "x-user-data")
+	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
+	assert.Equal(t, "1.2.3.4:8080", gotHeaders[metadata.DestinationEndpointKey])
+	assert.Equal(t, "123", gotHeaders["Content-Length"])
 }

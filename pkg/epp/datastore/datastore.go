@@ -21,13 +21,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"strconv"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -142,7 +142,8 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 
 	oldEndpointPool := ds.pool
 	ds.pool = endpointPool
-	if oldEndpointPool == nil || !reflect.DeepEqual(oldEndpointPool.Selector, endpointPool.Selector) {
+
+	if oldEndpointPool == nil || !labels.Equals(oldEndpointPool.Selector, endpointPool.Selector) {
 		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endpointPool.Selector)
 		// A full resync is required to address two cases:
 		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
@@ -326,13 +327,13 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		return fmt.Errorf("failed to list pods - %w", err)
 	}
 
-	activePods := make(map[string]bool)
+	activePods := sets.New[string]()
 	for _, pod := range podList.Items {
 		if !podutil.IsPodReady(&pod) {
 			continue
 		}
 		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-		activePods[pod.Name] = true
+		activePods.Insert(pod.Name)
 		if !ds.PodUpdateOrAddIfNotExist(&pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
@@ -343,7 +344,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	// Remove pods that don't belong to the pool or not ready any more.
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(datalayer.Endpoint)
-		if exist := activePods[ep.GetMetadata().PodName]; !exist {
+		if !activePods.Has(ep.GetMetadata().PodName) {
 			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", ep.GetMetadata().PodName)
 			ds.PodDelete(ep.GetMetadata().PodName)
 		}

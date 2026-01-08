@@ -23,7 +23,7 @@ import (
 
 // buildDAG builds a dependency graph among data preparation plugins based on their
 // produced and consumed data keys.
-func buildDAG(plugins []PrepareDataPlugin) map[string][]string {
+func buildDAG(plugins []PrepareDataPlugin) (map[string][]string, error) {
 	dag := make(map[string][]string)
 	for _, plugin := range plugins {
 		dag[plugin.TypedName().String()] = []string{}
@@ -36,11 +36,14 @@ func buildDAG(plugins []PrepareDataPlugin) map[string][]string {
 			}
 			// Check whether plugin[i] produces something consumed by plugin[j]. In that case, j depends on i.
 			if plugins[i].Produces() != nil && plugins[j].Consumes() != nil {
-				// For all the keys produced by plugin i, check if plugin j consumes any of them.
-				// If yes, then j depends on i.
-				for producedKey := range plugins[i].Produces() {
+				for producedKey, producedData := range plugins[i].Produces() {
 					// If plugin j consumes the produced key, then j depends on i. We can break after the first match.
-					if _, ok := plugins[j].Consumes()[producedKey]; ok {
+					if consumedData, ok := plugins[j].Consumes()[producedKey]; ok {
+						// Check types are same. Reflection is avoided here for simplicity.
+						// TODO(#1985): Document this detail in IGW docs.
+						if producedData != consumedData {
+							return nil, errors.New("data type mismatch between produced and consumed data for key: " + producedKey)
+						}
 						iPluginName := plugins[i].TypedName().String()
 						jPluginName := plugins[j].TypedName().String()
 						dag[jPluginName] = append(dag[jPluginName], iPluginName)
@@ -50,7 +53,7 @@ func buildDAG(plugins []PrepareDataPlugin) map[string][]string {
 			}
 		}
 	}
-	return dag
+	return dag, nil
 }
 
 // sortPlugins builds the dependency graph and returns the plugins ordered in topological order.

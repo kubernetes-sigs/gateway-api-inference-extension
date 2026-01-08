@@ -52,7 +52,14 @@ type ResponseStreaming interface {
 	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
 }
 
-// ResponseComplete is called by the director after the complete response is sent.
+// ResponseComplete is called by the director when the request lifecycle terminates.
+// This occurs after a response is fully sent, OR if the request fails/disconnects after a pod was scheduled.
+//
+// Plugins should assume this is the final cleanup hook for a request.
+//
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2079):
+// Update signature to pass error/termination state. This is a breaking change required for plugins to distinguish
+// between success, errors, and disconnects.
 type ResponseComplete interface {
 	plugins.Plugin
 	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)

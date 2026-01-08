@@ -30,11 +30,10 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 	t.Parallel()
 
 	// A minimal valid registry config, which is required for the success case.
-	validRegistryConfig := registry.Config{
-		PriorityBands: []registry.PriorityBandConfig{
-			{Priority: 1, PriorityName: "TestBand"},
-		},
-	}
+	validRegistryConfig, err := registry.NewConfig(registry.WithPriorityBand(
+		&registry.PriorityBandConfig{Priority: 1, PriorityName: "TestBand"},
+	))
+	require.NoError(t, err)
 
 	testCases := []struct {
 		name          string
@@ -57,16 +56,6 @@ func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
 					DefaultRequestTTL: -1 * time.Second,
 				},
 				Registry: validRegistryConfig,
-			},
-			expectErr: true,
-		},
-		{
-			name: "ShouldFail_WhenRegistryConfigIsInvalid",
-			input: Config{
-				Controller: controller.Config{},
-				Registry: registry.Config{
-					PriorityBands: []registry.PriorityBandConfig{},
-				},
 			},
 			expectErr: true,
 		},

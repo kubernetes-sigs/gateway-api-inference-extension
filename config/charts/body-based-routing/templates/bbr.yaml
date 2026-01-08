@@ -13,16 +13,24 @@ spec:
       labels:
         app: {{ .Values.bbr.name }}
     spec:
+      serviceAccountName: {{ .Values.bbr.name}}-{{ .Release.Name }}
       containers:
       - name: bbr
         image: {{ .Values.bbr.image.hub }}/{{ .Values.bbr.image.name }}:{{ .Values.bbr.image.tag }}
-        imagePullPolicy: {{ .Values.bbr.image.pullPolicy | default "Always" }}
+        imagePullPolicy: {{ .Values.bbr.image.pullPolicy }}
         args:
         - "--streaming"
         # Pass additional flags via the bbr.flags field in values.yaml.
         {{- range $key, $value := .Values.bbr.flags }}
         - --{{ $key }}
         - "{{ $value }}"
+        {{- end }}
+        {{- if not .Values.bbr.multiNamespace }}
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         {{- end }}
         ports:
         - containerPort: {{ .Values.bbr.port }}

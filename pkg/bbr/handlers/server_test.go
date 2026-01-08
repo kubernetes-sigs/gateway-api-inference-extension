@@ -62,6 +62,12 @@ func TestProcessRequestBody(t *testing.T) {
 												RawValue: []byte("foo"),
 											},
 										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      baseModelHeader,
+												RawValue: []byte(""),
+											},
+										},
 									},
 								},
 							},
@@ -97,6 +103,12 @@ func TestProcessRequestBody(t *testing.T) {
 												RawValue: []byte("foo"),
 											},
 										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      baseModelHeader,
+												RawValue: []byte(""),
+											},
+										},
 									},
 								},
 							},
@@ -127,7 +139,7 @@ func TestProcessRequestBody(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			srv := NewServer(tc.streaming)
+			srv := NewServer(tc.streaming, &fakeDatastore{})
 			streamedBody := &streamedBody{}
 			for i, body := range tc.bodys {
 				got, err := srv.processRequestBody(context.Background(), body, streamedBody, log.FromContext(ctx))
@@ -143,4 +155,10 @@ func TestProcessRequestBody(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fakeDatastore struct{}
+
+func (ds *fakeDatastore) GetBaseModel(modelName string) string {
+	return ""
 }

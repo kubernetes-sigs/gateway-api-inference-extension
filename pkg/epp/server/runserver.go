@@ -30,9 +30,9 @@ import (
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -42,14 +42,14 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort                         int
 	GKNN                             common.GKNN
-	DisableK8sCrdReconcile           bool
+	ControllerCfg                    ControllerConfig
 	Datastore                        datastore.Datastore
 	SecureServing                    bool
 	HealthChecking                   bool
@@ -58,7 +58,7 @@ type ExtProcServerRunner struct {
 	RefreshPrometheusMetricsInterval time.Duration
 	MetricsStalenessThreshold        time.Duration
 	Director                         *requestcontrol.Director
-	SaturationDetector               *saturationdetector.Detector
+	SaturationDetector               *utilizationdetector.Detector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
 
 	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
@@ -66,87 +66,70 @@ type ExtProcServerRunner struct {
 	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
 }
 
-// Default values for CLI flags in main
-const (
-	DefaultGrpcPort                         = 9002                          // default for --grpc-port
-	DefaultGrpcHealthPort                   = 9003                          // default for --grpc-health-port
-	DefaultMetricsPort                      = 9090                          // default for --metrics-port
-	DefaultPoolName                         = ""                            // required but no default
-	DefaultPoolNamespace                    = "default"                     // default for --pool-namespace
-	DefaultRefreshMetricsInterval           = 50 * time.Millisecond         // default for --refresh-metrics-interval
-	DefaultRefreshPrometheusMetricsInterval = 5 * time.Second               // default for --refresh-prometheus-metrics-interval
-	DefaultSecureServing                    = true                          // default for --secure-serving
-	DefaultHealthChecking                   = false                         // default for --health-checking
-	DefaultEnablePprof                      = true                          // default for --enable-pprof
-	DefaultTotalQueuedRequestsMetric        = "vllm:num_requests_waiting"   // default for --total-queued-requests-metric
-	DefaultTotalRunningRequestsMetric       = "vllm:num_requests_running"   // default for --total-running-requests-metric
-	DefaultKvCacheUsagePercentageMetric     = "vllm:kv_cache_usage_perc"    // default for --kv-cache-usage-percentage-metric
-	DefaultLoraInfoMetric                   = "vllm:lora_requests_info"     // default for --lora-info-metric
-	DefaultCacheInfoMetric                  = "vllm:cache_config_info"      // default for --cache-info-metric
-	DefaultCertPath                         = ""                            // default for --cert-path
-	DefaultCertReload                       = false                         // default for --enable-cert-reload
-	DefaultConfigFile                       = ""                            // default for --config-file
-	DefaultConfigText                       = ""                            // default for --config-text
-	DefaultPoolGroup                        = "inference.networking.k8s.io" // default for --pool-group
-	DefaultMetricsStalenessThreshold        = 2 * time.Second
-)
-
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
+	opts := NewOptions()
+	if opts.PoolNamespace == "" {
+		opts.PoolNamespace = DefaultPoolNamespace
+	}
+
 	gknn := common.GKNN{
-		NamespacedName: types.NamespacedName{Name: DefaultPoolName, Namespace: DefaultPoolNamespace},
+		NamespacedName: types.NamespacedName{Name: opts.PoolName, Namespace: opts.PoolNamespace},
 		GroupKind: schema.GroupKind{
-			Group: DefaultPoolGroup,
+			Group: opts.PoolGroup,
 			Kind:  "InferencePool",
 		},
 	}
 	return &ExtProcServerRunner{
-		GrpcPort:                         DefaultGrpcPort,
+		GrpcPort:                         opts.GRPCPort,
 		GKNN:                             gknn,
-		DisableK8sCrdReconcile:           false,
-		SecureServing:                    DefaultSecureServing,
-		HealthChecking:                   DefaultHealthChecking,
-		RefreshPrometheusMetricsInterval: DefaultRefreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:        DefaultMetricsStalenessThreshold,
+		ControllerCfg:                    ControllerConfig{true, true, true},
+		SecureServing:                    opts.SecureServing,
+		HealthChecking:                   opts.HealthChecking,
+		RefreshPrometheusMetricsInterval: opts.RefreshPrometheusMetricsInterval,
+		MetricsStalenessThreshold:        opts.MetricsStalenessThreshold,
 		// Dependencies can be assigned later.
 	}
 }
 
 // SetupWithManager sets up the runner with the given manager.
-func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
-	if !r.DisableK8sCrdReconcile {
+	if r.ControllerCfg.startCrdReconcilers {
 		if err := (&controller.InferencePoolReconciler{
 			Datastore: r.Datastore,
 			Reader:    mgr.GetClient(),
 			PoolGKNN:  r.GKNN,
 		}).SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
+			return fmt.Errorf("failed setting up InferencePoolReconciler - %w", err)
 		}
 
-		if err := (&controller.InferenceObjectiveReconciler{
-			Datastore: r.Datastore,
-			Reader:    mgr.GetClient(),
-			PoolGKNN:  r.GKNN,
-		}).SetupWithManager(ctx, mgr); err != nil {
-			return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
+		if r.ControllerCfg.hasInferenceObjective {
+			if err := (&controller.InferenceObjectiveReconciler{
+				Datastore: r.Datastore,
+				Reader:    mgr.GetClient(),
+				PoolGKNN:  r.GKNN,
+			}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("failed setting up InferenceObjectiveReconciler - %w", err)
+			}
 		}
-	}
-
-	if err := (&controller.InferenceModelRewriteReconciler{
-		Datastore: r.Datastore,
-		Reader:    mgr.GetClient(),
-		PoolGKNN:  r.GKNN,
-	}).SetupWithManager(ctx, mgr); err != nil {
-		return fmt.Errorf("failed setting up InferenceModelRewriteReconciler: %w", err)
+		if r.ControllerCfg.hasInferenceModelRewrites {
+			if err := (&controller.InferenceModelRewriteReconciler{
+				Datastore: r.Datastore,
+				Reader:    mgr.GetClient(),
+				PoolGKNN:  r.GKNN,
+			}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("failed setting up InferenceModelRewriteReconciler - %w", err)
+			}
+		}
 	}
 
 	if err := (&controller.PodReconciler{
 		Datastore: r.Datastore,
 		Reader:    mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up PodReconciler: %v", err)
+		return fmt.Errorf("failed setting up PodReconciler - %w", err)
 	}
 	return nil
 }

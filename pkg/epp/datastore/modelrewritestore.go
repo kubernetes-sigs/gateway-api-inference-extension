@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
@@ -155,11 +157,11 @@ func (rr rewriteRuleWithMetadata) isGeneric() bool {
 	return len(rr.rule.Matches) == 0
 }
 
-func (rr rewriteRuleWithMetadata) exactModels() map[string]bool {
-	modelSet := map[string]bool{}
+func (rr rewriteRuleWithMetadata) exactModels() sets.Set[string] {
+	modelSet := sets.New[string]()
 	for _, match := range rr.rule.Matches {
 		if match.Model != nil {
-			modelSet[match.Model.Value] = true
+			modelSet.Insert(match.Model.Value)
 		}
 	}
 	return modelSet

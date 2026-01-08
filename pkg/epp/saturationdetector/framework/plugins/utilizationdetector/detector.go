@@ -14,20 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package saturationdetector implements a mechanism to determine if the
+// Package utilizationdetector implements a mechanism to determine if the
 // backend model servers are considered saturated based on observed metrics.
 //
 // The current implementation provides a saturation signal (IsSaturated)
 // primarily based on backend queue depths and KV cache utilization, reflecting
 // the saturation signals previously used by the Scheduler before the
 // introduction of the FlowController.
-//
-// TODO: Explore more advanced saturation signals in the future, such as:
-//   - Latency-objective-based saturation.
-//   - Predictive saturation based on trends.
-//   - Hysteresis bands or other smoothing techniques to prevent rapid
-//     oscillations of the saturation signal.
-package saturationdetector
+package utilizationdetector
 
 import (
 	"context"

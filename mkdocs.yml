@@ -98,6 +98,7 @@ nav:
       - InferencePool: api-types/inferencepool.md
       - InferenceObjective: api-types/inferenceobjective.md
       - InferencePoolImport: api-types/inferencepoolimport.md
+      - InferenceModelRewrite: api-types/inferencemodelrewrite.md
   - Enhancements:
     - Overview: enhancements/overview.md
   - Contributing:

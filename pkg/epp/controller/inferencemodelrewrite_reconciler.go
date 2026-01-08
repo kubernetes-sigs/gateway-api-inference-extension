@@ -73,7 +73,7 @@ func (c *InferenceModelRewriteReconciler) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{}, nil
 }
 
-func (c *InferenceModelRewriteReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (c *InferenceModelRewriteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha2.InferenceModelRewrite{}).
 		WithEventFilter(predicate.Funcs{

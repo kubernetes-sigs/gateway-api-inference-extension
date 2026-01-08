@@ -19,87 +19,67 @@ package bbr
 
 import (
 	"context"
-	"fmt"
 	"testing"
-	"time"
 
-	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
-
-	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
-	integrationutils "sigs.k8s.io/gateway-api-inference-extension/test/integration"
+	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
-var logger = logutil.NewTestLogger().V(logutil.VERBOSE)
-
+// TestBodyBasedRouting validates the "Unary" (Non-Streaming) behavior of BBR.
+// This simulates scenarios where Envoy buffers the body before sending it to ext_proc.
 func TestBodyBasedRouting(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name        string
-		req         *extProcPb.ProcessingRequest
-		wantHeaders []*configPb.HeaderValueOption
-		wantErr     bool
+		name         string
+		req          *extProcPb.ProcessingRequest
+		wantResponse *extProcPb.ProcessingResponse
+		wantErr      bool
 	}{
 		{
-			name: "success adding model parameter to header",
-			req:  integrationutils.GenerateRequest(logger, "test", "llama", nil),
-			wantHeaders: []*configPb.HeaderValueOption{
-				{
-					Header: &configPb.HeaderValue{
-						Key:      "X-Gateway-Model-Name",
-						RawValue: []byte("llama"),
-					},
-				},
-			},
-			wantErr: false,
+			name:         "success: extracts model and sets header",
+			req:          integration.ReqLLMUnary(logger, "test", "llama"),
+			wantResponse: ExpectBBRUnaryResponse("llama"),
+			wantErr:      false,
 		},
 		{
-			name:        "no model parameter",
-			req:         integrationutils.GenerateRequest(logger, "test1", "", nil),
-			wantHeaders: []*configPb.HeaderValueOption{},
-			wantErr:     false,
+			name:         "noop: no model parameter in body",
+			req:          integration.ReqLLMUnary(logger, "test1", ""),
+			wantResponse: ExpectBBRUnaryResponse(""), // Expect no headers.
+			wantErr:      false,
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(false)
-			t.Cleanup(cleanup)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-			want := &extProcPb.ProcessingResponse{}
-			if len(test.wantHeaders) > 0 {
-				want.Response = &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{
-						Response: &extProcPb.CommonResponse{
-							HeaderMutation: &extProcPb.HeaderMutation{
-								SetHeaders: test.wantHeaders,
-							},
-							ClearRouteCache: true,
-						},
-					},
-				}
+			ctx := context.Background()
+			h := NewBBRHarness(t, ctx, false)
+
+			res, err := integration.SendRequest(t, h.Client, tc.req)
+
+			if tc.wantErr {
+				require.Error(t, err, "expected error during request processing")
 			} else {
-				want.Response = &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{},
-				}
+				require.NoError(t, err, "unexpected error during request processing")
 			}
 
-			res, err := integrationutils.SendRequest(t, client, test.req)
-			if err != nil && !test.wantErr {
-				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
-			}
-			if diff := cmp.Diff(want, res, protocmp.Transform()); diff != "" {
-				t.Errorf("Unexpected response, (-want +got): %v", diff)
+			if diff := cmp.Diff(tc.wantResponse, res, protocmp.Transform()); diff != "" {
+				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}
 		})
 	}
 }
 
+// TestFullDuplexStreamed_BodyBasedRouting validates the "Streaming" behavior of BBR.
+// This validates that BBR correctly buffers streamed chunks, inspects the body, and injects the header.
 func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		reqs          []*extProcPb.ProcessingRequest
@@ -107,188 +87,53 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			name: "success adding model parameter to header",
-			reqs: integrationutils.GenerateStreamedRequestSet(logger, "test", "foo", "foo", nil),
+			name: "success: adds model header from simple body",
+			reqs: integration.ReqLLM(logger, "test", "foo", "bar"),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{
-							Response: &extProcPb.CommonResponse{
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*configPb.HeaderValueOption{
-										{
-											Header: &configPb.HeaderValue{
-												Key:      "X-Gateway-Model-Name",
-												RawValue: []byte("foo"),
-											},
-										},
-									}},
-							},
-						},
-					},
-				},
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte("{\"max_tokens\":100,\"model\":\"foo\",\"prompt\":\"test\",\"temperature\":0}"),
-											EndOfStream: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				ExpectBBRHeader("foo"),
+				ExpectBBRBodyPassThrough("test", "foo"),
 			},
 		},
 		{
-			name: "success adding model parameter to header with multiple body chunks",
-			reqs: []*extProcPb.ProcessingRequest{
-				{
-					Request: &extProcPb.ProcessingRequest_RequestHeaders{
-						RequestHeaders: &extProcPb.HttpHeaders{
-							Headers: &configPb.HeaderMap{
-								Headers: []*configPb.HeaderValue{
-									{
-										Key:   "hi",
-										Value: "mom",
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{Body: []byte("{\"max_tokens\":100,\"model\":\"sql-lo"), EndOfStream: false},
-					},
-				},
-				{
-					Request: &extProcPb.ProcessingRequest_RequestBody{
-						RequestBody: &extProcPb.HttpBody{Body: []byte("ra-sheddable\",\"prompt\":\"test\",\"temperature\":0}"), EndOfStream: true},
-					},
-				},
-			},
+			name: "success: buffers split chunks and extracts model",
+			reqs: integration.ReqRaw(
+				map[string]string{"hi": "mom"},
+				`{"max_tokens":100,"model":"sql-lo`,
+				`ra-sheddable","prompt":"test","temperature":0}`,
+			),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{
-							Response: &extProcPb.CommonResponse{
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*configPb.HeaderValueOption{
-										{
-											Header: &configPb.HeaderValue{
-												Key:      "X-Gateway-Model-Name",
-												RawValue: []byte("sql-lora-sheddable"),
-											},
-										},
-									}},
-							},
-						},
-					},
-				},
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte("{\"max_tokens\":100,\"model\":\"sql-lora-sheddable\",\"prompt\":\"test\",\"temperature\":0}"),
-											EndOfStream: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				ExpectBBRHeader("sql-lora-sheddable"),
+				ExpectBBRBodyPassThrough("test", "sql-lora-sheddable"),
 			},
 		},
 		{
-			name: "no model parameter",
-			reqs: integrationutils.GenerateStreamedRequestSet(logger, "test", "", "", nil),
+			name: "noop: handles missing model field gracefully",
+			reqs: integration.ReqLLM(logger, "test", "", ""),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{},
-					},
-				},
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        []byte("{\"max_tokens\":100,\"prompt\":\"test\",\"temperature\":0}"),
-											EndOfStream: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				ExpectBBRNoOpHeader(),
+				ExpectBBRBodyPassThrough("test", ""),
 			},
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			client, cleanup := setUpHermeticServer(true)
-			t.Cleanup(cleanup)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-			responses, err := integrationutils.StreamedRequest(t, client, test.reqs, len(test.wantResponses))
-			if err != nil && !test.wantErr {
-				t.Errorf("Unexpected error, got: %v, want error: %v", err, test.wantErr)
+			ctx := context.Background()
+			h := NewBBRHarness(t, ctx, true)
+
+			responses, err := integration.StreamedRequest(t, h.Client, tc.reqs, len(tc.wantResponses))
+
+			if tc.wantErr {
+				require.Error(t, err, "expected stream error")
+			} else {
+				require.NoError(t, err, "unexpected stream error")
 			}
 
-			if diff := cmp.Diff(test.wantResponses, responses, protocmp.Transform()); diff != "" {
-				t.Errorf("Unexpected response, (-want +got): %v", diff)
+			if diff := cmp.Diff(tc.wantResponses, responses, protocmp.Transform()); diff != "" {
+				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}
 		})
-	}
-}
-
-func setUpHermeticServer(streaming bool) (client extProcPb.ExternalProcessor_ProcessClient, cleanup func()) {
-	port := 9004
-
-	serverCtx, stopServer := context.WithCancel(context.Background())
-	serverRunner := runserver.NewDefaultExtProcServerRunner(port, false)
-	serverRunner.SecureServing = false
-	serverRunner.Streaming = streaming
-
-	go func() {
-		if err := serverRunner.AsRunnable(logger.WithName("ext-proc")).Start(serverCtx); err != nil {
-			logutil.Fatal(logger, err, "Failed to start ext-proc server")
-		}
-	}()
-
-	address := fmt.Sprintf("localhost:%v", port)
-	// Create a grpc connection
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		logutil.Fatal(logger, err, "Failed to connect", "address", address)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	client, err = extProcPb.NewExternalProcessorClient(conn).Process(ctx)
-	if err != nil {
-		logutil.Fatal(logger, err, "Failed to create client")
-	}
-	return client, func() {
-		cancel()
-		conn.Close()
-		stopServer()
-
-		// wait a little until the goroutines actually exit
-		time.Sleep(5 * time.Second)
 	}
 }

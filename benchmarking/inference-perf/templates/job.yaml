@@ -35,7 +35,7 @@ spec:
           command: ["sh", "-c", "aws s3 cp s3://{{ .Values.s3Path }} /s3Dataset/s3-dataset.json"]
           volumeMounts:
             - name: s3-dataset-volume
-              mountPath: /s3dataset
+              mountPath: /s3Dataset
 {{- end }}
       containers:
         - name: inference-perf-container

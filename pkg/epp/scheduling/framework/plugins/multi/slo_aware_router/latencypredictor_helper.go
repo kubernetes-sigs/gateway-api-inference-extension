@@ -48,7 +48,7 @@ func refreshLastSeenMetrics(ctx context.Context, sloCtx *sloRequestContext) {
 	}
 }
 
-// GetMetricsForPrediction retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
+// getLatestMetricsForProfile retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
 func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.MetricsState, error) {
 	if len(sloCtx.lastSeenMetrics) == 0 {
 		return nil, errors.New("no last seen metrics available for prediction")
@@ -62,8 +62,8 @@ func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.Metr
 	return nil, fmt.Errorf("no metrics found for primary profile %s", primaryProfileName)
 }
 
-// ProcessHeader refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
-func processHeaderForLatencyPrediction(
+// processPreRequestForLatencyPrediction refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
+func processPreRequestForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	sloCtx *sloRequestContext,
@@ -87,7 +87,7 @@ func processHeaderForLatencyPrediction(
 		KVCachePercentage:  m.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: 0,
 		PrefixCacheScore:   prefix_cache_score,
 	}
@@ -112,21 +112,22 @@ func processHeaderForLatencyPrediction(
 
 	// Advance timestamp for first token reference
 	sloCtx.lastTokenTimestamp = time.Now()
-	refreshLastSeenMetrics(ctx, sloCtx)
 	return err
 }
 
-// ProcessFirstToken records actual TTFT, trains, predicts first TPOT, updates sloCtx, and advances timestamp.
+// processFirstTokenForLatencyPrediction records actual TTFT, trains, predicts first TPOT, updates sloCtx, and advances timestamp.
 func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
+	streamingMode bool,
 	sloCtx *sloRequestContext,
 	now time.Time,
+	samplingMean float64,
+	maxSampledTokens int,
 ) {
 	logger := log.FromContext(ctx)
 
-	initializeSampler(ctx, sloCtx)
-
+	initializeSampler(ctx, sloCtx, samplingMean, maxSampledTokens)
 	// Actual TTFT
 	sloCtx.ttft = float64(now.Sub(sloCtx.requestReceivedTimestamp).Milliseconds())
 	sloCtx.generatedTokenCount = 1
@@ -140,7 +141,9 @@ func processFirstTokenForLatencyPrediction(
 
 	recordTTFTTrainingData(ctx, predictor, sloCtx, m, now, prefixCacheScore)
 
-	predictFirstTPOT(ctx, predictor, sloCtx)
+	if streamingMode {
+		predictFirstTPOT(ctx, predictor, sloCtx)
+	}
 
 	// Advance timestamp
 	sloCtx.lastTokenTimestamp = now
@@ -148,11 +151,11 @@ func processFirstTokenForLatencyPrediction(
 	refreshLastSeenMetrics(ctx, sloCtx)
 }
 
-func initializeSampler(ctx context.Context, sloCtx *sloRequestContext) {
+func initializeSampler(ctx context.Context, sloCtx *sloRequestContext, samplingMean float64, maxSampledTokens int) {
 	if sloCtx.tokenSampler == nil {
 		logger := log.FromContext(ctx)
 		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
+		sloCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
 	}
 }
@@ -174,7 +177,7 @@ func recordTTFTTrainingData(
 		ActualTPOT:         0,
 		Timestamp:          now,
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: 0,
 		PrefixCacheScore:   prefixCacheScore,
 	}
@@ -201,7 +204,7 @@ func predictFirstTPOT(
 		KVCachePercentage:  m.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: sloCtx.generatedTokenCount,
 		PrefixCacheScore:   0,
 	}
@@ -220,19 +223,21 @@ func predictFirstTPOT(
 	metrics.RecordRequestTPOTPredictionDuration(ctx, sloCtx.schedulingRequest.TargetModel, sloCtx.incomingModelName, dur.Seconds())
 }
 
-// ProcessToken records actual inter-token latency, trains, predicts sampled TPOT, updates sloCtx, and advances timestamp.
+// processTokenForLatencyPrediction records actual inter-token latency, trains, predicts sampled TPOT, updates sloCtx, and advances timestamp.
 func processTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	sloCtx *sloRequestContext,
 	now time.Time,
+	samplingMean float64,
+	maxSampledTokens int,
 ) {
 	logger := log.FromContext(ctx)
 
 	// Initialize sampler if not yet
 	if sloCtx.tokenSampler == nil {
 		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
+		sloCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
 	}
 
@@ -260,7 +265,7 @@ func processTokenForLatencyPrediction(
 		ActualTPOT:         latencyMs,
 		Timestamp:          now,
 		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningQueueSize,
+		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: sloCtx.generatedTokenCount - 1,
 		PrefixCacheScore:   0, // TPOT does not use prefix cache score
 	}
@@ -274,7 +279,7 @@ func processTokenForLatencyPrediction(
 			KVCachePercentage:  m.KVCacheUsagePercent,
 			InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
 			NumRequestWaiting:  m.WaitingQueueSize,
-			NumRequestRunning:  m.RunningQueueSize,
+			NumRequestRunning:  m.RunningRequestsSize,
 			NumTokensGenerated: sloCtx.generatedTokenCount,
 			PrefixCacheScore:   0, // TPOT does not use prefix cache score
 		}
@@ -337,7 +342,7 @@ func bulkPredictWithMetrics(
 			KVCachePercentage:  metricsStates[i].KVCacheUsagePercent,
 			InputTokenLength:   len(strings.Fields(prompts[i])),
 			NumRequestWaiting:  metricsStates[i].WaitingQueueSize,
-			NumRequestRunning:  metricsStates[i].RunningQueueSize,
+			NumRequestRunning:  metricsStates[i].RunningRequestsSize,
 			NumTokensGenerated: generatedTokenCounts[i],
 			PrefixCacheScore:   prefixCacheScores[i],
 		}
@@ -385,7 +390,7 @@ func bulkPredictWithMetrics(
 				"generated_tokens", bulkRequests[i].NumTokensGenerated,
 				"kv_cache_percent", bulkRequests[i].KVCachePercentage,
 				"waiting_queue", bulkRequests[i].NumRequestWaiting,
-				"running_queue", bulkRequests[i].NumRequestRunning,
+				"running_requests", bulkRequests[i].NumRequestRunning,
 				"prefix_cache_score", bulkRequests[i].PrefixCacheScore)
 		}
 	}

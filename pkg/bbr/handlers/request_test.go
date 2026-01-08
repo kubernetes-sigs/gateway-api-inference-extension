@@ -114,8 +114,14 @@ func TestHandleRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      "X-Gateway-Model-Name",
+												Key:      modelHeader,
 												RawValue: []byte("foo"),
+											},
+										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      baseModelHeader,
+												RawValue: []byte(""),
 											},
 										},
 									},
@@ -143,8 +149,14 @@ func TestHandleRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      "X-Gateway-Model-Name",
+												Key:      modelHeader,
 												RawValue: []byte("foo"),
+											},
+										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      baseModelHeader,
+												RawValue: []byte(""),
 											},
 										},
 									},
@@ -174,11 +186,88 @@ func TestHandleRequestBody(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "success-with-streaming-large-body",
+			body: func() map[string]any {
+				return map[string]any{
+					"model":  "foo",
+					"prompt": strings.Repeat("a", 70000),
+				}
+			}(),
+			streaming: true,
+			want: func() []*extProcPb.ProcessingResponse {
+				m := map[string]any{
+					"model":  "foo",
+					"prompt": strings.Repeat("a", 70000),
+				}
+				b, _ := json.Marshal(m)
+				limit := 62000
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{
+							RequestHeaders: &extProcPb.HeadersResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      modelHeader,
+													RawValue: []byte("foo"),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      baseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_StreamedResponse{
+											StreamedResponse: &extProcPb.StreamedBodyResponse{
+												Body:        b[:limit],
+												EndOfStream: false,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_StreamedResponse{
+											StreamedResponse: &extProcPb.StreamedBodyResponse{
+												Body:        b[limit:],
+												EndOfStream: true,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &Server{streaming: test.streaming}
+			server := NewServer(test.streaming, &fakeDatastore{})
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, bodyBytes)
 			if err != nil {

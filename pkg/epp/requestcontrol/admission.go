@@ -137,12 +137,14 @@ func (lac *LegacyAdmissionController) Admit(
 // It uses the provided Flow Controller to enqueue the request and await an outcome.
 type FlowControlAdmissionController struct {
 	flowController flowController
+	poolName       string
 }
 
 // NewFlowControlAdmissionController creates a new FlowControlAdmissionController.
-func NewFlowControlAdmissionController(fc flowController) *FlowControlAdmissionController {
+func NewFlowControlAdmissionController(fc flowController, poolName string) *FlowControlAdmissionController {
 	return &FlowControlAdmissionController{
 		flowController: fc,
+		poolName:       poolName,
 	}
 }
 
@@ -158,11 +160,14 @@ func (fcac *FlowControlAdmissionController) Admit(
 		"requestID", reqCtx.SchedulingRequest.RequestId, "priority", priority, "fairnessID", reqCtx.FairnessID)
 
 	fcReq := &flowControlRequest{
-		requestID:       reqCtx.SchedulingRequest.RequestId,
-		fairnessID:      reqCtx.FairnessID,
-		priority:        priority,
-		requestByteSize: uint64(reqCtx.RequestSize),
-		reqMetadata:     reqCtx.Request.Metadata,
+		requestID:         reqCtx.SchedulingRequest.RequestId,
+		fairnessID:        reqCtx.FairnessID,
+		priority:          priority,
+		requestByteSize:   uint64(reqCtx.RequestSize),
+		reqMetadata:       reqCtx.Request.Metadata,
+		inferencePoolName: fcac.poolName,
+		modelName:         reqCtx.IncomingModelName,
+		targetModelName:   reqCtx.TargetModelName,
 	}
 
 	outcome, err := fcac.flowController.EnqueueAndWait(ctx, fcReq)
@@ -173,11 +178,14 @@ func (fcac *FlowControlAdmissionController) Admit(
 
 // flowControlRequest is an adapter that implements the types.FlowControlRequest interface.
 type flowControlRequest struct {
-	requestID       string
-	fairnessID      string
-	priority        int
-	requestByteSize uint64
-	reqMetadata     map[string]any
+	requestID         string
+	fairnessID        string
+	priority          int
+	requestByteSize   uint64
+	reqMetadata       map[string]any
+	inferencePoolName string
+	modelName         string
+	targetModelName   string
 }
 
 var _ types.FlowControlRequest = &flowControlRequest{}
@@ -185,11 +193,12 @@ var _ types.FlowControlRequest = &flowControlRequest{}
 func (r *flowControlRequest) ID() string                         { return r.requestID }
 func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
 func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
+func (r *flowControlRequest) GetMetadata() map[string]any        { return r.reqMetadata }
+func (r *flowControlRequest) InferencePoolName() string          { return r.inferencePoolName }
+func (r *flowControlRequest) ModelName() string                  { return r.modelName }
+func (r *flowControlRequest) TargetModelName() string            { return r.targetModelName }
 func (r *flowControlRequest) FlowKey() types.FlowKey {
 	return types.FlowKey{ID: r.fairnessID, Priority: r.priority}
-}
-func (r *flowControlRequest) GetMetadata() map[string]any {
-	return r.reqMetadata
 }
 
 // translateFlowControlOutcome maps the context-rich outcome of the Flow Control layer to the public errutil.Error

@@ -259,7 +259,7 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fc := &mockFlowController{outcome: tc.fcOutcome, err: tc.fcErr}
-			ac := NewFlowControlAdmissionController(fc)
+			ac := NewFlowControlAdmissionController(fc, "pool")
 
 			err := ac.Admit(ctx, reqCtx, tc.priority)
 

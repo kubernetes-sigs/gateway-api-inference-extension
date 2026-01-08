@@ -41,7 +41,7 @@ type podPredictionResult struct {
 }
 
 // generatePredictions creates prediction results for all candidate pods
-func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, sloCtx *sloRequestContext, candidatePods []schedulingtypes.Pod) ([]podPredictionResult, error) {
+func (s *SLOAwareRouter) generatePredictions(ctx context.Context, request *schedulingtypes.LLMRequest, sloCtx *sloRequestContext, candidatePods []schedulingtypes.Pod) ([]podPredictionResult, error) {
 	logger := log.FromContext(ctx)
 	predictions := make([]podPredictionResult, 0, len(candidatePods))
 
@@ -55,8 +55,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 		logger.V(logutil.TRACE).Info("Candidate pod for scheduling", "pod", pod.GetPod().String(), "metrics", pod.GetMetrics().String())
 
 		// Get prefix cache score for the pod
-		prefixCacheScore := s.getPrefixCacheScoreForPod(ctx, state, pod)
-		sloCtx.prefixCacheScoresForPods[pod.GetPod().String()] = prefixCacheScore
+		prefixCacheScore := sloCtx.prefixCacheScoresForPods[pod.GetPod().String()]
 
 		logger.V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", pod.GetPod().String(), "prefixCacheScore", prefixCacheScore)
 
@@ -90,7 +89,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 			"prefixCacheScore", predResult.PrefixCacheScore,
 			"TTFT", prediction.TTFT,
 			"TPOT", prediction.TPOT,
-			"buffer", SLOBufferFactor,
+			"buffer", s.config.SLOBufferFactor,
 			"podMinTPOTSLO", podMinTPOTSLO,
 			"ttftSLO", sloCtx.ttftSLO,
 			"requestTPOTSLO", sloCtx.avgTPOTSLO,
@@ -108,19 +107,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, state *schedul
 
 // updateRequestContextWithPredictions updates the request context with prediction data
 func (s *SLOAwareRouter) updateRequestContextWithPredictions(sloCtx *sloRequestContext, predictions []podPredictionResult) {
-	for _, pred := range predictions {
-		if pred.Error == nil {
-			podKey := pred.Pod.GetPod().String()
-			if sloCtx.predictedTTFTForScheduling == nil {
-				sloCtx.predictedTTFTForScheduling = make(map[string]float64)
-			}
-			if sloCtx.predictedTPOTForScheduling == nil {
-				sloCtx.predictedTPOTForScheduling = make(map[string]float64)
-			}
-			sloCtx.predictedTTFTForScheduling[podKey] = pred.TTFT
-			sloCtx.predictedTPOTForScheduling[podKey] = pred.TPOT
-		}
-	}
+	sloCtx.predictionsForScheduling = predictions
 }
 
 func (s *SLOAwareRouter) validatePrediction(
@@ -129,20 +116,27 @@ func (s *SLOAwareRouter) validatePrediction(
 	podMinTPOTSLO float64,
 ) (ttftOk, tpotOk, isValid bool, headroom float64, ttftHeadroom float64) {
 
-	bufferedTPOT := sloCtx.avgTPOTSLO * s.config.SLOBufferFactor
-	// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
-	if podMinTPOTSLO > 0 {
-		if podMinTPOTSLO < sloCtx.avgTPOTSLO {
-			log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", sloCtx.avgTPOTSLO)
+	ttftOk = pred.TTFT < sloCtx.ttftSLO
+	ttftHeadroom = sloCtx.ttftSLO - pred.TTFT
+
+	tpotOk = true
+	headroom = 0.0
+
+	if s.config.StreamingMode {
+		bufferedTPOT := sloCtx.avgTPOTSLO * s.config.SLOBufferFactor
+		// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
+		if podMinTPOTSLO > 0 {
+			if podMinTPOTSLO < sloCtx.avgTPOTSLO {
+				log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", sloCtx.avgTPOTSLO)
+			}
+			bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*s.config.SLOBufferFactor)
 		}
-		bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*s.config.SLOBufferFactor)
+
+		tpotOk = pred.TPOT < bufferedTPOT
+		headroom = bufferedTPOT - pred.TPOT
 	}
 
-	tpotOk = pred.TPOT < bufferedTPOT
-	ttftOk = pred.TTFT < sloCtx.ttftSLO
-
 	isValid = ttftOk && tpotOk
-	headroom = bufferedTPOT - pred.TPOT
-	ttftHeadroom = sloCtx.ttftSLO - pred.TTFT
+
 	return
 }

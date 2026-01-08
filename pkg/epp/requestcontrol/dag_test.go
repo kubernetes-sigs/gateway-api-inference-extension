@@ -61,6 +61,10 @@ func TestPrepareDataGraph(t *testing.T) {
 	pluginX := &mockPrepareRequestDataP{name: "X", produces: map[string]any{"keyX": nil}, consumes: map[string]any{"keyY": nil}}
 	pluginY := &mockPrepareRequestDataP{name: "Y", produces: map[string]any{"keyY": nil}, consumes: map[string]any{"keyX": nil}}
 
+	// Data type mismatch plugin.
+	pluginZ1 := &mockPrepareRequestDataP{name: "Z1", produces: map[string]any{"keyZ": int(0)}}
+	pluginZ2 := &mockPrepareRequestDataP{name: "Z2", consumes: map[string]any{"keyZ": string("")}}
+
 	testCases := []struct {
 		name        string
 		plugins     []PrepareDataPlugin
@@ -109,11 +113,23 @@ func TestPrepareDataGraph(t *testing.T) {
 			expectedDAG: nil,
 			expectError: true,
 		},
+		{
+			name:        "Data type mismatch between produced and consumed data",
+			plugins:     []PrepareDataPlugin{pluginZ1, pluginZ2},
+			expectedDAG: nil,
+			expectError: true,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			dag := buildDAG(tc.plugins)
+			dag, err := buildDAG(tc.plugins)
+			if err != nil {
+				if tc.expectError {
+					assert.Error(t, err)
+					return
+				}
+			}
 			orderedPlugins, err := sortPlugins(dag, tc.plugins)
 
 			if tc.expectError {

@@ -41,6 +41,8 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/kustomize/api/krusty"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -338,6 +340,8 @@ func checkCrdStatus(
 func ExecCommandInPod(testConfig *TestConfig, podName, containerName string, cmd []string) (string, error) {
 	parameterCodec := runtime.NewParameterCodec(testConfig.Scheme)
 
+	// construct REST request to the API server.
+	// podName is curl, that is where this is being sent.
 	req := testConfig.KubeCli.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
@@ -353,11 +357,13 @@ func ExecCommandInPod(testConfig *TestConfig, podName, containerName string, cmd
 			TTY:       false,
 		}, parameterCodec)
 
+	// req.URL() contains the request above
 	exec, err := remotecommand.NewSPDYExecutor(testConfig.RestConfig, "POST", req.URL())
 	if err != nil {
 		return "", fmt.Errorf("could not initialize executor: %w", err)
 	}
 
+	// Stream the data using the executor and stream result
 	var stdout, stderr bytes.Buffer
 	execErr := exec.StreamWithContext(testConfig.Context, remotecommand.StreamOptions{
 		Stdout: &stdout,
@@ -381,12 +387,64 @@ func EventuallyExists(testConfig *TestConfig, getResource func() error) {
 	}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 }
 
+func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
+	objNames := []string{}
+	for _, unstrObj := range objs {
+		ginkgo.By(fmt.Sprintf("Processing GVK: %s", unstrObj.GroupVersionKind()))
+		unstrObj.SetNamespace(testConfig.NsName)
+
+		kind := unstrObj.GetKind()
+		name := unstrObj.GetName()
+		objNames = append(objNames, kind+"/"+name)
+
+		err := testConfig.K8sClient.Create(testConfig.Context, unstrObj, &client.CreateOptions{})
+		gomega.Expect(err).NotTo(gomega.HaveOccurred(),
+			fmt.Sprintf("Failed to create %s %s", kind, name))
+
+		clientObj := getClientObject(kind)
+		EventuallyExists(testConfig, func() error {
+			return testConfig.K8sClient.Get(testConfig.Context,
+				types.NamespacedName{Namespace: testConfig.NsName, Name: name}, clientObj)
+		})
+
+		switch kind {
+		case "CustomResourceDefinition":
+			CRDEstablished(testConfig, clientObj.(*apiextv1.CustomResourceDefinition))
+		case "Deployment":
+			DeploymentAvailable(testConfig, clientObj.(*appsv1.Deployment))
+		case "Pod":
+			PodReady(testConfig, clientObj.(*corev1.Pod))
+		}
+	}
+	return objNames
+}
+
+func CreateCrdsFromKustomize(testConfig *TestConfig, kustomizePath string) []string {
+	ginkgo.By("Running Kustomize build on: " + kustomizePath)
+
+	fSys := filesys.MakeFsOnDisk()
+	opts := krusty.MakeDefaultOptions()
+	opts.PluginConfig = krusty.MakeDefaultOptions().PluginConfig
+	k := krusty.MakeKustomizer(opts)
+
+	resMap, err := k.Run(fSys, kustomizePath)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to run kustomize build")
+
+	resources := resMap.Resources()
+	objs := make([]*unstructured.Unstructured, 0, len(resources))
+	for _, res := range resources {
+		resMap, err := res.Map()
+		gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to run kustomize get map")
+		objs = append(objs, &unstructured.Unstructured{Object: resMap})
+	}
+	return createAndVerifyObjs(testConfig, objs)
+}
+
 // CreateObjsFromYaml creates K8S objects from yaml and waits for them to be instantiated
 func CreateObjsFromYaml(testConfig *TestConfig, docs []string) []string {
-	objNames := []string{}
-
-	// For each doc, decode and create
+	objs := make([]*unstructured.Unstructured, 0, len(docs))
 	decoder := serializer.NewCodecFactory(testConfig.Scheme).UniversalDeserializer()
+
 	for _, doc := range docs {
 		trimmed := strings.TrimSpace(doc)
 		if trimmed == "" {
@@ -407,37 +465,9 @@ func CreateObjsFromYaml(testConfig *TestConfig, docs []string) []string {
 			err := testConfig.Scheme.Convert(obj, unstrObj, nil)
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		}
-
-		unstrObj.SetNamespace(testConfig.NsName)
-		kind := unstrObj.GetKind()
-		name := unstrObj.GetName()
-		objNames = append(objNames, kind+"/"+name)
-
-		// Create the object
-		err := testConfig.K8sClient.Create(testConfig.Context, unstrObj, &client.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred(),
-			"Failed to create object from YAML")
-
-		// Wait for the created object to exist.
-		clientObj := getClientObject(kind)
-		EventuallyExists(testConfig, func() error {
-			return testConfig.K8sClient.Get(testConfig.Context,
-				types.NamespacedName{Namespace: testConfig.NsName, Name: name}, clientObj)
-		})
-
-		switch kind {
-		case "CustomResourceDefinition":
-			// Wait for the CRD to be established.
-			CRDEstablished(testConfig, clientObj.(*apiextv1.CustomResourceDefinition))
-		case "Deployment":
-			// Wait for the deployment to be available.
-			DeploymentAvailable(testConfig, clientObj.(*appsv1.Deployment))
-		case "Pod":
-			// Wait for the pod to be ready.
-			PodReady(testConfig, clientObj.(*corev1.Pod))
-		}
+		objs = append(objs, unstrObj)
 	}
-	return objNames
+	return createAndVerifyObjs(testConfig, objs)
 }
 
 // DeleteObjects deletes  set of Kubernetes objects in the form of kind/name

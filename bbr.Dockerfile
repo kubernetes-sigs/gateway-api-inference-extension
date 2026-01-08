@@ -8,6 +8,8 @@ FROM ${BUILDER_IMAGE} AS builder
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
+ARG COMMIT_SHA=unknown
+ARG BUILD_REF
 
 # Dependencies
 WORKDIR /src
@@ -19,8 +21,9 @@ COPY cmd/bbr ./cmd/bbr
 COPY pkg ./pkg
 COPY internal ./internal
 COPY api ./api
+COPY version ./version
 WORKDIR /src/cmd/bbr
-RUN go build -o /bbr
+RUN go build -ldflags="-X sigs.k8s.io/gateway-api-inference-extension/version.CommitSHA=${COMMIT_SHA} -X sigs.k8s.io/gateway-api-inference-extension/version.BuildRef=${BUILD_REF}" -o /bbr
 
 ## Multistage deploy
 FROM ${BASE_IMAGE}

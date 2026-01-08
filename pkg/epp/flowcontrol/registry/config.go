@@ -21,24 +21,23 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 )
 
-// =============================================================================
-// Default Values
-// =============================================================================
+// --- Defaults ---
 
 const (
 	// defaultPriorityBandMaxBytes is the default global capacity for a priority band if not explicitly configured.
 	// It is set to 1 GB.
 	defaultPriorityBandMaxBytes uint64 = 1_000_000_000
 	// defaultIntraFlowDispatchPolicy is the default policy for selecting items within a single flow's queue.
-	defaultIntraFlowDispatchPolicy intra.RegisteredPolicyName = fcfs.FCFSPolicyName
+	defaultIntraFlowDispatchPolicy intraflow.RegisteredPolicyName = intraflow.FCFSPolicyName
 	// defaultInterFlowDispatchPolicy is the default policy for selecting which flow's queue to service next.
 	defaultInterFlowDispatchPolicy interflow.RegisteredPolicyName = interflow.BestHeadPolicyName
 	// defaultQueue is the default queue implementation for flows.
@@ -52,15 +51,59 @@ const (
 	defaultEventChannelBufferSize int = 4096
 )
 
-// =============================================================================
-// Global Configuration (FlowRegistry)
-// =============================================================================
+// --- Capability Checking ---
 
-// Config holds the master configuration for the entire `FlowRegistry`.
+// capabilityChecker abstracts the logic required to validate if a policy is compatible with a queue.
+type capabilityChecker interface {
+	CheckCompatibility(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error
+}
+
+// runtimeCapabilityChecker is the default implementation used in production.
+// It instantiates the actual plugins to inspect their required and provided capabilities.
+type runtimeCapabilityChecker struct{}
+
+func (r *runtimeCapabilityChecker) CheckCompatibility(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+	tempPolicy, err := intraflow.NewPolicyFromName(p)
+	if err != nil {
+		return fmt.Errorf("failed to validate policy %q: %w", p, err)
+	}
+
+	requiredCapabilities := tempPolicy.RequiredQueueCapabilities()
+
+	// We pass nil for the comparator as we only need to inspect static capabilities here.
+	tempQueue, err := queue.NewQueueFromName(q, nil)
+	if err != nil {
+		return fmt.Errorf("failed to instantiate queue type %q: %w", q, err)
+	}
+
+	if len(requiredCapabilities) == 0 {
+		return nil // The policy is compatible with any queue type.
+	}
+
+	queueCapabilities := tempQueue.Capabilities()
+	capabilitySet := make(map[framework.QueueCapability]struct{}, len(queueCapabilities))
+	for _, cap := range queueCapabilities {
+		capabilitySet[cap] = struct{}{}
+	}
+
+	for _, req := range requiredCapabilities {
+		if _, ok := capabilitySet[req]; !ok {
+			return fmt.Errorf(
+				"policy %q is not compatible with queue %q: missing capability %q: %w",
+				tempPolicy.Name(),
+				tempQueue.Name(),
+				req,
+				contracts.ErrPolicyQueueIncompatible,
+			)
+		}
+	}
+	return nil
+}
+
+// --- Configuration ---
+
+// Config holds the master configuration for the entire FlowRegistry.
 // It serves as the top-level blueprint, defining global settings and the templates for its priority bands.
-//
-// This configuration is validated and defaulted once at startup. It is then used to generate partitioned `ShardConfig`
-// instances for each internal `registryShard`.
 type Config struct {
 	// MaxBytes defines an optional, global maximum total byte size limit aggregated across all priority bands and shards.
 	// The `controller.FlowController` enforces this limit in addition to per-band capacity limits.
@@ -69,18 +112,21 @@ type Config struct {
 	MaxBytes uint64
 
 	// PriorityBands defines the set of priority band templates managed by the `FlowRegistry`.
-	// The configuration for each band, including its default policies and queue types, is specified here.
-	// These templates are used to generate partitioned `ShardPriorityBandConfig`s.
-	// Required: At least one `PriorityBandConfig` must be provided for a functional registry.
-	PriorityBands []PriorityBandConfig
+	// It is a map keyed by Priority level, providing O(1) access and ensuring priority uniqueness by definition.
+	PriorityBands map[int]*PriorityBandConfig
+
+	// DefaultPriorityBand serves as a template for dynamically provisioning priority bands when a request arrives with a
+	// priority level that was not explicitly configured.
+	// If nil, it is automatically populated with system defaults during NewConfig.
+	DefaultPriorityBand *PriorityBandConfig
 
 	// InitialShardCount specifies the number of parallel shards to create when the registry is initialized.
 	// This value must be greater than zero.
 	// Optional: Defaults to `defaultInitialShardCount` (1).
 	InitialShardCount int
 
-	// FlowGCTimeout defines the interval at which the registry scans for and garbage collects idle flows. A flow is
-	// collected if it has been observed to be Idle for at least one full scan interval.
+	// FlowGCTimeout defines the interval at which the registry scans for and garbage collects idle flows.
+	// A flow is collected if it has been observed to be Idle for at least one full scan interval.
 	// Optional: Defaults to `defaultFlowGCTimeout` (5 minutes).
 	FlowGCTimeout time.Duration
 
@@ -90,19 +136,6 @@ type Config struct {
 	// This value must be greater than zero.
 	// Optional: Defaults to `defaultEventChannelBufferSize` (4096).
 	EventChannelBufferSize int
-
-	// priorityBandMap provides O(1) lookups of `PriorityBandConfig` by priority level.
-	// Crucially, this map serves as a correctness mechanism. It ensures that accessors return a safe, stable pointer to
-	// the correct element within this specific configuration instance, preventing common "pointer-to-loop-variable"
-	// errors, especially across deep copies or partitioning.
-	// It is populated during validation and when the config is copied or partitioned.
-	priorityBandMap map[int]*PriorityBandConfig
-
-	// Factory functions used for plugin instantiation during configuration validation.
-	// These enable dependency injection for unit testing the validation logic.
-	interFlowDispatchPolicyFactory interFlowDispatchPolicyFactory
-	intraFlowDispatchPolicyFactory intraFlowDispatchPolicyFactory
-	queueFactory                   queueFactory
 }
 
 // PriorityBandConfig defines the configuration template for a single priority band.
@@ -121,203 +154,305 @@ type PriorityBandConfig struct {
 
 	// IntraFlowDispatchPolicy specifies the default name of the policy used to select a request from within a single
 	// flow's queue in this band.
-	// Optional: Defaults to `defaultIntraFlowDispatchPolicy` ("FCFS").
-	IntraFlowDispatchPolicy intra.RegisteredPolicyName
+	// Optional: Defaults to defaultIntraFlowDispatchPolicy ("FCFS").
+	IntraFlowDispatchPolicy intraflow.RegisteredPolicyName
 
 	// InterFlowDispatchPolicy specifies the name of the policy used to select which flow's queue to service next from
 	// this band.
-	// Optional: Defaults to `defaultInterFlowDispatchPolicy` ("BestHead").
+	// Optional: Defaults to defaultInterFlowDispatchPolicy ("BestHead").
 	InterFlowDispatchPolicy interflow.RegisteredPolicyName
 
 	// Queue specifies the default name of the `framework.SafeQueue` implementation for flow queues in this band.
-	// Optional: Defaults to `defaultQueue` ("ListQueue").
+	// Optional: Defaults to defaultQueue ("ListQueue").
 	Queue queue.RegisteredQueueName
 
 	// MaxBytes defines the maximum total byte size for this priority band, aggregated across all shards.
-	// Optional: Defaults to `defaultPriorityBandMaxBytes` (1 GB).
+	// Optional: Defaults to defaultPriorityBandMaxBytes (1 GB).
 	MaxBytes uint64
 }
 
-// =============================================================================
-// Shard-Level Configuration
-// =============================================================================
+// --- Config Functional Options ---
 
-// ShardConfig holds the partitioned configuration for a single `registryShard`.
-// It contains only the data relevant to that shard and is derived from the global `Config`.
-type ShardConfig struct {
-	// MaxBytes is this shard's partitioned portion of the global `Config.MaxBytes` limit.
-	MaxBytes uint64
-
-	// PriorityBands holds the partitioned configuration for each priority band managed by this shard.
-	PriorityBands []ShardPriorityBandConfig
-
-	// priorityBandMap provides O(1) lookups of `ShardPriorityBandConfig` by priority level.
-	// It serves as a correctness mechanism, ensuring that accessors return a safe, stable pointer to the correct element
-	// within this specific shard configuration instance.
-	priorityBandMap map[int]*ShardPriorityBandConfig
+// configBuilder holds the intermediate state during NewConfig.
+// It allows us to manage build-time dependencies (like capabilityChecker) without polluting the final Config struct.
+type configBuilder struct {
+	config  *Config
+	checker capabilityChecker
 }
 
-// ShardPriorityBandConfig holds the partitioned configuration for a single priority band within a single shard.
-type ShardPriorityBandConfig struct {
-	// Priority is the unique numerical priority level for this band.
-	Priority int
-	// PriorityName is a unique human-readable name for this priority band.
-	PriorityName string
-	// IntraFlowDispatchPolicy is the name of the policy for dispatch within a flow's queue.
-	IntraFlowDispatchPolicy intra.RegisteredPolicyName
-	// InterFlowDispatchPolicy is the name of the policy for dispatch between flow queues.
-	InterFlowDispatchPolicy interflow.RegisteredPolicyName
-	// Queue is the name of the queue implementation to use.
-	Queue queue.RegisteredQueueName
-	// MaxBytes is this shard's partitioned portion of this band's global capacity limit.
-	// The `controller.FlowController` enforces this limit for this specific shard.
-	MaxBytes uint64
+// ConfigOption defines a functional option for configuring the registry.
+type ConfigOption func(*configBuilder) error
+
+// WithMaxBytes sets the global maximum total byte size limit.
+func WithMaxBytes(maxBytes uint64) ConfigOption {
+	return func(b *configBuilder) error {
+		b.config.MaxBytes = maxBytes
+		return nil
+	}
 }
 
-// getBandConfig finds and returns the shard-level configuration for a specific priority level.
-// Returns an error wrapping `contracts.ErrPriorityBandNotFound` if the priority is not configured.
-func (sc *ShardConfig) getBandConfig(priority int) (*ShardPriorityBandConfig, error) {
-	if band, ok := sc.priorityBandMap[priority]; ok {
-		return band, nil
+// WithInitialShardCount sets the number of shards to create on startup.
+func WithInitialShardCount(count int) ConfigOption {
+	return func(b *configBuilder) error {
+		if count <= 0 {
+			return errors.New("initialShardCount must be greater than 0")
+		}
+		b.config.InitialShardCount = count
+		return nil
 	}
-	return nil, fmt.Errorf("shard config for priority %d not found: %w", priority, contracts.ErrPriorityBandNotFound)
 }
 
-// =============================================================================
-// Internal Methods and Helpers
-// =============================================================================
-
-// --- Validation and Defaulting ---
-
-// ValidateAndApplyDefaults checks the global configuration for validity and then creates a new `Config` object,
-// populating any empty fields with system defaults.
-// It does not mutate the receiver.
-func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
-	cfg := c.deepCopy()
-
-	// Apply defaults to top-level fields.
-	if cfg.InitialShardCount <= 0 {
-		cfg.InitialShardCount = defaultInitialShardCount
-	}
-	if cfg.FlowGCTimeout <= 0 {
-		cfg.FlowGCTimeout = defaultFlowGCTimeout
-	}
-	if cfg.EventChannelBufferSize <= 0 {
-		cfg.EventChannelBufferSize = defaultEventChannelBufferSize
-	}
-
-	// Ensure the DI factories are initialized for production use if `NewConfig` was called without options.
-	if cfg.interFlowDispatchPolicyFactory == nil {
-		cfg.interFlowDispatchPolicyFactory = interflow.NewPolicyFromName
-	}
-	if cfg.intraFlowDispatchPolicyFactory == nil {
-		cfg.intraFlowDispatchPolicyFactory = intra.NewPolicyFromName
-	}
-	if cfg.queueFactory == nil {
-		cfg.queueFactory = queue.NewQueueFromName
-	}
-
-	if len(cfg.PriorityBands) == 0 {
-		return nil, errors.New("config validation failed: at least one priority band must be defined")
-	}
-
-	// Validate and default each priority band.
-	priorities := make(map[int]struct{})
-	priorityNames := make(map[string]struct{})
-	cfg.priorityBandMap = make(map[int]*PriorityBandConfig, len(cfg.PriorityBands))
-
-	for i := range cfg.PriorityBands {
-		band := &cfg.PriorityBands[i]
-		if _, exists := priorities[band.Priority]; exists {
-			return nil, fmt.Errorf("config validation failed: duplicate priority level %d found", band.Priority)
+// WithFlowGCTimeout sets the idle flow garbage collection interval.
+func WithFlowGCTimeout(d time.Duration) ConfigOption {
+	return func(b *configBuilder) error {
+		if d <= 0 {
+			return errors.New("flowGCTimeout must be positive")
 		}
-		priorities[band.Priority] = struct{}{}
+		b.config.FlowGCTimeout = d
+		return nil
+	}
+}
 
-		if band.PriorityName == "" {
-			return nil, fmt.Errorf("config validation failed: PriorityName is required for priority band %d", band.Priority)
+// WithPriorityBand adds a priority band configuration.
+// If a band with the same Priority already exists, it returns an error.
+func WithPriorityBand(band *PriorityBandConfig) ConfigOption {
+	return func(b *configBuilder) error {
+		if band == nil {
+			return errors.New("cannot add nil PriorityBandConfig")
 		}
-		if _, exists := priorityNames[band.PriorityName]; exists {
-			return nil, fmt.Errorf("config validation failed: duplicate priority name %q found", band.PriorityName)
+		if _, exists := b.config.PriorityBands[band.Priority]; exists {
+			return fmt.Errorf("duplicate priority level %d", band.Priority)
 		}
-		priorityNames[band.PriorityName] = struct{}{}
+		b.config.PriorityBands[band.Priority] = band
+		return nil
+	}
+}
 
-		if band.IntraFlowDispatchPolicy == "" {
-			band.IntraFlowDispatchPolicy = defaultIntraFlowDispatchPolicy
-		}
-		if band.InterFlowDispatchPolicy == "" {
-			band.InterFlowDispatchPolicy = defaultInterFlowDispatchPolicy
-		}
-		if band.Queue == "" {
-			band.Queue = defaultQueue
-		}
-		if band.MaxBytes == 0 {
-			band.MaxBytes = defaultPriorityBandMaxBytes
-		}
+// WithDefaultPriorityBand sets the template configuration used for dynamically provisioning priority bands.
+func WithDefaultPriorityBand(band *PriorityBandConfig) ConfigOption {
+	return func(b *configBuilder) error {
+		b.config.DefaultPriorityBand = band
+		return nil
+	}
+}
 
-		if err := cfg.validateBandCompatibility(*band); err != nil {
+// withCapabilityChecker overrides the compatibility checker used during validation.
+// It is intended for use only in internal unit tests.
+// test-only
+func withCapabilityChecker(checker capabilityChecker) ConfigOption {
+	return func(b *configBuilder) error {
+		if checker == nil {
+			return errors.New("cannot set nil CapabilityChecker")
+		}
+		b.checker = checker
+		return nil
+	}
+}
+
+// --- PriorityBandConfig Functional Options ---
+
+// PriorityBandConfigOption defines a functional option for configuring a single PriorityBandConfig.
+type PriorityBandConfigOption func(*PriorityBandConfig) error
+
+// WithIntraFlowPolicy sets the intraflow-flow dispatch policy (e.g., "FCFS").
+func WithIntraFlowPolicy(name intraflow.RegisteredPolicyName) PriorityBandConfigOption {
+	return func(p *PriorityBandConfig) error {
+		if name == "" {
+			return errors.New("IntraFlowDispatchPolicy cannot be empty")
+		}
+		p.IntraFlowDispatchPolicy = name
+		return nil
+	}
+}
+
+// WithInterFlowPolicy sets the inter-flow dispatch policy (e.g., "RoundRobin").
+func WithInterFlowPolicy(name interflow.RegisteredPolicyName) PriorityBandConfigOption {
+	return func(p *PriorityBandConfig) error {
+		if name == "" {
+			return errors.New("InterFlowDispatchPolicy cannot be empty")
+		}
+		p.InterFlowDispatchPolicy = name
+		return nil
+	}
+}
+
+// WithQueue sets the queue implementation (e.g., "ListQueue") for flows in this band.
+func WithQueue(name queue.RegisteredQueueName) PriorityBandConfigOption {
+	return func(p *PriorityBandConfig) error {
+		if name == "" {
+			return errors.New("Queue cannot be empty")
+		}
+		p.Queue = name
+		return nil
+	}
+}
+
+// WithBandMaxBytes sets the capacity limit for this specific priority band.
+func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
+	return func(p *PriorityBandConfig) error {
+		p.MaxBytes = maxBytes
+		return nil
+	}
+}
+
+// --- Constructors ---
+
+// NewConfig creates a new Config populated with system defaults, applies the provided options, and enforces strict
+// validation.
+func NewConfig(opts ...ConfigOption) (*Config, error) {
+	builder := &configBuilder{
+		config: &Config{
+			MaxBytes:               0, // no limit enforced
+			InitialShardCount:      defaultInitialShardCount,
+			FlowGCTimeout:          defaultFlowGCTimeout,
+			EventChannelBufferSize: defaultEventChannelBufferSize,
+			PriorityBands:          make(map[int]*PriorityBandConfig),
+		},
+		checker: &runtimeCapabilityChecker{},
+	}
+
+	for _, opt := range opts {
+		if err := opt(builder); err != nil {
 			return nil, err
 		}
-		cfg.priorityBandMap[band.Priority] = band
 	}
-	return cfg, nil
+
+	// Initialize DefaultPriorityBand if missing.
+	// This ensures we always have a template for dynamic provisioning.
+	if builder.config.DefaultPriorityBand == nil {
+		builder.config.DefaultPriorityBand = &PriorityBandConfig{}
+	}
+
+	// Apply defaults to the template.
+	builder.config.DefaultPriorityBand.applyDefaults()
+	if builder.config.DefaultPriorityBand.PriorityName == "" {
+		builder.config.DefaultPriorityBand.PriorityName = "Dynamic-Default"
+	}
+
+	// Apply defaults to all explicitly configured bands.
+	for _, band := range builder.config.PriorityBands {
+		band.applyDefaults()
+	}
+
+	if err := builder.config.validate(builder.checker); err != nil {
+		return nil, fmt.Errorf("invalid registry config: %w", err)
+	}
+	return builder.config, nil
 }
 
-// validateBandCompatibility verifies that a band's configured queue type has the necessary capabilities.
-func (c *Config) validateBandCompatibility(band PriorityBandConfig) error {
-	policy, err := c.intraFlowDispatchPolicyFactory(band.IntraFlowDispatchPolicy)
-	if err != nil {
-		return fmt.Errorf("failed to validate policy %q for priority band %d: %w",
-			band.IntraFlowDispatchPolicy, band.Priority, err)
+// NewPriorityBandConfig creates a new band configuration with the required fields.
+// It applies system defaults first, then applies any provided options to override those defaults.
+func NewPriorityBandConfig(priority int, name string, opts ...PriorityBandConfigOption) (*PriorityBandConfig, error) {
+	pb := &PriorityBandConfig{
+		Priority:     priority,
+		PriorityName: name,
 	}
 
-	requiredCapabilities := policy.RequiredQueueCapabilities()
-	if len(requiredCapabilities) == 0 {
-		return nil // The policy is compatible with any queue type.
+	pb.applyDefaults()
+
+	for _, opt := range opts {
+		if err := opt(pb); err != nil {
+			return nil, err
+		}
 	}
 
-	// Create a temporary queue instance to inspect its capabilities.
-	tempQueue, err := c.queueFactory(band.Queue, nil)
-	if err != nil {
-		return fmt.Errorf("failed to instantiate queue type %q for capability inspection (priority band %d): %w",
-			band.Queue, band.Priority, err)
-	}
-	queueCapabilities := tempQueue.Capabilities()
+	return pb, nil
+}
 
-	capabilitySet := make(map[framework.QueueCapability]struct{}, len(queueCapabilities))
-	for _, cap := range queueCapabilities {
-		capabilitySet[cap] = struct{}{}
-	}
+// --- Validation & Defaults ---
 
-	for _, req := range requiredCapabilities {
-		if _, ok := capabilitySet[req]; !ok {
-			return fmt.Errorf(
-				"policy %q is not compatible with queue %q for priority band %d (%s): missing capability %q: %w",
-				policy.Name(),
-				tempQueue.Name(),
-				band.Priority,
-				band.PriorityName,
-				req,
-				contracts.ErrPolicyQueueIncompatible,
-			)
+func (p *PriorityBandConfig) applyDefaults() {
+	if p.IntraFlowDispatchPolicy == "" {
+		p.IntraFlowDispatchPolicy = defaultIntraFlowDispatchPolicy
+	}
+	if p.InterFlowDispatchPolicy == "" {
+		p.InterFlowDispatchPolicy = defaultInterFlowDispatchPolicy
+	}
+	if p.Queue == "" {
+		p.Queue = defaultQueue
+	}
+	if p.MaxBytes == 0 {
+		p.MaxBytes = defaultPriorityBandMaxBytes
+	}
+}
+
+// validate checks the integrity of a single band's configuration.
+func (p *PriorityBandConfig) validate(checker capabilityChecker) error {
+	if p.PriorityName == "" {
+		return fmt.Errorf("PriorityName is required for priority band %d", p.Priority)
+	}
+	if p.IntraFlowDispatchPolicy == "" {
+		return fmt.Errorf("IntraFlowDispatchPolicy required for priority band %d", p.Priority)
+	}
+	if p.InterFlowDispatchPolicy == "" {
+		return fmt.Errorf("InterFlowDispatchPolicy required for priority band %d", p.Priority)
+	}
+	if p.Queue == "" {
+		return fmt.Errorf("Queue required for priority band %d", p.Priority)
+	}
+	if checker != nil {
+		if err := checker.CheckCompatibility(p.IntraFlowDispatchPolicy, p.Queue); err != nil {
+			return fmt.Errorf("priority band %d (%s) configuration error: %w",
+				p.Priority, p.PriorityName, err)
 		}
 	}
 	return nil
 }
 
-// --- Partitioning Logic ---
+// validate checks global constraints and delegates band validation.
+func (c *Config) validate(checker capabilityChecker) error {
+	if c.InitialShardCount <= 0 {
+		return errors.New("initialShardCount must be greater than 0")
+	}
+	if c.FlowGCTimeout <= 0 {
+		return errors.New("flowGCTimeout must be positive")
+	}
+	if c.EventChannelBufferSize <= 0 {
+		return errors.New("eventChannelBufferSize must be greater than 0")
+	}
+
+	// Validate the dynamic template.
+	// We use a dummy priority since the template itself doesn't have a fixed priority.
+	templateValidationCopy := *c.DefaultPriorityBand
+	templateValidationCopy.Priority = 0
+	if err := templateValidationCopy.validate(checker); err != nil {
+		return fmt.Errorf("invalid DefaultPriorityBand configuration: %w", err)
+	}
+
+	// Validate statically configured bands.
+	names := sets.New[string]()
+	for _, band := range c.PriorityBands {
+		if names.Has(band.PriorityName) {
+			return fmt.Errorf("duplicate priority name %q found", band.PriorityName)
+		}
+		names.Insert(band.PriorityName)
+
+		if err := band.validate(checker); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// --- Sharding & Partitioning ---
+
+// ShardConfig holds the partitioned configuration for a single registryShard.
+type ShardConfig struct {
+	MaxBytes      uint64
+	PriorityBands map[int]*PriorityBandConfig
+}
 
 // partition derives a `ShardConfig` from the master `Config` for a specific shard index.
 // It calculates the capacity distribution, ensuring that the total global capacity is distributed completely and
 // evenly.
 func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 	shardCfg := &ShardConfig{
-		MaxBytes:        partitionUint64(c.MaxBytes, shardIndex, totalShards),
-		PriorityBands:   make([]ShardPriorityBandConfig, len(c.PriorityBands)),
-		priorityBandMap: make(map[int]*ShardPriorityBandConfig, len(c.PriorityBands)),
+		MaxBytes:      partitionUint64(c.MaxBytes, shardIndex, totalShards),
+		PriorityBands: make(map[int]*PriorityBandConfig, len(c.PriorityBands)),
 	}
 
-	for i, template := range c.PriorityBands {
-		shardBandCfg := ShardPriorityBandConfig{
+	for _, template := range c.PriorityBands {
+		shardBand := &PriorityBandConfig{
 			Priority:                template.Priority,
 			PriorityName:            template.PriorityName,
 			IntraFlowDispatchPolicy: template.IntraFlowDispatchPolicy,
@@ -325,11 +460,8 @@ func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 			Queue:                   template.Queue,
 			MaxBytes:                partitionUint64(template.MaxBytes, shardIndex, totalShards),
 		}
-		shardCfg.PriorityBands[i] = shardBandCfg
 
-		// Crucial: We must take the address of the element within the new slice (`shardCfg.PriorityBands`) to ensure the
-		// map pointers are correct for the newly created ShardConfig instance.
-		shardCfg.priorityBandMap[shardBandCfg.Priority] = &shardCfg.PriorityBands[i]
+		shardCfg.PriorityBands[shardBand.Priority] = shardBand
 	}
 	return shardCfg
 }
@@ -337,129 +469,42 @@ func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 // partitionUint64 distributes a total uint64 value across a number of partitions.
 // It distributes the remainder of the division one by one to the first few partitions.
 func partitionUint64(total uint64, partitionIndex, totalPartitions int) uint64 {
-	if totalPartitions <= 0 {
-		panic(fmt.Sprintf("invariant violation: cannot partition into %d partitions", totalPartitions))
-	}
 	if total == 0 {
 		return 0
 	}
-	base := total / uint64(totalPartitions)
-	remainder := total % uint64(totalPartitions)
-	// Distribute the remainder. The first `remainder` partitions get one extra from the total.
-	// For example, if total=10 and partitions=3, base=3, remainder=1. Partition 0 gets 3+1=4, partitions 1 and 2 get 3.
+
+	t := uint64(totalPartitions)
+	base := total / t
+	remainder := total % t
+
 	if uint64(partitionIndex) < remainder {
-		base++
+		return base + 1
 	}
 	return base
 }
 
-// --- Test-Only Dependency Injection ---
-
-// configOption is a function that applies a configuration change to a `Config` object.
-// This is used exclusively for dependency injection in tests and should not be used in production code.
-type configOption func(*Config)
-
-// interFlowDispatchPolicyFactory defines the signature for a function that creates an
-// `framework.InterFlowDispatchPolicy` instance from its registered name.
-// It serves as an abstraction over the concrete `interflow.NewPolicyFromName` factory, enabling dependency injection for
-// testing validation logic.
-type interFlowDispatchPolicyFactory func(name interflow.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error)
-
-// intraFlowDispatchPolicyFactory defines the signature for a function that creates an
-// `framework.IntraFlowDispatchPolicy` instance from its registered name.
-// It serves as an abstraction over the concrete `intra.NewPolicyFromName` factory, enabling dependency injection for
-// testing validation logic.
-type intraFlowDispatchPolicyFactory func(name intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error)
-
-// queueFactory defines the signature for a function that creates a `framework.SafeQueue` instance from its registered
-// name and a given `framework.ItemComparator`.
-// It serves as an abstraction over the concrete `queue.NewQueueFromName` factory, enabling dependency injection for
-// testing validation logic.
-type queueFactory func(
-	name queue.RegisteredQueueName,
-	comparator framework.ItemComparator,
-) (framework.SafeQueue, error)
-
-// withInterFlowDispatchPolicyFactory returns a test-only `configOption` that overrides the factory function for
-// creating `framework.InterFlowDispatchPolicy` instances.
-// This is used exclusively for testing validation logic.
-// test-only
-func withInterFlowDispatchPolicyFactory(factory interFlowDispatchPolicyFactory) configOption {
-	return func(c *Config) {
-		c.interFlowDispatchPolicyFactory = factory
-	}
-}
-
-// withIntraFlowDispatchPolicyFactory returns a test-only `configOption` that overrides the factory function for
-// creating `framework.IntraFlowDispatchPolicy` instances.
-// This is used exclusively for testing validation logic.
-// test-only
-func withIntraFlowDispatchPolicyFactory(factory intraFlowDispatchPolicyFactory) configOption {
-	return func(c *Config) {
-		c.intraFlowDispatchPolicyFactory = factory
-	}
-}
-
-// withQueueFactory returns a test-only `configOption` that overrides the factory function for creating
-// `framework.SafeQueue` instances.
-// This is used exclusively for testing validation logic.
-// test-only
-func withQueueFactory(factory queueFactory) configOption {
-	return func(c *Config) {
-		c.queueFactory = factory
-	}
-}
-
-// newConfig creates a new validated and defaulted `Config` object.
-// It applies provided test-only functional options before validation and defaulting.
-// It does not mutate the input `cfg`.
-// test-only
-func newConfig(cfg Config, opts ...configOption) (*Config, error) {
-	newCfg := cfg.deepCopy()
-	for _, opt := range opts {
-		opt(newCfg)
-	}
-	return newCfg.ValidateAndApplyDefaults()
-}
-
-// --- Internal Utilities ---
-
-// deepCopy creates a deep copy of the `Config` object.
-func (c *Config) deepCopy() *Config {
+// Clone creates a deep copy of the Config.
+// It ensures the new Config has its own independent map and PriorityBandConfig instances.
+func (c *Config) Clone() *Config {
 	if c == nil {
 		return nil
 	}
-	newCfg := &Config{
-		MaxBytes:                       c.MaxBytes,
-		InitialShardCount:              c.InitialShardCount,
-		FlowGCTimeout:                  c.FlowGCTimeout,
-		EventChannelBufferSize:         c.EventChannelBufferSize,
-		PriorityBands:                  make([]PriorityBandConfig, len(c.PriorityBands)),
-		interFlowDispatchPolicyFactory: c.interFlowDispatchPolicyFactory,
-		intraFlowDispatchPolicyFactory: c.intraFlowDispatchPolicyFactory,
-		queueFactory:                   c.queueFactory,
+
+	clone := *c
+
+	if c.DefaultPriorityBand != nil {
+		val := *c.DefaultPriorityBand
+		clone.DefaultPriorityBand = &val
 	}
 
-	// PriorityBandConfig contains only value types, so a slice copy is sufficient for a deep copy.
-	copy(newCfg.PriorityBands, c.PriorityBands)
-
-	if c.priorityBandMap != nil {
-		newCfg.priorityBandMap = make(map[int]*PriorityBandConfig, len(c.PriorityBands))
-		// Crucial: We must rebuild the map and take the address of the elements within the new slice (`newCfg.PriorityBands`)
-		// to ensure the map pointers are correct for the newly created `Config` instance.
-		for i := range newCfg.PriorityBands {
-			band := &newCfg.PriorityBands[i]
-			newCfg.priorityBandMap[band.Priority] = band
+	if c.PriorityBands != nil {
+		clone.PriorityBands = make(map[int]*PriorityBandConfig, len(c.PriorityBands))
+		for prio, band := range c.PriorityBands {
+			// Dereference the pointer to copy the struct value, then take the address of the new value.
+			// This ensures 'clone' points to a new memory address.
+			b := *band
+			clone.PriorityBands[prio] = &b
 		}
 	}
-	return newCfg
-}
-
-// getBandConfig finds and returns the global configuration template for a specific priority level.
-// Returns an error wrapping `contracts.ErrPriorityBandNotFound` if the priority is not configured.
-func (c *Config) getBandConfig(priority int) (*PriorityBandConfig, error) {
-	if band, ok := c.priorityBandMap[priority]; ok {
-		return band, nil
-	}
-	return nil, fmt.Errorf("global config for priority %d not found: %w", priority, contracts.ErrPriorityBandNotFound)
+	return &clone
 }

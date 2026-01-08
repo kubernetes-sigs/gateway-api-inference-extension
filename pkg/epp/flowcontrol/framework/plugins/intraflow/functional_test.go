@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package dispatch_test
+package intraflow
 
 import (
 	"testing"
@@ -23,8 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
-	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch/fcfs"
 )
 
 // TestIntraFlowDispatchPolicyConformance is the main conformance test suite for `framework.IntraFlowDispatchPolicy`
@@ -34,7 +32,7 @@ import (
 func TestIntraFlowDispatchPolicyConformance(t *testing.T) {
 	t.Parallel()
 
-	for policyName, constructor := range dispatch.RegisteredPolicies {
+	for policyName, constructor := range RegisteredPolicies {
 		t.Run(string(policyName), func(t *testing.T) {
 			t.Parallel()
 

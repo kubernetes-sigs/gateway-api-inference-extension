@@ -65,7 +65,7 @@ func TestLogger(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = logr.NewContext(ctx, logger)
 
-	StartMetricsLogger(ctx, &fakeDataStore{}, 100*time.Millisecond, 100*time.Millisecond)
+	StartMetricsLogger(ctx, &FakeLoggerDataStore{}, 100*time.Millisecond, 100*time.Millisecond)
 
 	time.Sleep(6 * time.Second)
 	cancel()
@@ -74,7 +74,7 @@ func TestLogger(t *testing.T) {
 	assert.Contains(t, logOutput, "Refreshing Prometheus Metrics	{\"ReadyPods\": 2}")
 	assert.Contains(t, logOutput, "Current Pods and metrics gathered	{\"Fresh metrics\": \"[Metadata: {NamespacedName:default/pod1 PodName: Address:1.2.3.4:5678")
 	assert.Contains(t, logOutput, "Metrics: {ActiveModels:map[modelA:1] WaitingModels:map[modelB:2] MaxActiveModels:5")
-	assert.Contains(t, logOutput, "RunningQueueSize:3 WaitingQueueSize:7 KVCacheUsagePercent:42.5 KvCacheMaxTokenCapacity:2048")
+	assert.Contains(t, logOutput, "RunningRequestsSize:3 WaitingQueueSize:7 KVCacheUsagePercent:42.5 KvCacheMaxTokenCapacity:2048")
 	assert.Contains(t, logOutput, "Metadata: {NamespacedName:default/pod2 PodName: Address:1.2.3.4:5679")
 	assert.Contains(t, logOutput, "\"Stale metrics\": \"[]\"")
 }
@@ -94,19 +94,19 @@ var pod2 = &datalayer.EndpointMetadata{
 	Address: "1.2.3.4:5679",
 }
 
-type fakeDataStore struct{}
+type FakeLoggerDataStore struct{}
 
-func (f *fakeDataStore) PoolGet() (*datalayer.EndpointPool, error) {
+func (f *FakeLoggerDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	pool := &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}
 	return poolutil.InferencePoolToEndpointPool(pool), nil
 }
 
-func (f *fakeDataStore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
+func (f *FakeLoggerDataStore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
 	var m = &datalayer.Metrics{
 		ActiveModels:            map[string]int{"modelA": 1},
 		WaitingModels:           map[string]int{"modelB": 2},
 		MaxActiveModels:         5,
-		RunningQueueSize:        3,
+		RunningRequestsSize:     3,
 		WaitingQueueSize:        7,
 		KVCacheUsagePercent:     42.5,
 		KvCacheMaxTokenCapacity: 2048,

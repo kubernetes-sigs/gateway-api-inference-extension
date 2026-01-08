@@ -28,8 +28,9 @@ import (
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -95,9 +96,16 @@ func InstantiateAndConfigure(
 		return nil, fmt.Errorf("scheduler config build failed: %w", err)
 	}
 
+	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
+	dataConfig, err := buildDataLayerConfig(rawConfig.Data, featureGates[datalayer.ExperimentalDatalayerFeatureGate], handle)
+	if err != nil {
+		return nil, fmt.Errorf("data layer config build failed: %w", err)
+	}
+
 	return &config.Config{
 		SchedulerConfig:          schedulerConfig,
 		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
+		DataConfig:               dataConfig,
 	}, nil
 }
 
@@ -203,11 +211,11 @@ func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
 	return config
 }
 
-func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *saturationdetector.Config {
-	cfg := &saturationdetector.Config{
-		QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilizationdetector.Config {
+	cfg := &utilizationdetector.Config{
+		QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
 	}
 
 	if apiConfig != nil {
@@ -223,4 +231,41 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *saturationd
 	}
 
 	return cfg
+}
+
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle plugins.Handle) (*datalayer.Config, error) {
+	if !dataLayerEnabled {
+		if rawDataConfig != nil {
+			return nil, errors.New("the Datalayer has not been enabled, but you specified a configuration for it")
+		}
+		return nil, nil
+	}
+
+	if rawDataConfig == nil {
+		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
+	}
+
+	cfg := datalayer.Config{
+		Sources: []datalayer.DataSourceConfig{},
+	}
+	for _, source := range rawDataConfig.Sources {
+		if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
+			sourceConfig := datalayer.DataSourceConfig{
+				Plugin:     sourcePlugin,
+				Extractors: []datalayer.Extractor{},
+			}
+			for _, extractor := range source.Extractors {
+				if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(datalayer.Extractor); ok {
+					sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
+				} else {
+					return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)
+				}
+			}
+			cfg.Sources = append(cfg.Sources, sourceConfig)
+		} else {
+			return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
+		}
+	}
+
+	return &cfg, nil
 }

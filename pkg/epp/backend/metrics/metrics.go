@@ -100,7 +100,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 	if p.MetricMapping.TotalRunningRequests != nil {
 		running, err := p.getMetric(metricFamilies, *p.MetricMapping.TotalRunningRequests)
 		if err == nil {
-			updated.RunningQueueSize = int(running.GetGauge().GetValue())
+			updated.RunningRequestsSize = int(running.GetGauge().GetValue())
 		} else {
 			errs = multierr.Append(errs, err)
 		}

@@ -28,6 +28,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
@@ -206,6 +207,32 @@ func (p *Plugin) WithName(name string) *Plugin {
 	return p
 }
 
+func (p *Plugin) Produces() map[string]any {
+	return map[string]any{approximateprefix.PrefixCacheMatchInfoKey: approximateprefix.PrefixCacheMatchInfo{}}
+}
+
+func (p *Plugin) Consumes() map[string]any {
+	return map[string]any{}
+}
+
+// PrepareRequestData hashes prompt, finds longest prefix match and stores it in pod as attribute.
+func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Pod) error {
+	hashes := hashPrompt(ctx, request, getBlockSize(pods, p.config), p.config.MaxPrefixBlocksToMatch)
+	state := &SchedulingContextState{
+		PrefixHashes:       hashes,
+		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
+	}
+	total := len(state.PrefixHashes)
+
+	for _, pod := range pods {
+		matchLen := state.PrefixCacheServers[ServerID(pod.GetPod().NamespacedName)]
+		pod.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total))
+	}
+	// Store the state in plugin state for later use.
+	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+	return nil
+}
+
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
@@ -216,6 +243,8 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 	}
 
 	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
+
+	// store the state in plugin state for later use in PreRequest. This may go away once we default to prepare request data plugin hook.
 	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
 	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of pods

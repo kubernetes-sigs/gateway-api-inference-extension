@@ -24,8 +24,10 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -55,28 +57,14 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 	}
 
 	for _, header := range req.RequestHeaders.Headers.Headers {
-		if header.RawValue != nil {
-			reqCtx.Request.Headers[header.Key] = string(header.RawValue)
-		} else {
-			reqCtx.Request.Headers[header.Key] = header.Value
-		}
+		reqCtx.Request.Headers[header.Key] = request.GetHeaderValue(header)
 		switch header.Key {
 		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
-			// remove the fairness ID header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			// It is only used for flow control.
-			delete(reqCtx.Request.Headers, header.Key)
 		case metadata.ObjectiveKey:
 			reqCtx.ObjectiveKey = reqCtx.Request.Headers[header.Key]
-			// remove the objective header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			delete(reqCtx.Request.Headers, header.Key)
 		case metadata.ModelNameRewriteKey:
 			reqCtx.TargetModelName = reqCtx.Request.Headers[header.Key]
-			// remove the rewrite header from the request headers,
-			// this is not data that should be manipulated or sent to the backend.
-			delete(reqCtx.Request.Headers, header.Key)
 		}
 	}
 
@@ -88,7 +76,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 }
 
 func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) []*extProcPb.ProcessingResponse {
-	commonResponses := buildCommonResponses(requestBodyBytes, bodyByteLimit, true)
+	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
 	responses := []*extProcPb.ProcessingResponse{}
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{
@@ -143,8 +131,11 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 		})
 	}
 
-	// include all headers
+	// Include any non-system-owned headers.
 	for key, value := range reqCtx.Request.Headers {
+		if request.IsSystemOwnedHeader(key) {
+			continue
+		}
 		headers = append(headers, &configPb.HeaderValueOption{
 			Header: &configPb.HeaderValue{
 				Key:      key,

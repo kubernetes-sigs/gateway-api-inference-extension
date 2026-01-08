@@ -18,7 +18,6 @@ package registry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -30,9 +29,8 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
-	intra "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/policies/intraflow/dispatch"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -57,28 +55,37 @@ type harnessOptions struct {
 func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarness {
 	t.Helper()
 
-	var config Config
-	if opts.config != nil {
-		config = *opts.config
-	} else {
-		config = Config{
-			FlowGCTimeout: 5 * time.Minute, // Use a realistic but controllable GC time.
-			PriorityBands: []PriorityBandConfig{
-				{Priority: highPriority, PriorityName: "High"},
-				{Priority: lowPriority, PriorityName: "Low"},
-			},
-		}
-	}
-	if opts.initialShardCount > 0 {
-		config.InitialShardCount = opts.initialShardCount
-	}
+	var cfg *Config
+	var err error
 
-	validatedCfg, err := config.ValidateAndApplyDefaults()
-	require.NoError(t, err, "Test setup: validating config should not fail")
+	if opts.config != nil {
+		cfg = opts.config.Clone()
+		if opts.initialShardCount > 0 {
+			cfg.InitialShardCount = opts.initialShardCount
+		}
+	} else {
+		shardCount := 1
+		if opts.initialShardCount > 0 {
+			shardCount = opts.initialShardCount
+		}
+
+		highBand, err := NewPriorityBandConfig(highPriority, "High")
+		require.NoError(t, err)
+		lowBand, err := NewPriorityBandConfig(lowPriority, "Low")
+		require.NoError(t, err)
+
+		cfg, err = NewConfig(
+			WithInitialShardCount(shardCount),
+			WithFlowGCTimeout(5*time.Minute),
+			WithPriorityBand(highBand),
+			WithPriorityBand(lowBand),
+		)
+		require.NoError(t, err, "Test setup: failed to create default config")
+	}
 
 	fakeClock := testclock.NewFakeClock(time.Now())
 	registryOpts := []RegistryOption{withClock(fakeClock)}
-	fr, err := NewFlowRegistry(*validatedCfg, logr.Discard(), registryOpts...)
+	fr, err := NewFlowRegistry(cfg, logr.Discard(), registryOpts...)
 	require.NoError(t, err, "Test setup: NewFlowRegistry should not fail")
 
 	// Start the GC loop in the background.
@@ -137,17 +144,18 @@ func TestFlowRegistry_New(t *testing.T) {
 
 	t.Run("ShouldFail_WhenInitialShardCreationFails", func(t *testing.T) {
 		t.Parallel()
-		config, err := newConfig(
-			Config{PriorityBands: []PriorityBandConfig{{Priority: highPriority, PriorityName: "A"}}},
-			withInterFlowDispatchPolicyFactory(func(interflow.RegisteredPolicyName) (framework.InterFlowDispatchPolicy, error) {
-				return nil, errors.New("injected factory failure")
-			}),
-		)
+
+		badBand, err := NewPriorityBandConfig(highPriority, "A", WithInterFlowPolicy("non-existent-policy"))
+		require.NoError(t, err)
+
+		config, err := NewConfig(WithPriorityBand(badBand))
 		require.NoError(t, err, "Test setup: creating the config object itself should not fail")
-		_, err = NewFlowRegistry(*config, logr.Discard())
+
+		_, err = NewFlowRegistry(config, logr.Discard())
+
 		require.Error(t, err, "NewFlowRegistry should fail when initial shard setup fails")
-		assert.Contains(t, err.Error(), "injected factory failure",
-			"Error message should reflect the root cause from the failing plugin factory")
+		assert.Contains(t, err.Error(), "failed to create inter-flow policy",
+			"Error message should reflect the root cause (policy creation failure)")
 	})
 }
 
@@ -189,19 +197,35 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 
 	t.Run("ShouldFail_WhenJITFails", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
-		h.fr.config.intraFlowDispatchPolicyFactory = func(intra.RegisteredPolicyName) (framework.IntraFlowDispatchPolicy, error) {
-			return nil, errors.New("injected factory failure")
-		}
+
+		badPolicyName := intraflow.RegisteredPolicyName("non-existent-policy")
+		badBand, err := NewPriorityBandConfig(highPriority, "High", WithIntraFlowPolicy(badPolicyName))
+		require.NoError(t, err)
+
+		// Create a Config that uses a mock checker to bypass the strict validation.
+		// The default checker would reject "non-existent-policy", but our mock says it's fine.
+		// This allows us to instantiate the Registry with a latent configuration bomb.
+		cfg, err := NewConfig(
+			WithPriorityBand(badBand),
+			withCapabilityChecker(&mockCapabilityChecker{
+				checkCompatibilityFunc: func(_ intraflow.RegisteredPolicyName, _ queue.RegisteredQueueName) error {
+					return nil // Approve everything.
+				},
+			}),
+		)
+		require.NoError(t, err)
+
+		h := newRegistryTestHarness(t, harnessOptions{config: cfg})
 		key := types.FlowKey{ID: "test-flow", Priority: highPriority}
 
-		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
-			t.Fatal("Callback must not be executed when the flow failes to register JIT")
+		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			t.Fatal("Callback must not be executed when the flow fails to register JIT")
 			return nil
 		})
 
 		require.Error(t, err, "WithConnection must return an error for a failed flow JIT registration")
-		assert.ErrorContains(t, err, "injected factory failure", "The returned error must propagate the reason")
+		assert.ErrorContains(t, err, "no IntraFlowDispatchPolicy registered",
+			"The returned error must propagate the reason")
 	})
 
 	t.Run("Handle_Shards_ShouldReturnAllActiveShardsAndBeACopy", func(t *testing.T) {
@@ -343,37 +367,41 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 		key := types.FlowKey{ID: "re-activated-flow", Priority: highPriority}
 		h.openConnectionOnFlow(key)
 
-		// Make the flow a candidate for GC.
-		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
-		candidates := []types.FlowKey{key}
-
 		// Get the flow's state so we can manipulate its lock.
 		val, ok := h.fr.flowStates.Load(key)
 		require.True(t, ok, "Test setup: flow state must exist")
 		state := val.(*flowState)
 
-		// Lock the flow's `gcLock` to pause the GC.
+		// Acquire the lock before stepping the clock.
+		// This ensures the Background GC (which wakes up on Step) is blocked and cannot touch our flow until we release
+		// this lock.
 		state.gcLock.Lock()
 		defer state.gcLock.Unlock()
 
-		// Start the sweep in the background; it will block.
+		// Now step the clock to mark the flow as a candidate for GC.
+		// The Background GC wakes up but hangs on the lock.
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		candidates := []types.FlowKey{key}
+
+		// Start the manual sweep in the background; it will also block on the lock.
 		sweepDone := make(chan struct{})
 		go func() {
 			defer close(sweepDone)
 			h.fr.verifyAndSweepFlows(candidates)
 		}()
 
-		// While the sweep is blocked, make the flow Active again.
-		// This simulates a new connection arriving just in time.
+		// While the sweeps are blocked, simulate the flow becoming Active.
 		state.leaseCount.Add(1)
 
-		// Unblock the sweep.
+		// Unblock the sweeps.
+		// The Background GC and Manual Sweep will now race for the lock.
+		// Since leaseCount is now 1, whoever wins will see it is Active and abort.
 		state.gcLock.Unlock()
 
-		// Wait for the sweep to complete.
+		// Wait for the manual sweep to complete.
 		select {
 		case <-sweepDone:
-			// Continue to assertion.
+			// Success
 		case <-time.After(time.Second):
 			t.Fatal("verifyAndSweepFlows deadlocked or timed out")
 		}
@@ -518,19 +546,22 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			config := Config{
-				MaxBytes: globalCapacity,
-				PriorityBands: []PriorityBandConfig{
-					{Priority: highPriority, PriorityName: "A", MaxBytes: bandCapacity},
-				},
-				InitialShardCount: tc.initialShardCount,
-			}
 
-			h := newRegistryTestHarness(t, harnessOptions{config: &config})
+			band, err := NewPriorityBandConfig(highPriority, "A", WithBandMaxBytes(bandCapacity))
+			require.NoError(t, err)
+
+			config, err := NewConfig(
+				WithMaxBytes(globalCapacity),
+				WithInitialShardCount(tc.initialShardCount),
+				WithPriorityBand(band),
+			)
+			require.NoError(t, err, "Test setup: creating config should not fail")
+
+			h := newRegistryTestHarness(t, harnessOptions{config: config})
 			key := types.FlowKey{ID: "flow", Priority: highPriority}
 			h.openConnectionOnFlow(key)
 
-			err := h.fr.updateShardCount(tc.targetShardCount)
+			err = h.fr.updateShardCount(tc.targetShardCount)
 			if tc.expectErrIs != nil {
 				require.Error(t, err, "UpdateShardCount should have returned an error")
 				assert.ErrorIs(t, err, tc.expectErrIs, "Error should be the expected type")
@@ -563,6 +594,91 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 			assert.Equal(t, tc.expectedPartitionedBandCapacities, bandCapacities, "Band capacity re-partitioning incorrect")
 		})
 	}
+}
+
+// --- Dynamic Provisioning Tests ---
+
+func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ShouldCreateBand_WhenPriorityIsUnknown", func(t *testing.T) {
+		t.Parallel()
+		// Start with 2 shards to ensure propagation works across the cluster.
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		dynamicPrio := 55
+		key := types.FlowKey{ID: "dynamic-flow", Priority: dynamicPrio}
+
+		// Connect with a new priority.
+		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			return nil
+		})
+		require.NoError(t, err, "WithConnection should succeed for dynamic priority")
+
+		h.fr.mu.RLock()
+		_, existsInConfig := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, existsInConfig, "Dynamic priority must be added to global config definition")
+
+		stats := h.fr.Stats()
+		_, existsInStats := stats.PerPriorityBandStats[dynamicPrio]
+		assert.True(t, existsInStats, "Dynamic priority must appear in global stats")
+
+		for _, shard := range h.fr.activeShards {
+			_, err := shard.ManagedQueue(key)
+			assert.NoError(t, err, "Dynamic band must be provisioned on shard %s", shard.ID())
+		}
+	})
+
+	t.Run("ShouldHandleConcurrentDynamicCreation", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		dynamicPrio := 77
+		key := types.FlowKey{ID: "race-flow", Priority: dynamicPrio}
+
+		var wg sync.WaitGroup
+		concurrency := 10
+		wg.Add(concurrency)
+
+		for range concurrency {
+			go func() {
+				defer wg.Done()
+				// Everyone tries to trigger provisioning simultaneously.
+				_ = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error { return nil })
+			}()
+		}
+		wg.Wait()
+
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, exists, "Band should exist after concurrent creation attempts")
+	})
+
+	t.Run("ShouldPersistDynamicBands_AcrossScalingEvents", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 1})
+		dynamicPrio := 88
+		key := types.FlowKey{ID: "scaling-flow", Priority: dynamicPrio}
+
+		// Create dynamic band on Shard 0.
+		h.openConnectionOnFlow(key)
+
+		// Scale Up -> Shard 1 created.
+		err := h.fr.updateShardCount(2)
+		require.NoError(t, err)
+
+		// The repartition logic should have carried the dynamic band definition to the new shard config.
+		h.fr.mu.RLock()
+		newShard := h.fr.activeShards[1]
+		h.fr.mu.RUnlock()
+
+		_, policyErr := newShard.InterFlowDispatchPolicy(dynamicPrio)
+		assert.NoError(t, policyErr, "New shard must have the dynamic priority band configured")
+
+		mq, err := newShard.ManagedQueue(key)
+		require.NoError(t, err, "Existing flows should be auto-synced to new shards during scale-up")
+		require.NotNil(t, mq)
+	})
 }
 
 // --- Concurrency Tests ---

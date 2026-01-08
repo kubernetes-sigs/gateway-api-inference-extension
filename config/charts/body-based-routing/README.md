@@ -63,6 +63,8 @@ The following table list the configurable parameters of the chart.
 | `bbr.replicas`               | Number of replicas for the deployment. Defaults to `1`.                                                           |
 | `bbr.port`                   | Port serving ext_proc. Defaults to `9004`.                                                                        |
 | `bbr.healthCheckPort`        | Port for health checks. Defaults to `9005`.                                                                       |
+| `bbr.multiNamespace`         | Boolean flag to indicate whether BBR should watch cross namesapce configmaps or only within the namespace it is deployed.
+Defaults to `false`.                                                                       |
 | `bbr.image.name`             | Name of the container image used.                                                                                 |
 | `bbr.image.hub`              | Registry URL where the image is hosted.                                                                           | 
 | `bbr.image.tag`              | Image tag.                                                                                                        |

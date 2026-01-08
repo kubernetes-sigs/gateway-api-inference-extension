@@ -848,6 +848,12 @@ func getHistogramVecLabelValues(t *testing.T, h *prometheus.HistogramVec, labelV
 func TestFlowControlQueueDurationMetric(t *testing.T) {
 	Reset()
 
+	const (
+		pool   = "pool-1"
+		model  = "llama-2"
+		target = "llama-base"
+	)
+
 	records := []struct {
 		fairnessID string
 		priority   string
@@ -861,7 +867,7 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 	}
 
 	for _, rec := range records {
-		RecordFlowControlRequestQueueDuration(rec.fairnessID, rec.priority, rec.outcome, rec.duration)
+		RecordFlowControlRequestQueueDuration(rec.fairnessID, rec.priority, rec.outcome, pool, model, target, rec.duration)
 	}
 
 	testCases := []struct {
@@ -871,20 +877,41 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 		expectSum   float64
 	}{
 		{
-			name:        "user-a, prio 100, dispatched",
-			labels:      prometheus.Labels{"fairness_id": "user-a", "priority": "100", "outcome": "Dispatched"},
+			name: "user-a, prio 100, dispatched",
+			labels: prometheus.Labels{
+				"fairness_id":       "user-a",
+				"priority":          "100",
+				"outcome":           "Dispatched",
+				"inference_pool":    pool,
+				"model_name":        model,
+				"target_model_name": target,
+			},
 			expectCount: 2,
 			expectSum:   0.03, // 0.01 + 0.02
 		},
 		{
-			name:        "user-b, prio 100, rejected",
-			labels:      prometheus.Labels{"fairness_id": "user-b", "priority": "100", "outcome": "RejectedCapacity"},
+			name: "user-b, prio 100, rejected",
+			labels: prometheus.Labels{
+				"fairness_id":       "user-b",
+				"priority":          "100",
+				"outcome":           "RejectedCapacity",
+				"inference_pool":    pool,
+				"model_name":        model,
+				"target_model_name": target,
+			},
 			expectCount: 1,
 			expectSum:   0.005,
 		},
 		{
-			name:        "user-a, prio 50, dispatched",
-			labels:      prometheus.Labels{"fairness_id": "user-a", "priority": "50", "outcome": "Dispatched"},
+			name: "user-a, prio 50, dispatched",
+			labels: prometheus.Labels{
+				"fairness_id":       "user-a",
+				"priority":          "50",
+				"outcome":           "Dispatched",
+				"inference_pool":    pool,
+				"model_name":        model,
+				"target_model_name": target,
+			},
 			expectCount: 1,
 			expectSum:   0.1,
 		},
@@ -892,7 +919,14 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			labels := []string{tc.labels["fairness_id"], tc.labels["priority"], tc.labels["outcome"]}
+			labels := []string{
+				tc.labels["fairness_id"],
+				tc.labels["priority"],
+				tc.labels["outcome"],
+				tc.labels["inference_pool"],
+				tc.labels["model_name"],
+				tc.labels["target_model_name"],
+			}
 			hist, err := getHistogramVecLabelValues(t, flowControlRequestQueueDuration, labels...)
 			require.NoError(t, err, "Failed to get histogram for labels %v", tc.labels)
 			require.Equal(t, tc.expectCount, hist.GetSampleCount(), "Sample count mismatch for labels %v", tc.labels)
@@ -904,31 +938,37 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 func TestFlowControlQueueSizeMetric(t *testing.T) {
 	Reset()
 
+	const (
+		pool   = "pool-1"
+		model  = "llama-2"
+		target = "llama-base"
+	)
+
 	// Basic Inc/Dec
-	IncFlowControlQueueSize("user-a", "100")
-	val, err := testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100"))
+	IncFlowControlQueueSize("user-a", "100", pool, model, target)
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
 	require.Equal(t, 1.0, val, "Gauge value should be 1 after Inc for user-a/100")
 
-	DecFlowControlQueueSize("user-a", "100")
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100"))
+	DecFlowControlQueueSize("user-a", "100", pool, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Dec")
 	require.Equal(t, 0.0, val, "Gauge value should be 0 after Dec for user-a/100")
 
 	// Multiple labels
-	IncFlowControlQueueSize("user-b", "200")
-	IncFlowControlQueueSize("user-b", "200")
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200"))
+	IncFlowControlQueueSize("user-b", "200", pool, model, target)
+	IncFlowControlQueueSize("user-b", "200", pool, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200")
 	require.Equal(t, 2.0, val, "Gauge value should be 2 for user-b/200")
 
-	DecFlowControlQueueSize("user-b", "200")
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200"))
+	DecFlowControlQueueSize("user-b", "200", pool, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Dec")
 	require.Equal(t, 1.0, val, "Gauge value should be 1 for user-b/200 after one Dec")
 
 	// Non-existent labels
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100"))
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }

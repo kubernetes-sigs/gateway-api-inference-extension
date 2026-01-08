@@ -40,11 +40,6 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-const (
-	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
-	bodyByteLimit = 62000
-)
-
 func NewStreamingServer(datastore Datastore, director Director) *StreamingServer {
 	return &StreamingServer{
 		director:  director,
@@ -72,9 +67,10 @@ type StreamingServer struct {
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
-// TODO: The requestContext is gathering a ton of fields. A future refactor needs to tease these fields apart.
-// Specifically, there are fields related to the ext-proc protocol, and then fields related to the lifecycle of the request.
-// We should split these apart as this monolithic object exposes too much data to too many layers.
+//
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2082):
+// Refactor this monolithic struct. Fields related to the Envoy ext-proc protocol should be decoupled from the internal
+// request lifecycle state.
 type RequestContext struct {
 	TargetPod                 *backend.Pod
 	TargetEndpoint            string
@@ -165,6 +161,17 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		if reqCtx.RequestRunning {
 			metrics.DecRunningRequests(reqCtx.IncomingModelName)
 		}
+
+		// If we scheduled a pod (TargetPod != nil) but never marked the response  as complete (e.g. error, disconnect,
+		// panic), force the completion hooks to run.
+		if reqCtx.TargetPod != nil && !reqCtx.ResponseComplete {
+			// Use a fresh context as the request context might be canceled (Client Disconnect).
+			// We only need logging from the original context.
+			cleanupCtx := log.IntoContext(context.Background(), logger)
+			if _, err := s.director.HandleResponseBodyComplete(cleanupCtx, reqCtx); err != nil {
+				logger.Error(err, "error in HandleResponseBodyComplete")
+			}
+		}
 	}(err, reqCtx)
 
 	for {
@@ -207,12 +214,13 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Message is buffered, we can read and decode.
 			if v.RequestBody.EndOfStream {
 				loggerTrace.Info("decoding")
-				err = json.Unmarshal(body, &reqCtx.Request.Body)
-				if err != nil {
+				if errUnmarshal := json.Unmarshal(body, &reqCtx.Request.Body); errUnmarshal != nil {
 					if logger.V(logutil.DEBUG).Enabled() {
-						err = errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body: " + string(body)}
-					} else {
-						err = errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body"}
+						logger.Info("Error unmarshaling request body", "body", string(body), "err", errUnmarshal)
+					}
+					err = errutil.Error{
+						Code: errutil.BadRequest,
+						Msg:  "Error unmarshaling request body",
 					}
 					break
 				}
@@ -274,6 +282,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
 				if v.ResponseBody.EndOfStream {
 					loggerTrace.Info("stream completed")
+					reqCtx.ResponseComplete = true
+					if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
+						logger.Error(err, "error in HandleResponseBodyComplete")
+					}
 
 					reqCtx.ResponseCompleteTimestamp = time.Now()
 					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
@@ -484,49 +496,4 @@ func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 	}
 
 	return resp, nil
-}
-
-func buildCommonResponses(bodyBytes []byte, byteLimit int, setEos bool) []*extProcPb.CommonResponse {
-	responses := []*extProcPb.CommonResponse{}
-	startingIndex := 0
-	bodyLen := len(bodyBytes)
-
-	if bodyLen == 0 {
-		return []*extProcPb.CommonResponse{
-			{
-				BodyMutation: &extProcPb.BodyMutation{
-					Mutation: &extProcPb.BodyMutation_StreamedResponse{
-						StreamedResponse: &extProcPb.StreamedBodyResponse{
-							Body:        bodyBytes,
-							EndOfStream: setEos,
-						},
-					},
-				},
-			},
-		}
-	}
-
-	for startingIndex < bodyLen {
-		eos := false
-		len := min(bodyLen-startingIndex, byteLimit)
-		chunk := bodyBytes[startingIndex : len+startingIndex]
-		if setEos && len+startingIndex >= bodyLen {
-			eos = true
-		}
-
-		commonResp := &extProcPb.CommonResponse{
-			BodyMutation: &extProcPb.BodyMutation{
-				Mutation: &extProcPb.BodyMutation_StreamedResponse{
-					StreamedResponse: &extProcPb.StreamedBodyResponse{
-						Body:        chunk,
-						EndOfStream: eos,
-					},
-				},
-			},
-		}
-		responses = append(responses, commonResp)
-		startingIndex += len
-	}
-
-	return responses
 }

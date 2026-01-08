@@ -19,6 +19,7 @@ package loader
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -31,7 +32,7 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
@@ -47,6 +48,8 @@ const (
 	testPickerType     = "test-picker"
 	testScorerType     = "test-scorer"
 	testProfileHandler = "test-profile-handler"
+	testSourceType     = "test-source"
+	testExtractorType  = "test-extractor"
 )
 
 // --- Test: Phase 1 (Raw Loading & Static Defaults) ---
@@ -55,7 +58,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 	t.Parallel()
 
 	// Register known feature gates for validation.
-	RegisterFeatureGate(datalayer.FeatureGate)
+	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
 
 	tests := []struct {
 		name       string
@@ -87,7 +90,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 						},
 					},
 				},
-				FeatureGates: configapi.FeatureGates{datalayer.FeatureGate},
+				FeatureGates: configapi.FeatureGates{datalayer.ExperimentalDatalayerFeatureGate},
 				SaturationDetector: &configapi.SaturationDetector{
 					QueueDepthThreshold:       10,
 					KVCacheUtilThreshold:      0.8,
@@ -147,7 +150,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	// Not parallel because it modifies global plugin registry.
 	registerTestPlugins(t)
 
-	RegisterFeatureGate(datalayer.FeatureGate)
+	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
 
 	tests := []struct {
 		name       string
@@ -281,6 +284,21 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			configText: errorMultiProfilesUseSingleProfileHandlerText,
 			wantErr:    true,
 		},
+		{
+			name:       "Error - Missing Data Config",
+			configText: errorMissingDataConfigText,
+			wantErr:    true,
+		},
+		{
+			name:       "Error - Bad Source Reference",
+			configText: errorBadSourceReferenceText,
+			wantErr:    true,
+		},
+		{
+			name:       "Error - Bad Extractor Reference",
+			configText: errorBadExtractorReferenceText,
+			wantErr:    true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -321,7 +339,7 @@ func TestBuildSaturationConfig(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    *configapi.SaturationDetector
-		expected *saturationdetector.Config
+		expected *utilizationdetector.Config
 	}{
 		{
 			name: "Valid Configuration",
@@ -330,7 +348,7 @@ func TestBuildSaturationConfig(t *testing.T) {
 				KVCacheUtilThreshold:      0.9,
 				MetricsStalenessThreshold: metav1.Duration{Duration: 500 * time.Millisecond},
 			},
-			expected: &saturationdetector.Config{
+			expected: &utilizationdetector.Config{
 				QueueDepthThreshold:       20,
 				KVCacheUtilThreshold:      0.9,
 				MetricsStalenessThreshold: 500 * time.Millisecond,
@@ -339,10 +357,10 @@ func TestBuildSaturationConfig(t *testing.T) {
 		{
 			name:  "Nil Input (Defaults)",
 			input: nil,
-			expected: &saturationdetector.Config{
-				QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+			expected: &utilizationdetector.Config{
+				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
+				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
+				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
 			},
 		},
 		{
@@ -352,10 +370,10 @@ func TestBuildSaturationConfig(t *testing.T) {
 				KVCacheUtilThreshold:      1.5,
 				MetricsStalenessThreshold: metav1.Duration{Duration: -10 * time.Second},
 			},
-			expected: &saturationdetector.Config{
-				QueueDepthThreshold:       saturationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      saturationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: saturationdetector.DefaultMetricsStalenessThreshold,
+			expected: &utilizationdetector.Config{
+				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
+				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
+				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
 			},
 		},
 	}
@@ -422,6 +440,32 @@ func (m *mockHandler) ProcessResults(
 	return nil, nil
 }
 
+// Mock Source
+type mockSource struct{ mockPlugin }
+
+func (m *mockSource) AddExtractor(_ datalayer.Extractor) error {
+	return nil
+}
+
+func (m *mockSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
+	return nil
+}
+
+func (m *mockSource) Extractors() []string {
+	return []string{}
+}
+
+// Mock Extractor
+type mockExtractor struct{ mockPlugin }
+
+func (m *mockExtractor) ExpectedInputType() reflect.Type {
+	return reflect.TypeOf("")
+}
+
+func (m *mockExtractor) Extract(ctx context.Context, data any, ep datalayer.Endpoint) error {
+	return nil
+}
+
 func registerTestPlugins(t *testing.T) {
 	t.Helper()
 
@@ -458,6 +502,14 @@ func registerTestPlugins(t *testing.T) {
 
 	plugins.Register(testProfileHandler, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
 		return &mockHandler{mockPlugin{t: plugins.TypedName{Name: name, Type: testProfileHandler}}}, nil
+	})
+
+	plugins.Register(testSourceType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		return &mockSource{mockPlugin{t: plugins.TypedName{Name: name, Type: testSourceType}}}, nil
+	})
+
+	plugins.Register(testExtractorType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		return &mockExtractor{mockPlugin{t: plugins.TypedName{Name: name, Type: testExtractorType}}}, nil
 	})
 
 	// Ensure system defaults are registered too.

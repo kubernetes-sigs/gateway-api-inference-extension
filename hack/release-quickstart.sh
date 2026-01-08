@@ -132,15 +132,11 @@ sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inferen
 # Update the container registry for lora-syncer in vLLM CPU and GPU deployment manifests.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
 
-# Update IGW_CHART_VERSION in quickstart guide to match the current release tag
-GUIDES_INDEX="site-src/guides/index.md"
-OLD_VERSION=$(grep -oE 'export IGW_CHART_VERSION=v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?' "$GUIDES_INDEX" | head -n1 | cut -d'=' -f2)
-sed -i.bak -E "s/${OLD_VERSION}/${RELEASE_TAG}/g" "$GUIDES_INDEX"
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $GUIDES_INDEX files..."
-git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY $GUIDES_INDEX
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
+git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

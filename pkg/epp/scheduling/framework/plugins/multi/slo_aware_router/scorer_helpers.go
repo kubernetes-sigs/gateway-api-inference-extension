@@ -41,13 +41,12 @@ func (s *SLOAwareRouter) parseSLOHeaders(ctx context.Context, request *schedulin
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TPOT SLO from header")
 	}
-	sloCtx.predictorBasedScheduling = !hasHeader(*request, "x-prediction-based-scheduling-off")
 }
 
 func (s *SLOAwareRouter) classifyPodsByHeadroom(allPreds []podPredictionResult) (posHeadroomPods, negHeadroomPods []podPredictionResult) {
 	for _, p := range allPreds {
 		// A pod has positive headroom only if BOTH TTFT and TPOT have positive headroom
-		if p.Headroom > 0 && p.TTFTHeadroom > 0 {
+		if (p.Headroom >= 0) && p.TTFTHeadroom >= 0 {
 			posHeadroomPods = append(posHeadroomPods, p)
 		} else {
 			// A pod has negative headroom if EITHER TTFT or TPOT has negative/zero headroom
