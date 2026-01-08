@@ -295,6 +295,90 @@ inferenceExtension:
 Make sure that the `otelExporterEndpoint` points to your OpenTelemetry collector endpoint. 
 Current only the `parentbased_traceidratio` sampler is supported. You can adjust the base sampling ratio using the `samplerArg` (e.g., 0.1 means 10% of traces will be sampled).
 
+#### Jaeger Tracing Backend
+
+GAIE provides an opt-in Jaeger all-in-one deployment as a sub-chart for easy trace collection and visualization. This is particularly useful for development, testing, and understanding how inference requests are processed (filtered, scored) and forwarded to vLLM models.
+
+**Quick Start with Jaeger:**
+
+To install the InferencePool with Jaeger tracing enabled:
+
+```bash
+# Update Helm dependencies to fetch Jaeger chart
+helm dependency update ./config/charts/inferencepool
+
+# Install with Jaeger enabled
+helm install vllm-llama3-8b-instruct ./config/charts/inferencepool \
+  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  --set inferenceExtension.tracing.enabled=true \
+  --set jaeger.enabled=true
+```
+
+Or using a `values.yaml` file:
+
+```yaml
+inferenceExtension:
+  tracing:
+    enabled: true
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "1.0"  # 100% sampling for development
+
+jaeger:
+  enabled: true
+```
+
+Then install:
+
+```bash
+helm dependency update ./config/charts/inferencepool
+helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+```
+
+**Accessing Jaeger UI:**
+
+Once deployed, you can access the Jaeger UI to visualize traces:
+
+```bash
+# Port-forward to access Jaeger UI
+kubectl port-forward svc/vllm-llama3-8b-instruct-jaeger-query 16686:16686
+
+# Open browser to http://localhost:16686
+```
+
+In the Jaeger UI, you can:
+- Search for traces by service name (`gateway-api-inference-extension`)
+- View detailed span information showing filter and scorer execution
+- Analyze request routing decisions and latency
+- Understand the complete inference request flow
+
+**Configuration Options:**
+
+The Jaeger sub-chart supports the following configuration:
+
+| **Parameter Name**                          | **Description**                                                                                                              | **Default**   |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|--------------|
+| `jaeger.enabled`                            | Enable or disable installation of the Jaeger sub-chart (controls the Helm dependency condition `jaeger.enabled`).           | `false`      |
+| `jaeger.storage.type`                       | Storage backend type for traces (`cassandra`, `elasticsearch`, `grpc-plugin`, `badger`, `memory`).                          | `memory`     |
+| `jaeger.provisionDataStore.elasticsearch`   | Provision a new Elasticsearch cluster via the bundled Elasticsearch sub-chart for Jaeger storage.                           | `false`      |
+| `jaeger.provisionDataStore.cassandra`       | Provision a new Cassandra cluster via the bundled Cassandra sub-chart for Jaeger storage.                                   | `false`      |
+| `jaeger.elasticsearch.replicas`             | Number of Elasticsearch replicas when `provisionDataStore.elasticsearch` is enabled.                                        | `1`          |
+| `jaeger.elasticsearch.secret.password`      | Default password for the provisioned Elasticsearch cluster (for development/testing only, change for any real deployment).  | `changeme`   |
+| `jaeger.config`                             | Advanced OpenTelemetry collector configuration for Jaeger v2 (pipelines, receivers, exporters, storage backends, etc.).    | see chart    |
+
+**Important Notes:**
+
+1. **Development vs Production**: The all-in-one deployment uses in-memory storage and is suitable for development and testing. For production use, consider:
+   - Using a persistent storage backend (Elasticsearch, Cassandra, etc.)
+   - Deploying Jaeger components separately for better scalability
+   - Refer to [Jaeger Production Deployment](https://www.jaegertracing.io/docs/latest/deployment/) for best practices
+
+2. **Automatic Configuration**: When `jaeger.enabled=true`, the OTLP exporter endpoint is automatically configured to point to the Jaeger collector. You don't need to manually set `inferenceExtension.tracing.otelExporterEndpoint`.
+
+3. **Sampling Rate**: For development, you may want to set `samplerArg: "1.0"` to capture all traces. For production, use a lower value like `"0.1"` (10%) to reduce overhead.
+
+4. **Resource Requirements**: Adjust the resource limits based on your trace volume and cluster capacity.
+
 ## Notes
 
 This chart will only deploy an InferencePool and its corresponding EndpointPicker extension. Before install the chart, please make sure that the inference extension CRDs are installed in the cluster. For more details, please refer to the [getting started guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/).
