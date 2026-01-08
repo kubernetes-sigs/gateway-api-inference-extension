@@ -49,7 +49,8 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState()}
 	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState()}
-	pods := []types.Pod{pod1, pod2}
+	pod3 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, MetricsState: backendmetrics.NewMetricsState()}
+	pods := []types.Pod{pod1, pod2, pod3}
 
 	// First request.
 	req1 := &types.LLMRequest{
@@ -72,11 +73,12 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
-	// Simulate pod1 was picked.
+	// Simulate pod1 was picked and pod3 was picked as a prefill node.
 	schedulingResult := &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetPods: []types.Pod{pod1}},
+			"default":                          {TargetPods: []types.Pod{pod1}},
+			Experimental_DefaultPrefillProfile: {TargetPods: []types.Pod{pod3}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult)
@@ -131,8 +133,9 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
 	// Total hashes = 2 (the first one is for the prefix with model)
 	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
+	assert.Equal(t, 2, len(state.PrefixCacheServers), "pod1 and pod3 should have cached the aaaa prefix")
 	assert.Equal(t, 0.5, scores[pod1], "score should be 0.5 - the model and the first prefix block match")
+	assert.Equal(t, 0.5, scores[pod3], "score should be 0.5 - the model and the first prefix block match on the prefill node")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
 	schedulingResult = &types.SchedulingResult{
@@ -191,7 +194,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
 	// Total hashes = 3 (the first one is for the prefix with model)
 	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 1, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
+	assert.Equal(t, 2, len(state.PrefixCacheServers), "pod1 and pod3 should have cached the aaaa prefix")
 	assert.Equal(t, 2./3, scores[pod1], "score should be 2./3 - the model and the first 2 prefix blocks match")
 	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
 
