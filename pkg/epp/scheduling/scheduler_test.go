@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
@@ -38,7 +39,8 @@ import (
 func TestSchedule(t *testing.T) {
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()
-	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
+	prefixCacheScorer, err := prefix.New(context.Background(), prefix.DefaultConfig)
+	assert.NoError(t, err)
 	loraAffinityScorer := scorer.NewLoraAffinityScorer()
 
 	defaultProfile := framework.NewSchedulerProfile().

@@ -39,13 +39,46 @@ import (
 // static check to ensure Plugin implements the PrepareDataPlugin interface.
 var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 
+func TestPrefixPluginValidation(t *testing.T) {
+	validConfigs := []Config{{
+		AutoTune:               false,
+		BlockSizeTokens:        1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}, {
+		AutoTune:               false,
+		BlockSize:              1,
+		BlockSizeTokens:        1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}}
+	invalidConfigs := []Config{{
+		AutoTune:               false,
+		BlockSize:              1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}}
+
+	for _, config := range validConfigs {
+		_, err := New(context.Background(), config)
+		assert.NoError(t, err)
+	}
+
+	for _, config := range invalidConfigs {
+		_, err := New(context.Background(), config)
+		assert.Error(t, err)
+	}
+}
+
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		AutoTune:               false,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState()}
 	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState()}
@@ -207,11 +240,12 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 func TestPrefixPluginChatCompletions(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
 	pods := []types.Pod{pod1}
@@ -241,11 +275,13 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 
 func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	config := Config{
-		BlockSize:              8, // Use larger block size for more predictable JSON marshaling
+		BlockSizeTokens:        2, // Use larger block size for more predictable JSON marshaling
+		AutoTune:               false,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
 	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: &backendmetrics.MetricsState{}}
@@ -308,8 +344,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// Calculate expected score - pod1 should have cached the initial prefix
-	cachedBlocks := state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
-	expectedScore := float64(cachedBlocks) / float64(extendedHashCount)
+	cachedChars := state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
+	expectedScore := float64(cachedChars) / float64(extendedHashCount*state.BlockSize)
 	assert.Equal(t, expectedScore, scores[pod1], "pod1 should have prefix cache hit")
 	assert.Equal(t, float64(0), scores[pod2], "pod2 should have no cache hit")
 
@@ -338,13 +374,13 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
-	longHashCount := len(state.PrefixHashes)
+	longHashCount := len(state.PrefixHashes) * state.BlockSize
 	assert.Greater(t, longHashCount, extendedHashCount, "long conversation should have even more hashes")
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// pod1 should have an even higher cache hit rate now
-	cachedBlocks = state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
-	expectedScore = float64(cachedBlocks) / float64(longHashCount)
+	cachedChars = state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
+	expectedScore = float64(cachedChars) / float64(longHashCount)
 	assert.Equal(t, expectedScore, scores[pod1], "pod1 should have higher prefix cache hit")
 	assert.Greater(t, scores[pod1], float64(0.5), "cache hit rate should be substantial for growing conversation")
 	assert.Equal(t, float64(0), scores[pod2], "pod2 should still have no cache hit")
@@ -352,15 +388,15 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
 func BenchmarkPrefixPluginStress(b *testing.B) {
-	blockSize := 4
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(b, err)
 	types.NewCycleState()
 	var promptLen []int
 	for i := 1; i <= 1024; {
@@ -415,29 +451,29 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 		{
 			name: "all zero",
 			config: Config{
-				BlockSize:              0,
+				BlockSizeTokens:        0,
 				MaxPrefixBlocksToMatch: 0,
 				LRUCapacityPerServer:   0,
 			},
-			expectBlock:    DefaultBlockSize,
+			expectBlock:    DefaultBlockSizeTokens,
 			expectMaxMatch: DefaultMaxPrefixBlocks,
 			expectCapacity: DefaultLRUCapacityPerServer,
 		},
 		{
 			name: "negative values",
 			config: Config{
-				BlockSize:              -5,
+				BlockSizeTokens:        -5,
 				MaxPrefixBlocksToMatch: -10,
 				LRUCapacityPerServer:   -100,
 			},
-			expectBlock:    DefaultBlockSize,
+			expectBlock:    DefaultBlockSizeTokens,
 			expectMaxMatch: DefaultMaxPrefixBlocks,
 			expectCapacity: DefaultLRUCapacityPerServer,
 		},
 		{
 			name: "mixed valid and invalid",
 			config: Config{
-				BlockSize:              32,    // valid
+				BlockSizeTokens:        32,    // valid
 				MaxPrefixBlocksToMatch: -1,    // invalid
 				LRUCapacityPerServer:   50000, // valid
 			},
@@ -448,7 +484,7 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 		{
 			name: "all valid",
 			config: Config{
-				BlockSize:              64,
+				BlockSizeTokens:        64,
 				MaxPrefixBlocksToMatch: 200,
 				LRUCapacityPerServer:   30000,
 			},
@@ -461,11 +497,12 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			plugin := New(context.Background(), tt.config)
+			plugin, err := New(context.Background(), tt.config)
 
+			assert.NoError(t, err)
 			assert.NotEmpty(t, plugin)
 			assert.NotEmpty(t, plugin.indexer)
-			assert.Equal(t, tt.expectBlock, plugin.config.BlockSize)
+			assert.Equal(t, tt.expectBlock, plugin.config.BlockSizeTokens)
 			assert.Equal(t, tt.expectMaxMatch, plugin.config.MaxPrefixBlocksToMatch)
 			assert.Equal(t, tt.expectCapacity, plugin.config.LRUCapacityPerServer)
 		})
@@ -500,12 +537,13 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Enabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               true,
-			BlockSize:              32, // Should be ignored in favor of pod metrics (64)
+			BlockSizeTokens:        32, // Should be ignored in favor of pod metrics (64)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			// Should be ignored in favor of pod metrics (1000)
 			LRUCapacityPerServer: 1,
 		}
-		plugin := New(context.Background(), config)
+		plugin, err := New(context.Background(), config)
+		assert.NoError(t, err)
 
 		// 1. Verify Score uses pod metrics for block size
 		scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
@@ -535,11 +573,12 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Disabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               false,
-			BlockSize:              32, // Should be used (32 chars)
+			BlockSizeTokens:        8, // Should be used (32 chars, 8 tokens)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			LRUCapacityPerServer:   1, // Should be used, and the first hash should be evicted due to the small
 		}
-		plugin := New(context.Background(), config)
+		plugin, err := New(context.Background(), config)
+		assert.NoError(t, err)
 
 		// 1. Verify Score uses config BlockSize
 		req.RequestId = uuid.NewString() // New request ID
@@ -548,10 +587,10 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 
 		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
-		// Block size from config is 32 chars.
+		// Block size from config is 8 tokens (32 chars).
 		// Prompt is 128 chars.
 		// 128 / 32 = 4 chunks.
-		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (32 chars) -> 4 body blocks")
+		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (8 tokens) -> 4 body blocks")
 
 		// 2. Verify PreRequest uses config LRUCapacityPerServer
 		schedulingResult := &types.SchedulingResult{
@@ -579,11 +618,12 @@ func randomPrompt(n int) string {
 
 func TestPrepareRequestData(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
 	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
 	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
@@ -620,15 +660,15 @@ func TestPrepareRequestData(t *testing.T) {
 		},
 	}
 
-	err := plugin.PrepareRequestData(context.Background(), req2, pods)
+	err = plugin.PrepareRequestData(context.Background(), req2, pods)
 	assert.NoError(t, err)
 
 	// Verify pod1 has the correct prefix match info
 	info1, ok := pod1.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
-	assert.Equal(t, 1, prefixInfo1.MatchLength()) // "aaaa" matches
-	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 blocks
+	assert.Equal(t, 1, prefixInfo1.MatchLength()) // one token ("aaaa") matches
+	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 tokens
 
 	// Verify pod2 has no match info
 	info2, ok := pod2.Get(dplugins.PrefixCacheMatchInfoKey)
@@ -640,14 +680,14 @@ func TestPrepareRequestData(t *testing.T) {
 
 // BenchmarkPrefixPluginChatCompletionsStress is a stress test for chat completions with varying message counts and lengths
 func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
-	blockSize := 8
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSizeTokens:        2,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(b, err)
 
 	// Test scenarios: varying number of messages and message lengths
 	scenarios := []struct {
