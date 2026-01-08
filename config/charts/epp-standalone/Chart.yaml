@@ -12,3 +12,7 @@ dependencies:
   - name: inference-extension
     version: 0.0.0
     repository: "file://../inference-extension"
+  - name: jaeger
+    version: "4.3.0"
+    repository: "https://jaegertracing.github.io/helm-charts"
+    condition: jaeger.enabled
