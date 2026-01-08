@@ -4,10 +4,12 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+permissions:
+  pull-requests: write
+  contents: write
+
 jobs:
   add-label:
-    permissions:
-      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Add labels when base branch is not main
