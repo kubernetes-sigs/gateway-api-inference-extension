@@ -62,6 +62,8 @@ inferenceExtension:
       extraLabels: {}
   tracing:
     enabled: false
+    # When jaeger.enabled is true, this will automatically point to the Jaeger collector
+    # Otherwise, you can specify your own OpenTelemetry collector endpoint
     otelExporterEndpoint: "http://localhost:4317"
     sampling:
       sampler: "parentbased_traceidratio"
@@ -198,3 +200,484 @@ istio:
       # connectionPool:
       #   http:
       #     maxRequestsPerConnection: 256000
+
+# Jaeger tracing backend configuration
+# When enabled, deploys Jaeger all-in-one for trace collection and visualization
+jaeger:
+  enabled: false
+  # Default values for jaeger.
+  # Will use for user provided config
+  userconfig:
+
+  config:
+    service:
+      extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger, zipkin]
+          processors: [batch]
+          exporters: [jaeger_storage_exporter]
+      telemetry:
+        resource:
+          service.name: jaeger
+        metrics:
+          level: detailed
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
+    extensions:
+      healthcheckv2:
+        use_v2: true
+        http:
+          endpoint: 0.0.0.0:13133
+
+      # pprof:
+      #   endpoint: 0.0.0.0:1777
+      # zpages:
+      #   endpoint: 0.0.0.0:55679
+
+      jaeger_query:
+        storage:
+          traces: primary_store
+          traces_archive: archive_store
+
+      jaeger_storage:
+        backends:
+          primary_store:
+            elasticsearch:
+              # index_prefix: jaeger
+              server_urls: ["http://elasticsearch-master:9200"]
+              # username: elastic
+              # password: changeme
+            memory:
+              max_traces: 100000
+          archive_store:
+            elasticsearch:
+              # index_prefix: jaeger-archive
+              server_urls: ["http://elasticsearch-master:9200"]
+              # username: elastic
+              # password: changeme
+            memory:
+              max_traces: 100000
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          grpc:
+      zipkin:
+
+    processors:
+      batch:
+
+    exporters:
+      jaeger_storage_exporter:
+        trace_storage: primary_store
+  # The following settings apply to Jaeger v1 and partially to Jaeger v2
+
+  global:
+    imageRegistry:
+
+  provisionDataStore:
+    cassandra: false
+    elasticsearch: false
+
+  networkPolicy:
+    enabled: false
+
+  # Overrides the image tag where default is the chart appVersion.
+  tag: ""
+
+  nameOverride: ""
+  fullnameOverride: ""
+
+  # ------------------------------------------------------------------------------
+  # Jaeger Deployment Settings
+  # ------------------------------------------------------------------------------
+  jaeger:
+    enabled: true
+    replicas: 1
+    image:
+      registry: ""
+      repository: jaegertracing/jaeger
+      tag: ""
+      digest: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    extraEnv: []
+    extraSecretMounts: []
+      # - name: jaeger-tls
+      #   mountPath: /tls
+      #   subPath: ""
+      #   secretName: jaeger-tls
+      #   readOnly: true
+    # command line arguments / CLI flags
+    # See https://www.jaegertracing.io/docs/cli/
+    args: []
+    # samplingConfig: |-
+    #   {
+    #     "default_strategy": {
+    #       "type": "probabilistic",
+    #       "param": 1
+    #     }
+    #   }
+    serviceAccount:
+      annotations: {}
+      automountServiceAccountToken: true
+    service:
+      # labels: {}
+      # annotations: {}
+      headless: true
+      collector:
+        otlp:
+          grpc:
+            name: otlp-grpc
+          http:
+            name: otlp-http
+    ingress:
+      enabled: false
+      # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+      # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+      # ingressClassName: nginx
+      annotations: {}
+      labels: {}
+      # Used to create an Ingress record.
+      # hosts:
+      #   - chart-example.local
+      # annotations:
+      #   kubernetes.io/ingress.class: nginx
+      #   kubernetes.io/tls-acme: "true"
+      # labels:
+      #   app: jaeger
+      # tls:
+      #   # Secrets must be manually created in the namespace.
+      #   - secretName: chart-example-tls
+      #     hosts:
+      #       - chart-example.local
+      pathType:
+    # resources:
+    #   limits:
+    #     cpu: 500m
+    #     memory: 512Mi
+    #   requests:
+    #     cpu: 256m
+    #     memory: 128Mi
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    topologySpreadContraints: []
+    podSecurityContext:
+      runAsUser: 10001
+      runAsGroup: 10001
+      fsGroup: 10001
+    securityContext: {}
+
+  # ------------------------------------------------------------------------------
+  # Storage Connection Settings
+  # ------------------------------------------------------------------------------
+  # These settings configure how Jaeger connects to your storage backend.
+  # Use these when connecting to an EXTERNAL storage system (not provisioned by this chart)
+  # or to customize connection parameters for provisioned storage.
+  #
+  # For provisioned storage (via provisionDataStore), see the 'cassandra' and
+  # 'elasticsearch' top-level sections below which configure the subcharts.
+  # ------------------------------------------------------------------------------
+  storage:
+    # allowed values (cassandra, elasticsearch, grpc-plugin, badger, memory)
+    type: memory
+
+    # Cassandra connection settings (for external Cassandra or customizing provisioned)
+    cassandra:
+      host: cassandra
+      port: 9042
+      tls:
+        enabled: false
+        secretName: cassandra-tls-secret
+      user: user
+      usePassword: true
+      password: password
+      keyspace: jaeger_v1_test
+      ## Use existing secret (ignores previous password)
+      # existingSecret:
+      ## Cassandra related env vars to be configured on the concerned components
+      extraEnv: []
+        # - name: CASSANDRA_SERVERS
+        #   value: cassandra
+        # - name: CASSANDRA_PORT
+        #   value: "9042"
+        # - name: CASSANDRA_KEYSPACE
+        #   value: jaeger_v1_test
+        # - name: CASSANDRA_TLS_ENABLED
+        #   value: "false"
+      ## Cassandra related cmd line opts to be configured on the concerned components
+      cmdlineParams: {}
+        # cassandra.servers: cassandra
+        # cassandra.port: 9042
+        # cassandra.keyspace: jaeger_v1_test
+        # cassandra.tls.enabled: "false"
+
+    # Elasticsearch connection settings
+    # NOTE: In Jaeger v2, Elasticsearch is configured directly in config.extensions.jaeger_storage
+    # (see the 'config' section at the top of this file). The settings below are only used by
+    # the ES maintenance jobs (esIndexCleaner, esRollover, esLookback) via the elasticsearch.env helper.
+    elasticsearch:
+      tls:
+        insecure: true  # Set to false and provide ca_file for production TLS
+
+    badger:
+      ephemeral: true
+      persistence:
+        mountPath: /mnt/data
+        useExistingPvcName: ""
+      extraEnv: []
+    memory:
+      extraEnv: []
+
+  # ------------------------------------------------------------------------------
+  # Cassandra Subchart (Provisioning)
+  # ------------------------------------------------------------------------------
+  # These values are passed to the Cassandra subchart when provisionDataStore.cassandra=true
+  # This provisions a NEW Cassandra cluster - not for connecting to existing clusters.
+  # For connection settings to external Cassandra, use 'storage.cassandra' above.
+  # See: https://github.com/bitnami/charts/tree/main/bitnami/cassandra
+  # ------------------------------------------------------------------------------
+  cassandra:
+    persistence:
+      # To enable persistence, please see the documentation for the Cassandra chart
+      enabled: false
+    config:
+      cluster_name: jaeger
+      seed_size: 1
+      dc_name: dc1
+      rack_name: rack1
+      endpoint_snitch: GossipingPropertyFileSnitch
+  # ------------------------------------------------------------------------------
+  # Elasticsearch Subchart (Provisioning)
+  # ------------------------------------------------------------------------------
+  # These values are passed to the Elasticsearch subchart when provisionDataStore.elasticsearch=true
+  # This provisions a NEW Elasticsearch cluster - not for connecting to existing clusters.
+  # For connection settings to external Elasticsearch, use 'storage.elasticsearch' above
+  # or configure directly in 'config.extensions.jaeger_storage'.
+  # See: https://github.com/elastic/helm-charts/tree/main/elasticsearch
+  # ------------------------------------------------------------------------------
+  elasticsearch:
+    replicas: 1
+    minimumMasterNodes: 1
+    roles:
+      - master
+      - data
+      - ingest
+      - ml
+      - transform
+      - remote_cluster_client
+    volumeClaimTemplate:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 30Gi
+    secret:
+      password: changeme
+    esConfig:
+      elasticsearch.yml: |
+        # Security/TLS disabled so Jaeger can reach the provisioned cluster over HTTP by default.
+        xpack.security.enabled: false
+
+  spark:
+    enabled: false
+    securityContext: {}
+    podSecurityContext: {}
+    annotations: {}
+    image:
+      registry: ""
+      repository: jaegertracing/spark-dependencies
+      tag: latest
+      digest: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    cmdlineParams: {}
+    extraEnv: []
+    schedule: "49 23 * * *"
+    successfulJobsHistoryLimit: 5
+    failedJobsHistoryLimit: 5
+    concurrencyPolicy: Forbid
+    resources: {}
+      # limits:
+      #   cpu: 500m
+      #   memory: 512Mi
+      # requests:
+      #   cpu: 256m
+      #   memory: 128Mi
+    serviceAccount:
+      create: true
+      annotations: {}
+      # Explicitly mounts the API credentials for the Service Account
+      automountServiceAccountToken: false
+      name:
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraSecretMounts: []
+    extraConfigmapMounts: []
+    podAnnotations: {}
+    ## Additional pod labels
+    ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+    podLabels: {}
+    # ttlSecondsAfterFinished: 120
+
+  esIndexCleaner:
+    enabled: false
+    securityContext:
+      runAsUser: 1000
+    podSecurityContext:
+      runAsUser: 1000
+    annotations: {}
+    image:
+      registry: ""
+      repository: jaegertracing/jaeger-es-index-cleaner
+      tag: ""
+      digest: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    cmdlineParams: {}
+    extraEnv: []
+      # - name: ROLLOVER
+      #   value: 'true'
+    schedule: "55 23 * * *"
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    concurrencyPolicy: Forbid
+    resources: {}
+      # limits:
+      #   cpu: 500m
+      #   memory: 512Mi
+      # requests:
+      #   cpu: 256m
+      #   memory: 128Mi
+    numberOfDays: 7
+    serviceAccount:
+      create: true
+      annotations: {}
+      # Explicitly mounts the API credentials for the Service Account
+      automountServiceAccountToken: false
+      name:
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraSecretMounts: []
+    extraConfigmapMounts: []
+    podAnnotations: {}
+    ## Additional pod labels
+    ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+    podLabels: {}
+    # ttlSecondsAfterFinished: 120
+
+  esRollover:
+    enabled: false
+    securityContext: {}
+    podSecurityContext:
+      runAsUser: 1000
+    annotations: {}
+    image:
+      registry: ""
+      repository: jaegertracing/jaeger-es-rollover
+      tag: ""
+      digest: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    cmdlineParams: {}
+    extraEnv:
+      - name: CONDITIONS
+        value: '{"max_age": "1d"}'
+    schedule: "10 0 * * *"
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    concurrencyPolicy: Forbid
+    resources: {}
+      # limits:
+      #   cpu: 500m
+      #   memory: 512Mi
+      # requests:
+      #   cpu: 256m
+      #   memory: 128Mi
+    serviceAccount:
+      create: true
+      # Explicitly mounts the API credentials for the Service Account
+      automountServiceAccountToken: false
+      name:
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraSecretMounts: []
+    extraConfigmapMounts: []
+    podAnnotations: {}
+    ## Additional pod labels
+    ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+    podLabels: {}
+    # ttlSecondsAfterFinished: 120
+    initHook:
+      extraEnv: []
+        # - name: SHARDS
+        #   value: "3"
+      annotations: {}
+      podAnnotations: {}
+      podLabels: {}
+      ttlSecondsAfterFinished: 120
+
+  esLookback:
+    enabled: false
+    securityContext: {}
+    podSecurityContext:
+      runAsUser: 1000
+    annotations: {}
+    image:
+      registry: ""
+      repository: jaegertracing/jaeger-es-rollover
+      tag: ""
+      digest: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    cmdlineParams: {}
+    extraEnv:
+      - name: UNIT
+        value: days
+      - name: UNIT_COUNT
+        value: "7"
+    schedule: "5 0 * * *"
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    concurrencyPolicy: Forbid
+    resources: {}
+      # limits:
+      #   cpu: 500m
+      #   memory: 512Mi
+      # requests:
+      #   cpu: 256m
+      #   memory: 128Mi
+    serviceAccount:
+      create: true
+      annotations: {}
+      # Explicitly mounts the API credentials for the Service Account
+      automountServiceAccountToken: false
+      name:
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    extraSecretMounts: []
+    extraConfigmapMounts: []
+    podAnnotations: {}
+    ## Additional pod labels
+    ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+    podLabels: {}
+    # ttlSecondsAfterFinished: 120
+    # End: Default values for the various components of Jaeger
+
+    # Array with extra yaml objects to install alongside the chart. Values are evaluated as a template.
+    extraObjects: []

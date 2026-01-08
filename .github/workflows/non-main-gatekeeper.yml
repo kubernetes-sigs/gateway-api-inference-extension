@@ -6,6 +6,8 @@ on:
 
 jobs:
   add-label:
+    permissions:
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Add labels when base branch is not main
