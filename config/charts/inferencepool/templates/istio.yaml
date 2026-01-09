@@ -1,5 +1,5 @@
-{{- if eq .Values.provider.name "istio" }}
-{{- /* Prefer .Values.provider.istio, fallback to legacy .Values.istio, then {} */ -}}
+{{- if eq .Values.global.provider.name "istio" }}
+{{- /* Prefer .Values.global.provider.istio, fallback to legacy .Values.istio, then {} */ -}}
 {{- $provIstio := (index .Values "provider" "istio") -}}
 {{- $legacyIstio := .Values.istio -}}
 {{- $istio := coalesce $provIstio $legacyIstio (dict) -}}
