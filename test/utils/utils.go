@@ -143,24 +143,7 @@ func DeleteClusterResources(testConfig *TestConfig) error {
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	model := &apiextv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "inferenceobjectives.inference.networking.x-k8s.io",
-		},
-	}
-	err = testConfig.K8sClient.Delete(testConfig.Context, model, client.PropagationPolicy(metav1.DeletePropagationForeground))
-	if err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-	pool := &apiextv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "inferencepools.inference.networking.x-k8s.io",
-		},
-	}
-	err = testConfig.K8sClient.Delete(testConfig.Context, pool, client.PropagationPolicy(metav1.DeletePropagationForeground))
-	if err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
+	ProcessKustomize(testConfig, "../../../config/crd/", DeleteAndVerifyObjs)
 	return nil
 }
 
@@ -387,7 +370,7 @@ func EventuallyExists(testConfig *TestConfig, getResource func() error) {
 	}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 }
 
-func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
+func CreateAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
 	objNames := []string{}
 	for _, unstrObj := range objs {
 		ginkgo.By(fmt.Sprintf("Processing GVK: %s", unstrObj.GroupVersionKind()))
@@ -419,7 +402,31 @@ func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructur
 	return objNames
 }
 
-func CreateCrdsFromKustomize(testConfig *TestConfig, kustomizePath string) []string {
+func DeleteAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string{
+	objNames := []string{}
+	for _, unstrObj := range objs {
+		ginkgo.By(fmt.Sprintf("Deleting GVK: %s", unstrObj.GroupVersionKind()))
+		unstrObj.SetNamespace(testConfig.NsName)
+
+		kind := unstrObj.GetKind()
+		name := unstrObj.GetName()
+		objNames = append(objNames, kind+"/"+name)
+		err := testConfig.K8sClient.Delete(testConfig.Context, unstrObj, client.PropagationPolicy(metav1.DeletePropagationForeground))
+		if err != nil && !apierrors.IsNotFound(err) {
+			gomega.Expect(err).NotTo(gomega.HaveOccurred(), fmt.Sprintf("Failed to delete %s %s", kind, name))
+		}
+
+		clientObj := getClientObject(kind)
+		gomega.Eventually(func() bool {
+			err := testConfig.K8sClient.Get(testConfig.Context,
+				types.NamespacedName{Namespace: testConfig.NsName, Name: name}, clientObj)
+			return apierrors.IsNotFound(err)
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.BeTrue(), fmt.Sprintf("Timed out waiting for %s %s to be deleted", kind, name))
+	}
+	return objNames
+}
+
+func ProcessKustomize(testConfig *TestConfig, kustomizePath string, action func(*TestConfig, []*unstructured.Unstructured) []string) []string {
 	ginkgo.By("Running Kustomize build on: " + kustomizePath)
 
 	fSys := filesys.MakeFsOnDisk()
@@ -437,7 +444,7 @@ func CreateCrdsFromKustomize(testConfig *TestConfig, kustomizePath string) []str
 		gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to run kustomize get map")
 		objs = append(objs, &unstructured.Unstructured{Object: resMap})
 	}
-	return createAndVerifyObjs(testConfig, objs)
+	return action(testConfig, objs)
 }
 
 // CreateObjsFromYaml creates K8S objects from yaml and waits for them to be instantiated
@@ -467,7 +474,7 @@ func CreateObjsFromYaml(testConfig *TestConfig, docs []string) []string {
 		}
 		objs = append(objs, unstrObj)
 	}
-	return createAndVerifyObjs(testConfig, objs)
+	return CreateAndVerifyObjs(testConfig, objs)
 }
 
 // DeleteObjects deletes  set of Kubernetes objects in the form of kind/name
