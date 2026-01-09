@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -119,13 +120,13 @@ func TestHandleResponseBody(t *testing.T) {
 		name    string
 		body    []byte
 		reqCtx  *RequestContext
-		want    Usage
+		want    handlerstypes.Usage
 		wantErr bool
 	}{
 		{
 			name: "success",
 			body: []byte(body),
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
@@ -134,11 +135,11 @@ func TestHandleResponseBody(t *testing.T) {
 		{
 			name: "success with cached tokens",
 			body: []byte(bodyWithCachedTokens),
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
-				PromptTokenDetails: &PromptTokenDetails{
+				PromptTokenDetails: &handlerstypes.PromptTokenDetails{
 					CachedTokens: 10,
 				},
 			},
@@ -179,7 +180,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 		name    string
 		body    string
 		reqCtx  *RequestContext
-		want    Usage
+		want    handlerstypes.Usage
 		wantErr bool
 	}{
 		{
@@ -198,7 +199,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 				modelServerStreaming: true,
 			},
 			wantErr: false,
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
 				CompletionTokens: 10,
@@ -211,11 +212,11 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 				modelServerStreaming: true,
 			},
 			wantErr: false,
-			want: Usage{
+			want: handlerstypes.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
 				CompletionTokens: 10,
-				PromptTokenDetails: &PromptTokenDetails{
+				PromptTokenDetails: &handlerstypes.PromptTokenDetails{
 					CachedTokens: 5,
 				},
 			},
