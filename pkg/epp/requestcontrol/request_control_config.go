@@ -17,8 +17,12 @@ limitations under the License.
 package requestcontrol
 
 import (
+	"time"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
+
+const defaultPrepareDataTimeout = 400 * time.Millisecond
 
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
@@ -29,6 +33,7 @@ func NewConfig() *Config {
 		responseReceivedPlugins:  []ResponseReceived{},
 		responseStreamingPlugins: []ResponseStreaming{},
 		responseCompletePlugins:  []ResponseComplete{},
+		prepareDataTimeout:       defaultPrepareDataTimeout,
 	}
 }
 
@@ -40,6 +45,7 @@ type Config struct {
 	responseReceivedPlugins  []ResponseReceived
 	responseStreamingPlugins []ResponseStreaming
 	responseCompletePlugins  []ResponseComplete
+	prepareDataTimeout       time.Duration
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -73,6 +79,12 @@ func (c *Config) WithResponseCompletePlugins(plugins ...ResponseComplete) *Confi
 // WithPrepareDataPlugins sets the given plugins as the PrepareData plugins.
 func (c *Config) WithPrepareDataPlugins(plugins ...PrepareDataPlugin) *Config {
 	c.prepareDataPlugins = plugins
+	return c
+}
+
+// WithPrepareDataTimeout sets the timeout for PrepareData plugins.
+func (c *Config) WithPrepareDataTimeout(timeout time.Duration) *Config {
+	c.prepareDataTimeout = timeout
 	return c
 }
 
