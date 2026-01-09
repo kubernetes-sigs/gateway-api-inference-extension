@@ -17,6 +17,7 @@ limitations under the License.
 package handlers
 
 import (
+	"maps"
 	"strconv"
 	"time"
 
@@ -95,6 +96,14 @@ func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) 
 	// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
 	// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
 	// options for gateway providers.
+	dynamicMetadata := s.generateMetadata(reqCtx.TargetEndpoint)
+	if reqCtx.Response.DynamicMetadata != nil {
+		if dynamicMetadata.Fields == nil {
+			dynamicMetadata.Fields = make(map[string]*structpb.Value)
+		}
+		maps.Copy(dynamicMetadata.Fields, reqCtx.Response.DynamicMetadata.Fields)
+	}
+
 	return &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &extProcPb.HeadersResponse{
@@ -106,7 +115,7 @@ func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) 
 				},
 			},
 		},
-		DynamicMetadata: s.generateMetadata(reqCtx.TargetEndpoint),
+		DynamicMetadata: dynamicMetadata,
 	}
 }
 

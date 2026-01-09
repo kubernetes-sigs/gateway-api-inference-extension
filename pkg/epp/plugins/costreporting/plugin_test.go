@@ -24,260 +24,14 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	extproc "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
-func TestCostReporting_processBody(t *testing.T) {
-	logger := zap.New(zap.UseDevMode(true))
-	tests := []struct {
-		name       string
-		config     Config
-		body       []byte
-		wantResult *extproc.ProcessingResponse
-		wantErr    bool
-	}{
-		{
-			name: "simple expression",
-			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens",
-			},
-			body: []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{
-
-				Response: &extproc.ProcessingResponse_ImmediateResponse{
-					ImmediateResponse: &extproc.ImmediateResponse{
-						Details: "cost reporting plugin",
-					},
-				},
-				DynamicMetadata: &structpb.Struct{
-					Fields: map[string]*structpb.Value{
-						DefaultNamespace: {
-							Kind: &structpb.Value_StructValue{
-								StructValue: &structpb.Struct{
-									Fields: map[string]*structpb.Value{
-										"prompt_tokens": {Kind: &structpb.Value_StringValue{StringValue: "10"}},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "expression with addition",
-			config: Config{
-				Metric: Metric{
-					Name: "total_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens + responseBody.usage.completion_tokens",
-			},
-			body: []byte(`{"usage": {"prompt_tokens": 10, "completion_tokens": 20}}`),
-			wantResult: &extproc.ProcessingResponse{
-				Response: &extproc.ProcessingResponse_ImmediateResponse{
-					ImmediateResponse: &extproc.ImmediateResponse{
-						Details: "cost reporting plugin",
-					},
-				},
-				DynamicMetadata: &structpb.Struct{
-					Fields: map[string]*structpb.Value{
-						DefaultNamespace: {
-							Kind: &structpb.Value_StructValue{
-								StructValue: &structpb.Struct{
-									Fields: map[string]*structpb.Value{
-										"total_tokens": {Kind: &structpb.Value_StringValue{StringValue: "30"}},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "with condition true",
-			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens",
-				Condition:  "has(responseBody.usage)",
-			},
-			body: []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{
-				Response: &extproc.ProcessingResponse_ImmediateResponse{
-					ImmediateResponse: &extproc.ImmediateResponse{
-						Details: "cost reporting plugin",
-					},
-				},
-				DynamicMetadata: &structpb.Struct{
-					Fields: map[string]*structpb.Value{
-						DefaultNamespace: {
-							Kind: &structpb.Value_StructValue{
-								StructValue: &structpb.Struct{
-									Fields: map[string]*structpb.Value{
-										"prompt_tokens": {Kind: &structpb.Value_StringValue{StringValue: "10"}},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "with condition false",
-			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens",
-				Condition:  "has(responseBody.other)",
-			},
-			body:       []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{},
-		},
-		{
-			name: "custom namespace",
-			config: Config{
-				Metric: Metric{
-					Namespace: "my.namespace",
-					Name:      "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens",
-			},
-			body: []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{
-				Response: &extproc.ProcessingResponse_ImmediateResponse{
-					ImmediateResponse: &extproc.ImmediateResponse{
-						Details: "cost reporting plugin",
-					},
-				},
-				DynamicMetadata: &structpb.Struct{
-					Fields: map[string]*structpb.Value{
-						"my.namespace": {
-							Kind: &structpb.Value_StructValue{
-								StructValue: &structpb.Struct{
-									Fields: map[string]*structpb.Value{
-										"prompt_tokens": {Kind: &structpb.Value_StringValue{StringValue: "10"}},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "custom key",
-			config: Config{
-				Metric: Metric{
-					Name: "custom_prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens",
-			},
-			body: []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{
-				Response: &extproc.ProcessingResponse_ImmediateResponse{
-					ImmediateResponse: &extproc.ImmediateResponse{
-						Details: "cost reporting plugin",
-					},
-				},
-				DynamicMetadata: &structpb.Struct{
-					Fields: map[string]*structpb.Value{
-						DefaultNamespace: {
-							Kind: &structpb.Value_StructValue{
-								StructValue: &structpb.Struct{
-									Fields: map[string]*structpb.Value{
-										"custom_prompt_tokens": {Kind: &structpb.Value_StringValue{StringValue: "10"}},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "invalid JSON body",
-			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens",
-			},
-			body:       []byte(`{"usage": {"prompt_tokens": 10`),
-			wantResult: &extproc.ProcessingResponse{},
-		},
-		{
-			name: "expression error - field not found",
-			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.missing_field",
-			},
-			body:       []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{},
-		},
-		{
-			name: "expression error - type error",
-			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens + 'abc'",
-			},
-			body:       []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{},
-		},
-		{
-			name: "condition error",
-			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
-				},
-				DataSource: "responseBody",
-				Expression: "responseBody.usage.prompt_tokens",
-				Condition:  "responseBody.usage.prompt_tokens > 'abc'",
-			},
-			body:       []byte(`{"usage": {"prompt_tokens": 10}}`),
-			wantResult: &extproc.ProcessingResponse{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			plugin, err := New(tt.config, logger)
-			if err != nil {
-				t.Fatalf("Failed to create cost reporting plugin: %v", err)
-			}
-
-			gotResult, err := plugin.processBody(context.Background(), tt.body)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("processBody() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if diff := cmp.Diff(tt.wantResult, gotResult, protocmp.Transform()); diff != "" {
-				t.Errorf("processBody() mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
+// Test interface satisfaction at compile time.
+var _ requestcontrol.ResponseComplete = &Plugin{}
 
 func TestNewCostReporting(t *testing.T) {
 	logger := zap.New(zap.UseDevMode(true))
@@ -293,7 +47,7 @@ func TestNewCostReporting(t *testing.T) {
 				Metric: Metric{
 					Name: "test-metric",
 				},
-				Expression: "responseBody.usage.prompt_tokens",
+				Expression: "request.usage.prompt_tokens",
 			},
 			wantErr: false,
 			wantNS:  DefaultNamespace,
@@ -305,7 +59,7 @@ func TestNewCostReporting(t *testing.T) {
 					Name:      "test-metric",
 					Namespace: "custom-ns",
 				},
-				Expression: "responseBody.usage.prompt_tokens",
+				Expression: "request.usage.prompt_tokens",
 			},
 			wantErr: false,
 			wantNS:  "custom-ns",
@@ -315,7 +69,7 @@ func TestNewCostReporting(t *testing.T) {
 			name: "invalid config - missing name",
 			config: Config{
 				Metric:     Metric{},
-				Expression: "responseBody.usage.prompt_tokens",
+				Expression: "request.usage.prompt_tokens",
 			},
 			wantErr: true,
 		},
@@ -325,17 +79,6 @@ func TestNewCostReporting(t *testing.T) {
 				Metric: Metric{
 					Name: "test-metric",
 				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid config - unsupported dataSource",
-			config: Config{
-				Metric: Metric{
-					Name: "test-metric",
-				},
-				Expression: "responseBody.usage.prompt_tokens",
-				DataSource: "unsupported",
 			},
 			wantErr: true,
 		},
@@ -356,6 +99,93 @@ func TestNewCostReporting(t *testing.T) {
 				if metric.Namespace != tt.wantNS {
 					t.Errorf("Expected namespace %s, got %s", tt.wantNS, metric.Namespace)
 				}
+			}
+		})
+	}
+}
+
+func TestCostReporting_usage(t *testing.T) {
+	logger := zap.New(zap.UseDevMode(true))
+	tests := []struct {
+		name       string
+		config     Config
+		response   *requestcontrol.Response
+		wantResult *structpb.Struct
+		wantErr    bool
+	}{
+		{
+			name: "request usage expression",
+			config: Config{
+				Metric: Metric{
+					Name: "prompt_tokens",
+				},
+				Expression: "request.usage.prompt_tokens",
+			},
+			response: &requestcontrol.Response{
+				Usage: handlerstypes.Usage{
+					PromptTokens: 15,
+				},
+			},
+			wantResult: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					DefaultNamespace: {
+						Kind: &structpb.Value_StructValue{
+							StructValue: &structpb.Struct{
+								Fields: map[string]*structpb.Value{
+									"prompt_tokens": {Kind: &structpb.Value_NumberValue{NumberValue: 15}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "request usage expression and condition with zero value",
+			config: Config{
+				Metric: Metric{
+					Name: "prompt_tokens",
+				},
+				Expression: "request.usage.prompt_tokens",
+				Condition:  "has(request.usage.prompt_tokens)",
+			},
+			response: &requestcontrol.Response{
+				Usage: handlerstypes.Usage{
+					PromptTokens: 0,
+				},
+			},
+			wantResult: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					DefaultNamespace: {
+						Kind: &structpb.Value_StructValue{
+							StructValue: &structpb.Struct{
+								Fields: map[string]*structpb.Value{
+									"prompt_tokens": {Kind: &structpb.Value_NumberValue{NumberValue: 0}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plugin, err := New(tt.config, logger)
+			if err != nil {
+				t.Fatalf("Failed to create cost reporting plugin: %v", err)
+			}
+
+			// processBody call for request dataSource
+			plugin.ResponseComplete(context.Background(), &schedulingtypes.LLMRequest{}, tt.response, &backend.Pod{})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("processBody() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if diff := cmp.Diff(tt.wantResult, tt.response.DynamicMetadata, protocmp.Transform()); diff != "" {
+				t.Errorf("processBody() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

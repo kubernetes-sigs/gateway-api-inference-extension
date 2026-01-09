@@ -26,10 +26,10 @@ import (
 	"github.com/google/cel-go/checker/decls"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	extproc "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
@@ -51,7 +51,6 @@ type Plugin struct {
 // Config is the configuration for the cost reporting plugin.
 type Config struct {
 	Metric     Metric `json:"metric"`
-	DataSource string `json:"dataSource"`
 	Expression string `json:"expression"`
 	Condition  string `json:"condition,omitempty"`
 }
@@ -62,7 +61,20 @@ type Metric struct {
 	Name      string `json:"name"`
 }
 
-// New creates a new CostReporting plugin.
+func CostReportingPluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+	logger := log.FromContext(handle.Context()).WithName(name)
+	parameters := Config{}
+	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	plugin, err := New(parameters, logger)
+	if err != nil {
+		return nil, err
+	}
+	return plugin, nil
+}
+
 func New(config Config, logger logr.Logger) (*Plugin, error) {
 	metric := &config.Metric
 	if metric.Name == "" {
@@ -71,19 +83,12 @@ func New(config Config, logger logr.Logger) (*Plugin, error) {
 	if config.Expression == "" {
 		return nil, fmt.Errorf("config.Expression cannot be empty")
 	}
-	if config.DataSource == "" {
-		config.DataSource = "responseBody" // Default data source
-	}
-	if config.DataSource != "responseBody" {
-		return nil, fmt.Errorf("unsupported dataSource: %s", config.DataSource)
-	}
 	if metric.Namespace == "" {
 		metric.Namespace = DefaultNamespace
 	}
-
 	env, err := cel.NewEnv(
 		cel.Declarations(
-			decls.NewVar("responseBody", decls.Dyn),
+			decls.NewVar("request", decls.NewObjectType("google.protobuf.Struct")),
 		),
 	)
 	if err != nil {
@@ -134,90 +139,76 @@ func (c *Plugin) TypedName() plugins.TypedName {
 	}
 }
 
-// ResponseStreaming implements the requestcontrol.ResponseStreaming interface.
-func (c *Plugin) ResponseStreaming(
-	ctx context.Context, req *extproc.ProcessingRequest_ResponseHeaders, resp *extproc.ProcessingResponse_ResponseHeaders, bodyChunk []byte) (*extproc.ProcessingResponse, error) {
-	// For streaming, we'll assume the relevant information is in a single chunk.
-	// More complex scenarios might require buffering and re-parsing.
-	return c.processBody(ctx, bodyChunk)
-}
-
 // ResponseComplete implements the requestcontrol.ResponseComplete interface.
 func (c *Plugin) ResponseComplete(
-	ctx context.Context, req *extproc.ProcessingRequest_ResponseBody, resp *extproc.ProcessingResponse_ResponseBody) (*extproc.ProcessingResponse, error) {
-	return c.processBody(ctx, req.ResponseBody.Body)
-}
-
-func (c *Plugin) processBody(_ context.Context, body []byte) (*extproc.ProcessingResponse, error) {
+	ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *backend.Pod) {
 	logger := c.logger.WithValues("plugin", CostReportingPluginType)
-	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
-		logger.V(1).Info("Failed to unmarshal response body as JSON", "error", err)
-		return &extproc.ProcessingResponse{}, nil // Don't fail the request
-	}
 
-	vars := map[string]interface{}{
-		"responseBody": data,
-	}
-
-	response := &extproc.ProcessingResponse{}
-
-	shouldCalculateCost, err := c.shouldCalculateCost(vars)
+	// Convert the request usage Go struct into a protobuf struct so that it can be used as a CEL variable.
+	celData, err := c.getCelData(response)
 	if err != nil {
-		return response, err
+		logger.V(1).Error(err, "Failed to convert usage into CEL data")
+		return
+	}
+
+	shouldCalculateCost, err := c.shouldCalculateCost(celData)
+	if err != nil {
+		return
 	} else if !shouldCalculateCost {
-		return response, nil
+		return
 	}
 
-	intVal, err := c.calculateCost(vars)
+	intVal, err := c.calculateCost(celData)
 	if err != nil {
-		return response, err
-		// TODO we should not fail the request here
+		return
 	}
 
-	if response.Response == nil {
-		response.Response = &extproc.ProcessingResponse_ImmediateResponse{
-			ImmediateResponse: &extproc.ImmediateResponse{
-				Details: "cost reporting plugin",
-			},
-		}
-	}
+	// Write the calculated cost to dynamic metadata so it can be returned via the ext_proc response.
 
 	if response.DynamicMetadata == nil {
-		response.DynamicMetadata = &structpb.Struct{
-			Fields: map[string]*structpb.Value{},
-		}
+		response.DynamicMetadata = &structpb.Struct{Fields: make(map[string]*structpb.Value)}
+	}
+	if response.DynamicMetadata.Fields == nil {
+		response.DynamicMetadata.Fields = make(map[string]*structpb.Value)
 	}
 
 	metric := c.config.Metric
-	ns := metric.Namespace
-	nsData, ok := response.DynamicMetadata.Fields[ns]
+	metricValue := &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: float64(intVal)}}
+
+	namespaceMap, ok := response.DynamicMetadata.Fields[metric.Namespace]
 	if !ok {
-		nsData = &structpb.Value{
-			Kind: &structpb.Value_StructValue{
-				StructValue: &structpb.Struct{
-					Fields: map[string]*structpb.Value{},
-				},
-			},
-		}
-		response.DynamicMetadata.Fields[ns] = nsData
+		namespaceMap = &structpb.Value{Kind: &structpb.Value_StructValue{StructValue: &structpb.Struct{Fields: make(map[string]*structpb.Value)}}}
+		response.DynamicMetadata.Fields[metric.Namespace] = namespaceMap
 	}
 
-	nsData.GetStructValue().Fields[metric.Name] = &structpb.Value{
-		Kind: &structpb.Value_StringValue{
-			StringValue: fmt.Sprintf("%d", intVal),
-		},
-	}
-	logger.V(1).Info("Successfully calculated metric", "namespace", ns, "name", metric.Name, "value", intVal)
+	namespaceMap.GetStructValue().Fields[metric.Name] = metricValue
 
-	if response.DynamicMetadata != nil && len(response.DynamicMetadata.GetFields()) > 0 {
-		logger.Info("Dynamic metadata to be set", "metadata", response.DynamicMetadata)
-	}
-
-	return response, nil
+	logger.V(1).Info("Wrote dynamic metadata vlaue of %d to dynamic metadata", "value", intVal)
 }
 
-func (c *Plugin) shouldCalculateCost(vars map[string]interface{}) (bool, error) {
+func (c *Plugin) getCelData(response *requestcontrol.Response) (map[string]any, error) {
+	logger := c.logger.WithValues("plugin", CostReportingPluginType)
+
+	usageBytes, err := json.Marshal(response.Usage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request.Usage to JSON: %w", err)
+	}
+	usageStruct := &structpb.Struct{}
+	if err := usageStruct.UnmarshalJSON(usageBytes); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request.Usage JSON to structpb: %w", err)
+	}
+	requestStruct := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"usage": {Kind: &structpb.Value_StructValue{StructValue: usageStruct}},
+		},
+	}
+	celData := map[string]any{
+		"request": requestStruct,
+	}
+	return celData, nil
+}
+
+func (c *Plugin) shouldCalculateCost(vars map[string]any) (bool, error) {
 	if c.conditionProg != nil {
 		val, err := c.maybeExecuteProg(c.conditionProg, vars, "condition", c.config.Condition)
 		if err != nil {
@@ -231,10 +222,10 @@ func (c *Plugin) shouldCalculateCost(vars map[string]interface{}) (bool, error) 
 	return true, nil
 }
 
-func (c *Plugin) calculateCost(vars map[string]interface{}) (int64, error) {
+func (c *Plugin) calculateCost(vars map[string]any) (int64, error) {
 	val, err := c.maybeExecuteProg(c.expressionProg, vars, "expression", c.config.Expression)
 	if err != nil {
-		return -1, nil // Error already logged
+		return -1, err // Error already logged
 	}
 
 	doubleVal, ok := val.(float64)
@@ -250,26 +241,11 @@ func (c *Plugin) calculateCost(vars map[string]interface{}) (int64, error) {
 	return int64(doubleVal), nil
 }
 
-func (c *Plugin) maybeExecuteProg(prog cel.Program, vars map[string]interface{}, exprType string, expression string) (any, error) {
+func (c *Plugin) maybeExecuteProg(prog cel.Program, vars map[string]any, exprType string, expression string) (any, error) {
 	val, _, err := prog.Eval(vars)
 	if err != nil {
 		c.logger.Error(err, fmt.Sprintf("Failed to evaluate %s", exprType), exprType, expression)
 		return nil, err
 	}
 	return val.Value(), nil
-}
-
-// CostReportingPluginFactory is the factory function for the cost reporting plugin.
-func CostReportingPluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
-	logger := log.FromContext(handle.Context()).WithName(name)
-	parameters := Config{}
-	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	plugin, err := New(parameters, logger)
-	if err != nil {
-		return nil, err
-	}
-	return plugin, nil
 }

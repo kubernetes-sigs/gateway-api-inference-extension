@@ -29,10 +29,12 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -81,7 +83,7 @@ type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
-	Usage                     Usage
+	Usage                     handlerstypes.Usage
 	ResponseSize              int
 	ResponseComplete          bool
 	ResponseStatusCode        string
@@ -110,7 +112,8 @@ type Request struct {
 	Metadata map[string]any
 }
 type Response struct {
-	Headers map[string]string
+	Headers         map[string]string
+	DynamicMetadata *structpb.Struct
 }
 type StreamRequestState int
 
