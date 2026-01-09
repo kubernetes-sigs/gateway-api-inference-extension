@@ -67,6 +67,7 @@ func TestNewConfig(t *testing.T) {
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, defaultInitialShardCount, cfg.InitialShardCount, "InitialShardCount should be defaulted")
 				assert.Equal(t, defaultFlowGCTimeout, cfg.FlowGCTimeout, "FlowGCTimeout should be defaulted")
+				assert.Equal(t, defaultPriorityBandGCTimeout, cfg.PriorityBandGCTimeout, "PriorityBandGCTimeout should be defaulted")
 				assert.Equal(t, defaultEventChannelBufferSize, cfg.EventChannelBufferSize,
 					"EventChannelBufferSize should be defaulted")
 
@@ -85,12 +86,14 @@ func TestNewConfig(t *testing.T) {
 				WithInitialShardCount(10),
 				WithMaxBytes(5000),
 				WithFlowGCTimeout(1 * time.Hour),
+				WithPriorityBandGCTimeout(2 * time.Hour),
 				WithPriorityBand(mustBand(t, 1, "High")),
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, 10, cfg.InitialShardCount)
 				assert.Equal(t, uint64(5000), cfg.MaxBytes)
 				assert.Equal(t, 1*time.Hour, cfg.FlowGCTimeout)
+				assert.Equal(t, 2*time.Hour, cfg.PriorityBandGCTimeout)
 			},
 		},
 		{
@@ -149,6 +152,39 @@ func TestNewConfig(t *testing.T) {
 			name:      "ShouldError_WhenFlowGCTimeoutIsInvalid",
 			opts:      []ConfigOption{WithFlowGCTimeout(-1 * time.Second)},
 			expectErr: true,
+		},
+		{
+			name:      "ShouldError_WhenPriorityBandGCTimeoutIsNegative",
+			opts:      []ConfigOption{WithPriorityBandGCTimeout(-1 * time.Second)},
+			expectErr: true,
+		},
+		{
+			name: "ShouldError_WhenPriorityBandGCTimeoutLessThanFlowGCTimeout",
+			opts: []ConfigOption{
+				WithFlowGCTimeout(10 * time.Minute),
+				WithPriorityBandGCTimeout(5 * time.Minute), // Less than flow timeout
+			},
+			expectErr: true,
+		},
+		{
+			name: "ShouldSucceed_WhenPriorityBandGCTimeoutEqualToFlowGCTimeout",
+			opts: []ConfigOption{
+				WithFlowGCTimeout(10 * time.Minute),
+				WithPriorityBandGCTimeout(10 * time.Minute), // Equal is OK
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, 10*time.Minute, cfg.PriorityBandGCTimeout)
+			},
+		},
+		{
+			name: "ShouldSucceed_WhenPriorityBandGCTimeoutGreaterThanFlowGCTimeout",
+			opts: []ConfigOption{
+				WithFlowGCTimeout(5 * time.Minute),
+				WithPriorityBandGCTimeout(15 * time.Minute),
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, 15*time.Minute, cfg.PriorityBandGCTimeout)
+			},
 		},
 
 		// --- Validation Errors (Bands) ---
