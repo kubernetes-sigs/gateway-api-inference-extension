@@ -106,6 +106,7 @@ func InstantiateAndConfigure(
 		SchedulerConfig:          schedulerConfig,
 		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
 		DataConfig:               dataConfig,
+		RequestControlConfig:     buildRequestControlConfig(rawConfig.RequestControl),
 	}, nil
 }
 
@@ -230,6 +231,17 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilization
 		}
 	}
 
+	return cfg
+}
+
+func buildRequestControlConfig(apiConfig *configapi.RequestControlConfig) *config.RequestControlConfig {
+	if apiConfig == nil {
+		return nil
+	}
+	cfg := &config.RequestControlConfig{}
+	if apiConfig.PrepareDataTimeout.Duration > 0 {
+		cfg.PrepareDataTimeout = apiConfig.PrepareDataTimeout.Duration
+	}
 	return cfg
 }
 
