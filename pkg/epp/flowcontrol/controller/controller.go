@@ -222,6 +222,14 @@ func (fc *FlowController) EnqueueAndWait(
 		flowKey.ID, priority,
 		req.InferencePoolName(),
 		req.ModelName(), req.TargetModelName())
+	metrics.AddFlowControlQueueBytes(
+		flowKey.ID, priority,
+		req.InferencePoolName(),
+		req.ModelName(), req.TargetModelName(), req.ByteSize())
+	defer metrics.SubFlowControlQueueBytes(
+		flowKey.ID, priority,
+		req.InferencePoolName(),
+		req.ModelName(), req.TargetModelName(), req.ByteSize())
 
 	// 1. Create the derived context that governs this request's lifecycle (Parent Cancellation + TTL).
 	reqCtx, cancel, enqueueTime := fc.createRequestContext(ctx, req)

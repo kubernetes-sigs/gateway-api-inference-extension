@@ -685,6 +685,51 @@ func TestSchedulerE2ELatency(t *testing.T) {
 	}
 }
 
+func TestFlowControlDispatchCycleLengthMetric(t *testing.T) {
+	Reset()
+	scenarios := []struct {
+		name      string
+		durations []time.Duration
+	}{
+		{
+			name: "multiple scheduling latencies",
+			durations: []time.Duration{
+				200 * time.Nanosecond,  // 0.0000002s
+				800 * time.Nanosecond,  // 0.0000008s
+				1500 * time.Nanosecond, // 0.0000015s
+				3 * time.Nanosecond,    // 0.000000003s
+				8 * time.Nanosecond,    // 0.000000008s
+				15 * time.Nanosecond,   // 0.000000015s
+				30 * time.Nanosecond,   // 0.000000030s
+				75 * time.Nanosecond,   // 0.000000075s
+				150 * time.Nanosecond,  // 0.00000015s
+			},
+		},
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, duration := range scenario.durations {
+				RecordFlowControlDispatchCycleDuration(duration)
+			}
+
+			wantDispatchCycleLatency, err := os.Open("testdata/flow_control_dispatch_cycle_duration_seconds_metric")
+			defer func() {
+				if err := wantDispatchCycleLatency.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(metrics.Registry, wantDispatchCycleLatency, "inference_extension_flow_control_dispatch_cycle_duration_seconds"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+// TODO (7028): Research histogram bins using real-world data to ensure they are optimal.
+
 func TestSchedulerAttemptsTotal(t *testing.T) {
 
 	scenarios := []struct {
@@ -969,6 +1014,44 @@ func TestFlowControlQueueSizeMetric(t *testing.T) {
 
 	// Non-existent labels
 	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
+	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
+}
+
+func TestFlowControlQueueBytesMetric(t *testing.T) {
+	Reset()
+
+	const (
+		pool   = "pool-1"
+		model  = "llama-2"
+		target = "llama-base"
+	)
+
+	// Basic Inc/Dec
+	AddFlowControlQueueBytes("user-a", "100", pool, model, target, 32.0)
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
+	require.Equal(t, 32.0, val, "Gauge value should be 32 after Add for user-a/100")
+
+	SubFlowControlQueueBytes("user-a", "100", pool, model, target, 32)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Sub")
+	require.Equal(t, 0.0, val, "Gauge value should be 0 after Sub for user-a/100")
+
+	// Multiple labels
+	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 32.0)
+	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 16.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-b/200")
+	require.Equal(t, 48.0, val, "Gauge value should be 48 for user-b/200")
+
+	SubFlowControlQueueBytes("user-b", "200", pool, model, target, 48.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Sub")
+	require.Equal(t, 0.0, val, "Gauge value should be 0 for user-b/200 after one Sub")
+
+	// Non-existent labels
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }

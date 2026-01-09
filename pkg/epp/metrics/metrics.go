@@ -399,11 +399,42 @@ var (
 		append([]string{"fairness_id", "priority", "outcome", "inference_pool"}, ModelLabels...),
 	)
 
+	flowControlDispatchCycleDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_dispatch_cycle_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken for each dispatch cycle in the EPP flow control layer.", compbasemetrics.ALPHA),
+			// Buckets: []float64{
+			// 	0.000000005, // 5 ns
+			// 	0.000000010, // 10 ns
+			// 	0.000000025, // 25 ns
+			// 	0.000000050, // 50 ns
+			// 	0.000000100, // 100 ns
+			// 	0.000000250, // 250 ns
+			// 	0.000000500, // 500 ns
+			// 	0.000001000, // 1000 ns (1 µs)
+			// },
+			Buckets: []float64{
+				5, 10, 25, 50, 100, 250, 500, 1000,
+			},
+		},
+		[]string{},
+	)
+
 	flowControlQueueSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: InferenceExtension,
 			Name:      "flow_control_queue_size",
 			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+		},
+		append([]string{"fairness_id", "priority", "inference_pool"}, ModelLabels...),
+	)
+
+	flowControlQueueBytes = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_queue_bytes",
+			Help:      metricsutil.HelpMsgWithStability("Current number of bytes associated with requests actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
 		},
 		append([]string{"fairness_id", "priority", "inference_pool"}, ModelLabels...),
 	)
@@ -460,7 +491,9 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(PrefixCacheHitRatio)
 		metrics.Registry.MustRegister(PrefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
+		metrics.Registry.MustRegister(flowControlDispatchCycleDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
+		metrics.Registry.MustRegister(flowControlQueueBytes)
 		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
@@ -507,6 +540,7 @@ func Reset() {
 	PrefixCacheHitLength.Reset()
 	flowControlRequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
+	flowControlQueueBytes.Reset()
 	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
@@ -787,6 +821,11 @@ func RecordFlowControlRequestQueueDuration(
 	).Observe(duration.Seconds())
 }
 
+// RecordFlowControlDispatchCycleDuration records the duration of a dispatch cycle in the Flow Control layer.
+func RecordFlowControlDispatchCycleDuration(duration time.Duration) {
+	flowControlDispatchCycleDuration.WithLabelValues().Observe(float64(duration.Nanoseconds()))
+}
+
 // IncFlowControlQueueSize increments the Flow Control queue size gauge.
 func IncFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, targetModelName string) {
 	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Inc()
@@ -795,6 +834,16 @@ func IncFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, tar
 // DecFlowControlQueueSize decrements the Flow Control queue size gauge.
 func DecFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, targetModelName string) {
 	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Dec()
+}
+
+// AddFlowControlQueueBytes increments the Flow Control queue bytes gauge.
+func AddFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, targetModelName string, bytes uint64) {
+	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Add(float64(bytes))
+}
+
+// SubFlowControlQueueBytes decrements the Flow Control queue bytes gauge.
+func SubFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, targetModelName string, bytes uint64) {
+	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Sub(float64(bytes))
 }
 
 // SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
