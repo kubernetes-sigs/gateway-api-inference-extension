@@ -51,18 +51,25 @@ const (
 
 // --- DatastorePodLocator (The Delegate) ---
 
+// PodLocatorConfig holds configuration for the DatastorePodLocator.
+type PodLocatorConfig struct {
+	DisableEndpointSubsetFilter bool
+}
+
 // DatastorePodLocator implements contracts.PodLocator by querying the EPP Datastore.
 // It centralizes the logic for resolving candidate pods based on request metadata (specifically Envoy subset filters).
 type DatastorePodLocator struct {
 	datastore Datastore
+	config PodLocatorConfig
 }
 
 var _ contracts.PodLocator = &DatastorePodLocator{}
 
 // NewDatastorePodLocator creates a new DatastorePodLocator.
-func NewDatastorePodLocator(ds Datastore) *DatastorePodLocator {
+func NewDatastorePodLocator(ds Datastore, cfg PodLocatorConfig) *DatastorePodLocator {
 	return &DatastorePodLocator{
 		datastore: ds,
+		config: cfg,
 	}
 }
 
@@ -74,6 +81,12 @@ func NewDatastorePodLocator(ds Datastore) *DatastorePodLocator {
 // 2. Returning a filtered list of pods if "x-gateway-destination-endpoint-subset" is present.
 func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
+
+	// If the user explicitly disabled subset filtering, return the default pool (all pods).
+	if d.config.DisableEndpointSubsetFilter {
+		loggerTrace.Info("endpoint subset filtering is explicitly disabled, returning all pods")
+		return d.datastore.PodList(datastore.AllPodsPredicate)
+	}
 
 	// Check if the subset filter namespace exists in metadata.
 	// If not, we assume the request targets the default pool (all pods).

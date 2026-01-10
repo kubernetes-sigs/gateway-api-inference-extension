@@ -659,7 +659,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				}
 				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
-				locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+				locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds, PodLocatorConfig{}), time.Minute)
 				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, locator, config)
 				if test.name == "successful request with model rewrite" {
 					mockDs := &mockDatastore{
@@ -667,7 +667,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 						rewrites: []*v1alpha2.InferenceModelRewrite{rewrite},
 					}
 					director.datastore = mockDs
-					director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
+					director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs, PodLocatorConfig{}), time.Minute)
 				}
 
 				reqCtx := &handlers.RequestContext{
@@ -956,7 +956,7 @@ func TestDirector_ApplyWeightedModelRewrite(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockDs := &mockDatastore{rewrites: test.rewrites}
-			locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
+			locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs, PodLocatorConfig{}), time.Minute)
 			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, locator, NewConfig())
 
 			reqCtx := &handlers.RequestContext{
@@ -1057,7 +1057,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds, PodLocatorConfig{}), time.Minute)
 	director := NewDirectorWithConfig(
 		ds,
 		mockSched,
@@ -1101,7 +1101,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds, PodLocatorConfig{}), time.Minute)
 	director := NewDirectorWithConfig(ds, mockSched, nil, locator, NewConfig().WithResponseStreamingPlugins(ps1))
 
 	reqCtx := &handlers.RequestContext{
@@ -1138,7 +1138,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds, PodLocatorConfig{}), time.Minute)
 	director := NewDirectorWithConfig(ds, mockSched, nil, locator, NewConfig().WithResponseCompletePlugins(pc1))
 
 	reqCtx := &handlers.RequestContext{
