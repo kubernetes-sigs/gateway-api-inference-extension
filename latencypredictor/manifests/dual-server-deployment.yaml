@@ -14,7 +14,10 @@ data:
   LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
   LATENCY_TTFT_TREELITE_PATH: "/models/ttft_treelite.so"
   LATENCY_TPOT_TREELITE_PATH: "/models/tpot_treelite.so"
+  LATENCY_TTFT_CONFORMAL_PATH: "/models/ttft_conformal.json"
+  LATENCY_TPOT_CONFORMAL_PATH: "/models/tpot_conformal.json"
   LATENCY_MODEL_TYPE: "xgboost"
+  USE_TREELITE: "true"  # Enable TreeLite + conformal prediction mode
 
 ---
 apiVersion: v1
@@ -23,7 +26,6 @@ metadata:
   name: prediction-server-config
 data:
   MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 10 seconds
-  LATENCY_MODEL_TYPE: "xgboost"
   PREDICT_HOST: "0.0.0.0"
   PREDICT_PORT: "8001"
   TRAINING_SERVER_URL: "http://training-service:8000"
@@ -33,6 +35,9 @@ data:
   LOCAL_TPOT_SCALER_PATH: "/local_models/tpot_scaler.joblib"
   LOCAL_TTFT_TREELITE_PATH: "/local_models/ttft_treelite.so"
   LOCAL_TPOT_TREELITE_PATH: "/local_models/tpot_treelite.so"
+  LOCAL_TTFT_CONFORMAL_PATH: "/local_models/ttft_conformal.json"
+  LOCAL_TPOT_CONFORMAL_PATH: "/local_models/tpot_conformal.json"
+  LATENCY_MODEL_TYPE: "xgboost"
   USE_TREELITE: "true"  # Enable TreeLite for faster inference
   HTTP_TIMEOUT: "30"
 
@@ -164,19 +169,28 @@ spec:
         ports:
         - containerPort: 8001
           name: predict-port
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 30  # Allow up to 5 minutes for startup (30 * 10s)
+          timeoutSeconds: 5
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8001
-          initialDelaySeconds: 15
-          periodSeconds: 15
+          periodSeconds: 30  # Check less frequently after startup
+          timeoutSeconds: 10  # Longer timeout for TreeLite compilation
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8001
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          failureThreshold: 10  # Allow more failures while downloading models
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 10  # Longer timeout for TreeLite compilation
         resources:
           requests:
             cpu: "250m"

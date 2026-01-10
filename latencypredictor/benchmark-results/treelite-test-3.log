@@ -1,0 +1,582 @@
+============================= test session starts ==============================
+platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+cachedir: .pytest_cache
+rootdir: /app
+plugins: asyncio-1.2.0, anyio-4.12.0
+asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 30 items
+
+test_dual_server_client.py::test_prediction_server_healthz Waiting for prediction server...
+Waiting for training server...
+PASSED
+test_dual_server_client.py::test_training_server_healthz PASSED
+test_dual_server_client.py::test_prediction_server_readyz PASSED
+test_dual_server_client.py::test_training_server_readyz PASSED
+test_dual_server_client.py::test_prediction_server_status Prediction server using model type: xgboost
+Quantile: 0.9
+Models ready: True
+Models exist: {'ttft_model': True, 'tpot_model': True}
+PASSED
+test_dual_server_client.py::test_training_server_model_info Training server using model type: xgboost
+PASSED
+test_dual_server_client.py::test_training_server_models_list Note: TreeLite is incompatible with quantile regression objectives
+TreeLite models will be listed but may not exist when using quantile regression
+Model ttft: exists=True, size=143259 bytes
+Model tpot: exists=True, size=142692 bytes
+PASSED
+test_dual_server_client.py::test_model_download_from_training_server Successfully downloaded ttft model (143259 bytes)
+Successfully downloaded tpot model (142692 bytes)
+PASSED
+test_dual_server_client.py::test_treelite_models_on_training_server Testing TreeLite models for xgboost...
+⚠️  Note: TreeLite doesn't support quantile regression objectives
+⚠️  TreeLite models will NOT be available when using reg:quantileerror or objective=quantile
+⚠️  TTFT TreeLite model not found (expected when using quantile regression)
+⚠️  TPOT TreeLite model not found (expected when using quantile regression)
+PASSED
+test_dual_server_client.py::test_lightgbm_endpoints_on_training_server Skipping LightGBM endpoint tests - not using LightGBM model
+PASSED
+test_dual_server_client.py::test_add_training_data_to_training_server Successfully sent training data to training server
+PASSED
+test_dual_server_client.py::test_prediction_server_model_sync Model reload result: synced=False, loaded=True
+Prediction server models are ready!
+PASSED
+test_dual_server_client.py::test_prediction_via_prediction_server Prediction successful: TTFT=10.00ms, TPOT=10.00ms
+Model type: xgboost
+PASSED
+test_dual_server_client.py::test_bulk_prediction_strict Testing bulk prediction strict endpoint...
+✓ Bulk prediction strict endpoint test passed
+PASSED
+test_dual_server_client.py::test_bulk_prediction_with_validation_errors Testing bulk prediction validation error handling...
+✓ Bulk prediction correctly failed when any request had validation errors
+PASSED
+test_dual_server_client.py::test_bulk_prediction_all_valid Testing bulk prediction with all valid requests...
+✓ Bulk prediction succeeded with all valid requests
+PASSED
+test_dual_server_client.py::test_prediction_missing_prefix_cache_score ✓ Prediction correctly failed when prefix_cache_score was missing
+PASSED
+test_dual_server_client.py::test_training_server_metrics Training server metrics endpoint working correctly
+✓ Prefix cache score feature found in metrics
+PASSED
+test_dual_server_client.py::test_model_consistency_between_servers Model type consistent across servers: xgboost
+PASSED
+test_dual_server_client.py::test_model_specific_endpoints_on_training_server Testing XGBoost tree endpoints on training server...
+✓ TTFT XGBoost trees available: 200 trees
+✓ TPOT XGBoost trees available: 200 trees
+PASSED
+test_dual_server_client.py::test_dual_server_quantile_regression_learns_distribution Relative-err accuracy (≤15%): 99.5%
+Coverage: TTFT=0.580, TPOT=0.540 (target 0.900 ± 0.05)
+FAILED
+test_dual_server_client.py::test_prediction_server_stress_test Running prediction server stress test...
+Waiting for 100007 prediction requests to complete...
+Target QPS: 1000.0, Actual QPS: 1000.1
+
+==================================================
+PREDICTION SERVER STRESS TEST RESULTS
+==================================================
+Total Requests: 100007
+Successful: 100007 (100.0%)
+Failed: 0 (0.0%)
+Average Response Time: 7.44ms
+
+Model Types in Predictions:
+  xgboost: 100007
+
+Status Code Distribution:
+  200: 100007
+
+Response Time Percentiles:
+  P50: 3.95ms
+  P95: 20.21ms
+  P99: 94.28ms
+Prediction server stress test completed with 100.0% success rate
+PASSED
+test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+
+Testing with batch size 5...
+Waiting for 100005 bulk prediction requests to complete...
+Target RPS: 1000.0, Actual RPS: 1000.0
+Total Predictions: 500025, Predictions/sec: 5000.2
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 100005
+Successful: 100005 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 500025
+Total Batch Size: 500025
+Average Response Time: 12.96ms
+Average Batch Size: 5.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 100005
+
+Response Time Percentiles:
+  P50: 6.01ms
+  P95: 48.11ms
+  P99: 127.93ms
+Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+
+Testing with batch size 10...
+Waiting for 100001 bulk prediction requests to complete...
+Target RPS: 1000.0, Actual RPS: 1000.0
+Total Predictions: 1000010, Predictions/sec: 10000.1
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 100001
+Successful: 100001 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 1000010
+Total Batch Size: 1000010
+Average Response Time: 26.90ms
+Average Batch Size: 10.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 100001
+
+Response Time Percentiles:
+  P50: 7.56ms
+  P95: 151.01ms
+  P99: 244.69ms
+Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+
+Testing with batch size 25...
+Waiting for 100004 bulk prediction requests to complete...
+Target RPS: 1000.0, Actual RPS: 1000.0
+Total Predictions: 2500100, Predictions/sec: 25001.0
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 100004
+Successful: 100004 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 2500100
+Total Batch Size: 2500100
+Average Response Time: 47.65ms
+Average Batch Size: 25.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 100004
+
+Response Time Percentiles:
+  P50: 12.17ms
+  P95: 238.03ms
+  P99: 330.55ms
+Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+PASSED
+test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+
+Testing with batch size 1000...
+Waiting for 9990 bulk prediction requests to complete...
+Target RPS: 100.0, Actual RPS: 99.9
+Total Predictions: 9990000, Predictions/sec: 99900.0
+
+==================================================
+BULK PREDICTION STRESS TEST RESULTS
+==================================================
+Total Bulk Requests: 9990
+Successful: 9990 (100.0%)
+Failed: 0 (0.0%)
+Total Individual Predictions: 9990000
+Total Batch Size: 9990000
+Average Response Time: 38.68ms
+Average Batch Size: 1000.0
+Prediction Success Rate: 100.0%
+
+Status Code Distribution:
+  200: 9990
+
+Response Time Percentiles:
+  P50: 31.53ms
+  P95: 84.31ms
+  P99: 168.04ms
+Bulk prediction stress test (batch size 1000) completed with 100.0% success rate
+PASSED
+test_dual_server_client.py::test_end_to_end_workflow Testing end-to-end workflow...
+Step 1: Sending training data to training server...
+Step 2: Waiting for training...
+Step 3: Syncing models to prediction server...
+Step 4: Making predictions...
+  Prediction 1: TTFT=1778.74ms, TPOT=490.82ms (prefix_cache=0.10)
+  Prediction 2: TTFT=1716.54ms, TPOT=531.49ms (prefix_cache=0.31)
+  Prediction 3: TTFT=1095.74ms, TPOT=316.66ms (prefix_cache=0.20)
+  Prediction 4: TTFT=1034.30ms, TPOT=309.70ms (prefix_cache=0.65)
+  Prediction 5: TTFT=633.93ms, TPOT=179.41ms (prefix_cache=0.35)
+✓ End-to-end workflow completed successfully!
+PASSED
+test_dual_server_client.py::test_server_configuration Testing server configuration...
+Prediction server: HTTP-based Quantile Latency Predictor is running
+  Model type: xgboost
+  Is ready: True
+  Sync interval: 10s
+  Training server URL: http://training-service:8000
+Training server: Latency Predictor is running.
+  Model type: xgboost
+PASSED
+test_dual_server_client.py::test_training_server_flush_api Testing training server flush API...
+Step 1: Checking initial data status...
+  Initial training samples: TTFT=2753, TPOT=2753
+  Initial test samples: TTFT=317, TPOT=317
+Step 2: Adding training data...
+  Added 100 training samples
+Step 3: Verifying data was added...
+  After adding - Training: 5682, Test: 658, Total: 6340
+Step 4: Testing flush with only training data...
+  Flushed 2841 TTFT training samples
+  Flushed 2841 TPOT training samples
+  Test samples flushed: 0 TTFT, 0 TPOT (should be 0)
+  After training flush - Training: 0, Test: 658
+Step 5: Adding more training data...
+Step 6: Testing flush everything...
+  Complete flush message: Successfully flushed: 45 TTFT and 45 TPOT training samples, 334 TTFT and 334 TPOT test samples, all metric scores
+  After complete flush - Training: 0, Test: 0
+Step 7: Testing default flush (no body)...
+  Default flush result: Successfully flushed: 18 TTFT and 18 TPOT training samples, 2 TTFT and 2 TPOT test samples, all metric scores
+Step 8: Testing flush with only test data...
+  Test data flush: 5 TTFT, 5 TPOT
+  After test flush - Training: 90, Test: 0
+Step 9: Testing bucket distribution in status...
+  Bucket distribution available: 0 buckets with data
+✓ Flush API tests passed!
+PASSED
+test_dual_server_client.py::test_training_server_flush_error_handling Testing flush API error handling...
+✓ Invalid JSON handled correctly
+✓ Flush error handling tests passed!
+PASSED
+test_dual_server_client.py::test_native_quantile_mode
+==================================================
+Testing Native Quantile Mode (USE_TREELITE=false)
+==================================================
+Step 1: Checking server configuration...
+  Model type: xgboost
+  Quantile: 0.9
+Step 2: Verifying TreeLite models are NOT created...
+  ✓ TreeLite models NOT created (as expected in native quantile mode)
+Step 3: Sending training data...
+  ✓ Sent 500 training samples
+Step 4: Waiting for training...
+Step 5: Syncing models to prediction server...
+Step 6: Testing predictions and coverage...
+  Coverage: TTFT=47.0%, TPOT=46.0% (target: 90%)
+FAILED
+test_dual_server_client.py::test_treelite_conformal_mode
+==================================================
+Testing TreeLite + Conformal Mode (USE_TREELITE=true)
+==================================================
+Step 1: Checking server configuration...
+  Model type: xgboost
+  Quantile: 0.9
+Step 2: Verifying TreeLite models are created...
+  ⚠️  TreeLite models NOT created - likely using native quantile mode
+  This test expects USE_TREELITE=true
+  TTFT TreeLite exists: False
+  TPOT TreeLite exists: False
+PASSED
+
+=================================== FAILURES ===================================
+___________ test_dual_server_quantile_regression_learns_distribution ___________
+
+    def test_dual_server_quantile_regression_learns_distribution():
+        """
+        Quantile regression should learn the q-quantile of a Gaussian residual model
+        with fixed sigma, verified by (a) relative error vs μ+zσ and (b) empirical coverage.
+        """
+        import random, time, math
+        import numpy as np
+        import requests
+        from scipy.stats import norm
+
+        RNG_SEED = 42
+        random.seed(RNG_SEED)
+        np.random.seed(RNG_SEED)
+
+        # Config
+        TRAIN_N = 3000
+        TEST_N  = 200
+        TTFT_STD, TPOT_STD = 20.0, 10.0
+        REL_ERR_TOL = 0.15  # 15%
+        COVERAGE_TOL = 0.05 # ±5% around target quantile
+        MAX_WAIT_S = 180
+        POLL_INTERVAL_S = 3
+
+        # 1) Confirm server mode
+        r = requests.get(f"{TRAINING_URL}/model/download/info", timeout=10)
+        assert r.status_code == 200, "model info endpoint failed"
+        model_type = r.json().get("model_type", "unknown")
+
+        s = requests.get(f"{PREDICTION_URL}/status", timeout=10)
+        assert s.status_code == 200, "prediction status endpoint failed"
+        target_quantile = float(s.json().get("quantile", 0.9))
+
+        assert "xgboost" in model_type.lower() or "lightgbm" in model_type.lower(), f"Model not in quantile mode: {model_type}"
+
+        z = norm.ppf(target_quantile)
+
+        # 2) Generate training data (vectorized)
+        kv = np.random.uniform(0.1, 0.9, size=TRAIN_N)
+        input_len = np.random.randint(50, 801, size=TRAIN_N)
+        waiting = np.random.randint(0, 9, size=TRAIN_N)
+        running = np.random.randint(1, 5, size=TRAIN_N)
+        tokens_gen = np.random.randint(1, 26, size=TRAIN_N)
+        prefix = np.random.uniform(0.0, 1.0, size=TRAIN_N)
+
+        ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+        tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+
+        ttft_y = np.maximum(1.0, ttft_mu + np.random.normal(0, TTFT_STD, size=TRAIN_N))
+        tpot_y = np.maximum(1.0, tpot_mu + np.random.normal(0, TPOT_STD, size=TRAIN_N))
+
+        entries = [dict(
+            kv_cache_percentage=float(kv[i]),
+            input_token_length=int(input_len[i]),
+            num_request_waiting=int(waiting[i]),
+            num_request_running=int(running[i]),
+            actual_ttft_ms=float(ttft_y[i]),
+            actual_tpot_ms=float(tpot_y[i]),
+            num_tokens_generated=int(tokens_gen[i]),
+            prefix_cache_score=float(prefix[i]),
+        ) for i in range(TRAIN_N)]
+
+        # 3) Submit training data (with a couple retries)
+        for _ in range(3):
+            tr = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": entries}, timeout=60)
+            if tr.status_code == 202:
+                break
+            time.sleep(2)
+        assert tr.status_code == 202, f"training submit failed: {tr.status_code}"
+
+        # 4) Wait for training to complete
+        time.sleep(30)
+        # 5) Sync models to prediction server
+        synced = False
+        for _ in range(10):
+            rr = requests.post(f"{PREDICTION_URL}/reload", timeout=20)
+            if rr.status_code == 200 and rr.json().get("is_ready"):
+                synced = True
+                break
+            time.sleep(3)
+        assert synced, "Failed to sync models"
+
+        # 6) Build test set + expected quantiles
+        kv_t = np.random.uniform(0.1, 0.9, size=TEST_N)
+        in_t = np.random.randint(100, 601, size=TEST_N)
+        wait_t = np.random.randint(1, 9, size=TEST_N)
+        run_t = np.random.randint(1, 5, size=TEST_N)
+        tok_t = np.random.randint(5, 21, size=TEST_N)
+        pre_t = np.random.uniform(0.0, 1.0, size=TEST_N)
+
+        ttft_mu_t = (in_t*2.0 + wait_t*3.0 + run_t*4.0 + kv_t*50.0 + pre_t*30.0 + 95)
+        tpot_mu_t = (kv_t*100.0 + in_t*0.5 + tok_t*1.0 + run_t*5.0 + 9)
+        ttft_q_exp = ttft_mu_t + z*TTFT_STD
+        tpot_q_exp = tpot_mu_t + z*TPOT_STD
+
+        test_cases = [dict(
+            kv_cache_percentage=float(kv_t[i]),
+            input_token_length=int(in_t[i]),
+            num_request_waiting=int(wait_t[i]),
+            num_request_running=int(run_t[i]),
+            num_tokens_generated=int(tok_t[i]),
+            prefix_cache_score=float(pre_t[i]),
+        ) for i in range(TEST_N)]
+
+        # 7) Predict (bulk)
+        pr = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json={"requests": test_cases}, timeout=60)
+        assert pr.status_code == 200, f"predict failed: {pr.status_code}"
+        jd = pr.json()
+        assert jd["total_requests"] == TEST_N and jd["successful_predictions"] == TEST_N and jd["failed_predictions"] == 0
+        preds = jd["predictions"]
+
+        ttft_pred = np.array([p["ttft_ms"] for p in preds], dtype=float)
+        tpot_pred = np.array([p["tpot_ms"] for p in preds], dtype=float)
+
+        # 8) Relative error vs μ + zσ
+        ttft_rel_err = np.abs(ttft_pred - ttft_q_exp) / ttft_q_exp
+        tpot_rel_err = np.abs(tpot_pred - tpot_q_exp) / tpot_q_exp
+        acc_mask = (ttft_rel_err <= REL_ERR_TOL) & (tpot_rel_err <= REL_ERR_TOL)
+        rel_accuracy = acc_mask.mean()
+        print(f"Relative-err accuracy (≤{int(REL_ERR_TOL*100)}%): {rel_accuracy*100:.1f}%")
+
+        # 9) Coverage calibration (simulate actuals for the same test X)
+        # Generate fresh noise so it's an *unseen* draw from the same D|X:
+        ttft_actual = np.maximum(1.0, ttft_mu_t + np.random.normal(0, TTFT_STD, size=TEST_N))
+        tpot_actual = np.maximum(1.0, tpot_mu_t + np.random.normal(0, TPOT_STD, size=TEST_N))
+
+        ttft_cov = (ttft_actual <= ttft_pred).mean()
+        tpot_cov = (tpot_actual <= tpot_pred).mean()
+        print(f"Coverage: TTFT={ttft_cov:.3f}, TPOT={tpot_cov:.3f} (target {target_quantile:.3f} ± {COVERAGE_TOL})")
+
+        # 10) Monotonic sanity checks on a few random pairs (no hard fail, just helpful asserts)
+        # pick one sample index and perturb input_token_length upward
+        idx = 0
+        base = test_cases[idx].copy(); up = test_cases[idx].copy(); up["input_token_length"] += 100
+        br = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json={"requests":[base, up]}, timeout=30)
+        if br.status_code == 200:
+            _bp = br.json()["predictions"]
+            assert _bp[1]["ttft_ms"] >= _bp[0]["ttft_ms"] - 1e-6, "TTFT should not decrease with longer input"
+
+        # 11) Final assertions
+        assert rel_accuracy >= 0.70, f"Only {rel_accuracy*100:.1f}% within ±{int(REL_ERR_TOL*100)}% (expected ≥70%)"
+>       assert abs(ttft_cov - target_quantile) <= COVERAGE_TOL, f"TTFT coverage {ttft_cov:.3f} not within ±{COVERAGE_TOL} of {target_quantile:.3f}"
+E       AssertionError: TTFT coverage 0.580 not within ±0.05 of 0.900
+E       assert 0.32000000000000006 <= 0.05
+E        +  where 0.32000000000000006 = abs((0.58 - 0.9))
+
+test_dual_server_client.py:910: AssertionError
+__________________________ test_native_quantile_mode ___________________________
+
+    def test_native_quantile_mode():
+        """
+        Test native quantile regression mode (USE_TREELITE=false).
+        Verifies that:
+        1. Training server uses quantile regression objective
+        2. TreeLite models are NOT created
+        3. Predictions work correctly
+        4. Coverage is within expected range
+        """
+        print("\n" + "="*50)
+        print("Testing Native Quantile Mode (USE_TREELITE=false)")
+        print("="*50)
+
+        # 1. Check server configuration
+        print("Step 1: Checking server configuration...")
+        model_info_r = requests.get(f"{TRAINING_URL}/model/download/info", timeout=10)
+        assert model_info_r.status_code == 200
+        model_info = model_info_r.json()
+
+        prediction_status_r = requests.get(f"{PREDICTION_URL}/status", timeout=10)
+        assert prediction_status_r.status_code == 200
+        prediction_status = prediction_status_r.json()
+
+        model_type = model_info.get("model_type")
+        quantile = prediction_status.get("quantile", 0.9)
+
+        print(f"  Model type: {model_type}")
+        print(f"  Quantile: {quantile}")
+
+        # Only test if using XGBoost or LightGBM
+        if model_type not in ["xgboost", "lightgbm"]:
+            print(f"  Skipping - model type {model_type} doesn't support dual modes")
+            return
+
+        # 2. Check TreeLite models should NOT exist in native quantile mode
+        print("Step 2: Verifying TreeLite models are NOT created...")
+        models_list_r = requests.get(f"{TRAINING_URL}/models/list", timeout=10)
+        models_list = models_list_r.json()
+
+        treelite_models_exist = (
+            models_list["models"].get("ttft_treelite", {}).get("exists", False) or
+            models_list["models"].get("tpot_treelite", {}).get("exists", False)
+        )
+
+        if treelite_models_exist:
+            print("  ⚠️  TreeLite models exist - likely using TreeLite mode, not native quantile")
+            print("  This test expects USE_TREELITE=false")
+        else:
+            print("  ✓ TreeLite models NOT created (as expected in native quantile mode)")
+
+        # 3. Send training data
+        print("Step 3: Sending training data...")
+        np.random.seed(42)
+        training_entries = []
+
+        for i in range(500):
+            kv = np.random.uniform(0.1, 0.9)
+            input_len = np.random.randint(50, 800)
+            waiting = np.random.randint(0, 8)
+            running = np.random.randint(1, 4)
+            tokens_gen = np.random.randint(1, 25)
+            prefix = np.random.uniform(0.0, 1.0)
+
+            # Generate with known noise
+            ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+            tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+
+            training_entries.append({
+                "kv_cache_percentage": float(kv),
+                "input_token_length": int(input_len),
+                "num_request_waiting": int(waiting),
+                "num_request_running": int(running),
+                "actual_ttft_ms": float(max(1.0, ttft_mu + np.random.normal(0, 20))),
+                "actual_tpot_ms": float(max(1.0, tpot_mu + np.random.normal(0, 10))),
+                "num_tokens_generated": int(tokens_gen),
+                "prefix_cache_score": float(prefix),
+            })
+
+        training_r = requests.post(f"{TRAINING_URL}/add_training_data_bulk",
+                                  json={"entries": training_entries}, timeout=60)
+        assert training_r.status_code == 202
+        print(f"  ✓ Sent 500 training samples")
+
+        # 4. Wait for training and sync
+        print("Step 4: Waiting for training...")
+        time.sleep(30)
+
+        print("Step 5: Syncing models to prediction server...")
+        for _ in range(10):
+            reload_r = requests.post(f"{PREDICTION_URL}/reload", timeout=20)
+            if reload_r.status_code == 200 and reload_r.json().get("is_ready"):
+                break
+            time.sleep(3)
+
+        # 5. Make predictions and check coverage
+        print("Step 6: Testing predictions and coverage...")
+        test_cases = []
+        expected_ttft = []
+        expected_tpot = []
+
+        for i in range(100):
+            kv = np.random.uniform(0.1, 0.9)
+            input_len = np.random.randint(100, 600)
+            waiting = np.random.randint(1, 8)
+            running = np.random.randint(1, 4)
+            tokens_gen = np.random.randint(5, 20)
+            prefix = np.random.uniform(0.0, 1.0)
+
+            test_cases.append({
+                "kv_cache_percentage": float(kv),
+                "input_token_length": int(input_len),
+                "num_request_waiting": int(waiting),
+                "num_request_running": int(running),
+                "num_tokens_generated": int(tokens_gen),
+                "prefix_cache_score": float(prefix),
+            })
+
+            # Expected values for coverage check
+            ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
+            tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+            expected_ttft.append(max(1.0, ttft_mu + np.random.normal(0, 20)))
+            expected_tpot.append(max(1.0, tpot_mu + np.random.normal(0, 10)))
+
+        # Get predictions
+        pred_r = requests.post(f"{PREDICTION_URL}/predict/bulk/strict",
+                              json={"requests": test_cases}, timeout=60)
+        assert pred_r.status_code == 200
+        predictions = pred_r.json()["predictions"]
+
+        ttft_preds = np.array([p["ttft_ms"] for p in predictions])
+        tpot_preds = np.array([p["tpot_ms"] for p in predictions])
+
+        # Check coverage
+        ttft_coverage = np.mean(np.array(expected_ttft) <= ttft_preds) * 100
+        tpot_coverage = np.mean(np.array(expected_tpot) <= tpot_preds) * 100
+
+        print(f"  Coverage: TTFT={ttft_coverage:.1f}%, TPOT={tpot_coverage:.1f}% (target: {quantile*100:.0f}%)")
+
+        # For native quantile mode, coverage should be close to target
+        target_pct = quantile * 100
+>       assert abs(ttft_coverage - target_pct) <= 15, f"TTFT coverage {ttft_coverage:.1f}% too far from target {target_pct:.0f}%"
+E       AssertionError: TTFT coverage 47.0% too far from target 90%
+E       assert 43.0 <= 15
+E        +  where 43.0 = abs((47.0 - 90.0))
+
+test_dual_server_client.py:1575: AssertionError
+=========================== short test summary info ============================
+FAILED test_dual_server_client.py::test_dual_server_quantile_regression_learns_distribution
+FAILED test_dual_server_client.py::test_native_quantile_mode - AssertionError...
+=================== 2 failed, 28 passed in 592.79s (0:09:52) ===================

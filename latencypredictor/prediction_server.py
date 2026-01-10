@@ -44,11 +44,11 @@ except ImportError:
     logging.warning("LightGBM not available. Install with: pip install lightgbm")
 
 try:
-    import treelite_runtime
-    TREELITE_AVAILABLE = True
+    import tl2cgen
+    TL2CGEN_AVAILABLE = True
 except ImportError:
-    TREELITE_AVAILABLE = False
-    logging.warning("TreeLite runtime not available. Install with: pip install treelite_runtime")
+    TL2CGEN_AVAILABLE = False
+    logging.warning("TL2cgen not available. Install with: pip install tl2cgen")
 
 try:
     from conformal_quantile import ConformalQuantilePredictor
@@ -61,7 +61,6 @@ class ModelType(str, Enum):
     BAYESIAN_RIDGE = "bayesian_ridge"
     XGBOOST = "xgboost"
     LIGHTGBM = "lightgbm"
-    TREELITE = "treelite"
 
 class PredictSettings:
     """Configuration for the prediction server."""
@@ -117,6 +116,8 @@ class ModelSyncer:
             settings.LOCAL_TPOT_SCALER_PATH,
             settings.LOCAL_TTFT_TREELITE_PATH,
             settings.LOCAL_TPOT_TREELITE_PATH,
+            settings.LOCAL_TTFT_CONFORMAL_PATH,
+            settings.LOCAL_TPOT_CONFORMAL_PATH
         ]:
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -125,6 +126,9 @@ class ModelSyncer:
             info_url = f"{settings.TRAINING_SERVER_URL}/model/{name}/info"
             r = requests.get(info_url, timeout=settings.HTTP_TIMEOUT)
             if r.status_code != 200:
+                # Debug logging for conformal files
+                if 'conformal' in name:
+                    logging.debug(f"Model {name} not available on server (status {r.status_code})")
                 return False
             info = r.json()
             mtime = info.get("last_modified")
@@ -155,7 +159,11 @@ class ModelSyncer:
 
             # Atomic replace
             os.replace(tmp, dest)
-            logging.info(f"Downloaded {name} -> {dest}")
+            # Extra logging for conformal files
+            if 'conformal' in name:
+                logging.info(f"✓ Downloaded conformal file: {name} -> {dest} (size: {os.path.getsize(dest)} bytes)")
+            else:
+                logging.info(f"Downloaded {name} -> {dest}")
             return True
 
         except requests.RequestException as e:
@@ -175,7 +183,7 @@ class ModelSyncer:
             ]
 
             # Sync TreeLite models if enabled
-            if settings.USE_TREELITE and TREELITE_AVAILABLE:
+            if settings.USE_TREELITE and TL2CGEN_AVAILABLE:
                 to_sync += [
                     ("ttft_treelite", settings.LOCAL_TTFT_TREELITE_PATH),
                     ("tpot_treelite", settings.LOCAL_TPOT_TREELITE_PATH),
@@ -239,7 +247,7 @@ class LightweightPredictor:
 
         self.model_type = mt
         self.quantile = settings.QUANTILE_ALPHA
-        self.use_treelite = settings.USE_TREELITE and TREELITE_AVAILABLE and mt in [ModelType.XGBOOST, ModelType.LIGHTGBM]
+        self.use_treelite = settings.USE_TREELITE and TL2CGEN_AVAILABLE and mt in [ModelType.XGBOOST, ModelType.LIGHTGBM]
 
         # Model storage
         self.ttft_model = None
@@ -265,9 +273,11 @@ class LightweightPredictor:
             if self.model_type == ModelType.BAYESIAN_RIDGE:
                 return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
             elif self.use_treelite:
-                # For TreeLite, we need the compiled predictors
+                # TreeLite mode: need TreeLite models at minimum
+                # Conformal calibration is optional - service works without it during bootstrap
+                # (will return mean predictions until calibration data is collected)
                 return all([self.ttft_predictor, self.tpot_predictor])
-            else:  # XGBoost or LightGBM without TreeLite
+            else:  # XGBoost or LightGBM without TreeLite (native quantile regression)
                 return all([self.ttft_model, self.tpot_model])
 
     def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
@@ -290,10 +300,13 @@ class LightweightPredictor:
             .clip(upper=self.prefix_buckets - 1)
         )
 
-            # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
-            df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
- 
-            
+            # TreeLite mode: keep as int32 (categorical encoder disabled during training)
+            # Non-TreeLite mode: convert to categorical for XGBoost/LightGBM
+            if not self.use_treelite:
+                df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
+            else:
+                df['prefill_score_bucket'] = df['prefill_score_bucket'].astype('int32')
+
             # Return TTFT features with interaction
             feature_cols = [
                 'kv_cache_percentage',
@@ -304,7 +317,7 @@ class LightweightPredictor:
                 'effective_input_tokens',
                 'prefill_score_bucket'
             ]
-            
+
             return df[feature_cols]
             
         else:  # tpot
@@ -322,17 +335,34 @@ class LightweightPredictor:
     def load_models(self) -> bool:
         try:
             with self.lock:
-                # Load TreeLite models if enabled
+                # Always load base XGBoost/LightGBM models first (needed for fallback)
+                new_ttft = joblib.load(settings.LOCAL_TTFT_MODEL_PATH) if os.path.exists(settings.LOCAL_TTFT_MODEL_PATH) else None
+                new_tpot = joblib.load(settings.LOCAL_TPOT_MODEL_PATH) if os.path.exists(settings.LOCAL_TPOT_MODEL_PATH) else None
+
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    new_ttft_scaler = joblib.load(settings.LOCAL_TTFT_SCALER_PATH) if os.path.exists(settings.LOCAL_TTFT_SCALER_PATH) else None
+                    new_tpot_scaler = joblib.load(settings.LOCAL_TPOT_SCALER_PATH) if os.path.exists(settings.LOCAL_TPOT_SCALER_PATH) else None
+                else:
+                    new_ttft_scaler = new_tpot_scaler = None
+
+                if new_ttft: self.ttft_model = new_ttft
+                if new_tpot: self.tpot_model = new_tpot
+                if new_ttft_scaler: self.ttft_scaler = new_ttft_scaler
+                if new_tpot_scaler: self.tpot_scaler = new_tpot_scaler
+
+                # Additionally load TreeLite models if enabled (for performance)
                 if self.use_treelite:
                     if os.path.exists(settings.LOCAL_TTFT_TREELITE_PATH):
-                        self.ttft_predictor = treelite_runtime.Predictor(settings.LOCAL_TTFT_TREELITE_PATH, nthread=8)
-                        logging.info("TTFT TreeLite model loaded")
+                        # TL2cgen runtime API (replaces deprecated treelite_runtime.Predictor)
+                        self.ttft_predictor = tl2cgen.Predictor(settings.LOCAL_TTFT_TREELITE_PATH, nthread=8)
+                        logging.info("TTFT TreeLite model loaded via TL2cgen")
                     else:
                         logging.warning(f"TreeLite model not found: {settings.LOCAL_TTFT_TREELITE_PATH}")
 
                     if os.path.exists(settings.LOCAL_TPOT_TREELITE_PATH):
-                        self.tpot_predictor = treelite_runtime.Predictor(settings.LOCAL_TPOT_TREELITE_PATH, nthread=8)
-                        logging.info("TPOT TreeLite model loaded")
+                        # TL2cgen runtime API (replaces deprecated treelite_runtime.Predictor)
+                        self.tpot_predictor = tl2cgen.Predictor(settings.LOCAL_TPOT_TREELITE_PATH, nthread=8)
+                        logging.info("TPOT TreeLite model loaded via TL2cgen")
                     else:
                         logging.warning(f"TreeLite model not found: {settings.LOCAL_TPOT_TREELITE_PATH}")
 
@@ -366,25 +396,17 @@ class LightweightPredictor:
                         else:
                             logging.warning(f"TPOT conformal calibration not found: {settings.LOCAL_TPOT_CONFORMAL_PATH}")
                             self.tpot_conformal = None
-                else:
-                    # Load XGBoost/LightGBM/BayesianRidge models
-                    new_ttft = joblib.load(settings.LOCAL_TTFT_MODEL_PATH) if os.path.exists(settings.LOCAL_TTFT_MODEL_PATH) else None
-                    new_tpot = joblib.load(settings.LOCAL_TPOT_MODEL_PATH) if os.path.exists(settings.LOCAL_TPOT_MODEL_PATH) else None
-
-                    if self.model_type == ModelType.BAYESIAN_RIDGE:
-                        new_ttft_scaler = joblib.load(settings.LOCAL_TTFT_SCALER_PATH) if os.path.exists(settings.LOCAL_TTFT_SCALER_PATH) else None
-                        new_tpot_scaler = joblib.load(settings.LOCAL_TPOT_SCALER_PATH) if os.path.exists(settings.LOCAL_TPOT_SCALER_PATH) else None
-                    else:
-                        new_ttft_scaler = new_tpot_scaler = None
-
-                    if new_ttft: self.ttft_model = new_ttft
-                    if new_tpot: self.tpot_model = new_tpot
-                    if new_ttft_scaler: self.ttft_scaler = new_ttft_scaler
-                    if new_tpot_scaler: self.tpot_scaler = new_tpot_scaler
 
                 self.last_load = datetime.now(timezone.utc)
                 if self.is_ready:
-                    logging.info(f"Models loaded successfully (TreeLite: {self.use_treelite})")
+                    if self.use_treelite:
+                        if self.ttft_predictor and self.tpot_predictor:
+                            has_conformal = self.ttft_conformal and self.tpot_conformal
+                            logging.info(f"Models loaded: Using TreeLite compiled models (conformal calibration: {has_conformal})")
+                        else:
+                            logging.info(f"Models loaded: Using base XGBoost models (TreeLite models not yet available)")
+                    else:
+                        logging.info(f"Models loaded successfully (mode: {self.model_type.value})")
                     return True
                 logging.warning("Models missing after load")
                 return False
@@ -432,33 +454,34 @@ class LightweightPredictor:
                 df_tpot_raw = pd.DataFrame([tpot_raw_data])
                 df_tpot = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
 
-                # Use TreeLite for inference if enabled
+                # TreeLite mode: use compiled models with conformal prediction
                 if self.use_treelite:
-                    # TreeLite expects numpy arrays
-                    ttft_arr = df_ttft.values.astype('float32')
-                    tpot_arr = df_tpot.values.astype('float32')
+                    if not (self.ttft_predictor and self.tpot_predictor):
+                        raise HTTPException(status_code=503, detail="TreeLite models not loaded")
 
-                    # Create DMatrix for TreeLite
-                    ttft_dmat = treelite_runtime.DMatrix(ttft_arr)
-                    tpot_dmat = treelite_runtime.DMatrix(tpot_arr)
+                    logging.info("Using TreeLite compiled models for inference") # DEBUG LOGGING
+                    # TL2cgen v1.0.0 requires DMatrix
+                    ttft_dmat = tl2cgen.DMatrix(df_ttft.values.astype('float32'))
+                    tpot_dmat = tl2cgen.DMatrix(df_tpot.values.astype('float32'))
 
-                    # Get mean predictions from TreeLite
-                    ttft_mean = float(self.ttft_predictor.predict(ttft_dmat)[0])
-                    tpot_mean = float(self.tpot_predictor.predict(tpot_dmat)[0])
+                    # Get mean predictions from TL2cgen
+                    ttft_pred_array = self.ttft_predictor.predict(ttft_dmat)
+                    tpot_pred_array = self.tpot_predictor.predict(tpot_dmat)
 
-                    # Apply conformal correction to get quantile predictions
-                    if self.ttft_conformal:
+                    # Extract scalar values (handles both 1D and 2D arrays)
+                    ttft_mean = float(np.ravel(ttft_pred_array)[0])
+                    tpot_mean = float(np.ravel(tpot_pred_array)[0])
+                    logging.info(f"TreeLite predictions - TTFT mean: {ttft_mean:.2f}ms, TPOT mean: {tpot_mean:.2f}ms") # DEBUG LOGGING
+
+                    # Apply conformal correction if available, otherwise return mean (bootstrap phase)
+                    if self.ttft_conformal and self.tpot_conformal:
                         ttft_pred = self.ttft_conformal.conformalize(ttft_mean)
-                    else:
-                        # Fallback: use mean prediction (not ideal but prevents crashes)
-                        logging.warning("TTFT conformal calibration not loaded, returning mean prediction")
-                        ttft_pred = ttft_mean
-
-                    if self.tpot_conformal:
                         tpot_pred = self.tpot_conformal.conformalize(tpot_mean)
+                        logging.info(f"Applied conformal adjustment: {ttft_mean:.2f}ms -> {ttft_pred:.2f}ms (p{int(self.quantile*100)})") # DEBUG LOGGING
                     else:
-                        # Fallback: use mean prediction (not ideal but prevents crashes)
-                        logging.warning("TPOT conformal calibration not loaded, returning mean prediction")
+                        # Bootstrap phase: return mean predictions to allow training data collection
+                        logging.warning("Conformal calibration not ready - returning mean predictions (bootstrap phase)")
+                        ttft_pred = ttft_mean
                         tpot_pred = tpot_mean
 
                     return ttft_pred, tpot_pred
@@ -478,15 +501,25 @@ class LightweightPredictor:
                     return ttft_pred, tpot_pred
 
                 elif self.model_type == ModelType.XGBOOST:
-                    ttft_pred = self.ttft_model.predict(df_ttft)
+                    # Convert categorical columns to int if present (XGBoost needs enable_categorical or numeric dtypes)
+                    df_ttft_numeric = df_ttft.copy()
+                    if 'prefill_score_bucket' in df_ttft_numeric.columns:
+                        if df_ttft_numeric['prefill_score_bucket'].dtype.name == 'category':
+                            df_ttft_numeric['prefill_score_bucket'] = df_ttft_numeric['prefill_score_bucket'].astype('int32')
+
+                    ttft_pred = self.ttft_model.predict(df_ttft_numeric)
                     tpot_pred = self.tpot_model.predict(df_tpot)
 
+                    # Note: Base XGBoost models are native quantile regression (reg:quantileerror)
+                    # so predictions are already quantiles. No adjustment needed.
                     return ttft_pred[0], tpot_pred[0]
 
                 else:  # LightGBM
                     ttft_pred = self.ttft_model.predict(df_ttft)
                     tpot_pred = self.tpot_model.predict(df_tpot)
 
+                    # Note: Base LightGBM models are native quantile regression
+                    # so predictions are already quantiles. No adjustment needed.
                     return ttft_pred[0], tpot_pred[0]
                     
         except ValueError as ve:
@@ -543,18 +576,32 @@ class LightweightPredictor:
                 df_tpot_raw = pd.DataFrame(tpot_raw_data)
                 df_tpot_batch = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
 
-                # Use TreeLite for batch inference if enabled
+                # TreeLite mode: use compiled models with conformal prediction
                 if self.use_treelite:
-                    # TreeLite expects numpy arrays
-                    ttft_arr = df_ttft_batch.values.astype('float32')
-                    tpot_arr = df_tpot_batch.values.astype('float32')
+                    if not (self.ttft_predictor and self.tpot_predictor):
+                        raise HTTPException(status_code=503, detail="TreeLite models not loaded")
 
-                    # Create DMatrix for TreeLite
-                    ttft_dmat = treelite_runtime.DMatrix(ttft_arr)
-                    tpot_dmat = treelite_runtime.DMatrix(tpot_arr)
+                    # TL2cgen v1.0.0 requires DMatrix
+                    ttft_dmat = tl2cgen.DMatrix(df_ttft_batch.values.astype('float32'))
+                    tpot_dmat = tl2cgen.DMatrix(df_tpot_batch.values.astype('float32'))
 
-                    ttft_pred = self.ttft_predictor.predict(ttft_dmat)
-                    tpot_pred = self.tpot_predictor.predict(tpot_dmat)
+                    # Get batch mean predictions from TL2cgen
+                    ttft_pred_array = self.ttft_predictor.predict(ttft_dmat)
+                    tpot_pred_array = self.tpot_predictor.predict(tpot_dmat)
+
+                    # Flatten to 1D array (handles both 1D and 2D output)
+                    ttft_mean_preds = np.ravel(ttft_pred_array)
+                    tpot_mean_preds = np.ravel(tpot_pred_array)
+
+                    # Apply conformal correction if available, otherwise return mean (bootstrap phase)
+                    if self.ttft_conformal and self.tpot_conformal:
+                        ttft_pred = np.array([self.ttft_conformal.conformalize(m) for m in ttft_mean_preds])
+                        tpot_pred = np.array([self.tpot_conformal.conformalize(m) for m in tpot_mean_preds])
+                    else:
+                        # Bootstrap phase: return mean predictions to allow training data collection
+                        logging.warning("Conformal calibration not ready - returning mean predictions (bootstrap phase)")
+                        ttft_pred = ttft_mean_preds
+                        tpot_pred = tpot_mean_preds
 
                     return ttft_pred, tpot_pred
 
@@ -573,15 +620,25 @@ class LightweightPredictor:
                     return ttft_pred, tpot_pred
 
                 elif self.model_type == ModelType.XGBOOST:
-                    ttft_pred = self.ttft_model.predict(df_ttft_batch)
+                    # Convert categorical columns to int if present (XGBoost needs enable_categorical or numeric dtypes)
+                    df_ttft_batch_numeric = df_ttft_batch.copy()
+                    if 'prefill_score_bucket' in df_ttft_batch_numeric.columns:
+                        if df_ttft_batch_numeric['prefill_score_bucket'].dtype.name == 'category':
+                            df_ttft_batch_numeric['prefill_score_bucket'] = df_ttft_batch_numeric['prefill_score_bucket'].astype('int32')
+
+                    ttft_pred = self.ttft_model.predict(df_ttft_batch_numeric)
                     tpot_pred = self.tpot_model.predict(df_tpot_batch)
 
+                    # Note: Base XGBoost models are native quantile regression (reg:quantileerror)
+                    # so predictions are already quantiles. No adjustment needed.
                     return ttft_pred, tpot_pred
 
                 else:  # LightGBM
                     ttft_pred = self.ttft_model.predict(df_ttft_batch)
                     tpot_pred = self.tpot_model.predict(df_tpot_batch)
 
+                    # Note: Base LightGBM models are native quantile regression
+                    # so predictions are already quantiles. No adjustment needed.
                     return ttft_pred, tpot_pred
                     
         except ValueError as ve:

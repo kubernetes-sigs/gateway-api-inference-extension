@@ -61,6 +61,13 @@ except ImportError:
     logging.warning("TreeLite not available. Please install with: pip install treelite treelite_runtime")
 
 try:
+    import tl2cgen
+    TL2CGEN_AVAILABLE = True
+except ImportError:
+    TL2CGEN_AVAILABLE = False
+    logging.warning("TL2cgen not available. Please install with: pip install tl2cgen")
+
+try:
     from conformal_quantile import ConformalQuantilePredictor
     CONFORMAL_AVAILABLE = True
 except ImportError:
@@ -72,7 +79,6 @@ class ModelType(str, Enum):
     BAYESIAN_RIDGE = "bayesian_ridge"
     XGBOOST = "xgboost"
     LIGHTGBM = "lightgbm"
-    TREELITE = "treelite"
 
 
 class RandomDropDeque(deque):
@@ -128,7 +134,7 @@ class Settings:
     SAMPLE_WEIGHTING_FOR_PREFIX_CACHE: bool = os.getenv("LATENCY_SAMPLE_WEIGHTING_FOR_PREFIX_CACHE", "false").lower() == "true"
     # TreeLite mode: if true, use standard regression + conformal prediction for quantiles
     # if false, use native quantile regression (more accurate but slower)
-    USE_TREELITE: bool = os.getenv("USE_TREELITE", "false").lower() == "true"
+    USE_TREELITE: bool = os.getenv("USE_TREELITE", "true").lower() == "true"
 
 settings = Settings()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -443,7 +449,16 @@ class LatencyPredictor:
 
 
     def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series, model_name: str = None, sample_weight: np.ndarray = None) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
+        """
+        Train a model with the appropriate scaling/preprocessing.
 
+        TreeLite Compatibility Notes:
+        - TreeLite does NOT support XGBoost's categorical encoder (enable_categorical=True)
+        - When USE_TREELITE=true, we disable enable_categorical and convert categorical
+          features to integers manually before training
+        - This allows the trained XGBoost model to be compiled to TreeLite .so format
+        - The prediction server then uses the compiled TreeLite model for faster inference
+        """
         try:
             if len(features) == 0 or len(target) == 0:
                 raise ValueError("Empty training data")
@@ -508,6 +523,18 @@ class LatencyPredictor:
                             objective = "reg:quantileerror"
                             model_params = {"quantile_alpha": self.quantile}
 
+                        # TreeLite doesn't support XGBoost categorical encoder
+                        # So we disable it in TreeLite mode and convert categorical to int manually
+                        enable_categorical = not settings.USE_TREELITE
+
+                        # Convert categorical to int for TreeLite compatibility
+                        if settings.USE_TREELITE and 'prefill_score_bucket' in features.columns:
+                            features = features.copy()
+                            if str(features['prefill_score_bucket'].dtype) == 'category':
+                                features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
+                            else:
+                                features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
+
                         model = xgb.XGBRegressor(
                             n_estimators=200,
                             max_depth=6,
@@ -523,7 +550,7 @@ class LatencyPredictor:
                             n_jobs=-1,
                             random_state=42,
                             verbosity=1,
-                            enable_categorical=True,
+                            enable_categorical=enable_categorical,  # Disabled for TreeLite compatibility
                             **model_params
                             )
                         model.fit(features, target, sample_weight=sample_weight)
@@ -551,6 +578,17 @@ class LatencyPredictor:
                     objective = "reg:quantileerror"
                     model_params = {"quantile_alpha": self.quantile}
 
+                # TreeLite doesn't support XGBoost categorical encoder
+                enable_categorical = not settings.USE_TREELITE
+
+                # Convert categorical to int for TreeLite compatibility
+                if settings.USE_TREELITE and 'prefill_score_bucket' in features.columns:
+                    features = features.copy()
+                    if str(features['prefill_score_bucket'].dtype) == 'category':
+                        features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
+                    else:
+                        features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
+
                 model = xgb.XGBRegressor(
                 n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
                 max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
@@ -573,7 +611,7 @@ class LatencyPredictor:
                 n_jobs=-1,                   # Utilize all CPU cores for parallel training
                 random_state=42,             # Ensures reproducible results
                 verbosity=1,
-                enable_categorical=True,     # Enable categorical feature support
+                enable_categorical=enable_categorical,  # Disabled for TreeLite compatibility
                 **model_params
     )
                 model.fit(features, target, sample_weight=sample_weight)
@@ -641,25 +679,45 @@ class LatencyPredictor:
                    'num_request_waiting', 'num_request_running', 'num_tokens_generated']
 
             X = df_features[feature_cols]  # ✅ Now has properly typed categorical!
-            
 
-            
+            # Convert categorical columns to int for XGBoost (needs enable_categorical or numeric dtypes)
+            if self.model_type == ModelType.XGBOOST:
+                X = X.copy()
+                if 'prefill_score_bucket' in X.columns:
+                    if X['prefill_score_bucket'].dtype.name == 'category':
+                        X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
 
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
                 X = scaler.transform(X)
 
             y_true = df_raw[target_col].values
             y_pred = model.predict(X)
-            
-            # For Bayesian Ridge (which doesn't do true quantile regression), 
-            # we'll estimate the quantile by adding a factor to the mean prediction
+
+            # Apply appropriate quantile adjustment based on model type
             if self.model_type == ModelType.BAYESIAN_RIDGE:
-                # Rough approximation: add some multiple of std to get to desired quantile
-                # This is a simplification - in practice you'd want proper quantile regression
+                # For Bayesian Ridge: estimate quantile by adding factor to mean prediction
                 std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                 _, y_std = model.predict(X, return_std=True)
                 y_pred = y_pred + std_factor * y_std
-            
+            elif settings.USE_TREELITE and (self.model_type in [ModelType.XGBOOST, ModelType.LIGHTGBM]):
+                # For TreeLite mode: model predicts MEAN, apply conformal adjustment if available
+                if model_name == "ttft" and self.ttft_conformal:
+                    # Apply conformal adjustment to convert mean → quantile
+                    y_pred = np.array([self.ttft_conformal.conformalize(pred) for pred in y_pred])
+                    logging.debug(f"Applied conformal adjustment to TTFT test predictions")
+                elif model_name == "tpot" and self.tpot_conformal:
+                    # Apply conformal adjustment to convert mean → quantile
+                    y_pred = np.array([self.tpot_conformal.conformalize(pred) for pred in y_pred])
+                    logging.debug(f"Applied conformal adjustment to TPOT test predictions")
+                else:
+                    # No conformal predictor available yet - use crude statistical adjustment
+                    from scipy.stats import norm
+                    z = norm.ppf(self.quantile)
+                    sigma_estimate = 0.12
+                    y_pred = y_pred * (1.0 + sigma_estimate * z)
+                    logging.debug(f"Applied bootstrap quantile adjustment (conformal not yet calibrated)")
+            # else: Native quantile regression (XGBoost/LightGBM) - predictions are already quantiles
+
             # Calculate quantile-specific metrics
             ql = quantile_loss(y_true, y_pred, self.quantile)
             coverage = quantile_coverage(y_true, y_pred, self.quantile)
@@ -727,6 +785,14 @@ class LatencyPredictor:
                         ]
                         X = df_features[feature_cols]
                         y_true = df_raw['actual_ttft_ms'].values
+
+                        # Convert categorical to int for TreeLite compatibility (same as training)
+                        if settings.USE_TREELITE and 'prefill_score_bucket' in X.columns:
+                            X = X.copy()
+                            if str(X['prefill_score_bucket'].dtype) == 'category':
+                                X['prefill_score_bucket'] = X['prefill_score_bucket'].cat.codes.astype('int32')
+                            else:
+                                X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
 
                         # Get mean predictions from model
                         y_pred_mean = self.ttft_model.predict(X)
@@ -1097,18 +1163,26 @@ class LatencyPredictor:
                         logging.info(f"TTFT XGBoost trees saved to {ttft_json_path}")
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
-                        if settings.USE_TREELITE and TREELITE_AVAILABLE:
+                        if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
                             try:
+                                logging.info("Starting TTFT TreeLite export...")
+                                # Convert XGBoost model to TreeLite (TreeLite 4.x API)
                                 tl_model = treelite.frontend.from_xgboost(booster)
-                                tl_model.export_lib(
+                                logging.info(f"TTFT model converted to TreeLite format (num_trees: {tl_model.num_tree})")
+
+                                # Export to compiled library (.so file)
+                                # TreeLite 4.x: Compilation via TL2cgen
+                                tl2cgen.export_lib(
+                                    model=tl_model,
                                     toolchain='gcc',
                                     libpath=settings.TTFT_TREELITE_PATH,
                                     params={'parallel_comp': 8},
-                                    verbose=False
+                                    verbose=True
                                 )
-                                logging.info(f"TTFT TreeLite model exported to {settings.TTFT_TREELITE_PATH}")
+                                logging.info(f"TTFT TreeLite model successfully compiled and exported to {settings.TTFT_TREELITE_PATH}")
                             except Exception as e:
                                 logging.error(f"Error exporting TTFT to TreeLite: {e}", exc_info=True)
+                                logging.warning("TreeLite export failed - prediction server will fall back to native XGBoost")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1133,18 +1207,25 @@ class LatencyPredictor:
                         logging.info(f"TTFT LightGBM importances saved to {ttft_imp_path}")
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
-                        if settings.USE_TREELITE and TREELITE_AVAILABLE:
+                        if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
                             try:
+                                logging.info("Starting TTFT LightGBM TreeLite export...")
+                                # Convert LightGBM model to TreeLite (TreeLite 4.x API)
                                 tl_model = treelite.frontend.from_lightgbm(self.ttft_model.booster_)
-                                tl_model.export_lib(
+                                logging.info(f"TTFT LightGBM model converted to TreeLite format (num_trees: {tl_model.num_tree})")
+
+                                # TreeLite 4.x: Compilation via TL2cgen
+                                tl2cgen.export_lib(
+                                    model=tl_model,
                                     toolchain='gcc',
                                     libpath=settings.TTFT_TREELITE_PATH,
                                     params={'parallel_comp': 8},
-                                    verbose=False
+                                    verbose=True
                                 )
-                                logging.info(f"TTFT TreeLite model exported to {settings.TTFT_TREELITE_PATH}")
+                                logging.info(f"TTFT TreeLite model successfully compiled and exported to {settings.TTFT_TREELITE_PATH}")
                             except Exception as e:
                                 logging.error(f"Error exporting TTFT to TreeLite: {e}", exc_info=True)
+                                logging.warning("TreeLite export failed - prediction server will fall back to native LightGBM")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1159,8 +1240,12 @@ class LatencyPredictor:
             if settings.USE_TREELITE and self.ttft_conformal:
                 try:
                     os.makedirs(os.path.dirname(settings.TTFT_CONFORMAL_PATH), exist_ok=True)
-                    with open(settings.TTFT_CONFORMAL_PATH, 'w') as f:
+                    # Use atomic write: write to temp file, then rename
+                    tmp_path = settings.TTFT_CONFORMAL_PATH + '.tmp'
+                    with open(tmp_path, 'w') as f:
                         json.dump(self.ttft_conformal.get_state(), f, indent=2)
+                    # Atomic rename ensures file is always complete when visible
+                    os.replace(tmp_path, settings.TTFT_CONFORMAL_PATH)
                     logging.info(f"TTFT conformal calibration saved to {settings.TTFT_CONFORMAL_PATH}")
                 except Exception as e:
                     logging.error(f"Error saving TTFT conformal calibration: {e}", exc_info=True)
@@ -1183,18 +1268,26 @@ class LatencyPredictor:
                         logging.info(f"TPOT XGBoost trees saved to {tpot_json_path}")
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
-                        if settings.USE_TREELITE and TREELITE_AVAILABLE:
+                        if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
                             try:
+                                logging.info("Starting TPOT TreeLite export...")
+                                # Convert XGBoost model to TreeLite (TreeLite 4.x API)
                                 tl_model = treelite.frontend.from_xgboost(booster)
-                                tl_model.export_lib(
+                                logging.info(f"TPOT model converted to TreeLite format (num_trees: {tl_model.num_tree})")
+
+                                # Export to compiled library (.so file)
+                                # TreeLite 4.x: Compilation via TL2cgen
+                                tl2cgen.export_lib(
+                                    model=tl_model,
                                     toolchain='gcc',
                                     libpath=settings.TPOT_TREELITE_PATH,
                                     params={'parallel_comp': 8},
-                                    verbose=False
+                                    verbose=True
                                 )
-                                logging.info(f"TPOT TreeLite model exported to {settings.TPOT_TREELITE_PATH}")
+                                logging.info(f"TPOT TreeLite model successfully compiled and exported to {settings.TPOT_TREELITE_PATH}")
                             except Exception as e:
                                 logging.error(f"Error exporting TPOT to TreeLite: {e}", exc_info=True)
+                                logging.warning("TreeLite export failed - prediction server will fall back to native XGBoost")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1219,18 +1312,25 @@ class LatencyPredictor:
                         logging.info(f"TPOT LightGBM importances saved to {tpot_imp_path}")
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
-                        if settings.USE_TREELITE and TREELITE_AVAILABLE:
+                        if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
                             try:
+                                logging.info("Starting TPOT LightGBM TreeLite export...")
+                                # Convert LightGBM model to TreeLite (TreeLite 4.x API)
                                 tl_model = treelite.frontend.from_lightgbm(self.tpot_model.booster_)
-                                tl_model.export_lib(
+                                logging.info(f"TPOT LightGBM model converted to TreeLite format (num_trees: {tl_model.num_tree})")
+
+                                # TreeLite 4.x: Compilation via TL2cgen
+                                tl2cgen.export_lib(
+                                    model=tl_model,
                                     toolchain='gcc',
                                     libpath=settings.TPOT_TREELITE_PATH,
                                     params={'parallel_comp': 8},
-                                    verbose=False
+                                    verbose=True
                                 )
-                                logging.info(f"TPOT TreeLite model exported to {settings.TPOT_TREELITE_PATH}")
+                                logging.info(f"TPOT TreeLite model successfully compiled and exported to {settings.TPOT_TREELITE_PATH}")
                             except Exception as e:
                                 logging.error(f"Error exporting TPOT to TreeLite: {e}", exc_info=True)
+                                logging.warning("TreeLite export failed - prediction server will fall back to native LightGBM")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1245,8 +1345,12 @@ class LatencyPredictor:
             if settings.USE_TREELITE and self.tpot_conformal:
                 try:
                     os.makedirs(os.path.dirname(settings.TPOT_CONFORMAL_PATH), exist_ok=True)
-                    with open(settings.TPOT_CONFORMAL_PATH, 'w') as f:
+                    # Use atomic write: write to temp file, then rename
+                    tmp_path = settings.TPOT_CONFORMAL_PATH + '.tmp'
+                    with open(tmp_path, 'w') as f:
                         json.dump(self.tpot_conformal.get_state(), f, indent=2)
+                    # Atomic rename ensures file is always complete when visible
+                    os.replace(tmp_path, settings.TPOT_CONFORMAL_PATH)
                     logging.info(f"TPOT conformal calibration saved to {settings.TPOT_CONFORMAL_PATH}")
                 except Exception as e:
                     logging.error(f"Error saving TPOT conformal calibration: {e}", exc_info=True)
@@ -1354,6 +1458,36 @@ class LatencyPredictor:
                         self.tpot_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
                     self._save_models_unlocked()
+
+                # Initialize empty conformal predictors for TreeLite mode if not already present
+                if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
+                    if not os.path.exists(settings.TTFT_CONFORMAL_PATH):
+                        logging.info("Creating initial empty TTFT conformal predictor")
+                        self.ttft_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        )
+                        # Save initial empty state
+                        os.makedirs(os.path.dirname(settings.TTFT_CONFORMAL_PATH), exist_ok=True)
+                        tmp_path = settings.TTFT_CONFORMAL_PATH + '.tmp'
+                        with open(tmp_path, 'w') as f:
+                            json.dump(self.ttft_conformal.get_state(), f, indent=2)
+                        os.replace(tmp_path, settings.TTFT_CONFORMAL_PATH)
+                        logging.info(f"Initial TTFT conformal predictor saved to {settings.TTFT_CONFORMAL_PATH}")
+
+                    if not os.path.exists(settings.TPOT_CONFORMAL_PATH):
+                        logging.info("Creating initial empty TPOT conformal predictor")
+                        self.tpot_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        )
+                        # Save initial empty state
+                        os.makedirs(os.path.dirname(settings.TPOT_CONFORMAL_PATH), exist_ok=True)
+                        tmp_path = settings.TPOT_CONFORMAL_PATH + '.tmp'
+                        with open(tmp_path, 'w') as f:
+                            json.dump(self.tpot_conformal.get_state(), f, indent=2)
+                        os.replace(tmp_path, settings.TPOT_CONFORMAL_PATH)
+                        logging.info(f"Initial TPOT conformal predictor saved to {settings.TPOT_CONFORMAL_PATH}")
 
                 if not self.is_ready:
                     raise RuntimeError("Failed to initialize models/scalers")
@@ -1872,6 +2006,8 @@ async def model_info(model_name: str):
         "tpot_scaler": settings.TPOT_SCALER_PATH,
         "ttft_treelite": settings.TTFT_TREELITE_PATH,
         "tpot_treelite": settings.TPOT_TREELITE_PATH,
+        "ttft_conformal": settings.TTFT_CONFORMAL_PATH,
+        "tpot_conformal": settings.TPOT_CONFORMAL_PATH,
     }
     
     if model_name not in model_paths:
