@@ -1,0 +1,73 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# This is an example production overlay
+# It shows how to customize the base deployment for your environment
+
+# Reference the base configuration
+resources:
+  - ../../dual-server-deployment.yaml
+
+# Set a specific namespace for production
+namespace: latency-predictor-prod
+
+# Add production-specific labels
+labels:
+  - pairs:
+      environment: production
+      app.kubernetes.io/name: latency-predictor
+      app.kubernetes.io/component: dual-server
+
+# Override images with your production images
+images:
+  - name: training-server
+    newName: gcr.io/my-project/latency-predictor-training
+    newTag: v1.2.3
+
+  - name: prediction-server
+    newName: gcr.io/my-project/latency-predictor-prediction
+    newTag: v1.2.3
+
+# Override configuration for production
+configMapGenerator:
+  - name: prediction-server-config
+    behavior: merge
+    literals:
+      - MODEL_SYNC_INTERVAL_SEC=30
+      - USE_TREELITE=true
+
+  - name: latency-predictor-config
+    behavior: merge
+    literals:
+      - LATENCY_RETRAINING_INTERVAL_SEC=300
+      - LATENCY_MIN_SAMPLES_FOR_RETRAIN=1000
+
+# Scale up for production
+patches:
+  - target:
+      kind: Deployment
+      name: prediction-server-deployment
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 20
+
+# Increase resources for production
+patchesStrategicMerge:
+  - |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: training-server-deployment
+    spec:
+      template:
+        spec:
+          containers:
+          - name: training-server
+            resources:
+              requests:
+                cpu: "2000m"
+                memory: "4Gi"
+              limits:
+                cpu: "4000m"
+                memory: "8Gi"

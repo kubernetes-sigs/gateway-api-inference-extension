@@ -5,7 +5,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: latency-predictor-config
-  namespace: default
 data:
   LATENCY_RETRAINING_INTERVAL_SEC: "1"
   LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
@@ -13,17 +12,20 @@ data:
   LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
   LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
   LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
+  LATENCY_TTFT_TREELITE_PATH: "/models/ttft_treelite.so"
+  LATENCY_TPOT_TREELITE_PATH: "/models/tpot_treelite.so"
+  LATENCY_TTFT_CONFORMAL_PATH: "/models/ttft_conformal.json"
+  LATENCY_TPOT_CONFORMAL_PATH: "/models/tpot_conformal.json"
   LATENCY_MODEL_TYPE: "xgboost"
+  USE_TREELITE: "true"  # Enable TreeLite + conformal prediction mode
 
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prediction-server-config
-  namespace: default
 data:
-  MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 5 seconds
-  LATENCY_MODEL_TYPE: "xgboost"
+  MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 10 seconds
   PREDICT_HOST: "0.0.0.0"
   PREDICT_PORT: "8001"
   TRAINING_SERVER_URL: "http://training-service:8000"
@@ -31,20 +33,26 @@ data:
   LOCAL_TPOT_MODEL_PATH: "/local_models/tpot.joblib"
   LOCAL_TTFT_SCALER_PATH: "/local_models/ttft_scaler.joblib"
   LOCAL_TPOT_SCALER_PATH: "/local_models/tpot_scaler.joblib"
+  LOCAL_TTFT_TREELITE_PATH: "/local_models/ttft_treelite.so"
+  LOCAL_TPOT_TREELITE_PATH: "/local_models/tpot_treelite.so"
+  LOCAL_TTFT_CONFORMAL_PATH: "/local_models/ttft_conformal.json"
+  LOCAL_TPOT_CONFORMAL_PATH: "/local_models/tpot_conformal.json"
+  LATENCY_MODEL_TYPE: "xgboost"
+  USE_TREELITE: "true"  # Enable TreeLite for faster inference
   HTTP_TIMEOUT: "30"
 
----
-# --- 2. StorageClass for Hyperdisk ---
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: hyperdisk-balanced-sc
-provisioner: pd.csi.storage.gke.io
-parameters:
-  type: hyperdisk-balanced
-reclaimPolicy: Delete
-allowVolumeExpansion: true
-volumeBindingMode: WaitForFirstConsumer
+# ---
+# # --- 2. StorageClass for Hyperdisk ---
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: hyperdisk-balanced-sc
+# provisioner: pd.csi.storage.gke.io
+# parameters:
+#   type: hyperdisk-balanced
+# reclaimPolicy: Delete
+# allowVolumeExpansion: true
+# volumeBindingMode: WaitForFirstConsumer
 
 ---
 # --- 3. Persistent Volume Claim (PVC) ---
@@ -53,9 +61,8 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: training-models-pvc
-  namespace: default
 spec:
-  storageClassName: hyperdisk-balanced-sc # Explicitly use the compatible StorageClass
+  # storageClassName: hyperdisk-balanced-sc # Explicitly use the compatible StorageClass
   accessModes:
     - ReadWriteOnce # Sufficient since only the leader pod writes to the volume.
   resources:
@@ -67,7 +74,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: training-server-deployment
-  namespace: default
   labels:
     app: training-server
     component: training
@@ -83,12 +89,11 @@ spec:
         app: training-server
         component: training
     spec:
-      nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+      # nodeSelector:
+      #   cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: training-server
-        image: placeholder-for-training-server-image:latest # TODO Replace with actual image
-
+        image: training-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -140,7 +145,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prediction-server-deployment
-  namespace: default
   labels:
     app: prediction-server
     component: prediction
@@ -156,28 +160,37 @@ spec:
         app: prediction-server
         component: prediction
     spec:
-      nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+      # nodeSelector:
+      #   cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: prediction-server
-        image: placeholder-for-prediction-server-image:latest # TODO Replace with actual image
+        image: prediction-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8001
           name: predict-port
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 30  # Allow up to 5 minutes for startup (30 * 10s)
+          timeoutSeconds: 5
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8001
-          initialDelaySeconds: 15
-          periodSeconds: 15
+          periodSeconds: 30  # Check less frequently after startup
+          timeoutSeconds: 10  # Longer timeout for TreeLite compilation
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8001
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          failureThreshold: 10  # Allow more failures while downloading models
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 10  # Longer timeout for TreeLite compilation
         resources:
           requests:
             cpu: "250m"
@@ -209,7 +222,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: training-service
-  namespace: default
   labels:
     component: training
 spec:
@@ -228,7 +240,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prediction-service
-  namespace: default
   labels:
     component: prediction
 spec:
@@ -248,7 +259,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: training-service-external
-  namespace: default
 spec:
   type: LoadBalancer
   selector:

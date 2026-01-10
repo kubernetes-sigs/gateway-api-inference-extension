@@ -7,6 +7,9 @@ joblib
 river
 pydantic
 requests
-xgboost
+xgboost==1.7.6
 aiohttp
 lightgbm
+scipy
+treelite==4.1.2
+tl2cgen==1.0.0
