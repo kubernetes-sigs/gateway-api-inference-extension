@@ -26,7 +26,7 @@ import (
 	"github.com/prometheus/common/model"
 	flag "github.com/spf13/pflag"
 
-	httpds "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
@@ -76,7 +76,7 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle pl
 		}
 	}
 
-	ds := httpds.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, MetricsDataSourceType,
+	ds := http.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, MetricsDataSourceType,
 		name, parseMetrics, PrometheusMetricType)
 	return ds, nil
 }
