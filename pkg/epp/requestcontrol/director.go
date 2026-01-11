@@ -28,7 +28,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -59,7 +58,7 @@ type Datastore interface {
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Pod) (result *schedulingtypes.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Endpoint) (result *schedulingtypes.SchedulingResult, err error)
 }
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
@@ -247,20 +246,20 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
-	targetPods := []*backend.Pod{}
+	targetMetadatas := []*datalayer.EndpointMetadata{}
 	targetEndpoints := []string{}
 
-	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetPods {
-		curPod := pod.GetPod()
-		curEndpoint := net.JoinHostPort(curPod.GetIPAddress(), curPod.GetPort())
-		targetPods = append(targetPods, curPod)
+	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetEndpoints {
+		curMetadata := pod.GetMetadata()
+		curEndpoint := net.JoinHostPort(curMetadata.GetIPAddress(), curMetadata.GetPort())
+		targetMetadatas = append(targetMetadatas, curMetadata)
 		targetEndpoints = append(targetEndpoints, curEndpoint)
 	}
 
 	multiEndpointString := strings.Join(targetEndpoints, ",")
 	logger.V(logutil.VERBOSE).Info("Request handled", "objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModel", reqCtx.TargetModelName, "endpoint", multiEndpointString)
 
-	reqCtx.TargetPod = targetPods[0]
+	reqCtx.TargetPod = targetMetadatas[0]
 	reqCtx.TargetEndpoint = multiEndpointString
 
 	d.runPreRequestPlugins(ctx, reqCtx.SchedulingRequest, result)
@@ -268,13 +267,13 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	return reqCtx, nil
 }
 
-func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Pod {
-	pm := make([]schedulingtypes.Pod, len(pods))
+func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Endpoint {
+	pm := make([]schedulingtypes.Endpoint, len(pods))
 	for i, pod := range pods {
 		if pod.GetAttributes() != nil {
-			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
+			pm[i] = &schedulingtypes.PodMetrics{EndpointMetadata: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
 		} else {
-			pm[i] = &schedulingtypes.PodMetrics{Pod: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
+			pm[i] = &schedulingtypes.PodMetrics{EndpointMetadata: pod.GetMetadata().Clone(), MetricsState: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
 		}
 	}
 
@@ -325,7 +324,7 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 	return reqCtx, nil
 }
 
-func (d *Director) GetRandomPod() *backend.Pod {
+func (d *Director) GetRandomEndpoint() *datalayer.EndpointMetadata {
 	pods := d.datastore.PodList(datastore.AllPodsPredicate)
 	if len(pods) == 0 {
 		return nil
@@ -348,19 +347,19 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 }
 
 func (d *Director) runPrepareDataPlugins(ctx context.Context,
-	request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+	request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	if len(d.requestControlPlugins.prepareDataPlugins) == 0 {
 		return nil
 	}
-	return prepareDataPluginsWithTimeout(prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, pods)
+	return prepareDataPluginsWithTimeout(prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, endpoints)
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
-	request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) bool {
+	request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) bool {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.admissionPlugins {
 		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
-		if denyReason := plugin.AdmitRequest(ctx, request, pods); denyReason != nil {
+		if denyReason := plugin.AdmitRequest(ctx, request, endpoints); denyReason != nil {
 			loggerDebug.Info("AdmitRequest plugin denied the request", "plugin", plugin.TypedName(), "reason", denyReason.Error())
 			return false
 		}
@@ -369,34 +368,34 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 	return true
 }
 
-func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running ResponseReceived plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.ResponseReceived(ctx, request, response, targetPod)
+		plugin.ResponseReceived(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(ResponseReceivedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running ResponseReceived plugin successfully", "plugin", plugin.TypedName())
 	}
 }
 
-func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
 		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.ResponseStreaming(ctx, request, response, targetPod)
+		plugin.ResponseStreaming(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerTrace.Info("Completed running ResponseStreaming plugin successfully", "plugin", plugin.TypedName())
 	}
 }
 
-func (d *Director) runResponseCompletePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetPod *backend.Pod) {
+func (d *Director) runResponseCompletePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseCompletePlugins {
 		loggerDebug.Info("Running ResponseComplete plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.ResponseComplete(ctx, request, response, targetPod)
+		plugin.ResponseComplete(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(ResponseCompleteExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running ResponseComplete plugin successfully", "plugin", plugin.TypedName())
 	}

@@ -24,7 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
@@ -105,8 +105,8 @@ func (m *mockDirector) HandleResponseReceived(ctx context.Context, reqCtx *Reque
 func (m *mockDirector) HandlePreRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
 	return reqCtx, nil
 }
-func (m *mockDirector) GetRandomPod() *backend.Pod {
-	return &backend.Pod{}
+func (m *mockDirector) GetRandomEndpoint() *datalayer.EndpointMetadata {
+	return &datalayer.EndpointMetadata{}
 }
 func (m *mockDirector) HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
 	return reqCtx, nil

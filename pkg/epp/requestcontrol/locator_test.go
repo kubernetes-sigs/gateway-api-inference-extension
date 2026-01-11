@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -276,7 +276,7 @@ func (m *mockPodLocator) callCount() int {
 
 func makeMockPodMetrics(name, ip string) backendmetrics.PodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Pod: &backend.Pod{
+		Metadata: &datalayer.EndpointMetadata{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: name},
 			Address:        ip,
 		},

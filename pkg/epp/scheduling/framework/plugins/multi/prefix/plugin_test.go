@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
@@ -47,10 +46,10 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState()}
-	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState()}
-	pod3 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, MetricsState: backendmetrics.NewMetricsState()}
-	pods := []types.Pod{pod1, pod2, pod3}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState()}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState()}
+	endpoint3 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, MetricsState: backendmetrics.NewMetricsState()}
+	endpoints := []types.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
 	req1 := &types.LLMRequest{
@@ -62,7 +61,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -70,15 +69,15 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	// Total hashes = 1 (the first one is for the prefix with model)
 	assert.Equal(t, 1, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
-	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
-	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
+	assert.Equal(t, float64(0), scores[endpoint1], "score for endpoint1")
+	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	// Simulate pod1 was picked and pod3 was picked as a prefill node.
 	schedulingResult := &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default":                          {TargetPods: []types.Pod{pod1}},
-			Experimental_DefaultPrefillProfile: {TargetPods: []types.Pod{pod3}},
+			"default":                          {TargetEndpoints: []types.Endpoint{endpoint1}},
+			Experimental_DefaultPrefillProfile: {TargetEndpoints: []types.Endpoint{endpoint3}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult)
@@ -95,7 +94,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, pods)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
@@ -103,14 +102,14 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	// Total hashes = 1 (the first one is for the prefix with model)
 	assert.Equal(t, 1, len(state.PrefixHashes), "number of hashes is incorrect")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers")
-	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
-	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
+	assert.Equal(t, float64(0), scores[endpoint1], "score for endpoint1")
+	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	// Simulate pod2 was picked.
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetPods: []types.Pod{pod2}},
+			"default": {TargetEndpoints: []types.Endpoint{endpoint2}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req2, schedulingResult)
@@ -126,22 +125,22 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, pods)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
 	// Total hashes = 2 (the first one is for the prefix with model)
 	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 2, len(state.PrefixCacheServers), "pod1 and pod3 should have cached the aaaa prefix")
-	assert.Equal(t, 0.5, scores[pod1], "score should be 0.5 - the model and the first prefix block match")
-	assert.Equal(t, 0.5, scores[pod3], "score should be 0.5 - the model and the first prefix block match on the prefill node")
-	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
+	assert.Equal(t, 2, len(state.PrefixCacheServers), "endpoint1 and endpoint3 should have cached the aaaa prefix")
+	assert.Equal(t, 0.5, scores[endpoint1], "score should be 0.5 - the model and the first prefix block match")
+	assert.Equal(t, 0.5, scores[endpoint3], "score should be 0.5 - the model and the first prefix block match on the prefill node")
+	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetPods: []types.Pod{pod1}},
+			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req3, schedulingResult)
@@ -157,21 +156,21 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req4, pods)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req4, endpoints)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
 	// Total hashes = 2 (the first one is for the prefix with model)
 	assert.Equal(t, 2, len(state.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 0, len(state.PrefixCacheServers), "pod1 should have cached the aaaa prefix")
-	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
-	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
+	assert.Equal(t, 0, len(state.PrefixCacheServers), "endpoint1 should have cached the aaaa prefix")
+	assert.Equal(t, float64(0), scores[endpoint1], "score for endpoint1")
+	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetPods: []types.Pod{pod1}},
+			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req4, schedulingResult)
@@ -187,21 +186,21 @@ func TestPrefixPluginCompletion(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req5, pods)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req5, endpoints)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
 	// Total hashes = 3 (the first one is for the prefix with model)
 	assert.Equal(t, 3, len(state.PrefixHashes), "number of hashes is incorrect")
-	assert.Equal(t, 2, len(state.PrefixCacheServers), "pod1 and pod3 should have cached the aaaa prefix")
-	assert.Equal(t, 2./3, scores[pod1], "score should be 2./3 - the model and the first 2 prefix blocks match")
-	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
+	assert.Equal(t, 2, len(state.PrefixCacheServers), "endpoint1 and endpoint3 should have cached the aaaa prefix")
+	assert.Equal(t, 2./3, scores[endpoint1], "score should be 2./3 - the model and the first 2 prefix blocks match")
+	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	schedulingResult = &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetPods: []types.Pod{pod1}},
+			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req5, schedulingResult)
@@ -216,8 +215,8 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
-	pods := []types.Pod{pod1}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
+	endpoints := []types.Endpoint{endpoint1}
 
 	// Test with chat completions request
 	req1 := &types.LLMRequest{
@@ -232,14 +231,14 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Chat completions - Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Should have some hashes for the JSON-encoded messages
 	assert.Greater(t, len(state.PrefixHashes), 1, "should have hashes for chat completions")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers initially")
-	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
+	assert.Equal(t, float64(0), scores[endpoint1], "score for endpoint1")
 }
 
 func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
@@ -250,9 +249,9 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
-	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: &backendmetrics.MetricsState{}}
-	pods := []types.Pod{pod1, pod2}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: &backendmetrics.MetricsState{}}
+	endpoints := []types.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
 	req1 := &types.LLMRequest{
@@ -267,21 +266,21 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Initial conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	initialHashCount := len(state.PrefixHashes)
 	assert.Greater(t, initialHashCount, 1, "should have hashes for chat completions")
 	assert.Equal(t, 0, len(state.PrefixCacheServers), "there shouldn't be any cached servers initially")
-	assert.Equal(t, float64(0), scores[pod1], "score for pod1")
-	assert.Equal(t, float64(0), scores[pod2], "score for pod2")
+	assert.Equal(t, float64(0), scores[endpoint1], "score for endpoint1")
+	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	// Simulate pod1 was picked
 	schedulingResult := &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetPods: []types.Pod{pod1}},
+			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult)
@@ -302,7 +301,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, pods)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Extended conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
@@ -311,10 +310,10 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// Calculate expected score - pod1 should have cached the initial prefix
-	cachedBlocks := state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
+	cachedBlocks := state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().NamespacedName)]
 	expectedScore := float64(cachedBlocks) / float64(extendedHashCount)
-	assert.Equal(t, expectedScore, scores[pod1], "pod1 should have prefix cache hit")
-	assert.Equal(t, float64(0), scores[pod2], "pod2 should have no cache hit")
+	assert.Equal(t, expectedScore, scores[endpoint1], "endpoint1 should have prefix cache hit")
+	assert.Equal(t, float64(0), scores[endpoint2], "endpoint2 should have no cache hit")
 
 	// Simulate pod1 was picked again
 	plugin.PreRequest(context.Background(), req2, schedulingResult)
@@ -337,7 +336,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, pods)
+	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
 	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
@@ -346,11 +345,11 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// pod1 should have an even higher cache hit rate now
-	cachedBlocks = state.PrefixCacheServers[ServerID(pod1.GetPod().NamespacedName)]
+	cachedBlocks = state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().NamespacedName)]
 	expectedScore = float64(cachedBlocks) / float64(longHashCount)
-	assert.Equal(t, expectedScore, scores[pod1], "pod1 should have higher prefix cache hit")
-	assert.Greater(t, scores[pod1], float64(0.5), "cache hit rate should be substantial for growing conversation")
-	assert.Equal(t, float64(0), scores[pod2], "pod2 should still have no cache hit")
+	assert.Equal(t, expectedScore, scores[endpoint1], "endpoint1 should have higher prefix cache hit")
+	assert.Greater(t, scores[endpoint1], float64(0.5), "cache hit rate should be substantial for growing conversation")
+	assert.Equal(t, float64(0), scores[endpoint2], "endpoint2 should still have no cache hit")
 }
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
@@ -376,15 +375,15 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		b.Run(fmt.Sprintf("messages_%d_length_%d", i, v), func(b *testing.B) {
 			// Generate increasing-length random prompts
 			prompt := randomPrompt(4 + v)
-			pod := &types.PodMetrics{
-				Pod: &backend.Pod{
+			endpoint := &types.PodMetrics{
+				EndpointMetadata: &datalayer.EndpointMetadata{
 					NamespacedName: k8stypes.NamespacedName{
 						Name: fmt.Sprintf("random-pod-%d", v),
 					},
 				},
 			}
 
-			pods := []types.Pod{pod}
+			endpoints := []types.Endpoint{endpoint}
 			req := &types.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "model-stress",
@@ -397,7 +396,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 
 			b.ResetTimer()
 			// Benchmark the scoring operation
-			scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
+			scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 			_ = scores // Use the result to prevent optimization
 
 			// Clean up state for next iteration
@@ -478,14 +477,14 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 func TestPrefixPluginAutoTune(t *testing.T) {
 	// Setup common test data
 	podName := "pod-autotune"
-	pod := &types.PodMetrics{
-		Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: podName}},
+	endpoint := &types.PodMetrics{
+		EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
 		MetricsState: &backendmetrics.MetricsState{
 			CacheBlockSize:    16,   // 16 tokens * 4 chars/token = 64 chars per block
 			CacheNumGPUBlocks: 1000, // 1000 blocks capacity
 		},
 	}
-	pods := []types.Pod{pod}
+	endpoints := []types.Endpoint{endpoint}
 
 	req := &types.LLMRequest{
 		RequestId:   uuid.NewString(),
@@ -511,7 +510,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		plugin := New(context.Background(), config)
 
 		// 1. Verify Score uses pod metrics for block size
-		scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
+		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 		_ = scores
 
 		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
@@ -525,14 +524,14 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		schedulingResult := &types.SchedulingResult{
 			PrimaryProfileName: "default",
 			ProfileResults: map[string]*types.ProfileRunResult{
-				"default": {TargetPods: []types.Pod{pod}},
+				"default": {TargetEndpoints: []types.Endpoint{endpoint}},
 			},
 		}
 		plugin.PreRequest(context.Background(), req, schedulingResult)
 		plugin.wg.Wait()
 
 		// Check indexer state
-		assert.Contains(t, plugin.indexer.Pods(), ServerID(pod.GetPod().NamespacedName))
+		assert.Contains(t, plugin.indexer.Pods(), ServerID(endpoint.GetMetadata().NamespacedName))
 	})
 
 	t.Run("AutoTune Disabled", func(t *testing.T) {
@@ -546,7 +545,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 
 		// 1. Verify Score uses config BlockSize
 		req.RequestId = uuid.NewString() // New request ID
-		scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
+		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 		_ = scores
 
 		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
@@ -560,13 +559,13 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		schedulingResult := &types.SchedulingResult{
 			PrimaryProfileName: "default",
 			ProfileResults: map[string]*types.ProfileRunResult{
-				"default": {TargetPods: []types.Pod{pod}},
+				"default": {TargetEndpoints: []types.Endpoint{endpoint}},
 			},
 		}
 		plugin.PreRequest(context.Background(), req, schedulingResult)
 		plugin.wg.Wait()
 
-		assert.Contains(t, plugin.indexer.Pods(), ServerID(pod.GetPod().NamespacedName))
+		assert.Contains(t, plugin.indexer.Pods(), ServerID(endpoint.GetMetadata().NamespacedName))
 	})
 }
 
@@ -588,9 +587,9 @@ func TestPrepareRequestData(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	pod1 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
-	pod2 := &types.PodMetrics{Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
-	pods := []types.Pod{pod1, pod2}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
+	endpoints := []types.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.
 	req1 := &types.LLMRequest{
@@ -602,11 +601,11 @@ func TestPrepareRequestData(t *testing.T) {
 			},
 		},
 	}
-	_ = plugin.Score(context.Background(), types.NewCycleState(), req1, pods)
+	_ = plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
 	schedulingResult := &types.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetPods: []types.Pod{pod1}},
+			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult)
@@ -623,18 +622,18 @@ func TestPrepareRequestData(t *testing.T) {
 		},
 	}
 
-	err := plugin.PrepareRequestData(context.Background(), req2, pods)
+	err := plugin.PrepareRequestData(context.Background(), req2, endpoints)
 	assert.NoError(t, err)
 
 	// Verify pod1 has the correct prefix match info
-	info1, ok := pod1.Get(dplugins.PrefixCacheMatchInfoKey)
+	info1, ok := endpoint1.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
 	assert.Equal(t, 1, prefixInfo1.MatchLength()) // "aaaa" matches
 	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 blocks
 
 	// Verify pod2 has no match info
-	info2, ok := pod2.Get(dplugins.PrefixCacheMatchInfoKey)
+	info2, ok := endpoint2.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo2 := info2.(*dplugins.PrefixCacheMatchInfo)
 	assert.Equal(t, 0, prefixInfo2.MatchLength()) // No match for pod2
@@ -681,14 +680,14 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 				messages[i] = types.Message{Role: role, Content: types.Content{Raw: content}}
 			}
 
-			pod := &types.PodMetrics{
-				Pod: &backend.Pod{
+			endpoint := &types.PodMetrics{
+				EndpointMetadata: &datalayer.EndpointMetadata{
 					NamespacedName: k8stypes.NamespacedName{
 						Name: fmt.Sprintf("chat-pod-%d-%d", scenario.messageCount, scenario.messageLength),
 					},
 				},
 			}
-			pods := []types.Pod{pod}
+			endpoints := []types.Endpoint{endpoint}
 
 			req := &types.LLMRequest{
 				RequestId:   uuid.NewString(),
@@ -703,7 +702,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// Benchmark the scoring operation
-				scores := plugin.Score(context.Background(), types.NewCycleState(), req, pods)
+				scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 				_ = scores // Use the result to prevent optimization
 
 				// Clean up state for next iteration

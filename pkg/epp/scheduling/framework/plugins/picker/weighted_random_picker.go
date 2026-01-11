@@ -38,9 +38,9 @@ const (
 	WeightedRandomPickerType = "weighted-random-picker"
 )
 
-// weightedScoredPod represents a scored pod with its A-Res sampling key
-type weightedScoredPod struct {
-	*types.ScoredPod
+// weightedScoredEndpoint represents a scored endpoint with its A-Res sampling key
+type weightedScoredEndpoint struct {
+	*types.ScoredEndpoint
 	key float64
 }
 
@@ -72,10 +72,10 @@ func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 	}
 }
 
-// WeightedRandomPicker picks pod(s) from the list of candidates based on weighted random sampling using A-Res algorithm.
+// WeightedRandomPicker picks endpoint(s) from the list of candidates based on weighted random sampling using A-Res algorithm.
 // Reference: https://utopia.duth.gr/~pefraimi/research/data/2007EncOfAlg.pdf.
 //
-// The picker at its core is picking pods randomly, where the probability of the pod to get picked is derived
+// The picker at its core is picking endpoints randomly, where the probability of the endpoint to get picked is derived
 // from its weighted score.
 // Algorithm:
 // - Uses A-Res (Algorithm for Reservoir Sampling): keyᵢ = Uᵢ^(1/wᵢ)
@@ -102,52 +102,52 @@ func (p *WeightedRandomPicker) TypedName() plugins.TypedName {
 	return p.typedName
 }
 
-// Pick selects the pod(s) randomly from the list of candidates, where the probability of the pod to get picked is derived
+// Pick selects the endpoint(s) randomly from the list of candidates, where the probability of the endpoint to get picked is derived
 // from its weighted score.
-func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	// Check if there is at least one pod with Score > 0, if not let random picker run
-	if slices.IndexFunc(scoredPods, func(scoredPod *types.ScoredPod) bool { return scoredPod.Score > 0 }) == -1 {
+func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+	// Check if there is at least one endpoint with Score > 0, if not let random picker run
+	if slices.IndexFunc(scoredEndpoints, func(scoredEndpoint *types.ScoredEndpoint) bool { return scoredEndpoint.Score > 0 }) == -1 {
 		log.FromContext(ctx).V(logutil.DEBUG).Info("All scores are zero, delegating to RandomPicker for uniform selection")
-		return p.randomPicker.Pick(ctx, cycleState, scoredPods)
+		return p.randomPicker.Pick(ctx, cycleState, scoredEndpoints)
 	}
 
-	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates by random weighted picker", "max-num-of-endpoints", p.maxNumOfEndpoints,
-		"num-of-candidates", len(scoredPods), "scored-pods", scoredPods)
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates by random weighted picker", "max-num-of-endpoints", p.maxNumOfEndpoints,
+		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
 	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// A-Res algorithm: keyᵢ = Uᵢ^(1/wᵢ)
-	weightedPods := make([]weightedScoredPod, len(scoredPods))
+	weightedEndpoints := make([]weightedScoredEndpoint, len(scoredEndpoints))
 
-	for i, scoredPod := range scoredPods {
+	for i, scoredEndpoint := range scoredEndpoints {
 		// Handle zero score
-		if scoredPod.Score <= 0 {
-			// Assign key=0 for zero-score pods (effectively excludes them from selection)
-			weightedPods[i] = weightedScoredPod{ScoredPod: scoredPod, key: 0}
+		if scoredEndpoint.Score <= 0 {
+			// Assign key=0 for zero-score endpoints (effectively excludes them from selection)
+			weightedEndpoints[i] = weightedScoredEndpoint{ScoredEndpoint: scoredEndpoint, key: 0}
 			continue
 		}
 
-		// If we're here the scoredPod.Score > 0. Generate a random number U in (0,1)
+		// If we're here the scoredEndpoint.Score > 0. Generate a random number U in (0,1)
 		u := randomGenerator.Float64()
 		if u == 0 {
 			u = 1e-10 // Avoid log(0)
 		}
 
-		weightedPods[i] = weightedScoredPod{ScoredPod: scoredPod, key: math.Pow(u, 1.0/scoredPod.Score)} // key = U^(1/weight)
+		weightedEndpoints[i] = weightedScoredEndpoint{ScoredEndpoint: scoredEndpoint, key: math.Pow(u, 1.0/scoredEndpoint.Score)} // key = U^(1/weight)
 	}
 
 	// Sort by key in descending order (largest keys first)
-	sort.Slice(weightedPods, func(i, j int) bool {
-		return weightedPods[i].key > weightedPods[j].key
+	sort.Slice(weightedEndpoints, func(i, j int) bool {
+		return weightedEndpoints[i].key > weightedEndpoints[j].key
 	})
 
-	// Select top k pods
-	selectedCount := min(p.maxNumOfEndpoints, len(weightedPods))
+	// Select top k endpoints
+	selectedCount := min(p.maxNumOfEndpoints, len(weightedEndpoints))
 
-	targetPods := make([]types.Pod, selectedCount)
+	targetEndpoints := make([]types.Endpoint, selectedCount)
 	for i := range selectedCount {
-		targetPods[i] = weightedPods[i].ScoredPod
+		targetEndpoints[i] = weightedEndpoints[i].ScoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetPods: targetPods}
+	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

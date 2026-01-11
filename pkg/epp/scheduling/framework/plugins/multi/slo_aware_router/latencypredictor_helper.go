@@ -36,10 +36,10 @@ import (
 // refreshLastSeenMetrics updates sloCtx.LastSeenMetrics from the latest scheduling result.
 func refreshLastSeenMetrics(ctx context.Context, sloCtx *sloRequestContext) {
 	if sr := sloCtx.schedulingResult; sr != nil {
-		if pr := sr.ProfileResults[sr.PrimaryProfileName]; pr != nil && pr.TargetPods != nil {
+		if pr := sr.ProfileResults[sr.PrimaryProfileName]; pr != nil && pr.TargetEndpoints != nil {
 			for profileName, profileResult := range sr.ProfileResults {
-				if profileResult != nil && profileResult.TargetPods != nil && len(profileResult.TargetPods) > 0 {
-					sloCtx.lastSeenMetrics[profileName] = profileResult.TargetPods[0].GetMetrics().Clone()
+				if profileResult != nil && profileResult.TargetEndpoints != nil && len(profileResult.TargetEndpoints) > 0 {
+					sloCtx.lastSeenMetrics[profileName] = profileResult.TargetEndpoints[0].GetMetrics().Clone()
 				}
 			}
 		}
@@ -80,8 +80,8 @@ func processPreRequestForLatencyPrediction(
 		return err
 	}
 
-	targetPod := sloCtx.targetPod
-	prefix_cache_score := sloCtx.prefixCacheScoresForPods[targetPod.String()]
+	targetPod := sloCtx.targetMetadata
+	prefix_cache_score := sloCtx.prefixCacheScoresForEndpoints[targetPod.String()]
 
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
@@ -136,8 +136,8 @@ func processFirstTokenForLatencyPrediction(
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
 	}
-	targetPod := sloCtx.targetPod
-	prefixCacheScore := sloCtx.prefixCacheScoresForPods[targetPod.String()]
+	targetPod := sloCtx.targetMetadata
+	prefixCacheScore := sloCtx.prefixCacheScoresForEndpoints[targetPod.String()]
 
 	recordTTFTTrainingData(ctx, predictor, sloCtx, m, now, prefixCacheScore)
 

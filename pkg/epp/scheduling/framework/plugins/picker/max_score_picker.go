@@ -78,15 +78,15 @@ func (p *MaxScorePicker) TypedName() plugins.TypedName {
 	return p.typedName
 }
 
-// Pick selects the pod with the maximum score from the list of candidates.
-func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
-		"num-of-candidates", len(scoredPods), "scored-pods", scoredPods)
+// Pick selects the endpoint with the maximum score from the list of candidates.
+func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
+		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
 	// Shuffle in-place - needed for random tie break when scores are equal
-	shuffleScoredPods(scoredPods)
+	shuffleScoredEndpoints(scoredEndpoints)
 
-	slices.SortStableFunc(scoredPods, func(i, j *types.ScoredPod) int { // highest score first
+	slices.SortStableFunc(scoredEndpoints, func(i, j *types.ScoredEndpoint) int { // highest score first
 		if i.Score > j.Score {
 			return -1
 		}
@@ -96,15 +96,15 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 		return 0
 	})
 
-	// if we have enough pods to return keep only the "maxNumOfEndpoints" highest scored pods
-	if p.maxNumOfEndpoints < len(scoredPods) {
-		scoredPods = scoredPods[:p.maxNumOfEndpoints]
+	// if we have enough endpoints to return keep only the "maxNumOfEndpoints" highest scored endpoints
+	if p.maxNumOfEndpoints < len(scoredEndpoints) {
+		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
 	}
 
-	targetPods := make([]types.Pod, len(scoredPods))
-	for i, scoredPod := range scoredPods {
-		targetPods[i] = scoredPod
+	targetEndpoints := make([]types.Endpoint, len(scoredEndpoints))
+	for i, scoredEndpoint := range scoredEndpoints {
+		targetEndpoints[i] = scoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetPods: targetPods}
+	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

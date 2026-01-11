@@ -408,14 +408,14 @@ func (m *mockPlugin) TypedName() plugins.TypedName { return m.t }
 // Mock Scorer
 type mockScorer struct{ mockPlugin }
 
-func (m *mockScorer) Score(context.Context, *types.CycleState, *types.LLMRequest, []types.Pod) map[types.Pod]float64 {
+func (m *mockScorer) Score(context.Context, *types.CycleState, *types.LLMRequest, []types.Endpoint) map[types.Endpoint]float64 {
 	return nil
 }
 
 // Mock Picker
 type mockPicker struct{ mockPlugin }
 
-func (m *mockPicker) Pick(context.Context, *types.CycleState, []*types.ScoredPod) *types.ProfileRunResult {
+func (m *mockPicker) Pick(context.Context, *types.CycleState, []*types.ScoredEndpoint) *types.ProfileRunResult {
 	return nil
 }
 

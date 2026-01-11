@@ -32,13 +32,13 @@ type pickerParameters struct {
 	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
 }
 
-func shuffleScoredPods(scoredPods []*types.ScoredPod) {
+func shuffleScoredEndpoints(scoredEndpoints []*types.ScoredEndpoint) {
 	// Rand package is not safe for concurrent use, so we create a new instance.
 	// Source: https://pkg.go.dev/math/rand/v2#pkg-overview
 	randomGenerator := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
 
 	// Shuffle in-place
-	randomGenerator.Shuffle(len(scoredPods), func(i, j int) {
-		scoredPods[i], scoredPods[j] = scoredPods[j], scoredPods[i]
+	randomGenerator.Shuffle(len(scoredEndpoints), func(i, j int) {
+		scoredEndpoints[i], scoredEndpoints[j] = scoredEndpoints[j], scoredEndpoints[i]
 	})
 }

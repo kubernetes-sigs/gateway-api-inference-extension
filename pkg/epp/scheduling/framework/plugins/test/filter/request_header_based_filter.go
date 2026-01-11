@@ -49,7 +49,7 @@ func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 	}
 }
 
-// HeaderBasedTestingFilter filters Pods based on an address specified in the "test-epp-endpoint-selection" request header.
+// HeaderBasedTestingFilter filters Endpoints based on an address specified in the "test-epp-endpoint-selection" request header.
 type HeaderBasedTestingFilter struct {
 	typedName plugins.TypedName
 }
@@ -65,39 +65,39 @@ func (f *HeaderBasedTestingFilter) WithName(name string) *HeaderBasedTestingFilt
 	return f
 }
 
-// Filter selects pods whose IP or IP:port matches any value in the
+// Filter selects endpoints whose IP or IP:port matches any value in the
 // "test-epp-endpoint-selection" header. Values may be "IP" or "IP:port".
 // If a port is provided, only an exact IP:port match is accepted.
-func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod {
+func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, endpoints []types.Endpoint) []types.Endpoint {
 	hv, ok := request.Headers[test.HeaderTestEppEndPointSelectionKey]
 	if !ok || strings.TrimSpace(hv) == "" {
-		return []types.Pod{}
+		return []types.Endpoint{}
 	}
 
 	normalizeIP := func(s string) string { return strings.Trim(s, "[]") }
 
 	// Build lookup maps:
-	//   ip -> pod
-	//   ip:port -> pod (only when pod GetPort() is non-empty)
-	ipToPod := make(map[string]types.Pod, len(pods))
-	hpToPod := make(map[string]types.Pod, len(pods))
-	for _, p := range pods {
-		if p == nil || p.GetPod() == nil {
+	//   ip -> endpoint
+	//   ip:port -> endpoint (only when endpoint GetPort() is non-empty)
+	ipToEndpoint := make(map[string]types.Endpoint, len(endpoints))
+	hpToPod := make(map[string]types.Endpoint, len(endpoints))
+	for _, e := range endpoints {
+		if e == nil || e.GetMetadata() == nil {
 			continue
 		}
-		ip := normalizeIP(strings.TrimSpace(p.GetPod().GetIPAddress()))
+		ip := normalizeIP(strings.TrimSpace(e.GetMetadata().GetIPAddress()))
 		if ip == "" {
 			continue
 		}
-		ipToPod[ip] = p
-		if port := strings.TrimSpace(p.GetPod().GetPort()); port != "" {
-			hpToPod[ip+":"+port] = p
+		ipToEndpoint[ip] = e
+		if port := strings.TrimSpace(e.GetMetadata().GetPort()); port != "" {
+			hpToPod[ip+":"+port] = e
 		}
 	}
 
 	headerVals := strings.Split(hv, ",")
-	filteredPods := make([]types.Pod, 0, len(headerVals))
-	seen := make(map[string]struct{}, len(headerVals)) // de-dupe by pod IP
+	filteredEndpoints := make([]types.Endpoint, 0, len(headerVals))
+	seen := make(map[string]struct{}, len(headerVals)) // de-dupe by endpoint IP
 
 	for _, raw := range headerVals {
 		item := strings.TrimSpace(raw)
@@ -114,26 +114,26 @@ func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState
 		}
 		host = normalizeIP(host)
 
-		var pod types.Pod
+		var endpoint types.Endpoint
 		if port != "" {
 			// Require an exact ip:port match
 			if p, ok := hpToPod[host+":"+port]; ok {
-				pod = p
+				endpoint = p
 			}
 		} else {
 			// IP-only selection
-			if p, ok := ipToPod[host]; ok {
-				pod = p
+			if p, ok := ipToEndpoint[host]; ok {
+				endpoint = p
 			}
 		}
 
-		if pod != nil {
-			ip := normalizeIP(pod.GetPod().GetIPAddress())
+		if endpoint != nil {
+			ip := normalizeIP(endpoint.GetMetadata().GetIPAddress())
 			if _, dup := seen[ip]; !dup {
 				seen[ip] = struct{}{}
-				filteredPods = append(filteredPods, pod)
+				filteredEndpoints = append(filteredEndpoints, endpoint)
 			}
 		}
 	}
-	return filteredPods
+	return filteredEndpoints
 }

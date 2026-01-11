@@ -51,7 +51,7 @@ type ProfileHandler interface {
 // Filter defines the interface for filtering a list of pods based on context.
 type Filter interface {
 	plugins.Plugin
-	Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) []types.Pod
+	Filter(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Endpoint) []types.Endpoint
 }
 
 // Scorer defines the interface for scoring a list of pods based on context.
@@ -60,11 +60,11 @@ type Filter interface {
 // If a scorer returns value lower than 0, it will be treated as score 0.
 type Scorer interface {
 	plugins.Plugin
-	Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64
+	Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Endpoint) map[types.Endpoint]float64
 }
 
 // Picker picks the final pod(s) to send the request to.
 type Picker interface {
 	plugins.Plugin
-	Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult
+	Pick(ctx context.Context, cycleState *types.CycleState, scoredPods []*types.ScoredEndpoint) *types.ProfileRunResult
 }

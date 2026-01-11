@@ -42,15 +42,15 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 
 	// an EoS in the request headers means this request has no body or trailers.
 	if req.RequestHeaders.EndOfStream {
-		// We will route this request to a random pod as this is assumed to just be a GET
+		// We will route this request to a random endpoint as this is assumed to just be a GET
 		// More context: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/526
 		// The above PR will address endpoint admission, but currently any request without a body will be
-		// routed to a random upstream pod.
-		pod := s.director.GetRandomPod()
-		if pod == nil {
+		// routed to a random upstream endpoint.
+		endpoint := s.director.GetRandomEndpoint()
+		if endpoint == nil {
 			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
 		}
-		reqCtx.TargetEndpoint = pod.GetIPAddress() + ":" + pod.GetPort()
+		reqCtx.TargetEndpoint = endpoint.GetIPAddress() + ":" + endpoint.GetPort()
 		reqCtx.RequestSize = 0
 		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 		return nil

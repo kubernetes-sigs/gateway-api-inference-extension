@@ -26,7 +26,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds []podPredictionResult, r *rand.Rand, strategy headroomStrategy) schedulingtypes.Pod {
+func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds []endpointPredictionResult, r *rand.Rand, strategy headroomStrategy) schedulingtypes.Endpoint {
 	total := 0
 	choices := s.buildCompositeChoices(
 		ctx, allPreds, s.config.CompositeKVWeight, s.config.CompositeQueueWeight, s.config.CompositePrefixWeight, &total,
@@ -37,10 +37,10 @@ func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds
 			choices[i].weight = minWeight + wMax - choices[i].weight
 		}
 	}
-	selectedPod := s.performWeightedRandomSelection(choices, total, allPreds, r)
-	return selectedPod
+	selectedEndpoint := s.performWeightedRandomSelection(choices, total, allPreds, r)
+	return selectedEndpoint
 }
-func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []choice, total int, candidates []podPredictionResult, r *rand.Rand) schedulingtypes.Pod {
+func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []choice, total int, candidates []endpointPredictionResult, r *rand.Rand) schedulingtypes.Endpoint {
 	if total == 0 {
 		return nil
 	}
@@ -50,43 +50,43 @@ func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []choice
 
 		logger.V(logutil.DEBUG).Info("Pod selection mode: MAX - selecting pod with highest weight")
 		maxWeight := 0
-		var selectedPod schedulingtypes.Pod
+		var selectedEndpoint schedulingtypes.Endpoint
 		for _, c := range weightedChoices {
 			if c.weight > maxWeight {
 				maxWeight = c.weight
-				selectedPod = c.podName
+				selectedEndpoint = c.endpointName
 			}
 		}
-		if selectedPod != nil {
-			return selectedPod
+		if selectedEndpoint != nil {
+			return selectedEndpoint
 		}
 		// Fallback to first pod if no selection made
-		return candidates[0].Pod
+		return candidates[0].Endpoint
 	}
 
 	// Original weighted random selection logic
 	logger.V(logutil.DEBUG).Info("Pod selection mode: LINEAR - performing weighted random selection")
 	idx := r.Intn(total)
-	var selectedPod schedulingtypes.Pod
+	var selectedEndpoint schedulingtypes.Endpoint
 
 	for _, c := range weightedChoices {
 		if idx < c.weight {
-			selectedPod = c.podName
+			selectedEndpoint = c.endpointName
 			break
 		}
 		idx -= c.weight
 	}
 
-	// If no pod was selected (shouldn't happen), fallback to first pod
-	if selectedPod == nil {
-		selectedPod = candidates[0].Pod
+	// If no endpoint was selected (shouldn't happen), fallback to first endpoint
+	if selectedEndpoint == nil {
+		selectedEndpoint = candidates[0].Endpoint
 	}
 
-	return selectedPod
+	return selectedEndpoint
 }
 func (s *SLOAwareRouter) buildCompositeChoices(
 	ctx context.Context,
-	candidates []podPredictionResult,
+	candidates []endpointPredictionResult,
 	wkv, wq, wpref float64,
 	total *int,
 ) []choice {
@@ -104,9 +104,9 @@ func (s *SLOAwareRouter) buildCompositeChoices(
 	// Precompute queue stats
 	minQ, maxQ := math.MaxInt32, -1
 	queueCounts := make(map[string]int, len(candidates))
-	for _, p := range candidates {
-		q := p.Pod.GetMetrics().WaitingQueueSize
-		queueCounts[p.Pod.GetPod().String()] = q
+	for _, e := range candidates {
+		q := e.Endpoint.GetMetrics().WaitingQueueSize
+		queueCounts[e.Endpoint.GetMetadata().String()] = q
 		if q < minQ {
 			minQ = q
 		}
@@ -118,23 +118,23 @@ func (s *SLOAwareRouter) buildCompositeChoices(
 
 	choices := make([]choice, 0, len(candidates))
 	for _, p := range candidates {
-		q := queueCounts[p.Pod.GetPod().String()]
+		q := queueCounts[p.Endpoint.GetMetadata().String()]
 		relQueue := 1.0
 		if den > 0 {
 			relQueue = (float64(maxQ-q) / den)
 		}
 
-		kvUsage := p.Pod.GetMetrics().KVCacheUsagePercent
+		kvUsage := p.Endpoint.GetMetrics().KVCacheUsagePercent
 		kvFree := (1.0 - kvUsage)
 		prefix := (p.PrefixCacheScore)
 
 		composite := wkv*kvFree + wq*relQueue + wpref*prefix
 		w := int(math.Round(float64(minWeight) + (float64(wMax-minWeight) * composite)))
 		*total += w
-		choices = append(choices, choice{podName: p.Pod, weight: w})
+		choices = append(choices, choice{endpointName: p.Endpoint, weight: w})
 
 		log.FromContext(ctx).V(logutil.TRACE).Info("Composite (neg/pos) score",
-			"pod", p.Pod.GetPod().String(),
+			"endpoint", p.Endpoint.GetMetadata().String(),
 			"kvUsage", kvUsage, "kvFree", kvFree,
 			"queue", q, "relQueue", relQueue,
 			"prefix", prefix,
