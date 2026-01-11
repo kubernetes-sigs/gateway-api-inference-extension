@@ -1,3 +1,4 @@
+{{- if .Values.experimentalGateway.enabled }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -7,7 +8,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: {{ .Values.inferenceGateway.name }}
+    name: {{ .Values.experimentalGateway.name }}
   rules:
   - backendRefs:
     - group: inference.networking.k8s.io
@@ -17,11 +18,12 @@ spec:
     - path:
         type: PathPrefix
         value: /
-      {{- if .Values.inferenceExtension.baseModel }}
+      {{- if .Values.experimentalGateway.baseModel }}
       headers:
         - type: Exact
           name: X-Gateway-Base-Model-Name
-          value: {{ .Values.inferenceExtension.baseModel }}
+          value: {{ .Values.experimentalGateway.baseModel }}
       {{- end }}
     timeouts:
       request: 300s
+{{- end }}
