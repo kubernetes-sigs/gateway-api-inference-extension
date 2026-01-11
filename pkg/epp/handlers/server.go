@@ -27,6 +27,8 @@ import (
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -127,6 +129,12 @@ const (
 
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
+
+	// Start tracing span for the request
+	tracer := otel.Tracer("gateway-api-inference-extension")
+	ctx, span := tracer.Start(ctx, "gateway.request", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	loggerTrace := logger.V(logutil.TRACE)
 	loggerTrace.Info("Processing")
@@ -205,7 +213,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			loggerTrace = logger.V(logutil.TRACE)
 			ctx = log.IntoContext(ctx, logger)
 
-			err = s.HandleRequestHeaders(reqCtx, v)
+			err = s.HandleRequestHeaders(ctx, reqCtx, v)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerTrace.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			// In the stream case, we can receive multiple request bodies.
@@ -241,7 +249,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 				reqCtx.RequestSize = len(requestBodyBytes)
-				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
+				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
 				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
 
 				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
