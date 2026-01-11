@@ -186,6 +186,11 @@ func (s *SLOAwareRouter) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
+// ScoringPreference returns the preference the scorer applies when scoring candidate endpoints.
+func (s *SLOAwareRouter) ScoringPreference() framework.ScoringPreference {
+	return framework.Affinity
+}
+
 func (s *SLOAwareRouter) WithName(name string) *SLOAwareRouter {
 	s.typedName.Name = name
 	return s
