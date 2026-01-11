@@ -25,7 +25,7 @@ kind: ConfigMap
 metadata:
   name: prediction-server-config
 data:
-  MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 10 seconds
+  MODEL_SYNC_INTERVAL_SEC: "10"  # Check for model updates every 10 seconds
   PREDICT_HOST: "0.0.0.0"
   PREDICT_PORT: "8001"
   TRAINING_SERVER_URL: "http://training-service:8000"
@@ -113,11 +113,11 @@ spec:
         resources:
           # Increased CPU & memory
           requests:
-            cpu: "1000m"            # was 500m
+            cpu: "4000m"            # was 1000m
             memory: "2Gi"           # was 512Mi
             #ephemeral-storage: "50Gi" # new: reserve 5Gi of scratch space
           limits:
-            cpu: "2000m"            # was 1000m
+            cpu: "8000m"            # was 2000m
             memory: "4Gi"           # was 1Gi
             #ephemeral-storage: "100Gi" # new: cap at 10Gi of scratch space
 
@@ -177,20 +177,22 @@ spec:
           periodSeconds: 10
           failureThreshold: 30  # Allow up to 5 minutes for startup (30 * 10s)
           timeoutSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8001
-          periodSeconds: 30  # Check less frequently after startup
-          timeoutSeconds: 10  # Longer timeout for TreeLite compilation
-          failureThreshold: 3
+        # Liveness probe disabled for benchmarking with 1-core CPU limit
+        # CPU throttling can prevent timely responses, causing unnecessary restarts
+        # livenessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8001
+        #   periodSeconds: 30
+        #   timeoutSeconds: 20
+        #   failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8001
           periodSeconds: 10
-          failureThreshold: 3
-          timeoutSeconds: 10  # Longer timeout for TreeLite compilation
+          failureThreshold: 5  # Increased tolerance for CPU throttling
+          timeoutSeconds: 20  # Longer timeout for CPU throttling
         resources:
           requests:
             cpu: "250m"

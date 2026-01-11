@@ -68,7 +68,8 @@ class ConformalQuantilePredictor:
         self._cached_quantile_value: Optional[float] = None
         self._cache_dirty = True
 
-        logging.info(f"Initialized ConformalQuantilePredictor for {quantile:.0%} quantile")
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f"Initialized ConformalQuantilePredictor for {quantile:.0%} quantile")
 
     def calibrate(self, predictions: np.ndarray, actuals: np.ndarray):
         """
@@ -90,10 +91,11 @@ class ConformalQuantilePredictor:
 
         self._cache_dirty = True
 
-        logging.info(
-            f"Calibrated with {len(residuals)} samples. "
-            f"Total calibration samples: {len(self.calibration_residuals)}"
-        )
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(
+                f"Calibrated with {len(residuals)} samples. "
+                f"Total calibration samples: {len(self.calibration_residuals)}"
+            )
 
     def add_online_sample(self, prediction: float, actual: float):
         """

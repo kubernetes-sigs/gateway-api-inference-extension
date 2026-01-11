@@ -8,6 +8,11 @@ metadata:
     app: latency-predictor-test
     component: test
 spec:
+  # Run multiple client pods in parallel to avoid client-side bottlenecks
+  # Set to 1 for single-client testing, or 10 for distributed load
+  parallelism: 10
+  completions: 10
+
   template:
     metadata:
       labels:
@@ -25,10 +30,10 @@ spec:
         resources:
           requests:
             cpu: "500m"
-            memory: "50Gi"
+            memory: "2Gi"  # Reduced since each pod handles 1/10th of load
           limits:
             cpu: "1000m"
-            memory: "100Gi"
+            memory: "4Gi"
         env:
         # Point to your internal services
         - name: TRAINING_SERVER_URL
@@ -37,14 +42,28 @@ spec:
           value: "http://prediction-service:80"
         - name: TEST_TIMEOUT
           value: "300"  # 5 minutes
+        # Each pod runs 1/parallelism of total QPS (3000/10 = 300 per pod)
         - name: TARGET_QPS
-          value: "1000"  # Match the target QPS in your test script
+          value: "300"  # Total across all pods: 300 * 10 = 3000 QPS
+        - name: TARGET_QPS_LARGE_BATCH
+          value: "30"   # Total across all pods: 30 * 10 = 300 QPS
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         envFrom:
         - configMapRef:
             name: prediction-server-config  # Reuse existing config if needed
         # Override the default command to run specific pytest
+        # When running in parallel, skip training tests (they conflict across pods)
+        # Only run stress tests that measure performance
         command: ["pytest"]
-        args: ["-v", "-s", "test_dual_server_client.py"]
+        args:
+          - "-v"
+          - "-s"
+          - "test_dual_server_client.py"
+          - "-k"
+          - "stress"  # Only run *_stress_test functions
         # If your tests need to store results or logs
         volumeMounts:
         - name: test-results

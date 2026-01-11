@@ -17,6 +17,8 @@ import random
 import time
 import logging
 import threading
+import hashlib
+from io import BytesIO
 from datetime import datetime, timezone
 from collections import deque
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -36,7 +38,8 @@ from sklearn.preprocessing import StandardScaler
 
 import tempfile
 import shutil
-import os  # Added this import
+import subprocess
+import sys
 
 try:
     import xgboost as xgb
@@ -295,9 +298,22 @@ class LatencyPredictor:
         # Conformal predictors (only used in TreeLite mode)
         self.ttft_conformal = None
         self.tpot_conformal = None
-    
+
         self.ttft_coefficients = None  # Will store descaled coefficients as dict
         self.tpot_coefficients = None  # Will store descaled coefficients as dict
+
+        # Model hashes for TreeLite compilation caching
+        self.ttft_model_hash = None
+        self.tpot_model_hash = None
+
+        # Conformal calibration hashes (to avoid rewriting unchanged files)
+        self.ttft_conformal_hash = None
+        self.tpot_conformal_hash = None
+
+        # Cache hit tracking for observability
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.last_cache_report_time = time.time()
 
         self.lock = threading.Lock()
         self.last_retrain_time = None
@@ -765,7 +781,8 @@ class LatencyPredictor:
         Only called in TreeLite mode for XGBoost/LightGBM models.
         """
         try:
-            logging.info("Calibrating conformal predictors for TreeLite mode...")
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug("Calibrating conformal predictors for TreeLite mode...")
 
             # Calibrate TTFT conformal predictor
             if self.ttft_model and self.ttft_test_data and len(self.ttft_test_data) >= 10:
@@ -934,12 +951,14 @@ class LatencyPredictor:
                             self.ttft_quantile_loss_scores.append(ql)
                             self.ttft_coverage_scores.append(coverage)
                             self.ttft_violation_rates.append(violation_rate)
-                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. "
-                                       f"Quantile Loss = {ql:.4f}, "
-                                       f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                       f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TTFT model trained on {len(df_ttft)} samples. "
+                                           f"Quantile Loss = {ql:.4f}, "
+                                           f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
+                                           f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
                         else:
-                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. Quantile metrics = N/A (insufficient test data)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TTFT model trained on {len(df_ttft)} samples. Quantile metrics = N/A (insufficient test data)")
 
                     except Exception:
                         logging.error("Error training TTFT model", exc_info=True)
@@ -973,12 +992,14 @@ class LatencyPredictor:
                             self.tpot_quantile_loss_scores.append(ql)
                             self.tpot_coverage_scores.append(coverage)
                             self.tpot_violation_rates.append(violation_rate)
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. "
-                                       f"Quantile Loss = {ql:.4f}, "
-                                       f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                       f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TPOT model trained on {len(df_tpot)} samples. "
+                                           f"Quantile Loss = {ql:.4f}, "
+                                           f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
+                                           f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
                         else:
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. Quantile metrics = N/A (insufficient test data)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TPOT model trained on {len(df_tpot)} samples. Quantile metrics = N/A (insufficient test data)")
                             
                     except Exception:
                         logging.error("Error training TPOT model", exc_info=True)
@@ -1142,13 +1163,115 @@ class LatencyPredictor:
                     logging.exception("Failed to add one sample in bulk ingestion")
 
 
+    def _compute_model_hash(self, model) -> str:
+        """
+        Compute a hash of the model to detect if it has actually changed.
+
+        Args:
+            model: The trained model (XGBoost or LightGBM)
+
+        Returns:
+            MD5 hash string of the model's serialized form
+        """
+        try:
+            # Serialize model to bytes using BytesIO buffer
+            buffer = BytesIO()
+            joblib.dump(model, buffer)
+            model_bytes = buffer.getvalue()
+            model_hash = hashlib.md5(model_bytes).hexdigest()
+            return model_hash
+        except Exception as e:
+            logging.error(f"Error computing model hash: {e}", exc_info=True)
+            # Return a random hash to force compilation if hashing fails
+            return hashlib.md5(str(time.time()).encode()).hexdigest()
+
+    def _should_recompile_treelite(self, model, previous_hash: Optional[str], model_name: str) -> Tuple[bool, str]:
+        """
+        Determine if TreeLite recompilation is needed by comparing model hash.
+
+        Args:
+            model: The trained model
+            previous_hash: Hash of the previous model (None if first time)
+            model_name: Name for logging (e.g., "TTFT" or "TPOT")
+
+        Returns:
+            Tuple of (should_recompile: bool, current_hash: str)
+        """
+        try:
+            current_hash = self._compute_model_hash(model)
+
+            if previous_hash is None:
+                logging.info(f"{model_name}: First compilation (no previous hash)")
+                return True, current_hash
+
+            if current_hash == previous_hash:
+                self.cache_hits += 1
+                logging.debug(f"{model_name}: Model unchanged (hash: {current_hash[:8]}...), skipping compilation")
+
+                # Periodic cache efficiency report (every 60 seconds)
+                if time.time() - self.last_cache_report_time > 60:
+                    total = self.cache_hits + self.cache_misses
+                    hit_rate = (self.cache_hits / total * 100) if total > 0 else 0
+                    logging.info(f"Cache efficiency: {self.cache_hits} hits, {self.cache_misses} misses ({hit_rate:.1f}% hit rate)")
+                    self.last_cache_report_time = time.time()
+
+                return False, current_hash
+
+            self.cache_misses += 1
+            logging.info(f"{model_name}: Model changed (old: {previous_hash[:8]}..., new: {current_hash[:8]}...), triggering TreeLite compilation")
+            return True, current_hash
+
+        except Exception as e:
+            logging.error(f"Error checking if recompilation needed for {model_name}: {e}", exc_info=True)
+            # On error, force recompilation to be safe
+            return True, hashlib.md5(str(time.time()).encode()).hexdigest()
+
+    def _launch_treelite_compilation(self, model_path: str, output_path: str, model_name: str):
+        """
+        Launch TreeLite compilation in a background subprocess (non-blocking).
+
+        Args:
+            model_path: Path to the .joblib model file
+            output_path: Where to save the compiled .so file
+            model_name: Name for logging (e.g., "TTFT" or "TPOT")
+        """
+        try:
+            # Path to our background compilation script
+            script_path = os.path.join(os.path.dirname(__file__), 'compile_treelite_background.py')
+
+            # Launch subprocess in background (fire and forget)
+            # Use Popen instead of run() to avoid blocking
+            process = subprocess.Popen(
+                [sys.executable, script_path, model_path, output_path, model_name],
+                stdout=subprocess.DEVNULL,  # Don't capture output (goes to log file)
+                stderr=subprocess.DEVNULL,
+                start_new_session=True  # Detach from parent process
+            )
+
+            logging.info(f"🚀 Launched background TreeLite compilation for {model_name} (PID: {process.pid})")
+            logging.info(f"   Model: {model_path} -> {output_path}")
+            logging.info(f"   Check /tmp/treelite_compilation.log for compilation progress")
+
+        except Exception as e:
+            logging.error(f"Failed to launch background TreeLite compilation for {model_name}: {e}", exc_info=True)
+
     # Update the _save_models_unlocked method to handle LightGBM model exports
     def _save_models_unlocked(self):
         try:
             if self.ttft_model:
-                os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
-                joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
-                logging.info("TTFT model saved.")
+                # Check if model has changed before saving (reduces unnecessary disk I/O)
+                should_save, current_hash = self._should_recompile_treelite(
+                    self.ttft_model, self.ttft_model_hash, "TTFT"
+                )
+
+                if should_save or self.ttft_model_hash is None:
+                    os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
+                    joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
+                    logging.info("TTFT model saved to disk")
+                    # Note: Don't update hash here - let TreeLite compilation check handle it
+                else:
+                    if logging.getLogger().isEnabledFor(logging.DEBUG):
+                        logging.debug("TTFT model unchanged, skipping joblib save")
 
                 # Save model-specific exports
                 if self.model_type == ModelType.XGBOOST:
@@ -1160,29 +1283,26 @@ class LatencyPredictor:
                         ttft_json_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_trees.json')
                         with open(ttft_json_path, 'w') as f:
                             json.dump(trees, f, indent=2)
-                        logging.info(f"TTFT XGBoost trees saved to {ttft_json_path}")
+                        if logging.getLogger().isEnabledFor(logging.DEBUG):
+                            logging.debug(f"TTFT XGBoost trees saved to {ttft_json_path}")
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
+                        # Use smart caching to avoid unnecessary recompilation
                         if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
-                            try:
-                                logging.info("Starting TTFT TreeLite export...")
-                                # Convert XGBoost model to TreeLite (TreeLite 4.x API)
-                                tl_model = treelite.frontend.from_xgboost(booster)
-                                logging.info(f"TTFT model converted to TreeLite format (num_trees: {tl_model.num_tree})")
-
-                                # Export to compiled library (.so file)
-                                # TreeLite 4.x: Compilation via TL2cgen
-                                tl2cgen.export_lib(
-                                    model=tl_model,
-                                    toolchain='gcc',
-                                    libpath=settings.TTFT_TREELITE_PATH,
-                                    params={'parallel_comp': 8},
-                                    verbose=True
+                            should_recompile, new_hash = self._should_recompile_treelite(
+                                self.ttft_model, self.ttft_model_hash, "TTFT"
+                            )
+                            if should_recompile:
+                                logging.info("Starting TTFT TreeLite export in background (non-blocking)...")
+                                self._launch_treelite_compilation(
+                                    settings.TTFT_MODEL_PATH,
+                                    settings.TTFT_TREELITE_PATH,
+                                    "TTFT"
                                 )
-                                logging.info(f"TTFT TreeLite model successfully compiled and exported to {settings.TTFT_TREELITE_PATH}")
-                            except Exception as e:
-                                logging.error(f"Error exporting TTFT to TreeLite: {e}", exc_info=True)
-                                logging.warning("TreeLite export failed - prediction server will fall back to native XGBoost")
+                                self.ttft_model_hash = new_hash
+                            else:
+                                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                    logging.debug("TTFT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1208,24 +1328,32 @@ class LatencyPredictor:
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
                         if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
-                            try:
-                                logging.info("Starting TTFT LightGBM TreeLite export...")
-                                # Convert LightGBM model to TreeLite (TreeLite 4.x API)
-                                tl_model = treelite.frontend.from_lightgbm(self.ttft_model.booster_)
-                                logging.info(f"TTFT LightGBM model converted to TreeLite format (num_trees: {tl_model.num_tree})")
+                            should_recompile, new_hash = self._should_recompile_treelite(
+                                self.ttft_model, self.ttft_model_hash, "TTFT"
+                            )
+                            if should_recompile:
+                                try:
+                                    logging.info("Starting TTFT LightGBM TreeLite export...")
+                                    # Convert LightGBM model to TreeLite (TreeLite 4.x API)
+                                    tl_model = treelite.frontend.from_lightgbm(self.ttft_model.booster_)
+                                    logging.info(f"TTFT LightGBM model converted to TreeLite format (num_trees: {tl_model.num_tree})")
 
-                                # TreeLite 4.x: Compilation via TL2cgen
-                                tl2cgen.export_lib(
-                                    model=tl_model,
-                                    toolchain='gcc',
-                                    libpath=settings.TTFT_TREELITE_PATH,
-                                    params={'parallel_comp': 8},
-                                    verbose=True
-                                )
-                                logging.info(f"TTFT TreeLite model successfully compiled and exported to {settings.TTFT_TREELITE_PATH}")
-                            except Exception as e:
-                                logging.error(f"Error exporting TTFT to TreeLite: {e}", exc_info=True)
-                                logging.warning("TreeLite export failed - prediction server will fall back to native LightGBM")
+                                    # TreeLite 4.x: Compilation via TL2cgen
+                                    tl2cgen.export_lib(
+                                        model=tl_model,
+                                        toolchain='gcc',
+                                        libpath=settings.TTFT_TREELITE_PATH,
+                                        params={'parallel_comp': 8},
+                                        verbose=True
+                                    )
+                                    logging.info(f"TTFT TreeLite model successfully compiled and exported to {settings.TTFT_TREELITE_PATH}")
+                                    self.ttft_model_hash = new_hash
+                                except Exception as e:
+                                    logging.error(f"Error exporting TTFT to TreeLite: {e}", exc_info=True)
+                                    logging.warning("TreeLite export failed - prediction server will fall back to native LightGBM")
+                            else:
+                                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                    logging.debug("TTFT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1239,21 +1367,41 @@ class LatencyPredictor:
             # Save TTFT conformal calibration (only in TreeLite mode)
             if settings.USE_TREELITE and self.ttft_conformal:
                 try:
-                    os.makedirs(os.path.dirname(settings.TTFT_CONFORMAL_PATH), exist_ok=True)
-                    # Use atomic write: write to temp file, then rename
-                    tmp_path = settings.TTFT_CONFORMAL_PATH + '.tmp'
-                    with open(tmp_path, 'w') as f:
-                        json.dump(self.ttft_conformal.get_state(), f, indent=2)
-                    # Atomic rename ensures file is always complete when visible
-                    os.replace(tmp_path, settings.TTFT_CONFORMAL_PATH)
-                    logging.info(f"TTFT conformal calibration saved to {settings.TTFT_CONFORMAL_PATH}")
+                    # Compute hash of conformal state to avoid rewriting unchanged files
+                    ttft_conf_state = self.ttft_conformal.get_state()
+                    ttft_conf_json = json.dumps(ttft_conf_state, sort_keys=True)
+                    ttft_conf_hash = hashlib.md5(ttft_conf_json.encode()).hexdigest()
+
+                    if ttft_conf_hash != self.ttft_conformal_hash:
+                        os.makedirs(os.path.dirname(settings.TTFT_CONFORMAL_PATH), exist_ok=True)
+                        # Use atomic write: write to temp file, then rename
+                        tmp_path = settings.TTFT_CONFORMAL_PATH + '.tmp'
+                        with open(tmp_path, 'w') as f:
+                            json.dump(ttft_conf_state, f, indent=2)
+                        # Atomic rename ensures file is always complete when visible
+                        os.replace(tmp_path, settings.TTFT_CONFORMAL_PATH)
+                        self.ttft_conformal_hash = ttft_conf_hash
+                        logging.info(f"TTFT conformal calibration saved to {settings.TTFT_CONFORMAL_PATH} (hash: {ttft_conf_hash[:8]}...)")
+                    else:
+                        if logging.getLogger().isEnabledFor(logging.DEBUG):
+                            logging.debug(f"TTFT conformal calibration unchanged (hash: {ttft_conf_hash[:8]}...), skipping save")
                 except Exception as e:
                     logging.error(f"Error saving TTFT conformal calibration: {e}", exc_info=True)
 
             if self.tpot_model:
-                os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
-                joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
-                logging.info("TPOT model saved.")
+                # Check if model has changed before saving (reduces unnecessary disk I/O)
+                should_save, current_hash = self._should_recompile_treelite(
+                    self.tpot_model, self.tpot_model_hash, "TPOT"
+                )
+
+                if should_save or self.tpot_model_hash is None:
+                    os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
+                    joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
+                    logging.info("TPOT model saved to disk")
+                    # Note: Don't update hash here - let TreeLite compilation check handle it
+                else:
+                    if logging.getLogger().isEnabledFor(logging.DEBUG):
+                        logging.debug("TPOT model unchanged, skipping joblib save")
 
                 # Save model-specific exports
                 if self.model_type == ModelType.XGBOOST:
@@ -1265,29 +1413,26 @@ class LatencyPredictor:
                         tpot_json_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_trees.json')
                         with open(tpot_json_path, 'w') as f:
                             json.dump(trees, f, indent=2)
-                        logging.info(f"TPOT XGBoost trees saved to {tpot_json_path}")
+                        if logging.getLogger().isEnabledFor(logging.DEBUG):
+                            logging.debug(f"TPOT XGBoost trees saved to {tpot_json_path}")
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
+                        # Use smart caching to avoid unnecessary recompilation
                         if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
-                            try:
-                                logging.info("Starting TPOT TreeLite export...")
-                                # Convert XGBoost model to TreeLite (TreeLite 4.x API)
-                                tl_model = treelite.frontend.from_xgboost(booster)
-                                logging.info(f"TPOT model converted to TreeLite format (num_trees: {tl_model.num_tree})")
-
-                                # Export to compiled library (.so file)
-                                # TreeLite 4.x: Compilation via TL2cgen
-                                tl2cgen.export_lib(
-                                    model=tl_model,
-                                    toolchain='gcc',
-                                    libpath=settings.TPOT_TREELITE_PATH,
-                                    params={'parallel_comp': 8},
-                                    verbose=True
+                            should_recompile, new_hash = self._should_recompile_treelite(
+                                self.tpot_model, self.tpot_model_hash, "TPOT"
+                            )
+                            if should_recompile:
+                                logging.info("Starting TPOT TreeLite export in background (non-blocking)...")
+                                self._launch_treelite_compilation(
+                                    settings.TPOT_MODEL_PATH,
+                                    settings.TPOT_TREELITE_PATH,
+                                    "TPOT"
                                 )
-                                logging.info(f"TPOT TreeLite model successfully compiled and exported to {settings.TPOT_TREELITE_PATH}")
-                            except Exception as e:
-                                logging.error(f"Error exporting TPOT to TreeLite: {e}", exc_info=True)
-                                logging.warning("TreeLite export failed - prediction server will fall back to native XGBoost")
+                                self.tpot_model_hash = new_hash
+                            else:
+                                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                    logging.debug("TPOT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1313,24 +1458,32 @@ class LatencyPredictor:
 
                         # Export to TreeLite for production inference (only in TreeLite mode)
                         if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
-                            try:
-                                logging.info("Starting TPOT LightGBM TreeLite export...")
-                                # Convert LightGBM model to TreeLite (TreeLite 4.x API)
-                                tl_model = treelite.frontend.from_lightgbm(self.tpot_model.booster_)
-                                logging.info(f"TPOT LightGBM model converted to TreeLite format (num_trees: {tl_model.num_tree})")
+                            should_recompile, new_hash = self._should_recompile_treelite(
+                                self.tpot_model, self.tpot_model_hash, "TPOT"
+                            )
+                            if should_recompile:
+                                try:
+                                    logging.info("Starting TPOT LightGBM TreeLite export...")
+                                    # Convert LightGBM model to TreeLite (TreeLite 4.x API)
+                                    tl_model = treelite.frontend.from_lightgbm(self.tpot_model.booster_)
+                                    logging.info(f"TPOT LightGBM model converted to TreeLite format (num_trees: {tl_model.num_tree})")
 
-                                # TreeLite 4.x: Compilation via TL2cgen
-                                tl2cgen.export_lib(
-                                    model=tl_model,
-                                    toolchain='gcc',
-                                    libpath=settings.TPOT_TREELITE_PATH,
-                                    params={'parallel_comp': 8},
-                                    verbose=True
-                                )
-                                logging.info(f"TPOT TreeLite model successfully compiled and exported to {settings.TPOT_TREELITE_PATH}")
-                            except Exception as e:
-                                logging.error(f"Error exporting TPOT to TreeLite: {e}", exc_info=True)
-                                logging.warning("TreeLite export failed - prediction server will fall back to native LightGBM")
+                                    # TreeLite 4.x: Compilation via TL2cgen
+                                    tl2cgen.export_lib(
+                                        model=tl_model,
+                                        toolchain='gcc',
+                                        libpath=settings.TPOT_TREELITE_PATH,
+                                        params={'parallel_comp': 8},
+                                        verbose=True
+                                    )
+                                    logging.info(f"TPOT TreeLite model successfully compiled and exported to {settings.TPOT_TREELITE_PATH}")
+                                    self.tpot_model_hash = new_hash
+                                except Exception as e:
+                                    logging.error(f"Error exporting TPOT to TreeLite: {e}", exc_info=True)
+                                    logging.warning("TreeLite export failed - prediction server will fall back to native LightGBM")
+                            else:
+                                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                    logging.debug("TPOT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1344,14 +1497,24 @@ class LatencyPredictor:
             # Save TPOT conformal calibration (only in TreeLite mode)
             if settings.USE_TREELITE and self.tpot_conformal:
                 try:
-                    os.makedirs(os.path.dirname(settings.TPOT_CONFORMAL_PATH), exist_ok=True)
-                    # Use atomic write: write to temp file, then rename
-                    tmp_path = settings.TPOT_CONFORMAL_PATH + '.tmp'
-                    with open(tmp_path, 'w') as f:
-                        json.dump(self.tpot_conformal.get_state(), f, indent=2)
-                    # Atomic rename ensures file is always complete when visible
-                    os.replace(tmp_path, settings.TPOT_CONFORMAL_PATH)
-                    logging.info(f"TPOT conformal calibration saved to {settings.TPOT_CONFORMAL_PATH}")
+                    # Compute hash of conformal state to avoid rewriting unchanged files
+                    tpot_conf_state = self.tpot_conformal.get_state()
+                    tpot_conf_json = json.dumps(tpot_conf_state, sort_keys=True)
+                    tpot_conf_hash = hashlib.md5(tpot_conf_json.encode()).hexdigest()
+
+                    if tpot_conf_hash != self.tpot_conformal_hash:
+                        os.makedirs(os.path.dirname(settings.TPOT_CONFORMAL_PATH), exist_ok=True)
+                        # Use atomic write: write to temp file, then rename
+                        tmp_path = settings.TPOT_CONFORMAL_PATH + '.tmp'
+                        with open(tmp_path, 'w') as f:
+                            json.dump(tpot_conf_state, f, indent=2)
+                        # Atomic rename ensures file is always complete when visible
+                        os.replace(tmp_path, settings.TPOT_CONFORMAL_PATH)
+                        self.tpot_conformal_hash = tpot_conf_hash
+                        logging.info(f"TPOT conformal calibration saved to {settings.TPOT_CONFORMAL_PATH} (hash: {tpot_conf_hash[:8]}...)")
+                    else:
+                        if logging.getLogger().isEnabledFor(logging.DEBUG):
+                            logging.debug(f"TPOT conformal calibration unchanged (hash: {tpot_conf_hash[:8]}...), skipping save")
                 except Exception as e:
                     logging.error(f"Error saving TPOT conformal calibration: {e}", exc_info=True)
 
@@ -1996,6 +2159,42 @@ async def tpot_xgb_json():
 
 
 
+@app.get("/model/{model_name}/hash")
+async def get_model_hash(model_name: str):
+    """
+    Get the current hash of a model without downloading it.
+
+    This allows prediction servers to check if a model has changed
+    before downloading, reducing unnecessary network traffic.
+    """
+    if model_name == "ttft":
+        if not predictor.ttft_model:
+            raise HTTPException(status_code=404, detail="TTFT model not available")
+
+        return {
+            "model_name": "ttft",
+            "hash": predictor.ttft_model_hash or "initial",
+            "last_retrain": predictor.last_retrain_time.isoformat() if predictor.last_retrain_time else None,
+            "model_type": predictor.model_type.value,
+            "use_treelite": settings.USE_TREELITE
+        }
+
+    elif model_name == "tpot":
+        if not predictor.tpot_model:
+            raise HTTPException(status_code=404, detail="TPOT model not available")
+
+        return {
+            "model_name": "tpot",
+            "hash": predictor.tpot_model_hash or "initial",
+            "last_retrain": predictor.last_retrain_time.isoformat() if predictor.last_retrain_time else None,
+            "model_type": predictor.model_type.value,
+            "use_treelite": settings.USE_TREELITE
+        }
+
+    else:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}. Use 'ttft' or 'tpot'")
+
+
 @app.get("/model/{model_name}/info")
 async def model_info(model_name: str):
     """Get model file information including last modified time."""
@@ -2009,19 +2208,19 @@ async def model_info(model_name: str):
         "ttft_conformal": settings.TTFT_CONFORMAL_PATH,
         "tpot_conformal": settings.TPOT_CONFORMAL_PATH,
     }
-    
+
     if model_name not in model_paths:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
-    
+
     model_path = model_paths[model_name]
-    
+
     if not os.path.exists(model_path):
         raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
-    
+
     # Get file stats
     stat = os.stat(model_path)
     last_modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-    
+
     return {
         "model_name": model_name,
         "path": model_path,
