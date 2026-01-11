@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-// HTTPDataSource is a data source that recieves its data using HTTP client.
+// HTTPDataSource is a data source that receives its data using HTTP client.
 type HTTPDataSource struct {
 	typedName plugins.TypedName
 	scheme    string // scheme to use
