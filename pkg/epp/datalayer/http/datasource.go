@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Kubernetes Authors.
+Copyright 2026 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,35 +14,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package metrics
+package httpds
 
 import (
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
+	"reflect"
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-// DataSource is a Model Server Protocol (MSP) compliant metrics data source,
-// returning Prometheus formatted metrics for an endpoint.
-type DataSource struct {
-	typedName     plugins.TypedName
-	metricsScheme string // scheme to use in metrics URL
-	metricsPath   string // path to use in metrics URL
+// HTTPDataSource is a data source that recieves its data using HTTP client.
+type HTTPDataSource struct {
+	typedName plugins.TypedName
+	scheme    string // scheme to use
+	path      string // path to use
 
-	client     Client   // client (e.g. a wrapped http.Client) used to get metrics
+	client     Client // client (e.g. a wrapped http.Client) used to get data
+	parser     func(io.Reader) (any, error)
+	outputType reflect.Type
 	extractors sync.Map // key: name, value: extractor
 }
 
-// NewMetricsDataSource returns a new MSP compliant metrics data source, configured with
+// NewHTTPDataSource returns a new data source, configured with
 // the provided scheme, path and certificate verification parameters.
-func NewMetricsDataSource(metricsScheme string, metricsPath string, skipCertVerification bool) *DataSource {
-	if metricsScheme == "https" {
+func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, pluginType string,
+	pluginName string, parser func(io.Reader) (any, error), outputType reflect.Type) *HTTPDataSource {
+	if scheme == "https" {
 		httpsTransport := baseTransport.Clone()
 		httpsTransport.TLSClientConfig = &tls.Config{
 			InsecureSkipVerify: skipCertVerification,
@@ -50,25 +54,27 @@ func NewMetricsDataSource(metricsScheme string, metricsPath string, skipCertVeri
 		defaultClient.Transport = httpsTransport
 	}
 
-	dataSrc := &DataSource{
+	dataSrc := &HTTPDataSource{
 		typedName: plugins.TypedName{
-			Type: MetricsDataSourceType,
-			Name: MetricsDataSourceType,
+			Type: pluginType,
+			Name: pluginName,
 		},
-		metricsScheme: metricsScheme,
-		metricsPath:   metricsPath,
-		client:        defaultClient,
+		scheme:     scheme,
+		path:       path,
+		client:     defaultClient,
+		parser:     parser,
+		outputType: outputType,
 	}
 	return dataSrc
 }
 
-// TypedName returns the metrics data source type and name.
-func (dataSrc *DataSource) TypedName() plugins.TypedName {
+// TypedName returns the data source type and name.
+func (dataSrc *HTTPDataSource) TypedName() plugins.TypedName {
 	return dataSrc.typedName
 }
 
 // Extractors returns a list of registered Extractor names.
-func (dataSrc *DataSource) Extractors() []string {
+func (dataSrc *HTTPDataSource) Extractors() []string {
 	extractors := []string{}
 	dataSrc.extractors.Range(func(_, val any) bool {
 		if ex, ok := val.(datalayer.Extractor); ok {
@@ -80,9 +86,9 @@ func (dataSrc *DataSource) Extractors() []string {
 }
 
 // AddExtractor adds an extractor to the data source, validating it can process
-// the metrics' data source output type.
-func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
-	if err := datalayer.ValidateExtractorType(PrometheusMetricType, extractor.ExpectedInputType()); err != nil {
+// the data source output type.
+func (dataSrc *HTTPDataSource) AddExtractor(extractor datalayer.Extractor) error {
+	if err := datalayer.ValidateExtractorType(dataSrc.outputType, extractor.ExpectedInputType()); err != nil {
 		return err
 	}
 	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.TypedName().Name, extractor); loaded {
@@ -92,10 +98,10 @@ func (dataSrc *DataSource) AddExtractor(extractor datalayer.Extractor) error {
 }
 
 // Collect is triggered by the data layer framework to fetch potentially new
-// MSP metrics data for an endpoint.
-func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
-	target := dataSrc.getMetricsEndpoint(ep.GetMetadata())
-	families, err := dataSrc.client.Get(ctx, target, ep.GetMetadata())
+// data for an endpoint.
+func (dataSrc *HTTPDataSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
+	target := dataSrc.getEndpoint(ep.GetMetadata())
+	data, err := dataSrc.client.Get(ctx, target, ep.GetMetadata(), dataSrc.parser)
 
 	if err != nil {
 		return err
@@ -104,7 +110,7 @@ func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) e
 	var errs []error
 	dataSrc.extractors.Range(func(_, val any) bool {
 		if ex, ok := val.(datalayer.Extractor); ok {
-			if err = ex.Extract(ctx, families, ep); err != nil {
+			if err = ex.Extract(ctx, data, ep); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -117,10 +123,12 @@ func (dataSrc *DataSource) Collect(ctx context.Context, ep datalayer.Endpoint) e
 	return nil
 }
 
-func (dataSrc *DataSource) getMetricsEndpoint(ep datalayer.Addressable) *url.URL {
+func (dataSrc *HTTPDataSource) getEndpoint(ep datalayer.Addressable) *url.URL {
 	return &url.URL{
-		Scheme: dataSrc.metricsScheme,
+		Scheme: dataSrc.scheme,
 		Host:   ep.GetMetricsHost(),
-		Path:   dataSrc.metricsPath,
+		Path:   dataSrc.path,
 	}
 }
+
+var _ datalayer.DataSource = (*HTTPDataSource)(nil)

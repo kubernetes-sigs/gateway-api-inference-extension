@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Kubernetes Authors.
+Copyright 2025, 2026 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,10 +25,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	httpds "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
 )
 
 func TestDatasource(t *testing.T) {
-	source := NewMetricsDataSource("https", "/metrics", true)
+	source := httpds.NewHTTPDataSource("https", "/metrics", true, MetricsDataSourceType,
+		"metrics-data-source", parseMetrics, PrometheusMetricType)
 	extractor, err := NewModelServerExtractor(defaultTotalQueuedRequestsMetric, "", "", "", "")
 	assert.Nil(t, err, "failed to create extractor")
 
