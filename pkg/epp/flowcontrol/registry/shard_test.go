@@ -59,8 +59,8 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
 
 	globalConfig, err := NewConfig(
-		WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
-		WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
+		WithPriorityBand(&PriorityBandConfig{Priority: highPriority}),
+		WithPriorityBand(&PriorityBandConfig{Priority: lowPriority}),
 	)
 	require.NoError(t, err, "Test setup: validating and defaulting config should not fail")
 
@@ -134,7 +134,7 @@ func TestShard_New(t *testing.T) {
 		val, ok := h.shard.priorityBands.Load(highPriority)
 		bandHigh := val.(*priorityBand)
 		require.True(t, ok, "Priority band %d (High) must be initialized", highPriority)
-		assert.Equal(t, "High", bandHigh.config.PriorityName, "Priority band name must match the configuration")
+		assert.Equal(t, highPriority, bandHigh.config.Priority, "Priority band priority must match the configuration")
 		require.NotNil(t, bandHigh.interFlowDispatchPolicy, "Inter-flow policy must be instantiated during construction")
 		assert.Equal(t, string(defaultInterFlowDispatchPolicy), bandHigh.interFlowDispatchPolicy.Name(),
 			"The default inter-flow policy implementation must be used when not overridden")
@@ -146,7 +146,6 @@ func TestShard_New(t *testing.T) {
 		badConfig, err := NewConfig(
 			WithPriorityBand(&PriorityBandConfig{
 				Priority:                highPriority,
-				PriorityName:            "High",
 				InterFlowDispatchPolicy: "non-existent-policy",
 			}),
 		)
@@ -298,7 +297,6 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, h.highPriorityKey1.Priority, accessor.Priority(),
 				"Accessor Priority() must match the configured numerical priority")
-			assert.Equal(t, "High", accessor.PriorityName(), "Accessor PriorityName() must match the configured name")
 		})
 
 		t.Run("FlowKeys_ShouldReturnAllKeysInBand", func(t *testing.T) {
@@ -452,7 +450,7 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		// Update the config definition first (simulating the Registry's job).
 		dynamicPrio := 15
-		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
+		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio}
 		newBandCfg.applyDefaults()
 		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
 
@@ -464,7 +462,7 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		accessor, err := h.shard.PriorityBandAccessor(dynamicPrio)
 		require.NoError(t, err, "Accessor should be available for the new band")
-		assert.Equal(t, "Dynamic-15", accessor.PriorityName())
+		assert.Equal(t, dynamicPrio, accessor.Priority())
 	})
 
 	t.Run("ShouldBeIdempotent", func(t *testing.T) {
@@ -473,7 +471,7 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		// Prepare config.
 		dynamicPrio := 15
-		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
+		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio}
 		newBandCfg.applyDefaults()
 		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
 
