@@ -150,9 +150,7 @@ func NewTestHarness(t *testing.T, ctx context.Context) *TestHarness {
 		MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
 	}
 	runner.SaturationDetector = utilizationdetector.NewDetector(sdConfig, logger.WithName("sd"))
-	locator := requestcontrol.NewDatastorePodLocator(runner.Datastore, requestcontrol.PodLocatorConfig {
-		DisableEndpointSubsetFilter: false,
-	})
+	locator := requestcontrol.NewDatastorePodLocator(runner.Datastore)
 	runner.Director = requestcontrol.NewDirectorWithConfig(
 		runner.Datastore,
 		scheduling.NewSchedulerWithConfig(schedulerConfig),
