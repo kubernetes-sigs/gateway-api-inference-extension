@@ -45,7 +45,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		config		   PodLocatorConfig
+		config         PodLocatorConfig
 		metadata       map[string]any
 		expectedPodIPs []string
 	}{
@@ -62,7 +62,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 		{
-			name: "Metadata without subset namespace returns all pods",
+			name:   "Metadata without subset namespace returns all pods",
 			config: PodLocatorConfig{},
 			metadata: map[string]any{
 				"other-filter": "value",
@@ -70,7 +70,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 		{
-			name: "Subset filter with single match",
+			name:   "Subset filter with single match",
 			config: PodLocatorConfig{},
 			metadata: makeMetadataWithSubset([]any{
 				"10.0.0.1:8080",
@@ -78,7 +78,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			expectedPodIPs: []string{"10.0.0.1"},
 		},
 		{
-			name: "Subset filter with multiple matches",
+			name:   "Subset filter with multiple matches",
 			config: PodLocatorConfig{},
 			metadata: makeMetadataWithSubset([]any{
 				"10.0.0.1:8080",
@@ -87,7 +87,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			expectedPodIPs: []string{"10.0.0.1", "10.0.0.3"},
 		},
 		{
-			name: "Subset filter with no matches (Scale-from-Zero scenario)",
+			name:   "Subset filter with no matches (Scale-from-Zero scenario)",
 			config: PodLocatorConfig{},
 			metadata: makeMetadataWithSubset([]any{
 				"192.168.1.1:8080", // Does not exist in mockDS
@@ -95,7 +95,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			expectedPodIPs: []string{},
 		},
 		{
-			name: "Subset filter is present but list is empty",
+			name:   "Subset filter is present but list is empty",
 			config: PodLocatorConfig{},
 			metadata: map[string]any{
 				metadata.SubsetFilterNamespace: map[string]any{
@@ -105,7 +105,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			expectedPodIPs: []string{},
 		},
 		{
-			name: "Subset filter contains malformed data (non-string)",
+			name:   "Subset filter contains malformed data (non-string)",
 			config: PodLocatorConfig{},
 			metadata: makeMetadataWithSubset([]any{
 				"10.0.0.1:8080",
@@ -114,33 +114,33 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			expectedPodIPs: []string{"10.0.0.1"},
 		},
 		{
-            name: "Subset filter with match (filter disabled)",
-            config: PodLocatorConfig{
-                DisableEndpointSubsetFilter: true,
-            },
-            metadata: makeMetadataWithSubset([]any{
-                "10.0.0.1:8080",
-            }),
-            expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
-        },
-        {
-            name: "Subset filter is present but list is empty (filter disabled)",
-            config: PodLocatorConfig{
-                DisableEndpointSubsetFilter: true,
-            },
-            metadata: makeMetadataWithSubset([]any{}),
-            expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
-        },
-        {
-            name: "Subset filter with no matches (filter disabled)",
-            config: PodLocatorConfig{
-                DisableEndpointSubsetFilter: true,
-            },
-            metadata: makeMetadataWithSubset([]any{
-                "192.168.1.1:8080",
-            }),
-            expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
-        },
+			name: "Subset filter with match (filter disabled)",
+			config: PodLocatorConfig{
+				DisableEndpointSubsetFilter: true,
+			},
+			metadata: makeMetadataWithSubset([]any{
+				"10.0.0.1:8080",
+			}),
+			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+		},
+		{
+			name: "Subset filter is present but list is empty (filter disabled)",
+			config: PodLocatorConfig{
+				DisableEndpointSubsetFilter: true,
+			},
+			metadata:       makeMetadataWithSubset([]any{}),
+			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+		},
+		{
+			name: "Subset filter with no matches (filter disabled)",
+			config: PodLocatorConfig{
+				DisableEndpointSubsetFilter: true,
+			},
+			metadata: makeMetadataWithSubset([]any{
+				"192.168.1.1:8080",
+			}),
+			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+		},
 	}
 
 	for _, tc := range tests {

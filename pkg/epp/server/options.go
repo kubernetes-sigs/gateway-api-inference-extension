@@ -53,9 +53,9 @@ type Options struct {
 	//
 	// Endpoints (in lieu of using an InferencePool for service discovery).
 	//
-	EndpointSelector    string // Selector to filter model server pods on, only 'key=value' pairs are supported. (TODO: k8s.Selector, pflag.StringSlice?)
-	EndpointTargetPorts []int  // Target ports of model server pods.
-	DisableEndpointSubsetFilter bool // Disables respecting x-gateway-destination-endpoint-subset in EPP.
+	EndpointSelector            string // Selector to filter model server pods on, only 'key=value' pairs are supported. (TODO: k8s.Selector, pflag.StringSlice?)
+	EndpointTargetPorts         []int  // Target ports of model server pods.
+	DisableEndpointSubsetFilter bool   // Disables respecting x-gateway-destination-endpoint-subset in EPP.
 	//
 	// MSP metrics scraping.
 	//
@@ -101,7 +101,7 @@ func NewOptions() *Options {
 		GRPCPort:                         DefaultGrpcPort,
 		PoolGroup:                        "inference.networking.k8s.io",
 		EndpointTargetPorts:              []int{},
-		DisableEndpointSubsetFilter:	  false,
+		DisableEndpointSubsetFilter:      false,
 		ModelServerMetricsScheme:         "http",
 		ModelServerMetricsPath:           "/metrics",
 		ModelServerMetricsHTTPSInsecure:  true,
