@@ -375,11 +375,11 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
-	longHashCount := len(state.PrefixHashes) * state.BlockSize
+	longHashCount := len(state.PrefixHashes)
 	assert.Greater(t, longHashCount, extendedHashCount, "long conversation should have even more hashes")
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
-	// pod1 should have an even higher cache hit rate now
+	// endpoint1 should have an even higher cache hit rate now
 	cachedBlocks = state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().NamespacedName)]
 	expectedScore = float64(cachedBlocks) / float64(longHashCount)
 	assert.Equal(t, expectedScore, scores[endpoint1], "endpoint1 should have higher prefix cache hit")
@@ -668,15 +668,15 @@ func TestPrepareRequestData(t *testing.T) {
 	info1, ok := endpoint1.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
-	assert.Equal(t, 1, prefixInfo1.MatchLength()) // one token ("aaaa") matches
-	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 tokens
+	assert.Equal(t, 1, prefixInfo1.MatchBlocks()) // one block ("aaaa") matches
+	assert.Equal(t, 2, prefixInfo1.TotalBlocks()) // "aaaacccc" -> 2 blocks
 
 	// Verify pod2 has no match info
 	info2, ok := endpoint2.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo2 := info2.(*dplugins.PrefixCacheMatchInfo)
-	assert.Equal(t, 0, prefixInfo2.MatchLength()) // No match for pod2
-	assert.Equal(t, 2, prefixInfo2.TotalLength())
+	assert.Equal(t, 0, prefixInfo2.MatchBlocks()) // No match for pod2
+	assert.Equal(t, 2, prefixInfo2.TotalBlocks())
 }
 
 // BenchmarkPrefixPluginChatCompletionsStress is a stress test for chat completions with varying message counts and lengths

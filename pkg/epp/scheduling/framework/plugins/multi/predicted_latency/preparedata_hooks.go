@@ -38,7 +38,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 
 		if prefixCacheInfoRaw, ok := endpoint.Get(approximateprefix.PrefixCacheMatchInfoKey); ok {
 			prefixCacheInfo := prefixCacheInfoRaw.(*approximateprefix.PrefixCacheMatchInfo)
-			prefixCacheScore = float64(prefixCacheInfo.MatchLength()) / float64(prefixCacheInfo.TotalLength())
+			prefixCacheScore = float64(prefixCacheInfo.MatchBlocks()) / float64(prefixCacheInfo.TotalBlocks())
 			if !math.IsNaN(prefixCacheScore) {
 				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", endpoint.GetMetadata().NamespacedName.Name, "score", prefixCacheScore)
 			} else {

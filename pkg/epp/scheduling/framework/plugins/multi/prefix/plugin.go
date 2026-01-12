@@ -70,7 +70,7 @@ const (
 	PodActiveCheckInterval = 2 * time.Minute
 
 	// An estimated average characters per token, used since the request we cached is not tokenized.
-	AverageCharactersPerToken = 4
+	averageCharactersPerToken = 4
 )
 
 var DefaultConfig = Config{
@@ -138,10 +138,8 @@ var _ plugin.StateData = &SchedulingContextState{}
 type SchedulingContextState struct {
 	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
 	PrefixHashes []BlockHash
-	// A map of server to its longest prefix cache match length.
+	// A map of server to its longest prefix cache match length in blocks.
 	PrefixCacheServers map[ServerID]int
-	// Size of a block in tokens
-	BlockSize int
 }
 
 func (s *SchedulingContextState) Clone() plugin.StateData {
@@ -155,7 +153,6 @@ func (s *SchedulingContextState) Clone() plugin.StateData {
 	return &SchedulingContextState{
 		PrefixHashes:       prefixHashes,
 		PrefixCacheServers: prefixCacheServers,
-		BlockSize:          s.BlockSize,
 	}
 }
 
@@ -274,8 +271,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
-		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes, blockSize),
-		BlockSize:          blockSize,
+		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
 	}
 
 	cycleState.Write(plugin.StateKey(p.TypedName().String()), state)
@@ -350,9 +346,8 @@ func (p *Plugin) makeServer(targetEndpoint framework.Endpoint) Server {
 	}
 }
 
-// matchLongestPrefix returns a map of servers and length of prefix that each server caches, prefix length is defined in characters.
-// blockSize - the block size in tokens
-func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash, blockSize int) map[ServerID]int {
+// matchLongestPrefix returns a map of servers and length of prefix that each server caches, prefix length is defined in blocks.
+func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map[ServerID]int {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	res := make(map[ServerID]int)
 	// Use a greedy strategy to search from the longest prefix.
@@ -364,8 +359,8 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash, blo
 		} else {
 			loggerTrace.Info("Found cached servers", "cachedServers", cachedServers, "total # blocks", len(hashes), "longest prefix", i)
 			for server := range cachedServers {
-				// Update servers with their longest prefix match, prefix length is in tokens.
-				res[server] += blockSize
+				// Update servers with their longest prefix match, prefix length is in blocks.
+				res[server]++
 			}
 		}
 	}
@@ -402,7 +397,8 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
+// cacheBlockSize is defined in tokens
+func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
@@ -416,19 +412,19 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 	}
 
 	// convert block size from tokens to characters
-	cacheBlockSize *= AverageCharactersPerToken
+	blockSizeChars := blockSizeTokens * averageCharactersPerToken
 
-	if len(userInput) < cacheBlockSize {
-		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", cacheBlockSize)
+	if len(userInput) < blockSizeChars {
+		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", blockSizeChars)
 		return nil
 	}
-	if len(userInput) > cacheBlockSize*maxPrefixBlocks {
-		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", cacheBlockSize)
-		userInput = userInput[:maxPrefixBlocks*cacheBlockSize]
+	if len(userInput) > blockSizeChars*maxPrefixBlocks {
+		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", blockSizeChars)
+		userInput = userInput[:maxPrefixBlocks*blockSizeChars]
 	}
-	// Split the body into blocks of size cacheBlockSize.
-	// If the last block is smaller than cacheBlockSize, it will be ignored.
-	res := make([]BlockHash, 0, len(userInput)/cacheBlockSize)
+	// Split the body into blocks of size blockSizeChars.
+	// If the last block is smaller than blockSizeChars, it will be ignored.
+	res := make([]BlockHash, 0, len(userInput)/blockSizeChars)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	h := xxhash.New()
 	_, _ = h.Write([]byte(request.TargetModel))
@@ -437,9 +433,9 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize i
 	}
 
 	prevBlockHash := BlockHash(h.Sum64())
-	for i := 0; i+cacheBlockSize <= len(userInput); i += cacheBlockSize {
+	for i := 0; i+blockSizeChars <= len(userInput); i += blockSizeChars {
 		h.Reset()
-		_, _ = h.Write(userInput[i : i+cacheBlockSize])
+		_, _ = h.Write(userInput[i : i+blockSizeChars])
 		_, _ = h.Write(toBytes(prevBlockHash))
 		res = append(res, BlockHash(h.Sum64()))
 
@@ -464,9 +460,8 @@ func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
 	return json.Marshal(request.Body.ChatCompletions.Messages)
 }
 
-// getBlockSize returns block size in characters
-// in case of auto-tune - use block size from the first endpoint
-// otherwise use block size from configuration
+// getBlockSize returns the block size in tokens.
+// In case of auto-tune uses the block size from the first endpoint, otherwise uses the block size from the configuration
 func getBlockSize(endpoints []framework.Endpoint, config Config) int {
 	if !config.AutoTune {
 		return config.BlockSizeTokens
