@@ -81,16 +81,21 @@ type FlowRegistryDataPlane interface {
 	WithConnection(key types.FlowKey, fn func(conn ActiveFlowConnection) error) error
 }
 
-// ActiveFlowConnection represents a handle to a temporary, leased session on a flow.
-// It provides a safe, scoped entry point to the registry's sharded data plane.
+// ActiveFlowConnection represents a handle to a scoped, leased session on a flow.
+// It provides a safe entry point to the registry's sharded data plane.
 //
 // An `ActiveFlowConnection` instance is only valid for the duration of the `WithConnection` callback from which it was
 // received. Callers MUST NOT store a reference to this object or use it after the callback returns.
-// Its purpose is to ensure that any interaction with the flow's state (e.g., accessing its shards and queues) occurs
-// safely while the flow is guaranteed to be protected from garbage collection.
+//
+// Lifecycle & Pinning:
+// This interface represents an active "Lease" on the flow. As long as this object is valid (within the callback), the
+// Flow Registry guarantees that the underlying Flow State is "Pinned" and protected from Garbage Collection.
 type ActiveFlowConnection interface {
-	// ActiveShards returns a stable snapshot of accessors for all Active internal state shards.
+	// ActiveShards returns a current snapshot of accessors for all Active internal state shards.
 	ActiveShards() []RegistryShard
+
+	// FlowKey returns the immutable identity of the flow this connection is pinned to.
+	FlowKey() types.FlowKey
 }
 
 // RegistryShard defines the interface for a single slice (shard) of the `FlowRegistry`'s state.
