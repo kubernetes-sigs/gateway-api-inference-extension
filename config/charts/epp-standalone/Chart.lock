@@ -1,0 +1,6 @@
+dependencies:
+- name: inference-extension
+  repository: file://../inference-extension
+  version: 0.0.0
+digest: sha256:4a8aeb7ac929d73eab47276d786fd8e49c9c83856d70b612ce020608b83f1160
+generated: "2026-01-11T19:49:00.634395-08:00"
