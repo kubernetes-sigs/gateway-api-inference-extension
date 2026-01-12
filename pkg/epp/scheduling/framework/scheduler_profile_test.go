@@ -201,6 +201,10 @@ func (tp *testPlugin) TypedName() plugins.TypedName {
 	return tp.typedName
 }
 
+func (tp *testPlugin) Category() ScorerCategory {
+	return Distribution
+}
+
 func (tp *testPlugin) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, endpoints []types.Endpoint) []types.Endpoint {
 	tp.FilterCallCount++
 	return findEndpoints(endpoints, tp.FilterRes...)

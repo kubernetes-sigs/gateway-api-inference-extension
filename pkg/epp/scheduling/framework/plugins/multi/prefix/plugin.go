@@ -207,6 +207,11 @@ func (p *Plugin) TypedName() plugins.TypedName {
 	return p.typedName
 }
 
+// Category returns the preference the scorer applies when scoring candidate endpoints.
+func (p *Plugin) Category() framework.ScorerCategory {
+	return framework.Affinity
+}
+
 // WithName sets the name of the plugin.
 func (p *Plugin) WithName(name string) *Plugin {
 	p.typedName.Name = name

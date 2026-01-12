@@ -31,6 +31,22 @@ const (
 	ProcessProfilesResultsExtensionPoint = "ProcessProfilesResults"
 )
 
+// ScorerCategory marks the preference a scorer applies when scoring candidate endpoints.
+type ScorerCategory string
+
+const (
+	// Affinity indicates a scorer that prefers endpoints with existing locality, such as kv-cache or session-related state,
+	// and therefore tends to give higher scores to the same endpoints.
+	Affinity ScorerCategory = "Affinity"
+
+	// Distribution indicates a scorer that prefers spreading requests evenly across all candidate endpoints to avoid
+	// hotspots and improve overall utilization.
+	Distribution ScorerCategory = "Distribution"
+
+	// Balance indicates a scorer that its preference is balanced between Affinity and Distribution.
+	Balance ScorerCategory = "Balance"
+)
+
 // ProfileHandler defines the extension points for handling multi SchedulerProfile instances.
 // More specifically, this interface defines the 'Pick' and 'ProcessResults' extension points.
 type ProfileHandler interface {
@@ -60,6 +76,7 @@ type Filter interface {
 // If a scorer returns value lower than 0, it will be treated as score 0.
 type Scorer interface {
 	plugins.Plugin
+	Category() ScorerCategory
 	Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, pods []types.Endpoint) map[types.Endpoint]float64
 }
 

@@ -55,6 +55,11 @@ func (s *LoraAffinityScorer) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
+// Category returns the preference the scorer applies when scoring candidate endpoints.
+func (s *LoraAffinityScorer) Category() framework.ScorerCategory {
+	return framework.Affinity
+}
+
 // Consumes returns the list of data that is consumed by the plugin.
 func (s *LoraAffinityScorer) Consumes() map[string]any {
 	return map[string]any{

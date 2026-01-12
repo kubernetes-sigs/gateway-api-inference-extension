@@ -57,6 +57,11 @@ func (s *QueueScorer) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
+// Category returns the preference the scorer applies when scoring candidate endpoints.
+func (s *QueueScorer) Category() framework.ScorerCategory {
+	return framework.Distribution
+}
+
 // Consumes returns the list of data that is consumed by the plugin.
 func (s *QueueScorer) Consumes() map[string]any {
 	return map[string]any{
