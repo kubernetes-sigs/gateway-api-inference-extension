@@ -397,7 +397,6 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-// cacheBlockSize is defined in tokens
 func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
@@ -412,19 +411,19 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens 
 	}
 
 	// convert block size from tokens to characters
-	blockSizeChars := blockSizeTokens * averageCharactersPerToken
+	cacheBlockSize := blockSizeTokens * averageCharactersPerToken
 
-	if len(userInput) < blockSizeChars {
-		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", blockSizeChars)
+	if len(userInput) < cacheBlockSize {
+		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", cacheBlockSize)
 		return nil
 	}
-	if len(userInput) > blockSizeChars*maxPrefixBlocks {
-		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", blockSizeChars)
-		userInput = userInput[:maxPrefixBlocks*blockSizeChars]
+	if len(userInput) > cacheBlockSize*maxPrefixBlocks {
+		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", cacheBlockSize)
+		userInput = userInput[:maxPrefixBlocks*cacheBlockSize]
 	}
 	// Split the body into blocks of size blockSizeChars.
 	// If the last block is smaller than blockSizeChars, it will be ignored.
-	res := make([]BlockHash, 0, len(userInput)/blockSizeChars)
+	res := make([]BlockHash, 0, len(userInput)/cacheBlockSize)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	h := xxhash.New()
 	_, _ = h.Write([]byte(request.TargetModel))
@@ -433,9 +432,9 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens 
 	}
 
 	prevBlockHash := BlockHash(h.Sum64())
-	for i := 0; i+blockSizeChars <= len(userInput); i += blockSizeChars {
+	for i := 0; i+cacheBlockSize <= len(userInput); i += cacheBlockSize {
 		h.Reset()
-		_, _ = h.Write(userInput[i : i+blockSizeChars])
+		_, _ = h.Write(userInput[i : i+cacheBlockSize])
 		_, _ = h.Write(toBytes(prevBlockHash))
 		res = append(res, BlockHash(h.Sum64()))
 
