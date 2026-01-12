@@ -106,7 +106,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Install NGINX Gateway Fabric with the Inference Extension enabled by setting the `nginxGateway.gwAPIInferenceExtension.enable=true` Helm value
 
          ```bash
-         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginxGateway.gwAPIInferenceExtension.enable=true
+         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --dependency-update --set nginxGateway.gwAPIInferenceExtension.enable=true
          ```
          This enables NGINX Gateway Fabric to watch and manage Inference Extension resources such as InferencePool and InferenceObjective.
 

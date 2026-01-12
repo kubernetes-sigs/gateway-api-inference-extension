@@ -24,4 +24,8 @@ spec:
           name: X-Gateway-Base-Model-Name
           value: {{ .Values.experimentalHttpRoute.baseModel }}
       {{- end }}
+    {{- if ne (lower .Values.provider.name) "gke" }}
+    timeouts:
+      request: 300s
+    {{- end }}
 {{- end }}
