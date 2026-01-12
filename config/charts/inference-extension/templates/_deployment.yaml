@@ -79,7 +79,7 @@ spec:
             {{- $modelServerType = .Values.inferencePool.modelServerType | default "vllm" }}
           {{- end }}
           {{- /* 2. Mode Specific Flags */ -}}
-          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone -}}
+          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone }}
               - --endpoint-selector
               - {{ .Values.inferenceExtension.endpointsServer.endpointSelector | quote }}
               - --endpoint-target-ports
@@ -207,9 +207,9 @@ spec:
       {{- if .Values.inferenceExtension.sidecar.volumes }}
       {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 6 }}
       {{- end }}
-        - name: plugins-config-volume
-          configMap:
-            name: {{ include "gateway-api-inference-extension.name" . }}
+      - name: plugins-config-volume
+        configMap:
+          name: {{ include "gateway-api-inference-extension.name" . }}
       {{- include "gateway-api-inference-extension.latencyPredictor.volumes" . | nindent 6 }}
       {{- if .Values.inferenceExtension.affinity }}
       affinity:

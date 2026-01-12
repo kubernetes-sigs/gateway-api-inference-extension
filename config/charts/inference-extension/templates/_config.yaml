@@ -56,14 +56,14 @@ data:
   {{- end }}
   
 ---
-{{- if and .Values.inferenceExtension.sidecar.enabled .Values.inferenceExtension.sidecar.configMapData }}
+{{- if and .Values.inferenceExtension.sidecar.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "gateway-api-inference-extension.name" . }}-sidecar
+  name: {{ .Values.inferenceExtension.sidecar.configMap.name }}
   namespace: {{ .Release.Namespace }}
 data:
-  {{- .Values.inferenceExtension.sidecar.configMapData | toYaml | nindent 2 }}
+  {{- .Values.inferenceExtension.sidecar.configMap.data | toYaml | nindent 2 }}
 {{- end }}
 ---
 {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
