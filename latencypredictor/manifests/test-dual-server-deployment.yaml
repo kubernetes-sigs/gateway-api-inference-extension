@@ -1,27 +1,20 @@
-# --- Test Job ---
+# --- Functional Test Job (Single Pod) ---
+# Runs full test suite including model training validation
+# Use this to verify the system is working correctly
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: latency-predictor-test
-  namespace: default
+  name: latency-predictor-functional-test
   labels:
     app: latency-predictor-test
-    component: test
+    component: functional-test
 spec:
-  # Run multiple client pods in parallel to avoid client-side bottlenecks
-  # Set to 1 for single-client testing, or 10 for distributed load
-  parallelism: 10
-  completions: 10
-
   template:
     metadata:
       labels:
         app: latency-predictor-test
-        component: test
+        component: functional-test
     spec:
-      # Use the same node pool as your services
-      # nodeSelector:
-      #   cloud.google.com/gke-nodepool: "pool-2"
       restartPolicy: Never
       containers:
       - name: test-runner
@@ -29,11 +22,11 @@ spec:
         imagePullPolicy: Always
         resources:
           requests:
-            cpu: "500m"
-            memory: "2Gi"  # Reduced since each pod handles 1/10th of load
-          limits:
             cpu: "1000m"
-            memory: "4Gi"
+            memory: "4Gi"  # Increased for functional tests (training data generation)
+          limits:
+            cpu: "2000m"
+            memory: "8Gi"
         env:
         # Point to your internal services
         - name: TRAINING_SERVER_URL
@@ -42,33 +35,99 @@ spec:
           value: "http://prediction-service:80"
         - name: TEST_TIMEOUT
           value: "300"  # 5 minutes
-        # Each pod runs 1/parallelism of total QPS (3000/10 = 300 per pod)
-        - name: TARGET_QPS
-          value: "300"  # Total across all pods: 300 * 10 = 3000 QPS
-        - name: TARGET_QPS_LARGE_BATCH
-          value: "30"   # Total across all pods: 30 * 10 = 300 QPS
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
         envFrom:
         - configMapRef:
-            name: prediction-server-config  # Reuse existing config if needed
-        # Override the default command to run specific pytest
-        # When running in parallel, skip training tests (they conflict across pods)
-        # Only run stress tests that measure performance
+            name: prediction-server-config
+        # Run functional tests only (exclude stress tests)
         command: ["pytest"]
         args:
           - "-v"
           - "-s"
           - "test_dual_server_client.py"
           - "-k"
-          - "stress"  # Only run *_stress_test functions
-        # If your tests need to store results or logs
+          - "not stress"  # Exclude all *_stress_test functions
         volumeMounts:
         - name: test-results
           mountPath: /test-results
       volumes:
       - name: test-results
         emptyDir: {}
-  backoffLimit: 3  # Retry up to 3 times if test fails
+  backoffLimit: 1
+
+---
+# --- Performance/Stress Test Job (Parallel Pods) ---
+# Runs only stress tests across multiple pods to measure throughput
+# Use this to test performance at high QPS without client-side bottlenecks
+
+# apiVersion: batch/v1
+# kind: Job
+# metadata:
+#   name: latency-predictor-stress-test
+#   labels:
+#     app: latency-predictor-test
+#     component: stress-test
+# spec:
+#   # Run multiple client pods in parallel to avoid client-side bottlenecks
+#   parallelism: 10
+#   completions: 10
+#   completionMode: Indexed  # Give each pod a unique JOB_COMPLETION_INDEX
+#   template:
+#     metadata:
+#       labels:
+#         app: latency-predictor-test
+#         component: stress-test
+#     spec:
+#       restartPolicy: Never
+#       containers:
+#       - name: test-runner
+#         image: test-runner:latest
+#         imagePullPolicy: Always
+#         resources:
+#           requests:
+#             cpu: "2"       # Increased for JSON serialization/deserialization
+#             memory: "3Gi"  # Sufficient for ~7000 responses (~2GB observed)
+#           limits:
+#             cpu: "4"       # Higher limit to avoid CPU throttling
+#             memory: "6Gi"
+#         env:
+#         # Point to your internal services
+#         - name: TRAINING_SERVER_URL
+#           value: "http://training-service:8000"
+#         - name: PREDICTION_SERVER_URL
+#           value: "http://prediction-service:80"
+#         - name: TEST_TIMEOUT
+#           value: "300"  # 5 minutes
+#         # Each pod runs 1/parallelism of total QPS
+#         - name: TARGET_QPS
+#           value: "625"
+#         - name: TARGET_QPS_LARGE_BATCH
+#           value: "63"
+#         # Set to "true" to run training warmup before stress tests
+#         - name: RUN_TRAINING_WARMUP
+#           value: "true"
+#         - name: POD_NAME
+#           valueFrom:
+#             fieldRef:
+#               fieldPath: metadata.name
+#         envFrom:
+#         - configMapRef:
+#             name: prediction-server-config
+#         # Run stress tests only (entrypoint handles warmup logic)
+#         command: ["pytest"]
+#         args:
+#           - "-v"
+#           - "-s"
+#           - "test_dual_server_client.py"
+#           - "-k"
+#           - "stress"
+#         volumeMounts:
+#         - name: test-results
+#           mountPath: /test-results
+#       volumes:
+#       - name: test-results
+#         emptyDir: {}
+#   backoffLimit: 1

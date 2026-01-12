@@ -179,13 +179,13 @@ spec:
           timeoutSeconds: 5
         # Liveness probe disabled for benchmarking with 1-core CPU limit
         # CPU throttling can prevent timely responses, causing unnecessary restarts
-        # livenessProbe:
-        #   httpGet:
-        #     path: /healthz
-        #     port: 8001
-        #   periodSeconds: 30
-        #   timeoutSeconds: 20
-        #   failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8001
+          periodSeconds: 30
+          timeoutSeconds: 20
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /readyz

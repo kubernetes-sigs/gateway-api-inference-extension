@@ -27,14 +27,15 @@ except ImportError as e:
     sys.exit(1)
 
 
-def compile_model(model_path: str, output_path: str, model_name: str):
+def compile_model(model_path: str, output_path: str, model_name: str, versioned_path: str = None):
     """
     Load a joblib model, compile it to TreeLite, and save to output_path.
 
     Args:
         model_path: Path to .joblib model file
-        output_path: Path where compiled .so file should be saved
+        output_path: Path where compiled .so file should be saved (legacy path for compatibility)
         model_name: Name for logging (e.g., "TTFT" or "TPOT")
+        versioned_path: Optional versioned path for runtime updates
     """
     try:
         logging.info(f"Background compilation started for {model_name}")
@@ -65,9 +66,16 @@ def compile_model(model_path: str, output_path: str, model_name: str):
             verbose=True
         )
 
-        # Atomic rename to final destination
+        # Atomic rename to legacy path (for backward compatibility)
         os.replace(tmp_output, output_path)
         logging.info(f"✓ {model_name} TreeLite model successfully compiled and exported to {output_path}")
+
+        # Also save to versioned path if provided (for runtime updates)
+        if versioned_path:
+            import shutil
+            os.makedirs(os.path.dirname(versioned_path), exist_ok=True)
+            shutil.copy2(output_path, versioned_path)
+            logging.info(f"✓ {model_name} TreeLite model also saved to versioned path: {versioned_path}")
 
     except Exception as e:
         logging.error(f"Error compiling {model_name} TreeLite model: {e}", exc_info=True)
@@ -75,12 +83,13 @@ def compile_model(model_path: str, output_path: str, model_name: str):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print(f"Usage: {sys.argv[0]} <model_path> <output_path> <model_name>")
+    if len(sys.argv) not in [4, 5]:
+        print(f"Usage: {sys.argv[0]} <model_path> <output_path> <model_name> [versioned_path]")
         sys.exit(1)
 
     model_path = sys.argv[1]
     output_path = sys.argv[2]
     model_name = sys.argv[3]
+    versioned_path = sys.argv[4] if len(sys.argv) == 5 else None
 
-    compile_model(model_path, output_path, model_name)
+    compile_model(model_path, output_path, model_name, versioned_path)

@@ -126,6 +126,10 @@ class Settings:
     TPOT_TREELITE_PATH: str = os.getenv("LATENCY_TPOT_TREELITE_PATH", "/tmp/models/tpot_treelite.so")
     TTFT_CONFORMAL_PATH: str = os.getenv("LATENCY_TTFT_CONFORMAL_PATH", "/tmp/models/ttft_conformal.json")
     TPOT_CONFORMAL_PATH: str = os.getenv("LATENCY_TPOT_CONFORMAL_PATH", "/tmp/models/tpot_conformal.json")
+    # Versioned TreeLite paths (used for runtime updates without pod restarts)
+    TTFT_TREELITE_VERSIONED_DIR: str = os.getenv("LATENCY_TTFT_TREELITE_VERSIONED_DIR", "/tmp/models/treelite/ttft")
+    TPOT_TREELITE_VERSIONED_DIR: str = os.getenv("LATENCY_TPOT_TREELITE_VERSIONED_DIR", "/tmp/models/treelite/tpot")
+    MAX_VERSIONED_MODELS_TO_KEEP: int = int(os.getenv("LATENCY_MAX_VERSIONED_MODELS_TO_KEEP", "3"))
     RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))
     MIN_SAMPLES_FOR_RETRAIN_FRESH: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN_FRESH", 10))
     MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 1000))
@@ -173,6 +177,7 @@ class FlushResponse(BaseModel):
     ttft_test_samples_flushed: int
     tpot_test_samples_flushed: int
     metrics_cleared: bool
+    conformal_cleared: bool = Field(default=False, description="Whether conformal calibration was cleared")
     message: str
 
 def quantile_loss(y_true, y_pred, quantile):
@@ -314,6 +319,11 @@ class LatencyPredictor:
         self.cache_hits = 0
         self.cache_misses = 0
         self.last_cache_report_time = time.time()
+
+        # Track ongoing TreeLite compilations to prevent races
+        self.ttft_compilation_in_progress = False
+        self.tpot_compilation_in_progress = False
+        self.compilation_lock = threading.Lock()
 
         self.lock = threading.Lock()
         self.last_retrain_time = None
@@ -1185,6 +1195,54 @@ class LatencyPredictor:
             # Return a random hash to force compilation if hashing fails
             return hashlib.md5(str(time.time()).encode()).hexdigest()
 
+    def _cleanup_old_versioned_models(self, versioned_dir: str, current_hash: str, model_name: str):
+        """
+        Clean up old versioned TreeLite models to prevent disk bloat.
+
+        Keeps the most recent N versions (configured via MAX_VERSIONED_MODELS_TO_KEEP).
+
+        Args:
+            versioned_dir: Directory containing versioned .so files
+            current_hash: Hash of the current model (to protect from deletion)
+            model_name: Name for logging (e.g., "TTFT" or "TPOT")
+        """
+        try:
+            if not os.path.exists(versioned_dir):
+                return
+
+            # Find all versioned .so files
+            import glob
+            pattern = os.path.join(versioned_dir, f"{model_name.lower()}_*.so")
+            versioned_files = glob.glob(pattern)
+
+            if len(versioned_files) <= settings.MAX_VERSIONED_MODELS_TO_KEEP:
+                return  # Nothing to clean up yet
+
+            # Sort by modification time (newest first)
+            versioned_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+
+            # Keep the most recent N versions
+            files_to_keep = versioned_files[:settings.MAX_VERSIONED_MODELS_TO_KEEP]
+            files_to_delete = versioned_files[settings.MAX_VERSIONED_MODELS_TO_KEEP:]
+
+            # Also protect current hash from deletion
+            current_filename = f"{model_name.lower()}_{current_hash[:8]}.so"
+            current_filepath = os.path.join(versioned_dir, current_filename)
+
+            for filepath in files_to_delete:
+                if filepath == current_filepath:
+                    logging.info(f"Skipping deletion of current {model_name} model: {filepath}")
+                    continue
+
+                try:
+                    os.remove(filepath)
+                    logging.info(f"Cleaned up old {model_name} versioned model: {filepath}")
+                except Exception as e:
+                    logging.warning(f"Failed to delete old {model_name} model {filepath}: {e}")
+
+        except Exception as e:
+            logging.error(f"Error cleaning up old {model_name} versioned models: {e}", exc_info=True)
+
     def _should_recompile_treelite(self, model, previous_hash: Optional[str], model_name: str) -> Tuple[bool, str]:
         """
         Determine if TreeLite recompilation is needed by comparing model hash.
@@ -1226,23 +1284,37 @@ class LatencyPredictor:
             # On error, force recompilation to be safe
             return True, hashlib.md5(str(time.time()).encode()).hexdigest()
 
-    def _launch_treelite_compilation(self, model_path: str, output_path: str, model_name: str):
+    def _launch_treelite_compilation(self, model_path: str, output_path: str, model_name: str, versioned_path: str = None):
         """
         Launch TreeLite compilation in a background subprocess (non-blocking).
 
+        IMPORTANT: Caller must hold self.compilation_lock and set the in_progress flag!
+
         Args:
             model_path: Path to the .joblib model file
-            output_path: Where to save the compiled .so file
+            output_path: Where to save the compiled .so file (legacy path for compatibility)
             model_name: Name for logging (e.g., "TTFT" or "TPOT")
+            versioned_path: Optional versioned path for runtime updates (e.g., /models/treelite/ttft/ttft_a1b2c3d4.so)
         """
         try:
+            # Set the in-progress flag (caller already holds compilation_lock)
+            if model_name == "TTFT":
+                self.ttft_compilation_in_progress = True
+            elif model_name == "TPOT":
+                self.tpot_compilation_in_progress = True
+
             # Path to our background compilation script
             script_path = os.path.join(os.path.dirname(__file__), 'compile_treelite_background.py')
+
+            # Build command args - pass versioned path if provided
+            cmd_args = [sys.executable, script_path, model_path, output_path, model_name]
+            if versioned_path:
+                cmd_args.append(versioned_path)
 
             # Launch subprocess in background (fire and forget)
             # Use Popen instead of run() to avoid blocking
             process = subprocess.Popen(
-                [sys.executable, script_path, model_path, output_path, model_name],
+                cmd_args,
                 stdout=subprocess.DEVNULL,  # Don't capture output (goes to log file)
                 stderr=subprocess.DEVNULL,
                 start_new_session=True  # Detach from parent process
@@ -1250,9 +1322,33 @@ class LatencyPredictor:
 
             logging.info(f"🚀 Launched background TreeLite compilation for {model_name} (PID: {process.pid})")
             logging.info(f"   Model: {model_path} -> {output_path}")
+            if versioned_path:
+                logging.info(f"   Versioned: {versioned_path}")
             logging.info(f"   Check /tmp/treelite_compilation.log for compilation progress")
 
+            # Reset the in-progress flag after a timeout (in case process crashes without cleanup)
+            # This prevents permanent deadlock if subprocess fails silently
+            def reset_flag_after_timeout():
+                time.sleep(30)  # Wait 30 seconds (compilation should finish by then)
+                with self.compilation_lock:
+                    if model_name == "TTFT":
+                        if self.ttft_compilation_in_progress:
+                            logging.warning(f"TTFT compilation flag still set after 30s, resetting (compilation may have failed)")
+                            self.ttft_compilation_in_progress = False
+                    elif model_name == "TPOT":
+                        if self.tpot_compilation_in_progress:
+                            logging.warning(f"TPOT compilation flag still set after 30s, resetting (compilation may have failed)")
+                            self.tpot_compilation_in_progress = False
+
+            # Launch watchdog thread to reset flag after timeout
+            threading.Thread(target=reset_flag_after_timeout, daemon=True).start()
+
         except Exception as e:
+            # On error, reset the flag
+            if model_name == "TTFT":
+                self.ttft_compilation_in_progress = False
+            elif model_name == "TPOT":
+                self.tpot_compilation_in_progress = False
             logging.error(f"Failed to launch background TreeLite compilation for {model_name}: {e}", exc_info=True)
 
     # Update the _save_models_unlocked method to handle LightGBM model exports
@@ -1289,20 +1385,40 @@ class LatencyPredictor:
                         # Export to TreeLite for production inference (only in TreeLite mode)
                         # Use smart caching to avoid unnecessary recompilation
                         if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
-                            should_recompile, new_hash = self._should_recompile_treelite(
-                                self.ttft_model, self.ttft_model_hash, "TTFT"
-                            )
-                            if should_recompile:
-                                logging.info("Starting TTFT TreeLite export in background (non-blocking)...")
-                                self._launch_treelite_compilation(
-                                    settings.TTFT_MODEL_PATH,
-                                    settings.TTFT_TREELITE_PATH,
-                                    "TTFT"
-                                )
-                                self.ttft_model_hash = new_hash
-                            else:
-                                if logging.getLogger().isEnabledFor(logging.DEBUG):
-                                    logging.debug("TTFT TreeLite compilation skipped (model unchanged)")
+                            # Acquire compilation lock BEFORE checking if recompilation needed
+                            # This prevents TOCTOU race where multiple threads check simultaneously
+                            with self.compilation_lock:
+                                # Skip if compilation already in progress
+                                if self.ttft_compilation_in_progress:
+                                    logging.debug("TTFT TreeLite compilation already in progress, skipping")
+                                else:
+                                    should_recompile, new_hash = self._should_recompile_treelite(
+                                        self.ttft_model, self.ttft_model_hash, "TTFT"
+                                    )
+                                    if should_recompile:
+                                        logging.info("Starting TTFT TreeLite export in background (non-blocking)...")
+                                        # Create versioned path for runtime updates
+                                        os.makedirs(settings.TTFT_TREELITE_VERSIONED_DIR, exist_ok=True)
+                                        versioned_path = os.path.join(
+                                            settings.TTFT_TREELITE_VERSIONED_DIR,
+                                            f"ttft_{new_hash[:8]}.so"
+                                        )
+                                        self._launch_treelite_compilation(
+                                            settings.TTFT_MODEL_PATH,
+                                            settings.TTFT_TREELITE_PATH,
+                                            "TTFT",
+                                            versioned_path=versioned_path
+                                        )
+                                        self.ttft_model_hash = new_hash
+                                        # Clean up old versioned models
+                                        self._cleanup_old_versioned_models(
+                                            settings.TTFT_TREELITE_VERSIONED_DIR,
+                                            new_hash,
+                                            "TTFT"
+                                        )
+                                    else:
+                                        if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                            logging.debug("TTFT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1419,20 +1535,40 @@ class LatencyPredictor:
                         # Export to TreeLite for production inference (only in TreeLite mode)
                         # Use smart caching to avoid unnecessary recompilation
                         if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
-                            should_recompile, new_hash = self._should_recompile_treelite(
-                                self.tpot_model, self.tpot_model_hash, "TPOT"
-                            )
-                            if should_recompile:
-                                logging.info("Starting TPOT TreeLite export in background (non-blocking)...")
-                                self._launch_treelite_compilation(
-                                    settings.TPOT_MODEL_PATH,
-                                    settings.TPOT_TREELITE_PATH,
-                                    "TPOT"
-                                )
-                                self.tpot_model_hash = new_hash
-                            else:
-                                if logging.getLogger().isEnabledFor(logging.DEBUG):
-                                    logging.debug("TPOT TreeLite compilation skipped (model unchanged)")
+                            # Acquire compilation lock BEFORE checking if recompilation needed
+                            # This prevents TOCTOU race where multiple threads check simultaneously
+                            with self.compilation_lock:
+                                # Skip if compilation already in progress
+                                if self.tpot_compilation_in_progress:
+                                    logging.debug("TPOT TreeLite compilation already in progress, skipping")
+                                else:
+                                    should_recompile, new_hash = self._should_recompile_treelite(
+                                        self.tpot_model, self.tpot_model_hash, "TPOT"
+                                    )
+                                    if should_recompile:
+                                        logging.info("Starting TPOT TreeLite export in background (non-blocking)...")
+                                        # Create versioned path for runtime updates
+                                        os.makedirs(settings.TPOT_TREELITE_VERSIONED_DIR, exist_ok=True)
+                                        versioned_path = os.path.join(
+                                            settings.TPOT_TREELITE_VERSIONED_DIR,
+                                            f"tpot_{new_hash[:8]}.so"
+                                        )
+                                        self._launch_treelite_compilation(
+                                            settings.TPOT_MODEL_PATH,
+                                            settings.TPOT_TREELITE_PATH,
+                                            "TPOT",
+                                            versioned_path=versioned_path
+                                        )
+                                        self.tpot_model_hash = new_hash
+                                        # Clean up old versioned models
+                                        self._cleanup_old_versioned_models(
+                                            settings.TPOT_TREELITE_VERSIONED_DIR,
+                                            new_hash,
+                                            "TPOT"
+                                        )
+                                    else:
+                                        if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                            logging.debug("TPOT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
                             logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
@@ -1579,6 +1715,27 @@ class LatencyPredictor:
                     self.tpot_violation_rates.clear()
                     metrics_cleared = True
                     logging.info("Cleared all quantile metric scores")
+
+                # CRITICAL: Clear conformal calibration when flushing test data
+                # This ensures test isolation - conformal predictors are recalibrated on fresh test data
+                conformal_cleared = False
+                if flush_test and settings.USE_TREELITE:
+                    if self.ttft_conformal:
+                        # Reset conformal predictor to empty state
+                        self.ttft_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        ) if CONFORMAL_AVAILABLE else None
+                        conformal_cleared = True
+                    if self.tpot_conformal:
+                        # Reset conformal predictor to empty state
+                        self.tpot_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        ) if CONFORMAL_AVAILABLE else None
+                        conformal_cleared = True
+                    if conformal_cleared:
+                        logging.info("Cleared conformal calibration (will be recalibrated on next training cycle)")
         
                 return {
                     "success": True,
@@ -1586,7 +1743,8 @@ class LatencyPredictor:
                     "tpot_training_samples_flushed": tpot_training_count if flush_training else 0,
                     "ttft_test_samples_flushed": ttft_test_count if flush_test else 0,
                     "tpot_test_samples_flushed": tpot_test_count if flush_test else 0,
-                    "metrics_cleared": metrics_cleared
+                    "metrics_cleared": metrics_cleared,
+                    "conformal_cleared": conformal_cleared
                 }
         
         except Exception as e:
