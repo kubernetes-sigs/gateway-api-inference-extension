@@ -1,4 +1,7 @@
 inferenceExtension:
+  endpointsServer:
+    standalone: false
+
   replicas: 1
   image:
     name: epp
@@ -43,7 +46,7 @@ inferenceExtension:
   affinity: {}
 
   tolerations: []
-  
+
   # Sidecar configuration for EPP
   sidecar:
     enabled: false
@@ -70,7 +73,7 @@ inferenceExtension:
   # Latency Predictor Configuration
   latencyPredictor:
     enabled: false
-    
+
     # Training Server Configuration
     trainingServer:
       image:
@@ -154,12 +157,12 @@ inferencePool:
   targetPorts:
     - number: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
-  apiVersion: inference.networking.k8s.io/v1 
+  apiVersion: inference.networking.k8s.io/v1
   # modelServers: # REQUIRED
   #   matchLabels:
   #     app: vllm-llama3-8b-instruct
 
-  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2, 
+  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 

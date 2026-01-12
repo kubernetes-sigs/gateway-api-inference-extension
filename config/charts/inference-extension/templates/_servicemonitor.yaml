@@ -1,3 +1,4 @@
+{{- define "inference-extension.service-monitor" -}}
 {{- if and .Values.inferenceExtension.monitoring.prometheus.enabled (ne (lower .Values.provider.name) "gke") }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -27,4 +28,6 @@ spec:
   selector:
     matchLabels:
       {{- include "gateway-api-inference-extension.labels" . | nindent 6 }}
+---
+{{- end }}
 {{- end }}

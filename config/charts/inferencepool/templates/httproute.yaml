@@ -23,5 +23,4 @@ spec:
           name: X-Gateway-Base-Model-Name
           value: {{ .Values.inferenceExtension.baseModel }}
       {{- end }}
-    timeouts:
-      request: 300s
+

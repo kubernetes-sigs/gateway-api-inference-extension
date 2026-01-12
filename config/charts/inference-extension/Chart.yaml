@@ -1,0 +1,10 @@
+apiVersion: v2
+name: inference-extension
+description: A Helm chart for Kubernetes
+
+type: library
+
+version: 0.0.0
+
+appVersion: "0.0.0"
+
