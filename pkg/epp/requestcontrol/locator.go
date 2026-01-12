@@ -56,6 +56,16 @@ type PodLocatorConfig struct {
 	DisableEndpointSubsetFilter bool
 }
 
+// LocatorOption is a function that configures the PodLocatorConfig.
+type LocatorOption func(*PodLocatorConfig)
+
+// WithDisableEndpointSubsetFilter sets the DisableEndpointSubsetFilter flag.
+func WithDisableEndpointSubsetFilter(disable bool) LocatorOption {
+	return func(c *PodLocatorConfig) {
+		c.DisableEndpointSubsetFilter = disable
+	}
+}
+
 // DatastorePodLocator implements contracts.PodLocator by querying the EPP Datastore.
 // It centralizes the logic for resolving candidate pods based on request metadata (specifically Envoy subset filters).
 type DatastorePodLocator struct {
@@ -66,7 +76,13 @@ type DatastorePodLocator struct {
 var _ contracts.PodLocator = &DatastorePodLocator{}
 
 // NewDatastorePodLocator creates a new DatastorePodLocator.
-func NewDatastorePodLocator(ds Datastore, cfg PodLocatorConfig) *DatastorePodLocator {
+func NewDatastorePodLocator(ds Datastore, opts ...LocatorOption) *DatastorePodLocator {
+	cfg := PodLocatorConfig{
+		DisableEndpointSubsetFilter: false,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return &DatastorePodLocator{
 		datastore: ds,
 		config:    cfg,
