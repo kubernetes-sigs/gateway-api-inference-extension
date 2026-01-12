@@ -60,7 +60,7 @@ type PodLocatorConfig struct {
 // It centralizes the logic for resolving candidate pods based on request metadata (specifically Envoy subset filters).
 type DatastorePodLocator struct {
 	datastore Datastore
-	config PodLocatorConfig
+	config    PodLocatorConfig
 }
 
 var _ contracts.PodLocator = &DatastorePodLocator{}
@@ -69,7 +69,7 @@ var _ contracts.PodLocator = &DatastorePodLocator{}
 func NewDatastorePodLocator(ds Datastore, cfg PodLocatorConfig) *DatastorePodLocator {
 	return &DatastorePodLocator{
 		datastore: ds,
-		config: cfg,
+		config:    cfg,
 	}
 }
 
