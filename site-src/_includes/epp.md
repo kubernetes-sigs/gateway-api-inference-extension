@@ -5,7 +5,7 @@
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --set experimentalGateway.enabled=true \
+      --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -17,7 +17,7 @@
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --set experimentalGateway.enabled=true \
+      --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -29,7 +29,7 @@
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --set experimentalGateway.enabled=true \
+      --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -41,7 +41,7 @@
       helm install vllm-llama3-8b-instruct \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
       --set provider.name=$GATEWAY_PROVIDER \
-      --set experimentalGateway.enabled=true \
+      --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```

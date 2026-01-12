@@ -185,11 +185,11 @@ provider:
         #   http:
         #     maxRequestsPerConnection: 256000
 
-# experimentalGateway section is used to deploy httproute as part of the epp helm chart.
-# this section should be extracted to a separate chart.
-experimentalGateway:
+# experimentalHttpRoute section is used to deploy httproute as part of the epp helm chart.
+# this section is temporary and should be extracted to a separate chart.
+experimentalHttpRoute:
   enabled: false # a flag to indicate whether to create the httproute as part of the chart or not.
-  name: inference-gateway
+  inferenceGatewayName: inference-gateway
 
 # DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
 istio:
