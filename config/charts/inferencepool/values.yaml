@@ -1,7 +1,4 @@
 inferenceExtension:
-  endpointsServer:
-    standalone: false
-
   replicas: 1
   image:
     name: epp
