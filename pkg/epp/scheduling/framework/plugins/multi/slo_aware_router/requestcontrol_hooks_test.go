@@ -28,8 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -44,15 +44,15 @@ const (
 
 // Helper functions
 
-func createTestSchedulingResult(pod *backend.Pod) *schedulingtypes.SchedulingResult {
+func createTestSchedulingResult(metadata *datalayer.EndpointMetadata) *schedulingtypes.SchedulingResult {
 
-	mockPod := createTestPod(pod.NamespacedName.Name, kvUsage, runningRequests, waitingQueue)
+	mockPod := createTestEndpoint(metadata.NamespacedName.Name, kvUsage, runningRequests, waitingQueue)
 
 	return &schedulingtypes.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"default": {
-				TargetPods: []schedulingtypes.Pod{mockPod},
+				TargetEndpoints: []schedulingtypes.Endpoint{mockPod},
 			},
 		},
 	}
@@ -77,10 +77,10 @@ func TestNewSLORequestContext(t *testing.T) {
 	assert.NotNil(t, ctx)
 	assert.Equal(t, *request, ctx.schedulingRequest)
 	assert.NotNil(t, ctx.lastSeenMetrics)
-	assert.NotNil(t, ctx.prefixCacheScoresForPods)
+	assert.NotNil(t, ctx.prefixCacheScoresForEndpoints)
 	assert.NotNil(t, ctx.predictionsForScheduling)
 	assert.Empty(t, ctx.lastSeenMetrics)
-	assert.Empty(t, ctx.prefixCacheScoresForPods)
+	assert.Empty(t, ctx.prefixCacheScoresForEndpoints)
 }
 
 func TestSLOAwareRouter_SetAndGetSLOContext(t *testing.T) {
@@ -161,9 +161,9 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set initial SLO context
 	sloCtx := newSLORequestContext(request)
@@ -171,7 +171,7 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Initialize the request priority queue
-	router.runningRequestLists[pod.GetPod().NamespacedName] = newRequestPriorityQueue()
+	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = newRequestPriorityQueue()
 
 	beforeTime := time.Now()
 	router.PreRequest(ctx, request, schedulingResult)
@@ -180,7 +180,7 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 	// Verify SLO context was updated
 	retrievedCtx, err := router.getSLOContextForRequest(request)
 	require.NoError(t, err)
-	assert.Equal(t, pod.GetPod(), retrievedCtx.targetPod)
+	assert.Equal(t, endpoint.GetMetadata(), retrievedCtx.targetMetadata)
 	assert.Equal(t, schedulingResult, retrievedCtx.schedulingResult)
 	assert.True(t, retrievedCtx.requestReceivedTimestamp.After(beforeTime) ||
 		retrievedCtx.requestReceivedTimestamp.Equal(beforeTime))
@@ -194,9 +194,9 @@ func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set initial SLO context
 	sloCtx := newSLORequestContext(request)
@@ -207,8 +207,8 @@ func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 	router.PreRequest(ctx, request, schedulingResult)
 
 	// Verify queue was created and request was added
-	queue, exists := router.runningRequestLists[pod.GetPod().NamespacedName]
-	assert.True(t, exists, "Queue should be created for pod")
+	queue, exists := router.runningRequestLists[endpoint.GetMetadata().NamespacedName]
+	assert.True(t, exists, "Queue should be created for endpoint")
 	assert.NotNil(t, queue)
 }
 
@@ -218,10 +218,10 @@ func TestSLOAwareRouter_PreRequest_QueueAlreadyExists(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request1 := createTestLLMRequest("test-id-1", 100, 50)
 	request2 := createTestLLMRequest("test-id-2", 100, 50)
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set initial SLO contexts
 	sloCtx1 := newSLORequestContext(request1)
@@ -239,7 +239,7 @@ func TestSLOAwareRouter_PreRequest_QueueAlreadyExists(t *testing.T) {
 	router.PreRequest(ctx, request2, schedulingResult)
 
 	// Verify both are in the same queue
-	queue, exists := router.runningRequestLists[pod.GetPod().NamespacedName]
+	queue, exists := router.runningRequestLists[endpoint.GetMetadata().NamespacedName]
 	assert.True(t, exists)
 	assert.NotNil(t, queue)
 }
@@ -249,7 +249,7 @@ func TestSLOAwareRouter_ResponseReceived_NilPredictor(t *testing.T) {
 	router.latencypredictor = nil
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
@@ -257,7 +257,7 @@ func TestSLOAwareRouter_ResponseReceived_NilPredictor(t *testing.T) {
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Should not panic and should return early
-	router.ResponseReceived(ctx, request, response, pod.GetPod())
+	router.ResponseReceived(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist
 	_, err := router.getSLOContextForRequest(request)
@@ -289,12 +289,12 @@ func TestSLOAwareRouter_ResponseReceived_NoContext(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
 	// Don't set SLO context
-	router.ResponseReceived(ctx, request, response, pod.GetPod())
+	router.ResponseReceived(ctx, request, response, endpoint.GetMetadata())
 
 	// Should handle missing context gracefully
 
@@ -305,7 +305,7 @@ func TestSLOAwareRouter_ResponseStreaming_NilPredictor(t *testing.T) {
 	router.latencypredictor = nil
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
@@ -313,7 +313,7 @@ func TestSLOAwareRouter_ResponseStreaming_NilPredictor(t *testing.T) {
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Should not panic and should return early
-	router.ResponseStreaming(ctx, request, response, pod.GetPod())
+	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist
 	_, err := router.getSLOContextForRequest(request)
@@ -325,10 +325,10 @@ func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	sloCtx := newSLORequestContext(request)
 	sloCtx.requestReceivedTimestamp = time.Now()
@@ -355,10 +355,10 @@ func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
 	// Initialize the queue and add the request
 	queue := newRequestPriorityQueue()
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 50.0)
-	router.runningRequestLists[pod.GetPod().NamespacedName] = queue
+	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 
 	beforeTime := time.Now()
-	router.ResponseStreaming(ctx, request, response, pod.GetPod())
+	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 	afterTime := time.Now()
 
 	// Verify first token timestamp was set
@@ -376,10 +376,10 @@ func TestSLOAwareRouter_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	sloCtx := newSLORequestContext(request)
 	sloCtx.requestReceivedTimestamp = time.Now()
@@ -408,9 +408,9 @@ func TestSLOAwareRouter_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	// Initialize the queue and add the request
 	queue := newRequestPriorityQueue()
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 50.0)
-	router.runningRequestLists[pod.GetPod().NamespacedName] = queue
+	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 
-	router.ResponseStreaming(ctx, request, response, pod.GetPod())
+	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify token timestamp was updated
 	retrievedCtx, err := router.getSLOContextForRequest(request)
@@ -424,20 +424,20 @@ func TestSLOAwareRouter_ResponseComplete_QueueNotFound(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
 	sloCtx := newSLORequestContext(request)
 	sloCtx.incomingModelName = testModelName
-	sloCtx.targetPod = pod.GetPod() // ADD THIS to avoid other issues
+	sloCtx.targetMetadata = endpoint.GetMetadata() // ADD THIS to avoid other issues
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Create an EMPTY queue (not nil, but empty) to test queue.Remove behavior
-	router.runningRequestLists[pod.GetPod().NamespacedName] = newRequestPriorityQueue()
+	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = newRequestPriorityQueue()
 
 	// Should handle gracefully when request is not in queue
-	router.ResponseComplete(ctx, request, response, pod.GetPod())
+	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should be deleted
 	_, err := router.getSLOContextForRequest(request)
@@ -449,12 +449,12 @@ func TestSLOAwareRouter_ResponseStreaming_NoContext(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
 	// Don't set SLO context - should handle gracefully
-	router.ResponseStreaming(ctx, request, response, pod.GetPod())
+	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// Should not panic
 
@@ -466,13 +466,13 @@ func TestSLOAwareRouter_ResponseComplete_Success(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
 	// Create queue and add request
 	queue := newRequestPriorityQueue()
-	router.runningRequestLists[pod.GetPod().NamespacedName] = queue
+	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 50.0)
 
 	sloCtx := newSLORequestContext(request)
@@ -485,7 +485,7 @@ func TestSLOAwareRouter_ResponseComplete_Success(t *testing.T) {
 	sloCtx.incomingModelName = "incoming-model"
 	router.setSLOContextForRequest(request, sloCtx)
 
-	router.ResponseComplete(ctx, request, response, pod.GetPod())
+	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify context was deleted
 	_, err := router.getSLOContextForRequest(request)
@@ -500,7 +500,7 @@ func TestSLOAwareRouter_ResponseComplete_NilPredictor(t *testing.T) {
 	router.latencypredictor = nil
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
@@ -508,7 +508,7 @@ func TestSLOAwareRouter_ResponseComplete_NilPredictor(t *testing.T) {
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Should not panic
-	router.ResponseComplete(ctx, request, response, pod.GetPod())
+	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist (deletion happens only with predictor)
 	_, err := router.getSLOContextForRequest(request)
@@ -541,12 +541,12 @@ func TestSLOAwareRouter_ResponseComplete_NoContext(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
 	// Don't set SLO context - should handle gracefully
-	router.ResponseComplete(ctx, request, response, pod.GetPod())
+	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Should not panic
 
@@ -558,13 +558,13 @@ func TestSLOAwareRouter_ResponseComplete_WithMetrics(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
 	// Create queue
 	queue := newRequestPriorityQueue()
-	router.runningRequestLists[pod.GetPod().NamespacedName] = queue
+	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 50.0)
 
 	sloCtx := newSLORequestContext(request)
@@ -578,7 +578,7 @@ func TestSLOAwareRouter_ResponseComplete_WithMetrics(t *testing.T) {
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Should record metrics without panicking
-	router.ResponseComplete(ctx, request, response, pod.GetPod())
+	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify cleanup
 	_, err := router.getSLOContextForRequest(request)
@@ -591,13 +591,13 @@ func TestSLOAwareRouter_ResponseComplete_NoSLOs(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test-id", 0, 0) // No SLOs
 	response := &requestcontrol.Response{}
 
 	// Create queue
 	queue := newRequestPriorityQueue()
-	router.runningRequestLists[pod.GetPod().NamespacedName] = queue
+	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 0)
 
 	sloCtx := newSLORequestContext(request)
@@ -607,7 +607,7 @@ func TestSLOAwareRouter_ResponseComplete_NoSLOs(t *testing.T) {
 	router.setSLOContextForRequest(request, sloCtx)
 
 	// Should handle missing SLOs gracefully
-	router.ResponseComplete(ctx, request, response, pod.GetPod())
+	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify cleanup
 	_, err := router.getSLOContextForRequest(request)
@@ -627,9 +627,9 @@ func TestSLOAwareRouter_CheckPredictor_NilPredictor(t *testing.T) {
 	router := createTestRouter()
 	router.latencypredictor = nil
 	logger := logr.Discard()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 
-	result := router.checkPredictor(logger, pod.GetPod())
+	result := router.checkPredictor(logger, endpoint.GetMetadata())
 
 	assert.False(t, result)
 }
@@ -639,9 +639,9 @@ func TestSLOAwareRouter_CheckPredictor_Success(t *testing.T) {
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
 	logger := logr.Discard()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 
-	result := router.checkPredictor(logger, pod.GetPod())
+	result := router.checkPredictor(logger, endpoint.GetMetadata())
 
 	assert.True(t, result)
 }
@@ -652,14 +652,14 @@ func TestSLORequestContext_Fields(t *testing.T) {
 
 	// Test all field initialization
 	assert.NotNil(t, ctx.lastSeenMetrics)
-	assert.NotNil(t, ctx.prefixCacheScoresForPods)
+	assert.NotNil(t, ctx.prefixCacheScoresForEndpoints)
 	assert.NotNil(t, ctx.predictionsForScheduling)
 	assert.Empty(t, ctx.tpotObservations)
 	assert.Empty(t, ctx.predictedTPOTObservations)
 	assert.Zero(t, ctx.generatedTokenCount)
 	assert.Zero(t, ctx.ttft)
 	assert.Zero(t, ctx.avgTPOT)
-	assert.Nil(t, ctx.targetPod)
+	assert.Nil(t, ctx.targetMetadata)
 	assert.Nil(t, ctx.schedulingResult)
 	assert.Nil(t, ctx.tokenSampler)
 }
@@ -684,11 +684,11 @@ func TestSLORequestContext_PredictionData(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 	ctx := newSLORequestContext(request)
 
-	ctx.predictionsForScheduling = make([]podPredictionResult, 0)
+	ctx.predictionsForScheduling = make([]endpointPredictionResult, 0)
 
 	// Set prediction data
-	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, podPredictionResult{Pod: createTestPod("pod1", 0, 0, 0), TTFT: 80.0, TPOT: 25.0})
-	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, podPredictionResult{Pod: createTestPod("pod1", 0, 0, 0), TPOT: 30.0, TTFT: 85.0})
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TTFT: 80.0, TPOT: 25.0})
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TPOT: 30.0, TTFT: 85.0})
 
 	assert.Len(t, ctx.predictionsForScheduling, 2)
 	assert.Equal(t, 80.0, ctx.predictionsForScheduling[0].TTFT)
@@ -700,13 +700,13 @@ func TestSLORequestContext_PrefixCacheScores(t *testing.T) {
 	ctx := newSLORequestContext(request)
 
 	// Set prefix cache scores
-	ctx.prefixCacheScoresForPods["pod1"] = 0.8
-	ctx.prefixCacheScoresForPods["pod2"] = 0.6
-	ctx.prefixCacheScoresForPods["pod3"] = 0.9
+	ctx.prefixCacheScoresForEndpoints["pod1"] = 0.8
+	ctx.prefixCacheScoresForEndpoints["pod2"] = 0.6
+	ctx.prefixCacheScoresForEndpoints["pod3"] = 0.9
 
-	assert.Len(t, ctx.prefixCacheScoresForPods, 3)
-	assert.Equal(t, 0.8, ctx.prefixCacheScoresForPods["pod1"])
-	assert.Equal(t, 0.9, ctx.prefixCacheScoresForPods["pod3"])
+	assert.Len(t, ctx.prefixCacheScoresForEndpoints, 3)
+	assert.Equal(t, 0.8, ctx.prefixCacheScoresForEndpoints["pod1"])
+	assert.Equal(t, 0.9, ctx.prefixCacheScoresForEndpoints["pod3"])
 }
 
 func TestSLOAwareRouter_ConcurrentContextAccess(t *testing.T) {
@@ -747,13 +747,13 @@ func TestSLOAwareRouter_MultipleRequests_SamePod(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 
 	request1 := createTestLLMRequest("test-id-1", 100, 50)
 	request2 := createTestLLMRequest("test-id-2", 100, 50)
 	request3 := createTestLLMRequest("test-id-3", 100, 50)
 
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set SLO contexts
 	for _, req := range []*schedulingtypes.LLMRequest{request1, request2, request3} {
@@ -768,7 +768,7 @@ func TestSLOAwareRouter_MultipleRequests_SamePod(t *testing.T) {
 	router.PreRequest(ctx, request3, schedulingResult)
 
 	// Verify queue has all requests
-	queue, exists := router.runningRequestLists[pod.GetPod().NamespacedName]
+	queue, exists := router.runningRequestLists[endpoint.GetMetadata().NamespacedName]
 	assert.True(t, exists)
 	assert.NotNil(t, queue)
 }
@@ -779,10 +779,10 @@ func TestSLOAwareRouter_RequestLifecycle_Complete(t *testing.T) {
 	router.latencypredictor = mockPredictor
 
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create initial context
 	sloCtx := newSLORequestContext(request)
@@ -796,26 +796,26 @@ func TestSLOAwareRouter_RequestLifecycle_Complete(t *testing.T) {
 	// Verify context exists
 	retrievedCtx, err := router.getSLOContextForRequest(request)
 	require.NoError(t, err)
-	assert.NotNil(t, retrievedCtx.targetPod)
+	assert.NotNil(t, retrievedCtx.targetMetadata)
 
 	// 2. ResponseReceived
-	router.ResponseReceived(ctx, request, response, pod.GetPod())
+	router.ResponseReceived(ctx, request, response, endpoint.GetMetadata())
 
 	// 3. ResponseStreaming (first token)
-	router.ResponseStreaming(ctx, request, response, pod.GetPod())
+	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// 4. ResponseStreaming (subsequent tokens)
 	retrievedCtx, _ = router.getSLOContextForRequest(request)
 	retrievedCtx.ttft = 100 // Mark first token received
 	router.setSLOContextForRequest(request, retrievedCtx)
-	router.ResponseStreaming(ctx, request, response, pod.GetPod())
+	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// 5. ResponseComplete
 	retrievedCtx, _ = router.getSLOContextForRequest(request)
 	retrievedCtx.ttft = 80
 	retrievedCtx.avgTPOT = 30
 	router.setSLOContextForRequest(request, retrievedCtx)
-	router.ResponseComplete(ctx, request, response, pod.GetPod())
+	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify context was cleaned up
 	_, err = router.getSLOContextForRequest(request)
@@ -829,14 +829,14 @@ func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
 
 	ctx := context.Background()
 
-	pod1 := createTestPod("test-pod-1", 1, 1, 1)
-	pod2 := createTestPod("test-pod-2", 1, 1, 1)
+	endpoint1 := createTestEndpoint("test-pod-1", 1, 1, 1)
+	endpoint2 := createTestEndpoint("test-pod-2", 1, 1, 1)
 
 	request1 := createTestLLMRequest("test-id-1", 100, 50)
 	request2 := createTestLLMRequest("test-id-2", 100, 50)
 
-	schedulingResult1 := createTestSchedulingResult(pod1.GetPod())
-	schedulingResult2 := createTestSchedulingResult(pod2.GetPod())
+	schedulingResult1 := createTestSchedulingResult(endpoint1.GetMetadata())
+	schedulingResult2 := createTestSchedulingResult(endpoint2.GetMetadata())
 
 	// Create and set SLO contexts
 	sloCtx1 := newSLORequestContext(request1)
@@ -852,8 +852,8 @@ func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
 	router.PreRequest(ctx, request2, schedulingResult2)
 
 	// Verify separate queues were created
-	queue1, exists1 := router.runningRequestLists[pod1.GetPod().NamespacedName]
-	queue2, exists2 := router.runningRequestLists[pod2.GetPod().NamespacedName]
+	queue1, exists1 := router.runningRequestLists[endpoint1.GetMetadata().NamespacedName]
+	queue2, exists2 := router.runningRequestLists[endpoint2.GetMetadata().NamespacedName]
 
 	assert.True(t, exists1)
 	assert.True(t, exists2)
@@ -913,8 +913,8 @@ func TestSLORequestContext_SLOValidation(t *testing.T) {
 func BenchmarkSLOAwareRouter_PreRequest(b *testing.B) {
 	router := createTestRouter()
 	ctx := context.Background()
-	pod := createTestPod("test-pod", 1, 1, 1)
-	schedulingResult := createTestSchedulingResult(pod.GetPod())
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

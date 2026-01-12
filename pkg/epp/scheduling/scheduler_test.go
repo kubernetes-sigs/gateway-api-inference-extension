@@ -24,8 +24,8 @@ import (
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -56,31 +56,31 @@ func TestSchedule(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     *types.LLMRequest
-		input   []types.Pod
+		input   []types.Endpoint
 		wantRes *types.SchedulingResult
 		err     bool
 	}{
 		{
-			name: "no candidate pods",
+			name: "no candidate endpoints",
 			req: &types.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "any-model",
 			},
-			input:   []types.Pod{},
+			input:   []types.Endpoint{},
 			wantRes: nil,
 			err:     true,
 		},
 		{
-			name: "finds optimal pod",
+			name: "finds optimal endpoint",
 			req: &types.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "critical",
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []types.Pod{
+			input: []types.Endpoint{
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -92,7 +92,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -104,7 +104,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					MetricsState: &backendmetrics.MetricsState{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.8,
@@ -118,10 +118,10 @@ func TestSchedule(t *testing.T) {
 			wantRes: &types.SchedulingResult{
 				ProfileResults: map[string]*types.ProfileRunResult{
 					"default": {
-						TargetPods: []types.Pod{
-							&types.ScoredPod{
-								Pod: &types.PodMetrics{
-									Pod: &backend.Pod{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+						TargetEndpoints: []types.Endpoint{
+							&types.ScoredEndpoint{
+								Endpoint: &types.PodMetrics{
+									EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 									MetricsState: &backendmetrics.MetricsState{
 										WaitingQueueSize:    0,
 										KVCacheUsagePercent: 0.2,

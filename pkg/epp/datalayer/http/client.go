@@ -14,24 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package metrics
+package http
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
 
-	"github.com/prometheus/common/expfmt"
-	"github.com/prometheus/common/model"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-// Client is an interface for retrieving the metrics from an endpoint URL.
+// Client is an interface for retrieving the data from an endpoint URL.
 type Client interface {
-	Get(ctx context.Context, target *url.URL, ep datalayer.Addressable) (PrometheusMetricMap, error)
+	Get(ctx context.Context, target *url.URL, ep datalayer.Addressable, parser func(io.Reader) (any, error)) (any, error)
 }
 
 const (
@@ -67,14 +65,15 @@ type client struct {
 	http.Client
 }
 
-func (cl *client) Get(ctx context.Context, target *url.URL, ep datalayer.Addressable) (PrometheusMetricMap, error) {
+func (cl *client) Get(ctx context.Context, target *url.URL, ep datalayer.Addressable,
+	parser func(io.Reader) (any, error)) (any, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	resp, err := defaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", ep.GetNamespacedName(), err)
+		return nil, fmt.Errorf("failed to fetch data from %s: %w", ep.GetNamespacedName(), err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -84,10 +83,5 @@ func (cl *client) Get(ctx context.Context, target *url.URL, ep datalayer.Address
 		return nil, fmt.Errorf("unexpected status code from %s: %v", ep.GetNamespacedName(), resp.StatusCode)
 	}
 
-	parser := expfmt.NewTextParser(model.LegacyValidation)
-	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return metricFamilies, err
+	return parser(resp.Body)
 }

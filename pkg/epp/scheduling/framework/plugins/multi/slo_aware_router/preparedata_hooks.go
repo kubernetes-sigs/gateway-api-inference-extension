@@ -28,28 +28,28 @@ import (
 )
 
 // PrepareRequestData prepares the SLO context for the request, including parsing SLO headers and gathering prefix cache scores abds generating predictions.
-func (s *SLOAwareRouter) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+func (s *SLOAwareRouter) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
 	sloCtx := s.getOrMakeSLORequestContext(request)
 
 	s.parseSLOHeaders(ctx, request, sloCtx)
 	var prefixCacheScore float64
-	for _, pod := range pods {
+	for _, endpoint := range endpoints {
 
-		if prefixCacheInfoRaw, ok := pod.Get(approximateprefix.PrefixCacheMatchInfoKey); ok {
+		if prefixCacheInfoRaw, ok := endpoint.Get(approximateprefix.PrefixCacheMatchInfoKey); ok {
 			prefixCacheInfo := prefixCacheInfoRaw.(*approximateprefix.PrefixCacheMatchInfo)
 			prefixCacheScore = float64(prefixCacheInfo.MatchLength()) / float64(prefixCacheInfo.TotalLength())
 			if !math.IsNaN(prefixCacheScore) {
-				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", pod.GetPod().String(), "score", prefixCacheScore)
+				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", endpoint.GetMetadata().NamespacedName.Name, "score", prefixCacheScore)
 			} else {
 				prefixCacheScore = 0.0
-				logger.V(logutil.DEBUG).Info("Prefix cache score is NaN, defaulting to 0", "pod", pod.GetPod().String())
+				logger.V(logutil.DEBUG).Info("Prefix cache score is NaN, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
 			}
 		} else {
-			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", pod.GetPod().String())
+			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
 			prefixCacheScore = 0.0
 		}
-		sloCtx.prefixCacheScoresForPods[pod.GetPod().String()] = prefixCacheScore
+		sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
 	}
 	s.setSLOContextForRequest(request, sloCtx)
 	return nil

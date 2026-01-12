@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"strings"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
@@ -188,8 +187,8 @@ func (mc Content) PlainText() string {
 	return sb.String()
 }
 
-type Pod interface {
-	GetPod() *backend.Pod
+type Endpoint interface {
+	GetMetadata() *datalayer.EndpointMetadata
 	GetMetrics() *backendmetrics.MetricsState
 	String() string
 	Get(string) (datalayer.Cloneable, bool)
@@ -197,8 +196,8 @@ type Pod interface {
 	Keys() []string
 }
 
-type ScoredPod struct {
-	Pod
+type ScoredEndpoint struct {
+	Endpoint
 	Score float64
 }
 
@@ -210,8 +209,8 @@ func (pm *PodMetrics) String() string {
 	return fmt.Sprintf("%+v", *pm)
 }
 
-func (pm *PodMetrics) GetPod() *backend.Pod {
-	return pm.Pod
+func (pm *PodMetrics) GetMetadata() *datalayer.EndpointMetadata {
+	return pm.EndpointMetadata
 }
 
 func (pm *PodMetrics) GetMetrics() *backendmetrics.MetricsState {
@@ -219,14 +218,14 @@ func (pm *PodMetrics) GetMetrics() *backendmetrics.MetricsState {
 }
 
 type PodMetrics struct {
-	*backend.Pod
+	*datalayer.EndpointMetadata
 	*backendmetrics.MetricsState
 	datalayer.AttributeMap
 }
 
 // ProfileRunResult captures the profile run result.
 type ProfileRunResult struct {
-	TargetPods []Pod
+	TargetEndpoints []Endpoint
 }
 
 // SchedulingResult captures the result of the scheduling cycle.

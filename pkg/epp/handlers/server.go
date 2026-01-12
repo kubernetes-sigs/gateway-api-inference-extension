@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
@@ -52,7 +51,7 @@ type Director interface {
 	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	GetRandomPod() *backend.Pod
+	GetRandomEndpoint() *datalayer.EndpointMetadata
 }
 
 type Datastore interface {
@@ -72,7 +71,7 @@ type StreamingServer struct {
 // Refactor this monolithic struct. Fields related to the Envoy ext-proc protocol should be decoupled from the internal
 // request lifecycle state.
 type RequestContext struct {
-	TargetPod                 *backend.Pod
+	TargetPod                 *datalayer.EndpointMetadata
 	TargetEndpoint            string
 	IncomingModelName         string
 	TargetModelName           string
@@ -225,7 +224,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				// Body stream complete. Allocate empty slice for response to use.
+				// Body stream complete. Capture raw size for flow control.
+				reqCtx.RequestSize = len(body)
 				body = []byte{}
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
@@ -234,12 +234,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				// Populate the ExtProc protocol responses for the request body.
-				requestBodyBytes, err := json.Marshal(reqCtx.Request.Body)
+				// Marshal after HandleRequest to include modifications (e.g., model rewriting).
+				var requestBodyBytes []byte
+				requestBodyBytes, err = json.Marshal(reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
 					break
 				}
+				// Update RequestSize to match marshalled body for Content-Length header.
 				reqCtx.RequestSize = len(requestBodyBytes)
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
 				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)

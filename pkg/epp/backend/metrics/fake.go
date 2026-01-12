@@ -25,14 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // FakePodMetrics is an implementation of PodMetrics that doesn't run the async refresh loop.
 type FakePodMetrics struct {
-	Pod        *backend.Pod
+	Metadata   *datalayer.EndpointMetadata
 	Metrics    *MetricsState
 	Attributes *datalayer.Attributes
 }
@@ -41,8 +40,8 @@ func (fpm *FakePodMetrics) String() string {
 	return fmt.Sprintf("Metadata: %v; Metrics: %v", fpm.GetMetadata(), fpm.GetMetrics())
 }
 
-func (fpm *FakePodMetrics) GetMetadata() *backend.Pod {
-	return fpm.Pod
+func (fpm *FakePodMetrics) GetMetadata() *datalayer.EndpointMetadata {
+	return fpm.Metadata
 }
 
 func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
@@ -50,7 +49,7 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 }
 
 func (fpm *FakePodMetrics) UpdateMetadata(metadata *datalayer.EndpointMetadata) {
-	fpm.Pod = metadata
+	fpm.Metadata = metadata
 }
 func (fpm *FakePodMetrics) GetAttributes() *datalayer.Attributes {
 	return fpm.Attributes
@@ -72,7 +71,7 @@ type FakePodMetricsClient struct {
 	Res   map[types.NamespacedName]*MetricsState
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *backend.Pod, existing *MetricsState) (*MetricsState, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *datalayer.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
 	f.errMu.RLock()
 	err, ok := f.Err[pod.NamespacedName]
 	f.errMu.RUnlock()

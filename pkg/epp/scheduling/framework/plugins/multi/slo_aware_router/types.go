@@ -22,8 +22,8 @@ import schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/sche
 type headroomStrategy string
 
 type choice struct {
-	podName schedulingtypes.Pod
-	weight  int
+	endpointName schedulingtypes.Endpoint
+	weight       int
 }
 
 const (
