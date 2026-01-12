@@ -52,24 +52,32 @@ func (r *LLMRequest) String() string {
 
 // LLMRequestBody contains the request-body fields that we parse out as user input,
 // to be used in forming scheduling decisions.
-// An LLMRequestBody must contain exactly one of CompletionsRequest or ChatCompletionsRequest.
+// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, or ConversationsRequest.
 type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
 	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat/completions request body.
 	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
+	// ResponsesRequest is the representation of the OpenAI /v1/responses request body.
+	Responses *ResponsesRequest `json:"responses,omitempty"`
+	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
+	Conversations *ConversationsRequest `json:"conversations,omitempty"`
 }
 
 func (r *LLMRequestBody) CacheSalt() string {
-	if r.ChatCompletions == nil && r.Completions == nil {
-		return ""
+	if r.Conversations != nil {
+		return r.Conversations.CacheSalt
 	}
-
+	if r.Responses != nil {
+		return r.Responses.CacheSalt
+	}
 	if r.ChatCompletions != nil {
 		return r.ChatCompletions.CacheSalt
 	}
-
-	return r.Completions.CacheSalt
+	if r.Completions != nil {
+		return r.Completions.CacheSalt
+	}
+	return ""
 }
 
 // CompletionsRequest is a structured representation of the fields we parse out of the /v1/completions request
@@ -120,6 +128,52 @@ func (r *ChatCompletionsRequest) String() string {
 		messagesLen += len(msg.Content.PlainText())
 	}
 	return fmt.Sprintf("{MessagesLength: %d}", messagesLen)
+}
+
+// ResponsesRequest represents the OpenAI /v1/responses request body structure
+type ResponsesRequest struct {
+	// Input can be either a string or an array of conversation items
+	Input interface{} `json:"input,omitempty"`
+	// Instructions provides optional system-level guidance
+	Instructions interface{} `json:"instructions,omitempty"`
+	// Tools field for function calling capabilities
+	Tools interface{} `json:"tools,omitempty"`
+	// CacheSalt isolates prefix caches for security
+	CacheSalt string `json:"cache_salt,omitempty"`
+}
+
+func (r *ResponsesRequest) String() string {
+	if r == nil {
+		return nilString
+	}
+	return fmt.Sprintf("{InputType: %T, InstructionsType: %T}", r.Input, r.Instructions)
+}
+
+// ConversationsRequest represents the OpenAI /v1/conversations request body structure
+type ConversationsRequest struct {
+	// Items is the array of conversation items (messages, files, etc.)
+	Items []ConversationItem `json:"items,omitempty"`
+	// Metadata provides additional context for the conversation
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	// CacheSalt isolates prefix caches for security
+	CacheSalt string `json:"cache_salt,omitempty"`
+}
+
+func (c *ConversationsRequest) String() string {
+	if c == nil {
+		return nilString
+	}
+	return fmt.Sprintf("{ItemsCount: %d}", len(c.Items))
+}
+
+// ConversationItem represents a single item in a conversation
+type ConversationItem struct {
+	// Type specifies the item type (message, file, etc.)
+	Type string `json:"type,omitempty"`
+	// Role specifies the role (user, assistant, system)
+	Role string `json:"role,omitempty"`
+	// Content contains the item content
+	Content interface{} `json:"content,omitempty"`
 }
 
 // Message represents a single message in a chat-completions request.

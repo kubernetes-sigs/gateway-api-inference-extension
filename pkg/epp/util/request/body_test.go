@@ -27,11 +27,13 @@ func TestExtractRequestData(t *testing.T) {
 	tests := []struct {
 		name    string
 		body    map[string]any
+		headers map[string]string
 		want    *types.LLMRequestBody
 		wantErr bool
 	}{
 		{
-			name: "completions request body",
+			name:    "completions request body",
+			headers: map[string]string{":path": "/v1/completions"},
 			body: map[string]any{
 				"model":  "test",
 				"prompt": "test prompt",
@@ -43,7 +45,8 @@ func TestExtractRequestData(t *testing.T) {
 			},
 		},
 		{
-			name: "chat completions request body",
+			name:    "chat completions request body",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -65,7 +68,8 @@ func TestExtractRequestData(t *testing.T) {
 			},
 		},
 		{
-			name: "chat completions request body with multi-modal content",
+			name:    "chat completions request body with multi-modal content",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -115,7 +119,8 @@ func TestExtractRequestData(t *testing.T) {
 			},
 		},
 		{
-			name: "chat completions request body with audio and video content",
+			name:    "chat completions request body with audio and video content",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -159,7 +164,8 @@ func TestExtractRequestData(t *testing.T) {
 			},
 		},
 		{
-			name: "chat completions with all optional fields",
+			name:    "chat completions with all optional fields",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -188,11 +194,13 @@ func TestExtractRequestData(t *testing.T) {
 		},
 		{
 			name:    "nil body",
+			headers: map[string]string{":path": "/v1/completions"},
 			body:    nil,
 			wantErr: true,
 		},
 		{
-			name: "invalid prompt format",
+			name:    "invalid prompt format",
+			headers: map[string]string{":path": "/v1/completions"},
 			body: map[string]any{
 				"model":  "test",
 				"prompt": 123,
@@ -200,7 +208,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid messages format",
+			name:    "invalid messages format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model":    "test",
 				"messages": "invalid",
@@ -208,14 +217,16 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "neither prompt nor messages",
+			name:    "neither prompt nor messages",
+			headers: map[string]string{":path": "/v1/completions"},
 			body: map[string]any{
 				"model": "test",
 			},
 			wantErr: true,
 		},
 		{
-			name: "empty messages array",
+			name:    "empty messages array",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model":    "test",
 				"messages": []any{},
@@ -223,7 +234,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "message with non-string role",
+			name:    "message with non-string role",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -233,7 +245,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "message with non-string content",
+			name:    "message with non-string content",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -243,7 +256,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid tools format",
+			name:    "invalid tools format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -254,7 +268,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid documents format",
+			name:    "invalid documents format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -265,7 +280,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid chat_template format",
+			name:    "invalid chat_template format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -276,7 +292,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid return_assistant_tokens_mask format",
+			name:    "invalid return_assistant_tokens_mask format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -287,7 +304,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid continue_final_message format",
+			name:    "invalid continue_final_message format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -298,7 +316,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid add_generation_prompt format",
+			name:    "invalid add_generation_prompt format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -309,7 +328,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid chat_template_kwargs format",
+			name:    "invalid chat_template_kwargs format",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -320,7 +340,8 @@ func TestExtractRequestData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "completions request with cache_salt",
+			name:    "completions request with cache_salt",
+			headers: map[string]string{":path": "/v1/completions"},
 			body: map[string]any{
 				"model":      "test",
 				"prompt":     "test prompt",
@@ -334,7 +355,8 @@ func TestExtractRequestData(t *testing.T) {
 			},
 		},
 		{
-			name: "chat completions request with cache_salt",
+			name:    "chat completions request with cache_salt",
+			headers: map[string]string{":path": "/v1/chat/completions"},
 			body: map[string]any{
 				"model": "test",
 				"messages": []any{
@@ -357,11 +379,98 @@ func TestExtractRequestData(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:    "responses request body",
+			headers: map[string]string{":path": "/v1/responses"},
+			body: map[string]any{
+				"model":        "gpt-4o",
+				"input":        "How do I check if a Python object is an instance of a class?",
+				"instructions": "You are a coding assistant that talks like a pirate.",
+			},
+			want: &types.LLMRequestBody{
+				Responses: &types.ResponsesRequest{
+					Input:        "How do I check if a Python object is an instance of a class?",
+					Instructions: "You are a coding assistant that talks like a pirate.",
+				},
+			},
+		},
+		{
+			name:    "responses request with cache_salt",
+			headers: map[string]string{":path": "/v1/responses"},
+			body: map[string]any{
+				"model":      "gpt-4o",
+				"input":      "test input",
+				"cache_salt": "abc123",
+			},
+			want: &types.LLMRequestBody{
+				Responses: &types.ResponsesRequest{
+					Input:     "test input",
+					CacheSalt: "abc123",
+				},
+			},
+		},
+		{
+			name:    "responses request missing input",
+			headers: map[string]string{":path": "/v1/responses"},
+			body: map[string]any{
+				"model":        "gpt-4o",
+				"instructions": "test instructions",
+			},
+			wantErr: true,
+		},
+		// Path-based detection tests
+		{
+			name:    "conversations API via path",
+			headers: map[string]string{":path": "/v1/conversations"},
+			body: map[string]any{
+				"model": "gpt-4o",
+				"items": []map[string]interface{}{
+					{"type": "message", "role": "user", "content": "Hello"},
+				},
+			},
+			want: &types.LLMRequestBody{
+				Conversations: &types.ConversationsRequest{
+					Items: []types.ConversationItem{
+						{Type: "message", Role: "user", Content: "Hello"},
+					},
+				},
+			},
+		},
+		{
+			name:    "path from x-original-path header",
+			headers: map[string]string{"x-original-path": "/v1/conversations"},
+			body: map[string]any{
+				"model": "gpt-4o",
+				"items": []map[string]interface{}{
+					{"type": "message", "role": "user", "content": "Hello"},
+				},
+			},
+			want: &types.LLMRequestBody{
+				Conversations: &types.ConversationsRequest{
+					Items: []types.ConversationItem{
+						{Type: "message", Role: "user", Content: "Hello"},
+					},
+				},
+			},
+		},
+		{
+			name:    "defaults to completions API when no path header",
+			headers: map[string]string{},
+			body: map[string]any{
+				"model":  "gpt-4o",
+				"prompt": "test prompt",
+			},
+			want: &types.LLMRequestBody{
+				Completions: &types.CompletionsRequest{
+					Prompt: "test prompt",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractRequestBody(tt.body)
+			got, err := ExtractRequestBody(tt.body, tt.headers)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractRequestBody() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -383,10 +492,11 @@ func BenchmarkExtractRequestData_Completions(b *testing.B) {
 		"model":  "test",
 		"prompt": "test prompt",
 	}
+	headers := map[string]string{":path": "/v1/completions"}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body)
+		_, err := ExtractRequestBody(body, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -400,10 +510,11 @@ func BenchmarkExtractRequestData_ChatCompletions(b *testing.B) {
 			map[string]any{"role": "user", "content": "hello"},
 		},
 	}
+	headers := map[string]string{":path": "/v1/chat/completions"}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body)
+		_, err := ExtractRequestBody(body, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -424,10 +535,46 @@ func BenchmarkExtractRequestData_ChatCompletionsWithOptionals(b *testing.B) {
 		"add_generation_prompt":        true,
 		"chat_template_kwargs":         map[string]any{"key": "value"},
 	}
+	headers := map[string]string{":path": "/v1/chat/completions"}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body)
+		_, err := ExtractRequestBody(body, headers)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkExtractRequestData_Responses(b *testing.B) {
+	body := map[string]any{
+		"model":        "gpt-4o",
+		"input":        "How do I check if a Python object is an instance of a class?",
+		"instructions": "You are a coding assistant that talks like a pirate.",
+	}
+	headers := map[string]string{":path": "/v1/responses"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ExtractRequestBody(body, headers)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkExtractRequestData_Conversations(b *testing.B) {
+	body := map[string]any{
+		"model": "gpt-4o",
+		"items": []map[string]interface{}{
+			{"type": "message", "role": "user", "content": "Hello"},
+		},
+	}
+	headers := map[string]string{":path": "/v1/conversations"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ExtractRequestBody(body, headers)
 		if err != nil {
 			b.Fatal(err)
 		}

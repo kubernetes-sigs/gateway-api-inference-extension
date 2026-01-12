@@ -677,6 +677,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 				// Deep copy the body map.
 				maps.Copy(reqCtx.Request.Body, test.reqBodyMap)
 
+				// Add appropriate path header based on request body content for path-based API detection
+				if _, hasPrompt := test.reqBodyMap["prompt"]; hasPrompt {
+					reqCtx.Request.Headers[":path"] = "/v1/completions"
+				} else if _, hasMessages := test.reqBodyMap["messages"]; hasMessages {
+					reqCtx.Request.Headers[":path"] = "/v1/chat/completions"
+				}
+
 				returnedReqCtx, err := director.HandleRequest(ctx, reqCtx)
 
 				if test.wantErrCode != "" {

@@ -450,12 +450,47 @@ func toBytes(i BlockHash) []byte {
 }
 
 func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
-	if request.Body.Completions != nil { // assumed to be valid if not nil
-		return []byte(request.Body.Completions.Prompt), nil
-	}
+	switch {
+	case request.Body.Conversations != nil:
+		// Handle conversations API - marshal the entire items slice for cache key generation
+		return json.Marshal(request.Body.Conversations.Items)
 
-	// must be chat-completions request at this point, return bytes of entire messages
-	return json.Marshal(request.Body.ChatCompletions.Messages)
+	case request.Body.Responses != nil:
+		// Handle responses API - use ordered slice to ensure deterministic marshaling
+		var combined []map[string]interface{}
+
+		// 1. Instructions (if present)
+		if request.Body.Responses.Instructions != nil {
+			combined = append(combined, map[string]interface{}{
+				"instructions": request.Body.Responses.Instructions,
+			})
+		}
+
+		// 2. Tools (if present)
+		if request.Body.Responses.Tools != nil {
+			combined = append(combined, map[string]interface{}{
+				"tools": request.Body.Responses.Tools,
+			})
+		}
+
+		// 3. Input (always present)
+		combined = append(combined, map[string]interface{}{
+			"input": request.Body.Responses.Input,
+		})
+
+		return json.Marshal(combined)
+
+	case request.Body.ChatCompletions != nil:
+		// Handle chat completions API (maintain backward compatibility)
+		return json.Marshal(request.Body.ChatCompletions.Messages)
+
+	case request.Body.Completions != nil:
+		// Handle completions API (maintain backward compatibility)
+		return []byte(request.Body.Completions.Prompt), nil
+
+	default:
+		return nil, errors.New("invalid request body: no recognized API format found")
+	}
 }
 
 // getBlockSize returns the block size in tokens.

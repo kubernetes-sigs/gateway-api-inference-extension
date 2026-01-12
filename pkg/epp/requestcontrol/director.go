@@ -142,7 +142,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
 
-	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body)
+	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body, reqCtx.Request.Headers)
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
 	}
