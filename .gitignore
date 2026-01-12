@@ -34,3 +34,9 @@ site
 
 # MacOS generated files
 **/.DS_Store
+
+# Ignore all Chart.lock files anywhere under config/charts
+config/charts/**/Chart.lock
+
+# Ignore all .tgz files anywhere under config/charts
+config/charts/**/*.tgz
