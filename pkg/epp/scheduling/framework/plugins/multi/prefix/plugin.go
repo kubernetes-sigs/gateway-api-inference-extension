@@ -421,8 +421,8 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens 
 		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", cacheBlockSize)
 		userInput = userInput[:maxPrefixBlocks*cacheBlockSize]
 	}
-	// Split the body into blocks of size blockSizeChars.
-	// If the last block is smaller than blockSizeChars, it will be ignored.
+	// Split the body into blocks of size cacheBlockSize.
+	// If the last block is smaller than cacheBlockSize, it will be ignored.
 	res := make([]BlockHash, 0, len(userInput)/cacheBlockSize)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	h := xxhash.New()
