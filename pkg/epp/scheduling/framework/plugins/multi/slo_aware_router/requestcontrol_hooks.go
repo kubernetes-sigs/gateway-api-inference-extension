@@ -185,10 +185,16 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 		return
 	}
 
+	// Create a schedulingtypes.Pod wrapper for the backend.Pod
+	podWrapper := &schedulingtypes.PodMetrics{
+		Pod:          pod,
+		MetricsState: sloCtx.lastSeenMetrics[sloCtx.schedulingResult.PrimaryProfileName],
+	}
+
 	if sloCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, sloCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, sloCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, sloCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
