@@ -126,3 +126,36 @@ func validateChatCompletionsMessages(messages []types.Message) error {
 
 	return nil
 }
+
+// GetPromptText extracts the prompt text from either Completions or ChatCompletions format.
+// For completions requests, it returns the prompt string directly.
+// For chat completions requests, it concatenates all message contents.
+// Returns empty string if the request body is invalid or missing.
+func GetPromptText(request *types.LLMRequest) string {
+	if request == nil || request.Body == nil {
+		return ""
+	}
+
+	// Try Completions format first (assumed to be valid if not nil)
+	if request.Body.Completions != nil {
+		return request.Body.Completions.Prompt
+	}
+
+	// Must be ChatCompletions request at this point
+	if request.Body.ChatCompletions != nil && len(request.Body.ChatCompletions.Messages) > 0 {
+		// Concatenate all message contents
+		var result string
+		for i, msg := range request.Body.ChatCompletions.Messages {
+			text := msg.Content.PlainText()
+			if text != "" {
+				if i > 0 && result != "" {
+					result += " "
+				}
+				result += text
+			}
+		}
+		return result
+	}
+
+	return ""
+}
