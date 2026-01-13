@@ -712,6 +712,47 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 		h.openConnectionOnFlow(key)
 	})
 
+	t.Run("ShouldBackOff_WhenFlowIsMarkedForDeletion_ButStillInMap", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+		key := types.FlowKey{ID: "doomed-flow", Priority: highPriority}
+		h.openConnectionOnFlow(key)
+
+		// Get the original flow state object.
+		val, ok := h.fr.flowStates.Load(key)
+		require.True(t, ok)
+		originalState := val.(*flowState)
+
+		// Manually poison it (simulate GC step: marked but not yet deleted from map).
+		originalState.mu.Lock()
+		originalState.markedForDeletion = true
+		originalState.mu.Unlock()
+
+		// Launch a background routine to simulate the GC completing the deletion.
+		// Without this, the main thread would spin forever in pinActiveFlow reloading the same doomed object.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Yield to allow the main thread to enter the retry loop and hit the "poisoned" check at least once.
+			time.Sleep(10 * time.Millisecond)
+			h.fr.flowStates.Delete(key)
+		}()
+
+		// Attempt to connect.
+		// It should spin briefly, detect the deletion, create a new flow, and succeed.
+		err := h.fr.WithConnection(key, func(c contracts.ActiveFlowConnection) error {
+			return nil
+		})
+		require.NoError(t, err, "WithConnection should recover and succeed")
+		wg.Wait()
+
+		// Verification: Ensure we are using a fresh object, not the resurrected corpse.
+		newVal, ok := h.fr.flowStates.Load(key)
+		require.True(t, ok)
+		assert.NotSame(t, originalState, newVal, "Should have created a new flow object, not reused the marked one")
+	})
+
 	t.Run("MixedAdminAndDataPlaneWorkload", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 1})
