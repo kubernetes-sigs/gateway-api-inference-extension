@@ -1,5 +1,6 @@
 # Endpoint Picker(EPP) As a Standalone Request Scheduler
 The endpoint picker (EPP) at its core is a smart request scheduler for LLM requests, it currently implements a number of LLM-specific load balancing optimizations including:
+
 * Prefix-cache aware scheduling
 * Load-aware scheduling
 * Disaggregated serving
@@ -7,12 +8,13 @@ The endpoint picker (EPP) at its core is a smart request scheduler for LLM reque
 When using EPP with Gateway API, it works as an ext-proc to an envoy-based proxy fronting model servers running in a k8s cluster; 
 examples of such proxies are cloud managed ones like GKE’s L7LB and open source counterparts like Istio and kGateway.
 EPP as an ext-proc here offers several key advantages:
+
 * It utilizes robust, pre-existing L7 proxies, including both managed and open-source options.
 * Seamless integration with the Kubernetes networking ecosystem, the Gateway API, allows for:
   * Transforming a Kubernetes gateway into an inference scheduler using familiar APIs.
   * Leveraging Gateway API features like traffic splitting for gradual rollouts and HTTP rule matching.
   * Access to provider-specific features, such as model armor and apigee on GKE.
-  * 
+
 These benefits are critical for online services, including MaaS (Model-as-a-Service), which require support for multi-tenancy, demand high availability, scalability, and streamlined operations.
 
 However, for some batch inference, a tight integration with the Gateway API and requiring an external proxy to be deployed separately is in practice an operational overhead. 
