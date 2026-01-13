@@ -21,7 +21,6 @@ from collections import defaultdict
 import random
 import requests
 import pytest
-import joblib
 import numpy as np
 import tempfile
 

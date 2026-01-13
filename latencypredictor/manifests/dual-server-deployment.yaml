@@ -16,6 +16,9 @@ data:
   LATENCY_TPOT_TREELITE_PATH: "/models/tpot_treelite.so"
   LATENCY_TTFT_CONFORMAL_PATH: "/models/ttft_conformal.json"
   LATENCY_TPOT_CONFORMAL_PATH: "/models/tpot_conformal.json"
+  # Versioned TreeLite paths (for runtime model updates without pod restarts)
+  LATENCY_TTFT_TREELITE_VERSIONED_DIR: "/models/treelite/ttft"
+  LATENCY_TPOT_TREELITE_VERSIONED_DIR: "/models/treelite/tpot"
   LATENCY_MODEL_TYPE: "xgboost"
   USE_TREELITE: "true"  # Enable TreeLite + conformal prediction mode
 
@@ -38,6 +41,9 @@ data:
   LOCAL_TPOT_TREELITE_PATH: "/local_models/tpot_treelite.so"
   LOCAL_TTFT_CONFORMAL_PATH: "/local_models/ttft_conformal.json"
   LOCAL_TPOT_CONFORMAL_PATH: "/local_models/tpot_conformal.json"
+  # Versioned TreeLite paths (for runtime model updates without pod restarts)
+  LOCAL_TTFT_TREELITE_VERSIONED_DIR: "/local_models/treelite/ttft"
+  LOCAL_TPOT_TREELITE_VERSIONED_DIR: "/local_models/treelite/tpot"
   USE_TREELITE: "true"  # Enable TreeLite for faster inference
   HTTP_TIMEOUT: "30"
 
