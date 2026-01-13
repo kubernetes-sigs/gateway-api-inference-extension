@@ -936,7 +936,6 @@ def test_dual_server_quantile_regression_learns_distribution():
     # Verify data was added by checking data status
     data_status = requests.get(f"{TRAINING_URL}/data/status", timeout=10).json()
     total_samples = data_status['training_data']['total_samples'] + data_status['test_data']['total_samples']
-    print(f"DEBUG: After sending {TRAIN_N} samples, training server has {total_samples} total samples (training: {data_status['training_data']['total_samples']}, test: {data_status['test_data']['total_samples']})")
 
     # Verify we have exactly the samples we sent (not contaminated by background training)
     # NOTE: Each sample is counted twice in total_samples because it's added to both TTFT and TPOT data structures
@@ -1013,29 +1012,21 @@ def test_dual_server_quantile_regression_learns_distribution():
                 if new_last_load and new_last_load != first_reload_timestamp:
                     if not second_reload_done:
                         print(f"✓ Second training cycle completed after {i+1} more seconds (on new data)")
-                        print(f"DEBUG: Timestamp changed from {first_reload_timestamp} to {new_last_load}")
                         second_reload_done = True
 
                     # Now check if models were synced AFTER the second training cycle
                     if reload_data.get("synced"):
                         second_sync_done = True
                         print(f"✓ Models synced from training server after second training cycle (iteration {i+1})")
-                        print(f"DEBUG: Reload response: synced={reload_data.get('synced')}, loaded={reload_data.get('loaded')}, is_ready={reload_data.get('is_ready')}, model_type={reload_data.get('model_type')}, last_load_time={reload_data.get('last_load_time')}")
                         break
 
     assert second_reload_done, f"Second training cycle not completed within 60 seconds total"
     assert second_sync_done, f"Models were not synced after second training cycle (hash may not have changed, indicating training didn't update models)"
 
-    # Verify training server still has the data
-    final_data_status = requests.get(f"{TRAINING_URL}/data/status", timeout=10).json()
-    final_total = final_data_status['training_data']['total_samples'] + final_data_status['test_data']['total_samples']
-    print(f"DEBUG: After training, training server has {final_total} total samples (training: {final_data_status['training_data']['total_samples']}, test: {final_data_status['test_data']['total_samples']})")
-
-    # Check final model hash to see if it changed
+    # Check final model hash to see if it changed (helps debug if model didn't update)
     final_ttft_hash_r = requests.get(f"{TRAINING_URL}/model/ttft/hash", timeout=10)
     final_ttft_hash = final_ttft_hash_r.json().get("hash") if final_ttft_hash_r.status_code == 200 else "N/A"
-    print(f"DEBUG: Final TTFT model hash: {final_ttft_hash}")
-    print(f"DEBUG: Model hash changed: {initial_ttft_hash != final_ttft_hash}")
+    print(f"DEBUG: Model hash: initial={initial_ttft_hash[:8] if initial_ttft_hash != 'N/A' else 'N/A'}, final={final_ttft_hash[:8] if final_ttft_hash != 'N/A' else 'N/A'}, changed={initial_ttft_hash != final_ttft_hash}")
 
     # 7) CRITICAL: Wait for conformal calibration to be populated
     # The TreeLite mode requires conformal calibration files with residuals
@@ -1182,14 +1173,6 @@ def test_dual_server_quantile_regression_learns_distribution():
         print(f"  TTFT quantile adjustment: {cal_data.get('ttft_conformal', {}).get('quantile_adjustment_ms', 'N/A')}")
         print(f"  TPOT quantile adjustment: {cal_data.get('tpot_conformal', {}).get('quantile_adjustment_ms', 'N/A')}")
 
-    # Make a single prediction first to debug
-    single_test = test_cases[0]
-    print(f"DEBUG: Single test request features: {single_test}")
-    single_pr = requests.post(f"{PREDICTION_URL}/predict", json=single_test, timeout=10)
-    if single_pr.status_code == 200:
-        single_pred = single_pr.json()
-        print(f"DEBUG: Single prediction result: TTFT={single_pred['ttft_ms']:.2f}ms, TPOT={single_pred['tpot_ms']:.2f}ms, model_type={single_pred.get('model_type', 'N/A')}")
-
     # 7) Predict (bulk)
     pr = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json={"requests": test_cases}, timeout=60)
     assert pr.status_code == 200, f"predict failed: {pr.status_code}"
@@ -1199,15 +1182,6 @@ def test_dual_server_quantile_regression_learns_distribution():
 
     ttft_pred = np.array([p["ttft_ms"] for p in preds], dtype=float)
     tpot_pred = np.array([p["tpot_ms"] for p in preds], dtype=float)
-
-    # Diagnostic: Check if predictions are varying
-    print(f"DEBUG: TTFT predictions - min: {ttft_pred.min():.2f}, max: {ttft_pred.max():.2f}, mean: {ttft_pred.mean():.2f}, std: {ttft_pred.std():.2f}")
-    print(f"DEBUG: TPOT predictions - min: {tpot_pred.min():.2f}, max: {tpot_pred.max():.2f}, mean: {tpot_pred.mean():.2f}, std: {tpot_pred.std():.2f}")
-    print(f"DEBUG: Expected TTFT quantiles - min: {ttft_q_exp.min():.2f}, max: {ttft_q_exp.max():.2f}, mean: {ttft_q_exp.mean():.2f}")
-    print(f"DEBUG: Expected TPOT quantiles - min: {tpot_q_exp.min():.2f}, max: {tpot_q_exp.max():.2f}, mean: {tpot_q_exp.mean():.2f}")
-    print(f"DEBUG: Sample predictions from response:")
-    for i in range(min(5, len(preds))):
-        print(f"  Prediction {i}: TTFT={preds[i]['ttft_ms']:.2f}ms, TPOT={preds[i]['tpot_ms']:.2f}ms, model_type={preds[i].get('model_type', 'N/A')}")
 
     # 8) Relative error vs μ + zσ
     ttft_rel_err = np.abs(ttft_pred - ttft_q_exp) / ttft_q_exp

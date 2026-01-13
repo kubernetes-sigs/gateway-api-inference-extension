@@ -27,6 +27,7 @@ RUN pip install --no-cache-dir \
 # Copy test files
 COPY test_dual_server_client.py .
 COPY setup_training_data.py .
+COPY test_entrypoint.sh .
 
 # Create test results directory
 RUN mkdir -p /test-results

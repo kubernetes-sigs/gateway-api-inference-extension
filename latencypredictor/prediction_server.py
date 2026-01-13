@@ -148,7 +148,10 @@ class PredictSettings:
 
 
 settings = PredictSettings()
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Configure logging level from environment variable (default: INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class ModelSyncer:
@@ -250,7 +253,7 @@ class ModelSyncer:
                         logging.debug(f"Model {name} unchanged (hash: {server_hash[:8]}...), skipping download")
                         return False
 
-                    logging.info(f"Model {name} changed (old: {local_hash[:8] if local_hash else 'none'}..., new: {server_hash[:8]}...), downloading")
+                    logging.debug(f"Model {name} changed (old: {local_hash[:8] if local_hash else 'none'}..., new: {server_hash[:8]}...), downloading")
                 else:
                     # Hash endpoint not available, fall back to timestamp check
                     logging.debug(f"Hash check unavailable for {name}, using timestamp fallback")
@@ -304,11 +307,8 @@ class ModelSyncer:
                     elif name == "tpot":
                         self.tpot_hash = server_hash
 
-            # Extra logging for conformal files
-            if 'conformal' in name:
-                logging.info(f"✓ Downloaded conformal file: {name} -> {dest} (size: {os.path.getsize(dest)} bytes)")
-            else:
-                logging.info(f"Downloaded {name} -> {dest}")
+            # Log downloads at DEBUG level
+            logging.debug(f"Downloaded {name} -> {dest} (size: {os.path.getsize(dest)} bytes)")
             return True
 
         except requests.RequestException as e:
@@ -359,7 +359,7 @@ class ModelSyncer:
                         if self._download_model_if_newer("ttft_treelite", settings.LOCAL_TTFT_TREELITE_PATH):
                             import shutil
                             shutil.copy2(settings.LOCAL_TTFT_TREELITE_PATH, versioned_ttft_dest)
-                            logging.info(f"✓ Created versioned TTFT TreeLite model: {versioned_ttft_dest}")
+                            logging.debug(f"✓ Created versioned TTFT TreeLite model: {versioned_ttft_dest}")
                             updated = True
 
                 # Download versioned TPOT TreeLite model
@@ -374,7 +374,7 @@ class ModelSyncer:
                         if self._download_model_if_newer("tpot_treelite", settings.LOCAL_TPOT_TREELITE_PATH):
                             import shutil
                             shutil.copy2(settings.LOCAL_TPOT_TREELITE_PATH, versioned_tpot_dest)
-                            logging.info(f"✓ Created versioned TPOT TreeLite model: {versioned_tpot_dest}")
+                            logging.debug(f"✓ Created versioned TPOT TreeLite model: {versioned_tpot_dest}")
                             updated = True
 
             except Exception as e:
@@ -406,7 +406,7 @@ class ModelSyncer:
         # After flush, training server creates new conformal files but they might have
         # older timestamps than existing files. We must force reload to get fresh calibration.
         if models_changed and settings.USE_TREELITE and CONFORMAL_AVAILABLE:
-            logging.info("Core models changed - forcing conformal calibration reload")
+            logging.debug("Core models changed - forcing conformal calibration reload")
 
             # Force download by removing existing conformal files
             if os.path.exists(settings.LOCAL_TTFT_CONFORMAL_PATH):
@@ -418,10 +418,10 @@ class ModelSyncer:
 
             # Now download fresh conformal files
             if self._download_model_if_newer("ttft_conformal", settings.LOCAL_TTFT_CONFORMAL_PATH):
-                logging.info("✓ TTFT conformal calibration reloaded after model change")
+                logging.debug("✓ TTFT conformal calibration reloaded after model change")
                 updated = True
             if self._download_model_if_newer("tpot_conformal", settings.LOCAL_TPOT_CONFORMAL_PATH):
-                logging.info("✓ TPOT conformal calibration reloaded after model change")
+                logging.debug("✓ TPOT conformal calibration reloaded after model change")
                 updated = True
 
         return updated
@@ -589,12 +589,13 @@ class LightweightPredictor:
                     # Even if we have an old predictor, reload from disk to get updated model
                     new_ttft_predictor = tl2cgen.Predictor(ttft_path_to_load, nthread=1)
                     path_type = "VERSIONED" if versioned_ttft_path else "LEGACY"
-                    logging.info(f"✓ TTFT TreeLite model RELOADED from {path_type} path: {ttft_path_to_load}")
+                    logging.debug(f"✓ TTFT TreeLite model RELOADED from {path_type} path: {ttft_path_to_load}")
 
                     # Smoke test: verify predictor works with test input
-                    test_input = np.array([[0.5, 400, 4, 1, 0.7, 120, 2]], dtype=np.float32)
-                    test_pred = float(np.ravel(new_ttft_predictor.predict(tl2cgen.DMatrix(test_input)))[0])
-                    logging.info(f"  TTFT smoke test: input_len=400 → {test_pred:.2f}ms (expected ~974ms for good model)")
+                    if logging.getLogger().isEnabledFor(logging.DEBUG):
+                        test_input = np.array([[0.5, 400, 4, 1, 0.7, 120, 2]], dtype=np.float32)
+                        test_pred = float(np.ravel(new_ttft_predictor.predict(tl2cgen.DMatrix(test_input)))[0])
+                        logging.debug(f"  TTFT smoke test: input_len=400 → {test_pred:.2f}ms (expected ~974ms for good model)")
                 else:
                     # TreeLite not available yet - keep old predictor if we have one (bootstrap phase)
                     new_ttft_predictor = self.models.ttft_predictor if self.models.ttft_predictor else None
@@ -618,12 +619,13 @@ class LightweightPredictor:
                     # Even if we have an old predictor, reload from disk to get updated model
                     new_tpot_predictor = tl2cgen.Predictor(tpot_path_to_load, nthread=1)
                     path_type = "VERSIONED" if versioned_tpot_path else "LEGACY"
-                    logging.info(f"✓ TPOT TreeLite model RELOADED from {path_type} path: {tpot_path_to_load}")
+                    logging.debug(f"✓ TPOT TreeLite model RELOADED from {path_type} path: {tpot_path_to_load}")
 
                     # Smoke test: verify predictor works with test input
-                    test_input = np.array([[0.5, 400, 4, 1, 10]], dtype=np.float32)
-                    test_pred = float(np.ravel(new_tpot_predictor.predict(tl2cgen.DMatrix(test_input)))[0])
-                    logging.info(f"  TPOT smoke test: input_len=400 → {test_pred:.2f}ms")
+                    if logging.getLogger().isEnabledFor(logging.DEBUG):
+                        test_input = np.array([[0.5, 400, 4, 1, 10]], dtype=np.float32)
+                        test_pred = float(np.ravel(new_tpot_predictor.predict(tl2cgen.DMatrix(test_input)))[0])
+                        logging.debug(f"  TPOT smoke test: input_len=400 → {test_pred:.2f}ms")
                 else:
                     # TreeLite not available yet - keep old predictor if we have one (bootstrap phase)
                     new_tpot_predictor = self.models.tpot_predictor if self.models.tpot_predictor else None
@@ -675,17 +677,17 @@ class LightweightPredictor:
             final_ttft_predictor = new_ttft_predictor or self.models.ttft_predictor
             final_tpot_predictor = new_tpot_predictor or self.models.tpot_predictor
 
-            # Log predictor object changes
-            if self.use_treelite:
+            # Log predictor object changes (DEBUG only - technical details)
+            if self.use_treelite and logging.getLogger().isEnabledFor(logging.DEBUG):
                 if new_ttft_predictor and old_ttft_id != new_ttft_id:
-                    logging.info(f"TTFT predictor object CHANGED: {old_ttft_id} → {new_ttft_id}")
+                    logging.debug(f"TTFT predictor object CHANGED: {old_ttft_id} → {new_ttft_id}")
                 elif new_ttft_predictor is None and old_ttft_id:
-                    logging.info(f"TTFT predictor object REUSED (new load failed): {old_ttft_id}")
+                    logging.debug(f"TTFT predictor object REUSED (new load failed): {old_ttft_id}")
 
                 if new_tpot_predictor and old_tpot_id != new_tpot_id:
-                    logging.info(f"TPOT predictor object CHANGED: {old_tpot_id} → {new_tpot_id}")
+                    logging.debug(f"TPOT predictor object CHANGED: {old_tpot_id} → {new_tpot_id}")
                 elif new_tpot_predictor is None and old_tpot_id:
-                    logging.info(f"TPOT predictor object REUSED (new load failed): {old_tpot_id}")
+                    logging.debug(f"TPOT predictor object REUSED (new load failed): {old_tpot_id}")
 
             new_bundle = ModelBundle(
                 ttft_model=new_ttft or self.models.ttft_model,  # Keep old if load failed
@@ -711,7 +713,7 @@ class LightweightPredictor:
                 if self.use_treelite:
                     if new_ttft_predictor and new_tpot_predictor:
                         has_conformal = new_ttft_conformal and new_tpot_conformal
-                        logging.info(f"Models loaded: Using TreeLite compiled models (conformal calibration: {has_conformal})")
+                        logging.info(f"Models loaded: Using TreeLite compiled models (conformal calibration: {bool(has_conformal)})")
                     else:
                         logging.info(f"Models loaded: Using base XGBoost models (TreeLite models not yet available)")
                 else:
@@ -776,12 +778,6 @@ class LightweightPredictor:
                 effective_input_tokens = (1 - ttft_raw_data['prefix_cache_score']) * ttft_raw_data['input_token_length']
                 prefill_score_bucket = int(min(ttft_raw_data['prefix_cache_score'] * self.prefix_buckets, self.prefix_buckets - 1))
 
-                # DEBUG: Log single prediction input
-                logging.info(f"SINGLE PREDICTION DEBUG:")
-                logging.info(f"  Input features: {ttft_raw_data}")
-                logging.info(f"  effective_input_tokens: {effective_input_tokens}")
-                logging.info(f"  prefill_score_bucket: {prefill_score_bucket}")
-
                 ttft_features = np.array([[
                     ttft_raw_data['kv_cache_percentage'],
                     ttft_raw_data['input_token_length'],
@@ -791,8 +787,6 @@ class LightweightPredictor:
                     effective_input_tokens,
                     prefill_score_bucket
                 ]], dtype=np.float32)
-
-                logging.info(f"  TTFT features array: {ttft_features}")
 
                 # TPOT features: kv_cache_percentage, input_token_length, num_request_waiting,
                 #                num_request_running, num_tokens_generated
@@ -816,19 +810,16 @@ class LightweightPredictor:
                 ttft_mean = float(np.ravel(ttft_pred_array)[0])
                 tpot_mean = float(np.ravel(tpot_pred_array)[0])
 
-                logging.info(f"  TTFT pred_array shape: {ttft_pred_array.shape}, mean: {ttft_mean:.2f}")
-                logging.info(f"  TPOT pred_array shape: {tpot_pred_array.shape}, mean: {tpot_mean:.2f}")
-
                 # Apply conformal correction if available, otherwise return mean (bootstrap phase)
                 if models.ttft_conformal and models.tpot_conformal:
                     ttft_pred = models.ttft_conformal.conformalize(ttft_mean)
                     tpot_pred = models.tpot_conformal.conformalize(tpot_mean)
-                    logging.info(f"  After conformal: TTFT={ttft_pred:.2f}, TPOT={tpot_pred:.2f}")
+                    logging.debug(f"  After conformal: TTFT={ttft_pred:.2f}, TPOT={tpot_pred:.2f}")
                 else:
                     # Bootstrap phase: return mean predictions to allow training data collection
                     ttft_pred = ttft_mean
                     tpot_pred = tpot_mean
-                    logging.info(f"  No conformal (bootstrap): TTFT={ttft_pred:.2f}, TPOT={tpot_pred:.2f}")
+                    logging.debug(f"  No conformal (bootstrap): TTFT={ttft_pred:.2f}, TPOT={tpot_pred:.2f}")
 
                 return ttft_pred, tpot_pred
 
@@ -980,14 +971,14 @@ class LightweightPredictor:
                 tpot_mean_preds = np.ravel(tpot_pred_array)
 
                 # DEBUG: Log batch prediction details
-                if batch_size <= 5:  # Only log for small batches to avoid spam
-                    logging.info(f"BATCH PREDICTION DEBUG: batch_size={batch_size}")
-                    logging.info(f"  TTFT features shape: {ttft_features.shape}")
-                    logging.info(f"  TTFT features[0]: {ttft_features[0]}")
+                if logging.getLogger().isEnabledFor(logging.DEBUG) and batch_size <= 5:
+                    logging.debug(f"BATCH PREDICTION DEBUG: batch_size={batch_size}")
+                    logging.debug(f"  TTFT features shape: {ttft_features.shape}")
+                    logging.debug(f"  TTFT features[0]: {ttft_features[0]}")
                     if batch_size > 1:
-                        logging.info(f"  TTFT features[1]: {ttft_features[1]}")
-                    logging.info(f"  TTFT pred_array shape: {ttft_pred_array.shape}")
-                    logging.info(f"  TTFT mean_preds: {ttft_mean_preds}")
+                        logging.debug(f"  TTFT features[1]: {ttft_features[1]}")
+                    logging.debug(f"  TTFT pred_array shape: {ttft_pred_array.shape}")
+                    logging.debug(f"  TTFT mean_preds: {ttft_mean_preds}")
 
                 # Apply conformal correction if available, otherwise return mean (bootstrap phase)
                 if models.ttft_conformal and models.tpot_conformal:

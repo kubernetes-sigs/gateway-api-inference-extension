@@ -144,7 +144,10 @@ class Settings:
     USE_TREELITE: bool = os.getenv("USE_TREELITE", "true").lower() == "true"
 
 settings = Settings()
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Configure logging level from environment variable (default: INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Add this to your Pydantic models section
 class ModelInfoResponse(BaseModel):
@@ -833,7 +836,7 @@ class LatencyPredictor:
 
                         # Get coverage stats
                         stats = self.ttft_conformal.get_coverage_stats(y_pred_mean, y_true)
-                        logging.info(
+                        logging.debug(
                             f"TTFT conformal calibration complete: "
                             f"coverage={stats['coverage_percent']:.1f}% (target={stats['target_coverage_percent']:.0f}%), "
                             f"violation_rate={stats['violation_rate_percent']:.1f}%, "
@@ -870,7 +873,7 @@ class LatencyPredictor:
 
                         # Get coverage stats
                         stats = self.tpot_conformal.get_coverage_stats(y_pred_mean, y_true)
-                        logging.info(
+                        logging.debug(
                             f"TPOT conformal calibration complete: "
                             f"coverage={stats['coverage_percent']:.1f}% (target={stats['target_coverage_percent']:.0f}%), "
                             f"violation_rate={stats['violation_rate_percent']:.1f}%, "
@@ -891,9 +894,9 @@ class LatencyPredictor:
                 tpot_snap = list(self._all_samples(self.tpot_data_buckets))
                 total = len(ttft_snap) + len(tpot_snap)
                 if total < settings.MIN_SAMPLES_FOR_RETRAIN:
-                    logging.info(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
+                    logging.debug(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
                     return
-                logging.info(f"Initiating training with {total} samples using {self.model_type} for quantile {self.quantile}.")
+                logging.debug(f"Initiating training with {total} samples using {self.model_type} for quantile {self.quantile}.")
 
             new_ttft_model = new_ttft_scaler = None
             new_tpot_model = new_tpot_scaler = None
@@ -903,7 +906,7 @@ class LatencyPredictor:
                 raw_ttft = pd.DataFrame(ttft_snap).dropna()
                 raw_ttft = raw_ttft[raw_ttft['actual_ttft_ms'] > 0]
                 df_ttft = self._prepare_features_with_interaction(raw_ttft.copy(), model_type="ttft")
-                print(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
+                logging.debug(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
                 if len(df_ttft) >= settings.MIN_SAMPLES_FOR_RETRAIN:
                     # Updated TTFT features to include prefix_cache_score
                     ttft_feature_cols_tree = [
@@ -1267,16 +1270,16 @@ class LatencyPredictor:
                 logging.debug(f"{model_name}: Model unchanged (hash: {current_hash[:8]}...), skipping compilation")
 
                 # Periodic cache efficiency report (every 60 seconds)
-                if time.time() - self.last_cache_report_time > 60:
+                if logging.getLogger().isEnabledFor(logging.DEBUG) and time.time() - self.last_cache_report_time > 60:
                     total = self.cache_hits + self.cache_misses
                     hit_rate = (self.cache_hits / total * 100) if total > 0 else 0
-                    logging.info(f"Cache efficiency: {self.cache_hits} hits, {self.cache_misses} misses ({hit_rate:.1f}% hit rate)")
+                    logging.debug(f"TreeLite compilation cache: {self.cache_hits} hits, {self.cache_misses} misses ({hit_rate:.1f}% hit rate)")
                     self.last_cache_report_time = time.time()
 
                 return False, current_hash
 
             self.cache_misses += 1
-            logging.info(f"{model_name}: Model changed (old: {previous_hash[:8]}..., new: {current_hash[:8]}...), triggering TreeLite compilation")
+            logging.debug(f"{model_name}: Model changed (old: {previous_hash[:8]}..., new: {current_hash[:8]}...), triggering TreeLite compilation")
             return True, current_hash
 
         except Exception as e:
@@ -1363,7 +1366,7 @@ class LatencyPredictor:
                 if should_save or self.ttft_model_hash is None:
                     os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
                     joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
-                    logging.info("TTFT model saved to disk")
+                    logging.debug("TTFT model saved to disk")
                     # Note: Don't update hash here - let TreeLite compilation check handle it
                 else:
                     if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -1513,7 +1516,7 @@ class LatencyPredictor:
                 if should_save or self.tpot_model_hash is None:
                     os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
                     joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
-                    logging.info("TPOT model saved to disk")
+                    logging.debug("TPOT model saved to disk")
                     # Note: Don't update hash here - let TreeLite compilation check handle it
                 else:
                     if logging.getLogger().isEnabledFor(logging.DEBUG):

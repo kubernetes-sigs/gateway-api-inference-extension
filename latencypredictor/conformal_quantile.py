@@ -120,7 +120,7 @@ class ConformalQuantilePredictor:
             Quantile prediction (mean + appropriate residual quantile)
         """
         if len(self.calibration_residuals) == 0:
-            logging.warning("No calibration data available. Returning mean prediction.")
+            logging.debug("No calibration data available. Returning mean prediction (bootstrap phase).")
             return mean_prediction
 
         # Update cached quantile if needed
@@ -141,7 +141,7 @@ class ConformalQuantilePredictor:
             Array of quantile predictions
         """
         if len(self.calibration_residuals) == 0:
-            logging.warning("No calibration data available. Returning mean predictions.")
+            logging.debug("No calibration data available. Returning mean predictions (bootstrap phase).")
             return mean_predictions
 
         # Update cached quantile if needed
@@ -161,10 +161,11 @@ class ConformalQuantilePredictor:
 
         self._cache_dirty = False
 
-        logging.debug(
-            f"Updated quantile cache: {self.quantile:.0%} quantile = "
-            f"{self._cached_quantile_value:.2f} (from {len(self.calibration_residuals)} samples)"
-        )
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(
+                f"Updated quantile cache: {self.quantile:.0%} quantile = "
+                f"{self._cached_quantile_value:.2f} (from {len(self.calibration_residuals)} samples)"
+            )
 
     def get_coverage_stats(self, predictions: np.ndarray, actuals: np.ndarray) -> dict:
         """
