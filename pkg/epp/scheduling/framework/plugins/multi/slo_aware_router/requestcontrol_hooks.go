@@ -97,6 +97,57 @@ func (s *SLOAwareRouter) deleteSLOContextForRequest(request *schedulingtypes.LLM
 	s.sloContextStore.Delete(id)
 }
 
+// GetSchedulingResultForRequest returns the scheduling result for a request.
+// This is exposed to allow wrapper implementations (e.g., P/D-aware routers)
+// to access scheduling information for custom hook logic.
+func (s *SLOAwareRouter) GetSchedulingResultForRequest(request *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
+	sloCtx, err := s.getSLOContextForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return sloCtx.schedulingResult, nil
+}
+
+// GetLastSeenMetricsForRequest returns the last seen metrics for all profiles in a request.
+// This is exposed to allow wrapper implementations to access metrics for custom training logic.
+func (s *SLOAwareRouter) GetLastSeenMetricsForRequest(request *schedulingtypes.LLMRequest) (map[string]*backendmetrics.MetricsState, error) {
+	sloCtx, err := s.getSLOContextForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return sloCtx.lastSeenMetrics, nil
+}
+
+// GetPrefixCacheScoresForRequest returns the prefix cache scores for all pods in a request.
+func (s *SLOAwareRouter) GetPrefixCacheScoresForRequest(request *schedulingtypes.LLMRequest) (map[string]float64, error) {
+	sloCtx, err := s.getSLOContextForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return sloCtx.prefixCacheScoresForPods, nil
+}
+
+// GetRequestPrompt returns the prompt for a request.
+func (s *SLOAwareRouter) GetRequestPrompt(request *schedulingtypes.LLMRequest) (string, error) {
+	sloCtx, err := s.getSLOContextForRequest(request)
+	if err != nil {
+		return "", err
+	}
+	return sloCtx.schedulingRequest.Body.Completions.Prompt, nil
+}
+
+// GetRequestBuilder returns the PredictionRequestBuilder used by this router.
+// This allows wrappers to use the same builder for consistency.
+func (s *SLOAwareRouter) GetRequestBuilder() PredictionRequestBuilder {
+	return s.requestBuilder
+}
+
+// GetLatencyPredictor returns the latency predictor client.
+// This allows wrappers to record training data using the same predictor.
+func (s *SLOAwareRouter) GetLatencyPredictor() interface{} {
+	return s.latencypredictor
+}
+
 // --- RequestControl Hooks ---
 
 func (t *SLOAwareRouter) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult) {
