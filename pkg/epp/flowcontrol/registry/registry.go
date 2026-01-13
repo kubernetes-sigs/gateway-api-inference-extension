@@ -49,20 +49,28 @@ type bandStats struct {
 
 // flowState tracks the lifecycle and usage of a specific flow instance.
 //
-// It uses atomic reference counting to arbitrate between active request processing and garbage collection.
-// This structure allows the registry to determine if a flow is currently in use without requiring exclusive locks.
+// It uses a mutex-protected reference counter to arbitrate between active request processing and garbage collection.
+// This structure allows the registry to safely determine if a flow is currently in use or eligible for deletion.
 type flowState struct {
 	key types.FlowKey
 
-	// leaseCount is an atomic reference counter for all concurrent, in-flight connections.
-	// - lease > 0: Active. The flow is pinned and cannot be garbage collected.
-	// - lease == 0: Idle. The flow is eligible for garbage collection if the timeout is exceeded.
-	leaseCount atomic.Int64
+	// mu protects the lifecycle fields (leaseCount, becameIdleAt, closing).
+	// We use a mutex instead of independent atomics to ensure that state transitions (e.g., Active -> Idle) are atomic
+	// and consistent.
+	mu sync.Mutex
 
-	// becameIdleAt tracks the timestamp at which the lease count last dropped to zero.
-	// A nil value indicates the flow is currently active or has not yet been idle.
-	// This field is modified atomically.
-	becameIdleAt atomic.Pointer[time.Time]
+	// leaseCount tracks the number of concurrent, in-flight connections using this flow.
+	// - count > 0: Active. The flow is pinned and cannot be garbage collected.
+	// - count == 0: Idle. The flow is eligible for garbage collection if the timeout is exceeded.
+	leaseCount int
+
+	// becameIdleAt tracks the timestamp when leaseCount last dropped to zero.
+	// A zero value (time.Time{}) indicates the flow is currently Active.
+	becameIdleAt time.Time
+
+	// markedForDeletion indicates that the Garbage Collector has selected this flow for deletion.
+	// If true, incoming requests must back off and allow the flow to be cleaned up.
+	markedForDeletion bool
 
 	// initialized ensures that the heavy-weight infrastructure provisioning (creating queues on shards) happens exactly
 	// once per flowState instance.
@@ -227,19 +235,24 @@ func (fr *FlowRegistry) pinActiveFlow(key types.FlowKey) *flowState {
 		}
 		state := val.(*flowState)
 
-		// Increment lease.
-		state.leaseCount.Add(1)
+		state.mu.Lock()
+		if state.markedForDeletion {
+			// The GC has marked this flow for deletion.
+			// We must back off and let it die. We will retry and create a fresh one.
+			state.mu.Unlock()
+			continue
+		}
+		state.leaseCount++
+		state.becameIdleAt = time.Time{} // Mark as Active
+		state.mu.Unlock()
 
 		// Did the GC delete this object while we were acquiring it?
 		currentVal, ok := fr.flowStates.Load(key)
 		if !ok || currentVal != state {
 			// We acquired a "stale" object. Back off and retry.
-			state.leaseCount.Add(-1)
+			fr.releaseFlow(state)
 			continue
 		}
-
-		// Success. Mark as active (not idle).
-		state.becameIdleAt.Store(nil)
 		return state
 	}
 }
@@ -247,9 +260,11 @@ func (fr *FlowRegistry) pinActiveFlow(key types.FlowKey) *flowState {
 // releaseFlow decrements the lease count for a flow.
 // If the lease count reaches zero, the flow is marked as idle with the current timestamp.
 func (fr *FlowRegistry) releaseFlow(state *flowState) {
-	if state.leaseCount.Add(-1) == 0 {
-		now := fr.clock.Now()
-		state.becameIdleAt.Store(&now)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.leaseCount--
+	if state.leaseCount == 0 {
+		state.becameIdleAt = fr.clock.Now()
 	}
 }
 
@@ -378,23 +393,26 @@ func (fr *FlowRegistry) gcFlows() {
 	var flowsToClean []types.FlowKey
 	fr.flowStates.Range(func(key, value interface{}) bool {
 		state := value.(*flowState)
+		state.mu.Lock()
 
-		// 1. Check Idle Timeout.
-		idleTime := state.becameIdleAt.Load()
-		if idleTime == nil {
-			return true // Active (nil pointer indicates activity).
-		}
-		if fr.clock.Since(*idleTime) < fr.config.FlowGCTimeout {
-			return true // Not yet expired.
+		// 1. Check Lease.
+		if state.leaseCount > 0 {
+			state.mu.Unlock()
+			return true
 		}
 
-		// 2. Check Lease.
-		// Re-verify the lease count to ensure the flow wasn't resurrected concurrently.
-		if state.leaseCount.Load() > 0 {
-			return true // Active.
+		// 2. Check Idle Timeout.
+		if state.becameIdleAt.IsZero() || fr.clock.Since(state.becameIdleAt) < fr.config.FlowGCTimeout {
+			state.mu.Unlock()
+			return true // Not yet expired or active.
 		}
 
-		// 3. Logical Delete.
+		// 3. Mark for Deletion.
+		state.markedForDeletion = true
+		idleTime := state.becameIdleAt // Captured for logging
+		state.mu.Unlock()
+
+		// 4. Logical Delete.
 		// Remove from the map. Concurrent WithConnection calls will now create a fresh instance.
 		fr.flowStates.Delete(key)
 		flowsToClean = append(flowsToClean, key.(types.FlowKey))
@@ -402,7 +420,7 @@ func (fr *FlowRegistry) gcFlows() {
 		return true
 	})
 
-	// 4. Physical Cleanup.
+	// 5. Physical Cleanup.
 	// Performed outside the map iteration to avoid blocking or complex lock interactions.
 	if len(flowsToClean) > 0 {
 		fr.cleanupFlowResources(flowsToClean)
@@ -411,10 +429,13 @@ func (fr *FlowRegistry) gcFlows() {
 
 // cleanupFlowResources removes queue resources from the shards for the specified flows.
 func (fr *FlowRegistry) cleanupFlowResources(keys []types.FlowKey) {
-	fr.mu.RLock()
-	defer fr.mu.RUnlock()
+	fr.mu.Lock() // Exclusive lock to prevent race with ensureFlowInfrastructure.
+	defer fr.mu.Unlock()
 
 	for _, key := range keys {
+		if _, exists := fr.flowStates.Load(key); exists {
+			continue // 'Zombie' flow
+		}
 		for _, shard := range fr.allShards {
 			shard.deleteFlow(key)
 		}

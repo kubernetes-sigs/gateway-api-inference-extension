@@ -375,10 +375,15 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 
 		// Force the idle timestamp to be old.
 		oldTime := h.fakeClock.Now().Add(-h.config.FlowGCTimeout * 2)
-		state.becameIdleAt.Store(&oldTime)
+
+		state.mu.Lock()
+		state.becameIdleAt = oldTime
 
 		// ... BUT it has an active lease (simulating a request arriving just now).
-		state.leaseCount.Store(1)
+		// Note: In the real code, these two updates happen atomically, but we force this
+		// state to verify the GC's safety priority (Lease > Time).
+		state.leaseCount = 1
+		state.mu.Unlock()
 
 		// Trigger GC.
 		h.fr.executeGCCycle()
