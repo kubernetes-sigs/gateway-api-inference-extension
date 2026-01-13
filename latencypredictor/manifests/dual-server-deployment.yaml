@@ -25,7 +25,8 @@ kind: ConfigMap
 metadata:
   name: prediction-server-config
 data:
-  MODEL_SYNC_INTERVAL_SEC: "10"  # Check for model updates every 10 seconds
+  MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 5 seconds
+  LATENCY_MODEL_TYPE: "xgboost"
   PREDICT_HOST: "0.0.0.0"
   PREDICT_PORT: "8001"
   TRAINING_SERVER_URL: "http://training-service:8000"
@@ -37,7 +38,6 @@ data:
   LOCAL_TPOT_TREELITE_PATH: "/local_models/tpot_treelite.so"
   LOCAL_TTFT_CONFORMAL_PATH: "/local_models/ttft_conformal.json"
   LOCAL_TPOT_CONFORMAL_PATH: "/local_models/tpot_conformal.json"
-  LATENCY_MODEL_TYPE: "xgboost"
   USE_TREELITE: "true"  # Enable TreeLite for faster inference
   HTTP_TIMEOUT: "30"
 

@@ -19,8 +19,6 @@ RUN pip install --no-cache-dir \
     httpx \
     aiohttp \
     numpy \
-    pandas \
-    scikit-learn \
     xgboost \
     lightgbm
 
