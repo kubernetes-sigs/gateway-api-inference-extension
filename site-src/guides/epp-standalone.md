@@ -85,21 +85,19 @@ Install the curl pod as follows:
     apiVersion: v1
     kind: Pod
     metadata:
-    annotations:
-    labels:
-    app: curl
-    name: curl
+      name: curl
+      labels:
+        app: curl
     spec:
-    containers:
-    - command:
-        - tail
-        - -f
-        - /dev/null
-          image: curlimages/curl:7.83.1
-          imagePullPolicy: IfNotPresent
-          name: curl
-          restartPolicy: Never
-          schedulerName: default-scheduler
+      containers:
+      - name: curl
+        image: curlimages/curl:7.83.1
+        imagePullPolicy: IfNotPresent
+        command:
+          - tail
+          - -f
+          - /dev/null
+      restartPolicy: Never
     EOF
    ```
 Send an inference request via
