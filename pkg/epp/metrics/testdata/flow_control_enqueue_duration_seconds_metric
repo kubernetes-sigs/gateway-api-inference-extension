@@ -1,0 +1,142 @@
+# HELP inference_extension_flow_control_enqueue_duration_seconds_count [ALPHA] Distribution of the time taken for each enqueue cycle in the EPP flow control layer.
+# TYPE inference_extension_flow_control_enqueue_duration_seconds_count histogram
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="100"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="Dispatched", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="100"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="Dispatched", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="100"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="250"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="500"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedCapacity", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="100"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedCapacity", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="5"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="10"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="25"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="50"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="100"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="RejectedOther", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="100"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="250"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="500"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="RejectedOther", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="10"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="25"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="50"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="100"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedTTL", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="100"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="250"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="500"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedTTL", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="25"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="50"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="100"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedContextCancelled", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="5"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="10"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="25"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="50"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="100"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedContextCancelled", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="50"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="100"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="EvictedOther", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="25"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="50"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="100"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="EvictedOther", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="100"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="250"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="500"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="1", outcome="NotYetFinalized", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="5"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="10"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="25"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="50"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="100"} 0
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="250"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="500"} 1
+inference_extension_flow_control_enqueue_duration_seconds_bucket{priority="2", outcome="NotYetFinalized", le="+Inf"} 1
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="1", outcome="Dispatched"} 200
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="2", outcome="Dispatched"} 75
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="1", outcome="RejectedCapacity"} 1500
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="2", outcome="RejectedCapacity"} 200
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="1", outcome="RejectedOther"} 3
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="2", outcome="RejectedOther"} 800
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="1", outcome="EvictedTTL"} 8
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="2", outcome="EvictedTTL"} 1500
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="1", outcome="EvictedContextCancelled"} 15
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="2", outcome="EvictedContextCancelled"} 3
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="1", outcome="EvictedOther"} 30
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="2", outcome="EvictedOther"} 15
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="1", outcome="NotYetFinalized"} 800
+inference_extension_flow_control_enqueue_duration_seconds_sum{priority="2", outcome="NotYetFinalized"} 150
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="1", outcome="Dispatched"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="2", outcome="Dispatched"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="1", outcome="RejectedCapacity"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="2", outcome="RejectedCapacity"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="1", outcome="RejectedOther"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="2", outcome="RejectedOther"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="1", outcome="EvictedTTL"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="2", outcome="EvictedTTL"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="1", outcome="EvictedContextCancelled"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="2", outcome="EvictedContextCancelled"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="1", outcome="EvictedOther"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="2", outcome="EvictedOther"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="1", outcome="NotYetFinalized"} 1
+inference_extension_flow_control_enqueue_duration_seconds_count{priority="2", outcome="NotYetFinalized"} 1
