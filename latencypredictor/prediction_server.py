@@ -412,7 +412,9 @@ class ModelSyncer:
             if self._download_model_if_newer(name, path):
                 updated = True
                 # Track if core models changed (triggers conformal reload)
-                if name in ["ttft", "tpot"]:
+                # CRITICAL: Also trigger on TreeLite model changes since those are the actual
+                # models being used for prediction (joblib models may not be downloaded in TreeLite mode)
+                if name in ["ttft", "tpot", "ttft_treelite", "tpot_treelite"]:
                     models_changed = True
 
         # CRITICAL FIX: Force conformal file reload when models change
@@ -706,6 +708,13 @@ class LightweightPredictor:
                 elif new_tpot_predictor is None and old_tpot_id:
                     logging.debug(f"TPOT predictor object REUSED (new load failed): {old_tpot_id}")
 
+            # CRITICAL FIX: Never reuse old conformal predictors
+            # Conformal calibration MUST match the TreeLite models
+            # If new conformal failed to load, set to None (don't use stale calibration)
+            # This prevents the 70% coverage bug where old conformal is used with new models
+            final_ttft_conformal = new_ttft_conformal  # None if not loaded (correct behavior)
+            final_tpot_conformal = new_tpot_conformal  # None if not loaded (correct behavior)
+
             new_bundle = ModelBundle(
                 ttft_model=new_ttft or self.models.ttft_model,  # Keep old if load failed
                 tpot_model=new_tpot or self.models.tpot_model,
@@ -713,8 +722,8 @@ class LightweightPredictor:
                 tpot_scaler=new_tpot_scaler or self.models.tpot_scaler,
                 ttft_predictor=final_ttft_predictor,
                 tpot_predictor=final_tpot_predictor,
-                ttft_conformal=new_ttft_conformal or self.models.ttft_conformal,
-                tpot_conformal=new_tpot_conformal or self.models.tpot_conformal,
+                ttft_conformal=final_ttft_conformal,  # Never fallback to old conformal
+                tpot_conformal=final_tpot_conformal,  # Never fallback to old conformal
                 model_type=self.model_type.value,
                 use_treelite=self.use_treelite,
                 quantile=self.quantile,

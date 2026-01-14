@@ -22,6 +22,11 @@ data:
   LATENCY_TPOT_TREELITE_VERSIONED_DIR: "/models/treelite/tpot"
   LATENCY_MODEL_TYPE: "xgboost"
   USE_TREELITE: "true"  # Enable TreeLite + conformal prediction mode
+
+  # Bundle Registry Configuration (always enabled for atomic model distribution)
+  LATENCY_BUNDLE_DIR: "/models/bundles"
+  LATENCY_BUNDLE_CURRENT_SYMLINK: "/models/current"
+  LATENCY_MAX_BUNDLES_TO_KEEP: "5"
   
 
 ---

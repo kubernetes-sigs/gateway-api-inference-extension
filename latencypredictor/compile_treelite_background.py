@@ -37,6 +37,12 @@ def compile_model(model_path: str, output_path: str, model_name: str, versioned_
         model_name: Name for logging (e.g., "TTFT" or "TPOT")
         versioned_path: Optional versioned path for runtime updates
     """
+    import json
+    from datetime import datetime, timezone
+
+    # Determine status file path (same directory as output, with model name)
+    status_file = os.path.join(os.path.dirname(output_path), f"{model_name.lower()}_compilation_status.json")
+
     try:
         logging.info(f"Background compilation started for {model_name}")
         logging.info(f"Loading model from {model_path}")
@@ -77,8 +83,33 @@ def compile_model(model_path: str, output_path: str, model_name: str, versioned_
             shutil.copy2(output_path, versioned_path)
             logging.info(f"✓ {model_name} TreeLite model also saved to versioned path: {versioned_path}")
 
+        # CRITICAL: Update compilation status to "completed" so training server knows compilation succeeded
+        # This allows the polling loop to detect completion and add .so files to bundle manifest
+        with open(status_file, 'w') as f:
+            json.dump({
+                "status": "completed",
+                "model_name": model_name.lower(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "output_path": output_path,
+                "file_size": os.path.getsize(output_path)
+            }, f, indent=2)
+        logging.info(f"✓ Updated compilation status to 'completed' in {status_file}")
+
     except Exception as e:
         logging.error(f"Error compiling {model_name} TreeLite model: {e}", exc_info=True)
+
+        # Update status to "failed"
+        try:
+            with open(status_file, 'w') as f:
+                json.dump({
+                    "status": "failed",
+                    "model_name": model_name.lower(),
+                    "failed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": str(e)
+                }, f, indent=2)
+        except:
+            pass  # Don't fail if we can't write status file
+
         sys.exit(1)
 
 

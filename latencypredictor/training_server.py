@@ -77,6 +77,14 @@ except ImportError:
     CONFORMAL_AVAILABLE = False
     logging.warning("ConformalQuantilePredictor not available. Check conformal_quantile.py exists.")
 
+try:
+    from model_bundle import ModelBundle, BundleRegistry, BundleState
+    from bundle_integration import BundleModelManager
+    BUNDLE_REGISTRY_AVAILABLE = True
+except ImportError:
+    BUNDLE_REGISTRY_AVAILABLE = False
+    logging.warning("ModelBundle not available. Check model_bundle.py exists.")
+
 
 class ModelType(str, Enum):
     BAYESIAN_RIDGE = "bayesian_ridge"
@@ -142,6 +150,11 @@ class Settings:
     # TreeLite mode: if true, use standard regression + conformal prediction for quantiles
     # if false, use native quantile regression (more accurate but slower)
     USE_TREELITE: bool = os.getenv("USE_TREELITE", "true").lower() == "true"
+
+    # Bundle registry configuration (always enabled - modern model distribution)
+    BUNDLE_DIR: str = os.getenv("LATENCY_BUNDLE_DIR", "/tmp/models/bundles")
+    BUNDLE_CURRENT_SYMLINK: str = os.getenv("LATENCY_BUNDLE_CURRENT_SYMLINK", "/tmp/models/current")
+    MAX_BUNDLES_TO_KEEP: int = int(os.getenv("LATENCY_MAX_BUNDLES_TO_KEEP", "5"))
 
 settings = Settings()
 
@@ -332,6 +345,41 @@ class LatencyPredictor:
         self.last_retrain_time = None
         self._shutdown_event = threading.Event()
         self._training_thread: threading.Thread = None
+
+        # Bundle registry (always enabled - modern model distribution)
+        self.bundle_registry = None
+        self.current_bundle = None
+        self.bundle_manager = None
+        if BUNDLE_REGISTRY_AVAILABLE:
+            try:
+                # Initialize bundle manager with legacy path compatibility
+                legacy_paths = {
+                    'ttft_model': settings.TTFT_MODEL_PATH,
+                    'tpot_model': settings.TPOT_MODEL_PATH,
+                    'ttft_scaler': settings.TTFT_SCALER_PATH,
+                    'tpot_scaler': settings.TPOT_SCALER_PATH,
+                    'ttft_treelite': settings.TTFT_TREELITE_PATH,
+                    'tpot_treelite': settings.TPOT_TREELITE_PATH,
+                    'ttft_conformal': settings.TTFT_CONFORMAL_PATH,
+                    'tpot_conformal': settings.TPOT_CONFORMAL_PATH,
+                }
+
+                self.bundle_manager = BundleModelManager(
+                    bundle_dir=settings.BUNDLE_DIR,
+                    current_symlink=settings.BUNDLE_CURRENT_SYMLINK,
+                    max_bundles=settings.MAX_BUNDLES_TO_KEEP,
+                    use_bundles=True,
+                    legacy_paths=legacy_paths
+                )
+
+                # Keep bundle_registry for backward compatibility
+                self.bundle_registry = self.bundle_manager.registry
+                logging.info(f"Bundle manager initialized at {settings.BUNDLE_DIR}")
+            except Exception as e:
+                logging.error(f"Failed to initialize bundle manager: {e}", exc_info=True)
+                logging.warning("Falling back to legacy model distribution")
+        else:
+            logging.warning("model_bundle.py not available - falling back to legacy model distribution")
         
     def _get_prefix_bucket(self, prefix_score: float) -> int:
         """Map prefix cache score to bucket index."""
@@ -1050,7 +1098,7 @@ class LatencyPredictor:
                 if self.is_ready:
                     self.last_retrain_time = datetime.now(timezone.utc)
                     try:
-                        self._save_models_unlocked()
+                        self._save_models_with_bundle()
                     except Exception:
                         logging.error("Error saving models after training.", exc_info=True)
         except Exception as e:
@@ -1350,6 +1398,289 @@ class LatencyPredictor:
             elif model_name == "TPOT":
                 self.tpot_compilation_in_progress = False
             logging.error(f"Failed to launch background TreeLite compilation for {model_name}: {e}", exc_info=True)
+
+    def _save_models_with_bundle(self):
+        """
+        Save models using bundle registry (new architectural approach).
+        Creates immutable versioned bundles with atomic operations and TreeLite compilation tracking.
+
+        Falls back to legacy _save_models_unlocked() if bundle registry not enabled.
+        """
+        if not self.bundle_manager:
+            # Bundle manager not enabled - use legacy approach
+            return self._save_models_unlocked()
+
+        try:
+            # Calculate training and test sample counts
+            training_samples = {
+                "ttft": sum(len(bucket) for bucket in self.ttft_data_buckets.values()),
+                "tpot": sum(len(bucket) for bucket in self.tpot_data_buckets.values())
+            }
+            test_samples = {
+                "ttft": len(self.ttft_test_data),
+                "tpot": len(self.tpot_test_data)
+            }
+
+            # Start a new training session - creates bundle in TRAINING state
+            bundle = self.bundle_manager.start_training(
+                model_name="dual_ttft_tpot",
+                model_type=self.model_type.value,
+                quantile=self.quantile,
+                use_treelite=settings.USE_TREELITE
+            )
+
+            logging.info(f"Started bundle {bundle.manifest.bundle_id[:8]} (state: {bundle.manifest.state.value})")
+
+            # Save models to temp directory first, then add to bundle atomically
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # === TTFT MODEL ===
+                if self.ttft_model:
+                    temp_ttft_path = os.path.join(temp_dir, "ttft.joblib")
+                    joblib.dump(self.ttft_model, temp_ttft_path)
+                    self.bundle_manager.save_model_file(bundle, "ttft_model", temp_ttft_path)
+                    logging.debug(f"Bundle {bundle.manifest.bundle_id[:8]}: Added TTFT model")
+
+                    # TTFT model-specific exports
+                    if self.model_type == ModelType.XGBOOST:
+                        # Save XGBoost trees as JSON
+                        booster = self.ttft_model.get_booster()
+                        raw_trees = booster.get_dump(dump_format="json")
+                        trees = [json.loads(t) for t in raw_trees]
+                        temp_ttft_trees_path = os.path.join(temp_dir, "ttft_trees.json")
+                        with open(temp_ttft_trees_path, 'w') as f:
+                            json.dump(trees, f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, "ttft_trees", temp_ttft_trees_path)
+
+                    elif self.model_type == ModelType.LIGHTGBM:
+                        # Save LightGBM model as text and feature importances
+                        temp_ttft_txt_path = os.path.join(temp_dir, "ttft_lgb.txt")
+                        self.ttft_model.booster_.save_model(temp_ttft_txt_path)
+                        self.bundle_manager.save_model_file(bundle, "ttft_lgb", temp_ttft_txt_path)
+
+                        # Feature importances
+                        feature_names = ['kv_cache_percentage', 'input_token_length',
+                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score',
+                                       'effective_input_tokens', 'prefill_score_bucket']
+                        importances = {name: float(imp) for name, imp in zip(feature_names, self.ttft_model.feature_importances_)}
+                        temp_ttft_imp_path = os.path.join(temp_dir, "ttft_importances.json")
+                        with open(temp_ttft_imp_path, 'w') as f:
+                            json.dump(importances, f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, "ttft_importances", temp_ttft_imp_path)
+
+                # === TPOT MODEL ===
+                if self.tpot_model:
+                    temp_tpot_path = os.path.join(temp_dir, "tpot.joblib")
+                    joblib.dump(self.tpot_model, temp_tpot_path)
+                    self.bundle_manager.save_model_file(bundle, "tpot_model", temp_tpot_path)
+                    logging.debug(f"Bundle {bundle.manifest.bundle_id[:8]}: Added TPOT model")
+
+                    # TPOT model-specific exports
+                    if self.model_type == ModelType.XGBOOST:
+                        # Save XGBoost trees as JSON
+                        booster = self.tpot_model.get_booster()
+                        raw_trees = booster.get_dump(dump_format="json")
+                        trees = [json.loads(t) for t in raw_trees]
+                        temp_tpot_trees_path = os.path.join(temp_dir, "tpot_trees.json")
+                        with open(temp_tpot_trees_path, 'w') as f:
+                            json.dump(trees, f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, "tpot_trees", temp_tpot_trees_path)
+
+                    elif self.model_type == ModelType.LIGHTGBM:
+                        # Save LightGBM model as text and feature importances
+                        temp_tpot_txt_path = os.path.join(temp_dir, "tpot_lgb.txt")
+                        self.tpot_model.booster_.save_model(temp_tpot_txt_path)
+                        self.bundle_manager.save_model_file(bundle, "tpot_lgb", temp_tpot_txt_path)
+
+                        # Feature importances
+                        feature_names = ['kv_cache_percentage', 'input_token_length',
+                                       'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                        importances = {name: float(imp) for name, imp in zip(feature_names, self.tpot_model.feature_importances_)}
+                        temp_tpot_imp_path = os.path.join(temp_dir, "tpot_importances.json")
+                        with open(temp_tpot_imp_path, 'w') as f:
+                            json.dump(importances, f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, "tpot_importances", temp_tpot_imp_path)
+
+                # === SCALERS (Bayesian Ridge only) ===
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    if self.ttft_scaler:
+                        temp_ttft_scaler_path = os.path.join(temp_dir, "ttft_scaler.joblib")
+                        joblib.dump(self.ttft_scaler, temp_ttft_scaler_path)
+                        self.bundle_manager.save_model_file(bundle, "ttft_scaler", temp_ttft_scaler_path)
+
+                    if self.tpot_scaler:
+                        temp_tpot_scaler_path = os.path.join(temp_dir, "tpot_scaler.joblib")
+                        joblib.dump(self.tpot_scaler, temp_tpot_scaler_path)
+                        self.bundle_manager.save_model_file(bundle, "tpot_scaler", temp_tpot_scaler_path)
+
+                # === CONFORMAL CALIBRATION (TreeLite mode only) ===
+                if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
+                    if self.ttft_conformal:
+                        temp_ttft_conf_path = os.path.join(temp_dir, "ttft_conformal.json")
+                        # Use get_state() + manual JSON save (no .save() method exists)
+                        with open(temp_ttft_conf_path, 'w') as f:
+                            json.dump(self.ttft_conformal.get_state(), f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, "ttft_conformal", temp_ttft_conf_path)
+
+                    if self.tpot_conformal:
+                        temp_tpot_conf_path = os.path.join(temp_dir, "tpot_conformal.json")
+                        # Use get_state() + manual JSON save (no .save() method exists)
+                        with open(temp_tpot_conf_path, 'w') as f:
+                            json.dump(self.tpot_conformal.get_state(), f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, "tpot_conformal", temp_tpot_conf_path)
+
+            # === TREELITE COMPILATION ===
+            # Note: XGBoost uses background compilation, LightGBM uses synchronous
+            if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
+                if self.model_type == ModelType.XGBOOST:
+                    # XGBoost: Background compilation
+                    bundle.manifest.transition_state(BundleState.COMPILING, "Starting background TreeLite compilation for XGBoost")
+                    bundle.save_manifest()
+
+                    # Get model paths from bundle
+                    ttft_model_path = str(bundle.path / "ttft_model")
+                    tpot_model_path = str(bundle.path / "tpot_model")
+
+                    # Launch background compilations
+                    with self.compilation_lock:
+                        # TTFT compilation
+                        if self.ttft_model and not self.ttft_compilation_in_progress:
+                            ttft_treelite_path = str(bundle.path / "ttft_treelite.so")
+                            script_path = os.path.join(os.path.dirname(__file__), 'compile_treelite_background.py')
+                            cmd_args = [sys.executable, script_path, ttft_model_path, ttft_treelite_path, "TTFT"]
+
+                            process = subprocess.Popen(
+                                cmd_args,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True
+                            )
+
+                            self.bundle_manager.start_compilation(bundle, "ttft", process)
+                            logging.info(f"Launched background TreeLite compilation for TTFT (PID: {process.pid})")
+
+                        # TPOT compilation
+                        if self.tpot_model and not self.tpot_compilation_in_progress:
+                            tpot_treelite_path = str(bundle.path / "tpot_treelite.so")
+                            script_path = os.path.join(os.path.dirname(__file__), 'compile_treelite_background.py')
+                            cmd_args = [sys.executable, script_path, tpot_model_path, tpot_treelite_path, "TPOT"]
+
+                            process = subprocess.Popen(
+                                cmd_args,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True
+                            )
+
+                            self.bundle_manager.start_compilation(bundle, "tpot", process)
+                            logging.info(f"Launched background TreeLite compilation for TPOT (PID: {process.pid})")
+
+                    # CRITICAL: Wait for background compilation to complete before publishing
+                    # Otherwise bundles get published without .so files, causing prediction servers
+                    # to use mean regression models instead of TreeLite + conformal
+                    logging.info("Waiting for background TreeLite compilation to complete...")
+                    max_wait_seconds = 30  # XGBoost compilation should finish within 30 seconds
+                    poll_interval = 0.5  # Check every 500ms
+                    elapsed = 0
+
+                    while elapsed < max_wait_seconds:
+                        import time
+                        time.sleep(poll_interval)
+                        elapsed += poll_interval
+
+                        # Check compilation status for both models
+                        ttft_status = self.bundle_manager.check_compilation_status(bundle, "ttft")
+                        tpot_status = self.bundle_manager.check_compilation_status(bundle, "tpot")
+
+                        # Check if both completed successfully
+                        if ttft_status.value == "completed" and tpot_status.value == "completed":
+                            logging.info(f"✓ XGBoost TreeLite compilation completed after {elapsed:.1f}s")
+
+                            # Add .so files to bundle manifest (mark_compilation_complete does this)
+                            ttft_treelite_path = str(bundle.path / "ttft_treelite.so")
+                            tpot_treelite_path = str(bundle.path / "tpot_treelite.so")
+                            self.bundle_manager.mark_compilation_complete(bundle, "ttft", ttft_treelite_path, True)
+                            self.bundle_manager.mark_compilation_complete(bundle, "tpot", tpot_treelite_path, True)
+
+                            bundle.manifest.transition_state(BundleState.READY, "All files including TreeLite compiled and verified")
+                            break
+
+                        # Check if any failed
+                        if ttft_status.value == "failed" or tpot_status.value == "failed":
+                            logging.warning(f"TreeLite compilation failed: TTFT={ttft_status.value}, TPOT={tpot_status.value}")
+                            bundle.manifest.transition_state(BundleState.READY, f"Core files ready, TreeLite compilation failed")
+                            break
+                    else:
+                        # Timeout - compilation taking too long
+                        logging.warning(f"TreeLite compilation timeout after {max_wait_seconds}s (TTFT={ttft_status.value}, TPOT={tpot_status.value})")
+                        bundle.manifest.transition_state(BundleState.READY, f"Core files ready, TreeLite compilation timeout")
+
+                elif self.model_type == ModelType.LIGHTGBM:
+                    # LightGBM: Synchronous compilation (fast enough)
+                    bundle.manifest.transition_state(BundleState.COMPILING, "Starting TreeLite compilation for LightGBM")
+                    bundle.save_manifest()
+
+                    try:
+                        # TTFT LightGBM compilation
+                        if self.ttft_model:
+                            tl_model = treelite.frontend.from_lightgbm(self.ttft_model.booster_)
+                            ttft_treelite_path = str(bundle.path / "ttft_treelite.so")
+                            tl2cgen.export_lib(
+                                model=tl_model,
+                                toolchain='gcc',
+                                libpath=ttft_treelite_path,
+                                params={'parallel_comp': 8},
+                                verbose=False
+                            )
+                            self.bundle_manager.mark_compilation_complete(bundle, "ttft", ttft_treelite_path, True)
+                            logging.info(f"TTFT LightGBM TreeLite compilation completed")
+
+                        # TPOT LightGBM compilation
+                        if self.tpot_model:
+                            tl_model = treelite.frontend.from_lightgbm(self.tpot_model.booster_)
+                            tpot_treelite_path = str(bundle.path / "tpot_treelite.so")
+                            tl2cgen.export_lib(
+                                model=tl_model,
+                                toolchain='gcc',
+                                libpath=tpot_treelite_path,
+                                params={'parallel_comp': 8},
+                                verbose=False
+                            )
+                            self.bundle_manager.mark_compilation_complete(bundle, "tpot", tpot_treelite_path, True)
+                            logging.info(f"TPOT LightGBM TreeLite compilation completed")
+
+                        bundle.manifest.transition_state(BundleState.READY, "All files including TreeLite compiled and verified")
+                    except Exception as e:
+                        logging.error(f"TreeLite compilation failed: {e}", exc_info=True)
+                        bundle.manifest.transition_state(BundleState.READY, f"Core files ready, TreeLite compilation failed: {str(e)}")
+            else:
+                # No TreeLite - mark as READY immediately
+                bundle.manifest.transition_state(BundleState.READY, "All files written and verified (no TreeLite)")
+
+            bundle.save_manifest()
+
+            # Finalize and publish bundle atomically
+            success = self.bundle_manager.finalize_bundle(bundle, training_samples, test_samples)
+            if success:
+                logging.info(f"Bundle {bundle.manifest.bundle_id[:8]} published successfully at {settings.BUNDLE_CURRENT_SYMLINK}")
+                self.current_bundle = bundle
+
+                # CRITICAL: Update model hashes so prediction servers can detect changes
+                # Without this, /model/{name}/hash will return "initial" forever
+                # and prediction servers will never download the new models
+                if self.ttft_model:
+                    self.ttft_model_hash = self._compute_model_hash(self.ttft_model)
+                    logging.debug(f"Updated TTFT model hash: {self.ttft_model_hash[:8]}...")
+                if self.tpot_model:
+                    self.tpot_model_hash = self._compute_model_hash(self.tpot_model)
+                    logging.debug(f"Updated TPOT model hash: {self.tpot_model_hash[:8]}...")
+            else:
+                logging.error(f"Failed to publish bundle {bundle.manifest.bundle_id[:8]}")
+                raise Exception("Bundle publication failed")
+
+        except Exception as e:
+            logging.error(f"Error saving models with bundle registry: {e}", exc_info=True)
+            logging.warning("Falling back to legacy model save")
+            return self._save_models_unlocked()
 
     # Update the _save_models_unlocked method to handle LightGBM model exports
     def _save_models_unlocked(self):
@@ -1801,7 +2132,7 @@ class LatencyPredictor:
                     else:
                         self.ttft_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
-                    self._save_models_unlocked()
+                    self._save_models_with_bundle()
 
                 if os.path.exists(settings.TPOT_MODEL_PATH):
                     self.tpot_model = joblib.load(settings.TPOT_MODEL_PATH)
@@ -1814,7 +2145,7 @@ class LatencyPredictor:
                     else:
                         self.tpot_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
-                    self._save_models_unlocked()
+                    self._save_models_with_bundle()
 
                 # Initialize empty conformal predictors for TreeLite mode if not already present
                 if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
@@ -2392,7 +2723,20 @@ async def get_model_hash(model_name: str):
 @app.get("/model/{model_name}/info")
 async def model_info(model_name: str):
     """Get model file information including readiness status and last modified time."""
-    model_paths = {
+    # Map model names to bundle file names (used when bundle registry is enabled)
+    bundle_file_mapping = {
+        "ttft": "ttft_model",
+        "tpot": "tpot_model",
+        "ttft_scaler": "ttft_scaler",
+        "tpot_scaler": "tpot_scaler",
+        "ttft_treelite": "ttft_treelite",
+        "tpot_treelite": "tpot_treelite",
+        "ttft_conformal": "ttft_conformal",  # Conformal files ARE in bundles now!
+        "tpot_conformal": "tpot_conformal",
+    }
+
+    # Legacy model paths (used when bundle registry is disabled or as fallback)
+    legacy_paths = {
         "ttft": settings.TTFT_MODEL_PATH,
         "tpot": settings.TPOT_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
@@ -2403,11 +2747,29 @@ async def model_info(model_name: str):
         "tpot_conformal": settings.TPOT_CONFORMAL_PATH,
     }
 
-    if model_name not in model_paths:
+    if model_name not in legacy_paths:
         # This is a real 404 - invalid endpoint/unknown model name
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
 
-    model_path = model_paths[model_name]
+    # Determine actual file path based on bundle registry mode
+    model_path = None
+
+    if predictor.bundle_manager and predictor.bundle_manager.use_bundles:
+        # Bundle mode: check active bundle
+        bundle_file_name = bundle_file_mapping.get(model_name)
+
+        if bundle_file_name:
+            # Try to get file from active bundle
+            active_bundle = predictor.bundle_manager.get_active_bundle()
+            if active_bundle and bundle_file_name in active_bundle.manifest.files:
+                model_path = str(active_bundle.path / bundle_file_name)
+
+        # Fall back to legacy path if not in bundle (e.g., conformal files)
+        if not model_path:
+            model_path = legacy_paths[model_name]
+    else:
+        # Legacy mode: use traditional paths
+        model_path = legacy_paths[model_name]
 
     # Check if file exists
     if not os.path.exists(model_path):
@@ -2443,7 +2805,20 @@ async def model_info(model_name: str):
 @app.get("/model/{model_name}/download")
 async def download_model(model_name: str):
     """Download a model file."""
-    model_paths = {
+    # Map model names to bundle file names (used when bundle registry is enabled)
+    bundle_file_mapping = {
+        "ttft": "ttft_model",
+        "tpot": "tpot_model",
+        "ttft_scaler": "ttft_scaler",
+        "tpot_scaler": "tpot_scaler",
+        "ttft_treelite": "ttft_treelite",
+        "tpot_treelite": "tpot_treelite",
+        "ttft_conformal": "ttft_conformal",  # Conformal files ARE in bundles now!
+        "tpot_conformal": "tpot_conformal",
+    }
+
+    # Legacy model paths (used when bundle registry is disabled or as fallback)
+    legacy_paths = {
         "ttft": settings.TTFT_MODEL_PATH,
         "tpot": settings.TPOT_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
@@ -2454,10 +2829,28 @@ async def download_model(model_name: str):
         "tpot_conformal": settings.TPOT_CONFORMAL_PATH,
     }
 
-    if model_name not in model_paths:
+    if model_name not in legacy_paths:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
 
-    model_path = model_paths[model_name]
+    # Determine actual file path based on bundle registry mode
+    model_path = None
+
+    if predictor.bundle_manager and predictor.bundle_manager.use_bundles:
+        # Bundle mode: check active bundle
+        bundle_file_name = bundle_file_mapping.get(model_name)
+
+        if bundle_file_name:
+            # Try to get file from active bundle
+            active_bundle = predictor.bundle_manager.get_active_bundle()
+            if active_bundle and bundle_file_name in active_bundle.manifest.files:
+                model_path = str(active_bundle.path / bundle_file_name)
+
+        # Fall back to legacy path if not in bundle (e.g., conformal files)
+        if not model_path:
+            model_path = legacy_paths[model_name]
+    else:
+        # Legacy mode: use traditional paths
+        model_path = legacy_paths[model_name]
 
     if not os.path.exists(model_path):
         raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
