@@ -29,6 +29,10 @@ spec:
             memory: "8Gi"
         env:
         # Point to your internal services
+        - name: LOG_LEVEL
+          value: DEBUG
+        # - name: USE_TREELITE
+        #   value: "true"
         - name: TRAINING_SERVER_URL
           value: "http://training-service:8000"
         - name: PREDICTION_SERVER_URL
@@ -95,6 +99,10 @@ spec:
             memory: "6Gi"
         env:
         # Point to your internal services
+        - name: LOG_LEVEL
+          value: DEBUG
+        # - name: USE_TREELITE
+        #   value: "true"
         - name: TRAINING_SERVER_URL
           value: "http://training-service:8000"
         - name: PREDICTION_SERVER_URL
@@ -103,9 +111,9 @@ spec:
           value: "300"  # 5 minutes
         # Each pod runs 1/parallelism of total QPS
         - name: TARGET_QPS
-          value: "300"
+          value: "190"
         - name: TARGET_QPS_LARGE_BATCH
-          value: "30"
+          value: "19"
         # Set to "true" to run training warmup before stress tests
         - name: RUN_TRAINING_WARMUP
           value: "true"

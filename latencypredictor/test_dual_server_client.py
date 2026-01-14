@@ -153,7 +153,8 @@ def test_model_download_from_training_server():
             info_r = requests.get(f"{TRAINING_URL}/model/{model_name}/info")
             assert info_r.status_code == 200
             info_data = info_r.json()
-            assert info_data["exists"] == True
+            # Check ready status instead of exists (new API)
+            assert info_data["ready"] == True, f"Model {model_name} not ready: {info_data}"
             assert info_data["size_bytes"] > 0
 
             # Test model download with retry and streaming
@@ -191,7 +192,8 @@ def test_model_download_from_training_server():
                 info_r = requests.get(f"{TRAINING_URL}/model/{model_name}/info")
                 assert info_r.status_code == 200
                 info_data = info_r.json()
-                assert info_data["exists"] == True
+                # Check ready status instead of exists (new API)
+                assert info_data["ready"] == True, f"Model {model_name} not ready: {info_data}"
                 assert info_data["size_bytes"] > 0
 
                 # Test model download with retry and streaming

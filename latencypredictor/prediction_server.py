@@ -262,12 +262,25 @@ class ModelSyncer:
             info_url = f"{settings.TRAINING_SERVER_URL}/model/{name}/info"
             r = requests.get(info_url, timeout=settings.HTTP_TIMEOUT)
             if r.status_code != 200:
-                # Debug logging for conformal files
-                if 'conformal' in name:
-                    logging.debug(f"Model {name} not available on server (status {r.status_code})")
+                # Real error (invalid endpoint, server error, etc.)
+                logging.warning(f"Failed to get info for {name}: HTTP {r.status_code}")
                 return False
 
             info = r.json()
+
+            # Check if model is ready (new ready-status API)
+            if not info.get("ready", True):  # Default True for backward compatibility
+                # Model not ready yet (e.g., TreeLite not compiled, waiting for training)
+                status = info.get("status", "unknown")
+                message = info.get("message", "Not ready")
+                if 'treelite' in name or 'conformal' in name:
+                    # Debug-level for expected unavailability
+                    logging.debug(f"Model {name} not ready: {status} - {message}")
+                else:
+                    # Warning-level for unexpected unavailability
+                    logging.warning(f"Model {name} not ready: {status} - {message}")
+                return False
+
             mtime = info.get("last_modified")
 
             # Timestamp-based check for non-core models (conformal, treelite, scalers)
@@ -514,12 +527,16 @@ class LightweightPredictor:
             .clip(upper=self.prefix_buckets - 1)
         )
 
-            # TreeLite mode: keep as int32 (categorical encoder disabled during training)
-            # Non-TreeLite mode: convert to categorical for XGBoost/LightGBM
-            if not self.use_treelite:
-                df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
-            else:
+            # Dtype handling for prefill_score_bucket:
+            # - XGBoost in TreeLite mode: int32 (TreeLite doesn't support categorical)
+            # - LightGBM (all modes): categorical (required for consistency with training)
+            # - XGBoost native quantile mode: categorical (enable_categorical=True)
+            if self.use_treelite and self.model_type == ModelType.XGBOOST:
+                # XGBoost TreeLite mode: convert to int32
                 df['prefill_score_bucket'] = df['prefill_score_bucket'].astype('int32')
+            else:
+                # All other cases: keep as categorical
+                df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
 
             # Return TTFT features with interaction
             feature_cols = [

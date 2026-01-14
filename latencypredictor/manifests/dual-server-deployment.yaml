@@ -188,22 +188,23 @@ spec:
           periodSeconds: 10
           failureThreshold: 30  # Allow up to 5 minutes for startup (30 * 10s)
           timeoutSeconds: 5
-        # Liveness probe disabled for benchmarking with 1-core CPU limit
-        # CPU throttling can prevent timely responses, causing unnecessary restarts
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8001
-          periodSeconds: 30
-          timeoutSeconds: 20
-          failureThreshold: 3
+        # Liveness probe: Only restarts if pod is truly broken (not just slow/overloaded)
+        # Disabled by default - Kubernetes will restart on actual crashes (exit code != 0)
+        # Enable only if you need to detect hung processes that stop responding entirely
+        # livenessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8001
+        #   periodSeconds: 60
+        #   timeoutSeconds: 10
+        #   failureThreshold: 6  # 6 minutes of complete unresponsiveness before restart
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8001
           periodSeconds: 10
-          failureThreshold: 5  # Increased tolerance for CPU throttling
-          timeoutSeconds: 20  # Longer timeout for CPU throttling
+          timeoutSeconds: 5  # /readyz should respond quickly
+          failureThreshold: 3  # 30 seconds to remove from load balancer
         resources:
           requests:
             cpu: "250m"

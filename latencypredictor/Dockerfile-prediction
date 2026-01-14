@@ -24,4 +24,4 @@ EXPOSE 8001
 
 # Command to run the application using uvicorn
 # Single worker with high connection limit for async concurrency
-CMD ["uvicorn", "prediction_server:app", "--host", "0.0.0.0", "--port", "8001", "--limit-concurrency", "1000"]
+CMD ["uvicorn", "prediction_server:app", "--host", "0.0.0.0", "--port", "8001"]
