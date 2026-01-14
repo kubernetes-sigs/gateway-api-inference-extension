@@ -752,7 +752,7 @@ class LightweightPredictor:
                 if not isinstance(features[f], (int, float)):
                     raise ValueError(f"Invalid type for feature {f}: expected number")
 
-            # Create raw DataFrames (without interaction)
+            # Create raw data dictionaries
             ttft_raw_data = {
                 'kv_cache_percentage': features['kv_cache_percentage'],
                 'input_token_length': features['input_token_length'],
@@ -823,7 +823,15 @@ class LightweightPredictor:
 
                 return ttft_pred, tpot_pred
 
-            elif self.model_type == ModelType.BAYESIAN_RIDGE:
+            # Non-TreeLite paths: create DataFrames with feature engineering
+            # This is needed for Bayesian Ridge, XGBoost native, and LightGBM
+            df_ttft_raw = pd.DataFrame([ttft_raw_data])
+            df_ttft = self._prepare_features_with_interaction(df_ttft_raw, "ttft")
+
+            df_tpot_raw = pd.DataFrame([tpot_raw_data])
+            df_tpot = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
+
+            if self.model_type == ModelType.BAYESIAN_RIDGE:
                 ttft_for_scale = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
                 ttft_scaled = models.ttft_scaler.transform(ttft_for_scale)
                 tpot_scaled = models.tpot_scaler.transform(df_tpot)
@@ -838,13 +846,9 @@ class LightweightPredictor:
                 return ttft_pred, tpot_pred
 
             elif self.model_type == ModelType.XGBOOST:
-                # Convert categorical columns to int if present (XGBoost needs enable_categorical or numeric dtypes)
-                df_ttft_numeric = df_ttft.copy()
-                if 'prefill_score_bucket' in df_ttft_numeric.columns:
-                    if df_ttft_numeric['prefill_score_bucket'].dtype.name == 'category':
-                        df_ttft_numeric['prefill_score_bucket'] = df_ttft_numeric['prefill_score_bucket'].astype('int32')
-
-                ttft_pred = models.ttft_model.predict(df_ttft_numeric)
+                # XGBoost handles categorical dtypes natively via enable_categorical
+                # Just pass the DataFrame as-is (dtype must match training)
+                ttft_pred = models.ttft_model.predict(df_ttft)
                 tpot_pred = models.tpot_model.predict(df_tpot)
 
                 # Note: Base XGBoost models are native quantile regression (reg:quantileerror)
@@ -1015,13 +1019,9 @@ class LightweightPredictor:
                 return ttft_pred, tpot_pred
 
             elif self.model_type == ModelType.XGBOOST:
-                # Convert categorical columns to int if present (XGBoost needs enable_categorical or numeric dtypes)
-                df_ttft_batch_numeric = df_ttft_batch.copy()
-                if 'prefill_score_bucket' in df_ttft_batch_numeric.columns:
-                    if df_ttft_batch_numeric['prefill_score_bucket'].dtype.name == 'category':
-                        df_ttft_batch_numeric['prefill_score_bucket'] = df_ttft_batch_numeric['prefill_score_bucket'].astype('int32')
-
-                ttft_pred = models.ttft_model.predict(df_ttft_batch_numeric)
+                # XGBoost handles categorical dtypes natively via enable_categorical
+                # Just pass the DataFrame as-is (dtype must match training)
+                ttft_pred = models.ttft_model.predict(df_ttft_batch)
                 tpot_pred = models.tpot_model.predict(df_tpot_batch)
 
                 # Note: Base XGBoost models are native quantile regression (reg:quantileerror)

@@ -12,6 +12,7 @@ data:
   LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
   LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
   LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
+
   LATENCY_TTFT_TREELITE_PATH: "/models/ttft_treelite.so"
   LATENCY_TPOT_TREELITE_PATH: "/models/tpot_treelite.so"
   LATENCY_TTFT_CONFORMAL_PATH: "/models/ttft_conformal.json"
@@ -21,6 +22,7 @@ data:
   LATENCY_TPOT_TREELITE_VERSIONED_DIR: "/models/treelite/tpot"
   LATENCY_MODEL_TYPE: "xgboost"
   USE_TREELITE: "true"  # Enable TreeLite + conformal prediction mode
+  
 
 ---
 apiVersion: v1
@@ -37,6 +39,7 @@ data:
   LOCAL_TPOT_MODEL_PATH: "/local_models/tpot.joblib"
   LOCAL_TTFT_SCALER_PATH: "/local_models/ttft_scaler.joblib"
   LOCAL_TPOT_SCALER_PATH: "/local_models/tpot_scaler.joblib"
+
   LOCAL_TTFT_TREELITE_PATH: "/local_models/ttft_treelite.so"
   LOCAL_TPOT_TREELITE_PATH: "/local_models/tpot_treelite.so"
   LOCAL_TTFT_CONFORMAL_PATH: "/local_models/ttft_conformal.json"
@@ -131,6 +134,8 @@ spec:
         - configMapRef:
             name: latency-predictor-config
         env:
+        - name: LOG_LEVEL
+          value: DEBUG
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -210,6 +215,8 @@ spec:
         - configMapRef:
             name: prediction-server-config
         env:
+        - name: LOG_LEVEL
+          value: DEBUG
         - name: POD_NAME
           valueFrom:
             fieldRef:

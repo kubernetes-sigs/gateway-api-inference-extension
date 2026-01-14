@@ -709,12 +709,8 @@ class LatencyPredictor:
 
             X = df_features[feature_cols]  # ✅ Now has properly typed categorical!
 
-            # Convert categorical columns to int for XGBoost (needs enable_categorical or numeric dtypes)
-            if self.model_type == ModelType.XGBOOST:
-                X = X.copy()
-                if 'prefill_score_bucket' in X.columns:
-                    if X['prefill_score_bucket'].dtype.name == 'category':
-                        X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
+            # XGBoost handles categorical dtypes natively via enable_categorical
+            # Just use the DataFrame as-is (dtype must match training)
 
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
                 X = scaler.transform(X)
@@ -1367,7 +1363,8 @@ class LatencyPredictor:
                     os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
                     joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
                     logging.debug("TTFT model saved to disk")
-                    # Note: Don't update hash here - let TreeLite compilation check handle it
+                    # CRITICAL: Update hash for ALL modes (not just TreeLite) so prediction servers can detect changes
+                    self.ttft_model_hash = current_hash
                 else:
                     if logging.getLogger().isEnabledFor(logging.DEBUG):
                         logging.debug("TTFT model unchanged, skipping joblib save")
@@ -1395,16 +1392,15 @@ class LatencyPredictor:
                                 if self.ttft_compilation_in_progress:
                                     logging.debug("TTFT TreeLite compilation already in progress, skipping")
                                 else:
-                                    should_recompile, new_hash = self._should_recompile_treelite(
-                                        self.ttft_model, self.ttft_model_hash, "TTFT"
-                                    )
-                                    if should_recompile:
+                                    # CRITICAL FIX: Reuse should_save from earlier check (line 1358)
+                                    # Don't call _should_recompile_treelite again - hash was already updated!
+                                    if should_save:
                                         logging.info("Starting TTFT TreeLite export in background (non-blocking)...")
                                         # Create versioned path for runtime updates
                                         os.makedirs(settings.TTFT_TREELITE_VERSIONED_DIR, exist_ok=True)
                                         versioned_path = os.path.join(
                                             settings.TTFT_TREELITE_VERSIONED_DIR,
-                                            f"ttft_{new_hash[:8]}.so"
+                                            f"ttft_{current_hash[:8]}.so"
                                         )
                                         self._launch_treelite_compilation(
                                             settings.TTFT_MODEL_PATH,
@@ -1412,18 +1408,18 @@ class LatencyPredictor:
                                             "TTFT",
                                             versioned_path=versioned_path
                                         )
-                                        self.ttft_model_hash = new_hash
+                                        # Hash already updated at line 1367, don't update again
                                         # Clean up old versioned models
                                         self._cleanup_old_versioned_models(
                                             settings.TTFT_TREELITE_VERSIONED_DIR,
-                                            new_hash,
+                                            current_hash,
                                             "TTFT"
                                         )
                                     else:
                                         if logging.getLogger().isEnabledFor(logging.DEBUG):
                                             logging.debug("TTFT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
-                            logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
+                            logging.debug("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
                         logging.error(f"Error saving TTFT XGBoost trees: {e}", exc_info=True)
             
@@ -1474,7 +1470,7 @@ class LatencyPredictor:
                                 if logging.getLogger().isEnabledFor(logging.DEBUG):
                                     logging.debug("TTFT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
-                            logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
+                            logging.debug("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
                         logging.error(f"Error saving TTFT LightGBM exports: {e}", exc_info=True)
         
@@ -1517,7 +1513,8 @@ class LatencyPredictor:
                     os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
                     joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
                     logging.debug("TPOT model saved to disk")
-                    # Note: Don't update hash here - let TreeLite compilation check handle it
+                    # CRITICAL: Update hash for ALL modes (not just TreeLite) so prediction servers can detect changes
+                    self.tpot_model_hash = current_hash
                 else:
                     if logging.getLogger().isEnabledFor(logging.DEBUG):
                         logging.debug("TPOT model unchanged, skipping joblib save")
@@ -1545,16 +1542,15 @@ class LatencyPredictor:
                                 if self.tpot_compilation_in_progress:
                                     logging.debug("TPOT TreeLite compilation already in progress, skipping")
                                 else:
-                                    should_recompile, new_hash = self._should_recompile_treelite(
-                                        self.tpot_model, self.tpot_model_hash, "TPOT"
-                                    )
-                                    if should_recompile:
+                                    # CRITICAL FIX: Reuse should_save from earlier check (line 1508)
+                                    # Don't call _should_recompile_treelite again - hash was already updated!
+                                    if should_save:
                                         logging.info("Starting TPOT TreeLite export in background (non-blocking)...")
                                         # Create versioned path for runtime updates
                                         os.makedirs(settings.TPOT_TREELITE_VERSIONED_DIR, exist_ok=True)
                                         versioned_path = os.path.join(
                                             settings.TPOT_TREELITE_VERSIONED_DIR,
-                                            f"tpot_{new_hash[:8]}.so"
+                                            f"tpot_{current_hash[:8]}.so"
                                         )
                                         self._launch_treelite_compilation(
                                             settings.TPOT_MODEL_PATH,
@@ -1562,18 +1558,18 @@ class LatencyPredictor:
                                             "TPOT",
                                             versioned_path=versioned_path
                                         )
-                                        self.tpot_model_hash = new_hash
+                                        # Hash already updated at line 1517, don't update again
                                         # Clean up old versioned models
                                         self._cleanup_old_versioned_models(
                                             settings.TPOT_TREELITE_VERSIONED_DIR,
-                                            new_hash,
+                                            current_hash,
                                             "TPOT"
                                         )
                                     else:
                                         if logging.getLogger().isEnabledFor(logging.DEBUG):
                                             logging.debug("TPOT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
-                            logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
+                            logging.debug("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
                         logging.error(f"Error saving TPOT XGBoost trees: {e}", exc_info=True)
             
@@ -1624,7 +1620,7 @@ class LatencyPredictor:
                                 if logging.getLogger().isEnabledFor(logging.DEBUG):
                                     logging.debug("TPOT TreeLite compilation skipped (model unchanged)")
                         elif not settings.USE_TREELITE:
-                            logging.info("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
+                            logging.debug("TreeLite export skipped (USE_TREELITE=false, using native quantile regression)")
                     except Exception as e:
                         logging.error(f"Error saving TPOT LightGBM exports: {e}", exc_info=True)
         
