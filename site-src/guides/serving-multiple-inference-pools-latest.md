@@ -43,6 +43,37 @@ The BBR extracts the model name from the request body, does a lookup of the base
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing
       ```
 
+=== "Kgateway"
+
+    Kgateway does not require the Body-Based Routing Extension, and instead natively implements Body-Based Routing.
+    To use Body Based Routing, apply an `AgentgatewayPolicy`:
+
+    ```yaml
+    apiVersion: gateway.kgateway.dev/v1alpha1
+    kind: AgentgatewayPolicy
+    metadata:
+      name: bbr
+    spec:
+      targetRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: inference-gateway
+      traffic:
+        phase: PreRouting
+        transformation:
+          request:
+            set:
+            - name: X-Gateway-Base-Model-Name
+              value: |
+                {
+                  "meta-llama/Llama-3.1-8B-Instruct": "meta-llama/Llama-3.1-8B-Instruct",
+                  "food-review-1": "meta-llama/Llama-3.1-8B-Instruct",
+                  "deepseek/vllm-deepseek-r1": "deepseek/vllm-deepseek-r1",
+                  "ski-resorts": "deepseek/vllm-deepseek-r1",
+                  "movie-critique": "deepseek/vllm-deepseek-r1",
+                }[json(request.body).model]
+    ```
+
 === "Other"
 
       ```bash
