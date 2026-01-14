@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	PreRequestExtensionPoint        = "PreRequest"
-	ResponseReceivedExtensionPoint  = "ResponseReceived"
-	ResponseStreamingExtensionPoint = "ResponseStreaming"
-	ResponseCompleteExtensionPoint  = "ResponseComplete"
+	PreRequestExtensionPoint          = "PreRequest"
+	ResponseReceivedExtensionPoint    = "ResponseReceived"
+	ResponseStreamingExtensionPoint   = "ResponseStreaming"
+	ResponseCompleteExtensionPoint    = "ResponseComplete"
+	FirstTokenReceivedExtensionPoint  = "FirstTokenReceived"
 )
 
 // PreRequest is called by the director after a getting result from scheduling layer and
@@ -63,6 +64,14 @@ type ResponseStreaming interface {
 type ResponseComplete interface {
 	plugins.Plugin
 	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
+}
+
+// FirstTokenReceived is called by the director when the first token of a streaming response is received.
+// This is useful for plugins that need to perform actions at the time-to-first-token (TTFT) moment,
+// such as marking prefill completion in disaggregated inference architectures.
+type FirstTokenReceived interface {
+	plugins.Plugin
+	FirstTokenReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // PrepareRequestData is called by the director before scheduling requests.

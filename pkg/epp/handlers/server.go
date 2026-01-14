@@ -83,6 +83,7 @@ type RequestContext struct {
 	Usage                     Usage
 	ResponseSize              int
 	ResponseComplete          bool
+	FirstTokenReceived        bool
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
