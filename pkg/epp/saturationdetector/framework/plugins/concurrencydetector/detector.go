@@ -39,7 +39,7 @@ limitations under the License.
 // The Detector relies on a strict symmetry between PreRequest (increment) and ResponseComplete (decrement) calls.
 // It assumes the EPP framework guarantees that every PreRequest is eventually paired with a ResponseComplete.
 //
-// If the application panics, crashes, or if the framework fails to invoke the ompletion hook for a request, the
+// If the application panics, crashes, or if the framework fails to invoke the completion hook for a request, the
 // internal counters for a endpoint will drift upwards. This can lead to a "false saturated" state where the detector
 // believes a endpoint is full when it is actually empty.
 //
@@ -156,7 +156,7 @@ func (d *Detector) Filter(
 
 	for _, endpoint := range endpoints {
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
-		if d.tracker.get(endpointID) <= limit {
+		if d.tracker.get(endpointID) < limit {
 			filtered = append(filtered, endpoint)
 		}
 	}

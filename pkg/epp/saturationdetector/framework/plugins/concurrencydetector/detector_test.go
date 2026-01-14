@@ -82,31 +82,31 @@ func TestNewPlugin_Configuration(t *testing.T) {
 			endpointName := "test-endpoint"
 
 			// 1. Verify MaxConcurrency via IsSaturated
-			// Drive load up to effectiveMax - 1
+
+			// A. Drive load to just below the limit (Max - 1)
 			driveLoad(ctx, detector, endpointName, int(tc.effectiveMax-1))
 			require.False(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}),
-				"expected NOT saturated at limit-1")
+				"expected NOT saturated at MaxConcurrency-1")
 
-			// Increment to effectiveMax
+			// B. Increment to exactly the limit (Max)
 			driveLoad(ctx, detector, endpointName, 1)
 			require.True(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}),
-				"expected saturated at limit")
+				"expected saturated at MaxConcurrency")
 
 			// 2. Verify Headroom via Filter
-			// Reset state first via DeleteEndpoint.
+
+			// Reset state first.
 			detector.DeleteEndpoint(fullEndpointName(endpointName))
 
-			// Drive load to burst limit
-			driveLoad(ctx, detector, endpointName, int(tc.effectiveHeadroomBurst))
-
-			// Filter should KEEP the endpoint at the burst limit
+			// A. Drive load to just below the burst limit (Limit - 1)
+			driveLoad(ctx, detector, endpointName, int(tc.effectiveHeadroomBurst-1))
 			kept := detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)})
-			require.Len(t, kept, 1, "expected endpoint to be kept at burst limit")
+			require.Len(t, kept, 1, "expected endpoint to be KEPT at BurstLimit-1")
 
-			// Exceed burst limit
+			// B. Reach the burst limit (Limit)
 			driveLoad(ctx, detector, endpointName, 1)
 			kept = detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)})
-			require.Len(t, kept, 0, "expected endpoint to be filtered above burst limit")
+			require.Len(t, kept, 0, "expected endpoint to be FILTERED at BurstLimit")
 		})
 	}
 }
