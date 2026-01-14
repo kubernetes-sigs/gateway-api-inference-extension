@@ -732,6 +732,73 @@ func TestFlowControlDispatchCycleLengthMetric(t *testing.T) {
 
 // TODO (7028): Research histogram bins using real-world data to ensure they are optimal.
 
+func TestFlowControlEnqueueDurationMetric(t *testing.T) {
+	Reset()
+
+	scenarios := []struct {
+		name       string
+		priorities []string
+		outcomes   []string
+		durations  []time.Duration
+	}{
+		{
+			name: "multiple enqueue latencies",
+			priorities: []string{
+				"1", "1", "1", "1", "1", "1", "1",
+				"2", "2", "2", "2", "2", "2", "2",
+			},
+			outcomes: []string{
+				"Dispatched", "NotYetFinalized", "RejectedCapacity", "RejectedOther", "EvictedTTL", "EvictedContextCancelled", "EvictedOther",
+				"Dispatched", "NotYetFinalized", "RejectedCapacity", "RejectedOther", "EvictedTTL", "EvictedContextCancelled", "EvictedOther",
+			},
+			durations: []time.Duration{
+				200 * time.Nanosecond,
+				800 * time.Nanosecond,
+				1500 * time.Nanosecond,
+				3 * time.Nanosecond,
+				8 * time.Nanosecond,
+				15 * time.Nanosecond,
+				30 * time.Nanosecond,
+				75 * time.Nanosecond,
+				150 * time.Nanosecond,
+				200 * time.Nanosecond,
+				800 * time.Nanosecond,
+				1500 * time.Nanosecond,
+				3 * time.Nanosecond,
+				15 * time.Nanosecond,
+			},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			// FIX: Loop through the indices to record one event at a time
+			for i := range scenario.priorities {
+				RecordFlowControlRequestEnqueueDuration(
+					scenario.priorities[i],
+					scenario.outcomes[i],
+					scenario.durations[i],
+				)
+			}
+
+			// Validate results
+			func() {
+				wantEnqueueLatency, err := os.Open("testdata/flow_control_enqueue_duration_seconds_metric")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer wantEnqueueLatency.Close()
+
+				if err := testutil.GatherAndCompare(metrics.Registry, wantEnqueueLatency, "inference_extension_flow_control_enqueue_duration_seconds"); err != nil {
+					t.Error(err)
+				}
+			}()
+		})
+	}
+}
+
+// TODO (7028): Research histogram bins using real-world data to ensure they are optimal.
+
 func TestSchedulerAttemptsTotal(t *testing.T) {
 
 	scenarios := []struct {

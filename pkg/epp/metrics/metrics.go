@@ -400,6 +400,16 @@ var (
 			},
 		},
 		[]string{},
+	flowControlRequestEnqueueDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_request_enqueue_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken to enqueue requests by the EPP flow control layer.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				5, 10, 25, 50, 100, 250, 500, 1000,
+			},
+		},
+		[]string{"priority", "outcome"},
 	)
 
 	flowControlQueueSize = prometheus.NewGaugeVec(
@@ -475,6 +485,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(flowControlDispatchCycleDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
 		metrics.Registry.MustRegister(flowControlQueueBytes)
+		metrics.Registry.MustRegister(flowControlRequestEnqueueDuration)
 		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
@@ -522,6 +533,7 @@ func Reset() {
 	flowControlRequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
 	flowControlQueueBytes.Reset()
+	flowControlRequestEnqueueDuration.Reset()
 	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
@@ -805,6 +817,15 @@ func RecordFlowControlRequestQueueDuration(
 // RecordFlowControlDispatchCycleDuration records the duration of a dispatch cycle in the Flow Control layer.
 func RecordFlowControlDispatchCycleDuration(duration time.Duration) {
 	flowControlDispatchCycleDuration.WithLabelValues().Observe(duration.Seconds())
+}
+// RecordFlowControlRequestQueueDuration records the duration a request was in the enqueuing process in the Flow Control layer.
+func RecordFlowControlRequestEnqueueDuration(
+	priority string, outcome string,
+	duration time.Duration,
+) {
+	flowControlRequestEnqueueDuration.WithLabelValues(
+		priority, outcome,
+	).Observe(duration.Seconds())
 }
 
 // IncFlowControlQueueSize increments the Flow Control queue size gauge.

@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,14 +210,24 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 // enqueue processes an item received from the enqueueChan.
 // It handles capacity checks, checks for external finalization, and either admits the item to a queue or rejects it.
 func (sp *ShardProcessor) enqueue(item *FlowItem) {
+
+	outcome := item.FinalState()
 	req := item.OriginalRequest()
 	key := req.FlowKey()
+	priorityStr := strconv.Itoa(key.Priority)
+
+	startTime := time.Now()
+
+	defer func() {
+		metrics.RecordFlowControlRequestEnqueueDuration(priorityStr, outcome.Outcome.String(), time.Since(startTime))
+
+	}()
 
 	// --- Optimistic External Finalization Check ---
 	// Check if the item was finalized by the Controller (due to TTL/cancellation) while it was buffered in enqueueChan.
 	// This is an optimistic check to avoid unnecessary processing on items already considered dead.
 	// The ultimate guarantee of cleanup for any races is the runCleanupSweep mechanism.
-	if finalState := item.FinalState(); finalState != nil {
+	if finalState := outcome; finalState != nil {
 		sp.logger.V(logutil.TRACE).Info("Item finalized externally before processing, discarding.",
 			"outcome", finalState.Outcome, "err", finalState.Err, "flowKey", key, "reqID", req.ID())
 		return
