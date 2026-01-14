@@ -68,7 +68,7 @@ nav:
       - Getting started (Latest/Main): guides/getting-started-latest.md
       - Use Cases:
         - Serve Multiple GenAI models: guides/serve-multiple-genai-models.md
-        - Endpoint Picker(EPP) As a Standalone Request Scheduler: guides/epp-standalone.md
+        - Deploy As a Standalone Request Scheduler: guides/epp-standalone.md
       - Rollout:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md

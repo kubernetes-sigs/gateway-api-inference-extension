@@ -1,9 +1,8 @@
-# Endpoint Picker(EPP) As a Standalone Request Scheduler
+# Deploy As A Standalone Request Scheduler
 The endpoint picker (EPP) at its core is a smart request scheduler for LLM requests, it currently implements a number of LLM-specific load balancing optimizations including:
 
 * Prefix-cache aware scheduling
 * Load-aware scheduling
-* Disaggregated serving
 
 When using EPP with Gateway API, it works as an ext-proc to an envoy-based proxy fronting model servers running in a k8s cluster; 
 examples of such proxies are cloud managed ones like GKE’s L7LB and open source counterparts like Istio and kGateway.
@@ -12,7 +11,7 @@ EPP as an ext-proc here offers several key advantages:
 * It utilizes robust, pre-existing L7 proxies, including both managed and open-source options.
 * Seamless integration with the Kubernetes networking ecosystem, the Gateway API, allows for:Transforming a Kubernetes gateway into an inference scheduler using familiar APIs. 
 Leveraging Gateway API features like traffic splitting for gradual rollouts and HTTP rule matching. 
-Access to provider-specific features, such as model armor and apigee on GKE.
+Access to provider-specific features.
 
 These benefits are critical for online services, including MaaS (Model-as-a-Service), which require support for multi-tenancy, demand high availability, scalability, and streamlined operations.
 
@@ -22,7 +21,7 @@ this inference service is specific to the job, it is continuously updated during
 A simpler deployment mode would reduce the barrier to adopting the EPP for such single-tenant workloads.
 
 ## How
-An Envoy proxy is deployed as a sidecar to the EPP. The proxy and EPP continue to communicate via ext-proc protocol over localhost.
+A proxy is deployed as a sidecar to the EPP. The proxy and EPP continue to communicate via ext-proc protocol over localhost.
 For the endpoint discovery, you can configure the model server pods as a flag to EPP instead of using InferencePool dependency.
 
 ## Example of Endpoint Picker(EPP) As a Standalone Request Scheduler
@@ -58,7 +57,7 @@ For the endpoint discovery, you can configure the model server pods as a flag to
 
 #### Deploy Endpoint Picker Extension with Envoy sidecar
 
-Install an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker specific resources.
+Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker specific resources.
 
 Set the chart version and then select a tab to follow the provider-specific instructions.
 
