@@ -34,7 +34,7 @@ type PredictionRequestBuilder interface {
 	// BuildPredictionRequest constructs a prediction request for a pod
 	BuildPredictionRequest(
 		ctx context.Context,
-		pod schedulingtypes.Pod,
+		pod schedulingtypes.Endpoint,
 		metrics *backendmetrics.MetricsState,
 		prompt string,
 		generatedTokens int,
@@ -44,7 +44,7 @@ type PredictionRequestBuilder interface {
 	// BuildTrainingEntry constructs a training entry for a pod
 	BuildTrainingEntry(
 		ctx context.Context,
-		pod schedulingtypes.Pod,
+		pod schedulingtypes.Endpoint,
 		metrics *backendmetrics.MetricsState,
 		prompt string,
 		actualTTFT float64,
@@ -99,7 +99,7 @@ type DefaultPredictionRequestBuilder struct{}
 // BuildPredictionRequest constructs a standard prediction request without pod type information
 func (b *DefaultPredictionRequestBuilder) BuildPredictionRequest(
 	ctx context.Context,
-	pod schedulingtypes.Pod,
+	pod schedulingtypes.Endpoint,
 	metrics *backendmetrics.MetricsState,
 	prompt string,
 	generatedTokens int,
@@ -119,7 +119,7 @@ func (b *DefaultPredictionRequestBuilder) BuildPredictionRequest(
 // BuildTrainingEntry constructs a standard training entry without pod type information
 func (b *DefaultPredictionRequestBuilder) BuildTrainingEntry(
 	ctx context.Context,
-	pod schedulingtypes.Pod,
+	pod schedulingtypes.Endpoint,
 	metrics *backendmetrics.MetricsState,
 	prompt string,
 	actualTTFT float64,

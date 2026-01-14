@@ -110,7 +110,7 @@ func (s *SLOAwareRouter) GetSchedulingResultForRequest(request *schedulingtypes.
 
 // GetLastSeenMetricsForRequest returns the last seen metrics for all profiles in a request.
 // This is exposed to allow wrapper implementations to access metrics for custom training logic.
-func (s *SLOAwareRouter) GetLastSeenMetricsForRequest(request *schedulingtypes.LLMRequest) (map[string]*backendmetrics.MetricsState, error) {
+func (s *SLOAwareRouter) GetLastSeenMetricsForRequest(request *schedulingtypes.LLMRequest) (map[string]*datalayer.Metrics, error) {
 	sloCtx, err := s.getSLOContextForRequest(request)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func (s *SLOAwareRouter) GetPrefixCacheScoresForRequest(request *schedulingtypes
 	if err != nil {
 		return nil, err
 	}
-	return sloCtx.prefixCacheScoresForPods, nil
+	return sloCtx.prefixCacheScoresForEndpoints, nil
 }
 
 // GetRequestPrompt returns the prompt for a request.
@@ -236,10 +236,10 @@ func (t *SLOAwareRouter) ResponseStreaming(ctx context.Context, request *schedul
 		return
 	}
 
-	// Create a schedulingtypes.Pod wrapper for the backend.Pod
+	// Create a schedulingtypes.Endpoint wrapper for the metadata
 	podWrapper := &schedulingtypes.PodMetrics{
-		Pod:          pod,
-		MetricsState: sloCtx.lastSeenMetrics[sloCtx.schedulingResult.PrimaryProfileName],
+		EndpointMetadata: targetMetadata,
+		Metrics:          sloCtx.lastSeenMetrics[sloCtx.schedulingResult.PrimaryProfileName],
 	}
 
 	if sloCtx.ttft == 0 {
@@ -269,7 +269,12 @@ func (t *SLOAwareRouter) ResponseComplete(ctx context.Context, request *scheduli
 	}
 	now := time.Now()
 	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, sloCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		// Create a schedulingtypes.Endpoint wrapper for non-streaming responses
+		podWrapper := &schedulingtypes.PodMetrics{
+			EndpointMetadata: targetMetadata,
+			Metrics:          sloCtx.lastSeenMetrics[sloCtx.schedulingResult.PrimaryProfileName],
+		}
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, sloCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if sloCtx.ttft > 0 {

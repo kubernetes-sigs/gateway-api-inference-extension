@@ -123,7 +123,7 @@ func processFirstTokenForLatencyPrediction(
 	streamingMode bool,
 	requestBuilder PredictionRequestBuilder,
 	sloCtx *sloRequestContext,
-	pod schedulingtypes.Pod,
+	pod schedulingtypes.Endpoint,
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,
@@ -142,7 +142,7 @@ func processFirstTokenForLatencyPrediction(
 	targetPod := sloCtx.targetMetadata
 	prefixCacheScore := sloCtx.prefixCacheScoresForEndpoints[targetPod.String()]
 
-	recordTTFTTrainingData(ctx, predictor, requestBuilder, sloCtx, pod, m, now, prefixCacheScore)
+	recordTTFTTrainingData(ctx, predictor, requestBuilder, sloCtx, m, pod, now, prefixCacheScore)
 
 	if streamingMode {
 		predictFirstTPOT(ctx, predictor, sloCtx)
@@ -169,7 +169,7 @@ func recordTTFTTrainingData(
 	requestBuilder PredictionRequestBuilder,
 	sloCtx *sloRequestContext,
 	m *datalayer.Metrics,
-	pod schedulingtypes.Pod,
+	pod schedulingtypes.Endpoint,
 	now time.Time,
 	prefixCacheScore float64,
 ) {
@@ -234,7 +234,7 @@ func processTokenForLatencyPrediction(
 	predictor latencypredictor.PredictorInterface,
 	requestBuilder PredictionRequestBuilder,
 	sloCtx *sloRequestContext,
-	pod schedulingtypes.Pod,
+	pod schedulingtypes.Endpoint,
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,
@@ -320,7 +320,7 @@ func bulkPredictWithMetrics(
 	predictor latencypredictor.PredictorInterface,
 	metricsStates []*datalayer.Metrics,
 	requestBuilder PredictionRequestBuilder,
-	pods []schedulingtypes.Pod,
+	pods []schedulingtypes.Endpoint,
 	prompts []string,
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
