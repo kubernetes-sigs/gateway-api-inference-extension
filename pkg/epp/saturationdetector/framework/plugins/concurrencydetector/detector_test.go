@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
@@ -79,40 +79,40 @@ func TestNewPlugin_Configuration(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			detector := NewDetector(tc.config)
-			podName := "test-pod"
+			endpointName := "test-endpoint"
 
 			// 1. Verify MaxConcurrency via IsSaturated
 			// Drive load up to effectiveMax - 1
-			driveLoad(ctx, detector, podName, int(tc.effectiveMax-1))
-			require.False(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(podName)}),
+			driveLoad(ctx, detector, endpointName, int(tc.effectiveMax-1))
+			require.False(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}),
 				"expected NOT saturated at limit-1")
 
 			// Increment to effectiveMax
-			driveLoad(ctx, detector, podName, 1)
-			require.True(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(podName)}),
+			driveLoad(ctx, detector, endpointName, 1)
+			require.True(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}),
 				"expected saturated at limit")
 
 			// 2. Verify Headroom via Filter
-			// Reset state first via DeletePod.
-			detector.DeletePod(fullPodName(podName))
+			// Reset state first via DeleteEndpoint.
+			detector.DeleteEndpoint(fullEndpointName(endpointName))
 
 			// Drive load to burst limit
-			driveLoad(ctx, detector, podName, int(tc.effectiveHeadroomBurst))
+			driveLoad(ctx, detector, endpointName, int(tc.effectiveHeadroomBurst))
 
-			// Filter should KEEP the pod at the burst limit
-			kept := detector.Filter(ctx, nil, nil, []schedulingtypes.Pod{newStubSchedulingPod(podName)})
-			require.Len(t, kept, 1, "expected pod to be kept at burst limit")
+			// Filter should KEEP the endpoint at the burst limit
+			kept := detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)})
+			require.Len(t, kept, 1, "expected endpoint to be kept at burst limit")
 
 			// Exceed burst limit
-			driveLoad(ctx, detector, podName, 1)
-			kept = detector.Filter(ctx, nil, nil, []schedulingtypes.Pod{newStubSchedulingPod(podName)})
-			require.Len(t, kept, 0, "expected pod to be filtered above burst limit")
+			driveLoad(ctx, detector, endpointName, 1)
+			kept = detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)})
+			require.Len(t, kept, 0, "expected endpoint to be filtered above burst limit")
 		})
 	}
 }
 
 // TestDetector_IsSaturated verifies the global circuit breaker logic.
-// It ensures saturation is reported ONLY when ALL candidate pods are full.
+// It ensures saturation is reported ONLY when ALL candidate endpoints are full.
 func TestDetector_IsSaturated(t *testing.T) {
 	t.Parallel()
 
@@ -120,46 +120,46 @@ func TestDetector_IsSaturated(t *testing.T) {
 	config := Config{MaxConcurrency: maxConcurrency}
 
 	tests := []struct {
-		name           string
-		podLoadSetup   map[string]int // Map of PodName -> Request Count
-		candidatePods  []string       // Pods passed to IsSaturated
-		wantSaturation bool
+		name               string
+		endpointLoadSetup  map[string]int // Map of EndpointName -> Request Count
+		candidateEndpoints []string       // Endpoints passed to IsSaturated
+		wantSaturation     bool
 	}{
 		{
-			name:           "empty_candidate_list_fail_closed",
-			podLoadSetup:   nil,
-			candidatePods:  []string{},
-			wantSaturation: true,
+			name:               "empty_candidate_list_fail_closed",
+			endpointLoadSetup:  nil,
+			candidateEndpoints: []string{},
+			wantSaturation:     true,
 		},
 		{
-			name:           "single_pod_with_capacity",
-			podLoadSetup:   map[string]int{"pod-a": 4},
-			candidatePods:  []string{"pod-a"},
-			wantSaturation: false,
+			name:               "single_endpoint_with_capacity",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 4},
+			candidateEndpoints: []string{"endpoint-a"},
+			wantSaturation:     false,
 		},
 		{
-			name:           "single_pod_full",
-			podLoadSetup:   map[string]int{"pod-a": 5},
-			candidatePods:  []string{"pod-a"},
-			wantSaturation: true,
+			name:               "single_endpoint_full",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 5},
+			candidateEndpoints: []string{"endpoint-a"},
+			wantSaturation:     true,
 		},
 		{
-			name:           "multi_pod_one_available",
-			podLoadSetup:   map[string]int{"pod-a": 5, "pod-b": 4},
-			candidatePods:  []string{"pod-a", "pod-b"},
-			wantSaturation: false,
+			name:               "multi_endpoint_one_available",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 5, "endpoint-b": 4},
+			candidateEndpoints: []string{"endpoint-a", "endpoint-b"},
+			wantSaturation:     false,
 		},
 		{
-			name:           "multi_pod_all_full",
-			podLoadSetup:   map[string]int{"pod-a": 5, "pod-b": 6},
-			candidatePods:  []string{"pod-a", "pod-b"},
-			wantSaturation: true,
+			name:               "multi_endpoint_all_full",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 5, "endpoint-b": 6},
+			candidateEndpoints: []string{"endpoint-a", "endpoint-b"},
+			wantSaturation:     true,
 		},
 		{
-			name:           "unknown_pod_assumed_empty",
-			podLoadSetup:   nil,
-			candidatePods:  []string{"pod-unknown"},
-			wantSaturation: false,
+			name:               "unknown_endpoint_assumed_empty",
+			endpointLoadSetup:  nil,
+			candidateEndpoints: []string{"endpoint-unknown"},
+			wantSaturation:     false,
 		},
 	}
 
@@ -170,13 +170,13 @@ func TestDetector_IsSaturated(t *testing.T) {
 			detector := NewDetector(config)
 
 			// Setup load.
-			for podName, load := range tc.podLoadSetup {
-				driveLoad(ctx, detector, podName, load)
+			for endpointName, load := range tc.endpointLoadSetup {
+				driveLoad(ctx, detector, endpointName, load)
 			}
 
 			// Build candidates.
-			candidates := make([]backendmetrics.PodMetrics, 0, len(tc.candidatePods))
-			for _, name := range tc.candidatePods {
+			candidates := make([]backendmetrics.PodMetrics, 0, len(tc.candidateEndpoints))
+			for _, name := range tc.candidateEndpoints {
 				candidates = append(candidates, newFakePodMetric(name))
 			}
 
@@ -187,36 +187,36 @@ func TestDetector_IsSaturated(t *testing.T) {
 }
 
 // TestDetector_Lifecycle verifies the full state transition cycle:
-// New -> PreRequest (Inc) -> ResponseComplete (Dec) -> DeletePod (Reset).
+// New -> PreRequest (Inc) -> ResponseComplete (Dec) -> DeleteEndpoint (Reset).
 func TestDetector_Lifecycle(t *testing.T) {
 	t.Parallel()
 
 	// MaxConcurrency 1 makes state changes immediate.
 	detector := NewDetector(Config{MaxConcurrency: 1})
 	ctx := context.Background()
-	podName := "lifecycle-pod"
-	candidates := []backendmetrics.PodMetrics{newFakePodMetric(podName)}
+	endpointName := "lifecycle-endpoint"
+	candidates := []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}
 
 	// 1. Initially Empty
 	require.False(t, detector.IsSaturated(ctx, candidates), "expected initially empty")
 
 	// 2. Increment (Saturated)
-	detector.PreRequest(ctx, nil, makeSchedulingResult(podName))
+	detector.PreRequest(ctx, nil, makeSchedulingResult(endpointName))
 	require.True(t, detector.IsSaturated(ctx, candidates), "expected saturated after 1 request")
 
 	// 3. Decrement (Available)
-	targetPod := newStubSchedulingPod(podName)
-	detector.ResponseComplete(ctx, nil, nil, targetPod.pod)
+	targetEndpoint := newStubSchedulingEndpoint(endpointName)
+	detector.ResponseComplete(ctx, nil, nil, targetEndpoint.metadata)
 	require.False(t, detector.IsSaturated(ctx, candidates), "expected available after completion")
 
 	// 4. Increment again -> Delete -> Verify Reset
-	detector.PreRequest(ctx, nil, makeSchedulingResult(podName))
+	detector.PreRequest(ctx, nil, makeSchedulingResult(endpointName))
 	require.True(t, detector.IsSaturated(ctx, candidates), "re-saturation failed")
 
-	detector.DeletePod(fullPodName(podName))
+	detector.DeleteEndpoint(fullEndpointName(endpointName))
 
-	// After deletion, the pod is "unknown" to the tracker, effectively count=0.
-	require.False(t, detector.IsSaturated(ctx, candidates), "expected clean state after DeletePod")
+	// After deletion, the endpoint is "unknown" to the tracker, effectively count=0.
+	require.False(t, detector.IsSaturated(ctx, candidates), "expected clean state after DeleteEndpoint")
 }
 
 // TestDetector_ConcurrencyStress performs a targeted race condition check.
@@ -227,17 +227,17 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	// Config doesn't matter much here as we check internal state, but keep it consistent.
 	detector := NewDetector(Config{MaxConcurrency: 10000})
 	ctx := context.Background()
-	podName := "stress-pod"
-	fullID := fullPodName(podName)
+	endpointName := "stress-endpoint"
+	fullID := fullEndpointName(endpointName)
 
 	// 1. Pre-warm the tracker.
 	// We must ensure the atomic counter exists in the map before starting the race.
 	// Otherwise, early 'dec' calls might be ignored (safety feature) if they beat the first 'inc' calls, causing a
 	// positive drift.
-	warmUpRes := makeSchedulingResult(podName)
-	warmUpPod := newStubSchedulingPod(podName)
-	detector.PreRequest(ctx, nil, warmUpRes)                // Creates entry, count=1
-	detector.ResponseComplete(ctx, nil, nil, warmUpPod.pod) // Decrements, count=0
+	warmUpRes := makeSchedulingResult(endpointName)
+	warmUpEndpoint := newStubSchedulingEndpoint(endpointName)
+	detector.PreRequest(ctx, nil, warmUpRes)                          // Creates entry, count=1
+	detector.ResponseComplete(ctx, nil, nil, warmUpEndpoint.metadata) // Decrements, count=0
 
 	const (
 		numGoroutines = 50
@@ -251,7 +251,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			res := makeSchedulingResult(podName)
+			res := makeSchedulingResult(endpointName)
 			for range opsPerRoutine {
 				detector.PreRequest(ctx, nil, res)
 			}
@@ -262,9 +262,9 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			targetPod := newStubSchedulingPod(podName)
+			targetEndpoint := newStubSchedulingEndpoint(endpointName)
 			for range opsPerRoutine {
-				detector.ResponseComplete(ctx, nil, nil, targetPod.pod)
+				detector.ResponseComplete(ctx, nil, nil, targetEndpoint.metadata)
 			}
 		}()
 	}
@@ -278,24 +278,24 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 
 // --- Test Helpers & Mocks ---
 
-func driveLoad(ctx context.Context, detector *Detector, podName string, count int) {
-	res := makeSchedulingResult(podName)
+func driveLoad(ctx context.Context, detector *Detector, endpointName string, count int) {
+	res := makeSchedulingResult(endpointName)
 	for i := 0; i < count; i++ {
 		detector.PreRequest(ctx, nil, res)
 	}
 }
 
-func fullPodName(name string) string {
+func fullEndpointName(name string) string {
 	return types.NamespacedName{Name: name, Namespace: "default"}.String()
 }
 
 // makeSchedulingResult creates a minimal result for PreRequest
-func makeSchedulingResult(podName string) *schedulingtypes.SchedulingResult {
+func makeSchedulingResult(endpointName string) *schedulingtypes.SchedulingResult {
 	return &schedulingtypes.SchedulingResult{
 		PrimaryProfileName: "default",
 		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
 			"default": {
-				TargetPods: []schedulingtypes.Pod{newStubSchedulingPod(podName)},
+				TargetEndpoints: []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)},
 			},
 		},
 	}
@@ -303,21 +303,21 @@ func makeSchedulingResult(podName string) *schedulingtypes.SchedulingResult {
 
 func newFakePodMetric(name string) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Pod: &backend.Pod{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		Metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
-// stubSchedulingPod mocks schedulingtypes.Pod for Filter.
-// It embeds the interface to satisfy the compiler but only implements GetPod.
-type stubSchedulingPod struct {
-	schedulingtypes.Pod
-	pod *backend.Pod
+// stubSchedulingEndpoint mocks schedulingtypes.Endpoint for Filter.
+// It embeds the interface to satisfy the compiler but only implements GetMetadata.
+type stubSchedulingEndpoint struct {
+	schedulingtypes.Endpoint
+	metadata *datalayer.EndpointMetadata
 }
 
-func newStubSchedulingPod(name string) *stubSchedulingPod {
-	return &stubSchedulingPod{
-		pod: &backend.Pod{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
+	return &stubSchedulingEndpoint{
+		metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
-func (f *stubSchedulingPod) GetPod() *backend.Pod { return f.pod }
+func (f *stubSchedulingEndpoint) GetMetadata() *datalayer.EndpointMetadata { return f.metadata }

@@ -20,14 +20,14 @@ limitations under the License.
 // # Role in Flow Control (The Gatekeeper)
 //
 // The Detector implements the SaturationDetector interface to act as a "Circuit Breaker".
-// It signals saturation when every available candidate pod has reached the configured MaxConcurrency limit.
+// It signals saturation when every available candidate endpoint has reached the configured MaxConcurrency limit.
 // This indicates that the backend pool has no remaining capacity for new work, triggering the Flow Controller to queue
 // incoming requests.
 //
 // # Role in Scheduling (The Traffic Shaper)
 //
-// The Detector implements the Filter interface to protect individual pods.
-// It removes pods from candidate lists if they exceed the specific safety limit:
+// The Detector implements the Filter interface to protect individual endpoints.
+// It removes endpoints from candidate lists if they exceed the specific safety limit:
 //
 //	Limit = MaxConcurrency * (1 + Headroom)
 //
@@ -40,10 +40,10 @@ limitations under the License.
 // It assumes the EPP framework guarantees that every PreRequest is eventually paired with a ResponseComplete.
 //
 // If the application panics, crashes, or if the framework fails to invoke the ompletion hook for a request, the
-// internal counters for a pod will drift upwards. This can lead to a "false saturated" state where the detector
-// believes a pod is full when it is actually empty.
+// internal counters for a endpoint will drift upwards. This can lead to a "false saturated" state where the detector
+// believes a endpoint is full when it is actually empty.
 //
-// Currently, the only mechanism to reset a drifted counter is the DeletePod signal (when a backend is removed from the
+// Currently, the only mechanism to reset a drifted counter is the DeleteEndpoint signal (when a backend is removed from the
 // pool). Future iterations may require a reconciliation loop or a TTL-based cleanup to recover from persistent drift.
 package concurrencydetector
 
@@ -54,8 +54,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
@@ -115,24 +115,24 @@ func (d *Detector) TypedName() plugins.TypedName {
 
 // IsSaturated acts as the global circuit breaker.
 //
-// It iterates through the provided list of candidate pods. If it finds at least one pod where the current in-flight
-// requests are below the MaxConcurrency threshold, it returns false (not saturated), allowing the Flow Controller to
-// admit the request.
+// It iterates through the provided list of candidate endpoints. If it finds at least one endpoint where the current
+// in-flight requests are below the MaxConcurrency threshold, it returns false (not saturated), allowing the Flow
+// Controller to admit the request.
 //
-// If all candidate pods are at or above the MaxConcurrency limit, it returns true, signaling the Flow Controller to
-// halt dispatch and queue incoming requests.
-func (d *Detector) IsSaturated(ctx context.Context, candidatePods []metrics.PodMetrics) bool {
-	if len(candidatePods) == 0 {
+// If all candidate endpoints are at or above the MaxConcurrency limit, it returns true, signaling the Flow Controller
+// to halt dispatch and queue incoming requests.
+func (d *Detector) IsSaturated(ctx context.Context, candidateEndpoints []metrics.PodMetrics) bool {
+	if len(candidateEndpoints) == 0 {
 		return true
 	}
 
-	for _, pod := range candidatePods {
-		if pod.GetMetadata() == nil {
+	for _, endpoint := range candidateEndpoints {
+		if endpoint.GetMetadata() == nil {
 			continue
 		}
 
-		podID := pod.GetMetadata().NamespacedName.String()
-		inflight := d.tracker.get(podID)
+		endpointID := endpoint.GetMetadata().NamespacedName.String()
+		inflight := d.tracker.get(endpointID)
 		if inflight < d.config.MaxConcurrency {
 			return false
 		}
@@ -140,56 +140,56 @@ func (d *Detector) IsSaturated(ctx context.Context, candidatePods []metrics.PodM
 	return true
 }
 
-// Filter blocks traffic to specific pods that are physically saturated or exceeding their safety limits.
+// Filter blocks traffic to specific endpoints that are physically saturated or exceeding their safety limits.
 //
 // It applies a relaxed limit (MaxConcurrency * (1 + Headroom)) to allow for scheduling flexibility and burst tolerance.
 func (d *Detector) Filter(
 	_ context.Context,
 	_ *types.CycleState,
 	_ *types.LLMRequest,
-	pods []types.Pod,
-) []types.Pod {
+	endpoints []types.Endpoint,
+) []types.Endpoint {
 	limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
 
-	// Pre-allocate assuming most pods will pass the filter to minimize allocations.
-	filtered := make([]types.Pod, 0, len(pods))
+	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
+	filtered := make([]types.Endpoint, 0, len(endpoints))
 
-	for _, pod := range pods {
-		podID := pod.GetPod().NamespacedName.String()
-		if d.tracker.get(podID) <= limit {
-			filtered = append(filtered, pod)
+	for _, endpoint := range endpoints {
+		endpointID := endpoint.GetMetadata().NamespacedName.String()
+		if d.tracker.get(endpointID) <= limit {
+			filtered = append(filtered, endpoint)
 		}
 	}
 	return filtered
 }
 
-// PreRequest increments the atomic in-flight counter for the target pod.
+// PreRequest increments the atomic in-flight counter for the target endpoint.
 // We assume the scheduling result is valid based on the Director's contract.
 func (d *Detector) PreRequest(_ context.Context, _ *types.LLMRequest, result *types.SchedulingResult) {
-	d.tracker.inc(result.ProfileResults[result.PrimaryProfileName].TargetPods[0].GetPod().NamespacedName.String())
+	d.tracker.inc(result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String())
 }
 
-// ResponseComplete decrements the atomic in-flight counter for the target pod.
+// ResponseComplete decrements the atomic in-flight counter for the target endpoint.
 func (d *Detector) ResponseComplete(
 	_ context.Context,
 	_ *types.LLMRequest,
 	_ *requestcontrol.Response,
-	targetPod *backend.Pod,
+	targetEndpoint *datalayer.EndpointMetadata,
 ) {
-	d.tracker.dec(targetPod.NamespacedName.String())
+	d.tracker.dec(targetEndpoint.NamespacedName.String())
 }
 
-// DeletePod removes a pod from the concurrency tracker to prevent memory leaks.
+// DeleteEndpoint removes an endpoint from the concurrency tracker to prevent memory leaks.
 // This should be called by the controller when a backend is removed from the pool.
-func (d *Detector) DeletePod(podID string) {
-	d.tracker.delete(podID)
+func (d *Detector) DeleteEndpoint(endpointID string) {
+	d.tracker.delete(endpointID)
 }
 
 // concurrencyTracker manages thread-safe counters for inflight requests.
 // It is optimized for a read-heavy workload.
 type concurrencyTracker struct {
 	mu sync.RWMutex
-	// counts stores the inflight count per pod ID.
+	// counts stores the inflight count per endpoint ID.
 	// We use *atomic.Int64 to allow safe concurrent updates without holding the map lock.
 	counts map[string]*atomic.Int64
 }
@@ -200,11 +200,11 @@ func newConcurrencyTracker() *concurrencyTracker {
 	}
 }
 
-// get returns the current inflight count for the given pod.
-// It returns 0 if the pod is not tracked.
-func (ct *concurrencyTracker) get(podID string) int64 {
+// get returns the current inflight count for the given endpoint.
+// It returns 0 if the endpoint is not tracked.
+func (ct *concurrencyTracker) get(endpointID string) int64 {
 	ct.mu.RLock()
-	counter, exists := ct.counts[podID]
+	counter, exists := ct.counts[endpointID]
 	ct.mu.RUnlock()
 
 	if !exists {
@@ -213,12 +213,12 @@ func (ct *concurrencyTracker) get(podID string) int64 {
 	return counter.Load()
 }
 
-// inc increments the inflight count for the given pod.
+// inc increments the inflight count for the given endpoint.
 // It creates the counter if it does not exist.
-func (ct *concurrencyTracker) inc(podID string) {
+func (ct *concurrencyTracker) inc(endpointID string) {
 	// Fast path: Try with read lock first.
 	ct.mu.RLock()
-	counter, exists := ct.counts[podID]
+	counter, exists := ct.counts[endpointID]
 	ct.mu.RUnlock()
 
 	if exists {
@@ -231,32 +231,32 @@ func (ct *concurrencyTracker) inc(podID string) {
 	defer ct.mu.Unlock()
 
 	// Double-check existence to handle race conditions.
-	if counter, exists = ct.counts[podID]; exists {
+	if counter, exists = ct.counts[endpointID]; exists {
 		counter.Add(1)
 		return
 	}
 
 	counter = &atomic.Int64{}
 	counter.Store(1)
-	ct.counts[podID] = counter
+	ct.counts[endpointID] = counter
 }
 
-// dec decrements the inflight count for the given pod.
-func (ct *concurrencyTracker) dec(podID string) {
+// dec decrements the inflight count for the given endpoint.
+func (ct *concurrencyTracker) dec(endpointID string) {
 	ct.mu.RLock()
-	counter, exists := ct.counts[podID]
+	counter, exists := ct.counts[endpointID]
 	ct.mu.RUnlock()
 
 	if exists {
 		counter.Add(-1)
 	}
 	// If it doesn't exist, we silently ignore.
-	// This can happen if a pod was deleted/garbage collected while a request was inflight.
+	// This can happen if a endpoint was deleted/garbage collected while a request was inflight.
 }
 
-// delete removes the counter for the given pod.
-func (ct *concurrencyTracker) delete(podID string) {
+// delete removes the counter for the given endpoint.
+func (ct *concurrencyTracker) delete(endpointID string) {
 	ct.mu.Lock()
 	defer ct.mu.Unlock()
-	delete(ct.counts, podID)
+	delete(ct.counts, endpointID)
 }
