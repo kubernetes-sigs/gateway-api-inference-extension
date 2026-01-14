@@ -10,11 +10,9 @@ examples of such proxies are cloud managed ones like GKE’s L7LB and open sourc
 EPP as an ext-proc here offers several key advantages:
 
 * It utilizes robust, pre-existing L7 proxies, including both managed and open-source options.
-* Seamless integration with the Kubernetes networking ecosystem, the Gateway API, allows for:
-
-  * Transforming a Kubernetes gateway into an inference scheduler using familiar APIs.
-  * Leveraging Gateway API features like traffic splitting for gradual rollouts and HTTP rule matching.
-  * Access to provider-specific features, such as model armor and apigee on GKE.
+* Seamless integration with the Kubernetes networking ecosystem, the Gateway API, allows for:Transforming a Kubernetes gateway into an inference scheduler using familiar APIs. 
+Leveraging Gateway API features like traffic splitting for gradual rollouts and HTTP rule matching. 
+Access to provider-specific features, such as model armor and apigee on GKE.
 
 These benefits are critical for online services, including MaaS (Model-as-a-Service), which require support for multi-tenancy, demand high availability, scalability, and streamlined operations.
 
@@ -81,7 +79,7 @@ Wait until the EPP deployment is ready.
 
 Once you epp-standalone pod is running,
 Install the curl pod as follows:
-   ```bash
+```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Pod
@@ -100,7 +98,7 @@ spec:
       - /dev/null
   restartPolicy: Never
 EOF
-   ```
+```
 Send an inference request via
 ```bash
 kubectl exec curl -- curl -i http://vllm-llama3-8b-instruct-epp:8081/v1/completions \
