@@ -11,6 +11,7 @@ EPP as an ext-proc here offers several key advantages:
 
 * It utilizes robust, pre-existing L7 proxies, including both managed and open-source options.
 * Seamless integration with the Kubernetes networking ecosystem, the Gateway API, allows for:
+
   * Transforming a Kubernetes gateway into an inference scheduler using familiar APIs.
   * Leveraging Gateway API features like traffic splitting for gradual rollouts and HTTP rule matching.
   * Access to provider-specific features, such as model armor and apigee on GKE.
@@ -81,28 +82,28 @@ Wait until the EPP deployment is ready.
 Once you epp-standalone pod is running,
 Install the curl pod as follows:
    ```bash
-    cat <<EOF | kubectl apply -f -
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: curl
-      labels:
-        app: curl
-    spec:
-      containers:
-      - name: curl
-        image: curlimages/curl:7.83.1
-        imagePullPolicy: IfNotPresent
-        command:
-          - tail
-          - -f
-          - /dev/null
-      restartPolicy: Never
-    EOF
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: curl
+  labels:
+    app: curl
+spec:
+  containers:
+  - name: curl
+    image: curlimages/curl:7.83.1
+    imagePullPolicy: IfNotPresent
+    command:
+      - tail
+      - -f
+      - /dev/null
+  restartPolicy: Never
+EOF
    ```
 Send an inference request via
 ```bash
-kubectl exec curl -- curl -i http://envoy:8081/v1/completions \
+kubectl exec curl -- curl -i http://vllm-llama3-8b-instruct-epp:8081/v1/completions \
 -H 'Content-Type: application/json' \
 -d '{"model": "food-review-1","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
 ```
