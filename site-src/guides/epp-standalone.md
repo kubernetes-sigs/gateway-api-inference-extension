@@ -63,14 +63,13 @@ Set the chart version and then select a tab to follow the provider-specific inst
 
    ```bash
     export EPP_STANDALONE_CHART_VERSION=v0
-    export PROVIDER=<YOUR_PROVIDER> # can be gke as gke needed it specific epp monitoring resources.
-    git clone --depth 1 https://github.com/kubernetes-sigs/gateway-api-inference-extension.git /tmp/temp-chart-repo && \
+    export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
     helm install vllm-llama3-8b-instruct \
     --dependency-update \
     --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
     --set provider.name=$PROVIDER \
-    /tmp/temp-chart-repo/config/charts/epp-standalone && \
-    rm -rf /tmp/temp-chart-repo
+    --version $EPP_STANDALONE_CHART_VERSION \
+     oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
    ```
 
 #### Try it out
