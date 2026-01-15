@@ -16,8 +16,6 @@ limitations under the License.
 
 // Package registry provides the concrete implementation of the `contracts.FlowRegistry` interface.
 //
-// # Architecture: A Sharded, Concurrent Control Plane
-//
 // This package implements the flow control state machine using a sharded architecture to enable scalable, parallel
 // request processing. It separates the orchestration control plane from the request-processing data plane.
 //
@@ -27,10 +25,4 @@ limitations under the License.
 //     read-optimized, concurrent-safe view for a single `controller.FlowController` worker.
 //   - `managedQueue`: A stateful decorator around a `framework.SafeQueue`. It is the fundamental unit of state,
 //     responsible for atomically tracking statistics (e.g., length and byte size) and ensuring data consistency.
-//
-// # Concurrency Model
-//
-// The registry uses a multi-layered strategy to maximize performance on the hot path while ensuring correctness for
-// administrative tasks.
-// (See the `FlowRegistry` struct documentation for detailed locking rules).
 package registry

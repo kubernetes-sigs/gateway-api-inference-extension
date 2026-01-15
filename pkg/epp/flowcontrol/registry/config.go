@@ -46,7 +46,9 @@ const (
 	defaultInitialShardCount int = 1
 	// defaultFlowGCTimeout is the default duration of inactivity after which an idle flow is garbage collected.
 	// This also serves as the interval for the periodic garbage collection scan.
-	defaultFlowGCTimeout time.Duration = 5 * time.Minute
+	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1982) revert to 5m once this GC
+	// race condition is properly resolved.
+	defaultFlowGCTimeout time.Duration = 1 * time.Hour
 	// defaultEventChannelBufferSize is the default size of the buffered channel for control plane events.
 	defaultEventChannelBufferSize int = 4096
 )
@@ -127,7 +129,7 @@ type Config struct {
 
 	// FlowGCTimeout defines the interval at which the registry scans for and garbage collects idle flows.
 	// A flow is collected if it has been observed to be Idle for at least one full scan interval.
-	// Optional: Defaults to `defaultFlowGCTimeout` (5 minutes).
+	// Optional: Defaults to `defaultFlowGCTimeout` (1 hour).
 	FlowGCTimeout time.Duration
 
 	// EventChannelBufferSize defines the size of the buffered channel used for internal control plane events.

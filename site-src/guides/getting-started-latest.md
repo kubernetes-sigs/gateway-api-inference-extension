@@ -16,8 +16,6 @@
 
 ### Deploy Sample Model Server
 
---8<-- "site-src/_includes/model-server-intro.md"
-
 --8<-- "site-src/_includes/model-server-gpu.md"
 
     ```bash
@@ -221,6 +219,8 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 --8<-- "site-src/_includes/test.md"
 
 --8<-- "site-src/_includes/bbr.md"
+
+If you wish to exercise that function, then retain the setup you have deployed so far from this guide and move on to the additional steps described in [Serving Multiple Inference Pools](serving-multiple-inference-pools-latest.md) or else move on to the following section to cleanup your setup.
 
 ### Cleanup
 

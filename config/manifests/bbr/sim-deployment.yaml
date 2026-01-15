@@ -42,3 +42,15 @@ spec:
         resources:
           requests:
             cpu: 10m
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deepseek-adapters-allowlist
+  labels:
+    inference-gateway.k8s.io/managed: "true"
+data:
+  baseModel: deepseek/vllm-deepseek-r1
+  adapters: |
+    - ski-resorts
+    - movie-critique

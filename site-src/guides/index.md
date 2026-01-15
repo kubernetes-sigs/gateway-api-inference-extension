@@ -21,8 +21,6 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
 
 ### Deploy Sample Model Server
 
---8<-- "site-src/_includes/model-server-intro.md"
-
 --8<-- "site-src/_includes/model-server-gpu.md"
 
     ```bash

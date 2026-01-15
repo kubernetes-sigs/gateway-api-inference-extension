@@ -361,53 +361,35 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 		h.assertFlowExists(key, "Flow should survive GC because its idleness timer was reset")
 	})
 
-	t.Run("ShouldAbortSweep_WhenFlowBecomesActiveAfterScan", func(t *testing.T) {
+	t.Run("ShouldSkipGC_WhenIdleTimeoutExpired_ButActiveLeaseExists", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "re-activated-flow", Priority: highPriority}
+		key := types.FlowKey{ID: "race-resurrected-flow", Priority: highPriority}
 		h.openConnectionOnFlow(key)
 
-		// Get the flow's state so we can manipulate its lock.
+		// Manually manipulate the state to simulate a race condition.
+		// The flow is "Technically Idle" (timeout expired) ...
 		val, ok := h.fr.flowStates.Load(key)
-		require.True(t, ok, "Test setup: flow state must exist")
+		require.True(t, ok)
 		state := val.(*flowState)
 
-		// Acquire the lock before stepping the clock.
-		// This ensures the Background GC (which wakes up on Step) is blocked and cannot touch our flow until we release
-		// this lock.
-		state.gcLock.Lock()
-		defer state.gcLock.Unlock()
+		// Force the idle timestamp to be old.
+		oldTime := h.fakeClock.Now().Add(-h.config.FlowGCTimeout * 2)
 
-		// Now step the clock to mark the flow as a candidate for GC.
-		// The Background GC wakes up but hangs on the lock.
-		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
-		candidates := []types.FlowKey{key}
+		state.mu.Lock()
+		state.becameIdleAt = oldTime
 
-		// Start the manual sweep in the background; it will also block on the lock.
-		sweepDone := make(chan struct{})
-		go func() {
-			defer close(sweepDone)
-			h.fr.verifyAndSweepFlows(candidates)
-		}()
+		// ... BUT it has an active lease (simulating a request arriving just now).
+		// Note: In the real code, these two updates happen atomically, but we force this
+		// state to verify the GC's safety priority (Lease > Time).
+		state.leaseCount = 1
+		state.mu.Unlock()
 
-		// While the sweeps are blocked, simulate the flow becoming Active.
-		state.leaseCount.Add(1)
+		// Trigger GC.
+		h.fr.executeGCCycle()
 
-		// Unblock the sweeps.
-		// The Background GC and Manual Sweep will now race for the lock.
-		// Since leaseCount is now 1, whoever wins will see it is Active and abort.
-		state.gcLock.Unlock()
-
-		// Wait for the manual sweep to complete.
-		select {
-		case <-sweepDone:
-			// Success
-		case <-time.After(time.Second):
-			t.Fatal("verifyAndSweepFlows deadlocked or timed out")
-		}
-
-		h.assertFlowExists(key, "Flow should not be collected because it became active before the sweep")
-		state.gcLock.Lock() // Re-lock for the deferred unlock.
+		// The GC should have seen the leaseCount > 0 and skipped the deletion, despite the expired timestamp.
+		h.assertFlowExists(key, "Flow must not be collected if lease > 0, even if idle timer is expired")
 	})
 
 	t.Run("ShouldCollectDrainingShard_OnlyWhenEmpty", func(t *testing.T) {
@@ -436,49 +418,6 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 		require.NoError(t, err, "Test setup: removing item from draining shard failed")
 		h.fr.sweepDrainingShards()
 		assert.Empty(t, h.fr.drainingShards, "Draining shard should be collected after it becomes empty")
-	})
-
-	t.Run("ShouldHandleBenignRace_WhenSweepingAlreadyDeletedFlow", func(t *testing.T) {
-		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "benign-race-flow", Priority: highPriority}
-		h.openConnectionOnFlow(key)
-
-		// Get the flow state so we can lock it.
-		val, ok := h.fr.flowStates.Load(key)
-		require.True(t, ok, "Test setup: flow state must exist")
-		state := val.(*flowState)
-
-		// Make the flow a candidate for GC.
-		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
-		candidates := []types.FlowKey{key}
-
-		// Manually lock the flow's `gcLock`. This simulates the GC being stuck just before its "Verify" phase.
-		state.gcLock.Lock()
-		defer state.gcLock.Unlock()
-
-		// In a background goroutine, run the sweep. It will block on the lock.
-		sweepDone := make(chan struct{})
-		go func() {
-			defer close(sweepDone)
-			h.fr.verifyAndSweepFlows(candidates)
-		}()
-
-		// While the sweep is blocked, delete the flow from underneath it.
-		// This creates the benign race condition.
-		h.fr.flowStates.Delete(key)
-
-		// Unblock the sweep logic.
-		state.gcLock.Unlock() // Temporarily unlock to let the sweep proceed.
-
-		// The sweep must complete without panicking.
-		select {
-		case <-sweepDone:
-			// Success! The test completed gracefully.
-		case <-time.After(time.Second):
-			t.Fatal("verifyAndSweepFlows deadlocked or timed out")
-		}
-		state.gcLock.Lock() // Re-lock for the deferred unlock.
 	})
 }
 
@@ -711,6 +650,107 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 		// The primary assertion is that this completes without the race detector firing.
 		// We can also check that the flow state is consistent.
 		h.assertFlowExists(key, "Flow must exist after concurrent JIT registration")
+	})
+
+	t.Run("ShouldRecover_WhenGCDeletesFlow_DuringConnectionAttempt", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+		key := types.FlowKey{ID: "zombie-race-flow", Priority: highPriority}
+
+		// We want to force the specific race in pinActiveFlow where:
+		// 1. User loads ptr A.
+		// 2. GC deletes ptr A from Map.
+		// 3. User checks map, sees nil or ptr B.
+		// 4. User retries.
+
+		var wg sync.WaitGroup
+		stopCh := make(chan struct{})
+
+		// Routine 1: The "User" - Constantly tries to connect.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stopCh:
+					return
+				default:
+					// This triggers the optimistic loop.
+					err := h.fr.WithConnection(key, func(c contracts.ActiveFlowConnection) error {
+						return nil
+					})
+					if err != nil {
+						h.t.Logf("Connection failed during race: %v", err)
+					}
+				}
+			}
+		}()
+
+		// Routine 2: The "GC" - Constantly deletes the flow.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stopCh:
+					return
+				default:
+					// Forcefully delete the key to trigger the "Zombie" condition in Routine 1.
+					h.fr.flowStates.Delete(key)
+					time.Sleep(100 * time.Microsecond) // Yield briefly to let Routine 1 make progress
+				}
+			}
+		}()
+
+		// Let the chaos run for a bit.
+		time.Sleep(100 * time.Millisecond)
+		close(stopCh)
+		wg.Wait()
+
+		// Final consistency check: Ensure that we can still connect successfully after the chaos.
+		// If the optimistic loop works, the final state in the map should be valid.
+		h.openConnectionOnFlow(key)
+	})
+
+	t.Run("ShouldBackOff_WhenFlowIsMarkedForDeletion_ButStillInMap", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+		key := types.FlowKey{ID: "doomed-flow", Priority: highPriority}
+		h.openConnectionOnFlow(key)
+
+		// Get the original flow state object.
+		val, ok := h.fr.flowStates.Load(key)
+		require.True(t, ok)
+		originalState := val.(*flowState)
+
+		// Manually poison it (simulate GC step: marked but not yet deleted from map).
+		originalState.mu.Lock()
+		originalState.markedForDeletion = true
+		originalState.mu.Unlock()
+
+		// Launch a background routine to simulate the GC completing the deletion.
+		// Without this, the main thread would spin forever in pinActiveFlow reloading the same doomed object.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Yield to allow the main thread to enter the retry loop and hit the "poisoned" check at least once.
+			time.Sleep(10 * time.Millisecond)
+			h.fr.flowStates.Delete(key)
+		}()
+
+		// Attempt to connect.
+		// It should spin briefly, detect the deletion, create a new flow, and succeed.
+		err := h.fr.WithConnection(key, func(c contracts.ActiveFlowConnection) error {
+			return nil
+		})
+		require.NoError(t, err, "WithConnection should recover and succeed")
+		wg.Wait()
+
+		// Verification: Ensure we are using a fresh object, not the resurrected corpse.
+		newVal, ok := h.fr.flowStates.Load(key)
+		require.True(t, ok)
+		assert.NotSame(t, originalState, newVal, "Should have created a new flow object, not reused the marked one")
 	})
 
 	t.Run("MixedAdminAndDataPlaneWorkload", func(t *testing.T) {

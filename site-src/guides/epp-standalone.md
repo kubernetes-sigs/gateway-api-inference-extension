@@ -24,7 +24,7 @@ A simpler deployment mode would reduce the barrier to adopting the EPP for such 
 A proxy is deployed as a sidecar to the EPP. The proxy and EPP continue to communicate via ext-proc protocol over localhost.
 For the endpoint discovery, you can configure the model server pods as a flag to EPP instead of using InferencePool dependency.
 
-## Example of Endpoint Picker(EPP) As a Standalone Request Scheduler
+## Example
 
 ### **Prerequisites**
 
@@ -63,7 +63,7 @@ Set the chart version and then select a tab to follow the provider-specific inst
 
    ```bash
     export EPP_STANDALONE_CHART_VERSION=v0
-    export PROVIDER=<YOUR_PROVIDER> # can be gke or istio and kgateway
+    export PROVIDER=<YOUR_PROVIDER> # can be gke as gke needed it specific epp monitoring resources.
     git clone --depth 1 https://github.com/kubernetes-sigs/gateway-api-inference-extension.git /tmp/temp-chart-repo && \
     helm install vllm-llama3-8b-instruct \
     --dependency-update \
