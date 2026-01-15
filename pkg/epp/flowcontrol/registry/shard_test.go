@@ -58,10 +58,16 @@ type shardTestHarness struct {
 func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
 
+	handle := newTestPluginsHandle(t)
+	highBand, err := NewPriorityBandConfig(handle, highPriority)
+	require.NoError(t, err)
+	lowBand, err := NewPriorityBandConfig(handle, lowPriority)
+	require.NoError(t, err)
+
 	globalConfig, err := NewConfig(
-		newTestPluginsHandle(t),
-		WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
-		WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
+		handle,
+		WithPriorityBand(highBand),
+		WithPriorityBand(lowBand),
 	)
 	require.NoError(t, err, "Test setup: validating and defaulting config should not fail")
 
@@ -130,7 +136,7 @@ func TestShard_New(t *testing.T) {
 		val, ok := h.shard.priorityBands.Load(highPriority)
 		bandHigh := val.(*priorityBand)
 		require.True(t, ok, "Priority band %d (High) must be initialized", highPriority)
-		assert.Equal(t, "High", bandHigh.config.PriorityName, "Priority band name must match the configuration")
+		assert.Equal(t, highPriority, bandHigh.config.Priority, "Priority band priority must match the configuration")
 		require.NotNil(t, bandHigh.fairnessPolicy, "Fairness policy must be instantiated during construction")
 		assert.Equal(t, defaultFairnessPolicyRef, bandHigh.fairnessPolicy.TypedName().Name,
 			"Must match the configured fairness policy implementation")
@@ -275,7 +281,6 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, h.highPriorityKey1.Priority, accessor.Priority(),
 				"Accessor Priority() must match the configured numerical priority")
-			assert.Equal(t, "High", accessor.PriorityName(), "Accessor PriorityName() must match the configured name")
 		})
 
 		t.Run("FlowKeys_ShouldReturnAllKeysInBand", func(t *testing.T) {
@@ -429,7 +434,7 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		// Update the config definition first (simulating the Registry's job).
 		dynamicPrio := 15
-		newBandCfg, err := NewPriorityBandConfig(newTestPluginsHandle(t), dynamicPrio, "Dynamic-15")
+		newBandCfg, err := NewPriorityBandConfig(newTestPluginsHandle(t), dynamicPrio)
 		require.NoError(t, err)
 		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
 
@@ -441,7 +446,7 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		accessor, err := h.shard.PriorityBandAccessor(dynamicPrio)
 		require.NoError(t, err, "Accessor should be available for the new band")
-		assert.Equal(t, "Dynamic-15", accessor.PriorityName())
+		assert.Equal(t, dynamicPrio, accessor.Priority())
 	})
 
 	t.Run("ShouldBeIdempotent", func(t *testing.T) {
@@ -450,7 +455,7 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		// Prepare config.
 		dynamicPrio := 15
-		newBandCfg, err := NewPriorityBandConfig(newTestPluginsHandle(t), dynamicPrio, "Dynamic-15")
+		newBandCfg, err := NewPriorityBandConfig(newTestPluginsHandle(t), dynamicPrio)
 		require.NoError(t, err)
 		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
 

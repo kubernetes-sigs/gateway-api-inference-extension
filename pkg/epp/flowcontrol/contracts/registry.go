@@ -219,9 +219,6 @@ type ShardStats struct {
 type PriorityBandStats struct {
 	// Priority is the numerical priority level this struct describes.
 	Priority int
-	// PriorityName is a human-readable name for the priority band (e.g., "Critical", "Sheddable").
-	// The registry configuration requires this field, so it is guaranteed to be non-empty.
-	PriorityName string
 	// CapacityBytes is the configured maximum total byte size for this priority band.
 	// When viewed via `AggregateStats`, this is the global limit. When viewed via `ShardStats`, this is the partitioned
 	// value for that specific shard.

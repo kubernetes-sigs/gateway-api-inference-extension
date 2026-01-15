@@ -70,12 +70,18 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 			shardCount = opts.initialShardCount
 		}
 
+		handle := newTestPluginsHandle(t)
+		highBand, err := NewPriorityBandConfig(handle, highPriority)
+		require.NoError(t, err)
+		lowBand, err := NewPriorityBandConfig(handle, lowPriority)
+		require.NoError(t, err)
+
 		cfg, err = NewConfig(
-			newTestPluginsHandle(t),
+			handle,
 			WithInitialShardCount(shardCount),
 			WithFlowGCTimeout(5*time.Minute),
-			WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
-			WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
+			WithPriorityBand(highBand),
+			WithPriorityBand(lowBand),
 		)
 		require.NoError(t, err, "Test setup: failed to create default config")
 	}
@@ -136,6 +142,22 @@ func (h *registryTestHarness) openConnectionOnFlow(key types.FlowKey) {
 	h.assertFlowExists(key, "Flow %s should exist after registration", key)
 }
 
+// --- Constructor and Lifecycle Tests ---
+
+func TestFlowRegistry_New(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ShouldFail_WhenPolicyDoesNotExist", func(t *testing.T) {
+		t.Parallel()
+
+		handle := newTestPluginsHandle(t)
+		_, err := NewPriorityBandConfig(handle, highPriority, WithFairnessPolicy("non-existent-policy", handle))
+		require.Error(t, err, "NewPriorityBandConfig should fail when the fairness policy does not exist")
+		assert.Contains(t, err.Error(), "no fairness policy registered",
+			"Error message should indicate missing policy")
+	})
+}
+
 // --- `FlowRegistryClient` API Tests ---
 
 func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
@@ -177,7 +199,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 
 		handle := newTestPluginsHandle(t)
 		badPolicyName := intraflow.RegisteredPolicyName("non-existent-policy")
-		badBand, err := NewPriorityBandConfig(handle, highPriority, "High", WithIntraFlowPolicy(badPolicyName))
+		badBand, err := NewPriorityBandConfig(handle, highPriority, WithIntraFlowPolicy(badPolicyName))
 		require.NoError(t, err)
 
 		// Create a Config that uses a mock checker to bypass the strict validation.
@@ -466,7 +488,7 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 			t.Parallel()
 
 			handle := newTestPluginsHandle(t)
-			band, err := NewPriorityBandConfig(handle, highPriority, "A", WithBandMaxBytes(bandCapacity))
+			band, err := NewPriorityBandConfig(handle, highPriority, WithBandMaxBytes(bandCapacity))
 			require.NoError(t, err)
 
 			config, err := NewConfig(
