@@ -1114,7 +1114,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		require.Equal(t, 0, state.leaseCount, "Band should have no active leases")
 		state.mu.Unlock()
 
-		// Create a new flow BEFORE running GC
+		// Create a new flow _before_ running GC
 		// This will pin the band (increment leaseCount during provisioning)
 		newKey := types.FlowKey{ID: "new-flow", Priority: dynamicPrio}
 		h.openConnectionOnFlow(newKey)
@@ -1177,7 +1177,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, leaseCount, "Band lease should be released after JIT failure")
 	})
 
-	t.Run("BandLeaseCount_ShouldMatchActiveFlowCount", func(t *testing.T) {
+	t.Run("ShouldMaintainBandLeaseCount_MatchingActiveFlowCount", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
 
@@ -1316,60 +1316,6 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		_, exists = h.fr.config.PriorityBands[dynamicPrio]
 		h.fr.mu.RUnlock()
 		assert.False(t, exists, "Band should be collected after all flows are gone")
-	})
-
-	t.Run("ShouldNotCollectBand_WithActiveFlowLease", func(t *testing.T) {
-		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
-
-		key := types.FlowKey{ID: "flow-with-request", Priority: dynamicPrio}
-
-		var wg sync.WaitGroup
-		leaseAcquired := make(chan struct{})
-		releaseLease := make(chan struct{})
-		wg.Add(1)
-
-		go func() {
-			// This goroutine holds a flow lease (via active request).
-			defer wg.Done()
-			err := h.fr.WithConnection(key, func(contracts.ActiveFlowConnection) error {
-				close(leaseAcquired) // Signal that the flow lease is active.
-				<-releaseLease       // Block here, holding the flow lease.
-				return nil
-			})
-			require.NoError(t, err, "WithConnection should not fail")
-		}()
-		t.Cleanup(func() {
-			close(releaseLease)
-			wg.Wait()
-		})
-
-		<-leaseAcquired // Wait until the goroutine has acquired the flow lease.
-
-		// The flow is now Active (has request lease), so band has 1 flow lease.
-		// Verify band state has leaseCount = 1
-		val, ok := h.fr.priorityBandStates.Load(dynamicPrio)
-		require.True(t, ok, "Band state should exist")
-		state := val.(*priorityBandState)
-
-		state.mu.Lock()
-		leaseCount := state.leaseCount
-		state.mu.Unlock()
-
-		assert.Equal(t, 1, leaseCount, "Band should have 1 flow lease")
-
-		// Advance time past both timeouts
-		h.fakeClock.Step(h.config.FlowGCTimeout + h.config.PriorityBandGCTimeout + time.Second)
-		h.fr.executeGCCycle()
-
-		// Band should NOT be collected (flow still exists)
-		h.fr.mu.RLock()
-		_, exists := h.fr.config.PriorityBands[dynamicPrio]
-		h.fr.mu.RUnlock()
-		assert.True(t, exists, "Band must not be collected while any flow exists")
-
-		// Flow should NOT be collected (has active request lease)
-		h.assertFlowExists(key, "Flow must not be collected while it has active request lease")
 	})
 
 	t.Run("ShouldNotCollectBand_WhenLeaseCount_NonZero_DespiteEmpty", func(t *testing.T) {
