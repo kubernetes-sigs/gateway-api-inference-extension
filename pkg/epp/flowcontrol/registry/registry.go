@@ -420,8 +420,7 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 	fr.mu.Lock()
 	defer fr.mu.Unlock()
 
-	// Double-Check: Another goroutine might have created the band between the check in ensureFlowInfrastructure
-	// and acquiring this lock.
+	// Double-Check: Someone might have created it while we swapped locks in prepareNewFlow.
 	if _, ok := fr.config.PriorityBands[priority]; ok {
 		return nil
 	}
@@ -555,8 +554,6 @@ func (fr *FlowRegistry) executeGCCycle() {
 	fr.logger.V(logging.DEBUG).Info("Starting periodic GC scan")
 	fr.gcFlows()
 	fr.gcPriorityBands()
-
-	// Sweep draining shards
 	fr.sweepDrainingShards()
 }
 
