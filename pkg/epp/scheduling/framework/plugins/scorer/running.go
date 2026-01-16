@@ -57,6 +57,11 @@ func (s *RunningRequestsSizeScorer) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
+// Category returns the preference the scorer applies when scoring candidate endpoints.
+func (s *RunningRequestsSizeScorer) Category() framework.ScorerCategory {
+	return framework.Distribution
+}
+
 // Consumes returns the list of data that is consumed by the plugin.
 func (s *RunningRequestsSizeScorer) Consumes() map[string]any {
 	return map[string]any{
@@ -71,13 +76,13 @@ func (s *RunningRequestsSizeScorer) WithName(name string) *RunningRequestsSizeSc
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
+func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 
-	// Iterate through the remaining pods to find min and max
-	for _, pod := range pods {
-		queueSize := pod.GetMetrics().RunningRequestsSize
+	// Iterate through the remaining endpoints to find min and max
+	for _, endpoint := range endpoints {
+		queueSize := endpoint.GetMetrics().RunningRequestsSize
 		if queueSize < minQueueSize {
 			minQueueSize = queueSize
 		}
@@ -86,19 +91,19 @@ func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *types.CycleState
 		}
 	}
 
-	// podScoreFunc calculates the score based on the queue size of each pod. Longer queue gets a lower score.
-	podScoreFunc := func(pod types.Pod) float64 {
+	// endpointScoreFunc calculates the score based on the queue size of each endpoint. Longer queue gets a lower score.
+	endpointScoreFunc := func(endpoint types.Endpoint) float64 {
 		if maxQueueSize == minQueueSize {
-			// If all pods have the same queue size, return a neutral score
+			// If all endpoints have the same queue size, return a neutral score
 			return 1.0
 		}
-		return float64(maxQueueSize-pod.GetMetrics().RunningRequestsSize) / float64(maxQueueSize-minQueueSize)
+		return float64(maxQueueSize-endpoint.GetMetrics().RunningRequestsSize) / float64(maxQueueSize-minQueueSize)
 	}
 
-	// Create a map to hold the scores for each pod
-	scores := make(map[types.Pod]float64, len(pods))
-	for _, pod := range pods {
-		scores[pod] = podScoreFunc(pod)
+	// Create a map to hold the scores for each endpoint
+	scores := make(map[types.Endpoint]float64, len(endpoints))
+	for _, endpoint := range endpoints {
+		scores[endpoint] = endpointScoreFunc(endpoint)
 	}
 	return scores
 }

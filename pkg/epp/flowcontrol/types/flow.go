@@ -60,19 +60,3 @@ func (k FlowKey) Compare(other FlowKey) int {
 	}
 	return strings.Compare(k.ID, other.ID)
 }
-
-// FlowSpecification defines the complete configuration for a single logical flow instance, which is uniquely identified
-// by its immutable `Key`.
-//
-// It is the primary data contract used by the `contracts.FlowRegistry` to register or update a flow instance. The
-// registry manages one flow instance for each unique `FlowKey`. While the `Key` itself is immutable, the specification
-// can be updated via `RegisterOrUpdateFlow` to modify configurable parameters (e.g., policies, capacity limits) for the
-// existing flow instance (when these update stories are supported).
-type FlowSpecification struct {
-	// Key is the unique, immutable identifier for the flow instance this specification describes.
-	Key FlowKey
-
-	// TODO: Add other flow-scoped configuration fields here, such as:
-	// - IntraFlowDispatchPolicy intra.RegisteredPolicyName
-	// - CapacityBytes uint64
-}

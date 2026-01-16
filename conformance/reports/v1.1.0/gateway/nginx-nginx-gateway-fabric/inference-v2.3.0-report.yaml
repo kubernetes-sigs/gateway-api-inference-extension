@@ -1,0 +1,22 @@
+apiVersion: gateway.networking.k8s.io/v1
+date: "2025-12-18T16:59:22Z"
+gatewayAPIChannel: experimental
+gatewayAPIVersion: v1.4.1
+implementation:
+  contact:
+  - https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose
+  organization: nginx
+  project: nginx-gateway-fabric
+  url: https://github.com/nginx/nginx-gateway-fabric
+  version: v2.3.0
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: success
+    statistics:
+      Failed: 0
+      Passed: 10
+      Skipped: 0
+  name: Gateway
+  summary: Core tests succeeded.

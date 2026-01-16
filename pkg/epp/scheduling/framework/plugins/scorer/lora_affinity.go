@@ -55,6 +55,11 @@ func (s *LoraAffinityScorer) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
+// Category returns the preference the scorer applies when scoring candidate endpoints.
+func (s *LoraAffinityScorer) Category() framework.ScorerCategory {
+	return framework.Affinity
+}
+
 // Consumes returns the list of data that is consumed by the plugin.
 func (s *LoraAffinityScorer) Consumes() map[string]any {
 	return map[string]any{
@@ -69,28 +74,28 @@ func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
 	return s
 }
 
-func (s *LoraAffinityScorer) Score(_ context.Context, _ *types.CycleState, request *types.LLMRequest, pods []types.Pod) map[types.Pod]float64 {
-	scores := make(map[types.Pod]float64, len(pods))
+func (s *LoraAffinityScorer) Score(_ context.Context, _ *types.CycleState, request *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
+	scores := make(map[types.Endpoint]float64, len(endpoints))
 
-	// Assign a score to each pod for loading the target adapter.
-	for _, pod := range pods {
-		_, active := pod.GetMetrics().ActiveModels[request.TargetModel]
-		_, waiting := pod.GetMetrics().WaitingModels[request.TargetModel]
+	// Assign a score to each endpoint for loading the target adapter.
+	for _, endpoint := range endpoints {
+		_, active := endpoint.GetMetrics().ActiveModels[request.TargetModel]
+		_, waiting := endpoint.GetMetrics().WaitingModels[request.TargetModel]
 
 		// Determine the model server's suitability score based on adapter load status and capacity.
 		switch {
 		// Ideal: The adapter is already active on this model server.
 		case active:
-			scores[pod] = 1.0
+			scores[endpoint] = 1.0
 		// Good: The model server has capacity to load at least one more adapter.
-		case len(pod.GetMetrics().ActiveModels)+len(pod.GetMetrics().WaitingModels) < pod.GetMetrics().MaxActiveModels:
-			scores[pod] = 0.8
+		case len(endpoint.GetMetrics().ActiveModels)+len(endpoint.GetMetrics().WaitingModels) < endpoint.GetMetrics().MaxActiveModels:
+			scores[endpoint] = 0.8
 		// Moderate: The adapter is already in the queue to be loaded on this model server.
 		case waiting:
-			scores[pod] = 0.6
+			scores[endpoint] = 0.6
 		// Unsuitable: The model server has reached its maximum capacity and cannot load the adapter.
 		default:
-			scores[pod] = 0.0
+			scores[endpoint] = 0.0
 		}
 	}
 

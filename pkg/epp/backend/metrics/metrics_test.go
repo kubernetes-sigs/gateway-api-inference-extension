@@ -31,7 +31,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
@@ -577,7 +577,7 @@ func TestPromToPodMetrics(t *testing.T) {
 // there's no server running on the specified port.
 func TestFetchMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	pod := &backend.Pod{
+	metadata := &datalayer.EndpointMetadata{
 		Address:     "127.0.0.1",
 		Port:        "9999",
 		MetricsHost: "127.0.0.1:9999",
@@ -594,7 +594,7 @@ func TestFetchMetrics(t *testing.T) {
 		Client:                   http.DefaultClient,
 	}
 
-	_, err := p.FetchMetrics(ctx, pod, existing) // Use a port that's unlikely to be in use
+	_, err := p.FetchMetrics(ctx, metadata, existing) // Use a port that's unlikely to be in use
 	if err == nil {
 		t.Errorf("FetchMetrics() expected error, got nil")
 	}

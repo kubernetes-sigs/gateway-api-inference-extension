@@ -7,3 +7,7 @@ type: application
 version: 0.0.0
 
 appVersion: "0.0.0"
+dependencies:
+  - name: inference-extension
+    version: 0.0.0
+    repository: "file://../inference-extension"

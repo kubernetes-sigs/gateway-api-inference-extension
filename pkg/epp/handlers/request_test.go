@@ -17,6 +17,7 @@ limitations under the License.
 package handlers
 
 import (
+	"context"
 	"testing"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -64,7 +65,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 				},
 			}
 
-			err := server.HandleRequestHeaders(reqCtx, req)
+			err := server.HandleRequestHeaders(context.Background(), reqCtx, req)
 			assert.NoError(t, err, "HandleRequestHeaders should not return an error")
 
 			assert.Equal(t, tc.wantFairnessID, reqCtx.FairnessID, "FairnessID should match expected value")
@@ -93,7 +94,7 @@ func TestGenerateHeaders_Sanitization(t *testing.T) {
 		},
 	}
 
-	results := server.generateHeaders(reqCtx)
+	results := server.generateHeaders(context.Background(), reqCtx)
 
 	gotHeaders := make(map[string]string)
 	for _, h := range results {

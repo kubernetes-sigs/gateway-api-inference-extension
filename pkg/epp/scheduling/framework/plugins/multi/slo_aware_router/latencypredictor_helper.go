@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
@@ -36,10 +36,10 @@ import (
 // refreshLastSeenMetrics updates sloCtx.LastSeenMetrics from the latest scheduling result.
 func refreshLastSeenMetrics(ctx context.Context, sloCtx *sloRequestContext) {
 	if sr := sloCtx.schedulingResult; sr != nil {
-		if pr := sr.ProfileResults[sr.PrimaryProfileName]; pr != nil && pr.TargetPods != nil {
+		if pr := sr.ProfileResults[sr.PrimaryProfileName]; pr != nil && pr.TargetEndpoints != nil {
 			for profileName, profileResult := range sr.ProfileResults {
-				if profileResult != nil && profileResult.TargetPods != nil && len(profileResult.TargetPods) > 0 {
-					sloCtx.lastSeenMetrics[profileName] = profileResult.TargetPods[0].GetMetrics().Clone()
+				if profileResult != nil && profileResult.TargetEndpoints != nil && len(profileResult.TargetEndpoints) > 0 {
+					sloCtx.lastSeenMetrics[profileName] = profileResult.TargetEndpoints[0].GetMetrics().Clone()
 				}
 			}
 		}
@@ -48,8 +48,8 @@ func refreshLastSeenMetrics(ctx context.Context, sloCtx *sloRequestContext) {
 	}
 }
 
-// GetMetricsForPrediction retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
-func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.MetricsState, error) {
+// getLatestMetricsForProfile retrieves the latest metrics for prediction from sloCtx.LastSeenMetrics.
+func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*datalayer.Metrics, error) {
 	if len(sloCtx.lastSeenMetrics) == 0 {
 		return nil, errors.New("no last seen metrics available for prediction")
 	}
@@ -62,8 +62,8 @@ func getLatestMetricsForProfile(sloCtx *sloRequestContext) (*backendmetrics.Metr
 	return nil, fmt.Errorf("no metrics found for primary profile %s", primaryProfileName)
 }
 
-// ProcessHeader refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
-func processHeaderForLatencyPrediction(
+// processPreRequestForLatencyPrediction refreshes metrics, applies TTFT prediction, updates sloCtx.PredictedTTFT and timestamp.
+func processPreRequestForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	sloCtx *sloRequestContext,
@@ -80,8 +80,8 @@ func processHeaderForLatencyPrediction(
 		return err
 	}
 
-	targetPod := sloCtx.targetPod
-	prefix_cache_score := sloCtx.prefixCacheScoresForPods[targetPod.String()]
+	targetPod := sloCtx.targetMetadata
+	prefix_cache_score := sloCtx.prefixCacheScoresForEndpoints[targetPod.String()]
 
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
@@ -112,21 +112,22 @@ func processHeaderForLatencyPrediction(
 
 	// Advance timestamp for first token reference
 	sloCtx.lastTokenTimestamp = time.Now()
-	refreshLastSeenMetrics(ctx, sloCtx)
 	return err
 }
 
-// ProcessFirstToken records actual TTFT, trains, predicts first TPOT, updates sloCtx, and advances timestamp.
+// processFirstTokenForLatencyPrediction records actual TTFT, trains, predicts first TPOT, updates sloCtx, and advances timestamp.
 func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
+	streamingMode bool,
 	sloCtx *sloRequestContext,
 	now time.Time,
+	samplingMean float64,
+	maxSampledTokens int,
 ) {
 	logger := log.FromContext(ctx)
 
-	initializeSampler(ctx, sloCtx)
-
+	initializeSampler(ctx, sloCtx, samplingMean, maxSampledTokens)
 	// Actual TTFT
 	sloCtx.ttft = float64(now.Sub(sloCtx.requestReceivedTimestamp).Milliseconds())
 	sloCtx.generatedTokenCount = 1
@@ -135,12 +136,14 @@ func processFirstTokenForLatencyPrediction(
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
 	}
-	targetPod := sloCtx.targetPod
-	prefixCacheScore := sloCtx.prefixCacheScoresForPods[targetPod.String()]
+	targetPod := sloCtx.targetMetadata
+	prefixCacheScore := sloCtx.prefixCacheScoresForEndpoints[targetPod.String()]
 
 	recordTTFTTrainingData(ctx, predictor, sloCtx, m, now, prefixCacheScore)
 
-	predictFirstTPOT(ctx, predictor, sloCtx)
+	if streamingMode {
+		predictFirstTPOT(ctx, predictor, sloCtx)
+	}
 
 	// Advance timestamp
 	sloCtx.lastTokenTimestamp = now
@@ -148,11 +151,11 @@ func processFirstTokenForLatencyPrediction(
 	refreshLastSeenMetrics(ctx, sloCtx)
 }
 
-func initializeSampler(ctx context.Context, sloCtx *sloRequestContext) {
+func initializeSampler(ctx context.Context, sloCtx *sloRequestContext, samplingMean float64, maxSampledTokens int) {
 	if sloCtx.tokenSampler == nil {
 		logger := log.FromContext(ctx)
 		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
+		sloCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
 	}
 }
@@ -161,7 +164,7 @@ func recordTTFTTrainingData(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	sloCtx *sloRequestContext,
-	m *backendmetrics.MetricsState,
+	m *datalayer.Metrics,
 	now time.Time,
 	prefixCacheScore float64,
 ) {
@@ -220,19 +223,21 @@ func predictFirstTPOT(
 	metrics.RecordRequestTPOTPredictionDuration(ctx, sloCtx.schedulingRequest.TargetModel, sloCtx.incomingModelName, dur.Seconds())
 }
 
-// ProcessToken records actual inter-token latency, trains, predicts sampled TPOT, updates sloCtx, and advances timestamp.
+// processTokenForLatencyPrediction records actual inter-token latency, trains, predicts sampled TPOT, updates sloCtx, and advances timestamp.
 func processTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	sloCtx *sloRequestContext,
 	now time.Time,
+	samplingMean float64,
+	maxSampledTokens int,
 ) {
 	logger := log.FromContext(ctx)
 
 	// Initialize sampler if not yet
 	if sloCtx.tokenSampler == nil {
 		requestID := sloCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
-		sloCtx.tokenSampler = newTokenSampler(requestID, DefaultSamplingMean, MaxSampledTokens)
+		sloCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", sloCtx.tokenSampler.getNextSampleToken())
 	}
 
@@ -306,7 +311,7 @@ func processTokenForLatencyPrediction(
 func bulkPredictWithMetrics(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	metricsStates []*backendmetrics.MetricsState,
+	metricsStates []*datalayer.Metrics,
 	prompts []string,
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,

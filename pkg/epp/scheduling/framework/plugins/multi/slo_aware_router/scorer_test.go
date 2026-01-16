@@ -26,8 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
@@ -103,15 +102,15 @@ func (m *mockPredictor) GetServerStatus(ctx context.Context) (*latencypredictor.
 	return &latencypredictor.ServerStatusResponse{}, nil
 }
 
-func createTestPod(name string, kvCacheUsage float64, runningRequestsSize, waitingQueueSize int) schedulingtypes.Pod {
+func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, waitingQueueSize int) schedulingtypes.Endpoint {
 	return &schedulingtypes.PodMetrics{
-		Pod: &backend.Pod{
+		EndpointMetadata: &datalayer.EndpointMetadata{
 			NamespacedName: types.NamespacedName{
 				Name:      name,
 				Namespace: "default",
 			},
 		},
-		MetricsState: &backendmetrics.MetricsState{
+		Metrics: &datalayer.Metrics{
 			KVCacheUsagePercent: kvCacheUsage,
 			RunningRequestsSize: runningRequestsSize,
 			WaitingQueueSize:    waitingQueueSize,
@@ -145,7 +144,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 		predictor      *mockPredictor
 		strategy       headroomStrategy
 		request        *schedulingtypes.LLMRequest
-		pods           []schedulingtypes.Pod
+		endpoints      []schedulingtypes.Endpoint
 		expectedScores map[string]float64 // Map of pod name to expected score
 		expectNil      bool
 	}{
@@ -154,8 +153,8 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			predictor: nil,
 			strategy:  headroomStrategyLeast,
 			request:   createTestLLMRequest("test", 1.0, 0.05),
-			pods: []schedulingtypes.Pod{
-				createTestPod("pod1", 0.5, 2, 1),
+			endpoints: []schedulingtypes.Endpoint{
+				createTestEndpoint("pod1", 0.5, 2, 1),
 			},
 			expectNil: true,
 		},
@@ -170,10 +169,10 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			pods: []schedulingtypes.Pod{
-				createTestPod("pod1", 0.5, 2, 1), // 50% KV cache
-				createTestPod("pod2", 0.6, 3, 2), // 60% KV cache
-				createTestPod("pod3", 0.3, 1, 0), // 30% KV cache
+			endpoints: []schedulingtypes.Endpoint{
+				createTestEndpoint("pod1", 0.5, 2, 1), // 50% KV cache
+				createTestEndpoint("pod2", 0.6, 3, 2), // 60% KV cache
+				createTestEndpoint("pod3", 0.3, 1, 0), // 30% KV cache
 			},
 			// One pod should be selected with score 1, others 0
 			expectedScores: map[string]float64{
@@ -190,9 +189,9 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			pods: []schedulingtypes.Pod{
-				createTestPod("pod1", 0.8, 5, 3), // 80% KV cache, high load
-				createTestPod("pod2", 0.9, 6, 4), // 90% KV cache, very high load
+			endpoints: []schedulingtypes.Endpoint{
+				createTestEndpoint("pod1", 0.8, 5, 3), // 80% KV cache, high load
+				createTestEndpoint("pod2", 0.9, 6, 4), // 90% KV cache, very high load
 			},
 			// One pod should still be selected even with negative headroom
 			expectedScores: map[string]float64{},
@@ -207,9 +206,9 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			pods: []schedulingtypes.Pod{
-				createTestPod("pod-positive", 0.3, 1, 0), // Low KV cache, positive headroom
-				createTestPod("pod-negative", 0.9, 6, 4), // High KV cache, negative headroom
+			endpoints: []schedulingtypes.Endpoint{
+				createTestEndpoint("pod-positive", 0.3, 1, 0), // Low KV cache, positive headroom
+				createTestEndpoint("pod-negative", 0.9, 6, 4), // High KV cache, negative headroom
 			},
 			// With 99% probability, positive headroom pod should be selected
 			expectedScores: map[string]float64{},
@@ -221,9 +220,9 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			pods: []schedulingtypes.Pod{
-				createTestPod("pod1", 0.5, 2, 1),
-				createTestPod("pod2", 0.6, 3, 2),
+			endpoints: []schedulingtypes.Endpoint{
+				createTestEndpoint("pod1", 0.5, 2, 1),
+				createTestEndpoint("pod2", 0.6, 3, 2),
 			},
 			// Should fall back to composite-only scoring and select one pod
 			expectedScores: map[string]float64{
@@ -235,7 +234,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			predictor: &mockPredictor{},
 			strategy:  headroomStrategyLeast,
 			request:   createTestLLMRequest("test", 1.0, 0.05),
-			pods:      []schedulingtypes.Pod{},
+			endpoints: []schedulingtypes.Endpoint{},
 			// Should return empty scores map
 			expectedScores: map[string]float64{},
 		},
@@ -258,7 +257,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 
 			router = NewSLOAwareRouter(cfg, predictor)
 
-			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), tt.request, tt.pods)
+			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), tt.request, tt.endpoints)
 
 			if tt.expectNil {
 				assert.Nil(t, scores, "Expected nil scores")
@@ -269,17 +268,17 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 
 			// If we have specific expected scores, verify them
 			if len(tt.expectedScores) > 0 {
-				for _, pod := range tt.pods {
-					podName := pod.GetPod().NamespacedName.Name
-					if expectedScore, ok := tt.expectedScores[podName]; ok {
-						assert.InDelta(t, expectedScore, scores[pod], 0.0001, "Pod %s should have score %f", podName, expectedScore)
+				for _, endpoint := range tt.endpoints {
+					endpointName := endpoint.GetMetadata().NamespacedName.Name
+					if expectedScore, ok := tt.expectedScores[endpointName]; ok {
+						assert.InDelta(t, expectedScore, scores[endpoint], 0.0001, "Pod %s should have score %f", endpointName, expectedScore)
 					}
 				}
 			}
 
 			// General validation: exactly one pod should have score 1 (selected), others should have score 0
 			// This applies even when predictions fail because we fall back to composite scoring
-			if !tt.expectNil && len(tt.pods) > 0 && tt.predictor != nil {
+			if !tt.expectNil && len(tt.endpoints) > 0 && tt.predictor != nil {
 				selectedCount := 0
 				for _, score := range scores {
 					if score == 1.0 {
@@ -335,13 +334,13 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 			router := NewSLOAwareRouter(cfg, predictor)
 
 			request := createTestLLMRequest("test", 1.0, 0.05)
-			pods := []schedulingtypes.Pod{
-				createTestPod("pod1", 0.5, 2, 1),
-				createTestPod("pod2", 0.6, 3, 2),
-				createTestPod("pod3", 0.3, 1, 0),
+			endpoints := []schedulingtypes.Endpoint{
+				createTestEndpoint("pod1", 0.5, 2, 1),
+				createTestEndpoint("pod2", 0.6, 3, 2),
+				createTestEndpoint("pod3", 0.3, 1, 0),
 			}
 
-			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), request, pods)
+			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), request, endpoints)
 
 			assert.NotNil(t, scores, "Expected non-nil scores for strategy %s", tt.strategy)
 
@@ -385,20 +384,20 @@ func TestSLOAwareRouter_WithName(t *testing.T) {
 func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupRequests func(*SLOAwareRouter, schedulingtypes.Pod)
+		setupRequests func(*SLOAwareRouter, schedulingtypes.Endpoint)
 		expectedCount int
 	}{
 		{
 			name:          "No running requests",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Pod) {},
+			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {},
 			expectedCount: 0,
 		},
 		{
 			name: "One running request",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Pod) {
+			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {
 				podName := types.NamespacedName{
-					Name:      p.GetPod().NamespacedName.Name,
-					Namespace: p.GetPod().NamespacedName.Namespace,
+					Name:      p.GetMetadata().NamespacedName.Name,
+					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
 				r.runningRequestLists[podName] = newRequestPriorityQueue()
 				r.runningRequestLists[podName].Add("req1", 0.04)
@@ -407,15 +406,15 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 		},
 		{
 			name: "Multiple running requests",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Pod) {
-				podName := types.NamespacedName{
-					Name:      p.GetPod().NamespacedName.Name,
-					Namespace: p.GetPod().NamespacedName.Namespace,
+			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {
+				endpointName := types.NamespacedName{
+					Name:      p.GetMetadata().NamespacedName.Name,
+					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = newRequestPriorityQueue()
-				r.runningRequestLists[podName].Add("req1", 0.04)
-				r.runningRequestLists[podName].Add("req2", 0.03)
-				r.runningRequestLists[podName].Add("req3", 0.05)
+				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
+				r.runningRequestLists[endpointName].Add("req1", 0.04)
+				r.runningRequestLists[endpointName].Add("req2", 0.03)
+				r.runningRequestLists[endpointName].Add("req3", 0.05)
 			},
 			expectedCount: 3,
 		},
@@ -427,11 +426,11 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
 			router := NewSLOAwareRouter(cfg, predictor)
-			pod := createTestPod("test-pod", 0.5, 2, 1)
+			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
 
-			count := router.getPodRunningRequestCount(pod)
+			count := router.getEndpointRunningRequestCount(pod)
 			assert.Equal(t, tt.expectedCount, count, "Running request count should match expected")
 		})
 	}
@@ -440,38 +439,38 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupRequests func(*SLOAwareRouter, schedulingtypes.Pod)
+		setupRequests func(*SLOAwareRouter, schedulingtypes.Endpoint)
 		expectedSLO   float64
 	}{
 		{
 			name:          "No running requests",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Pod) {},
+			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {},
 			expectedSLO:   0.0,
 		},
 		{
 			name: "One running request",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Pod) {
-				podName := types.NamespacedName{
-					Name:      p.GetPod().NamespacedName.Name,
-					Namespace: p.GetPod().NamespacedName.Namespace,
+			setupRequests: func(r *SLOAwareRouter, e schedulingtypes.Endpoint) {
+				endpointName := types.NamespacedName{
+					Name:      e.GetMetadata().NamespacedName.Name,
+					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = newRequestPriorityQueue()
-				r.runningRequestLists[podName].Add("req1", 0.04)
+				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
+				r.runningRequestLists[endpointName].Add("req1", 0.04)
 			},
 			expectedSLO: 0.04,
 		},
 		{
 			name: "Multiple running requests - should return minimum",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Pod) {
-				podName := types.NamespacedName{
-					Name:      p.GetPod().NamespacedName.Name,
-					Namespace: p.GetPod().NamespacedName.Namespace,
+			setupRequests: func(r *SLOAwareRouter, e schedulingtypes.Endpoint) {
+				endpointName := types.NamespacedName{
+					Name:      e.GetMetadata().NamespacedName.Name,
+					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = newRequestPriorityQueue()
+				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
 				// Add in any order - heap will maintain minimum at top
-				r.runningRequestLists[podName].Add("req1", 0.05)
-				r.runningRequestLists[podName].Add("req2", 0.03) // This is the minimum
-				r.runningRequestLists[podName].Add("req3", 0.04)
+				r.runningRequestLists[endpointName].Add("req1", 0.05)
+				r.runningRequestLists[endpointName].Add("req2", 0.03) // This is the minimum
+				r.runningRequestLists[endpointName].Add("req3", 0.04)
 			},
 			expectedSLO: 0.03, // Minimum TPOT (heap guarantees this is at items[0])
 		},
@@ -483,11 +482,11 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
 			router := NewSLOAwareRouter(cfg, predictor)
-			pod := createTestPod("test-pod", 0.5, 2, 1)
+			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
 
-			minSLO := router.getPodMinTPOTSLO(pod)
+			minSLO := router.getEndpointMinTPOTSLO(pod)
 			assert.InDelta(t, tt.expectedSLO, minSLO, 0.0001, "Min TPOT SLO should match expected")
 		})
 	}
@@ -516,7 +515,7 @@ func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
 			state := schedulingtypes.NewCycleState()
 			tt.setupState(state)
 
-			pod := createTestPod("test-pod", 0.5, 2, 1)
+			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			score := router.getPrefixCacheScoreForPod(context.Background(), state, pod)
 			assert.InDelta(t, tt.expectedScore, score, 0.0001, "Prefix cache score should match expected")

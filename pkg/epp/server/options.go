@@ -53,8 +53,9 @@ type Options struct {
 	//
 	// Endpoints (in lieu of using an InferencePool for service discovery).
 	//
-	EndpointSelector    string // Selector to filter model server pods on, only 'key=value' pairs are supported. (TODO: k8s.Selector, pflag.StringSlice?)
-	EndpointTargetPorts []int  // Target ports of model server pods.
+	EndpointSelector            string // Selector to filter model server pods on, only 'key=value' pairs are supported. (TODO: k8s.Selector, pflag.StringSlice?)
+	EndpointTargetPorts         []int  // Target ports of model server pods.
+	DisableEndpointSubsetFilter bool   // Disables respecting x-gateway-destination-endpoint-subset in EPP.
 	//
 	// MSP metrics scraping.
 	//
@@ -100,6 +101,7 @@ func NewOptions() *Options {
 		GRPCPort:                         DefaultGrpcPort,
 		PoolGroup:                        "inference.networking.k8s.io",
 		EndpointTargetPorts:              []int{},
+		DisableEndpointSubsetFilter:      false,
 		ModelServerMetricsScheme:         "http",
 		ModelServerMetricsPath:           "/metrics",
 		ModelServerMetricsHTTPSInsecure:  true,
@@ -141,6 +143,8 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 			"Format: a comma-separated list of key=value pairs without whitespace (e.g., 'app=vllm-llama3-8b-instruct,env=prod').")
 	fs.IntSliceVar(&opts.EndpointTargetPorts, "endpoint-target-ports", opts.EndpointTargetPorts, "Target ports of model server pods. "+
 		"Format: a comma-separated list of numbers without whitespace (e.g., '3000,3001,3002').")
+	fs.BoolVar(&opts.DisableEndpointSubsetFilter, "disable-endpoint-subset-filter", opts.DisableEndpointSubsetFilter,
+		"Disables respecting the x-gateway-destination-endpoint-subset metadata for dispatching requests in EPP.")
 	fs.StringVar(&opts.ModelServerMetricsScheme, "model-server-metrics-scheme", opts.ModelServerMetricsScheme,
 		"Protocol scheme used in scraping metrics from endpoints.")
 	fs.StringVar(&opts.ModelServerMetricsPath, "model-server-metrics-path", opts.ModelServerMetricsPath,

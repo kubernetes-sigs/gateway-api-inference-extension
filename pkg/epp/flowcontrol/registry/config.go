@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
@@ -44,7 +46,9 @@ const (
 	defaultInitialShardCount int = 1
 	// defaultFlowGCTimeout is the default duration of inactivity after which an idle flow is garbage collected.
 	// This also serves as the interval for the periodic garbage collection scan.
-	defaultFlowGCTimeout time.Duration = 5 * time.Minute
+	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1982) revert to 5m once this GC
+	// race condition is properly resolved.
+	defaultFlowGCTimeout time.Duration = 1 * time.Hour
 	// defaultEventChannelBufferSize is the default size of the buffered channel for control plane events.
 	defaultEventChannelBufferSize int = 4096
 )
@@ -125,7 +129,7 @@ type Config struct {
 
 	// FlowGCTimeout defines the interval at which the registry scans for and garbage collects idle flows.
 	// A flow is collected if it has been observed to be Idle for at least one full scan interval.
-	// Optional: Defaults to `defaultFlowGCTimeout` (5 minutes).
+	// Optional: Defaults to `defaultFlowGCTimeout` (1 hour).
 	FlowGCTimeout time.Duration
 
 	// EventChannelBufferSize defines the size of the buffered channel used for internal control plane events.
@@ -418,12 +422,12 @@ func (c *Config) validate(checker capabilityChecker) error {
 	}
 
 	// Validate statically configured bands.
-	names := make(map[string]struct{}, len(c.PriorityBands))
+	names := sets.New[string]()
 	for _, band := range c.PriorityBands {
-		if _, exists := names[band.PriorityName]; exists {
+		if names.Has(band.PriorityName) {
 			return fmt.Errorf("duplicate priority name %q found", band.PriorityName)
 		}
-		names[band.PriorityName] = struct{}{}
+		names.Insert(band.PriorityName)
 
 		if err := band.validate(checker); err != nil {
 			return err

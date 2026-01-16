@@ -60,7 +60,7 @@ func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
 	}
 }
 
-// RandomPicker picks random pod(s) from the list of candidates.
+// RandomPicker picks random endpoint(s) from the list of candidates.
 type RandomPicker struct {
 	typedName         plugins.TypedName
 	maxNumOfEndpoints int
@@ -77,23 +77,23 @@ func (p *RandomPicker) TypedName() plugins.TypedName {
 	return p.typedName
 }
 
-// Pick selects random pod(s) from the list of candidates.
-func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredPods []*types.ScoredPod) *types.ProfileRunResult {
-	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting pods from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
-		"num-of-candidates", len(scoredPods), "scored-pods", scoredPods)
+// Pick selects random endpoint(s) from the list of candidates.
+func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
+		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
 	// Shuffle in-place
-	shuffleScoredPods(scoredPods)
+	shuffleScoredEndpoints(scoredEndpoints)
 
-	// if we have enough pods to return keep only the relevant subset
-	if p.maxNumOfEndpoints < len(scoredPods) {
-		scoredPods = scoredPods[:p.maxNumOfEndpoints]
+	// if we have enough endpoints to return keep only the relevant subset
+	if p.maxNumOfEndpoints < len(scoredEndpoints) {
+		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
 	}
 
-	targetPods := make([]types.Pod, len(scoredPods))
-	for i, scoredPod := range scoredPods {
-		targetPods[i] = scoredPod
+	targetEndpoints := make([]types.Endpoint, len(scoredEndpoints))
+	for i, scoredEndpoint := range scoredEndpoints {
+		targetEndpoints[i] = scoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetPods: targetPods}
+	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

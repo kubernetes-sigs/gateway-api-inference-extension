@@ -27,22 +27,18 @@ import (
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
-)
-
-const (
-	// Certain envoy implementations set a max limit of 64Kb per streamed chunk, intentionally setting this lower for a safe margin.
-	bodyByteLimit = 62000
 )
 
 func NewStreamingServer(datastore Datastore, director Director) *StreamingServer {
@@ -57,7 +53,7 @@ type Director interface {
 	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	GetRandomPod() *backend.Pod
+	GetRandomEndpoint() *datalayer.EndpointMetadata
 }
 
 type Datastore interface {
@@ -72,11 +68,12 @@ type StreamingServer struct {
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
-// TODO: The requestContext is gathering a ton of fields. A future refactor needs to tease these fields apart.
-// Specifically, there are fields related to the ext-proc protocol, and then fields related to the lifecycle of the request.
-// We should split these apart as this monolithic object exposes too much data to too many layers.
+//
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2082):
+// Refactor this monolithic struct. Fields related to the Envoy ext-proc protocol should be decoupled from the internal
+// request lifecycle state.
 type RequestContext struct {
-	TargetPod                 *backend.Pod
+	TargetPod                 *datalayer.EndpointMetadata
 	TargetEndpoint            string
 	IncomingModelName         string
 	TargetModelName           string
@@ -131,6 +128,12 @@ const (
 
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
+
+	// Start tracing span for the request
+	tracer := otel.Tracer("gateway-api-inference-extension")
+	ctx, span := tracer.Start(ctx, "gateway.request", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	loggerTrace := logger.V(logutil.TRACE)
 	loggerTrace.Info("Processing")
@@ -165,6 +168,17 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		if reqCtx.RequestRunning {
 			metrics.DecRunningRequests(reqCtx.IncomingModelName)
 		}
+
+		// If we scheduled a pod (TargetPod != nil) but never marked the response  as complete (e.g. error, disconnect,
+		// panic), force the completion hooks to run.
+		if reqCtx.TargetPod != nil && !reqCtx.ResponseComplete {
+			// Use a fresh context as the request context might be canceled (Client Disconnect).
+			// We only need logging from the original context.
+			cleanupCtx := log.IntoContext(context.Background(), logger)
+			if _, err := s.director.HandleResponseBodyComplete(cleanupCtx, reqCtx); err != nil {
+				logger.Error(err, "error in HandleResponseBodyComplete")
+			}
+		}
 	}(err, reqCtx)
 
 	for {
@@ -198,7 +212,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			loggerTrace = logger.V(logutil.TRACE)
 			ctx = log.IntoContext(ctx, logger)
 
-			err = s.HandleRequestHeaders(reqCtx, v)
+			err = s.HandleRequestHeaders(ctx, reqCtx, v)
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerTrace.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			// In the stream case, we can receive multiple request bodies.
@@ -218,7 +232,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				// Body stream complete. Allocate empty slice for response to use.
+				// Body stream complete. Capture raw size for flow control.
+				reqCtx.RequestSize = len(body)
 				body = []byte{}
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
@@ -227,14 +242,16 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				// Populate the ExtProc protocol responses for the request body.
-				requestBodyBytes, err := json.Marshal(reqCtx.Request.Body)
+				// Marshal after HandleRequest to include modifications (e.g., model rewriting).
+				var requestBodyBytes []byte
+				requestBodyBytes, err = json.Marshal(reqCtx.Request.Body)
 				if err != nil {
 					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
 					break
 				}
+				// Update RequestSize to match marshalled body for Content-Length header.
 				reqCtx.RequestSize = len(requestBodyBytes)
-				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
+				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
 				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
 
 				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
@@ -275,6 +292,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
 				if v.ResponseBody.EndOfStream {
 					loggerTrace.Info("stream completed")
+					reqCtx.ResponseComplete = true
+					if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
+						logger.Error(err, "error in HandleResponseBodyComplete")
+					}
 
 					reqCtx.ResponseCompleteTimestamp = time.Now()
 					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
@@ -485,49 +506,4 @@ func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 	}
 
 	return resp, nil
-}
-
-func buildCommonResponses(bodyBytes []byte, byteLimit int, setEos bool) []*extProcPb.CommonResponse {
-	responses := []*extProcPb.CommonResponse{}
-	startingIndex := 0
-	bodyLen := len(bodyBytes)
-
-	if bodyLen == 0 {
-		return []*extProcPb.CommonResponse{
-			{
-				BodyMutation: &extProcPb.BodyMutation{
-					Mutation: &extProcPb.BodyMutation_StreamedResponse{
-						StreamedResponse: &extProcPb.StreamedBodyResponse{
-							Body:        bodyBytes,
-							EndOfStream: setEos,
-						},
-					},
-				},
-			},
-		}
-	}
-
-	for startingIndex < bodyLen {
-		eos := false
-		len := min(bodyLen-startingIndex, byteLimit)
-		chunk := bodyBytes[startingIndex : len+startingIndex]
-		if setEos && len+startingIndex >= bodyLen {
-			eos = true
-		}
-
-		commonResp := &extProcPb.CommonResponse{
-			BodyMutation: &extProcPb.BodyMutation{
-				Mutation: &extProcPb.BodyMutation_StreamedResponse{
-					StreamedResponse: &extProcPb.StreamedBodyResponse{
-						Body:        chunk,
-						EndOfStream: eos,
-					},
-				},
-			},
-		}
-		responses = append(responses, commonResp)
-		startingIndex += len
-	}
-
-	return responses
 }

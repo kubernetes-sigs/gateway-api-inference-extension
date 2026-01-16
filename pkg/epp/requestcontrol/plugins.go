@@ -19,7 +19,7 @@ package requestcontrol
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
@@ -43,19 +43,26 @@ type PreRequest interface {
 // The given pod argument is the pod that served the request.
 type ResponseReceived interface {
 	plugins.Plugin
-	ResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	ResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // ResponseStreaming is called by the director after each chunk of streaming response is sent.
 type ResponseStreaming interface {
 	plugins.Plugin
-	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
-// ResponseComplete is called by the director after the complete response is sent.
+// ResponseComplete is called by the director when the request lifecycle terminates.
+// This occurs after a response is fully sent, OR if the request fails/disconnects after a pod was scheduled.
+//
+// Plugins should assume this is the final cleanup hook for a request.
+//
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2079):
+// Update signature to pass error/termination state. This is a breaking change required for plugins to distinguish
+// between success, errors, and disconnects.
 type ResponseComplete interface {
 	plugins.Plugin
-	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetPod *backend.Pod)
+	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // PrepareRequestData is called by the director before scheduling requests.
@@ -63,7 +70,7 @@ type ResponseComplete interface {
 type PrepareDataPlugin interface {
 	plugins.ProducerPlugin
 	plugins.ConsumerPlugin
-	PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Pod) error
+	PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
 }
 
 // AdmissionPlugin is called by the director after the prepare data phase and before scheduling.
@@ -73,5 +80,5 @@ type AdmissionPlugin interface {
 	plugins.Plugin
 	// AdmitRequest returns the denial reason, wrapped as error if the request is denied.
 	// If the request is allowed, it returns nil.
-	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Pod) error
+	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
 }

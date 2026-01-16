@@ -30,9 +30,9 @@ import (
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -94,7 +94,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 }
 
 // SetupWithManager sets up the runner with the given manager.
-func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 	// Create the controllers and register them with the manager
 	if r.ControllerCfg.startCrdReconcilers {
 		if err := (&controller.InferencePoolReconciler{
@@ -102,7 +102,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 			Reader:    mgr.GetClient(),
 			PoolGKNN:  r.GKNN,
 		}).SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("failed setting up InferencePoolReconciler: %w", err)
+			return fmt.Errorf("failed setting up InferencePoolReconciler - %w", err)
 		}
 
 		if r.ControllerCfg.hasInferenceObjective {
@@ -110,8 +110,8 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 				Datastore: r.Datastore,
 				Reader:    mgr.GetClient(),
 				PoolGKNN:  r.GKNN,
-			}).SetupWithManager(ctx, mgr); err != nil {
-				return fmt.Errorf("failed setting up InferenceObjectiveReconciler: %w", err)
+			}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("failed setting up InferenceObjectiveReconciler - %w", err)
 			}
 		}
 		if r.ControllerCfg.hasInferenceModelRewrites {
@@ -119,8 +119,8 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 				Datastore: r.Datastore,
 				Reader:    mgr.GetClient(),
 				PoolGKNN:  r.GKNN,
-			}).SetupWithManager(ctx, mgr); err != nil {
-				return fmt.Errorf("failed setting up InferenceModelRewriteReconciler: %w", err)
+			}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("failed setting up InferenceModelRewriteReconciler - %w", err)
 			}
 		}
 	}
@@ -129,7 +129,7 @@ func (r *ExtProcServerRunner) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Datastore: r.Datastore,
 		Reader:    mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up PodReconciler: %v", err)
+		return fmt.Errorf("failed setting up PodReconciler - %w", err)
 	}
 	return nil
 }

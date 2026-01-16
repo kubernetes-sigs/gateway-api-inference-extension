@@ -43,7 +43,7 @@ inferenceExtension:
   affinity: {}
 
   tolerations: []
-  
+
   # Sidecar configuration for EPP
   sidecar:
     enabled: false
@@ -60,10 +60,6 @@ inferenceExtension:
         secretName: inference-gateway-sa-metrics-reader-secret
       # additional labels for the ServiceMonitor
       extraLabels: {}
-
-    # DEPRECATED: The 'gke' configuration will be removed in the next release.
-    gke:
-      enabled: false
   tracing:
     enabled: false
     otelExporterEndpoint: "http://localhost:4317"
@@ -74,7 +70,7 @@ inferenceExtension:
   # Latency Predictor Configuration
   latencyPredictor:
     enabled: false
-    
+
     # Training Server Configuration
     trainingServer:
       image:
@@ -158,12 +154,12 @@ inferencePool:
   targetPorts:
     - number: 8000
   modelServerType: vllm # vllm, triton-tensorrt-llm
-  apiVersion: inference.networking.k8s.io/v1 
+  apiVersion: inference.networking.k8s.io/v1
   # modelServers: # REQUIRED
   #   matchLabels:
   #     app: vllm-llama3-8b-instruct
 
-  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2, 
+  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 
@@ -188,6 +184,12 @@ provider:
         # connectionPool:
         #   http:
         #     maxRequestsPerConnection: 256000
+
+# experimentalHttpRoute section is used to deploy httproute as part of the epp helm chart.
+# this section is temporary and should be extracted to a separate chart.
+experimentalHttpRoute:
+  enabled: false # a flag to indicate whether to create the httproute as part of the chart or not.
+  inferenceGatewayName: inference-gateway
 
 # DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
 istio:

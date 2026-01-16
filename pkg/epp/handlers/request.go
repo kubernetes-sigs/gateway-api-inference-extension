@@ -17,13 +17,17 @@ limitations under the License.
 package handlers
 
 import (
+	"context"
 	"strconv"
 	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -36,22 +40,22 @@ const (
 	defaultFairnessID = "default-flow"
 )
 
-func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
+func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
 	// an EoS in the request headers means this request has no body or trailers.
 	if req.RequestHeaders.EndOfStream {
-		// We will route this request to a random pod as this is assumed to just be a GET
+		// We will route this request to a random endpoint as this is assumed to just be a GET
 		// More context: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/526
 		// The above PR will address endpoint admission, but currently any request without a body will be
-		// routed to a random upstream pod.
-		pod := s.director.GetRandomPod()
-		if pod == nil {
+		// routed to a random upstream endpoint.
+		endpoint := s.director.GetRandomEndpoint()
+		if endpoint == nil {
 			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
 		}
-		reqCtx.TargetEndpoint = pod.GetIPAddress() + ":" + pod.GetPort()
+		reqCtx.TargetEndpoint = endpoint.GetIPAddress() + ":" + endpoint.GetPort()
 		reqCtx.RequestSize = 0
-		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
+		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
 		return nil
 	}
 
@@ -75,7 +79,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 }
 
 func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) []*extProcPb.ProcessingResponse {
-	commonResponses := buildCommonResponses(requestBodyBytes, bodyByteLimit, true)
+	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
 	responses := []*extProcPb.ProcessingResponse{}
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{
@@ -90,7 +94,7 @@ func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) 
 	return responses
 }
 
-func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+func (s *StreamingServer) generateRequestHeaderResponse(ctx context.Context, reqCtx *RequestContext) *extProcPb.ProcessingResponse {
 	// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
 	// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
 	// options for gateway providers.
@@ -100,7 +104,7 @@ func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) 
 				Response: &extProcPb.CommonResponse{
 					ClearRouteCache: true,
 					HeaderMutation: &extProcPb.HeaderMutation{
-						SetHeaders: s.generateHeaders(reqCtx),
+						SetHeaders: s.generateHeaders(ctx, reqCtx),
 					},
 				},
 			},
@@ -109,7 +113,7 @@ func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) 
 	}
 }
 
-func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
+func (s *StreamingServer) generateHeaders(ctx context.Context, reqCtx *RequestContext) []*configPb.HeaderValueOption {
 	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
 	headers := []*configPb.HeaderValueOption{
 		{
@@ -126,6 +130,19 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 			Header: &configPb.HeaderValue{
 				Key:      "Content-Length",
 				RawValue: []byte(strconv.Itoa(reqCtx.RequestSize)),
+			},
+		})
+	}
+
+	// Inject trace context headers for propagation to downstream services
+	traceHeaders := make(map[string]string)
+	propagator := otel.GetTextMapPropagator()
+	propagator.Inject(ctx, propagation.MapCarrier(traceHeaders))
+	for key, value := range traceHeaders {
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      key,
+				RawValue: []byte(value),
 			},
 		})
 	}

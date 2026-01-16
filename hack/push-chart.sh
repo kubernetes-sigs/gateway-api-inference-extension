@@ -39,6 +39,9 @@ then
   chart_version=${EXTRA_TAG}
 fi
 
+# Update dependencies
+${HELM} dependency update "config/charts/${CHART}"
+
 # Create the package
 ${HELM} package --version "${chart_version}" --app-version "${chart_version}" "config/charts/${CHART}" -d "${DEST_CHART_DIR}"
 

@@ -233,7 +233,7 @@ var (
 			Name: "pod1",
 		},
 	}
-	pod1Metrics = &backendmetrics.MetricsState{
+	pod1Metrics = &datalayer.Metrics{
 		WaitingQueueSize:    0,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -248,7 +248,7 @@ var (
 			Name: "pod2",
 		},
 	}
-	pod2Metrics = &backendmetrics.MetricsState{
+	pod2Metrics = &datalayer.Metrics{
 		WaitingQueueSize:    1,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -280,41 +280,41 @@ var (
 func TestMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
-		metrics   map[types.NamespacedName]*backendmetrics.MetricsState
+		metrics   map[types.NamespacedName]*datalayer.Metrics
 		err       map[types.NamespacedName]error
 		storePods []*corev1.Pod
-		want      []*backendmetrics.MetricsState
+		want      []*datalayer.Metrics
 		predict   func(backendmetrics.PodMetrics) bool
 	}{
 		{
 			name: "Probing metrics success",
-			metrics: map[types.NamespacedName]*backendmetrics.MetricsState{
+			metrics: map[types.NamespacedName]*datalayer.Metrics{
 				pod1NamespacedName: pod1Metrics,
 				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want:      []*backendmetrics.MetricsState{pod1Metrics, pod2Metrics},
+			want:      []*datalayer.Metrics{pod1Metrics, pod2Metrics},
 		},
 		{
 			name: "Only pods in are probed",
-			metrics: map[types.NamespacedName]*backendmetrics.MetricsState{
+			metrics: map[types.NamespacedName]*datalayer.Metrics{
 				pod1NamespacedName: pod1Metrics,
 				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1},
-			want:      []*backendmetrics.MetricsState{pod1Metrics},
+			want:      []*datalayer.Metrics{pod1Metrics},
 		},
 		{
 			name: "Probing metrics error",
 			err: map[types.NamespacedName]error{
 				pod2NamespacedName: errors.New("injected error"),
 			},
-			metrics: map[types.NamespacedName]*backendmetrics.MetricsState{
+			metrics: map[types.NamespacedName]*datalayer.Metrics{
 				pod1NamespacedName: pod1Metrics,
 				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want: []*backendmetrics.MetricsState{pod1Metrics,
+			want: []*datalayer.Metrics{pod1Metrics,
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
 					ActiveModels:        map[string]int{},
@@ -354,11 +354,11 @@ func TestMetrics(t *testing.T) {
 				}
 				assert.EventuallyWithT(t, func(t *assert.CollectT) {
 					got := ds.PodList(test.predict)
-					metrics := []*backendmetrics.MetricsState{}
+					metrics := []*datalayer.Metrics{}
 					for _, one := range got {
 						metrics = append(metrics, one.GetMetrics())
 					}
-					diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(backendmetrics.MetricsState{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *backendmetrics.MetricsState) bool {
+					diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(datalayer.Metrics{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *datalayer.Metrics) bool {
 						return a.String() < b.String()
 					}))
 					assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")

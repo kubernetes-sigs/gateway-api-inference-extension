@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -192,6 +192,6 @@ func (ts *testDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *
 	return reqCtx, nil
 }
 
-func (ts *testDirector) GetRandomPod() *backend.Pod {
+func (ts *testDirector) GetRandomEndpoint() *datalayer.EndpointMetadata {
 	return nil
 }

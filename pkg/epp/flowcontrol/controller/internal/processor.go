@@ -404,13 +404,12 @@ func (sp *ShardProcessor) runCleanupSweep(ctx context.Context) {
 // memory.
 func (sp *ShardProcessor) sweepFinalizedItems() {
 	processFn := func(managedQ contracts.ManagedQueue, logger logr.Logger) {
-		key := managedQ.FlowQueueAccessor().FlowKey()
 		predicate := func(itemAcc types.QueueItemAccessor) bool {
 			return itemAcc.(*FlowItem).FinalState() != nil
 		}
 		removedItems := managedQ.Cleanup(predicate)
 		logger.V(logutil.DEBUG).Info("Swept finalized items and released capacity.",
-			"flowKey", key, "count", len(removedItems))
+			"count", len(removedItems))
 	}
 	sp.processAllQueuesConcurrently("sweepFinalizedItems", processFn)
 }
@@ -461,7 +460,7 @@ func (sp *ShardProcessor) evictAll() {
 			// Finalization is idempotent; safe to call even if already finalized externally.
 			item.FinalizeWithOutcome(outcome, errShutdown)
 			logger.V(logutil.TRACE).Info("Item evicted during shutdown.",
-				"flowKey", key, "reqID", item.OriginalRequest().ID())
+				"reqID", item.OriginalRequest().ID())
 		}
 	}
 	sp.processAllQueuesConcurrently("evictAll", processFn)

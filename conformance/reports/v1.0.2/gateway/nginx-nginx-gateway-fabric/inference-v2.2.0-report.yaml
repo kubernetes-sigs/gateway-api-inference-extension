@@ -8,7 +8,7 @@ implementation:
   organization: nginx
   project: nginx-gateway-fabric
   url: https://github.com/nginx/nginx-gateway-fabric
-  version: 2.2.0
+  version: v2.2.0
 kind: ConformanceReport
 mode: default
 profiles:

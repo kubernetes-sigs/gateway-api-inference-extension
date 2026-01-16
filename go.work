@@ -1,0 +1,6 @@
+go 1.24.9
+
+use (
+	.
+	./conformance
+)

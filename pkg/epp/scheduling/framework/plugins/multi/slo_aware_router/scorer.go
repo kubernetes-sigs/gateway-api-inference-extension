@@ -65,25 +65,27 @@ type Config struct {
 	AffinityGateTau           float64 `json:"affinityGateTau,omitempty"`
 	AffinityGateTauGlobal     float64 `json:"affinityGateTauGlobal,omitempty"`
 	SelectionMode             string  `json:"selectionMode,omitempty"`
+	StreamingMode             bool    `json:"streamingMode,omitempty"`
 }
 
 var DefaultConfig = Config{
-	SamplingMean:              DefaultSamplingMean,
-	MaxSampledTokens:          MaxSampledTokens,
-	SLOBufferFactor:           SLOBufferFactor,
-	NegHeadroomTTFTWeight:     NegHeadroomTTFTWeight,
-	NegHeadroomTPOTWeight:     NegHeadroomTPOTWeight,
-	HeadroomTTFTWeight:        HeadroomTTFTWeight,
-	HeadroomTPOTWeight:        HeadroomTPOTWeight,
-	HeadroomSelectionStrategy: string(HeadroomSelectionStrategy),
-	CompositeKVWeight:         CompositeKVWeight,
-	CompositeQueueWeight:      CompositeQueueWeight,
-	CompositePrefixWeight:     CompositePrefixWeight,
-	EpsilonExploreSticky:      EpsilonExploreSticky,
-	EpsilonExploreNeg:         EpsilonExploreNeg,
-	AffinityGateTau:           AffinityGateTau,
-	AffinityGateTauGlobal:     AffinityGateTauGlobal,
-	SelectionMode:             string(SelectionMode),
+	SamplingMean:              1000,
+	MaxSampledTokens:          5,
+	SLOBufferFactor:           1,
+	NegHeadroomTTFTWeight:     0.8,
+	NegHeadroomTPOTWeight:     0.2,
+	HeadroomTTFTWeight:        0.8,
+	HeadroomTPOTWeight:        0.2,
+	HeadroomSelectionStrategy: "least",
+	CompositeKVWeight:         1,
+	CompositeQueueWeight:      1,
+	CompositePrefixWeight:     1,
+	EpsilonExploreSticky:      0.01,
+	EpsilonExploreNeg:         0.01,
+	AffinityGateTau:           0.80,
+	AffinityGateTauGlobal:     0.99,
+	SelectionMode:             "linear",
+	StreamingMode:             true,
 }
 
 func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
@@ -184,6 +186,11 @@ func (s *SLOAwareRouter) TypedName() plugins.TypedName {
 	return s.typedName
 }
 
+// Category returns the preference the scorer applies when scoring candidate endpoints.
+func (s *SLOAwareRouter) Category() framework.ScorerCategory {
+	return framework.Balance
+}
+
 func (s *SLOAwareRouter) WithName(name string) *SLOAwareRouter {
 	s.typedName.Name = name
 	return s
@@ -191,18 +198,18 @@ func (s *SLOAwareRouter) WithName(name string) *SLOAwareRouter {
 
 func (s *SLOAwareRouter) epsilonGreedyAffinityGate(
 	ctx context.Context,
-	candidates []podPredictionResult,
+	candidates []endpointPredictionResult,
 	r *rand.Rand,
 	label string, // e.g. "positive" or "negative"
 	prefixStickyThreshold float64,
-) ([]podPredictionResult, bool) {
+) ([]endpointPredictionResult, bool) {
 	logger := log.FromContext(ctx)
 	if prefixStickyThreshold <= 0 {
 		// Affinity gating disabled
 		logger.V(logutil.DEBUG).Info("Affinity gating disabled (threshold <= 0)", "path", label)
 		return candidates, false
 	}
-	eligible := make([]podPredictionResult, 0, len(candidates))
+	eligible := make([]endpointPredictionResult, 0, len(candidates))
 	for _, p := range candidates {
 		if p.PrefixCacheScore >= prefixStickyThreshold {
 			eligible = append(eligible, p)
@@ -215,9 +222,9 @@ func (s *SLOAwareRouter) epsilonGreedyAffinityGate(
 	}
 
 	// ε-exploration branch
-	if r.Float64() < EpsilonExploreSticky {
+	if r.Float64() < s.config.EpsilonExploreSticky {
 		logger.V(logutil.DEBUG).Info("ε-greedy: exploring (ignoring affinity gate)",
-			"path", label, "epsilon", EpsilonExploreSticky, "eligibleCount", len(eligible))
+			"path", label, "epsilon", s.config.EpsilonExploreSticky, "eligibleCount", len(eligible))
 		return candidates, false
 	}
 
@@ -231,44 +238,44 @@ func (s *SLOAwareRouter) epsilonGreedyAffinityGate(
 func (s *SLOAwareRouter) scoreWithoutPredictions(
 	ctx context.Context,
 	sloCtx *sloRequestContext,
-	pods []schedulingtypes.Pod,
+	endpoints []schedulingtypes.Endpoint,
 	r *rand.Rand,
-) map[schedulingtypes.Pod]float64 {
+) map[schedulingtypes.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.TRACE).Info("Using composite-only scoring without predictions")
 
-	scores := make(map[schedulingtypes.Pod]float64, len(pods))
-	for _, pod := range pods {
-		scores[pod] = 0
+	scores := make(map[schedulingtypes.Endpoint]float64, len(endpoints))
+	for _, endpoint := range endpoints {
+		scores[endpoint] = 0
 	}
 
-	if len(pods) == 0 {
+	if len(endpoints) == 0 {
 		return scores
 	}
 
 	// Build prediction results with only prefix cache scores
-	podResults := make([]podPredictionResult, 0, len(pods))
-	for _, pod := range pods {
-		prefixScore := sloCtx.prefixCacheScoresForPods[pod.GetPod().String()]
-		podResults = append(podResults, podPredictionResult{
-			Pod:              pod,
+	endpointResults := make([]endpointPredictionResult, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		prefixScore := sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name]
+		endpointResults = append(endpointResults, endpointPredictionResult{
+			Endpoint:         endpoint,
 			PrefixCacheScore: prefixScore,
-			IsValid:          true, // All pods are valid when we don't check predictions
+			IsValid:          true, // All endpoints are valid when we don't check predictions
 		})
 	}
 
 	// Select based on composite scores (prefix cache + other non-prediction metrics)
-	selectedPod := s.selectFromCompositeScores(ctx, podResults, r, headroomStrategyCompositeOnly)
+	selectedEndpoint := s.selectFromCompositeScores(ctx, endpointResults, r, headroomStrategyCompositeOnly)
 
-	if selectedPod != nil {
-		scores[selectedPod] = 1
-		logger.V(logutil.TRACE).Info("Selected pod using composite-only scoring", "pod", selectedPod.GetPod().String())
+	if selectedEndpoint != nil {
+		scores[selectedEndpoint] = 1
+		logger.V(logutil.TRACE).Info("Selected endpoint using composite-only scoring", "endpoint", selectedEndpoint.GetMetadata().String())
 	}
 
 	return scores
 }
 
-func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) map[schedulingtypes.Pod]float64 {
+func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) map[schedulingtypes.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	if s.latencypredictor == nil {
 		logger.V(logutil.DEBUG).Info("SLOAwareRouter: no predictor configured, returning nil scores")
@@ -279,56 +286,56 @@ func (s *SLOAwareRouter) Score(ctx context.Context, state *schedulingtypes.Cycle
 
 	sloCtx := s.getOrMakeSLORequestContext(request)
 
-	predictions, err := s.generatePredictions(ctx, request, sloCtx, pods)
+	predictions, err := s.generatePredictions(ctx, request, sloCtx, endpoints)
 	if err != nil || len(predictions) == 0 {
 		logger.V(logutil.DEBUG).Error(err, "SLOAwareRouter: Error generating predictions, falling back to composite-only scoring")
 		s.setSLOContextForRequest(request, sloCtx)
-		return s.scoreWithoutPredictions(ctx, sloCtx, pods, rng)
+		return s.scoreWithoutPredictions(ctx, sloCtx, endpoints, rng)
 	}
 	s.updateRequestContextWithPredictions(sloCtx, predictions)
 
 	// Initialize scores map with all pods having score 0
-	scores := make(map[schedulingtypes.Pod]float64, len(pods))
-	for _, pod := range pods {
-		scores[pod] = 0
+	scores := make(map[schedulingtypes.Endpoint]float64, len(endpoints))
+	for _, endpoint := range endpoints {
+		scores[endpoint] = 0
 	}
-	allPreds := append([]podPredictionResult(nil), predictions...)
-	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", AffinityGateTauGlobal)
+	allPreds := append([]endpointPredictionResult(nil), predictions...)
+	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", s.config.AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
-	allPodsInvalid := (sloCtx.ttftSLO > 0 && sloCtx.avgTPOTSLO > 0)
-	allPodsHaveRunningRequests := true
+	allEndpointsInvalid := (sloCtx.ttftSLO > 0 && (sloCtx.avgTPOTSLO > 0 || !s.config.StreamingMode))
+	allEndpointsHaveRunningRequests := true
 
 	for _, pred := range allPreds {
 		if pred.IsValid {
-			allPodsInvalid = false
+			allEndpointsInvalid = false
 		}
 
-		runningRequestCount := s.getPodRunningRequestCount(pred.Pod)
+		runningRequestCount := s.getEndpointRunningRequestCount(pred.Endpoint)
 		if runningRequestCount == 0 {
-			allPodsHaveRunningRequests = false
+			allEndpointsHaveRunningRequests = false
 		}
 	}
 
-	// Set HasValidPod to false if all pods are invalid and all have running requests
-	if allPodsInvalid && allPodsHaveRunningRequests && !sticky {
-		sloCtx.hasValidPod = false
-		logger.V(logutil.DEBUG).Info("All pods are invalid and have running requests, setting HasValidPod to false")
+	// Set HasValidEndpoint to false if all endpoints are invalid and all have running requests
+	if allEndpointsInvalid && allEndpointsHaveRunningRequests && !sticky {
+		sloCtx.hasValidEndpoint = false
+		logger.V(logutil.DEBUG).Info("All endpoints are invalid and have running requests, setting HasValidEndpoint to false")
 	}
 
 	// 2) Tiered selection: positive headroom pods get 99% probability, negative get 1%
-	posHeadroomPods, negHeadroomPods := s.classifyPodsByHeadroom(allPreds)
+	posHeadroomEndpoints, negHeadroomEndpoints := s.classifyEndpointsByHeadroom(allPreds)
 
 	logger.V(logutil.DEBUG).Info("Pod headroom distribution",
-		"positivePods", len(posHeadroomPods),
-		"negativePods", len(negHeadroomPods))
+		"positivePods", len(posHeadroomEndpoints),
+		"negativePods", len(negHeadroomEndpoints))
 
-	selectedPod := s.selectPodBasedOnStrategy(ctx, rng, allPreds, posHeadroomPods, negHeadroomPods)
+	selectedEndpoint := s.selectEndpointBasedOnStrategy(ctx, rng, allPreds, posHeadroomEndpoints, negHeadroomEndpoints)
 
-	// Set score = 1 for selected pod, 0 for all others
-	if selectedPod != nil {
-		scores[selectedPod] = 1
-		logger.V(logutil.DEBUG).Info("Selected pod for scheduling", "pod", selectedPod.GetPod().String())
+	// Set score = 1 for selected endpoint, 0 for all others
+	if selectedEndpoint != nil {
+		scores[selectedEndpoint] = 1
+		logger.V(logutil.DEBUG).Info("Selected endpoint for scheduling", "endpoint", selectedEndpoint.GetMetadata().String())
 	}
 
 	s.setSLOContextForRequest(request, sloCtx)
@@ -345,8 +352,8 @@ func (t *SLOAwareRouter) getOrMakeSLORequestContext(request *schedulingtypes.LLM
 	return sloCtx
 }
 
-func (s *SLOAwareRouter) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, pod schedulingtypes.Pod) float64 {
-	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for pod", "pod", pod.GetPod().String())
+func (s *SLOAwareRouter) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, endpoint schedulingtypes.Endpoint) float64 {
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String())
 	plugintype := prefix.PrefixCachePluginType
 	pluginname := prefix.PrefixCachePluginType
 	cycleStateKey := (plugins.TypedName{Type: plugintype, Name: pluginname}).String()
@@ -356,7 +363,7 @@ func (s *SLOAwareRouter) getPrefixCacheScoreForPod(ctx context.Context, cycleSta
 
 	if err != nil {
 		// The prefix cache plugin might not be enabled, which is a valid scenario.
-		log.FromContext(ctx).V(logutil.DEBUG).Info("prefix cache state not found in cycle state, returning prefix cache score of 0.0", "pod", pod.GetPod().String())
+		log.FromContext(ctx).V(logutil.DEBUG).Info("prefix cache state not found in cycle state, returning prefix cache score of 0.0", "pod", endpoint.GetMetadata().String())
 		return 0.0
 	}
 
@@ -374,7 +381,7 @@ func (s *SLOAwareRouter) getPrefixCacheScoreForPod(ctx context.Context, cycleSta
 		return 0.0
 	}
 
-	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(pod.GetPod().NamespacedName)]
-	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", pod.GetPod().String(), "matchLen", matchLen, "totalPrefixes", total)
+	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(endpoint.GetMetadata().NamespacedName)]
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
 }

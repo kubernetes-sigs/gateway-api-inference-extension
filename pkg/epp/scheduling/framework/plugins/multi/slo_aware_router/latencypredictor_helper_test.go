@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -35,7 +35,7 @@ func TestBulkPredictWithMetrics(t *testing.T) {
 		},
 	}
 
-	metricsStates := []*backendmetrics.MetricsState{
+	metricsStates := []*datalayer.Metrics{
 		{KVCacheUsagePercent: 0.5},
 		{KVCacheUsagePercent: 0.6},
 	}
@@ -58,7 +58,7 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 		err: errors.New("prediction failed"),
 	}
 
-	metricsStates := []*backendmetrics.MetricsState{
+	metricsStates := []*datalayer.Metrics{
 		{KVCacheUsagePercent: 0.5},
 	}
 	prompts := []string{"prompt1"}
@@ -73,7 +73,7 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 
 func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 	mockPredictor := &mockPredictor{}
-	metricsStates := []*backendmetrics.MetricsState{{}}
+	metricsStates := []*datalayer.Metrics{{}}
 	prompts := []string{"prompt1", "prompt2"} // Mismatch length
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
@@ -87,7 +87,7 @@ func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 
 func TestBulkPredictWithMetrics_NilMetricsState(t *testing.T) {
 	mockPredictor := &mockPredictor{}
-	metricsStates := []*backendmetrics.MetricsState{nil} // Nil metrics state
+	metricsStates := []*datalayer.Metrics{nil} // Nil metrics state
 	prompts := []string{"prompt1"}
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}

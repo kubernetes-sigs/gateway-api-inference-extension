@@ -40,13 +40,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -94,7 +94,9 @@ const (
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
-// TODO: This is a bad pattern. Remove this once we hook Flow Control into the config loading path.
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
+// Remove this static initialization helper once Flow Control is integrated
+// into the EPP YAML-based plugin configuration path.
 func must[T any](t T, err error) T {
 	if err != nil {
 		panic(fmt.Sprintf("static initialization failed: %v", err))
@@ -102,7 +104,9 @@ func must[T any](t T, err error) T {
 	return t
 }
 
-// TODO: This is hardcoded for POC only. This needs to be hooked up to our text-based config story.
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
+// Remove hardcoded configuration. Priorities, fairness policies, and limits should be loaded from the standard EPP
+// configuration system.
 var flowControlConfig = flowcontrol.Config{
 	Controller: fccontroller.Config{},        // Use all defaults.
 	Registry:   must(fcregistry.NewConfig()), // Use all defaults.
@@ -153,6 +157,8 @@ func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runne
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
+
 	opts := runserver.NewOptions()
 	opts.AddFlags(pflag.CommandLine)
 	pflag.Parse()
@@ -165,7 +171,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 	// Print all flag values
 	flags := make(map[string]any)
 	flag.VisitAll(func(f *flag.Flag) {
@@ -196,7 +201,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// --- Setup Datastore ---
-	epf, err := r.setupMetricsCollection(setupLog, r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts)
+	epf, err := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts)
 	if err != nil {
 		return err
 	}
@@ -210,7 +215,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	startCrdReconcilers := opts.EndpointSelector == "" // If endpointSelector is empty, it means it's not in the standalone mode. Then we should start the inferencePool and other CRD Reconciler.
 	controllerCfg := runserver.NewControllerConfig(startCrdReconcilers)
 
-	ds, err := setupDatastore(setupLog, ctx, epf, int32(opts.ModelServerMetricsPort), startCrdReconcilers,
+	ds, err := setupDatastore(ctx, epf, int32(opts.ModelServerMetricsPort), startCrdReconcilers,
 		opts.PoolName, opts.PoolNamespace, opts.EndpointSelector, opts.EndpointTargetPorts)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup datastore")
@@ -264,14 +269,10 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	if opts.EnablePprof {
-		setupLog.Info("Enabling pprof handlers")
-		err = setupPprofHandlers(mgr)
-		if err != nil {
+		if err = setupPprofHandlers(mgr); err != nil {
 			setupLog.Error(err, "Failed to setup pprof handlers")
 			return err
 		}
-		runtime.SetMutexProfileFraction(1)
-		runtime.SetBlockProfileRate(1)
 	}
 
 	// --- Initialize Core EPP Components ---
@@ -285,12 +286,29 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
+	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] { // initialize the data layer from configuration
+		if err := datalayer.WithConfig(eppConfig.DataConfig); err != nil {
+			setupLog.Error(err, "failed to initialize data layer")
+			return err
+		}
+		sources := datalayer.GetSources()
+		if len(sources) == 0 {
+			err := errors.New("data layer enabled but no data sources configured")
+			setupLog.Error(err, "failed to initialize data layer")
+			return err
+		}
+		epf.SetSources(sources)
+		for _, src := range sources {
+			setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
+		}
+	}
+
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
 	var locator contracts.PodLocator
-	locator = requestcontrol.NewDatastorePodLocator(ds)
+	locator = requestcontrol.NewDatastorePodLocator(ds, requestcontrol.WithDisableEndpointSubsetFilter(opts.DisableEndpointSubsetFilter))
 	if r.featureGates[flowcontrol.FeatureGate] {
 		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
@@ -309,7 +327,6 @@ func (r *Runner) Run(ctx context.Context) error {
 			fcCfg.Controller,
 			registry, saturationDetector,
 			locator,
-			setupLog,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
@@ -321,12 +338,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, locator)
 	}
 
-	director := requestcontrol.NewDirectorWithConfig(
-		ds,
-		scheduler,
-		admissionController,
-		locator,
-		r.requestControlConfig)
+	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, locator, r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -344,7 +356,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
 	}
-	if err := serverRunner.SetupWithManager(ctx, mgr); err != nil {
+	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
 		return err
 	}
@@ -371,7 +383,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32,
+func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32,
 	startCrdReconcilers bool, namespace, name, endpointSelector string, endpointTargetPorts []int) (datastore.Datastore, error) {
 	if startCrdReconcilers {
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort), nil
@@ -383,7 +395,7 @@ func setupDatastore(setupLog logr.Logger, ctx context.Context, epFactory datalay
 			return nil, err
 		}
 		endpointPool.Selector = labelsMap
-		_ = copy(endpointPool.TargetPorts, endpointTargetPorts)
+		endpointPool.TargetPorts = append(endpointPool.TargetPorts, endpointTargetPorts...)
 
 		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
@@ -528,18 +540,18 @@ func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.L
 	}
 }
 
-func (r *Runner) setupMetricsCollection(setupLog logr.Logger, useExperimentalDatalayer bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
+func (r *Runner) setupMetricsCollection(useExperimentalDatalayer bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
 	if useExperimentalDatalayer {
-		return setupDatalayer(setupLog, opts)
+		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval), nil
 	}
 
 	if len(datalayer.GetSources()) != 0 {
 		setupLog.Info("data sources registered but pluggable datalayer is disabled")
 	}
-	return setupMetricsV1(setupLog, opts)
+	return setupMetricsV1(opts)
 }
 
-func setupMetricsV1(setupLog logr.Logger, opts *runserver.Options) (datalayer.EndpointFactory, error) {
+func setupMetricsV1(opts *runserver.Options) (datalayer.EndpointFactory, error) {
 	mapping, err := backendmetrics.NewMetricMapping(
 		opts.TotalQueuedRequestsMetric,
 		opts.TotalRunningRequestsMetric,
@@ -551,7 +563,7 @@ func setupMetricsV1(setupLog logr.Logger, opts *runserver.Options) (datalayer.En
 		setupLog.Error(err, "Failed to create metric mapping from flags.")
 		return nil, err
 	}
-	verifyMetricMapping(*mapping, setupLog)
+	verifyMetricMapping(*mapping)
 
 	var metricsHttpClient *http.Client
 	if opts.ModelServerMetricsScheme == "https" {
@@ -574,43 +586,6 @@ func setupMetricsV1(setupLog logr.Logger, opts *runserver.Options) (datalayer.En
 	},
 		opts.RefreshMetricsInterval)
 	return pmf, nil
-}
-
-// This function serves two (independent) purposes:
-// - creating data sources and configuring their extractors.
-// - configuring endpoint factory with the provided source.
-// In the future, data sources and extractors might be configured via
-// a file. Once done, this (and registering the sources with the
-// endpoint factory) should be moved accordingly.
-// Regardless, registration of all sources (e.g., if additional sources
-// are to be configured), must be done before the EndpointFactory is initialized.
-func setupDatalayer(logger logr.Logger, opts *runserver.Options) (datalayer.EndpointFactory, error) {
-	// create and register a metrics data source and extractor.
-	source := dlmetrics.NewMetricsDataSource(opts.ModelServerMetricsScheme,
-		opts.ModelServerMetricsPath,
-		opts.ModelServerMetricsHTTPSInsecure)
-	extractor, err := dlmetrics.NewModelServerExtractor(opts.TotalQueuedRequestsMetric,
-		opts.TotalRunningRequestsMetric,
-		opts.KVCacheUsagePercentageMetric,
-		opts.LoRAInfoMetric, opts.CacheInfoMetric)
-
-	if err != nil {
-		return nil, err
-	}
-	if err := source.AddExtractor(extractor); err != nil {
-		return nil, err
-	}
-	if err := datalayer.RegisterSource(source); err != nil {
-		return nil, err
-	}
-
-	// TODO: this could be moved to the configuration loading functions once ported over.
-	sources := datalayer.GetSources()
-	for _, src := range sources {
-		logger.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
-	}
-	factory := datalayer.NewEndpointFactory(sources, opts.RefreshMetricsInterval)
-	return factory, nil
 }
 
 func initLogging(opts *zap.Options) {
@@ -645,24 +620,25 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 	return nil
 }
 
-func verifyMetricMapping(mapping backendmetrics.MetricMapping, logger logr.Logger) {
+func verifyMetricMapping(mapping backendmetrics.MetricMapping) {
 	if mapping.TotalQueuedRequests == nil {
-		logger.Info("Not scraping metric: TotalQueuedRequests")
+		setupLog.Info("Not scraping metric: TotalQueuedRequests")
 	}
 	if mapping.KVCacheUtilization == nil {
-		logger.Info("Not scraping metric: KVCacheUtilization")
+		setupLog.Info("Not scraping metric: KVCacheUtilization")
 	}
 	if mapping.LoraRequestInfo == nil {
-		logger.Info("Not scraping metric: LoraRequestInfo")
+		setupLog.Info("Not scraping metric: LoraRequestInfo")
 	}
 	if mapping.CacheConfigInfo == nil {
-		logger.Info("Not scraping metric: CacheConfigInfo")
+		setupLog.Info("Not scraping metric: CacheConfigInfo")
 	}
 }
 
 // setupPprofHandlers only implements the pre-defined profiles:
 // https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/runtime/pprof/pprof.go;l=108
 func setupPprofHandlers(mgr ctrl.Manager) error {
+	setupLog.Info("Enabling pprof handlers")
 	var err error
 	profiles := []string{
 		"heap",
@@ -678,6 +654,10 @@ func setupPprofHandlers(mgr ctrl.Manager) error {
 			return err
 		}
 	}
+
+	runtime.SetMutexProfileFraction(1)
+	runtime.SetBlockProfileRate(1)
+
 	return nil
 }
 

@@ -22,25 +22,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 func TestQueueScorer(t *testing.T) {
 	tests := []struct {
-		name              string
-		pods              []types.Pod
-		expectedScoresPod map[int]float64 // Map of pod index to expected score
+		name                   string
+		endpoints              []types.Endpoint
+		expectedScoresEndpoint map[int]float64 // Map of endpoint index to expected score
 	}{
 		{
 			name: "Different queue sizes",
-			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 10}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 5}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 0}},
+			endpoints: []types.Endpoint{
+				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 10}},
+				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
+				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
 			},
-			expectedScoresPod: map[int]float64{
+			expectedScoresEndpoint: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
 				1: 0.5, // Medium queue (5) gets medium score
 				2: 1.0, // Shortest queue (0) gets highest score
@@ -48,22 +47,22 @@ func TestQueueScorer(t *testing.T) {
 		},
 		{
 			name: "Same queue sizes",
-			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 5}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 5}},
+			endpoints: []types.Endpoint{
+				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
+				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
 			},
-			expectedScoresPod: map[int]float64{
+			expectedScoresEndpoint: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
 				1: 1.0,
 			},
 		},
 		{
 			name: "Zero queue sizes",
-			pods: []types.Pod{
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 0}},
-				&types.PodMetrics{Pod: &backend.Pod{}, MetricsState: &backendmetrics.MetricsState{WaitingQueueSize: 0}},
+			endpoints: []types.Endpoint{
+				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
+				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
 			},
-			expectedScoresPod: map[int]float64{
+			expectedScoresEndpoint: map[int]float64{
 				0: 1.0,
 				1: 1.0,
 			},
@@ -74,11 +73,11 @@ func TestQueueScorer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scores := scorer.Score(context.Background(), types.NewCycleState(), &types.LLMRequest{}, test.pods)
+			scores := scorer.Score(context.Background(), types.NewCycleState(), &types.LLMRequest{}, test.endpoints)
 
-			for i, pod := range test.pods {
-				expectedScore := test.expectedScoresPod[i]
-				assert.InDelta(t, expectedScore, scores[pod], 0.0001, "Pod %d should have score %f", i, expectedScore)
+			for i, endpoint := range test.endpoints {
+				expectedScore := test.expectedScoresEndpoint[i]
+				assert.InDelta(t, expectedScore, scores[endpoint], 0.0001, "Pod %d should have score %f", i, expectedScore)
 			}
 		})
 	}

@@ -17,6 +17,6 @@ spec:
       insecureSkipVerify: true
     {{- with (index (index $dr "trafficPolicy") "connectionPool") }}
     connectionPool:
-      {{- toYaml . | nindent 6 }}
+      {{- . | toYaml | nindent 6 }}
     {{- end }}
 {{- end }}

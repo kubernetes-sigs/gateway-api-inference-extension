@@ -48,6 +48,10 @@ type PodMetricsFactory struct {
 	refreshMetricsInterval time.Duration
 }
 
+func (f *PodMetricsFactory) SetSources(_ []datalayer.DataSource) {
+	// no-op
+}
+
 func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *datalayer.EndpointMetadata, ds datalayer.PoolInfo) datalayer.Endpoint {
 	pm := &podMetrics{
 		pmc:       f.pmc,
@@ -59,7 +63,7 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *dat
 		logger:    log.FromContext(parentCtx).WithValues("endpoint", metadata.NamespacedName),
 	}
 	pm.metadata.Store(metadata)
-	pm.metrics.Store(NewMetricsState())
+	pm.metrics.Store(datalayer.NewMetrics())
 
 	pm.startRefreshLoop(parentCtx)
 	return pm

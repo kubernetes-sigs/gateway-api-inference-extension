@@ -1,0 +1,75 @@
+{{- define "inference-extension.rbac" -}}
+{{- if .Values.inferenceExtension.monitoring.prometheus.enabled }}
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "gateway-api-inference-extension.cluster-rbac-name" . }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+    - authentication.k8s.io
+  resources:
+    - tokenreviews
+  verbs:
+    - create
+- apiGroups:
+    - authorization.k8s.io
+  resources:
+    - subjectaccessreviews
+  verbs:
+    - create
+- nonResourceURLs:
+    - "/metrics"
+  verbs:
+    - get
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "gateway-api-inference-extension.cluster-rbac-name" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "gateway-api-inference-extension.name" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "gateway-api-inference-extension.cluster-rbac-name" . }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ printf "%s-sa" (include "gateway-api-inference-extension.name" .) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ printf "%s-sa" (include "gateway-api-inference-extension.name" .) }}
+  namespace: {{ .Release.Namespace }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "gateway-api-inference-extension.name" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ printf "%s-sa" (include "gateway-api-inference-extension.name" .) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "gateway-api-inference-extension.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+---
+{{- end }}

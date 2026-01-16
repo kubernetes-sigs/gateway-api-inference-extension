@@ -138,14 +138,6 @@ func (p *Predictor) sampleFromSlice(entries []TrainingEntry, sampleSize int) []T
 	return sample[:sampleSize]
 }
 
-// Helper function to get minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // flushTraining sends buffered entries to training server in one bulk POST, with error handling.
 func (p *Predictor) flushTraining() {
 	p.bufferMu.Lock()

@@ -41,7 +41,7 @@ func (m *mockPrepareRequestDataPlugin) TypedName() plugins.TypedName {
 	return plugins.TypedName{Type: "mock", Name: m.name}
 }
 
-func (m *mockPrepareRequestDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+func (m *mockPrepareRequestDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	m.executed = true
 	if m.delay > 0 {
 		select {
@@ -167,11 +167,11 @@ type dagTestPlugin struct {
 	mu       sync.Mutex
 }
 
-func (p *dagTestPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, pods []schedulingtypes.Pod) error {
+func (p *dagTestPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.execTime = time.Now()
-	return p.mockPrepareRequestDataPlugin.PrepareRequestData(ctx, request, pods)
+	return p.mockPrepareRequestDataPlugin.PrepareRequestData(ctx, request, endpoints)
 }
 
 func (p *dagTestPlugin) Produces() map[string]any {

@@ -20,29 +20,40 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	"os"
 
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
 var (
-	grpcPort       = flag.Int("grpc-port", 9004, "The gRPC port used for communicating with Envoy proxy")
-	grpcHealthPort = flag.Int("grpc-health-port", 9005, "The port used for gRPC liveness and readiness probes")
-	metricsPort    = flag.Int("metrics-port", 9090, "The metrics port")
-	streaming      = flag.Bool("streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
-	logVerbosity   = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	grpcPort            = flag.Int("grpc-port", 9004, "The gRPC port used for communicating with Envoy proxy")
+	grpcHealthPort      = flag.Int("grpc-health-port", 9005, "The port used for gRPC liveness and readiness probes")
+	metricsPort         = flag.Int("metrics-port", 9090, "The metrics port")
+	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
+	streaming           = flag.Bool("streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
+	secureServing       = flag.Bool("secure-serving", true, "Enables secure serving.")
+	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -66,6 +77,7 @@ func (r *Runner) WithExecutableName(exeName string) *Runner {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	setupLog.Info(r.bbrExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -85,25 +97,60 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	metrics.Register()
+	ds := datastore.NewDatastore()
 
+	metrics.Register()
 	// Register metrics handler.
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:    fmt.Sprintf(":%d", *metricsPort),
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
+		BindAddress: fmt.Sprintf(":%d", *metricsPort),
+		FilterProvider: func() func(c *rest.Config, httpClient *http.Client) (metricsserver.Filter, error) {
+			if *metricsEndpointAuth {
+				return filters.WithAuthenticationAndAuthorization
+			}
+
+			return nil
+		}(),
 	}
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Metrics: metricsServerOptions})
+	// label "inference-gateway.k8s.io/managed" = "true" is used for server-side filtering of configmaps.
+	// only the configmap objects with this label will be tracked by bbr.
+	cacheOptions := cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.ConfigMap{}: {
+				Label: labels.SelectorFromSet(labels.Set{
+					"inference-gateway.k8s.io/managed": "true",
+				}),
+			},
+		},
+	}
+	// Apply namespace filtering only if env var is set
+	namespace := os.Getenv("NAMESPACE")
+	if namespace != "" {
+		cacheOptions.DefaultNamespaces = map[string]cache.Config{
+			namespace: {},
+		}
+	}
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Cache: cacheOptions, Metrics: metricsServerOptions})
 	if err != nil {
 		setupLog.Error(err, "Failed to create manager", "config", cfg)
 		return err
 	}
 
-	// Setup runner.
-	serverRunner := runserver.NewDefaultExtProcServerRunner(*grpcPort, *streaming)
+	// Setup ExtProc Server Runner
+	serverRunner := &runserver.ExtProcServerRunner{
+		GrpcPort:      *grpcPort,
+		Datastore:     ds,
+		SecureServing: *secureServing,
+		Streaming:     *streaming,
+	}
+	if err := serverRunner.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to setup BBR controllers")
+		return err
+	}
 
 	// Register health server.
 	if err := registerHealthServer(mgr, *grpcHealthPort); err != nil {

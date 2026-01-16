@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"strings"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
@@ -56,7 +54,7 @@ func (r *LLMRequest) String() string {
 type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
-	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat_completions request body.
+	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat/completions request body.
 	ChatCompletions *ChatCompletionsRequest `json:"chat_completions,omitempty"`
 }
 
@@ -188,17 +186,17 @@ func (mc Content) PlainText() string {
 	return sb.String()
 }
 
-type Pod interface {
-	GetPod() *backend.Pod
-	GetMetrics() *backendmetrics.MetricsState
+type Endpoint interface {
+	GetMetadata() *datalayer.EndpointMetadata
+	GetMetrics() *datalayer.Metrics
 	String() string
 	Get(string) (datalayer.Cloneable, bool)
 	Put(string, datalayer.Cloneable)
 	Keys() []string
 }
 
-type ScoredPod struct {
-	Pod
+type ScoredEndpoint struct {
+	Endpoint
 	Score float64
 }
 
@@ -210,23 +208,23 @@ func (pm *PodMetrics) String() string {
 	return fmt.Sprintf("%+v", *pm)
 }
 
-func (pm *PodMetrics) GetPod() *backend.Pod {
-	return pm.Pod
+func (pm *PodMetrics) GetMetadata() *datalayer.EndpointMetadata {
+	return pm.EndpointMetadata
 }
 
-func (pm *PodMetrics) GetMetrics() *backendmetrics.MetricsState {
-	return pm.MetricsState
+func (pm *PodMetrics) GetMetrics() *datalayer.Metrics {
+	return pm.Metrics
 }
 
 type PodMetrics struct {
-	*backend.Pod
-	*backendmetrics.MetricsState
+	*datalayer.EndpointMetadata
+	*datalayer.Metrics
 	datalayer.AttributeMap
 }
 
 // ProfileRunResult captures the profile run result.
 type ProfileRunResult struct {
-	TargetPods []Pod
+	TargetEndpoints []Endpoint
 }
 
 // SchedulingResult captures the result of the scheduling cycle.

@@ -16,7 +16,6 @@ latencypredictor/__pycache__
 *.out
 
 # Go workspace file
-go.work
 go.work.sum
 
 # Kubernetes Generated files - skip generated files, except for vendored files
@@ -34,3 +33,9 @@ site
 
 # MacOS generated files
 **/.DS_Store
+
+# Ignore all Chart.lock files anywhere under config/charts
+config/charts/**/Chart.lock
+
+# Ignore all .tgz files anywhere under config/charts
+config/charts/**/*.tgz

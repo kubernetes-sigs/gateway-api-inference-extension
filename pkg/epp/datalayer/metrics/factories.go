@@ -19,10 +19,14 @@ package metrics
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	flag "github.com/spf13/pflag"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
@@ -72,8 +76,8 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle pl
 		}
 	}
 
-	ds := NewMetricsDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify)
-	ds.typedName.Name = name
+	ds := http.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, MetricsDataSourceType,
+		name, parseMetrics, PrometheusMetricType)
 	return ds, nil
 }
 
@@ -182,4 +186,9 @@ func fromBoolFlag(name string) (bool, error) {
 		return false, fmt.Errorf("invalid bool flag %q: %w", name, err)
 	}
 	return b, nil
+}
+
+func parseMetrics(data io.Reader) (any, error) {
+	parser := expfmt.NewTextParser(model.LegacyValidation)
+	return parser.TextToMetricFamilies(data)
 }

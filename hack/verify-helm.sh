@@ -27,6 +27,13 @@ test_cases_inference_pool["multiple-replicas"]="--set inferencePool.replicas=3 -
 # source (such as in the verify-all script)
 make helm-install
 
+echo "Building dependencies for inferencePool chart..."
+${SCRIPT_ROOT}/bin/helm dependency build ${SCRIPT_ROOT}/config/charts/inferencepool
+if [ $? -ne 0 ]; then
+  echo "Helm dependency build failed."
+  exit 1
+fi
+
 # Running tests cases
 echo "Running helm template command for inferencePool chart..."
 # Loop through the keys of the associative array

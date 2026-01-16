@@ -91,12 +91,11 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 // synchronizeFlow simulates the registry synchronizing a flow with a real queue.
 func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 	h.t.Helper()
-	spec := types.FlowSpecification{Key: key}
 	policy, err := intraflow.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
 	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
 	q, err := queue.NewQueueFromName(defaultQueue, policy.Comparator())
 	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
-	h.shard.synchronizeFlow(spec, policy, q)
+	h.shard.synchronizeFlow(key, policy, q)
 }
 
 // addItem adds an item to a specific flow's queue on the shard.

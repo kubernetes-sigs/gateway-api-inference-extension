@@ -84,8 +84,8 @@ IGW has enhanced support for vLLM via llm-d, and broad support for any model ser
 
 ![Latest Release](https://img.shields.io/github/v/release/kubernetes-sigs/gateway-api-inference-extension?)
 
-This project is in alpha. latest release can be found [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest).  
-It should not be used in production yet.
+This project is GA'd! The latest release can be found [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/latest).  
+Please file any bugs or feature requests you have. We are always happy to welcome new collaborators and users.
 
 ## Getting Started
 

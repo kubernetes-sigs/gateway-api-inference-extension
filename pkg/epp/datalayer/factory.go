@@ -47,6 +47,7 @@ type PoolInfo interface {
 // providing methods to allocate and retire endpoints. This can potentially be used for
 // pooled memory or other management chores in the implementation.
 type EndpointFactory interface {
+	SetSources(sources []DataSource)
 	NewEndpoint(parent context.Context, inEnpointMetadata *EndpointMetadata, poolinfo PoolInfo) Endpoint
 	ReleaseEndpoint(ep Endpoint)
 }
@@ -62,11 +63,19 @@ type EndpointLifecycle struct {
 // NewEndpointFactory returns a new endpoint for factory, managing collectors for
 // its endpoints. This function assumes that sources are not modified afterwards.
 func NewEndpointFactory(sources []DataSource, refreshMetricsInterval time.Duration) *EndpointLifecycle {
-	return &EndpointLifecycle{
-		sources:         sources,
+	eplc := &EndpointLifecycle{
 		collectors:      sync.Map{},
 		refreshInterval: refreshMetricsInterval,
 	}
+	eplc.SetSources(sources)
+	return eplc
+}
+
+// SetSources sets the slice of collectors associated with the endpoint life cycle.
+// This overrides any sources which may have previously been set on creation.
+func (lc *EndpointLifecycle) SetSources(sources []DataSource) {
+	lc.sources = make([]DataSource, len(sources)) // clone the source slice
+	copy(lc.sources, sources)
 }
 
 // NewEndpoint implements EndpointFactory.NewEndpoint.

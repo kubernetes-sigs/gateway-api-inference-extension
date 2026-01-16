@@ -408,35 +408,39 @@ func (m *mockPlugin) TypedName() plugins.TypedName { return m.t }
 // Mock Scorer
 type mockScorer struct{ mockPlugin }
 
-func (m *mockScorer) Score(context.Context, *types.CycleState, *types.LLMRequest, []types.Pod) map[types.Pod]float64 {
+// compile-time type assertion
+var _ framework.Scorer = &mockScorer{}
+
+func (m *mockScorer) Category() framework.ScorerCategory {
+	return framework.Distribution
+}
+
+func (m *mockScorer) Score(context.Context, *types.CycleState, *types.LLMRequest, []types.Endpoint) map[types.Endpoint]float64 {
 	return nil
 }
 
 // Mock Picker
 type mockPicker struct{ mockPlugin }
 
-func (m *mockPicker) Pick(context.Context, *types.CycleState, []*types.ScoredPod) *types.ProfileRunResult {
+// compile-time type assertion
+var _ framework.Picker = &mockPicker{}
+
+func (m *mockPicker) Pick(context.Context, *types.CycleState, []*types.ScoredEndpoint) *types.ProfileRunResult {
 	return nil
 }
 
 // Mock Handler
 type mockHandler struct{ mockPlugin }
 
-func (m *mockHandler) Pick(
-	context.Context,
-	*types.CycleState,
-	*types.LLMRequest,
-	map[string]*framework.SchedulerProfile,
-	map[string]*types.ProfileRunResult,
-) map[string]*framework.SchedulerProfile {
+// compile-time type assertion
+var _ framework.ProfileHandler = &mockHandler{}
+
+func (m *mockHandler) Pick(context.Context, *types.CycleState, *types.LLMRequest, map[string]*framework.SchedulerProfile,
+	map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
 	return nil
 }
-func (m *mockHandler) ProcessResults(
-	context.Context,
-	*types.CycleState,
-	*types.LLMRequest,
-	map[string]*types.ProfileRunResult,
-) (*types.SchedulingResult, error) {
+func (m *mockHandler) ProcessResults(context.Context, *types.CycleState, *types.LLMRequest,
+	map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
 	return nil, nil
 }
 

@@ -43,7 +43,7 @@ var (
 		},
 	}
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name + "-rank-0", Namespace: pod1.Namespace}
-	pod1Metrics        = &backendmetrics.MetricsState{
+	pod1Metrics        = &datalayer.Metrics{
 		WaitingQueueSize:    100,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -70,7 +70,7 @@ func TestNoMetricsCollected(t *testing.T) {
 }
 
 func TestMetricsCollected(t *testing.T) {
-	metrics := map[types.NamespacedName]*backendmetrics.MetricsState{
+	metrics := map[types.NamespacedName]*datalayer.Metrics{
 		pod1NamespacedName: pod1Metrics,
 	}
 	period := time.Millisecond

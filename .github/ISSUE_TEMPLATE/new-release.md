@@ -41,9 +41,9 @@ This document defines the process for releasing Gateway API Inference Extension.
    tag has been published, set the appropriate environment variable or update the script. For example:
 
    ```shell
-   export VLLM_GPU=0.8.5
+   export VLLM_GPU=0.13.0
    export VLLM_CPU=0.9.3
-   export VLLM_SIM=0.3.0
+   export VLLM_SIM=0.6.1
    ```
 
 ## Release Process
@@ -82,13 +82,13 @@ This document defines the process for releasing Gateway API Inference Extension.
    For a release candidate:
 
     ```shell
-    git commit -s -m "Updates artifacts for v${MAJOR}.${MINOR}.${PATCH}-rc.${RC} release"
+    git commit -S -m "Updates artifacts for v${MAJOR}.${MINOR}.${PATCH}-rc.${RC} release"
     ```
 
    For a major, minor or patch release:
 
     ```shell
-    git commit -s -m "Updates artifacts for v${MAJOR}.${MINOR}.${PATCH} release"
+    git commit -S -m "Updates artifacts for v${MAJOR}.${MINOR}.${PATCH} release"
     ```
 
 6. Push your release branch to the Gateway API Inference Extension remote.

@@ -24,7 +24,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-func (s *SLOAwareRouter) calculateHeadroomRanges(candidates []podPredictionResult) (minTPOTH, maxTPOTH, minTTFTH, maxTTFTH float64) {
+func (s *SLOAwareRouter) calculateHeadroomRanges(candidates []endpointPredictionResult) (minTPOTH, maxTPOTH, minTTFTH, maxTTFTH float64) {
 	minTPOTH, maxTPOTH = math.MaxFloat64, -math.MaxFloat64
 	minTTFTH, maxTTFTH = math.MaxFloat64, -math.MaxFloat64
 
@@ -47,7 +47,7 @@ func (s *SLOAwareRouter) calculateHeadroomRanges(candidates []podPredictionResul
 
 func (s *SLOAwareRouter) calculateWeightedChoices(
 	ctx context.Context,
-	candidates []podPredictionResult,
+	candidates []endpointPredictionResult,
 	minTPOTH, maxTPOTH, minTTFTH, maxTTFTH float64,
 ) ([]choice, int) {
 	logger := log.FromContext(ctx)
@@ -57,6 +57,11 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 	// Precompute blend weights (renormalize if user sets both to 0)
 	alpha := s.config.HeadroomTTFTWeight
 	beta := s.config.HeadroomTPOTWeight
+
+	if !s.config.StreamingMode {
+		alpha = 1
+		beta = 0
+	}
 	if alpha+beta <= 0 {
 		alpha = 1.0
 		beta = 0.0
@@ -73,15 +78,15 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 	weightedChoices := make([]choice, 0, len(candidates))
 	total := 0
 
-	for _, p := range candidates {
+	for _, e := range candidates {
 		// Normalize to [0,1] within the cohort
 		nTPOTH := 0.5
 		if tpotRange > eps {
-			nTPOTH = (p.Headroom - minTPOTH) / (tpotRange + eps)
+			nTPOTH = (e.Headroom - minTPOTH) / (tpotRange + eps)
 		}
 		nTTFTH := 0.5
 		if ttftRange > eps {
-			nTTFTH = (p.TTFTHeadroom - minTTFTH) / (ttftRange + eps)
+			nTTFTH = (e.TTFTHeadroom - minTTFTH) / (ttftRange + eps)
 		}
 
 		// Blend: larger combined -> "safer"; smaller -> "tighter packing"
@@ -101,13 +106,13 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 			w = int((1.0-combined)*float64(wMax-minWeight)) + minWeight + 1
 		}
 
-		weightedChoices = append(weightedChoices, choice{podName: p.Pod, weight: w})
+		weightedChoices = append(weightedChoices, choice{endpointName: e.Endpoint, weight: w})
 		total += w
 
 		logger.V(logutil.TRACE).Info("Positive headroom blended weight",
-			"pod", p.Pod.GetPod().String(),
-			"ttftHeadroom", p.TTFTHeadroom, "normTTFTHeadroom", nTTFTH,
-			"tpotHeadroom", p.Headroom, "normTPOTHeadroom", nTPOTH,
+			"endpoint", e.Endpoint.GetMetadata().String(),
+			"ttftHeadroom", e.TTFTHeadroom, "normTTFTHeadroom", nTTFTH,
+			"tpotHeadroom", e.Headroom, "normTPOTHeadroom", nTPOTH,
 			"combined", combined, "weight", w)
 	}
 	return weightedChoices, total

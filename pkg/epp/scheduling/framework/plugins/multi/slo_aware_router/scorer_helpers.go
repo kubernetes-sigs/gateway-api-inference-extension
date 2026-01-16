@@ -43,56 +43,56 @@ func (s *SLOAwareRouter) parseSLOHeaders(ctx context.Context, request *schedulin
 	}
 }
 
-func (s *SLOAwareRouter) classifyPodsByHeadroom(allPreds []podPredictionResult) (posHeadroomPods, negHeadroomPods []podPredictionResult) {
+func (s *SLOAwareRouter) classifyEndpointsByHeadroom(allPreds []endpointPredictionResult) (posHeadroomEndpoints, negHeadroomEndpoints []endpointPredictionResult) {
 	for _, p := range allPreds {
-		// A pod has positive headroom only if BOTH TTFT and TPOT have positive headroom
-		if p.Headroom > 0 && p.TTFTHeadroom > 0 {
-			posHeadroomPods = append(posHeadroomPods, p)
+		// An endpoint has positive headroom only if BOTH TTFT and TPOT have positive headroom
+		if (p.Headroom >= 0) && p.TTFTHeadroom >= 0 {
+			posHeadroomEndpoints = append(posHeadroomEndpoints, p)
 		} else {
-			// A pod has negative headroom if EITHER TTFT or TPOT has negative/zero headroom
-			negHeadroomPods = append(negHeadroomPods, p)
+			// An endpoint has negative headroom if EITHER TTFT or TPOT has negative/zero headroom
+			negHeadroomEndpoints = append(negHeadroomEndpoints, p)
 		}
 	}
 	return
 }
 
-func (s *SLOAwareRouter) selectPodBasedOnStrategy(
+func (s *SLOAwareRouter) selectEndpointBasedOnStrategy(
 	ctx context.Context,
 	r *rand.Rand,
-	allPreds, posHeadroomPods, negHeadroomPods []podPredictionResult,
-) schedulingtypes.Pod {
+	allPreds, posHeadroomEndpoints, negHeadroomEndpoints []endpointPredictionResult,
+) schedulingtypes.Endpoint {
 	logger := log.FromContext(ctx)
-	var selectedPod schedulingtypes.Pod
+	var selectedEndpoint schedulingtypes.Endpoint
 
 	switch {
 	case s.headroomStrategy == headroomStrategyCompositeOnly:
 		logger.V(logutil.DEBUG).Info("Selecting from composite scores only")
-		selectedPod = s.selectFromCompositeScores(ctx, allPreds, r, headroomStrategyCompositeOnly)
-	case len(posHeadroomPods) > 0 && len(negHeadroomPods) > 0:
-		// 99% chance to select from positive headroom pods, 1% from negative
+		selectedEndpoint = s.selectFromCompositeScores(ctx, allPreds, r, headroomStrategyCompositeOnly)
+	case len(posHeadroomEndpoints) > 0 && len(negHeadroomEndpoints) > 0:
+		// 99% chance to select from positive headroom endpoints, 1% from negative
 		if r.Float64() < s.config.EpsilonExploreNeg {
-			logger.V(logutil.DEBUG).Info("Selecting from negative headroom pods (1% chance)")
-			selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
+			logger.V(logutil.DEBUG).Info("Selecting from negative headroom endpoints (1% chance)")
+			selectedEndpoint = s.selectFromNegativeHeadroomEndpoints(ctx, negHeadroomEndpoints, r)
 		} else {
-			logger.V(logutil.DEBUG).Info("Selecting from positive headroom pods (99% chance)")
-			selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
+			logger.V(logutil.DEBUG).Info("Selecting from positive headroom endpoints (99% chance)")
+			selectedEndpoint = s.selectFromPositiveHeadroomEndpoints(ctx, posHeadroomEndpoints, r)
 		}
-	case len(posHeadroomPods) > 0:
-		// If only positive headroom pods exist, select from them
-		logger.V(logutil.DEBUG).Info("Only positive headroom pods available")
-		selectedPod = s.selectFromPositiveHeadroomPods(ctx, posHeadroomPods, r)
-	case len(negHeadroomPods) > 0:
-		// If only negative headroom pods exist, select from them
-		logger.V(logutil.DEBUG).Info("Only negative headroom pods available")
-		selectedPod = s.selectFromNegativeHeadroomPods(ctx, negHeadroomPods, r)
+	case len(posHeadroomEndpoints) > 0:
+		// If only positive headroom endpoints exist, select from them
+		logger.V(logutil.DEBUG).Info("Only positive headroom endpoints available")
+		selectedEndpoint = s.selectFromPositiveHeadroomEndpoints(ctx, posHeadroomEndpoints, r)
+	case len(negHeadroomEndpoints) > 0:
+		// If only negative headroom endpoints exist, select from them
+		logger.V(logutil.DEBUG).Info("Only negative headroom endpoints available")
+		selectedEndpoint = s.selectFromNegativeHeadroomEndpoints(ctx, negHeadroomEndpoints, r)
 	case len(allPreds) > 0:
-		// fallback - select randomly from valid pods
-		logger.V(logutil.DEBUG).Info("No headroom pods available, selecting randomly from valid pods")
-		selectedPod = allPreds[r.Intn(len(allPreds))].Pod
+		// fallback - select randomly from valid endpoints
+		logger.V(logutil.DEBUG).Info("No headroom endpoints available, selecting randomly from valid endpoints")
+		selectedEndpoint = allPreds[r.Intn(len(allPreds))].Endpoint
 	default:
-		// No valid pods - return nil (caller handles this)
-		logger.V(logutil.DEBUG).Info("No valid pods available")
+		// No valid endpoints - return nil (caller handles this)
+		logger.V(logutil.DEBUG).Info("No valid endpoints available")
 		return nil
 	}
-	return selectedPod
+	return selectedEndpoint
 }

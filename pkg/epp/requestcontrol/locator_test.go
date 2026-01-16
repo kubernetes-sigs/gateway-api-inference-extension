@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -42,10 +42,10 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 
 	allPods := []backendmetrics.PodMetrics{podA, podB, podC}
 	mockDS := &mockDatastore{pods: allPods}
-	locator := NewDatastorePodLocator(mockDS)
 
 	tests := []struct {
 		name           string
+		opts           []LocatorOption
 		metadata       map[string]any
 		expectedPodIPs []string
 	}{
@@ -105,11 +105,40 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			}),
 			expectedPodIPs: []string{"10.0.0.1"},
 		},
+		{
+			name: "Subset filter with match (filter disabled)",
+			opts: []LocatorOption{
+				WithDisableEndpointSubsetFilter(true),
+			},
+			metadata: makeMetadataWithSubset([]any{
+				"10.0.0.1:8080",
+			}),
+			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+		},
+		{
+			name: "Subset filter is present but list is empty (filter disabled)",
+			opts: []LocatorOption{
+				WithDisableEndpointSubsetFilter(true),
+			},
+			metadata:       makeMetadataWithSubset([]any{}),
+			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+		},
+		{
+			name: "Subset filter with no matches (filter disabled)",
+			opts: []LocatorOption{
+				WithDisableEndpointSubsetFilter(true),
+			},
+			metadata: makeMetadataWithSubset([]any{
+				"192.168.1.1:8080",
+			}),
+			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			locator := NewDatastorePodLocator(mockDS, tc.opts...)
 			result := locator.Locate(context.Background(), tc.metadata)
 
 			var gotIPs []string
@@ -276,7 +305,7 @@ func (m *mockPodLocator) callCount() int {
 
 func makeMockPodMetrics(name, ip string) backendmetrics.PodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Pod: &backend.Pod{
+		Metadata: &datalayer.EndpointMetadata{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: name},
 			Address:        ip,
 		},

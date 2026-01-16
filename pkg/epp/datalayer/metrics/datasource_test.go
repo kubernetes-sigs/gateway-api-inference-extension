@@ -25,10 +25,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
 )
 
 func TestDatasource(t *testing.T) {
-	source := NewMetricsDataSource("https", "/metrics", true)
+	source := http.NewHTTPDataSource("https", "/metrics", true, MetricsDataSourceType,
+		"metrics-data-source", parseMetrics, PrometheusMetricType)
 	extractor, err := NewModelServerExtractor(defaultTotalQueuedRequestsMetric, "", "", "", "")
 	assert.Nil(t, err, "failed to create extractor")
 
