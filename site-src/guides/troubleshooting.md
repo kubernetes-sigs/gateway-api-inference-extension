@@ -107,7 +107,9 @@ This mismatch causes the EPP to fundamentally misunderstand the caching behavior
 *   **Overpredicting Cache Hits (Hotspots):** If EPP believes a pod has a prefix match when it doesn't (e.g., due to an incorrect `blockSize` or `lruCapacityPerServer` that is too large), it will aggressively funnel requests to that single pod. The pod effectively experiences a cache miss for every request, recalculating the full prompt while other pods sit idle.
 *   **Underpredicting Cache Hits (Missed Opportunities):** Conversely, if `lruCapacityPerServer` is too small, EPP may believe a pod has evicted a prefix that is actually still present. This leads to inefficient routing where requests are sent to suboptimal pods, missing out on "free" acceleration.
 
-**Solution**: Ensure that your prefix cache scorer parameters are tuned to match your model server's settings. You can override these in your `values.yaml` by providing a custom plugin configuration that matches your existing profile structure:
+**Solution**:
+*   **v1.2+**: We recommend using the auto-tuning capability, which automatically syncs configuration with the model server. This feature is currently only supported for model servers that expose the required memory block metrics (e.g., vLLM). It is not currently supported for `sglang` because the necessary metrics regarding memory blocks (`Block Size` and `Number of GPU Blocks`) are not yet exposed.
+*   **v1.1 and earlier**: Ensure that your prefix cache scorer parameters are manually tuned to match your model server's settings. You can override these in your `values.yaml` by providing a custom plugin configuration that matches your existing profile structure:
 
 #### Example: Classic Routing (Latency Predictor Disabled)
 Use this if you are using the default queue and cache-based scorers.
