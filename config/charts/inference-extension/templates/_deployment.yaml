@@ -165,7 +165,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-        {{- include "gateway-api-inference-extension.latencyPredictor.env" . | nindent 8 }}
+        {{- include "gateway-api-inference-extension.latencyPredictor.env" . | nindent 12 }}
         {{- if .Values.inferenceExtension.tracing.enabled }}
             - name: OTEL_SERVICE_NAME
               value: "gateway-api-inference-extension"
@@ -191,26 +191,26 @@ spec:
               value: {{ .Values.inferenceExtension.tracing.sampling.samplerArg | quote }}
         {{- end }}
         {{- if .Values.inferenceExtension.env }}
-        {{- toYaml .Values.inferenceExtension.env | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.env | nindent 12 }}
         {{- end }}
           volumeMounts:
             - name: plugins-config-volume
               mountPath: "/config"
         {{- if .Values.inferenceExtension.volumeMounts }}
-        {{- toYaml .Values.inferenceExtension.volumeMounts | nindent 8 }}
+        {{- toYaml .Values.inferenceExtension.volumeMounts | nindent 12 }}
         {{- end }}
-      {{- include "gateway-api-inference-extension.latencyPredictor.containers" . | nindent 6 }}
+      {{- include "gateway-api-inference-extension.latencyPredictor.containers" . | nindent 8 }}
       volumes:
       {{- if .Values.inferenceExtension.volumes }}
-      {{- toYaml .Values.inferenceExtension.volumes | nindent 6 }}
+      {{- toYaml .Values.inferenceExtension.volumes | nindent 8 }}
       {{- end }}
       {{- if .Values.inferenceExtension.sidecar.volumes }}
-      {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 6 }}
+      {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 8 }}
       {{- end }}
-      - name: plugins-config-volume
-        configMap:
-          name: {{ include "gateway-api-inference-extension.name" . }}
-      {{- include "gateway-api-inference-extension.latencyPredictor.volumes" . | nindent 6 }}
+        - name: plugins-config-volume
+          configMap:
+            name: {{ include "gateway-api-inference-extension.name" . }}
+      {{- include "gateway-api-inference-extension.latencyPredictor.volumes" . | nindent 8 }}
       {{- if .Values.inferenceExtension.affinity }}
       affinity:
         {{- toYaml .Values.inferenceExtension.affinity | nindent 8 }}
