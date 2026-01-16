@@ -40,12 +40,21 @@ const (
 func TestExtractorExtract(t *testing.T) {
 	ctx := context.Background()
 
-	if _, err := NewModelServerExtractor("vllm: dummy", "", "", "", ""); err == nil {
-		t.Error("expected to fail to create extractor with invalid specification")
+	if _, err := NewModelServerExtractor(nil, ""); err == nil {
+		t.Error("expected to fail to create extractor with nil registry")
 	}
 
-	extractor, err := NewModelServerExtractor(defaultTotalQueuedRequestsMetric, defaultTotalRunningRequestsMetric,
+	registry := NewMappingRegistry()
+	mapping, err := NewMapping(defaultTotalQueuedRequestsMetric, defaultTotalRunningRequestsMetric,
 		defaultKvCacheUsagePercentageMetric, defaultLoraInfoMetric, defaultCacheInfoMetric)
+	if err != nil {
+		t.Fatalf("failed to create mapping: %v", err)
+	}
+	if err := registry.Register(DefaultEngineType, mapping); err != nil {
+		t.Fatalf("failed to register mapping: %v", err)
+	}
+
+	extractor, err := NewModelServerExtractor(registry, "")
 	if err != nil {
 		t.Fatalf("failed to create extractor: %v", err)
 	}
@@ -201,5 +210,95 @@ func TestExtractorExtract(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestExtractorMultiEngine(t *testing.T) {
+	ctx := context.Background()
+
+	registry := NewMappingRegistry()
+	// Default mapping (vllm)
+	mDef, _ := NewMapping("vllm:num_requests_waiting", "vllm:num_requests_running", "", "", "")
+	_ = registry.Register(DefaultEngineType, mDef)
+	// SGLang mapping
+	mSgl, _ := NewMapping("sglang:num_queue_reqs", "sglang:num_running_reqs", "", "", "")
+	_ = registry.Register("sglang", mSgl)
+
+	extractor, _ := NewModelServerExtractor(registry, "")
+
+	// Sample metric data
+	data := PrometheusMetricMap{
+		"vllm:num_requests_waiting": &dto.MetricFamily{
+			Type: dto.MetricType_GAUGE.Enum(),
+			Metric: []*dto.Metric{
+				{
+					Gauge: &dto.Gauge{Value: ptr.To(10.0)},
+				},
+			},
+		},
+		"sglang:num_queue_reqs": &dto.MetricFamily{
+			Type: dto.MetricType_GAUGE.Enum(),
+			Metric: []*dto.Metric{
+				{
+					Gauge: &dto.Gauge{Value: ptr.To(20.0)},
+				},
+			},
+		},
+	}
+
+	// Case 1: Engine = vllm (uses default)
+	epVllm := datalayer.NewEndpoint(&datalayer.EndpointMetadata{
+		Labels: map[string]string{EngineTypeLabelKey: "vllm"},
+	}, nil)
+	_ = extractor.Extract(ctx, data, epVllm)
+	if epVllm.GetMetrics().WaitingQueueSize != 10 {
+		t.Errorf("vllm: expected queue size 10, got %v", epVllm.GetMetrics().WaitingQueueSize)
+	}
+
+	// Case 2: Engine = sglang (uses specific)
+	epSgl := datalayer.NewEndpoint(&datalayer.EndpointMetadata{
+		Labels: map[string]string{EngineTypeLabelKey: "sglang"},
+	}, nil)
+	_ = extractor.Extract(ctx, data, epSgl)
+	if epSgl.GetMetrics().WaitingQueueSize != 20 {
+		t.Errorf("sglang: expected queue size 20, got %v", epSgl.GetMetrics().WaitingQueueSize)
+	}
+}
+
+func TestBackwardCompatibility(t *testing.T) {
+	ctx := context.Background()
+
+	registry := NewMappingRegistry()
+	// Default mapping (legacy behavior)
+	mDef, _ := NewMapping("vllm:num_requests_waiting", "", "", "", "")
+	_ = registry.Register(DefaultEngineType, mDef)
+
+	extractor, _ := NewModelServerExtractor(registry, "")
+
+	data := PrometheusMetricMap{
+		"vllm:num_requests_waiting": &dto.MetricFamily{
+			Type: dto.MetricType_GAUGE.Enum(),
+			Metric: []*dto.Metric{
+				{
+					Gauge: &dto.Gauge{Value: ptr.To(100.0)},
+				},
+			},
+		},
+	}
+
+	// Case 1: No labels at all
+	epNone := datalayer.NewEndpoint(&datalayer.EndpointMetadata{Labels: nil}, nil)
+	_ = extractor.Extract(ctx, data, epNone)
+	if epNone.GetMetrics().WaitingQueueSize != 100 {
+		t.Errorf("no labels: expected 100, got %v", epNone.GetMetrics().WaitingQueueSize)
+	}
+
+	// Case 2: Different label key or unknown value
+	epUnknown := datalayer.NewEndpoint(&datalayer.EndpointMetadata{
+		Labels: map[string]string{EngineTypeLabelKey: "unknown-engine"},
+	}, nil)
+	_ = extractor.Extract(ctx, data, epUnknown)
+	if epUnknown.GetMetrics().WaitingQueueSize != 100 {
+		t.Errorf("unknown label: expected 100, got %v", epUnknown.GetMetrics().WaitingQueueSize)
 	}
 }

@@ -91,6 +91,12 @@ type Options struct {
 	ConfigFile string // The path to the configuration file.
 	ConfigText string // The configuration specified as text, in lieu of a file.
 
+	//
+	// Multi-engine support
+	//
+	EnableMultiEngine bool   // Enables multi-engine metric collection.
+	EngineLabelKey    string // Pod label key used to identify the engine type.
+
 	// internal
 	fs *pflag.FlagSet // FlagSet used in AddFlags() and consulted in Complete()
 }
@@ -121,6 +127,8 @@ func NewOptions() *Options {
 		EnablePprof:                      true,
 		SecureServing:                    true,
 		MetricsEndpointAuth:              true,
+		EnableMultiEngine:                false,
+		EngineLabelKey:                   "inference.networking.k8s.io/engine-type",
 	}
 }
 
@@ -190,6 +198,10 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"Enables authentication and authorization of the metrics endpoint.")
 	fs.StringVar(&opts.ConfigFile, "config-file", opts.ConfigFile, "The path to the configuration file.")
 	fs.StringVar(&opts.ConfigText, "config-text", opts.ConfigText, "The configuration specified as text, in lieu of a file.")
+	fs.BoolVar(&opts.EnableMultiEngine, "enable-multi-engine", opts.EnableMultiEngine,
+		"Enables multi-engine metric collection. When enabled, EPP will identify engine type from Pod labels.")
+	fs.StringVar(&opts.EngineLabelKey, "engine-label-key", opts.EngineLabelKey,
+		"Pod label key used to identify the engine type.")
 }
 
 func (opts *Options) Complete() error {

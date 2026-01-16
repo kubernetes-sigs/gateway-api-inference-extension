@@ -45,3 +45,50 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install the `in
 - name=lora-info-metric
   value="" # Set an empty metric to disable LoRA metric scraping as they are not supported by SGLang yet.
 ```
+
+## Multi-Engine Support
+
+The Inference Extension supports collecting metrics from multiple inference engines simultaneously within the same `InferencePool`. This is useful for A/B testing or mixed-engine deployments.
+
+### 1. Label your Pods
+
+Label each deployment with the engine type:
+
+```yaml
+# vLLM Deployment
+metadata:
+  labels:
+    inference.networking.k8s.io/engine-type: vllm
+
+# SGLang Deployment
+metadata:
+  labels:
+    inference.networking.k8s.io/engine-type: sglang
+```
+
+### 2. Configure EPP
+ 
+ Enable multi-engine support and provide engine-specific configurations in your `EndpointPickerConfig`:
+ 
+ ```yaml
+ apiVersion: inference.networking.x-k8s.io/v1alpha1
+ kind: EndpointPickerConfig
+ featureGates:
+ - dataLayer
+ plugins:
+ - name: model-server-protocol-metrics
+   type: model-server-protocol-metrics
+   parameters:
+     enableMultiEngine: true
+     engineLabelKey: "inference.networking.k8s.io/engine-type"
+     engineConfigs:
+     - name: vllm
+       queuedRequestsSpec: "vllm:num_requests_waiting"
+       runningRequestsSpec: "vllm:num_requests_running"
+       kvUsageSpec: "vllm:kv_cache_usage_perc"
+     - name: sglang
+       queuedRequestsSpec: "sglang:num_queue_reqs"
+ ```
+ 
+ If a Pod does not have the engine label, EPP falls back to the default metric specifications configured via global plugin parameters or standard flags.
+```

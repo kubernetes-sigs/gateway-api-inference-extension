@@ -47,8 +47,9 @@ const (
 // Extractor implements the metrics extraction based on the model
 // server protocol standard.
 type Extractor struct {
-	typedName plugins.TypedName
-	mapping   *Mapping
+	typedName      plugins.TypedName
+	registry       *MappingRegistry
+	engineLabelKey string
 }
 
 // Produces returns the data attributes that are provided by the datalayer.metrics
@@ -66,20 +67,21 @@ func Produces() map[string]any {
 }
 
 // NewModelServerExtractor returns a new model server protocol (MSP) metrics extractor,
-// configured with the given metrics' specifications.
-// These are mandatory metrics per the MSP specification, and are used
-// as the basis for the built-in scheduling plugins.
-func NewModelServerExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec string) (*Extractor, error) {
-	mapping, err := NewMapping(queueSpec, runningSpec, kvusageSpec, loraSpec, cacheInfoSpec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
+// configured with the given metrics' registry.
+func NewModelServerExtractor(registry *MappingRegistry, engineLabelKey string) (*Extractor, error) {
+	if registry == nil {
+		return nil, errors.New("mapping registry cannot be nil")
+	}
+	if engineLabelKey == "" {
+		engineLabelKey = EngineTypeLabelKey
 	}
 	return &Extractor{
 		typedName: plugins.TypedName{
 			Type: MetricsExtractorType,
 			Name: MetricsExtractorType,
 		},
-		mapping: mapping,
+		registry:       registry,
+		engineLabelKey: engineLabelKey,
 	}, nil
 }
 
@@ -102,12 +104,18 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		return fmt.Errorf("unexpected input in Extract: %T", data)
 	}
 
+	engineType := getEngineTypeFromEndpoint(ep, ext.engineLabelKey)
+	mapping, ok := ext.registry.Get(engineType)
+	if !ok {
+		return fmt.Errorf("no mapping found for engine type %q and no default mapping registered", engineType)
+	}
+
 	var errs []error
 	current := ep.GetMetrics()
 	clone := current.Clone()
 	updated := false
 
-	if spec := ext.mapping.TotalQueuedRequests; spec != nil { // extract queued requests
+	if spec := mapping.TotalQueuedRequests; spec != nil { // extract queued requests
 		if metric, err := spec.getLatestMetric(families); err != nil {
 			errs = append(errs, err)
 		} else {
@@ -116,7 +124,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
-	if spec := ext.mapping.TotalRunningRequests; spec != nil { // extract running requests
+	if spec := mapping.TotalRunningRequests; spec != nil { // extract running requests
 		if metric, err := spec.getLatestMetric(families); err != nil {
 			errs = append(errs, err)
 		} else {
@@ -125,7 +133,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
-	if spec := ext.mapping.KVCacheUtilization; spec != nil { // extract KV cache usage
+	if spec := mapping.KVCacheUtilization; spec != nil { // extract KV cache usage
 		if metric, err := spec.getLatestMetric(families); err != nil {
 			errs = append(errs, err)
 		} else {
@@ -134,7 +142,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
-	if spec := ext.mapping.LoraRequestInfo; spec != nil { // extract LoRA-specific metrics
+	if spec := mapping.LoraRequestInfo; spec != nil { // extract LoRA-specific metrics
 		metric, err := spec.getLatestMetric(families)
 		if err != nil {
 			errs = append(errs, err)
@@ -144,7 +152,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		}
 	}
 
-	if spec := ext.mapping.CacheInfo; spec != nil { // extract CacheInfo-specific metrics
+	if spec := mapping.CacheInfo; spec != nil { // extract CacheInfo-specific metrics
 		metric, err := spec.getLatestMetric(families)
 		if err != nil {
 			errs = append(errs, err)
@@ -165,6 +173,21 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoi
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// getEngineTypeFromEndpoint extracts the engine type from endpoint metadata labels.
+func getEngineTypeFromEndpoint(ep datalayer.Endpoint, labelKey string) string {
+	meta := ep.GetMetadata()
+	if meta == nil || meta.Labels == nil {
+		return DefaultEngineType
+	}
+
+	engineType, ok := meta.Labels[labelKey]
+	if !ok || engineType == "" {
+		return DefaultEngineType
+	}
+
+	return engineType
 }
 
 // populateLoRAMetrics updates the metrics with LoRA adapter info from the metric labels.
