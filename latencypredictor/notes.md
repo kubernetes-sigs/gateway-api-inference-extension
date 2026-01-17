@@ -61,10 +61,3 @@ guides:
 - https://stackoverflow.com/questions/50615033/is-it-possible-to-train-an-xgboost-model-in-python-and-deploy-it-run-it-in-c-c?utm_source=chatgpt.com
 - https://mlsys.org/Conferences/doc/2018/196.pdf
 
-------------------------------------------------
-
-Start a chat with ezra and folks. From the leads meeting:
-    - They don't want to integrate SGLange into every path not because of the competition, but because of maintainability. We are still doing this refactor of helm to kustomize, but while that work is in progress, we don't want ot have to add more support to the helmchart for SGLang because the config would be completely different
-    - We still want to show its feasible but not maintain integration into all of it
-    - 
-

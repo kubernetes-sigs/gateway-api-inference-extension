@@ -7,7 +7,6 @@
 bin/*
 Dockerfile.cross
 artifacts
-latencypredictor/__pycache__
 
 # Test binary, built with `go test -c`
 *.test
@@ -34,3 +33,7 @@ site
 
 # MacOS generated files
 **/.DS_Store
+
+# pytest files
+**/__pycache__
+**/.pytest_cache
