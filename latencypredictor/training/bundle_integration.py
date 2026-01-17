@@ -262,17 +262,27 @@ class BundleModelManager:
             test_samples: Dict of test sample counts per bucket
 
         Raises:
-            Exception if finalization fails
+            ValueError: If bundle is in FAILED state (cannot finalize failed bundles)
+            Exception: If finalization fails
         """
+        # CRITICAL: Validate bundle is not in FAILED state before finalizing
+        # This prevents failed bundles from being published
+        if bundle.manifest.state == BundleState.FAILED:
+            raise ValueError(
+                f"Cannot finalize bundle {bundle.manifest.bundle_id[:8]} - "
+                f"bundle is in FAILED state. Check bundle state history for details."
+            )
+
         # Update sample counts
         bundle.manifest.training_samples = training_samples
         bundle.manifest.test_samples = test_samples
 
-        # Transition to READY
-        bundle.manifest.transition_state(
-            BundleState.READY,
-            f"All files written and verified. Ready to publish."
-        )
+        # Transition to READY (only if not already READY from TreeLite compilation)
+        if bundle.manifest.state != BundleState.READY:
+            bundle.manifest.transition_state(
+                BundleState.READY,
+                f"All files written and verified. Ready to publish."
+            )
         bundle.save_manifest()
 
         # Publish bundle (atomic symlink update)

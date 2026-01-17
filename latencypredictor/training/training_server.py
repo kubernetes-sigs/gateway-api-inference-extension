@@ -455,8 +455,14 @@ class LatencyPredictor:
             .clip(upper=self.prefix_buckets - 1)
         )
 
-            # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
-            df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
+            # TreeLite compatibility: Only use categorical dtype when NOT in TreeLite mode
+            # TreeLite cannot parse XGBoost models with categorical features
+            if not settings.USE_TREELITE:
+                # Make it categorical for tree models (safe for LGB, XGB with enable_categorical)
+                df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
+            else:
+                # TreeLite mode: keep as int32 to avoid categorical encoding in XGBoost model JSON
+                df['prefill_score_bucket'] = df['prefill_score_bucket'].astype('int32')
 
 
             # Return TTFT features with interaction
@@ -592,16 +598,13 @@ class LatencyPredictor:
                             model_params = {"quantile_alpha": self.quantile}
 
                         # TreeLite doesn't support XGBoost categorical encoder
-                        # So we disable it in TreeLite mode and convert categorical to int manually
+                        # So we disable it in TreeLite mode (dtype already converted to int32 in _prepare_features_with_interaction)
                         enable_categorical = not settings.USE_TREELITE
 
-                        # Convert categorical to int for TreeLite compatibility
-                        if settings.USE_TREELITE and 'prefill_score_bucket' in features.columns:
-                            features = features.copy()
-                            if str(features['prefill_score_bucket'].dtype) == 'category':
-                                features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
-                            else:
-                                features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
+                        # CRITICAL FIX: XGBoost 2.0+ ignores enable_categorical=False for hist tree_method
+                        # It still infers categorical features based on cardinality
+                        # We must use tree_method='auto' or 'approx' in TreeLite mode to prevent categorical inference
+                        tree_method = 'approx' if settings.USE_TREELITE else 'hist'
 
                         model = xgb.XGBRegressor(
                             n_estimators=200,
@@ -614,7 +617,7 @@ class LatencyPredictor:
                             reg_alpha=0.01,
                             reg_lambda=0.1,
                             objective=objective,
-                            tree_method="hist",
+                            tree_method=tree_method,  # Use 'approx' in TreeLite mode to prevent categorical inference
                             n_jobs=-1,
                             random_state=42,
                             verbosity=1,
@@ -647,15 +650,11 @@ class LatencyPredictor:
                     model_params = {"quantile_alpha": self.quantile}
 
                 # TreeLite doesn't support XGBoost categorical encoder
+                # (TPOT doesn't use prefill_score_bucket, so no categorical conversion needed)
                 enable_categorical = not settings.USE_TREELITE
 
-                # Convert categorical to int for TreeLite compatibility
-                if settings.USE_TREELITE and 'prefill_score_bucket' in features.columns:
-                    features = features.copy()
-                    if str(features['prefill_score_bucket'].dtype) == 'category':
-                        features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
-                    else:
-                        features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
+                # Use 'approx' tree_method in TreeLite mode to prevent categorical inference
+                tree_method = 'approx' if settings.USE_TREELITE else 'hist'
 
                 model = xgb.XGBRegressor(
                 n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
@@ -675,7 +674,7 @@ class LatencyPredictor:
                 objective=objective,         # Conditional: quantile or standard regression
 
                 # Performance optimization:
-                tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
+                tree_method=tree_method,     # Use 'approx' in TreeLite mode to prevent categorical inference
                 n_jobs=-1,                   # Utilize all CPU cores for parallel training
                 random_state=42,             # Ensures reproducible results
                 verbosity=1,
@@ -759,15 +758,18 @@ class LatencyPredictor:
                 feature_cols = ['kv_cache_percentage', 'input_token_length', 
                    'num_request_waiting', 'num_request_running', 'num_tokens_generated']
 
-            X = df_features[feature_cols]  # ✅ Now has properly typed categorical!
+            X = df_features[feature_cols]
 
-            # Convert categorical to int for TreeLite mode (both XGBoost and LightGBM)
-            # TreeLite models are trained without categorical features, so predictions must use int dtype
+            # Defensive check: Ensure prefill_score_bucket is int32 in TreeLite mode
+            # (should already be int32 from _prepare_features_with_interaction, but verify for safety)
             if settings.USE_TREELITE and 'prefill_score_bucket' in X.columns:
-                X = X.copy()
                 if str(X['prefill_score_bucket'].dtype) == 'category':
+                    # This shouldn't happen - log warning if it does
+                    logging.warning("prefill_score_bucket is categorical in TreeLite mode - converting to int32")
+                    X = X.copy()
                     X['prefill_score_bucket'] = X['prefill_score_bucket'].cat.codes.astype('int32')
-                else:
+                elif str(X['prefill_score_bucket'].dtype) != 'int32':
+                    X = X.copy()
                     X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
 
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
@@ -870,13 +872,14 @@ class LatencyPredictor:
                         X = df_features[feature_cols]
                         y_true = df_raw['actual_ttft_ms'].values
 
-                        # Convert categorical to int for TreeLite mode (both XGBoost and LightGBM)
-                        # TreeLite compiled .so files don't support categorical dtypes
+                        # Defensive check: Ensure prefill_score_bucket is int32 in TreeLite mode
                         if settings.USE_TREELITE and 'prefill_score_bucket' in X.columns:
-                            X = X.copy()
                             if str(X['prefill_score_bucket'].dtype) == 'category':
+                                logging.warning("TTFT conformal: prefill_score_bucket is categorical - converting to int32")
+                                X = X.copy()
                                 X['prefill_score_bucket'] = X['prefill_score_bucket'].cat.codes.astype('int32')
-                            else:
+                            elif str(X['prefill_score_bucket'].dtype) != 'int32':
+                                X = X.copy()
                                 X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
 
                         # Get mean predictions from model
@@ -1454,7 +1457,25 @@ class LatencyPredictor:
                 use_treelite=settings.USE_TREELITE
             )
 
-            logging.info(f"Started bundle {bundle.manifest.bundle_id[:8]} (state: {bundle.manifest.state.value})")
+            # Increment training cycle (0 for default models, 1+ for trained models)
+            # This helps distinguish untrained bundles from real training failures
+            previous_cycle = self.current_bundle.manifest.training_cycle if self.current_bundle else 0
+            is_real_training = training_samples.get('ttft', 0) > 0 or training_samples.get('tpot', 0) > 0
+
+            if is_real_training:
+                # Real training with data - increment cycle
+                bundle.manifest.training_cycle = previous_cycle + 1
+                logging.info(
+                    f"Started bundle {bundle.manifest.bundle_id[:8]} "
+                    f"(state: {bundle.manifest.state.value}, training_cycle: {bundle.manifest.training_cycle})"
+                )
+            else:
+                # Default model creation (startup) - keep cycle at 0
+                bundle.manifest.training_cycle = 0
+                logging.info(
+                    f"Started bundle {bundle.manifest.bundle_id[:8]} with default models "
+                    f"(state: {bundle.manifest.state.value}, training_cycle: 0)"
+                )
 
             # Save models to temp directory first, then add to bundle atomically
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -1547,26 +1568,25 @@ class LatencyPredictor:
                         self.bundle_manager.save_model_file(bundle, TTFT_CONFORMAL_FILENAME, temp_ttft_conf_path)
                     else:
                         # TreeLite mode but no conformal calibration
-                        # Use conditional logging based on whether this is startup or real training
-                        has_training_data = training_samples.get('ttft', 0) > 0 or test_samples.get('ttft', 0) > 0
-
-                        if not has_training_data:
-                            # Startup with default models - expected behavior
+                        # Use training_cycle to determine if this is expected or an error
+                        if bundle.manifest.training_cycle == 0:
+                            # Default models (training_cycle=0) - expected to have no conformal
                             logging.info(
-                                f"TreeLite mode: No TTFT conformal calibration (startup with default models)"
+                                f"TreeLite mode: No TTFT conformal calibration (training_cycle=0, default models)"
                             )
-                        elif test_samples.get('ttft', 0) < 10 and training_samples.get('ttft', 0) < 100:
-                            # Small dataset - can't create conformal, but not critical
+                        elif test_samples.get('ttft', 0) < 10:
+                            # Insufficient test data - can't create conformal, but not critical yet
                             logging.warning(
-                                f"TreeLite mode: Insufficient data for TTFT conformal calibration\n"
-                                f"  Training samples: {training_samples.get('ttft', 0)}\n"
+                                f"TreeLite mode: Insufficient test data for TTFT conformal calibration\n"
+                                f"  Training cycle: {bundle.manifest.training_cycle}\n"
                                 f"  Test samples: {test_samples.get('ttft', 0)} (required: ≥10)\n"
-                                f"  Bundle will use default predictions until more data is available"
+                                f"  Bundle will use statistical adjustment until more test data is available"
                             )
                         else:
-                            # Real error - have sufficient data but conformal failed
+                            # Real error - trained model with sufficient data but conformal failed
                             logging.error(
                                 f"❌ CRITICAL: TreeLite mode enabled but TTFT conformal predictor is None!\n"
+                                f"  Training cycle: {bundle.manifest.training_cycle}\n"
                                 f"  Training samples: {training_samples.get('ttft', 0)}\n"
                                 f"  Test samples: {test_samples.get('ttft', 0)} (required: ≥10)\n"
                                 f"  Model type: {self.model_type}\n"
@@ -1583,26 +1603,25 @@ class LatencyPredictor:
                         self.bundle_manager.save_model_file(bundle, TPOT_CONFORMAL_FILENAME, temp_tpot_conf_path)
                     else:
                         # TreeLite mode but no conformal calibration
-                        # Use conditional logging based on whether this is startup or real training
-                        has_training_data = training_samples.get('tpot', 0) > 0 or test_samples.get('tpot', 0) > 0
-
-                        if not has_training_data:
-                            # Startup with default models - expected behavior
+                        # Use training_cycle to determine if this is expected or an error
+                        if bundle.manifest.training_cycle == 0:
+                            # Default models (training_cycle=0) - expected to have no conformal
                             logging.info(
-                                f"TreeLite mode: No TPOT conformal calibration (startup with default models)"
+                                f"TreeLite mode: No TPOT conformal calibration (training_cycle=0, default models)"
                             )
-                        elif test_samples.get('tpot', 0) < 10 and training_samples.get('tpot', 0) < 100:
-                            # Small dataset - can't create conformal, but not critical
+                        elif test_samples.get('tpot', 0) < 10:
+                            # Insufficient test data - can't create conformal, but not critical yet
                             logging.warning(
-                                f"TreeLite mode: Insufficient data for TPOT conformal calibration\n"
-                                f"  Training samples: {training_samples.get('tpot', 0)}\n"
+                                f"TreeLite mode: Insufficient test data for TPOT conformal calibration\n"
+                                f"  Training cycle: {bundle.manifest.training_cycle}\n"
                                 f"  Test samples: {test_samples.get('tpot', 0)} (required: ≥10)\n"
-                                f"  Bundle will use default predictions until more data is available"
+                                f"  Bundle will use statistical adjustment until more test data is available"
                             )
                         else:
-                            # Real error - have sufficient data but conformal failed
+                            # Real error - trained model with sufficient data but conformal failed
                             logging.error(
                                 f"❌ CRITICAL: TreeLite mode enabled but TPOT conformal predictor is None!\n"
+                                f"  Training cycle: {bundle.manifest.training_cycle}\n"
                                 f"  Training samples: {training_samples.get('tpot', 0)}\n"
                                 f"  Test samples: {test_samples.get('tpot', 0)} (required: ≥10)\n"
                                 f"  Model type: {self.model_type}\n"
@@ -1695,7 +1714,6 @@ class LatencyPredictor:
                                 f"TreeLite compilation FAILED: TTFT={ttft_val}, TPOT={tpot_val}. "
                                 f"Bundle will be marked as FAILED and NOT published. "
                                 f"Check /tmp/treelite_compilation.log for details. "
-                                f"Common cause: gcc/clang not installed in Docker image."
                             )
                             bundle.manifest.transition_state(BundleState.FAILED, f"TreeLite compilation failed (TTFT={ttft_val}, TPOT={tpot_val})")
                             break
@@ -1706,7 +1724,7 @@ class LatencyPredictor:
                         logging.error(
                             f"TreeLite compilation TIMEOUT after {max_wait_seconds}s: TTFT={ttft_val}, TPOT={tpot_val}. "
                             f"Bundle will be marked as FAILED and NOT published. "
-                            f"This usually indicates gcc/clang compilation is hung or missing."
+                            f"Check /tmp/treelite_compilation.log for details."
                         )
                         bundle.manifest.transition_state(BundleState.FAILED, f"TreeLite compilation timeout (TTFT={ttft_val}, TPOT={tpot_val})")
 
@@ -1748,8 +1766,7 @@ class LatencyPredictor:
                     except Exception as e:
                         logging.error(
                             f"LightGBM TreeLite compilation FAILED: {e}. "
-                            f"Bundle will be marked as FAILED and NOT published. "
-                            f"Common cause: gcc/clang not installed in Docker image.",
+                            f"Bundle will be marked as FAILED and NOT published.",
                             exc_info=True
                         )
                         bundle.manifest.transition_state(BundleState.FAILED, f"TreeLite compilation failed: {str(e)}")
@@ -1758,6 +1775,15 @@ class LatencyPredictor:
                 bundle.manifest.transition_state(BundleState.READY, "All files written and verified (no TreeLite)")
 
             bundle.save_manifest()
+
+            # CRITICAL: Only finalize and publish if bundle is in READY state
+            # If compilation failed, bundle will be in FAILED state and should NOT be published
+            if bundle.manifest.state == BundleState.FAILED:
+                logging.error(
+                    f"Bundle {bundle.manifest.bundle_id[:8]} is in FAILED state - will NOT be published. "
+                    f"Check logs above for error details."
+                )
+                return  # Early return - do not publish failed bundles
 
             # Finalize and publish bundle atomically (raises exception on failure)
             self.bundle_manager.finalize_bundle(bundle, training_samples, test_samples)
@@ -2696,6 +2722,7 @@ async def get_current_bundle_info():
         "bundle_id": active_bundle.manifest.bundle_id,
         "bundle_id_short": active_bundle.manifest.bundle_id[:8],
         "state": active_bundle.manifest.state.value,
+        "training_cycle": active_bundle.manifest.training_cycle,
         "model_type": active_bundle.manifest.model_type,
         "quantile": active_bundle.manifest.quantile,
         "use_treelite": active_bundle.manifest.use_treelite,
@@ -2729,6 +2756,7 @@ async def get_bundle_manifest(bundle_id: str):
     return {
         "bundle_id": bundle.manifest.bundle_id,
         "state": bundle.manifest.state.value,
+        "training_cycle": bundle.manifest.training_cycle,
         "model_type": bundle.manifest.model_type,
         "quantile": bundle.manifest.quantile,
         "use_treelite": bundle.manifest.use_treelite,

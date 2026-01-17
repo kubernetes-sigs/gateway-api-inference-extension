@@ -46,20 +46,24 @@ class BundleState(str, Enum):
     Explicit state machine for model bundles.
 
     State transitions:
-    TRAINING → COMPILING → READY → PUBLISHED → DEPRECATED
+    TRAINING → COMPILING → READY → PUBLISHED
+    TRAINING → FAILED (on training errors)
+    COMPILING → FAILED (on TreeLite compilation errors)
 
     States:
     - TRAINING: Models are being trained, bundle directory created but incomplete
     - COMPILING: Base models saved, TreeLite compilation in progress
     - READY: All files written, bundle ready for use (but not yet published)
     - PUBLISHED: Bundle is the current active version (symlink updated)
-    - DEPRECATED: Older bundle that has been superseded
+    - FAILED: Training or compilation failed, bundle is invalid
+
+    Note: Old bundles are deleted directly by cleanup_old_bundles(), no DEPRECATED state needed.
     """
     TRAINING = "training"       # Initial state: models being trained
     COMPILING = "compiling"     # TreeLite compilation in progress
     READY = "ready"             # All files written, ready to publish
     PUBLISHED = "published"     # Current active version
-    DEPRECATED = "deprecated"   # Old version, kept for rollback
+    FAILED = "failed"           # Training or compilation failed
 
 
 @dataclass
@@ -80,6 +84,11 @@ class BundleManifest:
     model_type: str  # "xgboost", "lightgbm", "bayesian_ridge"
     quantile: float
     use_treelite: bool
+
+    # Training cycle tracking
+    # 0 = Default/untrained models (startup state)
+    # 1+ = Models trained with real data (increments with each successful training)
+    training_cycle: int = 0
 
     # File checksums (SHA256)
     files: Dict[str, str] = field(default_factory=dict)

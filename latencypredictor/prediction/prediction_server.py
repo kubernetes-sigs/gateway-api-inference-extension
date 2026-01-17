@@ -497,6 +497,11 @@ class LightweightPredictor:
                 if CONFORMAL_AVAILABLE:
                     import json
                     # Load TTFT conformal calibration
+                    # Get training_cycle from bundle metadata for intelligent logging
+                    training_cycle = 0
+                    if model_syncer.current_bundle_info:
+                        training_cycle = model_syncer.current_bundle_info.get("training_cycle", 0)
+
                     if os.path.exists(ttft_conformal_path):
                         try:
                             with open(ttft_conformal_path, 'r') as f:
@@ -507,7 +512,11 @@ class LightweightPredictor:
                             logging.error(f"Error loading TTFT conformal calibration: {e}")
                             new_ttft_conformal = None
                     else:
-                        logging.warning(f"TTFT conformal calibration not found: {ttft_conformal_path}")
+                        # Training_cycle-aware logging: INFO for default models (cycle=0), WARNING for trained models (cycle≥1)
+                        if training_cycle == 0:
+                            logging.info(f"TTFT conformal calibration not yet available (training_cycle=0, default models - waiting for first training run)")
+                        else:
+                            logging.warning(f"TTFT conformal calibration missing despite training_cycle={training_cycle} - predictions may have reduced quality")
                         new_ttft_conformal = None
 
                     # Load TPOT conformal calibration
@@ -521,7 +530,11 @@ class LightweightPredictor:
                             logging.error(f"Error loading TPOT conformal calibration: {e}")
                             new_tpot_conformal = None
                     else:
-                        logging.warning(f"TPOT conformal calibration not found: {tpot_conformal_path}")
+                        # Training_cycle-aware logging: INFO for default models (cycle=0), WARNING for trained models (cycle≥1)
+                        if training_cycle == 0:
+                            logging.info(f"TPOT conformal calibration not yet available (training_cycle=0, default models - waiting for first training run)")
+                        else:
+                            logging.warning(f"TPOT conformal calibration missing despite training_cycle={training_cycle} - predictions may have reduced quality")
                         new_tpot_conformal = None
 
             # Build new bundle with all loaded models
@@ -577,22 +590,6 @@ class LightweightPredictor:
             # Log success (after lock released)
             if new_bundle.is_ready(self.model_type):
                 bundle_id_short = model_syncer.current_bundle_id[:8] if model_syncer.current_bundle_id else "unknown"
-
-                # DEBUG: Log bundle training sample counts for investigation
-                ttft_samples = new_bundle.training_samples.get("ttft", 0) if new_bundle.training_samples else 0
-                tpot_samples = new_bundle.training_samples.get("tpot", 0) if new_bundle.training_samples else 0
-                logging.info(
-                    f"DEBUG Model Load - Bundle {bundle_id_short} loaded with training samples: "
-                    f"TTFT={ttft_samples}, TPOT={tpot_samples}"
-                )
-
-                # Also check if these are default models by inspecting n_estimators
-                if hasattr(new_ttft_model, 'n_estimators'):
-                    logging.info(
-                        f"DEBUG Model Load - TTFT model config: "
-                        f"n_estimators={new_ttft_model.n_estimators}, "
-                        f"objective={getattr(new_ttft_model, 'objective', 'N/A')}"
-                    )
 
                 if self.use_treelite:
                     if new_ttft_predictor and new_tpot_predictor:

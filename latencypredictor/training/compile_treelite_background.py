@@ -52,9 +52,18 @@ def compile_model(model_path: str, output_path: str, model_name: str, versioned_
         booster = model.get_booster()
 
         # Convert to TreeLite format
+        # Note: With XGBoost 1.7.6, no categorical metadata workaround needed
+        # (XGBoost 2.0+ would require cats field stripping, but we pin to 1.7.6)
         logging.info(f"Converting {model_name} to TreeLite format")
-        tl_model = treelite.frontend.from_xgboost(booster)
-        logging.info(f"{model_name} model converted (num_trees: {tl_model.num_tree})")
+
+        try:
+            tl_model = treelite.frontend.from_xgboost(booster)
+            logging.info(f"✓ {model_name} converted to TreeLite (num_trees: {tl_model.num_tree})")
+        except Exception as e:
+            logging.error(f"TreeLite conversion failed: {e}")
+            # This shouldn't happen with XGBoost 1.7.6
+            # If it does, it's a different issue than categorical metadata
+            raise
 
         # Compile to shared library (this is the blocking part)
         # Use unique temp file to avoid race conditions between concurrent compilations

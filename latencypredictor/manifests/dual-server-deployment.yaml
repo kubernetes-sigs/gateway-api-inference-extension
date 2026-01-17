@@ -9,7 +9,7 @@ metadata:
 data:
   # Model configuration (shared across all services)
   LATENCY_MODEL_TYPE: "xgboost"
-  USE_TREELITE: "false"
+  USE_TREELITE: "true"
 
   # Data split configuration (shared between training server and tests)
   LATENCY_TEST_TRAIN_RATIO: "0.1"  # 10% test, 90% train

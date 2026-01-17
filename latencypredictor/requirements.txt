@@ -1,14 +1,21 @@
+# Web Framework (stable APIs, can leave unpinned)
 fastapi
 uvicorn[standard]
-scikit-learn
-numpy
-pandas
-joblib
 pydantic
 requests
-xgboost
 aiohttp
-lightgbm
-scipy
-treelite==4.1.2
-tl2cgen==1.0.0
+joblib
+
+# Core ML Libraries (PINNED for TreeLite v4.1.2 compatibility)
+# XGBoost 1.7.6: Last v1.x - avoids categorical metadata issues with TreeLite 4.1.2
+# XGBoost 2.0+ creates categorical metadata that TreeLite 4.1.2 cannot parse
+xgboost==1.7.6
+lightgbm==4.3.0        # Last known stable with TreeLite 4.1.2
+scikit-learn==1.4.0    # Stable with numpy 1.26.x
+numpy==1.26.4          # Pin to avoid numpy 2.x breaking changes
+pandas==2.2.3          # Latest stable 2.x
+scipy==1.11.4          # Compatible with numpy 1.26.x
+
+# TreeLite Ecosystem (required for fast inference)
+treelite==4.1.2        # Required by tl2cgen 1.0.0
+tl2cgen==1.0.0         # Last PyPI wheel release
