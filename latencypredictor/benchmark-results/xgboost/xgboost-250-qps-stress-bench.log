@@ -1,0 +1,364 @@
+latency-predictor-stress-test-5-4ldpb test-runner Pod 5: Waiting for models to be ready...
+latency-predictor-stress-test-5-4ldpb test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-5-4ldpb test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-5-4ldpb test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-5-4ldpb test-runner rootdir: /app
+latency-predictor-stress-test-5-4ldpb test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-5-4ldpb test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-5-4ldpb test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-5-4ldpb test-runner 
+latency-predictor-stress-test-5-4ldpb test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-5-4ldpb test-runner Waiting for training server...
+latency-predictor-stress-test-5-4ldpb test-runner Running prediction server stress test...
+latency-predictor-stress-test-2-wzm47 test-runner Pod 2: Waiting for models to be ready...
+latency-predictor-stress-test-2-wzm47 test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-2-wzm47 test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-6-r9b8q test-runner Pod 6: Waiting for models to be ready...
+latency-predictor-stress-test-6-r9b8q test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-6-r9b8q test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-6-r9b8q test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-6-r9b8q test-runner rootdir: /app
+latency-predictor-stress-test-6-r9b8q test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-6-r9b8q test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-2-wzm47 test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-6-r9b8q test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-2-wzm47 test-runner rootdir: /app
+latency-predictor-stress-test-6-r9b8q test-runner 
+latency-predictor-stress-test-6-r9b8q test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-6-r9b8q test-runner Waiting for training server...
+latency-predictor-stress-test-6-r9b8q test-runner Running prediction server stress test...
+latency-predictor-stress-test-2-wzm47 test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-2-wzm47 test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-2-wzm47 test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-2-wzm47 test-runner 
+latency-predictor-stress-test-2-wzm47 test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-2-wzm47 test-runner Waiting for training server...
+latency-predictor-stress-test-2-wzm47 test-runner Running prediction server stress test...
+latency-predictor-stress-test-4-w74xf test-runner Pod 4: Waiting for models to be ready...
+latency-predictor-stress-test-4-w74xf test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-4-w74xf test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-4-w74xf test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-4-w74xf test-runner rootdir: /app
+latency-predictor-stress-test-4-w74xf test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-4-w74xf test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-4-w74xf test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-4-w74xf test-runner 
+latency-predictor-stress-test-4-w74xf test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-4-w74xf test-runner Waiting for training server...
+latency-predictor-stress-test-4-w74xf test-runner Running prediction server stress test...
+latency-predictor-stress-test-1-hqgpx test-runner Pod 1: Waiting for models to be ready...
+latency-predictor-stress-test-1-hqgpx test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-1-hqgpx test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-1-hqgpx test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-1-hqgpx test-runner rootdir: /app
+latency-predictor-stress-test-1-hqgpx test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-1-hqgpx test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-1-hqgpx test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-1-hqgpx test-runner 
+latency-predictor-stress-test-1-hqgpx test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-1-hqgpx test-runner Waiting for training server...
+latency-predictor-stress-test-1-hqgpx test-runner Running prediction server stress test...
+latency-predictor-stress-test-0-ssnsp test-runner Pod 0: Running training warmup...
+latency-predictor-stress-test-0-ssnsp test-runner ==================================================
+latency-predictor-stress-test-0-ssnsp test-runner Setting up training data for stress tests
+latency-predictor-stress-test-0-ssnsp test-runner ==================================================
+latency-predictor-stress-test-0-ssnsp test-runner Sending 1000 training samples...
+latency-predictor-stress-test-0-ssnsp test-runner ✓ Successfully sent 1000 training samples
+latency-predictor-stress-test-0-ssnsp test-runner Waiting for training to complete (max 60s)...
+latency-predictor-stress-test-0-ssnsp test-runner ✓ Models trained and loaded
+latency-predictor-stress-test-0-ssnsp test-runner 
+latency-predictor-stress-test-0-ssnsp test-runner ✓ Setup complete! Ready for stress testing.
+latency-predictor-stress-test-0-ssnsp test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-0-ssnsp test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-0-ssnsp test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-0-ssnsp test-runner rootdir: /app
+latency-predictor-stress-test-0-ssnsp test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-0-ssnsp test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-0-ssnsp test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-0-ssnsp test-runner 
+latency-predictor-stress-test-0-ssnsp test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-0-ssnsp test-runner Waiting for training server...
+latency-predictor-stress-test-0-ssnsp test-runner Running prediction server stress test...
+latency-predictor-stress-test-9-xhkmf test-runner Pod 9: Waiting for models to be ready...
+latency-predictor-stress-test-9-xhkmf test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-9-xhkmf test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-9-xhkmf test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-9-xhkmf test-runner rootdir: /app
+latency-predictor-stress-test-9-xhkmf test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-9-xhkmf test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-9-xhkmf test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-9-xhkmf test-runner 
+latency-predictor-stress-test-9-xhkmf test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-9-xhkmf test-runner Waiting for training server...
+latency-predictor-stress-test-9-xhkmf test-runner Running prediction server stress test...
+latency-predictor-stress-test-3-c9d64 test-runner Pod 3: Waiting for models to be ready...
+latency-predictor-stress-test-3-c9d64 test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-3-c9d64 test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-3-c9d64 test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-3-c9d64 test-runner rootdir: /app
+latency-predictor-stress-test-3-c9d64 test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-3-c9d64 test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-3-c9d64 test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-3-c9d64 test-runner 
+latency-predictor-stress-test-3-c9d64 test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-3-c9d64 test-runner Waiting for training server...
+latency-predictor-stress-test-3-c9d64 test-runner Running prediction server stress test...
+latency-predictor-stress-test-8-wbhgw test-runner Pod 8: Waiting for models to be ready...
+latency-predictor-stress-test-8-wbhgw test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-8-wbhgw test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-8-wbhgw test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-8-wbhgw test-runner rootdir: /app
+latency-predictor-stress-test-8-wbhgw test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-8-wbhgw test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-8-wbhgw test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-8-wbhgw test-runner 
+latency-predictor-stress-test-8-wbhgw test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-8-wbhgw test-runner Waiting for training server...
+latency-predictor-stress-test-8-wbhgw test-runner Running prediction server stress test...
+latency-predictor-stress-test-7-xzpkd test-runner Pod 7: Waiting for models to be ready...
+latency-predictor-stress-test-7-xzpkd test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-7-xzpkd test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-7-xzpkd test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-7-xzpkd test-runner rootdir: /app
+latency-predictor-stress-test-7-xzpkd test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-7-xzpkd test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-7-xzpkd test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-7-xzpkd test-runner 
+latency-predictor-stress-test-7-xzpkd test-runner test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-7-xzpkd test-runner Waiting for training server...
+latency-predictor-stress-test-7-xzpkd test-runner Running prediction server stress test...
+latency-predictor-stress-test-0-ssnsp test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-7-xzpkd test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-4-w74xf test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-3-c9d64 test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-1-hqgpx test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-0-ssnsp test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-0-ssnsp test-runner 
+latency-predictor-stress-test-0-ssnsp test-runner ==================================================
+latency-predictor-stress-test-0-ssnsp test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-0-ssnsp test-runner ==================================================
+latency-predictor-stress-test-0-ssnsp test-runner Total Requests: 25001
+latency-predictor-stress-test-0-ssnsp test-runner Successful: 18817 (75.3%)
+latency-predictor-stress-test-0-ssnsp test-runner Failed: 6184 (24.7%)
+latency-predictor-stress-test-0-ssnsp test-runner Average Response Time: 2536.86ms
+latency-predictor-stress-test-0-ssnsp test-runner 
+latency-predictor-stress-test-0-ssnsp test-runner Model Types in Predictions:
+latency-predictor-stress-test-0-ssnsp test-runner   xgboost: 18817
+latency-predictor-stress-test-0-ssnsp test-runner 
+latency-predictor-stress-test-0-ssnsp test-runner Status Code Distribution:
+latency-predictor-stress-test-0-ssnsp test-runner   200: 18817
+latency-predictor-stress-test-0-ssnsp test-runner   0: 6184
+latency-predictor-stress-test-0-ssnsp test-runner 
+latency-predictor-stress-test-0-ssnsp test-runner Response Time Percentiles:
+latency-predictor-stress-test-0-ssnsp test-runner   P50: 2242.84ms
+latency-predictor-stress-test-0-ssnsp test-runner   P95: 5793.16ms
+latency-predictor-stress-test-0-ssnsp test-runner   P99: 5969.11ms
+latency-predictor-stress-test-0-ssnsp test-runner FAILED
+latency-predictor-stress-test-0-ssnsp test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-0-ssnsp test-runner 
+latency-predictor-stress-test-0-ssnsp test-runner Testing with batch size 5...
+latency-predictor-stress-test-4-w74xf test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-3-c9d64 test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-7-xzpkd test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-4-w74xf test-runner 
+latency-predictor-stress-test-4-w74xf test-runner ==================================================
+latency-predictor-stress-test-4-w74xf test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-4-w74xf test-runner ==================================================
+latency-predictor-stress-test-4-w74xf test-runner Total Requests: 25001
+latency-predictor-stress-test-4-w74xf test-runner Successful: 18939 (75.8%)
+latency-predictor-stress-test-4-w74xf test-runner Failed: 6062 (24.2%)
+latency-predictor-stress-test-4-w74xf test-runner Average Response Time: 2537.62ms
+latency-predictor-stress-test-4-w74xf test-runner 
+latency-predictor-stress-test-4-w74xf test-runner Model Types in Predictions:
+latency-predictor-stress-test-4-w74xf test-runner   xgboost: 18939
+latency-predictor-stress-test-4-w74xf test-runner 
+latency-predictor-stress-test-4-w74xf test-runner Status Code Distribution:
+latency-predictor-stress-test-4-w74xf test-runner   200: 18939
+latency-predictor-stress-test-4-w74xf test-runner   0: 6062
+latency-predictor-stress-test-4-w74xf test-runner 
+latency-predictor-stress-test-4-w74xf test-runner Response Time Percentiles:
+latency-predictor-stress-test-4-w74xf test-runner   P50: 2231.35ms
+latency-predictor-stress-test-4-w74xf test-runner   P95: 5794.34ms
+latency-predictor-stress-test-4-w74xf test-runner   P99: 5961.13ms
+latency-predictor-stress-test-3-c9d64 test-runner 
+latency-predictor-stress-test-3-c9d64 test-runner ==================================================
+latency-predictor-stress-test-3-c9d64 test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-3-c9d64 test-runner ==================================================
+latency-predictor-stress-test-3-c9d64 test-runner Total Requests: 25001
+latency-predictor-stress-test-3-c9d64 test-runner Successful: 19141 (76.6%)
+latency-predictor-stress-test-3-c9d64 test-runner Failed: 5860 (23.4%)
+latency-predictor-stress-test-3-c9d64 test-runner Average Response Time: 2521.93ms
+latency-predictor-stress-test-3-c9d64 test-runner 
+latency-predictor-stress-test-3-c9d64 test-runner Model Types in Predictions:
+latency-predictor-stress-test-3-c9d64 test-runner   xgboost: 19141
+latency-predictor-stress-test-3-c9d64 test-runner 
+latency-predictor-stress-test-3-c9d64 test-runner Status Code Distribution:
+latency-predictor-stress-test-3-c9d64 test-runner   200: 19141
+latency-predictor-stress-test-3-c9d64 test-runner   0: 5860
+latency-predictor-stress-test-3-c9d64 test-runner 
+latency-predictor-stress-test-3-c9d64 test-runner Response Time Percentiles:
+latency-predictor-stress-test-3-c9d64 test-runner   P50: 2245.14ms
+latency-predictor-stress-test-3-c9d64 test-runner   P95: 5777.70ms
+latency-predictor-stress-test-3-c9d64 test-runner   P99: 5957.79ms
+latency-predictor-stress-test-7-xzpkd test-runner 
+latency-predictor-stress-test-7-xzpkd test-runner ==================================================
+latency-predictor-stress-test-7-xzpkd test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-7-xzpkd test-runner ==================================================
+latency-predictor-stress-test-7-xzpkd test-runner Total Requests: 25001
+latency-predictor-stress-test-7-xzpkd test-runner Successful: 18691 (74.8%)
+latency-predictor-stress-test-7-xzpkd test-runner Failed: 6310 (25.2%)
+latency-predictor-stress-test-7-xzpkd test-runner Average Response Time: 2573.44ms
+latency-predictor-stress-test-7-xzpkd test-runner 
+latency-predictor-stress-test-7-xzpkd test-runner Model Types in Predictions:
+latency-predictor-stress-test-7-xzpkd test-runner   xgboost: 18691
+latency-predictor-stress-test-7-xzpkd test-runner 
+latency-predictor-stress-test-7-xzpkd test-runner Status Code Distribution:
+latency-predictor-stress-test-7-xzpkd test-runner   200: 18691
+latency-predictor-stress-test-7-xzpkd test-runner   0: 6310
+latency-predictor-stress-test-7-xzpkd test-runner 
+latency-predictor-stress-test-7-xzpkd test-runner Response Time Percentiles:
+latency-predictor-stress-test-7-xzpkd test-runner   P50: 2248.81ms
+latency-predictor-stress-test-7-xzpkd test-runner   P95: 5797.93ms
+latency-predictor-stress-test-7-xzpkd test-runner   P99: 5959.85ms
+latency-predictor-stress-test-4-w74xf test-runner FAILED
+latency-predictor-stress-test-4-w74xf test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-4-w74xf test-runner 
+latency-predictor-stress-test-4-w74xf test-runner Testing with batch size 5...
+latency-predictor-stress-test-3-c9d64 test-runner FAILED
+latency-predictor-stress-test-3-c9d64 test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-3-c9d64 test-runner 
+latency-predictor-stress-test-3-c9d64 test-runner Testing with batch size 5...
+latency-predictor-stress-test-7-xzpkd test-runner FAILED
+latency-predictor-stress-test-7-xzpkd test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-7-xzpkd test-runner 
+latency-predictor-stress-test-7-xzpkd test-runner Testing with batch size 5...
+latency-predictor-stress-test-1-hqgpx test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-1-hqgpx test-runner 
+latency-predictor-stress-test-1-hqgpx test-runner ==================================================
+latency-predictor-stress-test-1-hqgpx test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-1-hqgpx test-runner ==================================================
+latency-predictor-stress-test-1-hqgpx test-runner Total Requests: 25001
+latency-predictor-stress-test-1-hqgpx test-runner Successful: 18980 (75.9%)
+latency-predictor-stress-test-1-hqgpx test-runner Failed: 6021 (24.1%)
+latency-predictor-stress-test-1-hqgpx test-runner Average Response Time: 2548.23ms
+latency-predictor-stress-test-1-hqgpx test-runner 
+latency-predictor-stress-test-1-hqgpx test-runner Model Types in Predictions:
+latency-predictor-stress-test-1-hqgpx test-runner   xgboost: 18980
+latency-predictor-stress-test-1-hqgpx test-runner 
+latency-predictor-stress-test-1-hqgpx test-runner Status Code Distribution:
+latency-predictor-stress-test-1-hqgpx test-runner   200: 18980
+latency-predictor-stress-test-1-hqgpx test-runner   0: 6021
+latency-predictor-stress-test-1-hqgpx test-runner 
+latency-predictor-stress-test-1-hqgpx test-runner Response Time Percentiles:
+latency-predictor-stress-test-1-hqgpx test-runner   P50: 2254.73ms
+latency-predictor-stress-test-1-hqgpx test-runner   P95: 5792.98ms
+latency-predictor-stress-test-1-hqgpx test-runner   P99: 5959.89ms
+latency-predictor-stress-test-1-hqgpx test-runner FAILED
+latency-predictor-stress-test-1-hqgpx test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-1-hqgpx test-runner 
+latency-predictor-stress-test-1-hqgpx test-runner Testing with batch size 5...
+latency-predictor-stress-test-8-wbhgw test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-8-wbhgw test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-8-wbhgw test-runner 
+latency-predictor-stress-test-8-wbhgw test-runner ==================================================
+latency-predictor-stress-test-8-wbhgw test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-8-wbhgw test-runner ==================================================
+latency-predictor-stress-test-8-wbhgw test-runner Total Requests: 25001
+latency-predictor-stress-test-8-wbhgw test-runner Successful: 18996 (76.0%)
+latency-predictor-stress-test-8-wbhgw test-runner Failed: 6005 (24.0%)
+latency-predictor-stress-test-8-wbhgw test-runner Average Response Time: 2572.07ms
+latency-predictor-stress-test-8-wbhgw test-runner 
+latency-predictor-stress-test-8-wbhgw test-runner Model Types in Predictions:
+latency-predictor-stress-test-8-wbhgw test-runner   xgboost: 18996
+latency-predictor-stress-test-8-wbhgw test-runner 
+latency-predictor-stress-test-8-wbhgw test-runner Status Code Distribution:
+latency-predictor-stress-test-8-wbhgw test-runner   200: 18996
+latency-predictor-stress-test-8-wbhgw test-runner   0: 6005
+latency-predictor-stress-test-8-wbhgw test-runner 
+latency-predictor-stress-test-8-wbhgw test-runner Response Time Percentiles:
+latency-predictor-stress-test-8-wbhgw test-runner   P50: 2235.46ms
+latency-predictor-stress-test-8-wbhgw test-runner   P95: 5787.97ms
+latency-predictor-stress-test-8-wbhgw test-runner   P99: 5968.77ms
+latency-predictor-stress-test-8-wbhgw test-runner FAILED
+latency-predictor-stress-test-8-wbhgw test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-8-wbhgw test-runner 
+latency-predictor-stress-test-8-wbhgw test-runner Testing with batch size 5...
+latency-predictor-stress-test-5-4ldpb test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-5-4ldpb test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-5-4ldpb test-runner 
+latency-predictor-stress-test-5-4ldpb test-runner ==================================================
+latency-predictor-stress-test-5-4ldpb test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-5-4ldpb test-runner ==================================================
+latency-predictor-stress-test-5-4ldpb test-runner Total Requests: 25001
+latency-predictor-stress-test-5-4ldpb test-runner Successful: 18876 (75.5%)
+latency-predictor-stress-test-5-4ldpb test-runner Failed: 6125 (24.5%)
+latency-predictor-stress-test-5-4ldpb test-runner Average Response Time: 2596.35ms
+latency-predictor-stress-test-5-4ldpb test-runner 
+latency-predictor-stress-test-5-4ldpb test-runner Model Types in Predictions:
+latency-predictor-stress-test-5-4ldpb test-runner   xgboost: 18876
+latency-predictor-stress-test-5-4ldpb test-runner 
+latency-predictor-stress-test-5-4ldpb test-runner Status Code Distribution:
+latency-predictor-stress-test-5-4ldpb test-runner   200: 18876
+latency-predictor-stress-test-5-4ldpb test-runner   0: 6125
+latency-predictor-stress-test-5-4ldpb test-runner 
+latency-predictor-stress-test-5-4ldpb test-runner Response Time Percentiles:
+latency-predictor-stress-test-5-4ldpb test-runner   P50: 2242.66ms
+latency-predictor-stress-test-5-4ldpb test-runner   P95: 5800.02ms
+latency-predictor-stress-test-5-4ldpb test-runner   P99: 5965.10ms
+latency-predictor-stress-test-5-4ldpb test-runner FAILED
+latency-predictor-stress-test-5-4ldpb test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-5-4ldpb test-runner 
+latency-predictor-stress-test-5-4ldpb test-runner Testing with batch size 5...
+latency-predictor-stress-test-6-r9b8q test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-6-r9b8q test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-6-r9b8q test-runner 
+latency-predictor-stress-test-6-r9b8q test-runner ==================================================
+latency-predictor-stress-test-6-r9b8q test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-6-r9b8q test-runner ==================================================
+latency-predictor-stress-test-6-r9b8q test-runner Total Requests: 25001
+latency-predictor-stress-test-6-r9b8q test-runner Successful: 18476 (73.9%)
+latency-predictor-stress-test-6-r9b8q test-runner Failed: 6525 (26.1%)
+latency-predictor-stress-test-6-r9b8q test-runner Average Response Time: 2647.70ms
+latency-predictor-stress-test-6-r9b8q test-runner 
+latency-predictor-stress-test-6-r9b8q test-runner Model Types in Predictions:
+latency-predictor-stress-test-6-r9b8q test-runner   xgboost: 18476
+latency-predictor-stress-test-6-r9b8q test-runner 
+latency-predictor-stress-test-6-r9b8q test-runner Status Code Distribution:
+latency-predictor-stress-test-6-r9b8q test-runner   200: 18476
+latency-predictor-stress-test-6-r9b8q test-runner   0: 6525
+latency-predictor-stress-test-6-r9b8q test-runner 
+latency-predictor-stress-test-6-r9b8q test-runner Response Time Percentiles:
+latency-predictor-stress-test-6-r9b8q test-runner   P50: 2235.37ms
+latency-predictor-stress-test-6-r9b8q test-runner   P95: 5812.71ms
+latency-predictor-stress-test-6-r9b8q test-runner   P99: 5964.64ms
+latency-predictor-stress-test-6-r9b8q test-runner FAILED
+latency-predictor-stress-test-6-r9b8q test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-6-r9b8q test-runner 
+latency-predictor-stress-test-6-r9b8q test-runner Testing with batch size 5...
+latency-predictor-stress-test-2-wzm47 test-runner Waiting for 25001 prediction requests to complete...
+latency-predictor-stress-test-2-wzm47 test-runner Target QPS: 250.0, Actual QPS: 250.0
+latency-predictor-stress-test-2-wzm47 test-runner 
+latency-predictor-stress-test-2-wzm47 test-runner ==================================================
+latency-predictor-stress-test-2-wzm47 test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-2-wzm47 test-runner ==================================================
+latency-predictor-stress-test-2-wzm47 test-runner Total Requests: 25001
+latency-predictor-stress-test-2-wzm47 test-runner Successful: 18682 (74.7%)
+latency-predictor-stress-test-2-wzm47 test-runner Failed: 6319 (25.3%)
+latency-predictor-stress-test-2-wzm47 test-runner Average Response Time: 2617.85ms
+latency-predictor-stress-test-2-wzm47 test-runner 
+latency-predictor-stress-test-2-wzm47 test-runner Model Types in Predictions:
+latency-predictor-stress-test-2-wzm47 test-runner   xgboost: 18682
+latency-predictor-stress-test-2-wzm47 test-runner 
+latency-predictor-stress-test-2-wzm47 test-runner Status Code Distribution:
+latency-predictor-stress-test-2-wzm47 test-runner   200: 18682
+latency-predictor-stress-test-2-wzm47 test-runner   0: 6319
+latency-predictor-stress-test-2-wzm47 test-runner 
+latency-predictor-stress-test-2-wzm47 test-runner Response Time Percentiles:
+latency-predictor-stress-test-2-wzm47 test-runner   P50: 2236.82ms
+latency-predictor-stress-test-2-wzm47 test-runner   P95: 5795.25ms
+latency-predictor-stress-test-2-wzm47 test-runner   P99: 5967.09ms
+latency-predictor-stress-test-2-wzm47 test-runner FAILED
+latency-predictor-stress-test-2-wzm47 test-runner test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-2-wzm47 test-runner 
+latency-predictor-stress-test-2-wzm47 test-runner Testing with batch size 5...
+latency-predictor-stress-test-9-xhkmf test-runner Waiting for 25001 prediction requests to complete...

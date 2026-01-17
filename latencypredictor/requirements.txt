@@ -4,9 +4,11 @@ scikit-learn
 numpy
 pandas
 joblib
-river
 pydantic
 requests
 xgboost
 aiohttp
 lightgbm
+scipy
+treelite==4.1.2
+tl2cgen==1.0.0

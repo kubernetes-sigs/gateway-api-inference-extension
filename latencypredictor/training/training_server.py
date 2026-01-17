@@ -17,6 +17,8 @@ import random
 import time
 import logging
 import threading
+import hashlib
+from io import BytesIO
 from datetime import datetime, timezone
 from collections import deque
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -36,7 +38,8 @@ from sklearn.preprocessing import StandardScaler
 
 import tempfile
 import shutil
-import os  # Added this import
+import subprocess
+import sys
 
 try:
     import xgboost as xgb
@@ -51,6 +54,84 @@ try:
 except ImportError:
     LIGHTGBM_AVAILABLE = False
     logging.warning("LightGBM not available. Please install with: pip install lightgbm")
+
+try:
+    import treelite
+    import treelite.sklearn
+    TREELITE_AVAILABLE = True
+except ImportError:
+    TREELITE_AVAILABLE = False
+    logging.warning("TreeLite not available. Please install with: pip install treelite treelite_runtime")
+
+try:
+    import tl2cgen
+    TL2CGEN_AVAILABLE = True
+except ImportError:
+    TL2CGEN_AVAILABLE = False
+    logging.warning("TL2cgen not available. Please install with: pip install tl2cgen")
+
+try:
+    from common.conformal_quantile import ConformalQuantilePredictor
+    CONFORMAL_AVAILABLE = True
+except ImportError:
+    CONFORMAL_AVAILABLE = False
+    logging.warning("ConformalQuantilePredictor not available. Check common/conformal_quantile.py exists.")
+
+# Import bundle constants for consistent file naming
+from common.bundle_constants import (
+    TTFT_MODEL_FILENAME,
+    TPOT_MODEL_FILENAME,
+    TTFT_SCALER_FILENAME,
+    TPOT_SCALER_FILENAME,
+    TTFT_TREELITE_FILENAME,
+    TPOT_TREELITE_FILENAME,
+    TTFT_CONFORMAL_FILENAME,
+    TPOT_CONFORMAL_FILENAME
+)
+
+try:
+    from .model_bundle import ModelBundle, BundleRegistry, BundleState
+    from .bundle_integration import BundleModelManager
+    BUNDLE_REGISTRY_AVAILABLE = True
+except ImportError as e:
+    BUNDLE_REGISTRY_AVAILABLE = False
+    logging.warning(f"ModelBundle not available: {e}")
+
+# --- Configuration ---
+class Settings:
+    """
+    Configuration class for the latency predictor server.
+    Reads settings from environment variables with sensible defaults.
+    """
+    # Training configuration
+    RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))
+    MIN_SAMPLES_FOR_RETRAIN_FRESH: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN_FRESH", 10))
+    MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 1000))
+    MAX_TRAINING_DATA_SIZE_PER_BUCKET: int = int(os.getenv("LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET", 10000))
+    TEST_TRAIN_RATIO: float = float(os.getenv("LATENCY_TEST_TRAIN_RATIO", "0.1"))  # Default 1:10 (10% test, 90% train)
+    MAX_TEST_DATA_SIZE: int = int(os.getenv("LATENCY_MAX_TEST_DATA_SIZE", "1000"))  # Max test samples to keep
+    MODEL_TYPE: str = os.getenv("LATENCY_MODEL_TYPE", "xgboost")  # Default to XGBoost
+    QUANTILE_ALPHA: float = float(os.getenv("LATENCY_QUANTILE_ALPHA", "0.9"))  # p90 quantile
+    SAMPLE_WEIGHTING_FOR_PREFIX_CACHE: bool = os.getenv("LATENCY_SAMPLE_WEIGHTING_FOR_PREFIX_CACHE", "false").lower() == "true"
+
+    # TreeLite mode: if true, use standard regression + conformal prediction for quantiles
+    # if false, use native quantile regression (more accurate but slower)
+    USE_TREELITE: bool = os.getenv("USE_TREELITE", "true").lower() == "true"
+
+    # Bundle registry configuration (persistent storage for trained models)
+    # Training server creates bundles here - must be persistent volume to survive restarts!
+    BUNDLE_DIR: str = os.getenv("BUNDLE_DIR", "/models/bundles")
+    BUNDLE_CURRENT_SYMLINK: str = os.getenv("BUNDLE_CURRENT_SYMLINK", "/models/current")
+    MAX_BUNDLES_TO_KEEP: int = int(os.getenv("MAX_BUNDLES_TO_KEEP", "5"))
+
+settings = Settings()
+
+# Validate dependencies at startup (fail-fast)
+if settings.USE_TREELITE and not CONFORMAL_AVAILABLE:
+    raise RuntimeError(
+        "USE_TREELITE=true but conformal_quantile library not available. "
+        "Install with: pip install -e . (or ensure conformal_quantile.py exists)"
+    )
 
 
 class ModelType(str, Enum):
@@ -87,28 +168,9 @@ class RandomDropDeque(deque):
         super().appendleft(item)
 
 
-# --- Configuration ---
-class Settings:
-    """
-    Configuration class for the latency predictor server.
-    Reads settings from environment variables with sensible defaults.
-    """
-    TTFT_MODEL_PATH: str = os.getenv("LATENCY_TTFT_MODEL_PATH", "/tmp/models/ttft.joblib")
-    TPOT_MODEL_PATH: str = os.getenv("LATENCY_TPOT_MODEL_PATH", "/tmp/models/tpot.joblib")
-    TTFT_SCALER_PATH: str = os.getenv("LATENCY_TTFT_SCALER_PATH", "/tmp/models/ttft_scaler.joblib")
-    TPOT_SCALER_PATH: str = os.getenv("LATENCY_TPOT_SCALER_PATH", "/tmp/models/tpot_scaler.joblib")
-    RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))
-    MIN_SAMPLES_FOR_RETRAIN_FRESH: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN_FRESH", 10))
-    MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 1000))
-    MAX_TRAINING_DATA_SIZE_PER_BUCKET: int = int(os.getenv("LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET", 10000))
-    TEST_TRAIN_RATIO: float = float(os.getenv("LATENCY_TEST_TRAIN_RATIO", "0.1"))  # Default 1:10 (10% test, 90% train)
-    MAX_TEST_DATA_SIZE: int = int(os.getenv("LATENCY_MAX_TEST_DATA_SIZE", "1000"))  # Max test samples to keep
-    MODEL_TYPE: str = os.getenv("LATENCY_MODEL_TYPE", "xgboost")  # Default to XGBoost
-    QUANTILE_ALPHA: float = float(os.getenv("LATENCY_QUANTILE_ALPHA", "0.9"))  # p90 quantile
-    SAMPLE_WEIGHTING_FOR_PREFIX_CACHE: bool = os.getenv("LATENCY_SAMPLE_WEIGHTING_FOR_PREFIX_CACHE", "false").lower() == "true"
-
-settings = Settings()
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging level from environment variable (default: INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Add this to your Pydantic models section
 class ModelInfoResponse(BaseModel):
@@ -141,6 +203,7 @@ class FlushResponse(BaseModel):
     ttft_test_samples_flushed: int
     tpot_test_samples_flushed: int
     metrics_cleared: bool
+    conformal_cleared: bool = Field(default=False, description="Whether conformal calibration was cleared")
     message: str
 
 def quantile_loss(y_true, y_pred, quantile):
@@ -211,20 +274,20 @@ class LatencyPredictor:
         if model_type is None:
             model_type = settings.MODEL_TYPE
     
-        if model_type not in [ModelType.BAYESIAN_RIDGE, ModelType.XGBOOST, ModelType.LIGHTGBM]:
-            raise ValueError(f"Invalid model_type: {model_type}. Must be one of {list(ModelType)}")
-    
-        if model_type == ModelType.XGBOOST and not XGBOOST_AVAILABLE:
-            logging.warning("XGBoost requested but not available. Falling back to Bayesian Ridge.")
-            model_type = ModelType.BAYESIAN_RIDGE
+        if model_type not in [e.value for e in ModelType]:
+            raise ValueError(f"Invalid model_type: {model_type}. Must be one of {[e.value for e in ModelType]}")
 
-        if model_type == ModelType.LIGHTGBM and not LIGHTGBM_AVAILABLE:
+        if model_type == ModelType.XGBOOST.value and not XGBOOST_AVAILABLE:
+            logging.warning("XGBoost requested but not available. Falling back to Bayesian Ridge.")
+            model_type = ModelType.BAYESIAN_RIDGE.value
+
+        if model_type == ModelType.LIGHTGBM.value and not LIGHTGBM_AVAILABLE:
             logging.warning("LightGBM requested but not available. Falling back to Bayesian Ridge.")
-            model_type = ModelType.BAYESIAN_RIDGE
+            model_type = ModelType.BAYESIAN_RIDGE.value
 
         self.model_type = ModelType(model_type)
         self.quantile = settings.QUANTILE_ALPHA
-        logging.info(f"Initialized LatencyPredictor with model type: {self.model_type}, quantile: {self.quantile}")
+        logging.info(f"Initialized LatencyPredictor with model type: {self.model_type}, quantile: {self.quantile}, use_treelite: {settings.USE_TREELITE}")
 
         # Data buckets for sampling
         self.cache_buckets = int(1.0 / 0.05)  # 20 buckets for cache percentage (0-100% in 5% increments)
@@ -262,14 +325,52 @@ class LatencyPredictor:
         self.tpot_model = None
         self.ttft_scaler = None
         self.tpot_scaler = None
-    
+
+        # Conformal predictors (only used in TreeLite mode)
+        self.ttft_conformal = None
+        self.tpot_conformal = None
+
         self.ttft_coefficients = None  # Will store descaled coefficients as dict
         self.tpot_coefficients = None  # Will store descaled coefficients as dict
+
+        # Model hashes for TreeLite compilation caching
+        self.ttft_model_hash = None
+        self.tpot_model_hash = None
+
+        # Conformal calibration hashes (to avoid rewriting unchanged files)
+        self.ttft_conformal_hash = None
+        self.tpot_conformal_hash = None
+
+        # Cache hit tracking for observability
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.last_cache_report_time = time.time()
+
+        # Track ongoing TreeLite compilations to prevent races
+        self.ttft_compilation_in_progress = False
+        self.tpot_compilation_in_progress = False
+        self.compilation_lock = threading.Lock()
 
         self.lock = threading.Lock()
         self.last_retrain_time = None
         self._shutdown_event = threading.Event()
         self._training_thread: threading.Thread = None
+
+        # Bundle registry (always enabled - modern model distribution)
+        self.bundle_registry = None
+        self.current_bundle = None
+        self.bundle_manager = None
+        if BUNDLE_REGISTRY_AVAILABLE:
+            self.bundle_manager = BundleModelManager(
+                bundle_dir=settings.BUNDLE_DIR,
+                current_symlink=settings.BUNDLE_CURRENT_SYMLINK,
+                max_bundles=settings.MAX_BUNDLES_TO_KEEP
+            )
+            # Keep bundle_registry for backward compatibility
+            self.bundle_registry = self.bundle_manager.registry
+            logging.info(f"Bundle manager initialized at {settings.BUNDLE_DIR}")
+        else:
+            raise RuntimeError("model_bundle.py not available - bundle system is required")
         
     def _get_prefix_bucket(self, prefix_score: float) -> int:
         """Map prefix cache score to bucket index."""
@@ -395,8 +496,11 @@ class LatencyPredictor:
         """Checks if all models and scalers are loaded/trained."""
         if self.model_type == ModelType.BAYESIAN_RIDGE:
             return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
-        else:  # XGBoost or LightGBM
+        elif self.model_type in (ModelType.XGBOOST, ModelType.LIGHTGBM):
             return all([self.ttft_model, self.tpot_model])
+        else:
+            # TREELITE is not a valid training model type
+            raise ValueError(f"Invalid model_type: {self.model_type}. Use XGBOOST, LIGHTGBM, or BAYESIAN_RIDGE.")
 
     @is_ready.setter
     def is_ready(self, value: bool):
@@ -413,7 +517,16 @@ class LatencyPredictor:
 
 
     def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series, model_name: str = None, sample_weight: np.ndarray = None) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
+        """
+        Train a model with the appropriate scaling/preprocessing.
 
+        TreeLite Compatibility Notes:
+        - TreeLite does NOT support XGBoost's categorical encoder (enable_categorical=True)
+        - When USE_TREELITE=true, we disable enable_categorical and convert categorical
+          features to integers manually before training
+        - This allows the trained XGBoost model to be compiled to TreeLite .so format
+        - The prediction server then uses the compiled TreeLite model for faster inference
+        """
         try:
             if len(features) == 0 or len(target) == 0:
                 raise ValueError("Empty training data")
@@ -436,7 +549,7 @@ class LatencyPredictor:
                 model.fit(features_scaled, target, sample_weight=sample_weight)
                 return model, scaler
 
-            elif self.model_type == ModelType.XGBOOST:  # XGBoost with quantile regression
+            elif self.model_type == ModelType.XGBOOST:
                 if model_name == "ttft":
                      # enforce your TTFT feature order
                         ttft_order = [
@@ -467,7 +580,29 @@ class LatencyPredictor:
                         else:
                             features_stump["prefill_score_bucket"] = features_stump["prefill_score_bucket"].astype("int32")
 
-                        
+                        # Choose objective based on TreeLite mode
+                        if settings.USE_TREELITE:
+                            # Standard regression for TreeLite compatibility
+                            # Quantile predictions via conformal prediction
+                            objective = "reg:squarederror"
+                            model_params = {}
+                        else:
+                            # Native quantile regression (more accurate)
+                            objective = "reg:quantileerror"
+                            model_params = {"quantile_alpha": self.quantile}
+
+                        # TreeLite doesn't support XGBoost categorical encoder
+                        # So we disable it in TreeLite mode and convert categorical to int manually
+                        enable_categorical = not settings.USE_TREELITE
+
+                        # Convert categorical to int for TreeLite compatibility
+                        if settings.USE_TREELITE and 'prefill_score_bucket' in features.columns:
+                            features = features.copy()
+                            if str(features['prefill_score_bucket'].dtype) == 'category':
+                                features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
+                            else:
+                                features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
+
                         model = xgb.XGBRegressor(
                             n_estimators=200,
                             max_depth=6,
@@ -478,15 +613,15 @@ class LatencyPredictor:
                             gamma=0.2,
                             reg_alpha=0.01,
                             reg_lambda=0.1,
-                            objective="reg:quantileerror",
-                            quantile_alpha=self.quantile,
+                            objective=objective,
                             tree_method="hist",
                             n_jobs=-1,
                             random_state=42,
                             verbosity=1,
-                            enable_categorical=True,
+                            enable_categorical=enable_categorical,  # Disabled for TreeLite compatibility
+                            **model_params
                             )
-                        model.fit(features, target, sample_weight=sample_weight)    
+                        model.fit(features, target, sample_weight=sample_weight)
                         return model
 
 
@@ -497,55 +632,99 @@ class LatencyPredictor:
                             features = features[tpot_order]
                         except Exception as _:
                             raise ValueError(f"TPOT features must be exactly {tpot_order}; got {list(features.columns)}")
-                    mono_str = "(1,1,1,1,1)" 
+                    mono_str = "(1,1,1,1,1)"
                 else:
                     mono_str = "(0,0,0,0,0)"  # default
+
+                # Choose objective based on TreeLite mode
+                if settings.USE_TREELITE:
+                    # Standard regression for TreeLite compatibility
+                    objective = "reg:squarederror"
+                    model_params = {}
+                else:
+                    # Native quantile regression (more accurate)
+                    objective = "reg:quantileerror"
+                    model_params = {"quantile_alpha": self.quantile}
+
+                # TreeLite doesn't support XGBoost categorical encoder
+                enable_categorical = not settings.USE_TREELITE
+
+                # Convert categorical to int for TreeLite compatibility
+                if settings.USE_TREELITE and 'prefill_score_bucket' in features.columns:
+                    features = features.copy()
+                    if str(features['prefill_score_bucket'].dtype) == 'category':
+                        features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
+                    else:
+                        features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
+
                 model = xgb.XGBRegressor(
                 n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
                 max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
                 learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
                 subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
                 colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
-        
-                # Key parameters for accurate quantile regression:
-                min_child_weight=5,          # Low value allows fine-grained splits near p90 boundary (prevents overprediction)
-                gamma=0.2,                  # Low gamma allows splits with small loss reduction (critical for quantile accuracy)
-                #monotone_constraints=mono_str,  # Enforce monotonicity based on feature impact on latency   
+
+                # Key parameters for regression:
+                min_child_weight=5,          # Low value allows fine-grained splits
+                gamma=0.2,                  # Low gamma allows splits with small loss reduction
+                #monotone_constraints=mono_str,  # Enforce monotonicity based on feature impact on latency
                 # Regularization to prevent overfitting:
                 reg_alpha=0.01,              # L1 regularization (Lasso) - encourages sparsity
                 reg_lambda=0.1,              # L2 regularization (Ridge) - prevents large coefficients
-        
-                # Quantile regression configuration:
-                objective="reg:quantileerror",    # Quantile loss (pinball loss) for quantile regression
-                quantile_alpha=self.quantile,     # Target quantile (e.g., 0.9 for p90)
-        
+
+                objective=objective,         # Conditional: quantile or standard regression
+
                 # Performance optimization:
                 tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
                 n_jobs=-1,                   # Utilize all CPU cores for parallel training
                 random_state=42,             # Ensures reproducible results
                 verbosity=1,
-                enable_categorical=True       # Enable categorical feature support   
+                enable_categorical=enable_categorical,  # Disabled for TreeLite compatibility
+                **model_params
     )
                 model.fit(features, target, sample_weight=sample_weight)
                 return model
-            elif self.model_type == ModelType.LIGHTGBM:  # LightGBM with quantile regression
+            elif self.model_type == ModelType.LIGHTGBM:
+                # Choose objective based on TreeLite mode
+                if settings.USE_TREELITE:
+                    # Standard regression for TreeLite compatibility
+                    objective = "regression"
+                    model_params = {}
+
+                    # Convert categorical to int for TreeLite compatibility
+                    if 'prefill_score_bucket' in features.columns:
+                        features = features.copy()
+                        if str(features['prefill_score_bucket'].dtype) == 'category':
+                            features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
+                        else:
+                            features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
+                else:
+                    # Native quantile regression (more accurate)
+                    objective = "quantile"
+                    model_params = {"alpha": self.quantile}
+                    logging.info(f"Training LightGBM with quantile objective (alpha={self.quantile:.2f})")
+
                 model = lgb.LGBMRegressor(
-                n_estimators=200,           # Number of trees
-                max_depth=6,                # Maximum tree depth
-                learning_rate=0.05,         # Learning rate
-                subsample=0.8,              # Row sampling ratio
-                colsample_bytree=0.8,       # Column sampling ratio
-                min_child_samples=20,       # Minimum samples in leaf
-                reg_alpha=0.1,              # L1 regularization
-                reg_lambda=0.1,             # L2 regularization
-                objective="quantile",       # Quantile regression objective
-                alpha=self.quantile,        # Quantile level (e.g., 0.9 for p90)
-                n_jobs=-1,                  # Use all cores
-                random_state=42,            # Reproducibility
-                verbosity=-1,               # Suppress warnings
-                force_col_wise=True         # Better for small datasets
-            )
-                model.fit(features, target, sample_weight=sample_weight, categorical_feature=['prefill_score_bucket'] if model_name == "ttft" else None)
+                    n_estimators=200,           # Number of trees
+                    max_depth=6,                # Maximum tree depth
+                    learning_rate=0.05,         # Learning rate
+                    subsample=0.8,              # Row sampling ratio
+                    colsample_bytree=0.8,       # Column sampling ratio
+                    min_child_samples=20,       # Minimum samples in leaf
+                    reg_alpha=0.1,              # L1 regularization
+                    reg_lambda=0.1,             # L2 regularization
+                    objective=objective,        # Conditional: quantile or standard regression
+                    n_jobs=-1,                  # Use all cores
+                    random_state=42,            # Reproducibility
+                    verbosity=-1,               # Suppress warnings
+                    force_col_wise=True,        # Better for small datasets
+                    **model_params
+                )
+
+                # TreeLite doesn't support categorical features (same as XGBoost with enable_categorical=False)
+                # So we disable categorical_feature in TreeLite mode and treat prefill_score_bucket as int
+                categorical_feature = None if settings.USE_TREELITE else (['prefill_score_bucket'] if model_name == "ttft" else None)
+                model.fit(features, target, sample_weight=sample_weight, categorical_feature=categorical_feature)
                 return model
                 
         except Exception as e:
@@ -581,25 +760,47 @@ class LatencyPredictor:
                    'num_request_waiting', 'num_request_running', 'num_tokens_generated']
 
             X = df_features[feature_cols]  # ✅ Now has properly typed categorical!
-            
 
-            
+            # Convert categorical to int for TreeLite mode (both XGBoost and LightGBM)
+            # TreeLite models are trained without categorical features, so predictions must use int dtype
+            if settings.USE_TREELITE and 'prefill_score_bucket' in X.columns:
+                X = X.copy()
+                if str(X['prefill_score_bucket'].dtype) == 'category':
+                    X['prefill_score_bucket'] = X['prefill_score_bucket'].cat.codes.astype('int32')
+                else:
+                    X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
 
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
                 X = scaler.transform(X)
 
             y_true = df_raw[target_col].values
             y_pred = model.predict(X)
-            
-            # For Bayesian Ridge (which doesn't do true quantile regression), 
-            # we'll estimate the quantile by adding a factor to the mean prediction
+
+            # Apply appropriate quantile adjustment based on model type
             if self.model_type == ModelType.BAYESIAN_RIDGE:
-                # Rough approximation: add some multiple of std to get to desired quantile
-                # This is a simplification - in practice you'd want proper quantile regression
+                # For Bayesian Ridge: estimate quantile by adding factor to mean prediction
                 std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                 _, y_std = model.predict(X, return_std=True)
                 y_pred = y_pred + std_factor * y_std
-            
+            elif settings.USE_TREELITE and (self.model_type in [ModelType.XGBOOST, ModelType.LIGHTGBM]):
+                # For TreeLite mode: model predicts MEAN, apply conformal adjustment if available
+                if model_name == "ttft" and self.ttft_conformal:
+                    # Apply conformal adjustment to convert mean → quantile
+                    y_pred = np.array([self.ttft_conformal.conformalize(pred) for pred in y_pred])
+                    logging.debug(f"Applied conformal adjustment to TTFT test predictions")
+                elif model_name == "tpot" and self.tpot_conformal:
+                    # Apply conformal adjustment to convert mean → quantile
+                    y_pred = np.array([self.tpot_conformal.conformalize(pred) for pred in y_pred])
+                    logging.debug(f"Applied conformal adjustment to TPOT test predictions")
+                else:
+                    # No conformal predictor available yet - use crude statistical adjustment
+                    from scipy.stats import norm
+                    z = norm.ppf(self.quantile)
+                    sigma_estimate = 0.12
+                    y_pred = y_pred * (1.0 + sigma_estimate * z)
+                    logging.debug(f"Applied bootstrap quantile adjustment (conformal not yet calibrated)")
+            # else: Native quantile regression (XGBoost/LightGBM) - predictions are already quantiles
+
             # Calculate quantile-specific metrics
             ql = quantile_loss(y_true, y_pred, self.quantile)
             coverage = quantile_coverage(y_true, y_pred, self.quantile)
@@ -641,6 +842,122 @@ class LatencyPredictor:
             logging.error(f"Error creating default model for {model_type}: {e}", exc_info=True)
             raise
 
+    def _calibrate_conformal_predictors(self):
+        """
+        Calibrate conformal predictors using test data.
+        Only called in TreeLite mode for XGBoost/LightGBM models.
+        """
+        try:
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug("Calibrating conformal predictors for TreeLite mode...")
+
+            # Calibrate TTFT conformal predictor
+            if self.ttft_model and self.ttft_test_data and len(self.ttft_test_data) >= 10:
+                try:
+                    # Prepare test data
+                    df_raw = pd.DataFrame(list(self.ttft_test_data)).dropna()
+                    df_raw = df_raw[df_raw['actual_ttft_ms'] > 0]
+
+                    if len(df_raw) >= 10:
+                        # Apply feature engineering
+                        df_features = self._prepare_features_with_interaction(df_raw.copy(), model_type="ttft")
+
+                        # Get feature columns (same as used in training)
+                        feature_cols = [
+                            'kv_cache_percentage', 'input_token_length', 'num_request_waiting',
+                            'num_request_running', 'prefix_cache_score', 'effective_input_tokens', 'prefill_score_bucket'
+                        ]
+                        X = df_features[feature_cols]
+                        y_true = df_raw['actual_ttft_ms'].values
+
+                        # Convert categorical to int for TreeLite mode (both XGBoost and LightGBM)
+                        # TreeLite compiled .so files don't support categorical dtypes
+                        if settings.USE_TREELITE and 'prefill_score_bucket' in X.columns:
+                            X = X.copy()
+                            if str(X['prefill_score_bucket'].dtype) == 'category':
+                                X['prefill_score_bucket'] = X['prefill_score_bucket'].cat.codes.astype('int32')
+                            else:
+                                X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
+
+                        # Get mean predictions from model
+                        y_pred_mean = self.ttft_model.predict(X)
+
+                        # Create and calibrate conformal predictor
+                        self.ttft_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        )
+                        self.ttft_conformal.calibrate(y_pred_mean, y_true)
+
+                        # Get coverage stats
+                        stats = self.ttft_conformal.get_coverage_stats(y_pred_mean, y_true)
+                        logging.debug(
+                            f"TTFT conformal calibration complete: "
+                            f"coverage={stats['coverage_percent']:.1f}% (target={stats['target_coverage_percent']:.0f}%), "
+                            f"violation_rate={stats['violation_rate_percent']:.1f}%, "
+                            f"quantile_adjustment=+{stats['quantile_adjustment']:.2f}ms, "
+                            f"samples={stats['calibration_samples']}"
+                        )
+                except Exception as e:
+                    logging.error(
+                        f"❌ CRITICAL: TTFT conformal calibration FAILED in TreeLite mode!\n"
+                        f"  Error: {e}\n"
+                        f"  Test samples available: {len(self.ttft_test_data)}\n"
+                        f"  Model type: {self.model_type}\n"
+                        f"  Impact: Bundle will have 0 calibration samples → prediction servers will fail conformal adjustment\n"
+                        f"  This is a FATAL error for TreeLite mode - predictions will not have correct coverage!",
+                        exc_info=True
+                    )
+                    self.ttft_conformal = None
+
+            # Calibrate TPOT conformal predictor
+            if self.tpot_model and self.tpot_test_data and len(self.tpot_test_data) >= 10:
+                try:
+                    # Prepare test data
+                    df_raw = pd.DataFrame(list(self.tpot_test_data)).dropna()
+                    df_raw = df_raw[df_raw['actual_tpot_ms'] > 0]
+
+                    if len(df_raw) >= 10:
+                        # Get feature columns
+                        feature_cols = ['kv_cache_percentage', 'input_token_length',
+                                      'num_request_waiting', 'num_request_running', 'num_tokens_generated']
+                        X = df_raw[feature_cols]
+                        y_true = df_raw['actual_tpot_ms'].values
+
+                        # Get mean predictions from model
+                        y_pred_mean = self.tpot_model.predict(X)
+
+                        # Create and calibrate conformal predictor
+                        self.tpot_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        )
+                        self.tpot_conformal.calibrate(y_pred_mean, y_true)
+
+                        # Get coverage stats
+                        stats = self.tpot_conformal.get_coverage_stats(y_pred_mean, y_true)
+                        logging.debug(
+                            f"TPOT conformal calibration complete: "
+                            f"coverage={stats['coverage_percent']:.1f}% (target={stats['target_coverage_percent']:.0f}%), "
+                            f"violation_rate={stats['violation_rate_percent']:.1f}%, "
+                            f"quantile_adjustment=+{stats['quantile_adjustment']:.2f}ms, "
+                            f"samples={stats['calibration_samples']}"
+                        )
+                except Exception as e:
+                    logging.error(
+                        f"❌ CRITICAL: TPOT conformal calibration FAILED in TreeLite mode!\n"
+                        f"  Error: {e}\n"
+                        f"  Test samples available: {len(self.tpot_test_data)}\n"
+                        f"  Model type: {self.model_type}\n"
+                        f"  Impact: Bundle will have 0 calibration samples → prediction servers will fail conformal adjustment\n"
+                        f"  This is a FATAL error for TreeLite mode - predictions will not have correct coverage!",
+                        exc_info=True
+                    )
+                    self.tpot_conformal = None
+
+        except Exception as e:
+            logging.error(f"Error in _calibrate_conformal_predictors: {e}", exc_info=True)
+
     def train(self):
         try:
             with self.lock:
@@ -648,9 +965,9 @@ class LatencyPredictor:
                 tpot_snap = list(self._all_samples(self.tpot_data_buckets))
                 total = len(ttft_snap) + len(tpot_snap)
                 if total < settings.MIN_SAMPLES_FOR_RETRAIN:
-                    logging.info(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
+                    logging.debug(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
                     return
-                logging.info(f"Initiating training with {total} samples using {self.model_type} for quantile {self.quantile}.")
+                logging.debug(f"Initiating training with {total} samples using {self.model_type} for quantile {self.quantile}.")
 
             new_ttft_model = new_ttft_scaler = None
             new_tpot_model = new_tpot_scaler = None
@@ -660,7 +977,7 @@ class LatencyPredictor:
                 raw_ttft = pd.DataFrame(ttft_snap).dropna()
                 raw_ttft = raw_ttft[raw_ttft['actual_ttft_ms'] > 0]
                 df_ttft = self._prepare_features_with_interaction(raw_ttft.copy(), model_type="ttft")
-                print(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
+                logging.debug(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
                 if len(df_ttft) >= settings.MIN_SAMPLES_FOR_RETRAIN:
                     # Updated TTFT features to include prefix_cache_score
                     ttft_feature_cols_tree = [
@@ -718,12 +1035,14 @@ class LatencyPredictor:
                             self.ttft_quantile_loss_scores.append(ql)
                             self.ttft_coverage_scores.append(coverage)
                             self.ttft_violation_rates.append(violation_rate)
-                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. "
-                                       f"Quantile Loss = {ql:.4f}, "
-                                       f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                       f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TTFT model trained on {len(df_ttft)} samples. "
+                                           f"Quantile Loss = {ql:.4f}, "
+                                           f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
+                                           f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
                         else:
-                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. Quantile metrics = N/A (insufficient test data)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TTFT model trained on {len(df_ttft)} samples. Quantile metrics = N/A (insufficient test data)")
 
                     except Exception:
                         logging.error("Error training TTFT model", exc_info=True)
@@ -757,12 +1076,14 @@ class LatencyPredictor:
                             self.tpot_quantile_loss_scores.append(ql)
                             self.tpot_coverage_scores.append(coverage)
                             self.tpot_violation_rates.append(violation_rate)
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. "
-                                       f"Quantile Loss = {ql:.4f}, "
-                                       f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                       f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TPOT model trained on {len(df_tpot)} samples. "
+                                           f"Quantile Loss = {ql:.4f}, "
+                                           f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
+                                           f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
                         else:
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. Quantile metrics = N/A (insufficient test data)")
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(f"TPOT model trained on {len(df_tpot)} samples. Quantile metrics = N/A (insufficient test data)")
                             
                     except Exception:
                         logging.error("Error training TPOT model", exc_info=True)
@@ -786,19 +1107,24 @@ class LatencyPredictor:
                     self.tpot_model = new_tpot_model
                     if new_tpot_scaler is not None:
                         self.tpot_scaler = new_tpot_scaler
-                    
+
                     # Store descaled coefficients for Bayesian Ridge
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
-                        tpot_features = ['kv_cache_percentage', 'input_token_length', 
+                        tpot_features = ['kv_cache_percentage', 'input_token_length',
                                        'num_request_waiting', 'num_request_running', 'num_tokens_generated']
                         self.tpot_coefficients = self._store_descaled_coefficients(
                             new_tpot_model, new_tpot_scaler, tpot_features, "TPOT"
                         )
-                
+
+                # Calibrate conformal predictors (only in TreeLite mode)
+                if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
+                    if self.model_type in [ModelType.XGBOOST, ModelType.LIGHTGBM]:
+                        self._calibrate_conformal_predictors()
+
                 if self.is_ready:
                     self.last_retrain_time = datetime.now(timezone.utc)
                     try:
-                        self._save_models_unlocked()
+                        self._save_models_with_bundle()
                     except Exception:
                         logging.error("Error saving models after training.", exc_info=True)
         except Exception as e:
@@ -921,100 +1247,538 @@ class LatencyPredictor:
                     logging.exception("Failed to add one sample in bulk ingestion")
 
 
-    # Update the _save_models_unlocked method to handle LightGBM model exports
-    def _save_models_unlocked(self):
+    def _compute_model_hash(self, model) -> str:
+        """
+        Compute a hash of the model to detect if it has actually changed.
+
+        Args:
+            model: The trained model (XGBoost or LightGBM)
+
+        Returns:
+            MD5 hash string of the model's serialized form
+        """
         try:
-            if self.ttft_model:
-                os.makedirs(os.path.dirname(settings.TTFT_MODEL_PATH), exist_ok=True)
-                joblib.dump(self.ttft_model, settings.TTFT_MODEL_PATH)
-                logging.info("TTFT model saved.")
-        
-                # Save model-specific exports
-                if self.model_type == ModelType.XGBOOST:
-                    try:
+            # Serialize model to bytes using BytesIO buffer
+            buffer = BytesIO()
+            joblib.dump(model, buffer)
+            model_bytes = buffer.getvalue()
+            model_hash = hashlib.md5(model_bytes).hexdigest()
+            return model_hash
+        except Exception as e:
+            logging.error(f"Error computing model hash: {e}", exc_info=True)
+            # Return a random hash to force compilation if hashing fails
+            return hashlib.md5(str(time.time()).encode()).hexdigest()
+
+    def _cleanup_old_versioned_models(self, versioned_dir: str, current_hash: str, model_name: str):
+        """
+        Clean up old versioned TreeLite models to prevent disk bloat.
+
+        Keeps the most recent N versions (configured via MAX_VERSIONED_MODELS_TO_KEEP).
+
+        Args:
+            versioned_dir: Directory containing versioned .so files
+            current_hash: Hash of the current model (to protect from deletion)
+            model_name: Name for logging (e.g., "TTFT" or "TPOT")
+        """
+        try:
+            if not os.path.exists(versioned_dir):
+                return
+
+            # Find all versioned .so files
+            import glob
+            pattern = os.path.join(versioned_dir, f"{model_name.lower()}_*.so")
+            versioned_files = glob.glob(pattern)
+
+            if len(versioned_files) <= settings.MAX_VERSIONED_MODELS_TO_KEEP:
+                return  # Nothing to clean up yet
+
+            # Sort by modification time (newest first)
+            versioned_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+
+            # Keep the most recent N versions
+            files_to_keep = versioned_files[:settings.MAX_VERSIONED_MODELS_TO_KEEP]
+            files_to_delete = versioned_files[settings.MAX_VERSIONED_MODELS_TO_KEEP:]
+
+            # Also protect current hash from deletion
+            current_filename = f"{model_name.lower()}_{current_hash[:8]}.so"
+            current_filepath = os.path.join(versioned_dir, current_filename)
+
+            for filepath in files_to_delete:
+                if filepath == current_filepath:
+                    logging.info(f"Skipping deletion of current {model_name} model: {filepath}")
+                    continue
+
+                try:
+                    os.remove(filepath)
+                    logging.info(f"Cleaned up old {model_name} versioned model: {filepath}")
+                except Exception as e:
+                    logging.warning(f"Failed to delete old {model_name} model {filepath}: {e}")
+
+        except Exception as e:
+            logging.error(f"Error cleaning up old {model_name} versioned models: {e}", exc_info=True)
+
+    def _should_recompile_treelite(self, model, previous_hash: Optional[str], model_name: str) -> Tuple[bool, str]:
+        """
+        Determine if TreeLite recompilation is needed by comparing model hash.
+
+        Args:
+            model: The trained model
+            previous_hash: Hash of the previous model (None if first time)
+            model_name: Name for logging (e.g., "TTFT" or "TPOT")
+
+        Returns:
+            Tuple of (should_recompile: bool, current_hash: str)
+        """
+        try:
+            current_hash = self._compute_model_hash(model)
+
+            if previous_hash is None:
+                logging.info(f"{model_name}: First compilation (no previous hash)")
+                return True, current_hash
+
+            if current_hash == previous_hash:
+                self.cache_hits += 1
+                logging.debug(f"{model_name}: Model unchanged (hash: {current_hash[:8]}...), skipping compilation")
+
+                # Periodic cache efficiency report (every 60 seconds)
+                if logging.getLogger().isEnabledFor(logging.DEBUG) and time.time() - self.last_cache_report_time > 60:
+                    total = self.cache_hits + self.cache_misses
+                    hit_rate = (self.cache_hits / total * 100) if total > 0 else 0
+                    logging.debug(f"TreeLite compilation cache: {self.cache_hits} hits, {self.cache_misses} misses ({hit_rate:.1f}% hit rate)")
+                    self.last_cache_report_time = time.time()
+
+                return False, current_hash
+
+            self.cache_misses += 1
+            logging.debug(f"{model_name}: Model changed (old: {previous_hash[:8]}..., new: {current_hash[:8]}...), triggering TreeLite compilation")
+            return True, current_hash
+
+        except Exception as e:
+            logging.error(f"Error checking if recompilation needed for {model_name}: {e}", exc_info=True)
+            # On error, force recompilation to be safe
+            return True, hashlib.md5(str(time.time()).encode()).hexdigest()
+
+    def _launch_treelite_compilation(self, model_path: str, output_path: str, model_name: str, versioned_path: str = None):
+        """
+        Launch TreeLite compilation in a background subprocess (non-blocking).
+
+        IMPORTANT: Caller must hold self.compilation_lock and set the in_progress flag!
+
+        Args:
+            model_path: Path to the .joblib model file
+            output_path: Where to save the compiled .so file (legacy path for compatibility)
+            model_name: Name for logging (e.g., "TTFT" or "TPOT")
+            versioned_path: Optional versioned path for runtime updates (e.g., /models/treelite/ttft/ttft_a1b2c3d4.so)
+        """
+        try:
+            # Set the in-progress flag (caller already holds compilation_lock)
+            if model_name == "TTFT":
+                self.ttft_compilation_in_progress = True
+            elif model_name == "TPOT":
+                self.tpot_compilation_in_progress = True
+
+            # Path to our background compilation script
+            script_path = os.path.join(os.path.dirname(__file__), 'compile_treelite_background.py')
+
+            # Build command args - pass versioned path if provided
+            cmd_args = [sys.executable, script_path, model_path, output_path, model_name]
+            if versioned_path:
+                cmd_args.append(versioned_path)
+
+            # Launch subprocess in background (fire and forget)
+            # Use Popen instead of run() to avoid blocking
+            process = subprocess.Popen(
+                cmd_args,
+                stdout=subprocess.DEVNULL,  # Don't capture output (goes to log file)
+                stderr=subprocess.DEVNULL,
+                start_new_session=True  # Detach from parent process
+            )
+
+            logging.info(f"🚀 Launched background TreeLite compilation for {model_name} (PID: {process.pid})")
+            logging.info(f"   Model: {model_path} -> {output_path}")
+            if versioned_path:
+                logging.info(f"   Versioned: {versioned_path}")
+            logging.info(f"   Check /tmp/treelite_compilation.log for compilation progress")
+
+            # Reset the in-progress flag after a timeout (in case process crashes without cleanup)
+            # This prevents permanent deadlock if subprocess fails silently
+            def reset_flag_after_timeout():
+                time.sleep(30)  # Wait 30 seconds (compilation should finish by then)
+                with self.compilation_lock:
+                    if model_name == "TTFT":
+                        if self.ttft_compilation_in_progress:
+                            logging.warning(f"TTFT compilation flag still set after 30s, resetting (compilation may have failed)")
+                            self.ttft_compilation_in_progress = False
+                    elif model_name == "TPOT":
+                        if self.tpot_compilation_in_progress:
+                            logging.warning(f"TPOT compilation flag still set after 30s, resetting (compilation may have failed)")
+                            self.tpot_compilation_in_progress = False
+
+            # Launch watchdog thread to reset flag after timeout
+            threading.Thread(target=reset_flag_after_timeout, daemon=True).start()
+
+        except Exception as e:
+            # On error, reset the flag
+            if model_name == "TTFT":
+                self.ttft_compilation_in_progress = False
+            elif model_name == "TPOT":
+                self.tpot_compilation_in_progress = False
+            logging.error(f"Failed to launch background TreeLite compilation for {model_name}: {e}", exc_info=True)
+
+    def _save_models_with_bundle(self):
+        """
+        Save models using bundle registry (new architectural approach).
+        Creates immutable versioned bundles with atomic operations and TreeLite compilation tracking.
+
+        Requires bundle manager to be initialized.
+        """
+        if not self.bundle_manager:
+            raise RuntimeError("Bundle manager not initialized - cannot save models")
+
+        try:
+            # Calculate training and test sample counts
+            training_samples = {
+                "ttft": sum(len(bucket) for bucket in self.ttft_data_buckets.values()),
+                "tpot": sum(len(bucket) for bucket in self.tpot_data_buckets.values())
+            }
+            test_samples = {
+                "ttft": len(self.ttft_test_data),
+                "tpot": len(self.tpot_test_data)
+            }
+
+            # Start a new training session - creates bundle in TRAINING state
+            bundle = self.bundle_manager.start_training(
+                model_name="dual_ttft_tpot",
+                model_type=self.model_type.value,
+                quantile=self.quantile,
+                use_treelite=settings.USE_TREELITE
+            )
+
+            logging.info(f"Started bundle {bundle.manifest.bundle_id[:8]} (state: {bundle.manifest.state.value})")
+
+            # Save models to temp directory first, then add to bundle atomically
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # === TTFT MODEL ===
+                if self.ttft_model:
+                    temp_ttft_path = os.path.join(temp_dir, "ttft.joblib")
+                    joblib.dump(self.ttft_model, temp_ttft_path)
+                    self.bundle_manager.save_model_file(bundle, TTFT_MODEL_FILENAME, temp_ttft_path)
+                    logging.debug(f"Bundle {bundle.manifest.bundle_id[:8]}: Added TTFT model")
+
+                    # TTFT model-specific exports
+                    if self.model_type == ModelType.XGBOOST:
+                        # Save XGBoost trees as JSON
                         booster = self.ttft_model.get_booster()
                         raw_trees = booster.get_dump(dump_format="json")
                         trees = [json.loads(t) for t in raw_trees]
-                
-                        ttft_json_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_trees.json')
-                        with open(ttft_json_path, 'w') as f:
+                        temp_ttft_trees_path = os.path.join(temp_dir, "ttft_trees.json")
+                        with open(temp_ttft_trees_path, 'w') as f:
                             json.dump(trees, f, indent=2)
-                        logging.info(f"TTFT XGBoost trees saved to {ttft_json_path}")
-                    except Exception as e:
-                        logging.error(f"Error saving TTFT XGBoost trees: {e}", exc_info=True)
-            
-                elif self.model_type == ModelType.LIGHTGBM:
-                    try:
-                        # Save LightGBM model as text format
-                        ttft_txt_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_lgb.txt')
-                        self.ttft_model.booster_.save_model(ttft_txt_path)
-                    
-                        # Save feature importances as JSON
-                        feature_names = ['kv_cache_percentage', 'input_token_length', 
-                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score', 'effective_input_tokens', 'prefill_score_bucket']
-                        importances = dict(zip(feature_names, self.ttft_model.feature_importances_))
-                    
-                        ttft_imp_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_importances.json')
-                        with open(ttft_imp_path, 'w') as f:
+                        self.bundle_manager.save_model_file(bundle, "ttft_trees", temp_ttft_trees_path)
+
+                    elif self.model_type == ModelType.LIGHTGBM:
+                        # Save LightGBM model as text and feature importances
+                        temp_ttft_txt_path = os.path.join(temp_dir, "ttft_lgb.txt")
+                        self.ttft_model.booster_.save_model(temp_ttft_txt_path)
+                        self.bundle_manager.save_model_file(bundle, "ttft_lgb.txt", temp_ttft_txt_path)
+
+                        # Feature importances
+                        feature_names = ['kv_cache_percentage', 'input_token_length',
+                                       'num_request_waiting', 'num_request_running', 'prefix_cache_score',
+                                       'effective_input_tokens', 'prefill_score_bucket']
+                        importances = {name: float(imp) for name, imp in zip(feature_names, self.ttft_model.feature_importances_)}
+                        temp_ttft_imp_path = os.path.join(temp_dir, "ttft_importances.json")
+                        with open(temp_ttft_imp_path, 'w') as f:
                             json.dump(importances, f, indent=2)
-                    
-                        logging.info(f"TTFT LightGBM model saved to {ttft_txt_path}")
-                        logging.info(f"TTFT LightGBM importances saved to {ttft_imp_path}")
-                    except Exception as e:
-                        logging.error(f"Error saving TTFT LightGBM exports: {e}", exc_info=True)
-        
-            if self.ttft_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
-                os.makedirs(os.path.dirname(settings.TTFT_SCALER_PATH), exist_ok=True)
-                joblib.dump(self.ttft_scaler, settings.TTFT_SCALER_PATH)
-                logging.info("TTFT scaler saved.")
-        
-            if self.tpot_model:
-                os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
-                joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
-                logging.info("TPOT model saved.")
-        
-                # Save model-specific exports
-                if self.model_type == ModelType.XGBOOST:
-                    try:
+                        self.bundle_manager.save_model_file(bundle, "ttft_importances.json", temp_ttft_imp_path)
+
+                # === TPOT MODEL ===
+                if self.tpot_model:
+                    temp_tpot_path = os.path.join(temp_dir, "tpot.joblib")
+                    joblib.dump(self.tpot_model, temp_tpot_path)
+                    self.bundle_manager.save_model_file(bundle, TPOT_MODEL_FILENAME, temp_tpot_path)
+                    logging.debug(f"Bundle {bundle.manifest.bundle_id[:8]}: Added TPOT model")
+
+                    # TPOT model-specific exports
+                    if self.model_type == ModelType.XGBOOST:
+                        # Save XGBoost trees as JSON
                         booster = self.tpot_model.get_booster()
                         raw_trees = booster.get_dump(dump_format="json")
                         trees = [json.loads(t) for t in raw_trees]
-                
-                        tpot_json_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_trees.json')
-                        with open(tpot_json_path, 'w') as f:
+                        temp_tpot_trees_path = os.path.join(temp_dir, "tpot_trees.json")
+                        with open(temp_tpot_trees_path, 'w') as f:
                             json.dump(trees, f, indent=2)
-                        logging.info(f"TPOT XGBoost trees saved to {tpot_json_path}")
-                    except Exception as e:
-                        logging.error(f"Error saving TPOT XGBoost trees: {e}", exc_info=True)
-            
-                elif self.model_type == ModelType.LIGHTGBM:
-                    try:
-                        # Save LightGBM model as text format
-                        tpot_txt_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_lgb.txt')
-                        self.tpot_model.booster_.save_model(tpot_txt_path)
-                    
-                        # Save feature importances as JSON
-                        feature_names = ['kv_cache_percentage', 'input_token_length', 
+                        self.bundle_manager.save_model_file(bundle, "tpot_trees", temp_tpot_trees_path)
+
+                    elif self.model_type == ModelType.LIGHTGBM:
+                        # Save LightGBM model as text and feature importances
+                        temp_tpot_txt_path = os.path.join(temp_dir, "tpot_lgb.txt")
+                        self.tpot_model.booster_.save_model(temp_tpot_txt_path)
+                        self.bundle_manager.save_model_file(bundle, "tpot_lgb.txt", temp_tpot_txt_path)
+
+                        # Feature importances
+                        feature_names = ['kv_cache_percentage', 'input_token_length',
                                        'num_request_waiting', 'num_request_running', 'num_tokens_generated']
-                        importances = dict(zip(feature_names, self.tpot_model.feature_importances_))
-                    
-                        tpot_imp_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_importances.json')
-                        with open(tpot_imp_path, 'w') as f:
+                        importances = {name: float(imp) for name, imp in zip(feature_names, self.tpot_model.feature_importances_)}
+                        temp_tpot_imp_path = os.path.join(temp_dir, "tpot_importances.json")
+                        with open(temp_tpot_imp_path, 'w') as f:
                             json.dump(importances, f, indent=2)
-                    
-                        logging.info(f"TPOT LightGBM model saved to {tpot_txt_path}")
-                        logging.info(f"TPOT LightGBM importances saved to {tpot_imp_path}")
+                        self.bundle_manager.save_model_file(bundle, "tpot_importances.json", temp_tpot_imp_path)
+
+                # === SCALERS (Bayesian Ridge only) ===
+                if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    if self.ttft_scaler:
+                        temp_ttft_scaler_path = os.path.join(temp_dir, "ttft_scaler.joblib")
+                        joblib.dump(self.ttft_scaler, temp_ttft_scaler_path)
+                        self.bundle_manager.save_model_file(bundle, TTFT_SCALER_FILENAME, temp_ttft_scaler_path)
+
+                    if self.tpot_scaler:
+                        temp_tpot_scaler_path = os.path.join(temp_dir, "tpot_scaler.joblib")
+                        joblib.dump(self.tpot_scaler, temp_tpot_scaler_path)
+                        self.bundle_manager.save_model_file(bundle, TPOT_SCALER_FILENAME, temp_tpot_scaler_path)
+
+                # === CONFORMAL CALIBRATION (TreeLite mode only) ===
+                if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
+                    if self.ttft_conformal:
+                        temp_ttft_conf_path = os.path.join(temp_dir, "ttft_conformal.json")
+                        # Use get_state() + manual JSON save (no .save() method exists)
+                        with open(temp_ttft_conf_path, 'w') as f:
+                            json.dump(self.ttft_conformal.get_state(), f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, TTFT_CONFORMAL_FILENAME, temp_ttft_conf_path)
+                    else:
+                        # TreeLite mode but no conformal calibration
+                        # Use conditional logging based on whether this is startup or real training
+                        has_training_data = training_samples.get('ttft', 0) > 0 or test_samples.get('ttft', 0) > 0
+
+                        if not has_training_data:
+                            # Startup with default models - expected behavior
+                            logging.info(
+                                f"TreeLite mode: No TTFT conformal calibration (startup with default models)"
+                            )
+                        elif test_samples.get('ttft', 0) < 10 and training_samples.get('ttft', 0) < 100:
+                            # Small dataset - can't create conformal, but not critical
+                            logging.warning(
+                                f"TreeLite mode: Insufficient data for TTFT conformal calibration\n"
+                                f"  Training samples: {training_samples.get('ttft', 0)}\n"
+                                f"  Test samples: {test_samples.get('ttft', 0)} (required: ≥10)\n"
+                                f"  Bundle will use default predictions until more data is available"
+                            )
+                        else:
+                            # Real error - have sufficient data but conformal failed
+                            logging.error(
+                                f"❌ CRITICAL: TreeLite mode enabled but TTFT conformal predictor is None!\n"
+                                f"  Training samples: {training_samples.get('ttft', 0)}\n"
+                                f"  Test samples: {test_samples.get('ttft', 0)} (required: ≥10)\n"
+                                f"  Model type: {self.model_type}\n"
+                                f"  ⚠️  Bundle will be published WITHOUT TTFT conformal calibration!\n"
+                                f"  Impact: Prediction servers will have 0 calibration samples → INCORRECT COVERAGE\n"
+                                f"  Check logs above for conformal calibration errors"
+                            )
+
+                    if self.tpot_conformal:
+                        temp_tpot_conf_path = os.path.join(temp_dir, "tpot_conformal.json")
+                        # Use get_state() + manual JSON save (no .save() method exists)
+                        with open(temp_tpot_conf_path, 'w') as f:
+                            json.dump(self.tpot_conformal.get_state(), f, indent=2)
+                        self.bundle_manager.save_model_file(bundle, TPOT_CONFORMAL_FILENAME, temp_tpot_conf_path)
+                    else:
+                        # TreeLite mode but no conformal calibration
+                        # Use conditional logging based on whether this is startup or real training
+                        has_training_data = training_samples.get('tpot', 0) > 0 or test_samples.get('tpot', 0) > 0
+
+                        if not has_training_data:
+                            # Startup with default models - expected behavior
+                            logging.info(
+                                f"TreeLite mode: No TPOT conformal calibration (startup with default models)"
+                            )
+                        elif test_samples.get('tpot', 0) < 10 and training_samples.get('tpot', 0) < 100:
+                            # Small dataset - can't create conformal, but not critical
+                            logging.warning(
+                                f"TreeLite mode: Insufficient data for TPOT conformal calibration\n"
+                                f"  Training samples: {training_samples.get('tpot', 0)}\n"
+                                f"  Test samples: {test_samples.get('tpot', 0)} (required: ≥10)\n"
+                                f"  Bundle will use default predictions until more data is available"
+                            )
+                        else:
+                            # Real error - have sufficient data but conformal failed
+                            logging.error(
+                                f"❌ CRITICAL: TreeLite mode enabled but TPOT conformal predictor is None!\n"
+                                f"  Training samples: {training_samples.get('tpot', 0)}\n"
+                                f"  Test samples: {test_samples.get('tpot', 0)} (required: ≥10)\n"
+                                f"  Model type: {self.model_type}\n"
+                                f"  ⚠️  Bundle will be published WITHOUT TPOT conformal calibration!\n"
+                                f"  Impact: Prediction servers will have 0 calibration samples → INCORRECT COVERAGE\n"
+                                f"  Check logs above for conformal calibration errors"
+                            )
+
+            # === TREELITE COMPILATION ===
+            # Note: XGBoost uses background compilation, LightGBM uses synchronous
+            if settings.USE_TREELITE and TREELITE_AVAILABLE and TL2CGEN_AVAILABLE:
+                if self.model_type == ModelType.XGBOOST:
+                    # XGBoost: Background compilation
+                    bundle.manifest.transition_state(BundleState.COMPILING, "Starting background TreeLite compilation for XGBoost")
+                    bundle.save_manifest()
+
+                    # Get model paths from bundle
+                    ttft_model_path = str(bundle.path / TTFT_MODEL_FILENAME)
+                    tpot_model_path = str(bundle.path / TPOT_MODEL_FILENAME)
+
+                    # Launch background compilations
+                    with self.compilation_lock:
+                        # TTFT compilation
+                        if self.ttft_model and not self.ttft_compilation_in_progress:
+                            ttft_treelite_path = str(bundle.path / TTFT_TREELITE_FILENAME)
+                            script_path = os.path.join(os.path.dirname(__file__), 'compile_treelite_background.py')
+                            cmd_args = [sys.executable, script_path, ttft_model_path, ttft_treelite_path, "TTFT"]
+
+                            process = subprocess.Popen(
+                                cmd_args,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True
+                            )
+
+                            self.bundle_manager.start_compilation(bundle, "ttft", process)
+                            logging.info(f"Launched background TreeLite compilation for TTFT (PID: {process.pid})")
+
+                        # TPOT compilation
+                        if self.tpot_model and not self.tpot_compilation_in_progress:
+                            tpot_treelite_path = str(bundle.path / TPOT_TREELITE_FILENAME)
+                            script_path = os.path.join(os.path.dirname(__file__), 'compile_treelite_background.py')
+                            cmd_args = [sys.executable, script_path, tpot_model_path, tpot_treelite_path, "TPOT"]
+
+                            process = subprocess.Popen(
+                                cmd_args,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True
+                            )
+
+                            self.bundle_manager.start_compilation(bundle, "tpot", process)
+                            logging.info(f"Launched background TreeLite compilation for TPOT (PID: {process.pid})")
+
+                    # CRITICAL: Wait for background compilation to complete before publishing
+                    # Otherwise bundles get published without .so files, causing prediction servers
+                    # to use mean regression models instead of TreeLite + conformal
+                    logging.info("Waiting for background TreeLite compilation to complete...")
+                    max_wait_seconds = 30  # XGBoost compilation should finish within 30 seconds
+                    poll_interval = 0.5  # Check every 500ms
+                    elapsed = 0
+
+                    while elapsed < max_wait_seconds:
+                        import time
+                        time.sleep(poll_interval)
+                        elapsed += poll_interval
+
+                        # Check compilation status for both models
+                        ttft_status = self.bundle_manager.check_compilation_status(bundle, "ttft")
+                        tpot_status = self.bundle_manager.check_compilation_status(bundle, "tpot")
+
+                        # Check if both completed successfully
+                        if ttft_status and tpot_status and ttft_status.value == "completed" and tpot_status.value == "completed":
+                            logging.info(f"✓ XGBoost TreeLite compilation completed after {elapsed:.1f}s")
+
+                            # Add .so files to bundle manifest (mark_compilation_complete does this)
+                            ttft_treelite_path = str(bundle.path / TTFT_TREELITE_FILENAME)
+                            tpot_treelite_path = str(bundle.path / TPOT_TREELITE_FILENAME)
+                            self.bundle_manager.mark_compilation_complete(bundle, "ttft", ttft_treelite_path, True)
+                            self.bundle_manager.mark_compilation_complete(bundle, "tpot", tpot_treelite_path, True)
+
+                            bundle.manifest.transition_state(BundleState.READY, "All files including TreeLite compiled and verified")
+                            break
+
+                        # Check if any failed
+                        if (ttft_status and ttft_status.value == "failed") or (tpot_status and tpot_status.value == "failed"):
+                            ttft_val = ttft_status.value if ttft_status else "unknown"
+                            tpot_val = tpot_status.value if tpot_status else "unknown"
+                            logging.error(
+                                f"TreeLite compilation FAILED: TTFT={ttft_val}, TPOT={tpot_val}. "
+                                f"Bundle will be marked as FAILED and NOT published. "
+                                f"Check /tmp/treelite_compilation.log for details. "
+                                f"Common cause: gcc/clang not installed in Docker image."
+                            )
+                            bundle.manifest.transition_state(BundleState.FAILED, f"TreeLite compilation failed (TTFT={ttft_val}, TPOT={tpot_val})")
+                            break
+                    else:
+                        # Timeout - compilation taking too long
+                        ttft_val = ttft_status.value if ttft_status else "unknown"
+                        tpot_val = tpot_status.value if tpot_status else "unknown"
+                        logging.error(
+                            f"TreeLite compilation TIMEOUT after {max_wait_seconds}s: TTFT={ttft_val}, TPOT={tpot_val}. "
+                            f"Bundle will be marked as FAILED and NOT published. "
+                            f"This usually indicates gcc/clang compilation is hung or missing."
+                        )
+                        bundle.manifest.transition_state(BundleState.FAILED, f"TreeLite compilation timeout (TTFT={ttft_val}, TPOT={tpot_val})")
+
+                elif self.model_type == ModelType.LIGHTGBM:
+                    # LightGBM: Synchronous compilation (fast enough)
+                    bundle.manifest.transition_state(BundleState.COMPILING, "Starting TreeLite compilation for LightGBM")
+                    bundle.save_manifest()
+
+                    try:
+                        # TTFT LightGBM compilation
+                        if self.ttft_model:
+                            tl_model = treelite.frontend.from_lightgbm(self.ttft_model.booster_)
+                            ttft_treelite_path = str(bundle.path / TTFT_TREELITE_FILENAME)
+                            tl2cgen.export_lib(
+                                model=tl_model,
+                                toolchain='gcc',
+                                libpath=ttft_treelite_path,
+                                params={'parallel_comp': 8},
+                                verbose=False
+                            )
+                            self.bundle_manager.mark_compilation_complete(bundle, "ttft", ttft_treelite_path, True)
+                            logging.info(f"TTFT LightGBM TreeLite compilation completed")
+
+                        # TPOT LightGBM compilation
+                        if self.tpot_model:
+                            tl_model = treelite.frontend.from_lightgbm(self.tpot_model.booster_)
+                            tpot_treelite_path = str(bundle.path / TPOT_TREELITE_FILENAME)
+                            tl2cgen.export_lib(
+                                model=tl_model,
+                                toolchain='gcc',
+                                libpath=tpot_treelite_path,
+                                params={'parallel_comp': 8},
+                                verbose=False
+                            )
+                            self.bundle_manager.mark_compilation_complete(bundle, "tpot", tpot_treelite_path, True)
+                            logging.info(f"TPOT LightGBM TreeLite compilation completed")
+
+                        bundle.manifest.transition_state(BundleState.READY, "All files including TreeLite compiled and verified")
                     except Exception as e:
-                        logging.error(f"Error saving TPOT LightGBM exports: {e}", exc_info=True)
-        
-            if self.tpot_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
-                os.makedirs(os.path.dirname(settings.TPOT_SCALER_PATH), exist_ok=True)
-                joblib.dump(self.tpot_scaler, settings.TPOT_SCALER_PATH)
-                logging.info("TPOT scaler saved.")
-        
+                        logging.error(
+                            f"LightGBM TreeLite compilation FAILED: {e}. "
+                            f"Bundle will be marked as FAILED and NOT published. "
+                            f"Common cause: gcc/clang not installed in Docker image.",
+                            exc_info=True
+                        )
+                        bundle.manifest.transition_state(BundleState.FAILED, f"TreeLite compilation failed: {str(e)}")
+            else:
+                # No TreeLite - mark as READY immediately
+                bundle.manifest.transition_state(BundleState.READY, "All files written and verified (no TreeLite)")
+
+            bundle.save_manifest()
+
+            # Finalize and publish bundle atomically (raises exception on failure)
+            self.bundle_manager.finalize_bundle(bundle, training_samples, test_samples)
+
+            logging.info(f"Bundle {bundle.manifest.bundle_id[:8]} published successfully at {settings.BUNDLE_CURRENT_SYMLINK}")
+            self.current_bundle = bundle
+
+            # CRITICAL: Update model hashes so prediction servers can detect changes
+            # Without this, /model/{name}/hash will return "initial" forever
+            # and prediction servers will never download the new models
+            if self.ttft_model:
+                self.ttft_model_hash = self._compute_model_hash(self.ttft_model)
+                logging.debug(f"Updated TTFT model hash: {self.ttft_model_hash[:8]}...")
+            if self.tpot_model:
+                self.tpot_model_hash = self._compute_model_hash(self.tpot_model)
+                logging.debug(f"Updated TPOT model hash: {self.tpot_model_hash[:8]}...")
+
         except Exception as e:
-            logging.error(f"Error saving models: {e}", exc_info=True)
-            
+            logging.error(f"Error saving models with bundle registry: {e}", exc_info=True)
+            raise
+
     def flush_training_data(self, flush_training: bool = True, flush_test: bool = True, 
                    flush_metrics: bool = True, reason: str = None) -> dict:
         """
@@ -1073,6 +1837,27 @@ class LatencyPredictor:
                     self.tpot_violation_rates.clear()
                     metrics_cleared = True
                     logging.info("Cleared all quantile metric scores")
+
+                # CRITICAL: Clear conformal calibration when flushing test data
+                # This ensures test isolation - conformal predictors are recalibrated on fresh test data
+                conformal_cleared = False
+                if flush_test and settings.USE_TREELITE:
+                    if self.ttft_conformal:
+                        # Reset conformal predictor to empty state
+                        self.ttft_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        ) if CONFORMAL_AVAILABLE else None
+                        conformal_cleared = True
+                    if self.tpot_conformal:
+                        # Reset conformal predictor to empty state
+                        self.tpot_conformal = ConformalQuantilePredictor(
+                            quantile=self.quantile,
+                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                        ) if CONFORMAL_AVAILABLE else None
+                        conformal_cleared = True
+                    if conformal_cleared:
+                        logging.info("Cleared conformal calibration (will be recalibrated on next training cycle)")
         
                 return {
                     "success": True,
@@ -1080,7 +1865,8 @@ class LatencyPredictor:
                     "tpot_training_samples_flushed": tpot_training_count if flush_training else 0,
                     "ttft_test_samples_flushed": ttft_test_count if flush_test else 0,
                     "tpot_test_samples_flushed": tpot_test_count if flush_test else 0,
-                    "metrics_cleared": metrics_cleared
+                    "metrics_cleared": metrics_cleared,
+                    "conformal_cleared": conformal_cleared
                 }
         
         except Exception as e:
@@ -1088,36 +1874,100 @@ class LatencyPredictor:
             raise
     
     def load_models(self):
+        """
+        Load models from existing bundle or create initial default models.
+
+        This method is bundle-native: it tries to load from the active bundle first,
+        and only creates default models if no bundle exists (first startup).
+        """
         try:
             with self.lock:
-                if os.path.exists(settings.TTFT_MODEL_PATH):
-                    self.ttft_model = joblib.load(settings.TTFT_MODEL_PATH)
-                    if self.model_type == ModelType.BAYESIAN_RIDGE and os.path.exists(settings.TTFT_SCALER_PATH):
-                        self.ttft_scaler = joblib.load(settings.TTFT_SCALER_PATH)
-                else:
+                # Try to load from existing bundle
+                active_bundle = self.bundle_manager.get_active_bundle()
+
+                if active_bundle:
+                    # Bundle exists - load models from it
+                    logging.info(f"Loading models from existing bundle {active_bundle.manifest.bundle_id[:8]}")
+
+                    # Load TTFT model
+                    ttft_model_path = active_bundle.path / TTFT_MODEL_FILENAME
+                    if ttft_model_path.exists():
+                        self.ttft_model = joblib.load(ttft_model_path)
+                        logging.info(f"Loaded TTFT model from bundle")
+
+                        # Load TTFT scaler if Bayesian Ridge
+                        if self.model_type == ModelType.BAYESIAN_RIDGE:
+                            ttft_scaler_path = active_bundle.path / TTFT_SCALER_FILENAME
+                            if ttft_scaler_path.exists():
+                                self.ttft_scaler = joblib.load(ttft_scaler_path)
+                                logging.info(f"Loaded TTFT scaler from bundle")
+
+                    # Load TPOT model
+                    tpot_model_path = active_bundle.path / TPOT_MODEL_FILENAME
+                    if tpot_model_path.exists():
+                        self.tpot_model = joblib.load(tpot_model_path)
+                        logging.info(f"Loaded TPOT model from bundle")
+
+                        # Load TPOT scaler if Bayesian Ridge
+                        if self.model_type == ModelType.BAYESIAN_RIDGE:
+                            tpot_scaler_path = active_bundle.path / TPOT_SCALER_FILENAME
+                            if tpot_scaler_path.exists():
+                                self.tpot_scaler = joblib.load(tpot_scaler_path)
+                                logging.info(f"Loaded TPOT scaler from bundle")
+
+                    # Load conformal predictors if TreeLite mode
+                    if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
+                        ttft_conformal_path = active_bundle.path / TTFT_CONFORMAL_FILENAME
+                        if ttft_conformal_path.exists():
+                            with open(ttft_conformal_path, 'r') as f:
+                                conformal_state = json.load(f)
+                            self.ttft_conformal = ConformalQuantilePredictor(
+                                quantile=self.quantile,
+                                max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                            )
+                            self.ttft_conformal.load_state(conformal_state)
+                            logging.info(f"Loaded TTFT conformal predictor from bundle")
+
+                        tpot_conformal_path = active_bundle.path / TPOT_CONFORMAL_FILENAME
+                        if tpot_conformal_path.exists():
+                            with open(tpot_conformal_path, 'r') as f:
+                                conformal_state = json.load(f)
+                            self.tpot_conformal = ConformalQuantilePredictor(
+                                quantile=self.quantile,
+                                max_calibration_samples=settings.MAX_TEST_DATA_SIZE
+                            )
+                            self.tpot_conformal.load_state(conformal_state)
+                            logging.info(f"Loaded TPOT conformal predictor from bundle")
+
+                # If no bundle exists or models missing, create defaults
+                if not self.ttft_model:
+                    logging.info("No TTFT model in bundle - creating default model")
                     result = self._create_default_model("ttft")
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
                         self.ttft_model, self.ttft_scaler = result
                     else:
                         self.ttft_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
-                    self._save_models_unlocked()
 
-                if os.path.exists(settings.TPOT_MODEL_PATH):
-                    self.tpot_model = joblib.load(settings.TPOT_MODEL_PATH)
-                    if self.model_type == ModelType.BAYESIAN_RIDGE and os.path.exists(settings.TPOT_SCALER_PATH):
-                        self.tpot_scaler = joblib.load(settings.TPOT_SCALER_PATH)
-                else:
+                if not self.tpot_model:
+                    logging.info("No TPOT model in bundle - creating default model")
                     result = self._create_default_model("tpot")
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
                         self.tpot_model, self.tpot_scaler = result
                     else:
                         self.tpot_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
-                    self._save_models_unlocked()
+
+                # If we created any default models, save initial bundle
+                if not active_bundle or not self.ttft_model or not self.tpot_model:
+                    logging.info("Creating initial bundle with default models")
+                    self._save_models_with_bundle()
 
                 if not self.is_ready:
                     raise RuntimeError("Failed to initialize models/scalers")
+
+                logging.info(f"Models loaded successfully. Ready for training.")
+
         except Exception as e:
             logging.error(f"Critical error in load_models: {e}", exc_info=True)
             raise
@@ -1528,7 +2378,7 @@ async def get_data_status():
         "model_ready": predictor.is_ready,
         "last_retrain": predictor.last_retrain_time.isoformat() if predictor.last_retrain_time else None
     }
-    
+
 @app.get("/model/download/info")
 async def model_download_info():
     """
@@ -1623,96 +2473,202 @@ async def tpot_xgb_json():
 
 
 
+@app.get("/model/{model_name}/hash")
+async def get_model_hash(model_name: str):
+    """
+    Get the current hash of a model without downloading it.
+
+    This allows prediction servers to check if a model has changed
+    before downloading, reducing unnecessary network traffic.
+    """
+    if model_name == "ttft":
+        if not predictor.ttft_model:
+            raise HTTPException(status_code=404, detail="TTFT model not available")
+
+        return {
+            "model_name": "ttft",
+            "hash": predictor.ttft_model_hash or "initial",
+            "last_retrain": predictor.last_retrain_time.isoformat() if predictor.last_retrain_time else None,
+            "model_type": predictor.model_type.value,
+            "use_treelite": settings.USE_TREELITE
+        }
+
+    elif model_name == "tpot":
+        if not predictor.tpot_model:
+            raise HTTPException(status_code=404, detail="TPOT model not available")
+
+        return {
+            "model_name": "tpot",
+            "hash": predictor.tpot_model_hash or "initial",
+            "last_retrain": predictor.last_retrain_time.isoformat() if predictor.last_retrain_time else None,
+            "model_type": predictor.model_type.value,
+            "use_treelite": settings.USE_TREELITE
+        }
+
+    else:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}. Use 'ttft' or 'tpot'")
+
+
 @app.get("/model/{model_name}/info")
 async def model_info(model_name: str):
-    """Get model file information including last modified time."""
-    model_paths = {
-        "ttft": settings.TTFT_MODEL_PATH,
-        "tpot": settings.TPOT_MODEL_PATH,
-        "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+    """Get model file information from active bundle including readiness status."""
+    # Map model names to bundle file names
+    bundle_file_mapping = {
+        "ttft": TTFT_MODEL_FILENAME,
+        "tpot": TPOT_MODEL_FILENAME,
+        "ttft_scaler": TTFT_SCALER_FILENAME,
+        "tpot_scaler": TPOT_SCALER_FILENAME,
+        "ttft_treelite": TTFT_TREELITE_FILENAME,
+        "tpot_treelite": TPOT_TREELITE_FILENAME,
+        "ttft_conformal": TTFT_CONFORMAL_FILENAME,
+        "tpot_conformal": TPOT_CONFORMAL_FILENAME,
     }
-    
-    if model_name not in model_paths:
+
+    if model_name not in bundle_file_mapping:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
-    
-    model_path = model_paths[model_name]
-    
+
+    bundle_file_name = bundle_file_mapping[model_name]
+
+    # Get file path from active bundle
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+    if not active_bundle or bundle_file_name not in active_bundle.manifest.files:
+        # Bundle or file not ready yet
+        return {
+            "model_name": model_name,
+            "ready": False,
+            "status": "pending_training",
+            "message": "Model will be available after training completes",
+            "model_type": predictor.model_type.value,
+            "expected_after_seconds": settings.RETRAINING_INTERVAL_SEC if predictor.last_retrain_time is None else 0,
+            "quantile": predictor.quantile if model_name in ["ttft", "tpot", "ttft_treelite", "tpot_treelite", "ttft_conformal", "tpot_conformal"] else None
+        }
+
+    model_path = str(active_bundle.path / bundle_file_name)
+
+    # Check if file exists (should always exist if in manifest)
     if not os.path.exists(model_path):
-        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
-    
-    # Get file stats
+        # This shouldn't happen (file in manifest but not on disk)
+        raise HTTPException(status_code=500, detail=f"Bundle integrity error: {bundle_file_name} missing")
+
+    # File exists - return full info with ready=true
     stat = os.stat(model_path)
     last_modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-    
+
     return {
         "model_name": model_name,
         "path": model_path,
+        "ready": True,
+        "status": "available",
         "size_bytes": stat.st_size,
         "last_modified": last_modified.isoformat(),
-        "exists": True,
         "model_type": predictor.model_type.value,
-        "quantile": predictor.quantile if model_name in ["ttft", "tpot"] else None
+        "quantile": predictor.quantile if model_name in ["ttft", "tpot", "ttft_treelite", "tpot_treelite", "ttft_conformal", "tpot_conformal"] else None
     }
 
 
 @app.get("/model/{model_name}/download")
 async def download_model(model_name: str):
-    """Download a model file."""
-    model_paths = {
-        "ttft": settings.TTFT_MODEL_PATH,
-        "tpot": settings.TPOT_MODEL_PATH,
-        "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+    """Download a model file from the active bundle."""
+    # Map model names to bundle file names
+    bundle_file_mapping = {
+        "ttft": TTFT_MODEL_FILENAME,
+        "tpot": TPOT_MODEL_FILENAME,
+        "ttft_scaler": TTFT_SCALER_FILENAME,
+        "tpot_scaler": TPOT_SCALER_FILENAME,
+        "ttft_treelite": TTFT_TREELITE_FILENAME,
+        "tpot_treelite": TPOT_TREELITE_FILENAME,
+        "ttft_conformal": TTFT_CONFORMAL_FILENAME,
+        "tpot_conformal": TPOT_CONFORMAL_FILENAME,
     }
-    
-    if model_name not in model_paths:
+
+    if model_name not in bundle_file_mapping:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
-    
-    model_path = model_paths[model_name]
-    
+
+    bundle_file_name = bundle_file_mapping[model_name]
+
+    # Get file path from active bundle
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+    if not active_bundle or bundle_file_name not in active_bundle.manifest.files:
+        raise HTTPException(status_code=404, detail=f"Model {model_name} not available yet")
+
+    model_path = str(active_bundle.path / bundle_file_name)
+
     if not os.path.exists(model_path):
-        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
-    
+        # Bundle integrity error
+        raise HTTPException(status_code=500, detail=f"Bundle integrity error: {bundle_file_name} missing")
+
     # Return the file
-    filename = f"{model_name}.joblib"
+    if model_name.endswith('_treelite'):
+        filename = f"{model_name}.so"
+        media_type = 'application/octet-stream'
+    elif model_name.endswith('_conformal'):
+        filename = f"{model_name}.json"
+        media_type = 'application/json'
+    else:
+        filename = f"{model_name}.joblib"
+        media_type = 'application/octet-stream'
+
     return FileResponse(
         model_path,
-        media_type='application/octet-stream',
+        media_type=media_type,
         filename=filename
     )
 
 
 @app.get("/models/list")
 async def list_models():
-    """List all available models with their status."""
+    """List all available models from the active bundle."""
     models = {}
-    model_paths = {
-        "ttft": settings.TTFT_MODEL_PATH,
-        "tpot": settings.TPOT_MODEL_PATH,
-        "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+
+    # Map of model names to bundle file names
+    bundle_file_mapping = {
+        "ttft": TTFT_MODEL_FILENAME,
+        "tpot": TPOT_MODEL_FILENAME,
+        "ttft_scaler": TTFT_SCALER_FILENAME,
+        "tpot_scaler": TPOT_SCALER_FILENAME,
+        "ttft_treelite": TTFT_TREELITE_FILENAME,
+        "tpot_treelite": TPOT_TREELITE_FILENAME,
+        "ttft_conformal": TTFT_CONFORMAL_FILENAME,
+        "tpot_conformal": TPOT_CONFORMAL_FILENAME
     }
-    
-    for model_name, model_path in model_paths.items():
-        if os.path.exists(model_path):
-            stat = os.stat(model_path)
-            models[model_name] = {
-                "exists": True,
-                "size_bytes": stat.st_size,
-                "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
-            }
+
+    # Get active bundle
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+
+    for model_name, bundle_file_name in bundle_file_mapping.items():
+        if active_bundle and bundle_file_name in active_bundle.manifest.files:
+            model_path = active_bundle.path / bundle_file_name
+            if model_path.exists():
+                stat = os.stat(model_path)
+                models[model_name] = {
+                    "exists": True,
+                    "size_bytes": stat.st_size,
+                    "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    "bundle_id": active_bundle.manifest.bundle_id[:8],
+                    "checksum": active_bundle.manifest.files[bundle_file_name][:8]
+                }
+            else:
+                models[model_name] = {
+                    "exists": False,
+                    "size_bytes": 0,
+                    "last_modified": None,
+                    "bundle_id": active_bundle.manifest.bundle_id[:8],
+                    "checksum": None,
+                    "error": "Bundle integrity error"
+                }
         else:
             models[model_name] = {
                 "exists": False,
                 "size_bytes": 0,
                 "last_modified": None
             }
-    
+
     return {
         "models": models,
         "model_type": predictor.model_type.value,
         "quantile": predictor.quantile,
+        "active_bundle": active_bundle.manifest.bundle_id[:8] if active_bundle else None,
+        "bundle_state": active_bundle.manifest.state.value if active_bundle else None,
         "server_time": datetime.now(timezone.utc).isoformat(),
         "evaluation_metrics": {
             "quantile_loss": "Lower is better",
@@ -1721,24 +2677,135 @@ async def list_models():
         }
     }
 
+
+# Bundle sync endpoints for prediction servers
+@app.get("/bundle/current/info")
+async def get_current_bundle_info():
+    """
+    Get information about the current active bundle.
+
+    This endpoint allows prediction servers to check if a new bundle is available
+    without downloading all files.
+    """
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+
+    if not active_bundle:
+        raise HTTPException(status_code=404, detail="No active bundle available")
+
+    return {
+        "bundle_id": active_bundle.manifest.bundle_id,
+        "bundle_id_short": active_bundle.manifest.bundle_id[:8],
+        "state": active_bundle.manifest.state.value,
+        "model_type": active_bundle.manifest.model_type,
+        "quantile": active_bundle.manifest.quantile,
+        "use_treelite": active_bundle.manifest.use_treelite,
+        "created_at": active_bundle.manifest.created_at,
+        "training_samples": active_bundle.manifest.training_samples,
+        "test_samples": active_bundle.manifest.test_samples,
+        "files": {
+            name: {
+                "checksum": checksum[:8],
+                "size_bytes": os.path.getsize(active_bundle.path / name) if (active_bundle.path / name).exists() else 0
+            }
+            for name, checksum in active_bundle.manifest.files.items()
+        }
+    }
+
+
+@app.get("/bundle/{bundle_id}/manifest")
+async def get_bundle_manifest(bundle_id: str):
+    """
+    Get the manifest for a specific bundle.
+
+    Args:
+        bundle_id: Full or short (8-char) bundle ID
+    """
+    # Load bundle from registry
+    try:
+        bundle = ModelBundle.load(predictor.bundle_manager.registry.bundle_dir, bundle_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Bundle {bundle_id} not found: {e}")
+
+    return {
+        "bundle_id": bundle.manifest.bundle_id,
+        "state": bundle.manifest.state.value,
+        "model_type": bundle.manifest.model_type,
+        "quantile": bundle.manifest.quantile,
+        "use_treelite": bundle.manifest.use_treelite,
+        "created_at": bundle.manifest.created_at.isoformat(),
+        "files": bundle.manifest.files
+    }
+
+
+@app.get("/bundle/{bundle_id}/file/{file_name}")
+async def download_bundle_file(bundle_id: str, file_name: str):
+    """
+    Download a specific file from a bundle.
+
+    Args:
+        bundle_id: Full or short (8-char) bundle ID
+        file_name: Name of file in bundle (e.g., "ttft_model", "ttft_treelite")
+    """
+    # Load bundle from registry
+    try:
+        bundle = ModelBundle.load(predictor.bundle_manager.registry.bundle_dir, bundle_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Bundle {bundle_id} not found: {e}")
+
+    if file_name not in bundle.manifest.files:
+        raise HTTPException(status_code=404, detail=f"File {file_name} not found in bundle {bundle_id[:8]}")
+
+    file_path = bundle.path / file_name
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File {file_name} missing from bundle {bundle_id[:8]} (integrity error)")
+
+    # Map file types to media types
+    media_type_map = {
+        TTFT_MODEL_FILENAME: "application/octet-stream",
+        TPOT_MODEL_FILENAME: "application/octet-stream",
+        TTFT_SCALER_FILENAME: "application/octet-stream",
+        TPOT_SCALER_FILENAME: "application/octet-stream",
+        TTFT_TREELITE_FILENAME: "application/x-sharedlib",
+        TPOT_TREELITE_FILENAME: "application/x-sharedlib",
+        TTFT_CONFORMAL_FILENAME: "application/json",
+        TPOT_CONFORMAL_FILENAME: "application/json",
+    }
+
+    media_type = media_type_map.get(file_name, "application/octet-stream")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=f"{file_name}.bin"
+    )
+
+
 # Add new API endpoints for LightGBM model exports
 @app.get("/model/ttft/lgb/txt")
 async def ttft_lgb_txt():
     """
-    Download the TTFT LightGBM model as text format.
+    Download the TTFT LightGBM model as text format from active bundle.
     """
     if predictor.model_type != ModelType.LIGHTGBM:
         raise HTTPException(status_code=404, detail="TTFT model is not LightGBM")
-    
+
     if not predictor.ttft_model:
         raise HTTPException(status_code=404, detail="TTFT model not available")
-        
-    txt_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_lgb.txt')
-    if not os.path.exists(txt_path):
-        raise HTTPException(status_code=404, detail="TTFT LightGBM text model not found")
-    
+
+    # Get active bundle
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+    if not active_bundle:
+        raise HTTPException(status_code=404, detail="No active bundle available")
+
+    # LightGBM text export filename (stored in bundle during training)
+    txt_filename = "ttft_lgb.txt"
+    txt_path = active_bundle.path / txt_filename
+
+    if not txt_path.exists():
+        raise HTTPException(status_code=404, detail="TTFT LightGBM text model not found in bundle")
+
     return FileResponse(
-        txt_path,
+        str(txt_path),
         media_type='text/plain',
         filename='ttft_lgb_model.txt'
     )
@@ -1746,20 +2813,28 @@ async def ttft_lgb_txt():
 @app.get("/model/tpot/lgb/txt")
 async def tpot_lgb_txt():
     """
-    Download the TPOT LightGBM model as text format.
+    Download the TPOT LightGBM model as text format from active bundle.
     """
     if predictor.model_type != ModelType.LIGHTGBM:
         raise HTTPException(status_code=404, detail="TPOT model is not LightGBM")
-    
+
     if not predictor.tpot_model:
         raise HTTPException(status_code=404, detail="TPOT model not available")
-        
-    txt_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_lgb.txt')
-    if not os.path.exists(txt_path):
-        raise HTTPException(status_code=404, detail="TPOT LightGBM text model not found")
-    
+
+    # Get active bundle
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+    if not active_bundle:
+        raise HTTPException(status_code=404, detail="No active bundle available")
+
+    # LightGBM text export filename (stored in bundle during training)
+    txt_filename = "tpot_lgb.txt"
+    txt_path = active_bundle.path / txt_filename
+
+    if not txt_path.exists():
+        raise HTTPException(status_code=404, detail="TPOT LightGBM text model not found in bundle")
+
     return FileResponse(
-        txt_path,
+        str(txt_path),
         media_type='text/plain',
         filename='tpot_lgb_model.txt'
     )
@@ -1767,41 +2842,57 @@ async def tpot_lgb_txt():
 @app.get("/model/ttft/lgb/importances")
 async def ttft_lgb_importances():
     """
-    Get TTFT LightGBM feature importances as JSON.
+    Get TTFT LightGBM feature importances as JSON from active bundle.
     """
     if predictor.model_type != ModelType.LIGHTGBM:
         raise HTTPException(status_code=404, detail="TTFT model is not LightGBM")
-    
+
     if not predictor.ttft_model:
         raise HTTPException(status_code=404, detail="TTFT model not available")
-        
-    imp_path = settings.TTFT_MODEL_PATH.replace('.joblib', '_importances.json')
-    if not os.path.exists(imp_path):
-        raise HTTPException(status_code=404, detail="TTFT LightGBM importances not found")
-    
+
+    # Get active bundle
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+    if not active_bundle:
+        raise HTTPException(status_code=404, detail="No active bundle available")
+
+    # LightGBM importances filename (stored in bundle during training)
+    imp_filename = "ttft_importances.json"
+    imp_path = active_bundle.path / imp_filename
+
+    if not imp_path.exists():
+        raise HTTPException(status_code=404, detail="TTFT LightGBM importances not found in bundle")
+
     with open(imp_path, 'r') as f:
         importances = json.load(f)
-    
+
     return JSONResponse(content=importances)
 
 @app.get("/model/tpot/lgb/importances")
 async def tpot_lgb_importances():
     """
-    Get TPOT LightGBM feature importances as JSON.
+    Get TPOT LightGBM feature importances as JSON from active bundle.
     """
     if predictor.model_type != ModelType.LIGHTGBM:
         raise HTTPException(status_code=404, detail="TPOT model is not LightGBM")
-    
+
     if not predictor.tpot_model:
         raise HTTPException(status_code=404, detail="TPOT model not available")
-        
-    imp_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_importances.json')
-    if not os.path.exists(imp_path):
-        raise HTTPException(status_code=404, detail="TPOT LightGBM importances not found")
-    
+
+    # Get active bundle
+    active_bundle = predictor.bundle_manager.get_active_bundle()
+    if not active_bundle:
+        raise HTTPException(status_code=404, detail="No active bundle available")
+
+    # LightGBM importances filename (stored in bundle during training)
+    imp_filename = "tpot_importances.json"
+    imp_path = active_bundle.path / imp_filename
+
+    if not imp_path.exists():
+        raise HTTPException(status_code=404, detail="TPOT LightGBM importances not found in bundle")
+
     with open(imp_path, 'r') as f:
         importances = json.load(f)
-    
+
     return JSONResponse(content=importances)
 
 @app.get("/debug/prefix_distribution")

@@ -1,50 +1,66 @@
 # Simple deployment using HTTP for model sharing - No ReadWriteMany needed!
 
 # --- 1. ConfigMaps ---
+# Shared configuration for all services (training, prediction, tests)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: latency-predictor-config
-  namespace: default
+  name: latency-predictor-shared-config
 data:
+  # Model configuration (shared across all services)
+  LATENCY_MODEL_TYPE: "xgboost"
+  USE_TREELITE: "false"
+
+  # Data split configuration (shared between training server and tests)
+  LATENCY_TEST_TRAIN_RATIO: "0.1"  # 10% test, 90% train
+  LATENCY_MAX_TEST_DATA_SIZE: "1000"  # Max test samples to keep in memory
+
+  # Training configuration (used by training server and tests)
   LATENCY_RETRAINING_INTERVAL_SEC: "1"
   LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
-  LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
-  LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
-  LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
-  LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
-  LATENCY_MODEL_TYPE: "xgboost"
 
 ---
+# Training Server Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: training-server-config
+data:
+  # Bundle Registry Configuration (persistent storage for trained models)
+  # Training server creates bundles here - must be persistent volume to survive restarts!
+  BUNDLE_DIR: "/models/bundles"
+  BUNDLE_CURRENT_SYMLINK: "/models/current"
+  MAX_BUNDLES_TO_KEEP: "5"
+
+---
+# Prediction Server Configuration
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prediction-server-config
-  namespace: default
 data:
-  MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 5 seconds
-  LATENCY_MODEL_TYPE: "xgboost"
+  # Server configuration
+  MODEL_SYNC_INTERVAL_SEC: "10"
   PREDICT_HOST: "0.0.0.0"
   PREDICT_PORT: "8001"
   TRAINING_SERVER_URL: "http://training-service:8000"
-  LOCAL_TTFT_MODEL_PATH: "/local_models/ttft.joblib"
-  LOCAL_TPOT_MODEL_PATH: "/local_models/tpot.joblib"
-  LOCAL_TTFT_SCALER_PATH: "/local_models/ttft_scaler.joblib"
-  LOCAL_TPOT_SCALER_PATH: "/local_models/tpot_scaler.joblib"
   HTTP_TIMEOUT: "30"
 
----
-# --- 2. StorageClass for Hyperdisk ---
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: hyperdisk-balanced-sc
-provisioner: pd.csi.storage.gke.io
-parameters:
-  type: hyperdisk-balanced
-reclaimPolicy: Delete
-allowVolumeExpansion: true
-volumeBindingMode: WaitForFirstConsumer
+  # Bundle configuration
+  BUNDLE_CACHE_DIR: "/local_models/bundles"
+
+# ---
+# # --- 2. StorageClass for Hyperdisk ---
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: hyperdisk-balanced-sc
+# provisioner: pd.csi.storage.gke.io
+# parameters:
+#   type: hyperdisk-balanced
+# reclaimPolicy: Delete
+# allowVolumeExpansion: true
+# volumeBindingMode: WaitForFirstConsumer
 
 ---
 # --- 3. Persistent Volume Claim (PVC) ---
@@ -53,9 +69,8 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: training-models-pvc
-  namespace: default
 spec:
-  storageClassName: hyperdisk-balanced-sc # Explicitly use the compatible StorageClass
+  # storageClassName: hyperdisk-balanced-sc # Explicitly use the compatible StorageClass
   accessModes:
     - ReadWriteOnce # Sufficient since only the leader pod writes to the volume.
   resources:
@@ -67,7 +82,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: training-server-deployment
-  namespace: default
   labels:
     app: training-server
     component: training
@@ -83,12 +97,11 @@ spec:
         app: training-server
         component: training
     spec:
-      nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+      # nodeSelector:
+      #   cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: training-server
-        image: placeholder-for-training-server-image:latest # TODO Replace with actual image
-
+        image: training-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -108,18 +121,22 @@ spec:
         resources:
           # Increased CPU & memory
           requests:
-            cpu: "1000m"            # was 500m
+            cpu: "4000m"            # was 1000m
             memory: "2Gi"           # was 512Mi
             #ephemeral-storage: "50Gi" # new: reserve 5Gi of scratch space
           limits:
-            cpu: "2000m"            # was 1000m
+            cpu: "8000m"            # was 2000m
             memory: "4Gi"           # was 1Gi
             #ephemeral-storage: "100Gi" # new: cap at 10Gi of scratch space
 
         envFrom:
         - configMapRef:
-            name: latency-predictor-config
+            name: latency-predictor-shared-config
+        - configMapRef:
+            name: training-server-config
         env:
+        - name: LOG_LEVEL
+          value: DEBUG
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -140,7 +157,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prediction-server-deployment
-  namespace: default
   labels:
     app: prediction-server
     component: prediction
@@ -156,28 +172,30 @@ spec:
         app: prediction-server
         component: prediction
     spec:
-      nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+      # nodeSelector:
+      #   cloud.google.com/gke-nodepool: "pool-2"
       containers:
       - name: prediction-server
-        image: placeholder-for-prediction-server-image:latest # TODO Replace with actual image
+        image: prediction-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8001
           name: predict-port
-        livenessProbe:
+        startupProbe:
           httpGet:
             path: /healthz
             port: 8001
-          initialDelaySeconds: 15
-          periodSeconds: 15
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 30  # Allow up to 5 minutes for startup (30 * 10s)
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /readyz
             port: 8001
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          failureThreshold: 10  # Allow more failures while downloading models
+          periodSeconds: 10
+          timeoutSeconds: 5  # /readyz should respond quickly
+          failureThreshold: 3  # 30 seconds to remove from load balancer
         resources:
           requests:
             cpu: "250m"
@@ -187,8 +205,12 @@ spec:
             memory: "2Gi"
         envFrom:
         - configMapRef:
+            name: latency-predictor-shared-config
+        - configMapRef:
             name: prediction-server-config
         env:
+        - name: LOG_LEVEL
+          value: DEBUG
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -209,7 +231,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: training-service
-  namespace: default
   labels:
     component: training
 spec:
@@ -228,7 +249,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prediction-service
-  namespace: default
   labels:
     component: prediction
 spec:
@@ -248,7 +268,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: training-service-external
-  namespace: default
 spec:
   type: LoadBalancer
   selector:
