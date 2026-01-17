@@ -15,15 +15,14 @@
 """
 Bundle Integration Layer
 
-This module provides integration between the new ModelBundle architecture and the existing
-path-based model management system. It allows for gradual migration while maintaining
-backward compatibility.
+This module provides high-level integration for the ModelBundle architecture,
+enabling atomic model distribution with versioning and immutability.
 
 Key features:
-- Dual-mode operation: bundle mode (new) and legacy mode (old)
 - Atomic model exports with completion tracking
 - Background compilation tracking for TreeLite
-- Single source of truth for model states
+- Single source of truth for model states via bundle manifests
+- Automatic cleanup of old bundles
 """
 
 import os
@@ -36,7 +35,8 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 from enum import Enum
 
-from model_bundle import ModelBundle, BundleRegistry, BundleState
+from .model_bundle import ModelBundle, BundleRegistry, BundleState
+from common.bundle_constants import TTFT_TREELITE_FILENAME, TPOT_TREELITE_FILENAME
 
 
 class CompilationStatus(str, Enum):
@@ -49,27 +49,23 @@ class CompilationStatus(str, Enum):
 
 class BundleModelManager:
     """
-    Manager for model bundles (always enabled for atomic model distribution).
+    Manager for model bundles using atomic operations and versioning.
 
-    This class provides modern bundle-based model distribution with atomic operations,
-    versioning, and immutability. It maintains backward compatibility with legacy paths
-    for prediction servers that haven't migrated yet.
+    This class provides bundle-based model distribution with atomic operations,
+    versioning, and immutability.
 
     Features:
     - Atomic model exports (temp dir + atomic rename)
     - Background compilation tracking with completion files
     - Single source of truth via bundle manifest
     - Automatic cleanup of old bundles
-    - Backward compatible with legacy paths
     """
 
     def __init__(
         self,
         bundle_dir: str,
         current_symlink: str,
-        max_bundles: int = 5,
-        use_bundles: bool = True,
-        legacy_paths: Optional[Dict[str, str]] = None
+        max_bundles: int = 5
     ):
         """
         Initialize the bundle manager.
@@ -78,25 +74,15 @@ class BundleModelManager:
             bundle_dir: Directory to store bundles
             current_symlink: Path to symlink pointing to active bundle
             max_bundles: Maximum number of bundles to keep (older ones deleted)
-            use_bundles: Whether to use bundle mode (True) or legacy mode (False)
-            legacy_paths: Dict mapping model names to legacy file paths
         """
         self.bundle_dir = Path(bundle_dir)
         self.current_symlink = Path(current_symlink)
         self.max_bundles = max_bundles
-        self.use_bundles = use_bundles
-        self.legacy_paths = legacy_paths or {}
 
-        # Initialize bundle registry if in bundle mode
-        if self.use_bundles:
-            self.bundle_dir.mkdir(parents=True, exist_ok=True)
-            self.registry = BundleRegistry(str(self.bundle_dir), max_bundles)
-            logging.info(f"BundleModelManager initialized in BUNDLE mode: {self.bundle_dir}")
-        else:
-            logging.info("BundleModelManager initialized in LEGACY mode")
-            # Ensure legacy paths exist
-            for path in self.legacy_paths.values():
-                Path(path).parent.mkdir(parents=True, exist_ok=True)
+        # Initialize bundle registry
+        self.bundle_dir.mkdir(parents=True, exist_ok=True)
+        self.registry = BundleRegistry(str(self.bundle_dir), max_bundles)
+        logging.info(f"BundleModelManager initialized: {self.bundle_dir}")
 
     def start_training(
         self,
@@ -104,12 +90,11 @@ class BundleModelManager:
         model_type: str,
         quantile: float,
         use_treelite: bool
-    ) -> Optional[ModelBundle]:
+    ) -> ModelBundle:
         """
         Start a new model training session.
 
-        In bundle mode: Creates a new bundle in TRAINING state.
-        In legacy mode: No-op, returns None.
+        Creates a new bundle in TRAINING state.
 
         Args:
             model_name: Name of the model (ttft or tpot)
@@ -118,83 +103,55 @@ class BundleModelManager:
             use_treelite: Whether TreeLite compilation is enabled
 
         Returns:
-            ModelBundle in TRAINING state, or None in legacy mode
+            ModelBundle in TRAINING state
         """
-        if not self.use_bundles:
-            return None
-
         bundle = self.registry.create_bundle(model_type, quantile, use_treelite)
         logging.info(f"Started training for {model_name}: bundle_id={bundle.manifest.bundle_id}")
         return bundle
 
     def save_model_file(
         self,
-        bundle: Optional[ModelBundle],
+        bundle: ModelBundle,
         file_type: str,
-        source_path: str,
-        legacy_path: Optional[str] = None
+        source_path: str
     ) -> bool:
         """
-        Save a model file atomically.
+        Save a model file atomically to the bundle.
 
-        In bundle mode: Adds file to bundle with checksum verification.
-        In legacy mode: Copies to legacy path using atomic rename.
+        Adds file to bundle with checksum verification.
 
         Args:
-            bundle: ModelBundle to add file to (None in legacy mode)
+            bundle: ModelBundle to add file to
             file_type: Type of file (e.g., "ttft_model", "ttft_treelite", "ttft_conformal")
             source_path: Path to source file to copy
-            legacy_path: Path to copy to in legacy mode
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            if self.use_bundles and bundle:
-                # Bundle mode: add file with checksum
-                bundle.add_file(file_type, source_path)
-                logging.debug(f"Added {file_type} to bundle {bundle.manifest.bundle_id}")
-                return True
-            else:
-                # Legacy mode: atomic copy
-                if not legacy_path:
-                    logging.error(f"Legacy path required for {file_type} in legacy mode")
-                    return False
-
-                dest = Path(legacy_path)
-                dest.parent.mkdir(parents=True, exist_ok=True)
-
-                # Atomic copy via temp file
-                tmp_path = dest.with_suffix('.tmp')
-                shutil.copy2(source_path, tmp_path)
-                os.replace(tmp_path, dest)  # Atomic rename
-
-                logging.debug(f"Saved {file_type} to {legacy_path}")
-                return True
+            bundle.add_file(file_type, source_path)
+            logging.debug(f"Added {file_type} to bundle {bundle.manifest.bundle_id}")
+            return True
         except Exception as e:
             logging.error(f"Error saving {file_type}: {e}", exc_info=True)
             return False
 
     def start_compilation(
         self,
-        bundle: Optional[ModelBundle],
+        bundle: ModelBundle,
         model_name: str,
         process: subprocess.Popen
     ):
         """
         Track a background TreeLite compilation process.
 
-        In bundle mode: Transitions bundle to COMPILING state and creates tracking file.
-        In legacy mode: No-op.
+        Transitions bundle to COMPILING state and creates tracking file.
 
         Args:
             bundle: ModelBundle being compiled
             model_name: Name of model being compiled (ttft or tpot)
             process: Subprocess handle for compilation
         """
-        if not self.use_bundles or not bundle:
-            return
-
         # Transition to COMPILING state
         bundle.manifest.transition_state(
             BundleState.COMPILING,
@@ -216,7 +173,7 @@ class BundleModelManager:
 
     def check_compilation_status(
         self,
-        bundle: Optional[ModelBundle],
+        bundle: ModelBundle,
         model_name: str
     ) -> Optional[CompilationStatus]:
         """
@@ -227,11 +184,8 @@ class BundleModelManager:
             model_name: Name of model (ttft or tpot)
 
         Returns:
-            CompilationStatus or None if not found/not in bundle mode
+            CompilationStatus or None if not found
         """
-        if not self.use_bundles or not bundle:
-            return None
-
         status_file = bundle.path / f"{model_name}_compilation_status.json"
         if not status_file.exists():
             return None
@@ -247,7 +201,7 @@ class BundleModelManager:
 
     def mark_compilation_complete(
         self,
-        bundle: Optional[ModelBundle],
+        bundle: ModelBundle,
         model_name: str,
         treelite_path: str,
         success: bool,
@@ -256,8 +210,7 @@ class BundleModelManager:
         """
         Mark background compilation as complete.
 
-        In bundle mode: Updates status file and adds .so file to bundle if successful.
-        In legacy mode: No-op.
+        Updates status file and adds .so file to bundle if successful.
 
         Args:
             bundle: ModelBundle that was compiled
@@ -266,9 +219,6 @@ class BundleModelManager:
             success: Whether compilation succeeded
             error_msg: Error message if compilation failed
         """
-        if not self.use_bundles or not bundle:
-            return
-
         status_file = bundle.path / f"{model_name}_compilation_status.json"
         import json
 
@@ -281,7 +231,8 @@ class BundleModelManager:
 
         if success:
             # Add .so file to bundle
-            self.save_model_file(bundle, f"{model_name}_treelite", treelite_path)
+            treelite_filename = TTFT_TREELITE_FILENAME if model_name == "ttft" else TPOT_TREELITE_FILENAME
+            self.save_model_file(bundle, treelite_filename, treelite_path)
             status_data['treelite_path'] = treelite_path
         else:
             status_data['error'] = error_msg
@@ -296,65 +247,53 @@ class BundleModelManager:
 
     def finalize_bundle(
         self,
-        bundle: Optional[ModelBundle],
+        bundle: ModelBundle,
         training_samples: Dict[str, int],
         test_samples: Dict[str, int]
-    ) -> bool:
+    ):
         """
         Finalize and publish a bundle.
 
-        In bundle mode: Transitions to READY, updates metadata, publishes via symlink.
-        In legacy mode: No-op, returns True.
+        Transitions to READY, updates metadata, and publishes via atomic symlink update.
 
         Args:
             bundle: ModelBundle to finalize
             training_samples: Dict of training sample counts per bucket
             test_samples: Dict of test sample counts per bucket
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            Exception if finalization fails
         """
-        if not self.use_bundles or not bundle:
-            return True
+        # Update sample counts
+        bundle.manifest.training_samples = training_samples
+        bundle.manifest.test_samples = test_samples
 
-        try:
-            # Update sample counts
-            bundle.manifest.training_samples = training_samples
-            bundle.manifest.test_samples = test_samples
+        # Transition to READY
+        bundle.manifest.transition_state(
+            BundleState.READY,
+            f"All files written and verified. Ready to publish."
+        )
+        bundle.save_manifest()
 
-            # Transition to READY
-            bundle.manifest.transition_state(
-                BundleState.READY,
-                f"All files written and verified. Ready to publish."
-            )
-            bundle.save_manifest()
+        # Publish bundle (atomic symlink update)
+        bundle.publish(str(self.current_symlink))
 
-            # Publish bundle (atomic symlink update)
-            bundle.publish(str(self.current_symlink))
+        # Cleanup old bundles
+        self.registry.cleanup_old_bundles(str(self.current_symlink))
 
-            # Cleanup old bundles
-            self.registry.cleanup_old_bundles(str(self.current_symlink))
-
-            logging.info(
-                f"Published bundle {bundle.manifest.bundle_id}: "
-                f"{sum(training_samples.values())} training samples, "
-                f"{sum(test_samples.values())} test samples"
-            )
-            return True
-        except Exception as e:
-            logging.error(f"Error finalizing bundle: {e}", exc_info=True)
-            return False
+        logging.info(
+            f"Published bundle {bundle.manifest.bundle_id}: "
+            f"{sum(training_samples.values())} training samples, "
+            f"{sum(test_samples.values())} test samples"
+        )
 
     def get_active_bundle(self) -> Optional[ModelBundle]:
         """
         Get the currently active bundle.
 
         Returns:
-            Active ModelBundle or None if not in bundle mode or no active bundle
+            Active ModelBundle or None if no active bundle
         """
-        if not self.use_bundles:
-            return None
-
         return self.registry.get_active_bundle(str(self.current_symlink))
 
     def list_bundles(self) -> List[ModelBundle]:
@@ -362,19 +301,13 @@ class BundleModelManager:
         List all bundles (sorted by creation time, newest first).
 
         Returns:
-            List of ModelBundles or empty list if not in bundle mode
+            List of ModelBundles
         """
-        if not self.use_bundles:
-            return []
-
         return self.registry.list_bundles()
 
     def get_model_path(self, file_type: str) -> Optional[str]:
         """
-        Get the current path to a model file.
-
-        In bundle mode: Returns path within active bundle.
-        In legacy mode: Returns legacy path.
+        Get the current path to a model file within the active bundle.
 
         Args:
             file_type: Type of file (e.g., "ttft_model", "ttft_treelite")
@@ -382,10 +315,7 @@ class BundleModelManager:
         Returns:
             Absolute path to file, or None if not found
         """
-        if self.use_bundles:
-            bundle = self.get_active_bundle()
-            if bundle and file_type in bundle.manifest.files:
-                return str(bundle.path / file_type)
-            return None
-        else:
-            return self.legacy_paths.get(file_type)
+        bundle = self.get_active_bundle()
+        if bundle and file_type in bundle.manifest.files:
+            return str(bundle.path / file_type)
+        return None

@@ -19,7 +19,7 @@ This module implements conformal prediction for obtaining quantile estimates
 from standard regression models (e.g., XGBoost with TreeLite).
 
 The approach:
-1. Train a model to predict the mean (standard regression)
+1. Train a model to predict the mean (standard regression with objective=reg:squarederror)
 2. Calibrate with a held-out set to learn the residual distribution
 3. At prediction time, add the appropriate quantile of residuals to get quantile prediction
 
@@ -68,6 +68,9 @@ class ConformalQuantilePredictor:
         self._cached_quantile_value: Optional[float] = None
         self._cache_dirty = True
 
+        # Track whether we've logged "no calibration data" warning (to avoid spam)
+        self._logged_no_calibration_warning = False
+
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f"Initialized ConformalQuantilePredictor for {quantile:.0%} quantile")
 
@@ -90,6 +93,9 @@ class ConformalQuantilePredictor:
             self.calibration_residuals.append(float(r))
 
         self._cache_dirty = True
+
+        # Reset warning flag now that we have calibration data
+        self._logged_no_calibration_warning = False
 
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(
@@ -120,7 +126,9 @@ class ConformalQuantilePredictor:
             Quantile prediction (mean + appropriate residual quantile)
         """
         if len(self.calibration_residuals) == 0:
-            logging.debug("No calibration data available. Returning mean prediction (bootstrap phase).")
+            if not self._logged_no_calibration_warning:
+                logging.debug("No calibration data available. Returning mean prediction (bootstrap phase).")
+                self._logged_no_calibration_warning = True
             return mean_prediction
 
         # Update cached quantile if needed
@@ -141,7 +149,9 @@ class ConformalQuantilePredictor:
             Array of quantile predictions
         """
         if len(self.calibration_residuals) == 0:
-            logging.debug("No calibration data available. Returning mean predictions (bootstrap phase).")
+            if not self._logged_no_calibration_warning:
+                logging.debug("No calibration data available. Returning mean predictions (bootstrap phase).")
+                self._logged_no_calibration_warning = True
             return mean_predictions
 
         # Update cached quantile if needed

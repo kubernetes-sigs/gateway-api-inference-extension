@@ -16,6 +16,7 @@ import time
 import logging
 import threading
 import requests
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Tuple, Optional, List, Any
@@ -51,11 +52,23 @@ except ImportError:
     logging.warning("TL2cgen not available. Install with: pip install tl2cgen")
 
 try:
-    from conformal_quantile import ConformalQuantilePredictor
+    from common.conformal_quantile import ConformalQuantilePredictor
     CONFORMAL_AVAILABLE = True
 except ImportError:
     CONFORMAL_AVAILABLE = False
-    logging.warning("ConformalQuantilePredictor not available. Check conformal_quantile.py exists.")
+    logging.warning("ConformalQuantilePredictor not available. Check common/conformal_quantile.py exists.")
+
+# Import bundle constants for consistent file naming
+from common.bundle_constants import (
+    TTFT_MODEL_FILENAME,
+    TPOT_MODEL_FILENAME,
+    TTFT_SCALER_FILENAME,
+    TPOT_SCALER_FILENAME,
+    TTFT_TREELITE_FILENAME,
+    TPOT_TREELITE_FILENAME,
+    TTFT_CONFORMAL_FILENAME,
+    TPOT_CONFORMAL_FILENAME
+)
 
 
 @dataclass(frozen=True)
@@ -115,19 +128,8 @@ class PredictSettings:
     # Training server URL
     TRAINING_SERVER_URL: str = os.getenv("TRAINING_SERVER_URL", "http://training-service:8000")
 
-    # Local model paths
-    LOCAL_TTFT_MODEL_PATH: str = os.getenv("LOCAL_TTFT_MODEL_PATH", "/local_models/ttft.joblib")
-    LOCAL_TPOT_MODEL_PATH: str = os.getenv("LOCAL_TPOT_MODEL_PATH", "/local_models/tpot.joblib")
-    LOCAL_TTFT_SCALER_PATH: str = os.getenv("LOCAL_TTFT_SCALER_PATH", "/local_models/ttft_scaler.joblib")
-    LOCAL_TPOT_SCALER_PATH: str = os.getenv("LOCAL_TPOT_SCALER_PATH", "/local_models/tpot_scaler.joblib")
-    LOCAL_TTFT_TREELITE_PATH: str = os.getenv("LOCAL_TTFT_TREELITE_PATH", "/local_models/ttft_treelite.so")
-    LOCAL_TPOT_TREELITE_PATH: str = os.getenv("LOCAL_TPOT_TREELITE_PATH", "/local_models/tpot_treelite.so")
-    LOCAL_TTFT_CONFORMAL_PATH: str = os.getenv("LOCAL_TTFT_CONFORMAL_PATH", "/local_models/ttft_conformal.json")
-    LOCAL_TPOT_CONFORMAL_PATH: str = os.getenv("LOCAL_TPOT_CONFORMAL_PATH", "/local_models/tpot_conformal.json")
-
-    # Versioned model directories (for runtime updates without pod restarts)
-    LOCAL_TTFT_TREELITE_VERSIONED_DIR: str = os.getenv("LOCAL_TTFT_TREELITE_VERSIONED_DIR", "/local_models/treelite/ttft")
-    LOCAL_TPOT_TREELITE_VERSIONED_DIR: str = os.getenv("LOCAL_TPOT_TREELITE_VERSIONED_DIR", "/local_models/treelite/tpot")
+    # Bundle cache directory
+    BUNDLE_CACHE_DIR: str = os.getenv("BUNDLE_CACHE_DIR", "/local_models/bundles")
 
     # Use TreeLite for inference (preferred for production)
     USE_TREELITE: bool = os.getenv("USE_TREELITE", "true").lower() == "true"
@@ -155,296 +157,135 @@ logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format="%(a
 
 
 class ModelSyncer:
-    """Downloads models from a training server via HTTP."""
+    """Downloads models from a training server via HTTP using bundle-aware syncing."""
 
     def __init__(self):
         self._shutdown_event = threading.Event()
         self._sync_thread: Optional[threading.Thread] = None
         self._sync_lock = threading.Lock()
 
-        # Track model hashes to avoid unnecessary downloads
-        self.ttft_hash: Optional[str] = None
-        self.tpot_hash: Optional[str] = None
+        # Track current bundle ID to avoid re-downloading same bundle
+        self.current_bundle_id: Optional[str] = None
 
-        # Ensure local directories
-        for path in [
-            settings.LOCAL_TTFT_MODEL_PATH,
-            settings.LOCAL_TPOT_MODEL_PATH,
-            settings.LOCAL_TTFT_SCALER_PATH,
-            settings.LOCAL_TPOT_SCALER_PATH,
-            settings.LOCAL_TTFT_TREELITE_PATH,
-            settings.LOCAL_TPOT_TREELITE_PATH,
-            settings.LOCAL_TTFT_CONFORMAL_PATH,
-            settings.LOCAL_TPOT_CONFORMAL_PATH
-        ]:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+        # Cache bundle metadata (training_samples, test_samples, etc.)
+        self.current_bundle_info: Optional[dict] = None
 
-    def _find_latest_versioned_model(self, versioned_dir: str, model_prefix: str) -> Optional[str]:
+        # Bundle cache directory
+        self.bundle_cache_dir = settings.BUNDLE_CACHE_DIR
+        os.makedirs(self.bundle_cache_dir, exist_ok=True)
+
+    def sync_bundle(self) -> bool:
         """
-        Find the most recently modified versioned model file in a directory.
+        Sync models using bundle-aware approach.
 
-        Args:
-            versioned_dir: Directory containing versioned .so files
-            model_prefix: Prefix of the model files (e.g., "ttft" or "tpot")
+        This eliminates race conditions by downloading all model files atomically
+        from the same bundle.
 
         Returns:
-            Path to the latest versioned model, or None if none found
+            True if a new bundle was downloaded, False otherwise
         """
         try:
-            if not os.path.exists(versioned_dir):
-                return None
+            # 1. Get current bundle info from training server
+            bundle_info_url = f"{settings.TRAINING_SERVER_URL}/bundle/current/info"
+            r = requests.get(bundle_info_url, timeout=10)
 
-            import glob
-            pattern = os.path.join(versioned_dir, f"{model_prefix}_*.so")
-            versioned_files = glob.glob(pattern)
-
-            if not versioned_files:
-                return None
-
-            # Return the most recently modified file
-            latest_file = max(versioned_files, key=lambda f: os.path.getmtime(f))
-            return latest_file
-
-        except Exception as e:
-            logging.error(f"Error finding latest versioned {model_prefix} model: {e}", exc_info=True)
-            return None
-
-    def _check_model_hash(self, model_name: str) -> Optional[str]:
-        """
-        Check the current hash of a model on the training server.
-
-        Args:
-            model_name: Name of the model ("ttft" or "tpot")
-
-        Returns:
-            Current hash from server, or None if unavailable
-        """
-        try:
-            hash_url = f"{settings.TRAINING_SERVER_URL}/model/{model_name}/hash"
-            r = requests.get(hash_url, timeout=5)  # Short timeout for hash check
-            if r.status_code == 200:
-                data = r.json()
-                return data.get("hash")
-            else:
-                logging.debug(f"Hash endpoint not available for {model_name} (status {r.status_code})")
-                return None
-        except requests.RequestException as e:
-            logging.debug(f"Error checking hash for {model_name}: {e}")
-            return None
-
-    def _download_model_if_newer(self, name: str, dest: str) -> bool:
-        """
-        Download a model file only if it has changed (hash-based).
-
-        For core models (ttft/tpot), uses hash comparison for efficiency.
-        For other files, falls back to timestamp-based checking.
-        """
-        try:
-            # For core models, use hash-based checking
-            if name in ["ttft", "tpot"]:
-                server_hash = self._check_model_hash(name)
-
-                if server_hash:
-                    # Get current local hash (thread-safe read)
-                    with self._sync_lock:
-                        local_hash = self.ttft_hash if name == "ttft" else self.tpot_hash
-
-                    if server_hash == local_hash and local_hash is not None:
-                        logging.debug(f"Model {name} unchanged (hash: {server_hash[:8]}...), skipping download")
-                        return False
-
-                    logging.debug(f"Model {name} changed (old: {local_hash[:8] if local_hash else 'none'}..., new: {server_hash[:8]}...), downloading")
-                else:
-                    # Hash endpoint not available, fall back to timestamp check
-                    logging.debug(f"Hash check unavailable for {name}, using timestamp fallback")
-
-            # Download logic (used when hash indicates change, or for non-core models, or fallback)
-            info_url = f"{settings.TRAINING_SERVER_URL}/model/{name}/info"
-            r = requests.get(info_url, timeout=settings.HTTP_TIMEOUT)
             if r.status_code != 200:
-                # Real error (invalid endpoint, server error, etc.)
-                logging.warning(f"Failed to get info for {name}: HTTP {r.status_code}")
+                logging.error(f"Bundle info not available (status {r.status_code}) - training server must support bundle system")
+                raise Exception(f"Training server does not support bundle system (status {r.status_code})")
+
+            bundle_info = r.json()
+            server_bundle_id = bundle_info["bundle_id"]
+
+            # 2. Check if we already have this bundle
+            if server_bundle_id == self.current_bundle_id:
+                logging.debug(f"Bundle {server_bundle_id[:8]} already synced")
                 return False
 
-            info = r.json()
+            logging.info(f"New bundle available: {server_bundle_id[:8]} (current: {self.current_bundle_id[:8] if self.current_bundle_id else 'none'})")
 
-            # Check if model is ready (new ready-status API)
-            if not info.get("ready", True):  # Default True for backward compatibility
-                # Model not ready yet (e.g., TreeLite not compiled, waiting for training)
-                status = info.get("status", "unknown")
-                message = info.get("message", "Not ready")
-                if 'treelite' in name or 'conformal' in name:
-                    # Debug-level for expected unavailability
-                    logging.debug(f"Model {name} not ready: {status} - {message}")
-                else:
-                    # Warning-level for unexpected unavailability
-                    logging.warning(f"Model {name} not ready: {status} - {message}")
-                return False
+            # 3. Create bundle directory in cache
+            bundle_dir = os.path.join(self.bundle_cache_dir, server_bundle_id[:8])
+            os.makedirs(bundle_dir, exist_ok=True)
 
-            mtime = info.get("last_modified")
+            # 4. Download all files from bundle
+            files_downloaded = 0
+            for file_name, file_info in bundle_info["files"].items():
+                file_url = f"{settings.TRAINING_SERVER_URL}/bundle/{server_bundle_id}/file/{file_name}"
+                file_dest = os.path.join(bundle_dir, file_name)
 
-            # Timestamp-based check for non-core models (conformal, treelite, scalers)
-            # Skip for core models that already did hash checking above
-            if name not in ["ttft", "tpot"]:
-                if mtime and os.path.exists(dest):
-                    server_time = datetime.fromisoformat(mtime.replace('Z', '+00:00'))
-                    local_time = datetime.fromtimestamp(os.path.getmtime(dest), tz=timezone.utc)
-                    if local_time >= server_time:
-                        logging.debug(f"Model {name} is up-to-date (timestamp): {dest}")
-                        return False
+                # Skip if already downloaded (idempotent)
+                if os.path.exists(file_dest):
+                    expected_size = file_info["size_bytes"]
+                    actual_size = os.path.getsize(file_dest)
+                    if actual_size == expected_size:
+                        logging.debug(f"  ✓ {file_name} already cached ({actual_size} bytes)")
+                        continue
 
-            # Perform download
-            dl_url = f"{settings.TRAINING_SERVER_URL}/model/{name}/download"
-            dl = requests.get(dl_url, timeout=settings.HTTP_TIMEOUT, stream=True)
-            if dl.status_code != 200:
-                logging.error(f"Failed download {name}: {dl.status_code}")
-                return False
+                # Download file
+                try:
+                    file_r = requests.get(file_url, timeout=settings.HTTP_TIMEOUT, stream=True)
+                    if file_r.status_code == 200:
+                        # Write to temp file first, then atomic rename
+                        temp_dest = file_dest + ".tmp"
+                        with open(temp_dest, 'wb') as f:
+                            for chunk in file_r.iter_content(8192):
+                                if chunk:
+                                    f.write(chunk)
 
-            tmp = dest + ".tmp"
-            with open(tmp, 'wb') as f:
-                for chunk in dl.iter_content(8192):
-                    if chunk:
-                        f.write(chunk)
-            if os.path.getsize(tmp) == 0:
-                os.remove(tmp)
-                return False
+                        # Atomic rename
+                        os.replace(temp_dest, file_dest)
+                        files_downloaded += 1
+                        logging.debug(f"  ✓ Downloaded {file_name} ({os.path.getsize(file_dest)} bytes)")
+                    else:
+                        logging.warning(f"  ✗ Failed to download {file_name}: HTTP {file_r.status_code}")
+                except Exception as e:
+                    logging.error(f"  ✗ Error downloading {file_name}: {e}")
 
-            # Atomic replace
-            os.replace(tmp, dest)
+            # 5. Update current bundle ID and cache bundle info
+            with self._sync_lock:
+                self.current_bundle_id = server_bundle_id
+                self.current_bundle_info = bundle_info  # Cache full bundle info including training_samples
 
-            # Update local hash for core models (thread-safe with lock)
-            if name in ["ttft", "tpot"] and server_hash:
-                with self._sync_lock:
-                    if name == "ttft":
-                        self.ttft_hash = server_hash
-                    elif name == "tpot":
-                        self.tpot_hash = server_hash
-
-            # Log downloads at DEBUG level
-            logging.debug(f"Downloaded {name} -> {dest} (size: {os.path.getsize(dest)} bytes)")
+            logging.info(f"✓ Bundle {server_bundle_id[:8]} synced ({files_downloaded} files downloaded, {len(bundle_info['files']) - files_downloaded} cached)")
             return True
 
         except requests.RequestException as e:
-            logging.error(f"Network error for {name}: {e}")
+            logging.debug(f"Bundle sync failed (network): {e}")
             return False
-        except OSError as e:
-            logging.error(f"Filesystem error for {name}: {e}")
+        except Exception as e:
+            logging.error(f"Bundle sync failed: {e}", exc_info=True)
             return False
 
-    def sync_models(self) -> bool:
-        """Sync all relevant models; returns True if any updated.
-
-        Note: Downloads happen WITHOUT holding sync_lock to avoid blocking predictions.
-        Only hash tracking is protected by the lock.
+    def get_bundle_path(self, bundle_id: Optional[str] = None) -> Optional[str]:
         """
-        # Build list of files to sync (no lock needed for this)
-        updated = False
-        models_changed = False  # Track if core models changed (triggers conformal reload)
-        to_sync = [
-            ("ttft", settings.LOCAL_TTFT_MODEL_PATH),
-            ("tpot", settings.LOCAL_TPOT_MODEL_PATH),
-        ]
+        Get the path to a bundle directory.
 
-        # Sync TreeLite models if enabled
-        if settings.USE_TREELITE and TL2CGEN_AVAILABLE:
-            to_sync += [
-                ("ttft_treelite", settings.LOCAL_TTFT_TREELITE_PATH),
-                ("tpot_treelite", settings.LOCAL_TPOT_TREELITE_PATH),
-            ]
+        Args:
+            bundle_id: Bundle ID (uses current if None)
 
-            # ALSO sync versioned TreeLite models for runtime updates
-            # These are downloaded to a versioned directory and loaded dynamically
-            # This allows OS to load fresh .so files without pod restarts
-            try:
-                # Ensure versioned directories exist
-                os.makedirs(settings.LOCAL_TTFT_TREELITE_VERSIONED_DIR, exist_ok=True)
-                os.makedirs(settings.LOCAL_TPOT_TREELITE_VERSIONED_DIR, exist_ok=True)
+        Returns:
+            Path to bundle directory, or None if not available
+        """
+        if bundle_id is None:
+            bundle_id = self.current_bundle_id
 
-                # Download versioned TTFT TreeLite model
-                if self.ttft_hash:  # Only if we know the hash
-                    versioned_ttft_dest = os.path.join(
-                        settings.LOCAL_TTFT_TREELITE_VERSIONED_DIR,
-                        f"ttft_{self.ttft_hash[:8]}.so"
-                    )
-                    # Download if not already present
-                    if not os.path.exists(versioned_ttft_dest):
-                        # Download from legacy path and copy to versioned path
-                        if self._download_model_if_newer("ttft_treelite", settings.LOCAL_TTFT_TREELITE_PATH):
-                            import shutil
-                            shutil.copy2(settings.LOCAL_TTFT_TREELITE_PATH, versioned_ttft_dest)
-                            logging.debug(f"✓ Created versioned TTFT TreeLite model: {versioned_ttft_dest}")
-                            updated = True
+        if bundle_id is None:
+            return None
 
-                # Download versioned TPOT TreeLite model
-                if self.tpot_hash:  # Only if we know the hash
-                    versioned_tpot_dest = os.path.join(
-                        settings.LOCAL_TPOT_TREELITE_VERSIONED_DIR,
-                        f"tpot_{self.tpot_hash[:8]}.so"
-                    )
-                    # Download if not already present
-                    if not os.path.exists(versioned_tpot_dest):
-                        # Download from legacy path and copy to versioned path
-                        if self._download_model_if_newer("tpot_treelite", settings.LOCAL_TPOT_TREELITE_PATH):
-                            import shutil
-                            shutil.copy2(settings.LOCAL_TPOT_TREELITE_PATH, versioned_tpot_dest)
-                            logging.debug(f"✓ Created versioned TPOT TreeLite model: {versioned_tpot_dest}")
-                            updated = True
+        bundle_dir = os.path.join(self.bundle_cache_dir, bundle_id[:8])
+        if os.path.exists(bundle_dir):
+            return bundle_dir
 
-            except Exception as e:
-                logging.error(f"Error syncing versioned TreeLite models: {e}", exc_info=True)
-
-            # Also sync conformal calibration for TreeLite mode
-            if CONFORMAL_AVAILABLE:
-                to_sync += [
-                    ("ttft_conformal", settings.LOCAL_TTFT_CONFORMAL_PATH),
-                    ("tpot_conformal", settings.LOCAL_TPOT_CONFORMAL_PATH),
-                ]
-
-        # Sync scalers only for Bayesian Ridge
-        if settings.MODEL_TYPE == ModelType.BAYESIAN_RIDGE:
-            to_sync += [
-                ("ttft_scaler", settings.LOCAL_TTFT_SCALER_PATH),
-                ("tpot_scaler", settings.LOCAL_TPOT_SCALER_PATH),
-            ]
-
-        # Download models WITHOUT holding lock (allows predictions to continue)
-        for name, path in to_sync:
-            if self._download_model_if_newer(name, path):
-                updated = True
-                # Track if core models changed (triggers conformal reload)
-                # CRITICAL: Also trigger on TreeLite model changes since those are the actual
-                # models being used for prediction (joblib models may not be downloaded in TreeLite mode)
-                if name in ["ttft", "tpot", "ttft_treelite", "tpot_treelite"]:
-                    models_changed = True
-
-        # CRITICAL FIX: Force conformal file reload when models change
-        # After flush, training server creates new conformal files but they might have
-        # older timestamps than existing files. We must force reload to get fresh calibration.
-        if models_changed and settings.USE_TREELITE and CONFORMAL_AVAILABLE:
-            logging.debug("Core models changed - forcing conformal calibration reload")
-
-            # Force download by removing existing conformal files
-            if os.path.exists(settings.LOCAL_TTFT_CONFORMAL_PATH):
-                os.remove(settings.LOCAL_TTFT_CONFORMAL_PATH)
-                logging.debug(f"Removed existing TTFT conformal file to force reload")
-            if os.path.exists(settings.LOCAL_TPOT_CONFORMAL_PATH):
-                os.remove(settings.LOCAL_TPOT_CONFORMAL_PATH)
-                logging.debug(f"Removed existing TPOT conformal file to force reload")
-
-            # Now download fresh conformal files
-            if self._download_model_if_newer("ttft_conformal", settings.LOCAL_TTFT_CONFORMAL_PATH):
-                logging.debug("✓ TTFT conformal calibration reloaded after model change")
-                updated = True
-            if self._download_model_if_newer("tpot_conformal", settings.LOCAL_TPOT_CONFORMAL_PATH):
-                logging.debug("✓ TPOT conformal calibration reloaded after model change")
-                updated = True
-
-        return updated
+        return None
 
     def _sync_loop(self):
         while not self._shutdown_event.is_set():
             try:
-                if self.sync_models():
+                # Bundle-aware sync (eliminates race conditions)
+                bundle_synced = self.sync_bundle()
+
+                if bundle_synced:
+                    # Bundle synced successfully - load models from bundle
                     predictor.load_models()
             except Exception as e:
                 logging.error(f"Error in sync loop: {e}")
@@ -572,16 +413,36 @@ class LightweightPredictor:
         This method builds a new ModelBundle outside the lock, then swaps
         it atomically with a brief lock. This minimizes lock hold time and
         allows predictions to continue using the old bundle while loading.
+
+        BUNDLE-ONLY: All files loaded from bundle directory (atomic guarantee).
         """
         try:
+            # Get bundle path
+            bundle_path = model_syncer.get_bundle_path()
+
+            if not bundle_path:
+                logging.error("No bundle available - cannot load models")
+                return False
+
+            # Load from bundle directory (all files guaranteed consistent)
+            logging.debug(f"Loading models from bundle: {bundle_path}")
+            ttft_model_path = os.path.join(bundle_path, TTFT_MODEL_FILENAME)
+            tpot_model_path = os.path.join(bundle_path, TPOT_MODEL_FILENAME)
+            ttft_scaler_path = os.path.join(bundle_path, TTFT_SCALER_FILENAME)
+            tpot_scaler_path = os.path.join(bundle_path, TPOT_SCALER_FILENAME)
+            ttft_treelite_path = os.path.join(bundle_path, TTFT_TREELITE_FILENAME)
+            tpot_treelite_path = os.path.join(bundle_path, TPOT_TREELITE_FILENAME)
+            ttft_conformal_path = os.path.join(bundle_path, TTFT_CONFORMAL_FILENAME)
+            tpot_conformal_path = os.path.join(bundle_path, TPOT_CONFORMAL_FILENAME)
+
             # Load models WITHOUT holding lock (I/O can be slow)
             # Always load base XGBoost/LightGBM models first (needed for fallback)
-            new_ttft = joblib.load(settings.LOCAL_TTFT_MODEL_PATH) if os.path.exists(settings.LOCAL_TTFT_MODEL_PATH) else None
-            new_tpot = joblib.load(settings.LOCAL_TPOT_MODEL_PATH) if os.path.exists(settings.LOCAL_TPOT_MODEL_PATH) else None
+            new_ttft = joblib.load(ttft_model_path) if os.path.exists(ttft_model_path) else None
+            new_tpot = joblib.load(tpot_model_path) if os.path.exists(tpot_model_path) else None
 
             if self.model_type == ModelType.BAYESIAN_RIDGE:
-                new_ttft_scaler = joblib.load(settings.LOCAL_TTFT_SCALER_PATH) if os.path.exists(settings.LOCAL_TTFT_SCALER_PATH) else None
-                new_tpot_scaler = joblib.load(settings.LOCAL_TPOT_SCALER_PATH) if os.path.exists(settings.LOCAL_TPOT_SCALER_PATH) else None
+                new_ttft_scaler = joblib.load(ttft_scaler_path) if os.path.exists(ttft_scaler_path) else None
+                new_tpot_scaler = joblib.load(tpot_scaler_path) if os.path.exists(tpot_scaler_path) else None
             else:
                 new_ttft_scaler = new_tpot_scaler = None
 
@@ -592,23 +453,12 @@ class LightweightPredictor:
             new_tpot_conformal = None
 
             if self.use_treelite:
-                # CRITICAL: Prefer versioned TreeLite models for runtime updates
-                # Versioned models have unique paths, forcing OS to load fresh .so files
-                # This avoids tl2cgen/OS caching issues that prevent runtime model updates
-                versioned_ttft_path = model_syncer._find_latest_versioned_model(
-                    settings.LOCAL_TTFT_TREELITE_VERSIONED_DIR,
-                    "ttft"
-                )
-
-                # Use versioned path if available, otherwise fall back to legacy path
-                ttft_path_to_load = versioned_ttft_path if versioned_ttft_path else settings.LOCAL_TTFT_TREELITE_PATH
-
-                if os.path.exists(ttft_path_to_load):
+                # Load TTFT TreeLite model
+                if os.path.exists(ttft_treelite_path):
                     # IMPORTANT: Always reload TreeLite predictor (tl2cgen caches model in memory)
                     # Even if we have an old predictor, reload from disk to get updated model
-                    new_ttft_predictor = tl2cgen.Predictor(ttft_path_to_load, nthread=1)
-                    path_type = "VERSIONED" if versioned_ttft_path else "LEGACY"
-                    logging.debug(f"✓ TTFT TreeLite model RELOADED from {path_type} path: {ttft_path_to_load}")
+                    new_ttft_predictor = tl2cgen.Predictor(ttft_treelite_path, nthread=1)
+                    logging.debug(f"✓ TTFT TreeLite model loaded from bundle: {ttft_treelite_path}")
 
                     # Smoke test: verify predictor works with test input
                     if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -619,26 +469,16 @@ class LightweightPredictor:
                     # TreeLite not available yet - keep old predictor if we have one (bootstrap phase)
                     new_ttft_predictor = self.models.ttft_predictor if self.models.ttft_predictor else None
                     if not new_ttft_predictor:
-                        logging.warning(f"TreeLite model not found: {ttft_path_to_load}")
+                        logging.warning(f"TreeLite model not found: {ttft_treelite_path}")
                     else:
                         logging.info("Keeping existing TTFT TreeLite predictor (file not found)")
 
-                # CRITICAL: Prefer versioned TreeLite models for runtime updates
-                # Versioned models have unique paths, forcing OS to load fresh .so files
-                versioned_tpot_path = model_syncer._find_latest_versioned_model(
-                    settings.LOCAL_TPOT_TREELITE_VERSIONED_DIR,
-                    "tpot"
-                )
-
-                # Use versioned path if available, otherwise fall back to legacy path
-                tpot_path_to_load = versioned_tpot_path if versioned_tpot_path else settings.LOCAL_TPOT_TREELITE_PATH
-
-                if os.path.exists(tpot_path_to_load):
+                # Load TPOT TreeLite model
+                if os.path.exists(tpot_treelite_path):
                     # IMPORTANT: Always reload TreeLite predictor (tl2cgen caches model in memory)
                     # Even if we have an old predictor, reload from disk to get updated model
-                    new_tpot_predictor = tl2cgen.Predictor(tpot_path_to_load, nthread=1)
-                    path_type = "VERSIONED" if versioned_tpot_path else "LEGACY"
-                    logging.debug(f"✓ TPOT TreeLite model RELOADED from {path_type} path: {tpot_path_to_load}")
+                    new_tpot_predictor = tl2cgen.Predictor(tpot_treelite_path, nthread=1)
+                    logging.debug(f"✓ TPOT TreeLite model loaded from bundle: {tpot_treelite_path}")
 
                     # Smoke test: verify predictor works with test input
                     if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -649,7 +489,7 @@ class LightweightPredictor:
                     # TreeLite not available yet - keep old predictor if we have one (bootstrap phase)
                     new_tpot_predictor = self.models.tpot_predictor if self.models.tpot_predictor else None
                     if not new_tpot_predictor:
-                        logging.warning(f"TreeLite model not found: {tpot_path_to_load}")
+                        logging.warning(f"TreeLite model not found: {tpot_treelite_path}")
                     else:
                         logging.info("Keeping existing TPOT TreeLite predictor (file not found)")
 
@@ -657,9 +497,9 @@ class LightweightPredictor:
                 if CONFORMAL_AVAILABLE:
                     import json
                     # Load TTFT conformal calibration
-                    if os.path.exists(settings.LOCAL_TTFT_CONFORMAL_PATH):
+                    if os.path.exists(ttft_conformal_path):
                         try:
-                            with open(settings.LOCAL_TTFT_CONFORMAL_PATH, 'r') as f:
+                            with open(ttft_conformal_path, 'r') as f:
                                 ttft_conf_state = json.load(f)
                             new_ttft_conformal = ConformalQuantilePredictor.from_state(ttft_conf_state)
                             logging.debug(f"TTFT conformal calibration loaded ({len(ttft_conf_state.get('calibration_residuals', []))} samples)")
@@ -667,13 +507,13 @@ class LightweightPredictor:
                             logging.error(f"Error loading TTFT conformal calibration: {e}")
                             new_ttft_conformal = None
                     else:
-                        logging.warning(f"TTFT conformal calibration not found: {settings.LOCAL_TTFT_CONFORMAL_PATH}")
+                        logging.warning(f"TTFT conformal calibration not found: {ttft_conformal_path}")
                         new_ttft_conformal = None
 
                     # Load TPOT conformal calibration
-                    if os.path.exists(settings.LOCAL_TPOT_CONFORMAL_PATH):
+                    if os.path.exists(tpot_conformal_path):
                         try:
-                            with open(settings.LOCAL_TPOT_CONFORMAL_PATH, 'r') as f:
+                            with open(tpot_conformal_path, 'r') as f:
                                 tpot_conf_state = json.load(f)
                             new_tpot_conformal = ConformalQuantilePredictor.from_state(tpot_conf_state)
                             logging.debug(f"TPOT conformal calibration loaded ({len(tpot_conf_state.get('calibration_residuals', []))} samples)")
@@ -681,7 +521,7 @@ class LightweightPredictor:
                             logging.error(f"Error loading TPOT conformal calibration: {e}")
                             new_tpot_conformal = None
                     else:
-                        logging.warning(f"TPOT conformal calibration not found: {settings.LOCAL_TPOT_CONFORMAL_PATH}")
+                        logging.warning(f"TPOT conformal calibration not found: {tpot_conformal_path}")
                         new_tpot_conformal = None
 
             # Build new bundle with all loaded models
@@ -736,14 +576,32 @@ class LightweightPredictor:
 
             # Log success (after lock released)
             if new_bundle.is_ready(self.model_type):
+                bundle_id_short = model_syncer.current_bundle_id[:8] if model_syncer.current_bundle_id else "unknown"
+
+                # DEBUG: Log bundle training sample counts for investigation
+                ttft_samples = new_bundle.training_samples.get("ttft", 0) if new_bundle.training_samples else 0
+                tpot_samples = new_bundle.training_samples.get("tpot", 0) if new_bundle.training_samples else 0
+                logging.info(
+                    f"DEBUG Model Load - Bundle {bundle_id_short} loaded with training samples: "
+                    f"TTFT={ttft_samples}, TPOT={tpot_samples}"
+                )
+
+                # Also check if these are default models by inspecting n_estimators
+                if hasattr(new_ttft_model, 'n_estimators'):
+                    logging.info(
+                        f"DEBUG Model Load - TTFT model config: "
+                        f"n_estimators={new_ttft_model.n_estimators}, "
+                        f"objective={getattr(new_ttft_model, 'objective', 'N/A')}"
+                    )
+
                 if self.use_treelite:
                     if new_ttft_predictor and new_tpot_predictor:
                         has_conformal = new_ttft_conformal and new_tpot_conformal
-                        logging.info(f"Models loaded: Using TreeLite compiled models (conformal calibration: {bool(has_conformal)})")
+                        logging.info(f"Models loaded from bundle {bundle_id_short}: TreeLite compiled models (conformal: {bool(has_conformal)})")
                     else:
-                        logging.info(f"Models loaded: Using base XGBoost models (TreeLite models not yet available)")
+                        logging.info(f"Models loaded from bundle {bundle_id_short}: Using base models (TreeLite not yet available)")
                 else:
-                    logging.info(f"Models loaded successfully (mode: {self.model_type.value})")
+                    logging.info(f"Models loaded from bundle {bundle_id_short} (mode: {self.model_type.value})")
                 return True
 
             logging.warning("Models missing after load")
@@ -828,24 +686,61 @@ class LightweightPredictor:
                 ttft_dmat = tl2cgen.DMatrix(ttft_features)
                 tpot_dmat = tl2cgen.DMatrix(tpot_features)
 
-                # Get mean predictions from TL2cgen
-                ttft_pred_array = models.ttft_predictor.predict(ttft_dmat)
-                tpot_pred_array = models.tpot_predictor.predict(tpot_dmat)
+                # Get mean predictions from TL2cgen (with error handling for corrupt .so files)
+                try:
+                    ttft_pred_array = models.ttft_predictor.predict(ttft_dmat)
+                    tpot_pred_array = models.tpot_predictor.predict(tpot_dmat)
 
-                # Extract scalar values (handles both 1D and 2D arrays)
-                ttft_mean = float(np.ravel(ttft_pred_array)[0])
-                tpot_mean = float(np.ravel(tpot_pred_array)[0])
+                    # Extract scalar values (handles both 1D and 2D arrays)
+                    ttft_mean = float(np.ravel(ttft_pred_array)[0])
+                    tpot_mean = float(np.ravel(tpot_pred_array)[0])
+                except Exception as e:
+                    logging.error(f"TreeLite prediction failed: {e}", exc_info=True)
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"TreeLite prediction failed (model may be corrupt): {str(e)}"
+                    )
 
-                # Apply conformal correction if available, otherwise return mean (bootstrap phase)
+                # Check if conformal calibration is expected (by checking bundle manifest)
+                # This distinguishes bootstrap (conformal not yet available) from bugs (conformal missing when expected)
+                conformal_expected = False
+                bundle_path = model_syncer.get_bundle_path()
+                if bundle_path:
+                    manifest_path = os.path.join(bundle_path, "manifest.json")
+                    if os.path.exists(manifest_path):
+                        try:
+                            with open(manifest_path, 'r') as f:
+                                manifest = json.load(f)
+                                # Check if bundle should contain conformal files
+                                from bundle_constants import TTFT_CONFORMAL_FILENAME, TPOT_CONFORMAL_FILENAME
+                                conformal_expected = (
+                                    TTFT_CONFORMAL_FILENAME in manifest.get("files", {}) and
+                                    TPOT_CONFORMAL_FILENAME in manifest.get("files", {})
+                                )
+                        except Exception as e:
+                            logging.warning(f"Failed to read bundle manifest: {e}")
+
+                # Apply conformal correction if available
                 if models.ttft_conformal and models.tpot_conformal:
+                    # Optimal path: TreeLite + conformal working correctly
                     ttft_pred = models.ttft_conformal.conformalize(ttft_mean)
                     tpot_pred = models.tpot_conformal.conformalize(tpot_mean)
                     logging.debug(f"  After conformal: TTFT={ttft_pred:.2f}, TPOT={tpot_pred:.2f}")
+                elif conformal_expected:
+                    # Bundle should have conformal but loading failed → FAIL FAST
+                    logging.error(
+                        "Conformal calibration expected (present in bundle manifest) but not loaded. "
+                        "Bundle may be corrupt or incomplete."
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Conformal calibration expected but not loaded (bundle may be corrupt or incomplete)"
+                    )
                 else:
-                    # Bootstrap phase: return mean predictions to allow training data collection
+                    # Bootstrap phase: conformal not yet available, use mean predictions
                     ttft_pred = ttft_mean
                     tpot_pred = tpot_mean
-                    logging.debug(f"  No conformal (bootstrap): TTFT={ttft_pred:.2f}, TPOT={tpot_pred:.2f}")
+                    logging.debug(f"  Bootstrap mode: using mean predictions (conformal not yet calibrated)")
 
                 return ttft_pred, tpot_pred
 
@@ -874,20 +769,85 @@ class LightweightPredictor:
             elif self.model_type == ModelType.XGBOOST:
                 # XGBoost handles categorical dtypes natively via enable_categorical
                 # Just pass the DataFrame as-is (dtype must match training)
+
+                # DEBUG: Log model state and input data for investigation
+                logging.info(
+                    f"DEBUG XGBoost prediction - TTFT model info: "
+                    f"n_estimators={getattr(models.ttft_model, 'n_estimators', 'N/A')}, "
+                    f"objective={getattr(models.ttft_model, 'objective', 'N/A')}, "
+                    f"enable_categorical={getattr(models.ttft_model, 'enable_categorical', 'N/A')}"
+                )
+                logging.info(f"DEBUG XGBoost prediction - TTFT input shape: {df_ttft.shape}, dtypes: {df_ttft.dtypes.to_dict()}")
+                logging.info(f"DEBUG XGBoost prediction - TTFT input values:\n{df_ttft.to_dict('records')}")
+
                 ttft_pred = models.ttft_model.predict(df_ttft)
                 tpot_pred = models.tpot_model.predict(df_tpot)
 
-                # Note: Base XGBoost models are native quantile regression (reg:quantileerror)
-                # so predictions are already quantiles. No adjustment needed.
-                return ttft_pred[0], tpot_pred[0]
+                logging.info(f"DEBUG XGBoost prediction - Raw predictions: TTFT={ttft_pred[0]:.4f}ms, TPOT={tpot_pred[0]:.4f}ms")
+
+                # CRITICAL: Check if we're in TreeLite mode but using fallback path
+                # If USE_TREELITE=true, base models use objective=reg:squarederror (mean regression)
+                # and REQUIRE conformal adjustment to get quantile predictions
+                if models.use_treelite:
+                    # TreeLite mode: base models predict mean, need conformal adjustment
+                    if models.ttft_conformal and models.tpot_conformal:
+                        # Apply conformal adjustment to get quantile predictions
+                        ttft_pred_quantile = models.ttft_conformal.conformalize(float(ttft_pred[0]))
+                        tpot_pred_quantile = models.tpot_conformal.conformalize(float(tpot_pred[0]))
+                        logging.warning(
+                            f"TreeLite models not loaded, using fallback XGBoost with conformal adjustment. "
+                            f"TTFT: {ttft_pred[0]:.2f}ms (mean) → {ttft_pred_quantile:.2f}ms (P{models.quantile*100:.0f}), "
+                            f"TPOT: {tpot_pred[0]:.2f}ms (mean) → {tpot_pred_quantile:.2f}ms (P{models.quantile*100:.0f})"
+                        )
+                        return ttft_pred_quantile, tpot_pred_quantile
+                    else:
+                        # FAIL FAST: TreeLite mode but conformal missing
+                        logging.error(
+                            "TreeLite mode enabled but TreeLite models not loaded and conformal calibration missing. "
+                            "Cannot provide valid quantile predictions. Check bundle integrity."
+                        )
+                        raise HTTPException(
+                            status_code=503,
+                            detail="TreeLite models not loaded and conformal calibration missing (cannot provide quantile predictions)"
+                        )
+                else:
+                    # Native quantile mode: Base XGBoost models use objective=reg:quantileerror
+                    # Predictions are already quantiles. No adjustment needed.
+                    return ttft_pred[0], tpot_pred[0]
 
             else:  # LightGBM
                 ttft_pred = models.ttft_model.predict(df_ttft)
                 tpot_pred = models.tpot_model.predict(df_tpot)
 
-                # Note: Base LightGBM models are native quantile regression
-                # so predictions are already quantiles. No adjustment needed.
-                return ttft_pred[0], tpot_pred[0]
+                # CRITICAL: Check if we're in TreeLite mode but using fallback path
+                # If USE_TREELITE=true, base models use objective=regression (mean regression)
+                # and REQUIRE conformal adjustment to get quantile predictions
+                if models.use_treelite:
+                    # TreeLite mode: base models predict mean, need conformal adjustment
+                    if models.ttft_conformal and models.tpot_conformal:
+                        # Apply conformal adjustment to get quantile predictions
+                        ttft_pred_quantile = models.ttft_conformal.conformalize(float(ttft_pred[0]))
+                        tpot_pred_quantile = models.tpot_conformal.conformalize(float(tpot_pred[0]))
+                        logging.warning(
+                            f"TreeLite models not loaded, using fallback LightGBM with conformal adjustment. "
+                            f"TTFT: {ttft_pred[0]:.2f}ms (mean) → {ttft_pred_quantile:.2f}ms (P{models.quantile*100:.0f}), "
+                            f"TPOT: {tpot_pred[0]:.2f}ms (mean) → {tpot_pred_quantile:.2f}ms (P{models.quantile*100:.0f})"
+                        )
+                        return ttft_pred_quantile, tpot_pred_quantile
+                    else:
+                        # FAIL FAST: TreeLite mode but conformal missing
+                        logging.error(
+                            "TreeLite mode enabled but TreeLite models not loaded and conformal calibration missing. "
+                            "Cannot provide valid quantile predictions. Check bundle integrity."
+                        )
+                        raise HTTPException(
+                            status_code=503,
+                            detail="TreeLite models not loaded and conformal calibration missing (cannot provide quantile predictions)"
+                        )
+                else:
+                    # Native quantile mode: Base LightGBM models use objective=quantile
+                    # Predictions are already quantiles. No adjustment needed.
+                    return ttft_pred[0], tpot_pred[0]
 
         except ValueError as ve:
             logging.warning(f"Client error in predict(): {ve}")
@@ -992,13 +952,20 @@ class LightweightPredictor:
                 ttft_dmat = tl2cgen.DMatrix(ttft_features)
                 tpot_dmat = tl2cgen.DMatrix(tpot_features)
 
-                # Get batch mean predictions from TL2cgen
-                ttft_pred_array = models.ttft_predictor.predict(ttft_dmat)
-                tpot_pred_array = models.tpot_predictor.predict(tpot_dmat)
+                # Get batch mean predictions from TL2cgen (with error handling for corrupt .so files)
+                try:
+                    ttft_pred_array = models.ttft_predictor.predict(ttft_dmat)
+                    tpot_pred_array = models.tpot_predictor.predict(tpot_dmat)
 
-                # Flatten to 1D array (handles both 1D and 2D output)
-                ttft_mean_preds = np.ravel(ttft_pred_array)
-                tpot_mean_preds = np.ravel(tpot_pred_array)
+                    # Flatten to 1D array (handles both 1D and 2D output)
+                    ttft_mean_preds = np.ravel(ttft_pred_array)
+                    tpot_mean_preds = np.ravel(tpot_pred_array)
+                except Exception as e:
+                    logging.error(f"TreeLite batch prediction failed: {e}", exc_info=True)
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"TreeLite prediction failed (model may be corrupt): {str(e)}"
+                    )
 
                 # DEBUG: Log batch prediction details
                 if logging.getLogger().isEnabledFor(logging.DEBUG) and batch_size <= 5:
@@ -1010,13 +977,43 @@ class LightweightPredictor:
                     logging.debug(f"  TTFT pred_array shape: {ttft_pred_array.shape}")
                     logging.debug(f"  TTFT mean_preds: {ttft_mean_preds}")
 
-                # Apply conformal correction if available, otherwise return mean (bootstrap phase)
+                # Check if conformal calibration is expected (by checking bundle manifest)
+                # This distinguishes bootstrap (conformal not yet available) from bugs (conformal missing when expected)
+                conformal_expected = False
+                bundle_path = model_syncer.get_bundle_path()
+                if bundle_path:
+                    manifest_path = os.path.join(bundle_path, "manifest.json")
+                    if os.path.exists(manifest_path):
+                        try:
+                            with open(manifest_path, 'r') as f:
+                                manifest = json.load(f)
+                                # Check if bundle should contain conformal files
+                                from bundle_constants import TTFT_CONFORMAL_FILENAME, TPOT_CONFORMAL_FILENAME
+                                conformal_expected = (
+                                    TTFT_CONFORMAL_FILENAME in manifest.get("files", {}) and
+                                    TPOT_CONFORMAL_FILENAME in manifest.get("files", {})
+                                )
+                        except Exception as e:
+                            logging.warning(f"Failed to read bundle manifest: {e}")
+
+                # Apply conformal correction if available
                 if models.ttft_conformal and models.tpot_conformal:
+                    # Optimal path: TreeLite + conformal working correctly
                     # Use vectorized batch conformalization (much faster than loop)
                     ttft_pred = models.ttft_conformal.conformalize_batch(ttft_mean_preds)
                     tpot_pred = models.tpot_conformal.conformalize_batch(tpot_mean_preds)
+                elif conformal_expected:
+                    # Bundle should have conformal but loading failed → FAIL FAST
+                    logging.error(
+                        "Conformal calibration expected (present in bundle manifest) but not loaded. "
+                        "Bundle may be corrupt or incomplete."
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Conformal calibration expected but not loaded (bundle may be corrupt or incomplete)"
+                    )
                 else:
-                    # Bootstrap phase: return mean predictions to allow training data collection
+                    # Bootstrap phase: conformal not yet available, use mean predictions
                     ttft_pred = ttft_mean_preds
                     tpot_pred = tpot_mean_preds
 
@@ -1111,6 +1108,7 @@ class StatusResponse(BaseModel):
     training_server_url: str
     models_exist: dict
     use_treelite: bool = Field(..., description="Whether TreeLite mode is enabled")
+    bundle_info: Optional[dict] = Field(None, description="Current bundle metadata (training_samples, test_samples, bundle_id, created_at)")
 
 
 class BulkPredictionRequest(BaseModel):
@@ -1145,16 +1143,35 @@ async def status_endpoint():
     # Atomic read of model bundle
     models = predictor.models
 
-    models_exist = {
-        "ttft_model": os.path.exists(settings.LOCAL_TTFT_MODEL_PATH),
-        "tpot_model": os.path.exists(settings.LOCAL_TPOT_MODEL_PATH),
-    }
+    # Check if models exist in current bundle
+    bundle_path = model_syncer.get_bundle_path()
+    models_exist = {}
 
-    if predictor.model_type == ModelType.BAYESIAN_RIDGE:
-        models_exist.update({
-            "ttft_scaler": os.path.exists(settings.LOCAL_TTFT_SCALER_PATH),
-            "tpot_scaler": os.path.exists(settings.LOCAL_TPOT_SCALER_PATH),
-        })
+    if bundle_path:
+        models_exist = {
+            "ttft_model": os.path.exists(os.path.join(bundle_path, TTFT_MODEL_FILENAME)),
+            "tpot_model": os.path.exists(os.path.join(bundle_path, TPOT_MODEL_FILENAME)),
+        }
+
+        if predictor.model_type == ModelType.BAYESIAN_RIDGE:
+            models_exist.update({
+                "ttft_scaler": os.path.exists(os.path.join(bundle_path, TTFT_SCALER_FILENAME)),
+                "tpot_scaler": os.path.exists(os.path.join(bundle_path, TPOT_SCALER_FILENAME)),
+            })
+    else:
+        models_exist = {
+            "error": "No bundle loaded"
+        }
+
+    # Build bundle_info from cached bundle metadata
+    bundle_info = None
+    if model_syncer.current_bundle_info:
+        bundle_info = {
+            "bundle_id": model_syncer.current_bundle_info.get("bundle_id", "unknown")[:8],
+            "training_samples": model_syncer.current_bundle_info.get("training_samples", {}),
+            "test_samples": model_syncer.current_bundle_info.get("test_samples", {}),
+            "created_at": model_syncer.current_bundle_info.get("created_at", "unknown")
+        }
 
     return StatusResponse(
         is_ready=predictor.is_ready,
@@ -1163,7 +1180,8 @@ async def status_endpoint():
         last_model_load=models.last_load,
         training_server_url=settings.TRAINING_SERVER_URL,
         models_exist=models_exist,
-        use_treelite=settings.USE_TREELITE
+        use_treelite=settings.USE_TREELITE,
+        bundle_info=bundle_info
     )
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -1339,10 +1357,10 @@ def predict_bulk_endpoint(request: BulkPredictionRequest):
 async def reload_models():
     """Manually trigger model reload."""
     try:
-        # First sync from training server
-        synced = model_syncer.sync_models()
-        
-        # Then load models
+        # First sync bundle from training server
+        synced = model_syncer.sync_bundle()
+
+        # Then load models from bundle
         loaded = predictor.load_models()
         
         return {
@@ -1447,8 +1465,8 @@ async def root():
 @app.on_event("startup")
 async def startup():
     logging.info("Starting up...")
-    # initial sync & load
-    model_syncer.sync_models()
+    # Initial bundle sync & load
+    model_syncer.sync_bundle()
     predictor.load_models()
     model_syncer.start()
 

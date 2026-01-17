@@ -19,14 +19,14 @@ labels:
 images:
   - name: training-server
     newName: quay.io/grpereir/slo-predicter-trainer
-    newTag: v0.0.156
+    newTag: v0.0.206
   - name: prediction-server
     newName: quay.io/grpereir/slo-predicter
-    newTag: v0.0.156
+    newTag: v0.0.206
   # If using test deployment
   - name: test-runner
     newName: quay.io/grpereir/slo-predicter-tester
-    newTag: v0.0.156
+    newTag: v0.0.206
 # ConfigMap generator (optional - use this to override config values)
 # Uncomment and modify to override specific configuration values
 # configMapGenerator:
@@ -35,7 +35,7 @@ images:
 #     literals:
 #       - MODEL_SYNC_INTERVAL_SEC=15
 #       - USE_TREELITE=true
-#   - name: latency-predictor-config
+#   - name: training-server-config
 #     behavior: merge
 #     literals:
 #       - LATENCY_RETRAINING_INTERVAL_SEC=5

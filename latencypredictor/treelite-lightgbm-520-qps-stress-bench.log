@@ -1,0 +1,1528 @@
+latency-predictor-stress-test-4-6zgqk test-runner Pod 4: Waiting for models to be ready...
+latency-predictor-stress-test-4-6zgqk test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-4-6zgqk test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-4-6zgqk test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-4-6zgqk test-runner rootdir: /app
+latency-predictor-stress-test-4-6zgqk test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-4-6zgqk test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-4-6zgqk test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-4-6zgqk test-runner Waiting for training server...
+latency-predictor-stress-test-4-6zgqk test-runner Running prediction server stress test...
+latency-predictor-stress-test-4-6zgqk test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-4-6zgqk test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner Total Requests: 52000
+latency-predictor-stress-test-4-6zgqk test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Average Response Time: 2.23ms
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Model Types in Predictions:
+latency-predictor-stress-test-4-6zgqk test-runner   lightgbm: 52000
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Status Code Distribution:
+latency-predictor-stress-test-4-6zgqk test-runner   200: 52000
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Response Time Percentiles:
+latency-predictor-stress-test-4-6zgqk test-runner   P50: 0.79ms
+latency-predictor-stress-test-4-6zgqk test-runner   P95: 2.28ms
+latency-predictor-stress-test-4-6zgqk test-runner   P99: 4.68ms
+latency-predictor-stress-test-4-6zgqk test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-4-6zgqk test-runner PASSED
+latency-predictor-stress-test-4-6zgqk test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Testing with batch size 5...
+latency-predictor-stress-test-4-6zgqk test-runner Waiting for 51998 bulk prediction requests to complete...
+latency-predictor-stress-test-4-6zgqk test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-4-6zgqk test-runner Total Predictions: 259990, Predictions/sec: 2599.9
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner Total Bulk Requests: 51998
+latency-predictor-stress-test-4-6zgqk test-runner Successful: 51998 (100.0%)
+latency-predictor-stress-test-7-5mxq8 test-runner Pod 7: Waiting for models to be ready...
+latency-predictor-stress-test-7-5mxq8 test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-7-5mxq8 test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-7-5mxq8 test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-7-5mxq8 test-runner rootdir: /app
+latency-predictor-stress-test-7-5mxq8 test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-7-5mxq8 test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-7-5mxq8 test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-7-5mxq8 test-runner Waiting for training server...
+latency-predictor-stress-test-7-5mxq8 test-runner Running prediction server stress test...
+latency-predictor-stress-test-7-5mxq8 test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-7-5mxq8 test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner Total Requests: 52000
+latency-predictor-stress-test-7-5mxq8 test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-7-5mxq8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-7-5mxq8 test-runner Average Response Time: 2.23ms
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Model Types in Predictions:
+latency-predictor-stress-test-7-5mxq8 test-runner   lightgbm: 52000
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Status Code Distribution:
+latency-predictor-stress-test-7-5mxq8 test-runner   200: 52000
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-7-5mxq8 test-runner   P50: 0.79ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P95: 2.41ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P99: 5.01ms
+latency-predictor-stress-test-7-5mxq8 test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-7-5mxq8 test-runner PASSED
+latency-predictor-stress-test-7-5mxq8 test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Testing with batch size 5...
+latency-predictor-stress-test-7-5mxq8 test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-7-5mxq8 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-7-5mxq8 test-runner Total Predictions: 259995, Predictions/sec: 2599.9
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-7-5mxq8 test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Total Individual Predictions: 259990
+latency-predictor-stress-test-4-6zgqk test-runner Total Batch Size: 259990
+latency-predictor-stress-test-4-6zgqk test-runner Average Response Time: 10.97ms
+latency-predictor-stress-test-4-6zgqk test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-4-6zgqk test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Status Code Distribution:
+latency-predictor-stress-test-4-6zgqk test-runner   200: 51998
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Response Time Percentiles:
+latency-predictor-stress-test-4-6zgqk test-runner   P50: 4.46ms
+latency-predictor-stress-test-4-6zgqk test-runner   P95: 42.24ms
+latency-predictor-stress-test-4-6zgqk test-runner   P99: 102.48ms
+latency-predictor-stress-test-4-6zgqk test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Testing with batch size 10...
+latency-predictor-stress-test-4-6zgqk test-runner Waiting for 51995 bulk prediction requests to complete...
+latency-predictor-stress-test-4-6zgqk test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-4-6zgqk test-runner Total Predictions: 519950, Predictions/sec: 5199.5
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner Total Bulk Requests: 51995
+latency-predictor-stress-test-4-6zgqk test-runner Successful: 51995 (100.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Total Individual Predictions: 519950
+latency-predictor-stress-test-7-5mxq8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-7-5mxq8 test-runner Total Individual Predictions: 259995
+latency-predictor-stress-test-7-5mxq8 test-runner Total Batch Size: 259995
+latency-predictor-stress-test-7-5mxq8 test-runner Average Response Time: 11.91ms
+latency-predictor-stress-test-7-5mxq8 test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-7-5mxq8 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-5-vfl8g test-runner Pod 5: Waiting for models to be ready...
+latency-predictor-stress-test-5-vfl8g test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-5-vfl8g test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-5-vfl8g test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-5-vfl8g test-runner rootdir: /app
+latency-predictor-stress-test-5-vfl8g test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-5-vfl8g test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-5-vfl8g test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-5-vfl8g test-runner Waiting for training server...
+latency-predictor-stress-test-5-vfl8g test-runner Running prediction server stress test...
+latency-predictor-stress-test-5-vfl8g test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-5-vfl8g test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner Total Requests: 52000
+latency-predictor-stress-test-5-vfl8g test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Average Response Time: 1.40ms
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Model Types in Predictions:
+latency-predictor-stress-test-5-vfl8g test-runner   lightgbm: 52000
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Status Code Distribution:
+latency-predictor-stress-test-5-vfl8g test-runner   200: 52000
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Response Time Percentiles:
+latency-predictor-stress-test-5-vfl8g test-runner   P50: 0.79ms
+latency-predictor-stress-test-5-vfl8g test-runner   P95: 2.19ms
+latency-predictor-stress-test-5-vfl8g test-runner   P99: 4.26ms
+latency-predictor-stress-test-5-vfl8g test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-5-vfl8g test-runner PASSED
+latency-predictor-stress-test-5-vfl8g test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Testing with batch size 5...
+latency-predictor-stress-test-7-5mxq8 test-runner Status Code Distribution:
+latency-predictor-stress-test-5-vfl8g test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-7-5mxq8 test-runner   200: 51999
+latency-predictor-stress-test-5-vfl8g test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Total Predictions: 259980, Predictions/sec: 2599.8
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-5-vfl8g test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Total Individual Predictions: 259980
+latency-predictor-stress-test-5-vfl8g test-runner Total Batch Size: 259980
+latency-predictor-stress-test-5-vfl8g test-runner Average Response Time: 10.20ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P50: 4.32ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P95: 45.44ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P99: 108.75ms
+latency-predictor-stress-test-7-5mxq8 test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Testing with batch size 10...
+latency-predictor-stress-test-7-5mxq8 test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-7-5mxq8 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-7-5mxq8 test-runner Total Predictions: 519960, Predictions/sec: 5199.6
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-7-5mxq8 test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-7-5mxq8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-7-5mxq8 test-runner Total Individual Predictions: 519960
+latency-predictor-stress-test-5-vfl8g test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-5-vfl8g test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Status Code Distribution:
+latency-predictor-stress-test-5-vfl8g test-runner   200: 51996
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Response Time Percentiles:
+latency-predictor-stress-test-5-vfl8g test-runner   P50: 3.99ms
+latency-predictor-stress-test-5-vfl8g test-runner   P95: 34.32ms
+latency-predictor-stress-test-5-vfl8g test-runner   P99: 94.09ms
+latency-predictor-stress-test-5-vfl8g test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Testing with batch size 10...
+latency-predictor-stress-test-5-vfl8g test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-5-vfl8g test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-5-vfl8g test-runner Total Predictions: 519990, Predictions/sec: 5199.9
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-5-vfl8g test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Total Individual Predictions: 519990
+latency-predictor-stress-test-5-vfl8g test-runner Total Batch Size: 519990
+latency-predictor-stress-test-4-6zgqk test-runner Total Batch Size: 519950
+latency-predictor-stress-test-4-6zgqk test-runner Average Response Time: 9.18ms
+latency-predictor-stress-test-4-6zgqk test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-4-6zgqk test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Status Code Distribution:
+latency-predictor-stress-test-4-6zgqk test-runner   200: 51995
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Response Time Percentiles:
+latency-predictor-stress-test-4-6zgqk test-runner   P50: 2.69ms
+latency-predictor-stress-test-4-6zgqk test-runner   P95: 16.78ms
+latency-predictor-stress-test-4-6zgqk test-runner   P99: 70.33ms
+latency-predictor-stress-test-4-6zgqk test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Testing with batch size 25...
+latency-predictor-stress-test-4-6zgqk test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-4-6zgqk test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-4-6zgqk test-runner Total Predictions: 1299975, Predictions/sec: 12999.8
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-4-6zgqk test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-4-6zgqk test-runner Total Individual Predictions: 1299975
+latency-predictor-stress-test-4-6zgqk test-runner Total Batch Size: 1299975
+latency-predictor-stress-test-4-6zgqk test-runner Average Response Time: 23.09ms
+latency-predictor-stress-test-4-6zgqk test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-4-6zgqk test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Status Code Distribution:
+latency-predictor-stress-test-4-6zgqk test-runner   200: 51999
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Response Time Percentiles:
+latency-predictor-stress-test-4-6zgqk test-runner   P50: 4.36ms
+latency-predictor-stress-test-4-6zgqk test-runner   P95: 101.06ms
+latency-predictor-stress-test-4-6zgqk test-runner   P99: 232.52ms
+latency-predictor-stress-test-4-6zgqk test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-4-6zgqk test-runner PASSED
+latency-predictor-stress-test-4-6zgqk test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Testing with batch size 1000...
+latency-predictor-stress-test-4-6zgqk test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-4-6zgqk test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-4-6zgqk test-runner Total Predictions: 3897000, Predictions/sec: 38970.0
+latency-predictor-stress-test-7-5mxq8 test-runner Total Batch Size: 519960
+latency-predictor-stress-test-7-5mxq8 test-runner Average Response Time: 8.13ms
+latency-predictor-stress-test-7-5mxq8 test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-7-5mxq8 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Status Code Distribution:
+latency-predictor-stress-test-7-5mxq8 test-runner   200: 51996
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-5-vfl8g test-runner Average Response Time: 8.79ms
+latency-predictor-stress-test-5-vfl8g test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-5-vfl8g test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Status Code Distribution:
+latency-predictor-stress-test-5-vfl8g test-runner   200: 51999
+latency-predictor-stress-test-7-5mxq8 test-runner   P50: 2.75ms
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Response Time Percentiles:
+latency-predictor-stress-test-7-5mxq8 test-runner   P95: 15.50ms
+latency-predictor-stress-test-5-vfl8g test-runner   P50: 2.65ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P99: 66.50ms
+latency-predictor-stress-test-5-vfl8g test-runner   P95: 13.36ms
+latency-predictor-stress-test-5-vfl8g test-runner   P99: 70.79ms
+latency-predictor-stress-test-5-vfl8g test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Testing with batch size 25...
+latency-predictor-stress-test-5-vfl8g test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-5-vfl8g test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-5-vfl8g test-runner Total Predictions: 1299900, Predictions/sec: 12999.0
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-5-vfl8g test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Total Individual Predictions: 1299900
+latency-predictor-stress-test-5-vfl8g test-runner Total Batch Size: 1299900
+latency-predictor-stress-test-5-vfl8g test-runner Average Response Time: 19.70ms
+latency-predictor-stress-test-5-vfl8g test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-5-vfl8g test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Status Code Distribution:
+latency-predictor-stress-test-5-vfl8g test-runner   200: 51996
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Response Time Percentiles:
+latency-predictor-stress-test-7-5mxq8 test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner   P50: 4.61ms
+latency-predictor-stress-test-5-vfl8g test-runner   P95: 82.33ms
+latency-predictor-stress-test-5-vfl8g test-runner   P99: 189.63ms
+latency-predictor-stress-test-7-5mxq8 test-runner Testing with batch size 25...
+latency-predictor-stress-test-7-5mxq8 test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-7-5mxq8 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-7-5mxq8 test-runner Total Predictions: 1299975, Predictions/sec: 12999.8
+latency-predictor-stress-test-5-vfl8g test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-5-vfl8g test-runner PASSED
+latency-predictor-stress-test-5-vfl8g test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Testing with batch size 1000...
+latency-predictor-stress-test-5-vfl8g test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-5-vfl8g test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner Total Predictions: 3923000, Predictions/sec: 39230.0
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-7-5mxq8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner ==================================================
+latency-predictor-stress-test-5-vfl8g test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-7-5mxq8 test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-5-vfl8g test-runner Successful: 3923 (75.4%)
+latency-predictor-stress-test-5-vfl8g test-runner Failed: 1277 (24.6%)
+latency-predictor-stress-test-7-5mxq8 test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-5-vfl8g test-runner Total Individual Predictions: 3923000
+latency-predictor-stress-test-5-vfl8g test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-5-vfl8g test-runner Average Response Time: 3788.55ms
+latency-predictor-stress-test-5-vfl8g test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-5-vfl8g test-runner Prediction Success Rate: 75.4%
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner Status Code Distribution:
+latency-predictor-stress-test-5-vfl8g test-runner   200: 3923
+latency-predictor-stress-test-5-vfl8g test-runner   0: 1277
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-7-5mxq8 test-runner Total Individual Predictions: 1299975
+latency-predictor-stress-test-7-5mxq8 test-runner Total Batch Size: 1299975
+latency-predictor-stress-test-5-vfl8g test-runner Response Time Percentiles:
+latency-predictor-stress-test-5-vfl8g test-runner   P50: 3661.46ms
+latency-predictor-stress-test-7-5mxq8 test-runner Average Response Time: 34.19ms
+latency-predictor-stress-test-7-5mxq8 test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-7-5mxq8 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Status Code Distribution:
+latency-predictor-stress-test-7-5mxq8 test-runner   200: 51999
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner   P95: 9778.14ms
+latency-predictor-stress-test-5-vfl8g test-runner   P99: 10634.31ms
+latency-predictor-stress-test-5-vfl8g test-runner Bulk prediction stress test (batch size 1000) completed with 75.4% success rate
+latency-predictor-stress-test-5-vfl8g test-runner PASSED
+latency-predictor-stress-test-7-5mxq8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-5-vfl8g test-runner 
+latency-predictor-stress-test-5-vfl8g test-runner ================= 3 passed, 27 deselected in 507.51s (0:08:27) =================
+latency-predictor-stress-test-7-5mxq8 test-runner   P50: 4.86ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P95: 138.30ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P99: 555.21ms
+latency-predictor-stress-test-7-5mxq8 test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-6-7hkv8 test-runner Pod 6: Waiting for models to be ready...
+latency-predictor-stress-test-6-7hkv8 test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-6-7hkv8 test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-6-7hkv8 test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-6-7hkv8 test-runner rootdir: /app
+latency-predictor-stress-test-6-7hkv8 test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-6-7hkv8 test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-6-7hkv8 test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-6-7hkv8 test-runner Waiting for training server...
+latency-predictor-stress-test-6-7hkv8 test-runner Running prediction server stress test...
+latency-predictor-stress-test-6-7hkv8 test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-6-7hkv8 test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner Total Requests: 52000
+latency-predictor-stress-test-6-7hkv8 test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Average Response Time: 2.11ms
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Model Types in Predictions:
+latency-predictor-stress-test-6-7hkv8 test-runner   lightgbm: 52000
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Status Code Distribution:
+latency-predictor-stress-test-6-7hkv8 test-runner   200: 52000
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-6-7hkv8 test-runner   P50: 0.81ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P95: 2.26ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P99: 4.52ms
+latency-predictor-stress-test-6-7hkv8 test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-6-7hkv8 test-runner PASSED
+latency-predictor-stress-test-6-7hkv8 test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Testing with batch size 5...
+latency-predictor-stress-test-6-7hkv8 test-runner Waiting for 52000 bulk prediction requests to complete...
+latency-predictor-stress-test-6-7hkv8 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-6-7hkv8 test-runner Total Predictions: 260000, Predictions/sec: 2600.0
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner Total Bulk Requests: 52000
+latency-predictor-stress-test-6-7hkv8 test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Total Individual Predictions: 260000
+latency-predictor-stress-test-6-7hkv8 test-runner Total Batch Size: 260000
+latency-predictor-stress-test-6-7hkv8 test-runner Average Response Time: 11.66ms
+latency-predictor-stress-test-6-7hkv8 test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-6-7hkv8 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Status Code Distribution:
+latency-predictor-stress-test-6-7hkv8 test-runner   200: 52000
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-6-7hkv8 test-runner   P50: 4.31ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P95: 46.01ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P99: 105.31ms
+latency-predictor-stress-test-6-7hkv8 test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Testing with batch size 10...
+latency-predictor-stress-test-6-7hkv8 test-runner Waiting for 51997 bulk prediction requests to complete...
+latency-predictor-stress-test-6-7hkv8 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-6-7hkv8 test-runner Total Predictions: 519970, Predictions/sec: 5199.7
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner Total Bulk Requests: 51997
+latency-predictor-stress-test-6-7hkv8 test-runner Successful: 51997 (100.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Total Individual Predictions: 519970
+latency-predictor-stress-test-6-7hkv8 test-runner Total Batch Size: 519970
+latency-predictor-stress-test-6-7hkv8 test-runner Average Response Time: 10.10ms
+latency-predictor-stress-test-6-7hkv8 test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-6-7hkv8 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Status Code Distribution:
+latency-predictor-stress-test-6-7hkv8 test-runner   200: 51997
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-6-7hkv8 test-runner   P50: 2.99ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P95: 23.07ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P99: 86.92ms
+latency-predictor-stress-test-6-7hkv8 test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Testing with batch size 25...
+latency-predictor-stress-test-6-7hkv8 test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-6-7hkv8 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-6-7hkv8 test-runner Total Predictions: 1299975, Predictions/sec: 12999.8
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-6-7hkv8 test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-6-7hkv8 test-runner Total Individual Predictions: 1299975
+latency-predictor-stress-test-6-7hkv8 test-runner Total Batch Size: 1299975
+latency-predictor-stress-test-6-7hkv8 test-runner Average Response Time: 21.27ms
+latency-predictor-stress-test-6-7hkv8 test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-6-7hkv8 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Status Code Distribution:
+latency-predictor-stress-test-6-7hkv8 test-runner   200: 51999
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-6-7hkv8 test-runner   P50: 4.55ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P95: 82.17ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P99: 190.47ms
+latency-predictor-stress-test-6-7hkv8 test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-6-7hkv8 test-runner PASSED
+latency-predictor-stress-test-6-7hkv8 test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Testing with batch size 1000...
+latency-predictor-stress-test-6-7hkv8 test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-4-6zgqk test-runner ==================================================
+latency-predictor-stress-test-4-6zgqk test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-4-6zgqk test-runner Successful: 3897 (74.9%)
+latency-predictor-stress-test-4-6zgqk test-runner Failed: 1303 (25.1%)
+latency-predictor-stress-test-4-6zgqk test-runner Total Individual Predictions: 3897000
+latency-predictor-stress-test-4-6zgqk test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-4-6zgqk test-runner Average Response Time: 3852.64ms
+latency-predictor-stress-test-4-6zgqk test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-4-6zgqk test-runner Prediction Success Rate: 74.9%
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Status Code Distribution:
+latency-predictor-stress-test-4-6zgqk test-runner   200: 3897
+latency-predictor-stress-test-4-6zgqk test-runner   0: 1303
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner Response Time Percentiles:
+latency-predictor-stress-test-4-6zgqk test-runner   P50: 3689.23ms
+latency-predictor-stress-test-4-6zgqk test-runner   P95: 10073.39ms
+latency-predictor-stress-test-4-6zgqk test-runner   P99: 10753.66ms
+latency-predictor-stress-test-4-6zgqk test-runner Bulk prediction stress test (batch size 1000) completed with 74.9% success rate
+latency-predictor-stress-test-4-6zgqk test-runner PASSED
+latency-predictor-stress-test-4-6zgqk test-runner 
+latency-predictor-stress-test-4-6zgqk test-runner ================= 3 passed, 27 deselected in 504.77s (0:08:24) =================
+latency-predictor-stress-test-7-5mxq8 test-runner PASSED
+latency-predictor-stress-test-7-5mxq8 test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Testing with batch size 1000...
+latency-predictor-stress-test-7-5mxq8 test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-7-5mxq8 test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-7-5mxq8 test-runner Total Predictions: 4881000, Predictions/sec: 48810.0
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-7-5mxq8 test-runner ==================================================
+latency-predictor-stress-test-7-5mxq8 test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-7-5mxq8 test-runner Successful: 4881 (93.9%)
+latency-predictor-stress-test-7-5mxq8 test-runner Failed: 319 (6.1%)
+latency-predictor-stress-test-7-5mxq8 test-runner Total Individual Predictions: 4881000
+latency-predictor-stress-test-7-5mxq8 test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-7-5mxq8 test-runner Average Response Time: 3644.56ms
+latency-predictor-stress-test-7-5mxq8 test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-7-5mxq8 test-runner Prediction Success Rate: 93.9%
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Status Code Distribution:
+latency-predictor-stress-test-7-5mxq8 test-runner   200: 4881
+latency-predictor-stress-test-7-5mxq8 test-runner   0: 319
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-7-5mxq8 test-runner   P50: 3830.56ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P95: 5474.48ms
+latency-predictor-stress-test-7-5mxq8 test-runner   P99: 10070.37ms
+latency-predictor-stress-test-7-5mxq8 test-runner Bulk prediction stress test (batch size 1000) completed with 93.9% success rate
+latency-predictor-stress-test-7-5mxq8 test-runner PASSED
+latency-predictor-stress-test-7-5mxq8 test-runner 
+latency-predictor-stress-test-7-5mxq8 test-runner ================= 3 passed, 27 deselected in 506.91s (0:08:26) =================
+latency-predictor-stress-test-6-7hkv8 test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-6-7hkv8 test-runner Total Predictions: 3930000, Predictions/sec: 39300.0
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-6-7hkv8 test-runner ==================================================
+latency-predictor-stress-test-6-7hkv8 test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-6-7hkv8 test-runner Successful: 3930 (75.6%)
+latency-predictor-stress-test-6-7hkv8 test-runner Failed: 1270 (24.4%)
+latency-predictor-stress-test-6-7hkv8 test-runner Total Individual Predictions: 3930000
+latency-predictor-stress-test-6-7hkv8 test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-6-7hkv8 test-runner Average Response Time: 3775.72ms
+latency-predictor-stress-test-6-7hkv8 test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-6-7hkv8 test-runner Prediction Success Rate: 75.6%
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Status Code Distribution:
+latency-predictor-stress-test-6-7hkv8 test-runner   200: 3930
+latency-predictor-stress-test-6-7hkv8 test-runner   0: 1270
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner Response Time Percentiles:
+latency-predictor-stress-test-6-7hkv8 test-runner   P50: 3669.28ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P95: 9581.27ms
+latency-predictor-stress-test-6-7hkv8 test-runner   P99: 10617.54ms
+latency-predictor-stress-test-6-7hkv8 test-runner Bulk prediction stress test (batch size 1000) completed with 75.6% success rate
+latency-predictor-stress-test-6-7hkv8 test-runner PASSED
+latency-predictor-stress-test-6-7hkv8 test-runner 
+latency-predictor-stress-test-6-7hkv8 test-runner ================= 3 passed, 27 deselected in 508.36s (0:08:28) =================
+latency-predictor-stress-test-2-42nq2 test-runner Pod 2: Waiting for models to be ready...
+latency-predictor-stress-test-2-42nq2 test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-2-42nq2 test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-2-42nq2 test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-2-42nq2 test-runner rootdir: /app
+latency-predictor-stress-test-2-42nq2 test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-2-42nq2 test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-2-42nq2 test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-2-42nq2 test-runner Waiting for training server...
+latency-predictor-stress-test-2-42nq2 test-runner Running prediction server stress test...
+latency-predictor-stress-test-2-42nq2 test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-2-42nq2 test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner Total Requests: 52000
+latency-predictor-stress-test-2-42nq2 test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Average Response Time: 2.13ms
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Model Types in Predictions:
+latency-predictor-stress-test-2-42nq2 test-runner   lightgbm: 52000
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Status Code Distribution:
+latency-predictor-stress-test-2-42nq2 test-runner   200: 52000
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-2-42nq2 test-runner   P50: 0.82ms
+latency-predictor-stress-test-2-42nq2 test-runner   P95: 2.21ms
+latency-predictor-stress-test-2-42nq2 test-runner   P99: 4.54ms
+latency-predictor-stress-test-2-42nq2 test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-2-42nq2 test-runner PASSED
+latency-predictor-stress-test-2-42nq2 test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Testing with batch size 5...
+latency-predictor-stress-test-2-42nq2 test-runner Waiting for 51998 bulk prediction requests to complete...
+latency-predictor-stress-test-2-42nq2 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-2-42nq2 test-runner Total Predictions: 259990, Predictions/sec: 2599.9
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner Total Bulk Requests: 51998
+latency-predictor-stress-test-2-42nq2 test-runner Successful: 51998 (100.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Total Individual Predictions: 259990
+latency-predictor-stress-test-2-42nq2 test-runner Total Batch Size: 259990
+latency-predictor-stress-test-2-42nq2 test-runner Average Response Time: 13.59ms
+latency-predictor-stress-test-2-42nq2 test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-2-42nq2 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Status Code Distribution:
+latency-predictor-stress-test-2-42nq2 test-runner   200: 51998
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-2-42nq2 test-runner   P50: 4.36ms
+latency-predictor-stress-test-2-42nq2 test-runner   P95: 57.32ms
+latency-predictor-stress-test-2-42nq2 test-runner   P99: 118.40ms
+latency-predictor-stress-test-2-42nq2 test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Testing with batch size 10...
+latency-predictor-stress-test-2-42nq2 test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-2-42nq2 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-2-42nq2 test-runner Total Predictions: 519990, Predictions/sec: 5199.9
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-2-42nq2 test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Total Individual Predictions: 519990
+latency-predictor-stress-test-2-42nq2 test-runner Total Batch Size: 519990
+latency-predictor-stress-test-2-42nq2 test-runner Average Response Time: 8.59ms
+latency-predictor-stress-test-2-42nq2 test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-2-42nq2 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Status Code Distribution:
+latency-predictor-stress-test-2-42nq2 test-runner   200: 51999
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-2-42nq2 test-runner   P50: 2.92ms
+latency-predictor-stress-test-2-42nq2 test-runner   P95: 14.78ms
+latency-predictor-stress-test-2-42nq2 test-runner   P99: 74.09ms
+latency-predictor-stress-test-2-42nq2 test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Testing with batch size 25...
+latency-predictor-stress-test-2-42nq2 test-runner Waiting for 51997 bulk prediction requests to complete...
+latency-predictor-stress-test-2-42nq2 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-2-42nq2 test-runner Total Predictions: 1299925, Predictions/sec: 12999.2
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner Total Bulk Requests: 51997
+latency-predictor-stress-test-2-42nq2 test-runner Successful: 51997 (100.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-2-42nq2 test-runner Total Individual Predictions: 1299925
+latency-predictor-stress-test-2-42nq2 test-runner Total Batch Size: 1299925
+latency-predictor-stress-test-2-42nq2 test-runner Average Response Time: 18.28ms
+latency-predictor-stress-test-2-42nq2 test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-2-42nq2 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Status Code Distribution:
+latency-predictor-stress-test-2-42nq2 test-runner   200: 51997
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-2-42nq2 test-runner   P50: 4.65ms
+latency-predictor-stress-test-2-42nq2 test-runner   P95: 64.77ms
+latency-predictor-stress-test-2-42nq2 test-runner   P99: 149.31ms
+latency-predictor-stress-test-2-42nq2 test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-2-42nq2 test-runner PASSED
+latency-predictor-stress-test-2-42nq2 test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Testing with batch size 1000...
+latency-predictor-stress-test-2-42nq2 test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-2-42nq2 test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-2-42nq2 test-runner Total Predictions: 4034000, Predictions/sec: 40340.0
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-2-42nq2 test-runner ==================================================
+latency-predictor-stress-test-2-42nq2 test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-2-42nq2 test-runner Successful: 4034 (77.6%)
+latency-predictor-stress-test-2-42nq2 test-runner Failed: 1166 (22.4%)
+latency-predictor-stress-test-2-42nq2 test-runner Total Individual Predictions: 4034000
+latency-predictor-stress-test-2-42nq2 test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-2-42nq2 test-runner Average Response Time: 3695.77ms
+latency-predictor-stress-test-2-42nq2 test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-2-42nq2 test-runner Prediction Success Rate: 77.6%
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Status Code Distribution:
+latency-predictor-stress-test-2-42nq2 test-runner   200: 4034
+latency-predictor-stress-test-2-42nq2 test-runner   0: 1166
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-2-42nq2 test-runner   P50: 3729.86ms
+latency-predictor-stress-test-2-42nq2 test-runner   P95: 8927.30ms
+latency-predictor-stress-test-2-42nq2 test-runner   P99: 10643.62ms
+latency-predictor-stress-test-2-42nq2 test-runner Bulk prediction stress test (batch size 1000) completed with 77.6% success rate
+latency-predictor-stress-test-2-42nq2 test-runner PASSED
+latency-predictor-stress-test-2-42nq2 test-runner 
+latency-predictor-stress-test-2-42nq2 test-runner ================= 3 passed, 27 deselected in 508.65s (0:08:28) =================
+latency-predictor-stress-test-9-kw8fp test-runner Pod 9: Waiting for models to be ready...
+latency-predictor-stress-test-9-kw8fp test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-9-kw8fp test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-9-kw8fp test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-9-kw8fp test-runner rootdir: /app
+latency-predictor-stress-test-9-kw8fp test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-9-kw8fp test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-9-kw8fp test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-9-kw8fp test-runner Waiting for training server...
+latency-predictor-stress-test-9-kw8fp test-runner Running prediction server stress test...
+latency-predictor-stress-test-9-kw8fp test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-9-kw8fp test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner Total Requests: 52000
+latency-predictor-stress-test-9-kw8fp test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Average Response Time: 2.55ms
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Model Types in Predictions:
+latency-predictor-stress-test-9-kw8fp test-runner   lightgbm: 52000
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Status Code Distribution:
+latency-predictor-stress-test-9-kw8fp test-runner   200: 52000
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Response Time Percentiles:
+latency-predictor-stress-test-9-kw8fp test-runner   P50: 0.82ms
+latency-predictor-stress-test-9-kw8fp test-runner   P95: 2.20ms
+latency-predictor-stress-test-9-kw8fp test-runner   P99: 4.73ms
+latency-predictor-stress-test-9-kw8fp test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-9-kw8fp test-runner PASSED
+latency-predictor-stress-test-9-kw8fp test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Testing with batch size 5...
+latency-predictor-stress-test-9-kw8fp test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-9-kw8fp test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-9-kw8fp test-runner Total Predictions: 259995, Predictions/sec: 2599.9
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-9-kw8fp test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Total Individual Predictions: 259995
+latency-predictor-stress-test-9-kw8fp test-runner Total Batch Size: 259995
+latency-predictor-stress-test-9-kw8fp test-runner Average Response Time: 13.04ms
+latency-predictor-stress-test-9-kw8fp test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-9-kw8fp test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Status Code Distribution:
+latency-predictor-stress-test-9-kw8fp test-runner   200: 51999
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Response Time Percentiles:
+latency-predictor-stress-test-9-kw8fp test-runner   P50: 4.33ms
+latency-predictor-stress-test-9-kw8fp test-runner   P95: 49.89ms
+latency-predictor-stress-test-9-kw8fp test-runner   P99: 114.49ms
+latency-predictor-stress-test-9-kw8fp test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Testing with batch size 10...
+latency-predictor-stress-test-9-kw8fp test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-9-kw8fp test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-9-kw8fp test-runner Total Predictions: 519960, Predictions/sec: 5199.6
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-9-kw8fp test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Total Individual Predictions: 519960
+latency-predictor-stress-test-9-kw8fp test-runner Total Batch Size: 519960
+latency-predictor-stress-test-9-kw8fp test-runner Average Response Time: 9.46ms
+latency-predictor-stress-test-9-kw8fp test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-9-kw8fp test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Status Code Distribution:
+latency-predictor-stress-test-9-kw8fp test-runner   200: 51996
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Response Time Percentiles:
+latency-predictor-stress-test-9-kw8fp test-runner   P50: 2.87ms
+latency-predictor-stress-test-9-kw8fp test-runner   P95: 16.85ms
+latency-predictor-stress-test-9-kw8fp test-runner   P99: 72.15ms
+latency-predictor-stress-test-9-kw8fp test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Testing with batch size 25...
+latency-predictor-stress-test-9-kw8fp test-runner Waiting for 51998 bulk prediction requests to complete...
+latency-predictor-stress-test-9-kw8fp test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-9-kw8fp test-runner Total Predictions: 1299950, Predictions/sec: 12999.5
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner Total Bulk Requests: 51998
+latency-predictor-stress-test-9-kw8fp test-runner Successful: 51998 (100.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-9-kw8fp test-runner Total Individual Predictions: 1299950
+latency-predictor-stress-test-9-kw8fp test-runner Total Batch Size: 1299950
+latency-predictor-stress-test-9-kw8fp test-runner Average Response Time: 15.13ms
+latency-predictor-stress-test-9-kw8fp test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-9-kw8fp test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Status Code Distribution:
+latency-predictor-stress-test-9-kw8fp test-runner   200: 51998
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Response Time Percentiles:
+latency-predictor-stress-test-9-kw8fp test-runner   P50: 4.23ms
+latency-predictor-stress-test-9-kw8fp test-runner   P95: 60.38ms
+latency-predictor-stress-test-9-kw8fp test-runner   P99: 128.55ms
+latency-predictor-stress-test-9-kw8fp test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-9-kw8fp test-runner PASSED
+latency-predictor-stress-test-9-kw8fp test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Testing with batch size 1000...
+latency-predictor-stress-test-9-kw8fp test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-9-kw8fp test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-9-kw8fp test-runner Total Predictions: 3949000, Predictions/sec: 39490.0
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-9-kw8fp test-runner ==================================================
+latency-predictor-stress-test-9-kw8fp test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-9-kw8fp test-runner Successful: 3949 (75.9%)
+latency-predictor-stress-test-9-kw8fp test-runner Failed: 1251 (24.1%)
+latency-predictor-stress-test-9-kw8fp test-runner Total Individual Predictions: 3949000
+latency-predictor-stress-test-9-kw8fp test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-9-kw8fp test-runner Average Response Time: 3667.41ms
+latency-predictor-stress-test-9-kw8fp test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-9-kw8fp test-runner Prediction Success Rate: 75.9%
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Status Code Distribution:
+latency-predictor-stress-test-9-kw8fp test-runner   200: 3949
+latency-predictor-stress-test-9-kw8fp test-runner   0: 1251
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner Response Time Percentiles:
+latency-predictor-stress-test-9-kw8fp test-runner   P50: 3657.63ms
+latency-predictor-stress-test-9-kw8fp test-runner   P95: 9640.06ms
+latency-predictor-stress-test-9-kw8fp test-runner   P99: 10549.06ms
+latency-predictor-stress-test-9-kw8fp test-runner Bulk prediction stress test (batch size 1000) completed with 75.9% success rate
+latency-predictor-stress-test-9-kw8fp test-runner PASSED
+latency-predictor-stress-test-9-kw8fp test-runner 
+latency-predictor-stress-test-9-kw8fp test-runner ================= 3 passed, 27 deselected in 509.01s (0:08:29) =================
+latency-predictor-stress-test-0-2tvv9 test-runner Pod 0: Running training warmup...
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner Setting up training data for stress tests
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner Sending 1000 training samples...
+latency-predictor-stress-test-0-2tvv9 test-runner ✓ Successfully sent 1000 training samples
+latency-predictor-stress-test-0-2tvv9 test-runner Waiting for training to complete (max 60s)...
+latency-predictor-stress-test-0-2tvv9 test-runner ✓ Models trained and loaded
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner ✓ Setup complete! Ready for stress testing.
+latency-predictor-stress-test-0-2tvv9 test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-0-2tvv9 test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-0-2tvv9 test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-0-2tvv9 test-runner rootdir: /app
+latency-predictor-stress-test-0-2tvv9 test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-0-2tvv9 test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-0-2tvv9 test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-0-2tvv9 test-runner Waiting for training server...
+latency-predictor-stress-test-0-2tvv9 test-runner Running prediction server stress test...
+latency-predictor-stress-test-0-2tvv9 test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-0-2tvv9 test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner Total Requests: 52000
+latency-predictor-stress-test-0-2tvv9 test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Average Response Time: 2.09ms
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Model Types in Predictions:
+latency-predictor-stress-test-0-2tvv9 test-runner   lightgbm: 52000
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Status Code Distribution:
+latency-predictor-stress-test-0-2tvv9 test-runner   200: 52000
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Response Time Percentiles:
+latency-predictor-stress-test-0-2tvv9 test-runner   P50: 0.83ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P95: 2.12ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P99: 4.38ms
+latency-predictor-stress-test-0-2tvv9 test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-0-2tvv9 test-runner PASSED
+latency-predictor-stress-test-0-2tvv9 test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Testing with batch size 5...
+latency-predictor-stress-test-0-2tvv9 test-runner Waiting for 52000 bulk prediction requests to complete...
+latency-predictor-stress-test-0-2tvv9 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-0-2tvv9 test-runner Total Predictions: 260000, Predictions/sec: 2600.0
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner Total Bulk Requests: 52000
+latency-predictor-stress-test-0-2tvv9 test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Total Individual Predictions: 260000
+latency-predictor-stress-test-0-2tvv9 test-runner Total Batch Size: 260000
+latency-predictor-stress-test-0-2tvv9 test-runner Average Response Time: 10.34ms
+latency-predictor-stress-test-0-2tvv9 test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-0-2tvv9 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Status Code Distribution:
+latency-predictor-stress-test-0-2tvv9 test-runner   200: 52000
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Response Time Percentiles:
+latency-predictor-stress-test-0-2tvv9 test-runner   P50: 3.71ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P95: 40.18ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P99: 99.76ms
+latency-predictor-stress-test-0-2tvv9 test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Testing with batch size 10...
+latency-predictor-stress-test-0-2tvv9 test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-0-2tvv9 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-0-2tvv9 test-runner Total Predictions: 519990, Predictions/sec: 5199.9
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-0-2tvv9 test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Total Individual Predictions: 519990
+latency-predictor-stress-test-0-2tvv9 test-runner Total Batch Size: 519990
+latency-predictor-stress-test-0-2tvv9 test-runner Average Response Time: 9.18ms
+latency-predictor-stress-test-0-2tvv9 test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-0-2tvv9 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Status Code Distribution:
+latency-predictor-stress-test-0-2tvv9 test-runner   200: 51999
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Response Time Percentiles:
+latency-predictor-stress-test-0-2tvv9 test-runner   P50: 2.84ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P95: 16.54ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P99: 66.31ms
+latency-predictor-stress-test-0-2tvv9 test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Testing with batch size 25...
+latency-predictor-stress-test-0-2tvv9 test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-0-2tvv9 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-0-2tvv9 test-runner Total Predictions: 1299900, Predictions/sec: 12999.0
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-0-2tvv9 test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-0-2tvv9 test-runner Total Individual Predictions: 1299900
+latency-predictor-stress-test-0-2tvv9 test-runner Total Batch Size: 1299900
+latency-predictor-stress-test-0-2tvv9 test-runner Average Response Time: 15.66ms
+latency-predictor-stress-test-0-2tvv9 test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-0-2tvv9 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Status Code Distribution:
+latency-predictor-stress-test-0-2tvv9 test-runner   200: 51996
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Response Time Percentiles:
+latency-predictor-stress-test-0-2tvv9 test-runner   P50: 4.42ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P95: 59.02ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P99: 115.77ms
+latency-predictor-stress-test-0-2tvv9 test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-0-2tvv9 test-runner PASSED
+latency-predictor-stress-test-0-2tvv9 test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Testing with batch size 1000...
+latency-predictor-stress-test-0-2tvv9 test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-0-2tvv9 test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-0-2tvv9 test-runner Total Predictions: 4104000, Predictions/sec: 41040.0
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-0-2tvv9 test-runner ==================================================
+latency-predictor-stress-test-0-2tvv9 test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-0-2tvv9 test-runner Successful: 4104 (78.9%)
+latency-predictor-stress-test-0-2tvv9 test-runner Failed: 1096 (21.1%)
+latency-predictor-stress-test-0-2tvv9 test-runner Total Individual Predictions: 4104000
+latency-predictor-stress-test-0-2tvv9 test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-0-2tvv9 test-runner Average Response Time: 3438.37ms
+latency-predictor-stress-test-0-2tvv9 test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-0-2tvv9 test-runner Prediction Success Rate: 78.9%
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Status Code Distribution:
+latency-predictor-stress-test-0-2tvv9 test-runner   200: 4104
+latency-predictor-stress-test-0-2tvv9 test-runner   0: 1096
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner Response Time Percentiles:
+latency-predictor-stress-test-0-2tvv9 test-runner   P50: 3657.75ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P95: 9284.64ms
+latency-predictor-stress-test-0-2tvv9 test-runner   P99: 10724.09ms
+latency-predictor-stress-test-0-2tvv9 test-runner Bulk prediction stress test (batch size 1000) completed with 78.9% success rate
+latency-predictor-stress-test-0-2tvv9 test-runner PASSED
+latency-predictor-stress-test-0-2tvv9 test-runner 
+latency-predictor-stress-test-0-2tvv9 test-runner ================= 3 passed, 27 deselected in 509.68s (0:08:29) =================
+latency-predictor-stress-test-3-nnrcm test-runner Pod 3: Waiting for models to be ready...
+latency-predictor-stress-test-3-nnrcm test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-3-nnrcm test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-3-nnrcm test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-3-nnrcm test-runner rootdir: /app
+latency-predictor-stress-test-3-nnrcm test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-3-nnrcm test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-3-nnrcm test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-3-nnrcm test-runner Waiting for training server...
+latency-predictor-stress-test-3-nnrcm test-runner Running prediction server stress test...
+latency-predictor-stress-test-3-nnrcm test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-3-nnrcm test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner Total Requests: 52000
+latency-predictor-stress-test-3-nnrcm test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-3-nnrcm test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-3-nnrcm test-runner Average Response Time: 3.51ms
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Model Types in Predictions:
+latency-predictor-stress-test-3-nnrcm test-runner   lightgbm: 52000
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Status Code Distribution:
+latency-predictor-stress-test-3-nnrcm test-runner   200: 52000
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Response Time Percentiles:
+latency-predictor-stress-test-3-nnrcm test-runner   P50: 1.02ms
+latency-predictor-stress-test-3-nnrcm test-runner   P95: 5.43ms
+latency-predictor-stress-test-3-nnrcm test-runner   P99: 17.46ms
+latency-predictor-stress-test-3-nnrcm test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-3-nnrcm test-runner PASSED
+latency-predictor-stress-test-3-nnrcm test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Testing with batch size 5...
+latency-predictor-stress-test-3-nnrcm test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-3-nnrcm test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-3-nnrcm test-runner Total Predictions: 259995, Predictions/sec: 2599.9
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-3-nnrcm test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-3-nnrcm test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-3-nnrcm test-runner Total Individual Predictions: 259995
+latency-predictor-stress-test-3-nnrcm test-runner Total Batch Size: 259995
+latency-predictor-stress-test-3-nnrcm test-runner Average Response Time: 10.60ms
+latency-predictor-stress-test-3-nnrcm test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-3-nnrcm test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Status Code Distribution:
+latency-predictor-stress-test-3-nnrcm test-runner   200: 51999
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Response Time Percentiles:
+latency-predictor-stress-test-3-nnrcm test-runner   P50: 4.09ms
+latency-predictor-stress-test-3-nnrcm test-runner   P95: 31.04ms
+latency-predictor-stress-test-3-nnrcm test-runner   P99: 93.75ms
+latency-predictor-stress-test-3-nnrcm test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Testing with batch size 10...
+latency-predictor-stress-test-3-nnrcm test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-3-nnrcm test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-3-nnrcm test-runner Total Predictions: 519990, Predictions/sec: 5199.9
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-3-nnrcm test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-3-nnrcm test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-3-nnrcm test-runner Total Individual Predictions: 519990
+latency-predictor-stress-test-3-nnrcm test-runner Total Batch Size: 519990
+latency-predictor-stress-test-3-nnrcm test-runner Average Response Time: 10.15ms
+latency-predictor-stress-test-3-nnrcm test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-3-nnrcm test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Status Code Distribution:
+latency-predictor-stress-test-3-nnrcm test-runner   200: 51999
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Response Time Percentiles:
+latency-predictor-stress-test-3-nnrcm test-runner   P50: 2.83ms
+latency-predictor-stress-test-3-nnrcm test-runner   P95: 23.73ms
+latency-predictor-stress-test-3-nnrcm test-runner   P99: 80.45ms
+latency-predictor-stress-test-3-nnrcm test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Testing with batch size 25...
+latency-predictor-stress-test-3-nnrcm test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-3-nnrcm test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-3-nnrcm test-runner Total Predictions: 620400, Predictions/sec: 6204.0
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-3-nnrcm test-runner Successful: 24816 (47.7%)
+latency-predictor-stress-test-3-nnrcm test-runner Failed: 27183 (52.3%)
+latency-predictor-stress-test-3-nnrcm test-runner Total Individual Predictions: 620400
+latency-predictor-stress-test-3-nnrcm test-runner Total Batch Size: 1299975
+latency-predictor-stress-test-3-nnrcm test-runner Average Response Time: 3716.85ms
+latency-predictor-stress-test-3-nnrcm test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-3-nnrcm test-runner Prediction Success Rate: 47.7%
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Status Code Distribution:
+latency-predictor-stress-test-3-nnrcm test-runner   200: 24816
+latency-predictor-stress-test-3-nnrcm test-runner   0: 27183
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Response Time Percentiles:
+latency-predictor-stress-test-3-nnrcm test-runner   P50: 71.70ms
+latency-predictor-stress-test-3-nnrcm test-runner   P95: 10850.04ms
+latency-predictor-stress-test-3-nnrcm test-runner   P99: 10975.00ms
+latency-predictor-stress-test-3-nnrcm test-runner FAILED
+latency-predictor-stress-test-3-nnrcm test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Testing with batch size 1000...
+latency-predictor-stress-test-3-nnrcm test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-3-nnrcm test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-3-nnrcm test-runner Total Predictions: 3161000, Predictions/sec: 31610.0
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-3-nnrcm test-runner ==================================================
+latency-predictor-stress-test-3-nnrcm test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-3-nnrcm test-runner Successful: 3161 (60.8%)
+latency-predictor-stress-test-3-nnrcm test-runner Failed: 2039 (39.2%)
+latency-predictor-stress-test-3-nnrcm test-runner Total Individual Predictions: 3161000
+latency-predictor-stress-test-3-nnrcm test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-3-nnrcm test-runner Average Response Time: 693.62ms
+latency-predictor-stress-test-3-nnrcm test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-3-nnrcm test-runner Prediction Success Rate: 60.8%
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Status Code Distribution:
+latency-predictor-stress-test-3-nnrcm test-runner   0: 2039
+latency-predictor-stress-test-3-nnrcm test-runner   200: 3161
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner Response Time Percentiles:
+latency-predictor-stress-test-3-nnrcm test-runner   P50: 25.07ms
+latency-predictor-stress-test-3-nnrcm test-runner   P95: 4842.80ms
+latency-predictor-stress-test-3-nnrcm test-runner   P99: 10587.89ms
+latency-predictor-stress-test-3-nnrcm test-runner FAILED
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner =================================== FAILURES ===================================
+latency-predictor-stress-test-3-nnrcm test-runner _______________________ test_bulk_prediction_stress_test _______________________
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner     def test_bulk_prediction_stress_test():
+latency-predictor-stress-test-3-nnrcm test-runner         """Stress test the bulk prediction endpoint."""
+latency-predictor-stress-test-3-nnrcm test-runner         print("Running bulk prediction stress test...")
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner         # Test with different batch sizes
+latency-predictor-stress-test-3-nnrcm test-runner         batch_sizes = [5, 10, 25]
+latency-predictor-stress-test-3-nnrcm test-runner         for batch_size in batch_sizes:
+latency-predictor-stress-test-3-nnrcm test-runner             print(f"\nTesting with batch size {batch_size}...")
+latency-predictor-stress-test-3-nnrcm test-runner             results = asyncio.run(run_bulk_prediction_stress_test(
+latency-predictor-stress-test-3-nnrcm test-runner                 duration_seconds=100,
+latency-predictor-stress-test-3-nnrcm test-runner                 target_rps=TARGET_QPS,  # Lower RPS for bulk requests
+latency-predictor-stress-test-3-nnrcm test-runner                 batch_size=batch_size
+latency-predictor-stress-test-3-nnrcm test-runner             ))
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner             analyze_bulk_prediction_stress_results(results)
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner             assert len(results) > 0, f"No bulk requests were made for batch size {batch_size}"
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner             successful_requests = sum(1 for r in results if r.get('success', False))
+latency-predictor-stress-test-3-nnrcm test-runner             success_rate = successful_requests / len(results)
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner >           assert success_rate > 0.7, f"Bulk success rate too low for batch size {batch_size}: {success_rate*100:.1f}%"
+latency-predictor-stress-test-3-nnrcm test-runner E           AssertionError: Bulk success rate too low for batch size 25: 47.7%
+latency-predictor-stress-test-3-nnrcm test-runner E           assert 0.4772399469220562 > 0.7
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner test/test_dual_server_client.py:1456: AssertionError
+latency-predictor-stress-test-3-nnrcm test-runner ___________________ test_large_batch_prediction_stress_test ____________________
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner     def test_large_batch_prediction_stress_test():
+latency-predictor-stress-test-3-nnrcm test-runner         """Stress test the bulk prediction endpoint."""
+latency-predictor-stress-test-3-nnrcm test-runner         print("Running bulk prediction stress test...")
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner         # Test with different batch sizes
+latency-predictor-stress-test-3-nnrcm test-runner         batch_sizes = [1000]
+latency-predictor-stress-test-3-nnrcm test-runner         for batch_size in batch_sizes:
+latency-predictor-stress-test-3-nnrcm test-runner             print(f"\nTesting with batch size {batch_size}...")
+latency-predictor-stress-test-3-nnrcm test-runner             results = asyncio.run(run_bulk_prediction_stress_test(
+latency-predictor-stress-test-3-nnrcm test-runner                 duration_seconds=100,
+latency-predictor-stress-test-3-nnrcm test-runner                 target_rps=TARGET_QPS_LARGE_BATCH,  # Lower RPS for bulk requests
+latency-predictor-stress-test-3-nnrcm test-runner                 batch_size=batch_size
+latency-predictor-stress-test-3-nnrcm test-runner             ))
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner             analyze_bulk_prediction_stress_results(results)
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner             assert len(results) > 0, f"No bulk requests were made for batch size {batch_size}"
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner             successful_requests = sum(1 for r in results if r.get('success', False))
+latency-predictor-stress-test-3-nnrcm test-runner             success_rate = successful_requests / len(results)
+latency-predictor-stress-test-3-nnrcm test-runner     
+latency-predictor-stress-test-3-nnrcm test-runner >           assert success_rate > 0.7, f"Bulk success rate too low for batch size {batch_size}: {success_rate*100:.1f}%"
+latency-predictor-stress-test-3-nnrcm test-runner E           AssertionError: Bulk success rate too low for batch size 1000: 60.8%
+latency-predictor-stress-test-3-nnrcm test-runner E           assert 0.6078846153846154 > 0.7
+latency-predictor-stress-test-3-nnrcm test-runner 
+latency-predictor-stress-test-3-nnrcm test-runner test/test_dual_server_client.py:1481: AssertionError
+latency-predictor-stress-test-3-nnrcm test-runner =========================== short test summary info ============================
+latency-predictor-stress-test-3-nnrcm test-runner FAILED test/test_dual_server_client.py::test_bulk_prediction_stress_test - As...
+latency-predictor-stress-test-3-nnrcm test-runner FAILED test/test_dual_server_client.py::test_large_batch_prediction_stress_test
+latency-predictor-stress-test-3-nnrcm test-runner ============ 2 failed, 1 passed, 27 deselected in 504.35s (0:08:24) ============
+latency-predictor-stress-test-1-hjh7j test-runner Pod 1: Waiting for models to be ready...
+latency-predictor-stress-test-1-hjh7j test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-1-hjh7j test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-1-hjh7j test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-1-hjh7j test-runner rootdir: /app
+latency-predictor-stress-test-1-hjh7j test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-1-hjh7j test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-1-hjh7j test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-1-hjh7j test-runner Waiting for training server...
+latency-predictor-stress-test-1-hjh7j test-runner Running prediction server stress test...
+latency-predictor-stress-test-1-hjh7j test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-1-hjh7j test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner Total Requests: 52000
+latency-predictor-stress-test-1-hjh7j test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Average Response Time: 1.86ms
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Model Types in Predictions:
+latency-predictor-stress-test-1-hjh7j test-runner   lightgbm: 52000
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Status Code Distribution:
+latency-predictor-stress-test-1-hjh7j test-runner   200: 52000
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Response Time Percentiles:
+latency-predictor-stress-test-1-hjh7j test-runner   P50: 0.82ms
+latency-predictor-stress-test-1-hjh7j test-runner   P95: 2.41ms
+latency-predictor-stress-test-1-hjh7j test-runner   P99: 4.95ms
+latency-predictor-stress-test-1-hjh7j test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-1-hjh7j test-runner PASSED
+latency-predictor-stress-test-1-hjh7j test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Testing with batch size 5...
+latency-predictor-stress-test-1-hjh7j test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-1-hjh7j test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-1-hjh7j test-runner Total Predictions: 259980, Predictions/sec: 2599.8
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-1-hjh7j test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Total Individual Predictions: 259980
+latency-predictor-stress-test-1-hjh7j test-runner Total Batch Size: 259980
+latency-predictor-stress-test-1-hjh7j test-runner Average Response Time: 14.64ms
+latency-predictor-stress-test-1-hjh7j test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-1-hjh7j test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Status Code Distribution:
+latency-predictor-stress-test-1-hjh7j test-runner   200: 51996
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Response Time Percentiles:
+latency-predictor-stress-test-1-hjh7j test-runner   P50: 5.27ms
+latency-predictor-stress-test-1-hjh7j test-runner   P95: 58.17ms
+latency-predictor-stress-test-1-hjh7j test-runner   P99: 121.00ms
+latency-predictor-stress-test-1-hjh7j test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Testing with batch size 10...
+latency-predictor-stress-test-1-hjh7j test-runner Waiting for 51998 bulk prediction requests to complete...
+latency-predictor-stress-test-1-hjh7j test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-1-hjh7j test-runner Total Predictions: 519980, Predictions/sec: 5199.8
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner Total Bulk Requests: 51998
+latency-predictor-stress-test-1-hjh7j test-runner Successful: 51998 (100.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Total Individual Predictions: 519980
+latency-predictor-stress-test-1-hjh7j test-runner Total Batch Size: 519980
+latency-predictor-stress-test-1-hjh7j test-runner Average Response Time: 11.48ms
+latency-predictor-stress-test-1-hjh7j test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-1-hjh7j test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Status Code Distribution:
+latency-predictor-stress-test-1-hjh7j test-runner   200: 51998
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Response Time Percentiles:
+latency-predictor-stress-test-1-hjh7j test-runner   P50: 2.80ms
+latency-predictor-stress-test-1-hjh7j test-runner   P95: 17.63ms
+latency-predictor-stress-test-1-hjh7j test-runner   P99: 72.93ms
+latency-predictor-stress-test-1-hjh7j test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Testing with batch size 25...
+latency-predictor-stress-test-1-hjh7j test-runner Waiting for 51999 bulk prediction requests to complete...
+latency-predictor-stress-test-1-hjh7j test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-1-hjh7j test-runner Total Predictions: 1299975, Predictions/sec: 12999.8
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner Total Bulk Requests: 51999
+latency-predictor-stress-test-1-hjh7j test-runner Successful: 51999 (100.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-1-hjh7j test-runner Total Individual Predictions: 1299975
+latency-predictor-stress-test-1-hjh7j test-runner Total Batch Size: 1299975
+latency-predictor-stress-test-1-hjh7j test-runner Average Response Time: 24.46ms
+latency-predictor-stress-test-1-hjh7j test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-1-hjh7j test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Status Code Distribution:
+latency-predictor-stress-test-1-hjh7j test-runner   200: 51999
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Response Time Percentiles:
+latency-predictor-stress-test-1-hjh7j test-runner   P50: 4.75ms
+latency-predictor-stress-test-1-hjh7j test-runner   P95: 105.04ms
+latency-predictor-stress-test-1-hjh7j test-runner   P99: 256.62ms
+latency-predictor-stress-test-1-hjh7j test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-1-hjh7j test-runner PASSED
+latency-predictor-stress-test-1-hjh7j test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Testing with batch size 1000...
+latency-predictor-stress-test-1-hjh7j test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-1-hjh7j test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-1-hjh7j test-runner Total Predictions: 4084000, Predictions/sec: 40840.0
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-1-hjh7j test-runner ==================================================
+latency-predictor-stress-test-1-hjh7j test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-1-hjh7j test-runner Successful: 4084 (78.5%)
+latency-predictor-stress-test-1-hjh7j test-runner Failed: 1116 (21.5%)
+latency-predictor-stress-test-1-hjh7j test-runner Total Individual Predictions: 4084000
+latency-predictor-stress-test-1-hjh7j test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-1-hjh7j test-runner Average Response Time: 3804.60ms
+latency-predictor-stress-test-1-hjh7j test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-1-hjh7j test-runner Prediction Success Rate: 78.5%
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Status Code Distribution:
+latency-predictor-stress-test-1-hjh7j test-runner   200: 4084
+latency-predictor-stress-test-1-hjh7j test-runner   0: 1116
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner Response Time Percentiles:
+latency-predictor-stress-test-1-hjh7j test-runner   P50: 3681.92ms
+latency-predictor-stress-test-1-hjh7j test-runner   P95: 8792.17ms
+latency-predictor-stress-test-1-hjh7j test-runner   P99: 10506.21ms
+latency-predictor-stress-test-1-hjh7j test-runner Bulk prediction stress test (batch size 1000) completed with 78.5% success rate
+latency-predictor-stress-test-1-hjh7j test-runner PASSED
+latency-predictor-stress-test-1-hjh7j test-runner 
+latency-predictor-stress-test-1-hjh7j test-runner ================= 3 passed, 27 deselected in 505.27s (0:08:25) =================
+latency-predictor-stress-test-8-x58b2 test-runner Pod 8: Waiting for models to be ready...
+latency-predictor-stress-test-8-x58b2 test-runner ============================= test session starts ==============================
+latency-predictor-stress-test-8-x58b2 test-runner platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+latency-predictor-stress-test-8-x58b2 test-runner cachedir: .pytest_cache
+latency-predictor-stress-test-8-x58b2 test-runner rootdir: /app
+latency-predictor-stress-test-8-x58b2 test-runner plugins: anyio-4.12.1, asyncio-1.2.0
+latency-predictor-stress-test-8-x58b2 test-runner asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+latency-predictor-stress-test-8-x58b2 test-runner collecting ... collected 30 items / 27 deselected / 3 selected
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner test/test_dual_server_client.py::test_prediction_server_stress_test Waiting for prediction server...
+latency-predictor-stress-test-8-x58b2 test-runner Waiting for training server...
+latency-predictor-stress-test-8-x58b2 test-runner Running prediction server stress test...
+latency-predictor-stress-test-8-x58b2 test-runner Waiting for 52000 prediction requests to complete...
+latency-predictor-stress-test-8-x58b2 test-runner Target QPS: 520.0, Actual QPS: 520.0
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner PREDICTION SERVER STRESS TEST RESULTS
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner Total Requests: 52000
+latency-predictor-stress-test-8-x58b2 test-runner Successful: 52000 (100.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Average Response Time: 1.96ms
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Model Types in Predictions:
+latency-predictor-stress-test-8-x58b2 test-runner   lightgbm: 52000
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Status Code Distribution:
+latency-predictor-stress-test-8-x58b2 test-runner   200: 52000
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-8-x58b2 test-runner   P50: 0.81ms
+latency-predictor-stress-test-8-x58b2 test-runner   P95: 2.21ms
+latency-predictor-stress-test-8-x58b2 test-runner   P99: 4.41ms
+latency-predictor-stress-test-8-x58b2 test-runner Prediction server stress test completed with 100.0% success rate
+latency-predictor-stress-test-8-x58b2 test-runner PASSED
+latency-predictor-stress-test-8-x58b2 test-runner test/test_dual_server_client.py::test_bulk_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Testing with batch size 5...
+latency-predictor-stress-test-8-x58b2 test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-8-x58b2 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-8-x58b2 test-runner Total Predictions: 259980, Predictions/sec: 2599.8
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-8-x58b2 test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Total Individual Predictions: 259980
+latency-predictor-stress-test-8-x58b2 test-runner Total Batch Size: 259980
+latency-predictor-stress-test-8-x58b2 test-runner Average Response Time: 11.93ms
+latency-predictor-stress-test-8-x58b2 test-runner Average Batch Size: 5.0
+latency-predictor-stress-test-8-x58b2 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Status Code Distribution:
+latency-predictor-stress-test-8-x58b2 test-runner   200: 51996
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-8-x58b2 test-runner   P50: 4.39ms
+latency-predictor-stress-test-8-x58b2 test-runner   P95: 44.76ms
+latency-predictor-stress-test-8-x58b2 test-runner   P99: 108.86ms
+latency-predictor-stress-test-8-x58b2 test-runner Bulk prediction stress test (batch size 5) completed with 100.0% success rate
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Testing with batch size 10...
+latency-predictor-stress-test-8-x58b2 test-runner Waiting for 51998 bulk prediction requests to complete...
+latency-predictor-stress-test-8-x58b2 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-8-x58b2 test-runner Total Predictions: 519980, Predictions/sec: 5199.8
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner Total Bulk Requests: 51998
+latency-predictor-stress-test-8-x58b2 test-runner Successful: 51998 (100.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Total Individual Predictions: 519980
+latency-predictor-stress-test-8-x58b2 test-runner Total Batch Size: 519980
+latency-predictor-stress-test-8-x58b2 test-runner Average Response Time: 8.86ms
+latency-predictor-stress-test-8-x58b2 test-runner Average Batch Size: 10.0
+latency-predictor-stress-test-8-x58b2 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Status Code Distribution:
+latency-predictor-stress-test-8-x58b2 test-runner   200: 51998
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-8-x58b2 test-runner   P50: 3.05ms
+latency-predictor-stress-test-8-x58b2 test-runner   P95: 18.72ms
+latency-predictor-stress-test-8-x58b2 test-runner   P99: 71.06ms
+latency-predictor-stress-test-8-x58b2 test-runner Bulk prediction stress test (batch size 10) completed with 100.0% success rate
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Testing with batch size 25...
+latency-predictor-stress-test-8-x58b2 test-runner Waiting for 51996 bulk prediction requests to complete...
+latency-predictor-stress-test-8-x58b2 test-runner Target RPS: 520.0, Actual RPS: 520.0
+latency-predictor-stress-test-8-x58b2 test-runner Total Predictions: 1299900, Predictions/sec: 12999.0
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner Total Bulk Requests: 51996
+latency-predictor-stress-test-8-x58b2 test-runner Successful: 51996 (100.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Failed: 0 (0.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Total Individual Predictions: 1299900
+latency-predictor-stress-test-8-x58b2 test-runner Total Batch Size: 1299900
+latency-predictor-stress-test-8-x58b2 test-runner Average Response Time: 23.51ms
+latency-predictor-stress-test-8-x58b2 test-runner Average Batch Size: 25.0
+latency-predictor-stress-test-8-x58b2 test-runner Prediction Success Rate: 100.0%
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Status Code Distribution:
+latency-predictor-stress-test-8-x58b2 test-runner   200: 51996
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-8-x58b2 test-runner   P50: 4.98ms
+latency-predictor-stress-test-8-x58b2 test-runner   P95: 96.95ms
+latency-predictor-stress-test-8-x58b2 test-runner   P99: 198.68ms
+latency-predictor-stress-test-8-x58b2 test-runner Bulk prediction stress test (batch size 25) completed with 100.0% success rate
+latency-predictor-stress-test-8-x58b2 test-runner PASSED
+latency-predictor-stress-test-8-x58b2 test-runner test/test_dual_server_client.py::test_large_batch_prediction_stress_test Running bulk prediction stress test...
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Testing with batch size 1000...
+latency-predictor-stress-test-8-x58b2 test-runner Waiting for 5200 bulk prediction requests to complete...
+latency-predictor-stress-test-8-x58b2 test-runner Target RPS: 52.0, Actual RPS: 52.0
+latency-predictor-stress-test-8-x58b2 test-runner Total Predictions: 3847000, Predictions/sec: 38470.0
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner BULK PREDICTION STRESS TEST RESULTS
+latency-predictor-stress-test-8-x58b2 test-runner ==================================================
+latency-predictor-stress-test-8-x58b2 test-runner Total Bulk Requests: 5200
+latency-predictor-stress-test-8-x58b2 test-runner Successful: 3847 (74.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Failed: 1353 (26.0%)
+latency-predictor-stress-test-8-x58b2 test-runner Total Individual Predictions: 3847000
+latency-predictor-stress-test-8-x58b2 test-runner Total Batch Size: 5200000
+latency-predictor-stress-test-8-x58b2 test-runner Average Response Time: 3813.28ms
+latency-predictor-stress-test-8-x58b2 test-runner Average Batch Size: 1000.0
+latency-predictor-stress-test-8-x58b2 test-runner Prediction Success Rate: 74.0%
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Status Code Distribution:
+latency-predictor-stress-test-8-x58b2 test-runner   200: 3847
+latency-predictor-stress-test-8-x58b2 test-runner   0: 1353
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner Response Time Percentiles:
+latency-predictor-stress-test-8-x58b2 test-runner   P50: 3681.61ms
+latency-predictor-stress-test-8-x58b2 test-runner   P95: 10102.20ms
+latency-predictor-stress-test-8-x58b2 test-runner   P99: 10755.29ms
+latency-predictor-stress-test-8-x58b2 test-runner Bulk prediction stress test (batch size 1000) completed with 74.0% success rate
+latency-predictor-stress-test-8-x58b2 test-runner PASSED
+latency-predictor-stress-test-8-x58b2 test-runner 
+latency-predictor-stress-test-8-x58b2 test-runner ================= 3 passed, 27 deselected in 507.48s (0:08:27) =================

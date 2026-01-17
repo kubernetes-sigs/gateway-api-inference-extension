@@ -1,59 +1,53 @@
 # Simple deployment using HTTP for model sharing - No ReadWriteMany needed!
 
 # --- 1. ConfigMaps ---
+# Shared configuration for all services (training, prediction, tests)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: latency-predictor-config
+  name: latency-predictor-shared-config
 data:
+  # Model configuration (shared across all services)
+  LATENCY_MODEL_TYPE: "xgboost"
+  USE_TREELITE: "false"
+
+  # Data split configuration (shared between training server and tests)
+  LATENCY_TEST_TRAIN_RATIO: "0.1"  # 10% test, 90% train
+  LATENCY_MAX_TEST_DATA_SIZE: "1000"  # Max test samples to keep in memory
+
+  # Training configuration (used by training server and tests)
   LATENCY_RETRAINING_INTERVAL_SEC: "1"
   LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
-  LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
-  LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
-  LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
-  LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
-
-  LATENCY_TTFT_TREELITE_PATH: "/models/ttft_treelite.so"
-  LATENCY_TPOT_TREELITE_PATH: "/models/tpot_treelite.so"
-  LATENCY_TTFT_CONFORMAL_PATH: "/models/ttft_conformal.json"
-  LATENCY_TPOT_CONFORMAL_PATH: "/models/tpot_conformal.json"
-  # Versioned TreeLite paths (for runtime model updates without pod restarts)
-  LATENCY_TTFT_TREELITE_VERSIONED_DIR: "/models/treelite/ttft"
-  LATENCY_TPOT_TREELITE_VERSIONED_DIR: "/models/treelite/tpot"
-  LATENCY_MODEL_TYPE: "xgboost"
-  USE_TREELITE: "true"  # Enable TreeLite + conformal prediction mode
-
-  # Bundle Registry Configuration (always enabled for atomic model distribution)
-  LATENCY_BUNDLE_DIR: "/models/bundles"
-  LATENCY_BUNDLE_CURRENT_SYMLINK: "/models/current"
-  LATENCY_MAX_BUNDLES_TO_KEEP: "5"
-  
 
 ---
+# Training Server Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: training-server-config
+data:
+  # Bundle Registry Configuration (persistent storage for trained models)
+  # Training server creates bundles here - must be persistent volume to survive restarts!
+  BUNDLE_DIR: "/models/bundles"
+  BUNDLE_CURRENT_SYMLINK: "/models/current"
+  MAX_BUNDLES_TO_KEEP: "5"
+
+---
+# Prediction Server Configuration
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prediction-server-config
 data:
-  MODEL_SYNC_INTERVAL_SEC: "10"  # Download models every 5 seconds
-  LATENCY_MODEL_TYPE: "xgboost"
+  # Server configuration
+  MODEL_SYNC_INTERVAL_SEC: "10"
   PREDICT_HOST: "0.0.0.0"
   PREDICT_PORT: "8001"
   TRAINING_SERVER_URL: "http://training-service:8000"
-  LOCAL_TTFT_MODEL_PATH: "/local_models/ttft.joblib"
-  LOCAL_TPOT_MODEL_PATH: "/local_models/tpot.joblib"
-  LOCAL_TTFT_SCALER_PATH: "/local_models/ttft_scaler.joblib"
-  LOCAL_TPOT_SCALER_PATH: "/local_models/tpot_scaler.joblib"
-
-  LOCAL_TTFT_TREELITE_PATH: "/local_models/ttft_treelite.so"
-  LOCAL_TPOT_TREELITE_PATH: "/local_models/tpot_treelite.so"
-  LOCAL_TTFT_CONFORMAL_PATH: "/local_models/ttft_conformal.json"
-  LOCAL_TPOT_CONFORMAL_PATH: "/local_models/tpot_conformal.json"
-  # Versioned TreeLite paths (for runtime model updates without pod restarts)
-  LOCAL_TTFT_TREELITE_VERSIONED_DIR: "/local_models/treelite/ttft"
-  LOCAL_TPOT_TREELITE_VERSIONED_DIR: "/local_models/treelite/tpot"
-  USE_TREELITE: "true"  # Enable TreeLite for faster inference
   HTTP_TIMEOUT: "30"
+
+  # Bundle configuration
+  BUNDLE_CACHE_DIR: "/local_models/bundles"
 
 # ---
 # # --- 2. StorageClass for Hyperdisk ---
@@ -137,7 +131,9 @@ spec:
 
         envFrom:
         - configMapRef:
-            name: latency-predictor-config
+            name: latency-predictor-shared-config
+        - configMapRef:
+            name: training-server-config
         env:
         - name: LOG_LEVEL
           value: DEBUG
@@ -193,16 +189,6 @@ spec:
           periodSeconds: 10
           failureThreshold: 30  # Allow up to 5 minutes for startup (30 * 10s)
           timeoutSeconds: 5
-        # Liveness probe: Only restarts if pod is truly broken (not just slow/overloaded)
-        # Disabled by default - Kubernetes will restart on actual crashes (exit code != 0)
-        # Enable only if you need to detect hung processes that stop responding entirely
-        # livenessProbe:
-        #   httpGet:
-        #     path: /healthz
-        #     port: 8001
-        #   periodSeconds: 60
-        #   timeoutSeconds: 10
-        #   failureThreshold: 6  # 6 minutes of complete unresponsiveness before restart
         readinessProbe:
           httpGet:
             path: /readyz
@@ -218,6 +204,8 @@ spec:
             cpu: "1000m"
             memory: "2Gi"
         envFrom:
+        - configMapRef:
+            name: latency-predictor-shared-config
         - configMapRef:
             name: prediction-server-config
         env:
