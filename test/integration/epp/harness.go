@@ -76,12 +76,32 @@ var (
 
 const testPoolName = "vllm-llama3-8b-instruct-pool"
 
+// HarnessConfig holds configuration options for the TestHarness.
+type HarnessConfig struct {
+	// StandaloneMode indicates if the EPP should run without watching Gateway API CRDs.
+	StandaloneMode bool
+}
+
+// HarnessOption is a functional option for configuring the TestHarness.
+type HarnessOption func(*HarnessConfig)
+
+// WithStandaloneMode configures the harness to run in Standalone mode.
+// In this mode, CRD watchers are disabled and a static EndpointPool is injected.
+func WithStandaloneMode() HarnessOption {
+	return func(c *HarnessConfig) {
+		c.StandaloneMode = true
+	}
+}
+
 // TestHarness encapsulates the environment for a single isolated EPP test run.
 // It manages the lifecycle of the controller manager, the EPP server, and the K8s namespace.
 type TestHarness struct {
 	t         *testing.T
 	ctx       context.Context
 	Namespace string
+
+	// --- Config State ---
+	StandaloneMode bool
 
 	Mgr          ctrl.Manager
 	ServerRunner *server.ExtProcServerRunner
@@ -95,8 +115,13 @@ type TestHarness struct {
 // NewTestHarness boots up a fully isolated test environment.
 // It creates a unique Namespace, scopes the Manager to that Namespace, and starts the components.
 // Note: EPP tests must run serially because they rely on the global Prometheus registry.
-func NewTestHarness(t *testing.T, ctx context.Context) *TestHarness {
+func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *TestHarness {
 	t.Helper()
+
+	config := &HarnessConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
 
 	// 1. Identity & Namespace Isolation
 	// We use a unique UUID to ensure that resources from this test do not collide with others.
@@ -148,8 +173,24 @@ func NewTestHarness(t *testing.T, ctx context.Context) *TestHarness {
 
 	// 5. Dependency Injection (Scheduler, Scorers, Datastore)
 	pmf := backendmetrics.NewPodMetricsFactory(runner.TestPodMetricsClient, 10*time.Millisecond)
+
+	// Configure Datastore based on mode.
 	// We disable periodic resync (0) to ensure deterministic test behavior.
-	runner.Datastore = datastore.NewDatastore(ctx, pmf, 0)
+	if config.StandaloneMode {
+		// Disable CRD watching for Standalone mode.
+		runner.ControllerCfg = server.NewControllerConfig(false)
+
+		// Inject static Endpoint Pool.
+		// This replicates the manual pool construction that happens in runner.go CLI parsing.
+		// TODO(#2174): Refactor this to share logic with runner.go.
+		endpointPool := datalayer.NewEndpointPool(nsName, testPoolName)
+		endpointPool.Selector = map[string]string{"app": testPoolName}
+		endpointPool.TargetPorts = []int{epptestutil.DefaultTestPort}
+
+		runner.Datastore = datastore.NewDatastore(ctx, pmf, 0, datastore.WithEndpointPool(endpointPool))
+	} else {
+		runner.Datastore = datastore.NewDatastore(ctx, pmf, 0)
+	}
 
 	defaultProfile := framework.NewSchedulerProfile().
 		WithScorers(
@@ -206,14 +247,15 @@ func NewTestHarness(t *testing.T, ctx context.Context) *TestHarness {
 	)
 
 	h := &TestHarness{
-		t:            t,
-		ctx:          serverCtx,
-		Namespace:    nsName,
-		Mgr:          mgr,
-		ServerRunner: runner,
-		Client:       client,
-		Datastore:    runner.Datastore,
-		grpcConn:     conn,
+		t:              t,
+		ctx:            serverCtx,
+		Namespace:      nsName,
+		StandaloneMode: config.StandaloneMode,
+		Mgr:            mgr,
+		ServerRunner:   runner,
+		Client:         client,
+		Datastore:      runner.Datastore,
+		grpcConn:       conn,
 	}
 
 	// 7. Register Cleanup
@@ -308,28 +350,33 @@ func (h *TestHarness) WaitForReadyPodsMetric(expectedCount int) {
 	}, 10*time.Second, 50*time.Millisecond, "Timed out waiting for inference_pool_ready_pods metric to settle")
 }
 
-// WaitForSync blocks until the EPP Datastore has synced the expected number of pods and, optionally, a specific model
-// objective.
+// WaitForSync blocks until the EPP Datastore has synced the expected number of pods.
+// In Standard mode, it also waits for the InferencePool CRD to sync.
 func (h *TestHarness) WaitForSync(expectedPods int, checkModelObjective string) *TestHarness {
 	h.t.Helper()
 	require.Eventually(h.t, func() bool {
-		if !h.Datastore.PoolHasSynced() {
+		// If we are NOT in standalone mode, we must wait for the Pool CRD to sync.
+		// In Standalone mode, there is no CRD controller, so this check is skipped.
+		if !h.StandaloneMode && !h.Datastore.PoolHasSynced() {
 			return false
 		}
+
 		if len(h.Datastore.PodList(datastore.AllPodsPredicate)) != expectedPods {
 			return false
 		}
-		if checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
+		// In Standalone mode, Objectives are not CRDs, so we skip checking the Objective store unless we add logic to mock
+		// that too.
+		// For now, we skip objective verification in Standalone.
+		if !h.StandaloneMode && checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
 			return false
 		}
 		return true
 	}, 10*time.Second, 50*time.Millisecond,
-		"Datastore sync timed out.\n- PoolSynced: %v\n- Pods Found: %d (Expected: %d)\n- Objective '%s' Found: %v",
+		"Datastore sync timed out.\n- Mode: Standalone=%v\n- PoolSynced: %v\n- Pods Found: %d (Expected: %d)",
+		h.StandaloneMode,
 		h.Datastore.PoolHasSynced(),
 		len(h.Datastore.PodList(datastore.AllPodsPredicate)),
 		expectedPods,
-		checkModelObjective,
-		h.Datastore.ObjectiveGet(checkModelObjective) != nil,
 	)
 	return h
 }
