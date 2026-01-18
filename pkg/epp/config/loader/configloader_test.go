@@ -42,6 +42,7 @@ import (
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -416,6 +417,70 @@ func TestBuildSaturationConfig(t *testing.T) {
 			got := buildSaturationConfig(tc.input)
 			if diff := cmp.Diff(tc.expected, got); diff != "" {
 				t.Errorf("buildSaturationConfig mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestBuildConcurrencyConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    *configapi.SaturationDetector
+		expected *concurrencydetector.Config
+	}{
+		{
+			name: "Valid Configuration",
+			input: &configapi.SaturationDetector{
+				Concurrency: &configapi.ConcurrencySaturationDetectorConfig{
+					MaxConcurrency: 200,
+					Headroom:       0.3,
+				},
+			},
+			expected: &concurrencydetector.Config{
+				MaxConcurrency: 200,
+				Headroom:       0.3,
+			},
+		},
+		{
+			name:  "Nil Input (Defaults)",
+			input: nil,
+			expected: &concurrencydetector.Config{
+				MaxConcurrency: concurrencydetector.DefaultMaxConcurrency,
+				Headroom:       concurrencydetector.DefaultHeadroom,
+			},
+		},
+		{
+			name: "Nil Concurrency Config (Defaults)",
+			input: &configapi.SaturationDetector{
+				Concurrency: nil,
+			},
+			expected: &concurrencydetector.Config{
+				MaxConcurrency: concurrencydetector.DefaultMaxConcurrency,
+				Headroom:       concurrencydetector.DefaultHeadroom,
+			},
+		},
+		{
+			name: "Invalid Values (Fallback to Defaults)",
+			input: &configapi.SaturationDetector{
+				Concurrency: &configapi.ConcurrencySaturationDetectorConfig{
+					MaxConcurrency: -10,
+					Headroom:       1.5,
+				},
+			},
+			expected: &concurrencydetector.Config{
+				MaxConcurrency: concurrencydetector.DefaultMaxConcurrency,
+				Headroom:       concurrencydetector.DefaultHeadroom,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildConcurrencyConfig(tc.input)
+			if diff := cmp.Diff(tc.expected, got); diff != "" {
+				t.Errorf("buildConcurrencyConfig mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

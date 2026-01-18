@@ -71,6 +71,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -274,7 +275,19 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
+	var saturationDetector contracts.SaturationDetector
+	if eppConfig.SaturationDetectorType == configapi.SaturationDetectorTypeConcurrency {
+		if eppConfig.ConcurrencyDetectorConfig == nil {
+			err := errors.New("concurrency detector selected but config is missing")
+			setupLog.Error(err, "invalid saturation detector config")
+			return err
+		}
+		setupLog.Info("Using Concurrency Saturation Detector", "config", eppConfig.ConcurrencyDetectorConfig)
+		saturationDetector = concurrencydetector.NewDetector(*eppConfig.ConcurrencyDetectorConfig)
+	} else {
+		setupLog.Info("Using Utilization Saturation Detector", "config", eppConfig.SaturationDetectorConfig)
+		saturationDetector = utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
+	}
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
