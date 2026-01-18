@@ -1,143 +1,119 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.9.25, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python3.9
+platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /usr/local/bin/python3.11
 cachedir: .pytest_cache
 rootdir: /app
-plugins: anyio-4.12.1, asyncio-1.2.0
-asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 30 items / 3 deselected / 27 selected
+plugins: anyio-4.12.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 29 items / 3 deselected / 26 selected
 
-test_dual_server_client.py::test_prediction_server_healthz Waiting for prediction server...
+test/test_dual_server_client.py::test_prediction_server_healthz Waiting for prediction server...
 Waiting for training server...
 PASSED
-test_dual_server_client.py::test_training_server_healthz PASSED
-test_dual_server_client.py::test_prediction_server_readyz PASSED
-test_dual_server_client.py::test_training_server_readyz PASSED
-test_dual_server_client.py::test_prediction_server_status Prediction server using model type: xgboost
+test/test_dual_server_client.py::test_training_server_healthz PASSED
+test/test_dual_server_client.py::test_prediction_server_readyz PASSED
+test/test_dual_server_client.py::test_training_server_readyz PASSED
+test/test_dual_server_client.py::test_prediction_server_status Prediction server using model type: xgboost
+Models exist: {'ttft_model': True, 'tpot_model': True}
 Quantile: 0.9
 Models ready: True
-Models exist: {'ttft_model': True, 'tpot_model': True}
 PASSED
-test_dual_server_client.py::test_training_server_model_info Training server using model type: xgboost
+test/test_dual_server_client.py::test_training_server_model_info Training server using model type: xgboost
 PASSED
-test_dual_server_client.py::test_training_server_models_list Note: TreeLite is incompatible with quantile regression objectives
+test/test_dual_server_client.py::test_training_server_models_list Note: TreeLite mode enabled but incompatible with quantile regression
 TreeLite models will be listed but may not exist when using quantile regression
-Model ttft: exists=True, size=142142 bytes
-Model tpot: exists=True, size=142052 bytes
+Model ttft: exists=True, size=760192 bytes
+Model tpot: exists=True, size=786213 bytes
 PASSED
-test_dual_server_client.py::test_model_download_from_training_server Successfully downloaded ttft model (142142 bytes)
-Successfully downloaded tpot model (142052 bytes)
-Successfully downloaded ttft_treelite TreeLite model (16016 bytes)
-Successfully downloaded tpot_treelite TreeLite model (16016 bytes)
+test/test_dual_server_client.py::test_model_download_from_training_server Successfully downloaded ttft model (760192 bytes)
+Successfully downloaded tpot model (786213 bytes)
+Successfully downloaded ttft_treelite TreeLite model (544400 bytes)
+Successfully downloaded tpot_treelite TreeLite model (560784 bytes)
 PASSED
-test_dual_server_client.py::test_treelite_models_on_training_server Testing TreeLite models for xgboost...
-⚠️  Note: TreeLite doesn't support quantile regression objectives
-⚠️  TreeLite models will NOT be available when using reg:quantileerror or objective=quantile
-✓ TTFT TreeLite model available (16016 bytes)
-✓ TPOT TreeLite model available (16016 bytes)
+test/test_dual_server_client.py::test_treelite_models_on_training_server Testing TreeLite model endpoints for xgboost...
+✓ TTFT TreeLite model available (544400 bytes)
+✓ TPOT TreeLite model available (560784 bytes)
 PASSED
-test_dual_server_client.py::test_lightgbm_endpoints_on_training_server Skipping LightGBM endpoint tests - not using LightGBM model
+test/test_dual_server_client.py::test_add_training_data_to_training_server Successfully sent training data to training server
+  Cleaned up test data: Successfully flushed: 41 TTFT and 41 TPOT training samples, 9 TTFT and 9 TPOT test samples, all metric scores
 PASSED
-test_dual_server_client.py::test_add_training_data_to_training_server Successfully sent training data to training server
-  Cleaned up test data: Successfully flushed: 44 TTFT and 44 TPOT training samples, 6 TTFT and 6 TPOT test samples, all metric scores
+test/test_dual_server_client.py::test_prediction_server_model_sync Flushing old training data...
+  ✓ Training data flushed: Successfully flushed: 0 TTFT and 0 TPOT training samples, 0 TTFT and 0 TPOT test samples, all metric scores
+Adding 150 training samples...
+✓ Added 150 training samples
+Waiting for bundle with ≥108 TTFT and ≥108 TPOT samples (timeout: 32s)...
+  ✓ Bundle found after 0s: TTFT=4502, TPOT=4502 samples
+✓ Prediction server models are trained! (TTFT: 4502, TPOT: 4502 samples)
+  ✓ Training data flushed: Successfully flushed: 137 TTFT and 137 TPOT training samples, 13 TTFT and 13 TPOT test samples, all metric scores
 PASSED
-test_dual_server_client.py::test_prediction_server_model_sync Model reload result: synced=False, loaded=True
-Prediction server models are ready!
+test/test_dual_server_client.py::test_prediction_endpoint_response_format ✓ Prediction using TRAINED models: TTFT=586.09ms, TPOT=191.96ms
+  Trained on 4502 TTFT samples, 4502 TPOT samples
+  Model type: xgboost
 PASSED
-test_dual_server_client.py::test_prediction_via_prediction_server Prediction successful: TTFT=0.50ms, TPOT=0.50ms
-Model type: xgboost
-PASSED
-test_dual_server_client.py::test_bulk_prediction_strict Testing bulk prediction strict endpoint...
+test/test_dual_server_client.py::test_bulk_prediction_strict Testing bulk prediction strict endpoint...
 ✓ Bulk prediction strict endpoint test passed
 PASSED
-test_dual_server_client.py::test_bulk_prediction_with_validation_errors Testing bulk prediction validation error handling...
+test/test_dual_server_client.py::test_bulk_prediction_with_validation_errors Testing bulk prediction validation error handling...
 ✓ Bulk prediction correctly failed when any request had validation errors
 PASSED
-test_dual_server_client.py::test_bulk_prediction_all_valid Testing bulk prediction with all valid requests...
+test/test_dual_server_client.py::test_bulk_prediction_all_valid Testing bulk prediction with all valid requests...
 ✓ Bulk prediction succeeded with all valid requests
 PASSED
-test_dual_server_client.py::test_prediction_missing_prefix_cache_score ✓ Prediction correctly failed when prefix_cache_score was missing
+test/test_dual_server_client.py::test_prediction_missing_prefix_cache_score ✓ Prediction correctly failed when prefix_cache_score was missing
 PASSED
-test_dual_server_client.py::test_training_server_metrics Training server metrics endpoint working correctly
+test/test_dual_server_client.py::test_training_server_metrics Training server metrics endpoint working correctly
 ✓ Prefix cache score feature found in metrics
 PASSED
-test_dual_server_client.py::test_model_consistency_between_servers Model type consistent across servers: xgboost
+test/test_dual_server_client.py::test_model_consistency_between_servers Model type consistent across servers: xgboost
 PASSED
-test_dual_server_client.py::test_model_specific_endpoints_on_training_server Testing XGBoost tree endpoints on training server...
+test/test_dual_server_client.py::test_model_specific_endpoints_on_training_server Testing XGBoost tree endpoints on training server...
 ✓ TTFT XGBoost trees available: 200 trees
 ✓ TPOT XGBoost trees available: 200 trees
 PASSED
-test_dual_server_client.py::test_dual_server_quantile_regression_learns_distribution Using random seed: 11934
+test/test_dual_server_client.py::test_dual_server_quantile_regression_learns_distribution Using random seed: 16534
 Flushing old training data...
-  Flushed old data: Successfully flushed: 0 TTFT and 0 TPOT training samples, 0 TTFT and 0 TPOT test samples, all metric scores
-  Data clean: 0 samples (flush successful, verified stable)
+  ✓ Training data flushed: Successfully flushed: 0 TTFT and 0 TPOT training samples, 0 TTFT and 0 TPOT test samples, all metric scores
+Expected calibration samples: 500 (min threshold: 400)
 Detected mode: TreeLite+conformal (coverage tolerance: ±6.5%)
-Final flush immediately before sending test data...
-  Successfully flushed: 0 TTFT and 0 TPOT training samples, 0 TTFT and 0 TPOT test samples, all metric scores
-  Pre-submission check: 0 samples (should be 0)
 Submitting 5000 training samples...
   Attempt 1: POSTing 5000 entries to http://training-service:8000/add_training_data_bulk
   Response: 202 - {'message': 'Accepted 5000 training samples.'}
 ✓ Training data submitted successfully after 1 attempt(s)
-DEBUG: After sending 5000 samples, training server has 10000 total samples (training: 9056, test: 944)
-DEBUG: Initial TTFT model hash: c23bf004c905ab7dec2c7c97cdc5221e
-Waiting for models to be retrained (initial last_load: 2026-01-12T21:11:30.235396Z)...
-Note: Waiting for 2 training cycles to ensure new data is used
-✓ First training cycle completed after 1 seconds (may be on stale data)
-✓ Second training cycle completed after 1 more seconds (on new data)
-DEBUG: Timestamp changed from 2026-01-12T21:11:55.120087+00:00 to 2026-01-12T21:11:56.258013+00:00
-✓ Models synced from training server after second training cycle (iteration 1)
-DEBUG: Reload response: synced=True, loaded=True, is_ready=True, model_type=xgboost, last_load_time=2026-01-12T21:11:56.258013+00:00
-DEBUG: After training, training server has 10000 total samples (training: 9056, test: 944)
-DEBUG: Final TTFT model hash: 5cdf6b6942a04e2843fe6781168523f8
-DEBUG: Model hash changed: True
-Waiting for conformal calibration to be populated...
-  Waiting for calibration data: TTFT=0, TPOT=0 (need ≥100 each)
-  Waiting for calibration data: TTFT=0, TPOT=0 (need ≥100 each)
-  Waiting for calibration data: TTFT=0, TPOT=0 (need ≥100 each)
-  Waiting for calibration data: TTFT=0, TPOT=0 (need ≥100 each)
-  Waiting for calibration data: TTFT=0, TPOT=0 (need ≥100 each)
-✓ Conformal calibration ready: TTFT=472 samples, TPOT=472 samples
+Expected training samples: 4500 (min threshold: 3600)
+Waiting for bundle with ≥3600 TTFT and ≥3600 TPOT samples (timeout: 32s)...
+  ✓ Bundle found after 0s: TTFT=4502, TPOT=4502 samples
+Flushing training data to stabilize bundle for pod sync...
+  ✓ Training data flushed: Successfully flushed: 4483 TTFT and 4483 TPOT training samples, 517 TTFT and 517 TPOT test samples, all metric scores
 Waiting for all prediction server pods to sync good models (including TreeLite)...
-✓ All pods synced after 1 seconds
-  Avg predictions: input_len=100: 400.66ms, 400: 978.99ms, 600: 1390.14ms (std: 405.87)
+✓ All pods synced after 1 seconds (bundle: 5f09f6a9)
+  TTFT: input_len=100: 399.38ms, 400: 1007.92ms, 600: 1399.13ms (std: 411.35)
+  TPOT: input_len=100: 140.78ms, 400: 289.84ms, 600: 390.70ms (std: 102.66)
 Verifying all pods have correct calibration data...
-  TTFT calibration: min=472, max=472, avg=472
-  TPOT calibration: min=472, max=472, avg=472
+  TTFT calibration: min=544, max=544, avg=544
+  TPOT calibration: min=544, max=544, avg=544
 ✓ All pods have consistent calibration data
 DEBUG: Pre-prediction calibration check:
   use_treelite: True
-  TTFT calibration samples: 472
-  TPOT calibration samples: 472
-  TTFT quantile adjustment: 40.936084980983324
-  TPOT quantile adjustment: 18.453462043188896
-DEBUG: Single test request features: {'kv_cache_percentage': 0.8597832896072566, 'input_token_length': 125, 'num_request_waiting': 8, 'num_request_running': 4, 'num_tokens_generated': 18, 'prefix_cache_score': 0.8585341032437349}
-DEBUG: Single prediction result: TTFT=482.79ms, TPOT=209.02ms, model_type=xgboost
-DEBUG: TTFT predictions - min: 395.40, max: 1414.31, mean: 892.08, std: 286.10
-DEBUG: TPOT predictions - min: 118.64, max: 437.51, mean: 274.27, std: 74.31
-DEBUG: Expected TTFT quantiles - min: 361.56, max: 1415.45, mean: 875.99
-DEBUG: Expected TPOT quantiles - min: 105.03, max: 435.94, mean: 268.39
-DEBUG: Sample predictions from response:
-  Prediction 0: TTFT=482.79ms, TPOT=209.02ms, model_type=xgboost
-  Prediction 1: TTFT=674.26ms, TPOT=239.46ms, model_type=xgboost
-  Prediction 2: TTFT=585.43ms, TPOT=212.87ms, model_type=xgboost
-  Prediction 3: TTFT=494.36ms, TPOT=200.81ms, model_type=xgboost
-  Prediction 4: TTFT=642.27ms, TPOT=196.13ms, model_type=xgboost
-Relative-err accuracy (≤15%): 99.6%
-Coverage: TTFT=0.958, TPOT=0.962 (target 0.900 ± 0.065)
+  TTFT calibration samples: 544
+  TPOT calibration samples: 544
+  TTFT quantile adjustment: 39.724181097873824
+  TPOT quantile adjustment: 17.286366364070005
+Relative-err accuracy (≤15%): 99.8%
+Coverage: TTFT=0.952, TPOT=0.962 (target 0.900 ± 0.065)
 PASSED
-test_dual_server_client.py::test_end_to_end_workflow Testing end-to-end workflow...
+test/test_dual_server_client.py::test_end_to_end_workflow Testing end-to-end workflow...
 Step 1: Sending training data to training server...
 Step 2: Waiting for training...
 Step 3: Syncing models to prediction server...
 Step 4: Making predictions...
-  Prediction 1: TTFT=821.07ms, TPOT=268.42ms (prefix_cache=0.43)
-  Prediction 2: TTFT=471.45ms, TPOT=147.26ms (prefix_cache=0.77)
-  Prediction 3: TTFT=864.13ms, TPOT=269.37ms (prefix_cache=0.75)
-  Prediction 4: TTFT=363.85ms, TPOT=138.98ms (prefix_cache=0.54)
-  Prediction 5: TTFT=777.71ms, TPOT=269.80ms (prefix_cache=0.00)
+  Prediction 1: TTFT=535.14ms, TPOT=216.23ms (prefix_cache=0.05)
+  Prediction 2: TTFT=452.90ms, TPOT=158.26ms (prefix_cache=0.22)
+  Prediction 3: TTFT=727.39ms, TPOT=263.28ms (prefix_cache=0.24)
+  Prediction 4: TTFT=1183.97ms, TPOT=304.71ms (prefix_cache=0.49)
+  Prediction 5: TTFT=1712.70ms, TPOT=515.49ms (prefix_cache=0.09)
 ✓ End-to-end workflow completed successfully!
+  ✓ Training data flushed: Successfully flushed: 18 TTFT and 18 TPOT training samples, 2 TTFT and 2 TPOT test samples, all metric scores
 PASSED
-test_dual_server_client.py::test_server_configuration Testing server configuration...
+test/test_dual_server_client.py::test_server_configuration Testing server configuration...
 Prediction server: HTTP-based Quantile Latency Predictor is running
   Model type: xgboost
   Is ready: True
@@ -146,25 +122,25 @@ Prediction server: HTTP-based Quantile Latency Predictor is running
 Training server: Latency Predictor is running.
   Model type: xgboost
 PASSED
-test_dual_server_client.py::test_zzz_training_server_flush_api Testing training server flush API...
+test/test_dual_server_client.py::test_training_server_flush_api Testing training server flush API...
 Step 1: Checking initial data status...
-  Initial training samples: TTFT=4545, TPOT=4545
-  Initial test samples: TTFT=475, TPOT=475
+  Initial training samples: TTFT=0, TPOT=0
+  Initial test samples: TTFT=0, TPOT=0
 Step 2: Adding training data...
   Added 100 training samples
 Step 3: Verifying data was added...
-  After adding - Training: 9270, Test: 970, Total: 10240
+  After adding - Training: 182, Test: 18, Total: 200
 Step 4: Testing flush with only training data...
-  Flushed 4635 TTFT training samples
-  Flushed 4635 TPOT training samples
+  Flushed 91 TTFT training samples
+  Flushed 91 TPOT training samples
   Test samples flushed: 0 TTFT, 0 TPOT (should be 0)
-  After training flush - Training: 0, Test: 970
+  After training flush - Training: 0, Test: 18
 Step 5: Adding more training data...
 Step 6: Testing flush everything...
-  Complete flush message: Successfully flushed: 50 TTFT and 50 TPOT training samples, 485 TTFT and 485 TPOT test samples, all metric scores
+  Complete flush message: Successfully flushed: 43 TTFT and 43 TPOT training samples, 16 TTFT and 16 TPOT test samples, all metric scores
   After complete flush - Training: 0, Test: 0
 Step 7: Testing default flush (no body)...
-  Default flush result: Successfully flushed: 20 TTFT and 20 TPOT training samples, 0 TTFT and 0 TPOT test samples, all metric scores
+  Default flush result: Successfully flushed: 17 TTFT and 17 TPOT training samples, 3 TTFT and 3 TPOT test samples, all metric scores
 Step 8: Testing flush with only test data...
   Test data flush: 6 TTFT, 6 TPOT
   After test flush - Training: 88, Test: 0
@@ -172,23 +148,16 @@ Step 9: Testing bucket distribution in status...
   Bucket distribution available: 0 buckets with data
 ✓ Flush API tests passed!
 PASSED
-test_dual_server_client.py::test_training_server_flush_error_handling Testing flush API error handling...
+test/test_dual_server_client.py::test_training_server_flush_error_handling Testing flush API error handling...
 ✓ Invalid JSON handled correctly
 ✓ Flush error handling tests passed!
 PASSED
-test_dual_server_client.py::test_native_quantile_mode 
+test/test_dual_server_client.py::test_native_quantile_mode 
 ==================================================
 Testing Native Quantile Mode (USE_TREELITE=false)
 ==================================================
-Step 1: Checking server configuration...
-  Model type: xgboost
-  Quantile: 0.9
-Step 2: Verifying TreeLite models are NOT created...
-  ⚠️  TreeLite models exist - server is using TreeLite mode
-  This test is for native quantile mode (USE_TREELITE=false)
-  Skipping test - use test_treelite_conformal_mode instead
-PASSED
-test_dual_server_client.py::test_treelite_conformal_mode 
+SKIPPED (...)
+test/test_dual_server_client.py::test_treelite_conformal_mode 
 ==================================================
 Testing TreeLite + Conformal Mode (USE_TREELITE=true)
 ==================================================
@@ -196,31 +165,45 @@ Step 1: Checking server configuration...
   Model type: xgboost
   Quantile: 0.9
 Step 2: Verifying TreeLite models are created...
-  ✓ TTFT TreeLite model exists (81552 bytes)
-  ✓ TPOT TreeLite model exists (81552 bytes)
+  ✓ TTFT TreeLite model exists (36496 bytes)
+  ✓ TPOT TreeLite model exists (36496 bytes)
 Step 3: Verifying conformal calibration files...
-  ✓ TTFT conformal calibration exists (87 bytes)
-  ✓ TPOT conformal calibration exists (87 bytes)
+  ✓ TTFT conformal calibration exists (462 bytes)
+  ✓ TPOT conformal calibration exists (461 bytes)
 Step 4: Checking prediction server conformal calibration...
   ✓ Prediction server using TreeLite mode
-  ✓ TTFT conformal loaded with 475 samples
-    Quantile adjustment: +41.41ms
-  ✓ TPOT conformal loaded with 475 samples
-    Quantile adjustment: +17.57ms
+  ✓ TTFT conformal loaded with 544 samples
+    Quantile adjustment: +39.72ms
+  ✓ TPOT conformal loaded with 544 samples
+    Quantile adjustment: +17.29ms
 Step 5: Sending training data...
+  Expected calibration samples: 500 (min threshold: 400)
   ✓ Sent 5000 training samples
 Step 6: Waiting for training to complete...
-Step 7: Syncing models to prediction server (waiting for 2 training cycles)...
-  ✓ First training cycle after 1 seconds
-  ✓ Second training cycle after 1 more seconds (on new data)
-  Waiting for conformal calibration...
-  ✓ Conformal calibration ready: TTFT=480, TPOT=480
-  Waiting for all prediction server pods to sync (including TreeLite)...
-  ✓ All pods synced after 1 seconds (std: 375.53ms)
-Step 8: Testing predictions and coverage...
-  Coverage: TTFT=93.2%, TPOT=96.8% (target: 90%)
+  Expected training samples: 4500 (min threshold: 3600)
+Waiting for bundle with ≥3600 TTFT and ≥3600 TPOT samples (timeout: 32s)...
+  Waiting... current: TTFT=91, TPOT=91 (need: ≥3600, ≥3600)
+  Waiting... current: TTFT=17, TPOT=17 (need: ≥3600, ≥3600)
+  Waiting... current: TTFT=17, TPOT=17 (need: ≥3600, ≥3600)
+  ✓ Bundle found after 11s: TTFT=4559, TPOT=4559 samples
+  ✓ Bundle trained on 4559 TTFT, 4559 TPOT samples
+Flushing training data to stabilize bundle for pod sync...
+  ✓ Training data flushed: Successfully flushed: 4559 TTFT and 4559 TPOT training samples, 485 TTFT and 485 TPOT test samples, all metric scores
+Step 7: Syncing models to prediction server (including TreeLite compilation)...
+Waiting for all prediction server pods to sync good models (including TreeLite)...
+  Attempt 1: Pods have different bundles: {'39a9f966', '1305df3f', '05f79d51'}
+✓ All pods synced after 6 seconds (bundle: a51c8898)
+  TTFT: input_len=100: 400.59ms, 400: 987.59ms, 600: 1397.55ms (std: 409.14)
+  TPOT: input_len=100: 139.47ms, 400: 290.12ms, 600: 388.10ms (std: 102.26)
+Verifying all pods have correct calibration data...
+  TTFT calibration: min=485, max=485, avg=485
+  TPOT calibration: min=485, max=485, avg=485
+✓ All pods have consistent calibration data
+Step 9: Testing predictions and coverage...
+  Coverage: TTFT=94.8%, TPOT=95.6% (target: 90%)
 ✓ TreeLite + conformal mode test passed!
   Note: Coverage within acceptable range for conformal prediction
+  ✓ Training data flushed: Successfully flushed: 0 TTFT and 0 TPOT training samples, 0 TTFT and 0 TPOT test samples, all metric scores
 PASSED
 
-====================== 27 passed, 3 deselected in 42.02s =======================
+============ 25 passed, 1 skipped, 3 deselected in 60.20s (0:01:00) ============

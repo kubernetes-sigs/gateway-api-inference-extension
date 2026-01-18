@@ -8,8 +8,8 @@ metadata:
   name: latency-predictor-shared-config
 data:
   # Model configuration (shared across all services)
-  LATENCY_MODEL_TYPE: "xgboost"
-  USE_TREELITE: "true"
+  LATENCY_MODEL_TYPE: "bayesian_ridge"
+  USE_TREELITE: "false"
 
   # Data split configuration (shared between training server and tests)
   LATENCY_TEST_TRAIN_RATIO: "0.1"  # 10% test, 90% train

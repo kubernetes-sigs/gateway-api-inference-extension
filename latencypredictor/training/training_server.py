@@ -455,13 +455,16 @@ class LatencyPredictor:
             .clip(upper=self.prefix_buckets - 1)
         )
 
-            # TreeLite compatibility: Only use categorical dtype when NOT in TreeLite mode
-            # TreeLite cannot parse XGBoost models with categorical features
+            # Only create categorical dtype when NOT in TreeLite mode
+            # TreeLite mode requires enable_categorical=False, which rejects categorical dtype
             if not settings.USE_TREELITE:
-                # Make it categorical for tree models (safe for LGB, XGB with enable_categorical)
-                df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
+                df['prefill_score_bucket'] = pd.Categorical(
+                    df['prefill_score_bucket'].astype(int),
+                    categories=[0, 1, 2, 3],
+                    ordered=True
+                )
             else:
-                # TreeLite mode: keep as int32 to avoid categorical encoding in XGBoost model JSON
+                # TreeLite mode: keep as int32 (XGBoost will treat as continuous feature)
                 df['prefill_score_bucket'] = df['prefill_score_bucket'].astype('int32')
 
 
@@ -475,7 +478,7 @@ class LatencyPredictor:
             'effective_input_tokens',
             'prefill_score_bucket'
             ]
-        
+
             return df[feature_cols]
         
         else:  # tpot
@@ -527,11 +530,11 @@ class LatencyPredictor:
         Train a model with the appropriate scaling/preprocessing.
 
         TreeLite Compatibility Notes:
-        - TreeLite does NOT support XGBoost's categorical encoder (enable_categorical=True)
-        - When USE_TREELITE=true, we disable enable_categorical and convert categorical
-          features to integers manually before training
-        - This allows the trained XGBoost model to be compiled to TreeLite .so format
-        - The prediction server then uses the compiled TreeLite model for faster inference
+        - TreeLite 4.6.1 does NOT support XGBoost categorical features (categorical encoder not supported)
+        - Categorical features (e.g., prefill_score_bucket) are DISABLED when USE_TREELITE=true
+        - Non-TreeLite mode supports categorical features for improved accuracy
+        - The trained model is compiled to TreeLite .so format for faster inference
+        - The prediction server loads the compiled TreeLite model for low-latency predictions
         """
         try:
             if len(features) == 0 or len(target) == 0:
@@ -588,23 +591,22 @@ class LatencyPredictor:
 
                         # Choose objective based on TreeLite mode
                         if settings.USE_TREELITE:
-                            # Standard regression for TreeLite compatibility
-                            # Quantile predictions via conformal prediction
+                            # TreeLite mode: Use standard regression + conformal prediction for quantiles
+                            # (TreeLite compilation works best with simple objectives)
                             objective = "reg:squarederror"
                             model_params = {}
                         else:
-                            # Native quantile regression (more accurate)
+                            # Non-TreeLite mode: Use native quantile regression (more accurate)
                             objective = "reg:quantileerror"
                             model_params = {"quantile_alpha": self.quantile}
+                            logging.info(f"Training XGBoost TTFT with native quantile regression (alpha={self.quantile:.2f})")
 
-                        # TreeLite doesn't support XGBoost categorical encoder
-                        # So we disable it in TreeLite mode (dtype already converted to int32 in _prepare_features_with_interaction)
+                        # TreeLite 4.6.1 does NOT support XGBoost categorical features (categorical encoder not supported)
+                        # Disable categorical features when TreeLite mode is enabled
                         enable_categorical = not settings.USE_TREELITE
 
-                        # CRITICAL FIX: XGBoost 2.0+ ignores enable_categorical=False for hist tree_method
-                        # It still infers categorical features based on cardinality
-                        # We must use tree_method='auto' or 'approx' in TreeLite mode to prevent categorical inference
-                        tree_method = 'approx' if settings.USE_TREELITE else 'hist'
+                        # Use 'hist' tree method for best performance
+                        tree_method = 'hist'
 
                         model = xgb.XGBRegressor(
                             n_estimators=200,
@@ -617,11 +619,11 @@ class LatencyPredictor:
                             reg_alpha=0.01,
                             reg_lambda=0.1,
                             objective=objective,
-                            tree_method=tree_method,  # Use 'approx' in TreeLite mode to prevent categorical inference
+                            tree_method=tree_method,  # 'hist' for optimal performance
                             n_jobs=-1,
                             random_state=42,
                             verbosity=1,
-                            enable_categorical=enable_categorical,  # Disabled for TreeLite compatibility
+                            enable_categorical=enable_categorical,  # Disabled in TreeLite mode (not supported)
                             **model_params
                             )
                         model.fit(features, target, sample_weight=sample_weight)
@@ -641,20 +643,23 @@ class LatencyPredictor:
 
                 # Choose objective based on TreeLite mode
                 if settings.USE_TREELITE:
-                    # Standard regression for TreeLite compatibility
+                    # TreeLite mode: Use standard regression + conformal prediction for quantiles
+                    # (TreeLite compilation works best with simple objectives)
                     objective = "reg:squarederror"
                     model_params = {}
                 else:
-                    # Native quantile regression (more accurate)
+                    # Non-TreeLite mode: Use native quantile regression (more accurate)
                     objective = "reg:quantileerror"
                     model_params = {"quantile_alpha": self.quantile}
+                    logging.info(f"Training XGBoost TPOT with native quantile regression (alpha={self.quantile:.2f})")
 
-                # TreeLite doesn't support XGBoost categorical encoder
-                # (TPOT doesn't use prefill_score_bucket, so no categorical conversion needed)
+                # TreeLite 4.6.1 does NOT support XGBoost categorical features (categorical encoder not supported)
+                # Disable categorical features when TreeLite mode is enabled
+                # (TPOT doesn't use categorical features anyway, but keep logic consistent)
                 enable_categorical = not settings.USE_TREELITE
 
-                # Use 'approx' tree_method in TreeLite mode to prevent categorical inference
-                tree_method = 'approx' if settings.USE_TREELITE else 'hist'
+                # Use 'hist' tree method for best performance
+                tree_method = 'hist'
 
                 model = xgb.XGBRegressor(
                 n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
@@ -674,11 +679,11 @@ class LatencyPredictor:
                 objective=objective,         # Conditional: quantile or standard regression
 
                 # Performance optimization:
-                tree_method=tree_method,     # Use 'approx' in TreeLite mode to prevent categorical inference
+                tree_method=tree_method,     # 'hist' for optimal performance
                 n_jobs=-1,                   # Utilize all CPU cores for parallel training
                 random_state=42,             # Ensures reproducible results
                 verbosity=1,
-                enable_categorical=enable_categorical,  # Disabled for TreeLite compatibility
+                enable_categorical=enable_categorical,  # Disabled in TreeLite mode (not supported)
                 **model_params
     )
                 model.fit(features, target, sample_weight=sample_weight)
@@ -686,17 +691,9 @@ class LatencyPredictor:
             elif self.model_type == ModelType.LIGHTGBM:
                 # Choose objective based on TreeLite mode
                 if settings.USE_TREELITE:
-                    # Standard regression for TreeLite compatibility
+                    # Standard regression for TreeLite mode (conformal prediction converts to quantiles)
                     objective = "regression"
                     model_params = {}
-
-                    # Convert categorical to int for TreeLite compatibility
-                    if 'prefill_score_bucket' in features.columns:
-                        features = features.copy()
-                        if str(features['prefill_score_bucket'].dtype) == 'category':
-                            features['prefill_score_bucket'] = features['prefill_score_bucket'].cat.codes.astype('int32')
-                        else:
-                            features['prefill_score_bucket'] = features['prefill_score_bucket'].astype('int32')
                 else:
                     # Native quantile regression (more accurate)
                     objective = "quantile"
@@ -720,9 +717,8 @@ class LatencyPredictor:
                     **model_params
                 )
 
-                # TreeLite doesn't support categorical features (same as XGBoost with enable_categorical=False)
-                # So we disable categorical_feature in TreeLite mode and treat prefill_score_bucket as int
-                categorical_feature = None if settings.USE_TREELITE else (['prefill_score_bucket'] if model_name == "ttft" else None)
+                # TreeLite 4.6.1 supports categorical features - enable for TTFT model
+                categorical_feature = ['prefill_score_bucket'] if model_name == "ttft" else None
                 model.fit(features, target, sample_weight=sample_weight, categorical_feature=categorical_feature)
                 return model
                 
@@ -759,18 +755,6 @@ class LatencyPredictor:
                    'num_request_waiting', 'num_request_running', 'num_tokens_generated']
 
             X = df_features[feature_cols]
-
-            # Defensive check: Ensure prefill_score_bucket is int32 in TreeLite mode
-            # (should already be int32 from _prepare_features_with_interaction, but verify for safety)
-            if settings.USE_TREELITE and 'prefill_score_bucket' in X.columns:
-                if str(X['prefill_score_bucket'].dtype) == 'category':
-                    # This shouldn't happen - log warning if it does
-                    logging.warning("prefill_score_bucket is categorical in TreeLite mode - converting to int32")
-                    X = X.copy()
-                    X['prefill_score_bucket'] = X['prefill_score_bucket'].cat.codes.astype('int32')
-                elif str(X['prefill_score_bucket'].dtype) != 'int32':
-                    X = X.copy()
-                    X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
 
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
                 X = scaler.transform(X)
@@ -872,16 +856,6 @@ class LatencyPredictor:
                         X = df_features[feature_cols]
                         y_true = df_raw['actual_ttft_ms'].values
 
-                        # Defensive check: Ensure prefill_score_bucket is int32 in TreeLite mode
-                        if settings.USE_TREELITE and 'prefill_score_bucket' in X.columns:
-                            if str(X['prefill_score_bucket'].dtype) == 'category':
-                                logging.warning("TTFT conformal: prefill_score_bucket is categorical - converting to int32")
-                                X = X.copy()
-                                X['prefill_score_bucket'] = X['prefill_score_bucket'].cat.codes.astype('int32')
-                            elif str(X['prefill_score_bucket'].dtype) != 'int32':
-                                X = X.copy()
-                                X['prefill_score_bucket'] = X['prefill_score_bucket'].astype('int32')
-
                         # Get mean predictions from model
                         y_pred_mean = self.ttft_model.predict(X)
 
@@ -964,8 +938,13 @@ class LatencyPredictor:
     def train(self):
         try:
             with self.lock:
+                # Snapshot training and test data counts
+                # These snapshots represent the data that will be used for training and bundle metadata
                 ttft_snap = list(self._all_samples(self.ttft_data_buckets))
                 tpot_snap = list(self._all_samples(self.tpot_data_buckets))
+                ttft_test_snap_count = len(self.ttft_test_data)
+                tpot_test_snap_count = len(self.tpot_test_data)
+
                 total = len(ttft_snap) + len(tpot_snap)
                 if total < settings.MIN_SAMPLES_FOR_RETRAIN:
                     logging.debug(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
@@ -1120,14 +1099,22 @@ class LatencyPredictor:
                         )
 
                 # Calibrate conformal predictors (only in TreeLite mode)
-                if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
-                    if self.model_type in [ModelType.XGBOOST, ModelType.LIGHTGBM]:
+                # TreeLite mode uses mean regression + conformal prediction for quantiles
+                # Non-TreeLite mode uses native quantile regression (XGBoost/LightGBM)
+                if CONFORMAL_AVAILABLE and settings.USE_TREELITE:
+                    if self.model_type in (ModelType.XGBOOST, ModelType.LIGHTGBM):
+                        # Calibrate conformal for TreeLite mode
                         self._calibrate_conformal_predictors()
 
                 if self.is_ready:
                     self.last_retrain_time = datetime.now(timezone.utc)
                     try:
-                        self._save_models_with_bundle()
+                        # Pass snapshot counts to ensure bundle metadata reflects what was actually trained on
+                        # This prevents race conditions where data is flushed during training
+                        self._save_models_with_bundle(
+                            training_samples={"ttft": len(ttft_snap), "tpot": len(tpot_snap)},
+                            test_samples={"ttft": ttft_test_snap_count, "tpot": tpot_test_snap_count}
+                        )
                     except Exception:
                         logging.error("Error saving models after training.", exc_info=True)
         except Exception as e:
@@ -1428,10 +1415,16 @@ class LatencyPredictor:
                 self.tpot_compilation_in_progress = False
             logging.error(f"Failed to launch background TreeLite compilation for {model_name}: {e}", exc_info=True)
 
-    def _save_models_with_bundle(self):
+    def _save_models_with_bundle(self, training_samples: dict = None, test_samples: dict = None):
         """
         Save models using bundle registry (new architectural approach).
         Creates immutable versioned bundles with atomic operations and TreeLite compilation tracking.
+
+        Args:
+            training_samples: Dict with 'ttft' and 'tpot' training sample counts from snapshot.
+                            If None, will read current state (used for initial bundle creation).
+            test_samples: Dict with 'ttft' and 'tpot' test sample counts from snapshot.
+                         If None, will read current state (used for initial bundle creation).
 
         Requires bundle manager to be initialized.
         """
@@ -1439,15 +1432,17 @@ class LatencyPredictor:
             raise RuntimeError("Bundle manager not initialized - cannot save models")
 
         try:
-            # Calculate training and test sample counts
-            training_samples = {
-                "ttft": sum(len(bucket) for bucket in self.ttft_data_buckets.values()),
-                "tpot": sum(len(bucket) for bucket in self.tpot_data_buckets.values())
-            }
-            test_samples = {
-                "ttft": len(self.ttft_test_data),
-                "tpot": len(self.tpot_test_data)
-            }
+            # Use provided snapshot counts (from train()) or calculate from current state (for initial bundle)
+            if training_samples is None:
+                training_samples = {
+                    "ttft": sum(len(bucket) for bucket in self.ttft_data_buckets.values()),
+                    "tpot": sum(len(bucket) for bucket in self.tpot_data_buckets.values())
+                }
+            if test_samples is None:
+                test_samples = {
+                    "ttft": len(self.ttft_test_data),
+                    "tpot": len(self.tpot_test_data)
+                }
 
             # Start a new training session - creates bundle in TRAINING state
             bundle = self.bundle_manager.start_training(
@@ -1558,8 +1553,16 @@ class LatencyPredictor:
                         joblib.dump(self.tpot_scaler, temp_tpot_scaler_path)
                         self.bundle_manager.save_model_file(bundle, TPOT_SCALER_FILENAME, temp_tpot_scaler_path)
 
-                # === CONFORMAL CALIBRATION (TreeLite mode only) ===
-                if settings.USE_TREELITE and CONFORMAL_AVAILABLE:
+                # === CONFORMAL CALIBRATION ===
+                # Only save conformal calibration in TreeLite mode
+                # Non-TreeLite mode uses native quantile regression (no conformal needed)
+                should_save_conformal = (
+                    CONFORMAL_AVAILABLE and
+                    settings.USE_TREELITE and
+                    self.model_type in (ModelType.XGBOOST, ModelType.LIGHTGBM)
+                )
+
+                if should_save_conformal:
                     if self.ttft_conformal:
                         temp_ttft_conf_path = os.path.join(temp_dir, "ttft_conformal.json")
                         # Use get_state() + manual JSON save (no .save() method exists)
@@ -1864,26 +1867,11 @@ class LatencyPredictor:
                     metrics_cleared = True
                     logging.info("Cleared all quantile metric scores")
 
-                # CRITICAL: Clear conformal calibration when flushing test data
-                # This ensures test isolation - conformal predictors are recalibrated on fresh test data
+                # NOTE: We do NOT clear conformal predictors during flush because:
+                # 1. Conformal is recalibrated on every training cycle anyway
+                # 2. Clearing during flush can race with training (flush happens mid-training)
+                # 3. This caused bundles to be published with 0 calibration samples
                 conformal_cleared = False
-                if flush_test and settings.USE_TREELITE:
-                    if self.ttft_conformal:
-                        # Reset conformal predictor to empty state
-                        self.ttft_conformal = ConformalQuantilePredictor(
-                            quantile=self.quantile,
-                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
-                        ) if CONFORMAL_AVAILABLE else None
-                        conformal_cleared = True
-                    if self.tpot_conformal:
-                        # Reset conformal predictor to empty state
-                        self.tpot_conformal = ConformalQuantilePredictor(
-                            quantile=self.quantile,
-                            max_calibration_samples=settings.MAX_TEST_DATA_SIZE
-                        ) if CONFORMAL_AVAILABLE else None
-                        conformal_cleared = True
-                    if conformal_cleared:
-                        logging.info("Cleared conformal calibration (will be recalibrated on next training cycle)")
         
                 return {
                     "success": True,
@@ -1947,22 +1935,14 @@ class LatencyPredictor:
                         if ttft_conformal_path.exists():
                             with open(ttft_conformal_path, 'r') as f:
                                 conformal_state = json.load(f)
-                            self.ttft_conformal = ConformalQuantilePredictor(
-                                quantile=self.quantile,
-                                max_calibration_samples=settings.MAX_TEST_DATA_SIZE
-                            )
-                            self.ttft_conformal.load_state(conformal_state)
+                            self.ttft_conformal = ConformalQuantilePredictor.from_state(conformal_state)
                             logging.info(f"Loaded TTFT conformal predictor from bundle")
 
                         tpot_conformal_path = active_bundle.path / TPOT_CONFORMAL_FILENAME
                         if tpot_conformal_path.exists():
                             with open(tpot_conformal_path, 'r') as f:
                                 conformal_state = json.load(f)
-                            self.tpot_conformal = ConformalQuantilePredictor(
-                                quantile=self.quantile,
-                                max_calibration_samples=settings.MAX_TEST_DATA_SIZE
-                            )
-                            self.tpot_conformal.load_state(conformal_state)
+                            self.tpot_conformal = ConformalQuantilePredictor.from_state(conformal_state)
                             logging.info(f"Loaded TPOT conformal predictor from bundle")
 
                 # If no bundle exists or models missing, create defaults

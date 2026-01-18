@@ -964,16 +964,6 @@ class LightweightPredictor:
                         detail=f"TreeLite prediction failed (model may be corrupt): {str(e)}"
                     )
 
-                # DEBUG: Log batch prediction details
-                if logging.getLogger().isEnabledFor(logging.DEBUG) and batch_size <= 5:
-                    logging.debug(f"BATCH PREDICTION DEBUG: batch_size={batch_size}")
-                    logging.debug(f"  TTFT features shape: {ttft_features.shape}")
-                    logging.debug(f"  TTFT features[0]: {ttft_features[0]}")
-                    if batch_size > 1:
-                        logging.debug(f"  TTFT features[1]: {ttft_features[1]}")
-                    logging.debug(f"  TTFT pred_array shape: {ttft_pred_array.shape}")
-                    logging.debug(f"  TTFT mean_preds: {ttft_mean_preds}")
-
                 # Check if conformal calibration is expected (by checking bundle manifest)
                 # This distinguishes bootstrap (conformal not yet available) from bugs (conformal missing when expected)
                 conformal_expected = False

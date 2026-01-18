@@ -1,4 +1,10 @@
-# Web Framework (stable APIs, can leave unpinned)
+# Production Requirements: XGBoost 3.1.3 + TreeLite 4.6.1
+#
+# This configuration uses modern ML stack with dual-mode quantile prediction:
+# - TreeLite mode (USE_TREELITE=true): Mean regression + conformal prediction + compiled .so
+# - Non-TreeLite mode (USE_TREELITE=false): Native quantile regression (reg:quantileerror)
+
+# Web Framework
 fastapi
 uvicorn[standard]
 pydantic
@@ -6,16 +12,23 @@ requests
 aiohttp
 joblib
 
-# Core ML Libraries (PINNED for TreeLite v4.1.2 compatibility)
-# XGBoost 1.7.6: Last v1.x - avoids categorical metadata issues with TreeLite 4.1.2
-# XGBoost 2.0+ creates categorical metadata that TreeLite 4.1.2 cannot parse
-xgboost==1.7.6
-lightgbm==4.3.0        # Last known stable with TreeLite 4.1.2
-scikit-learn==1.4.0    # Stable with numpy 1.26.x
-numpy==1.26.4          # Pin to avoid numpy 2.x breaking changes
+# Core ML Libraries
+xgboost==3.1.3         # Latest stable (Jan 2026)
+lightgbm==4.6.0        # Latest stable (Feb 2025) - has native quantile regression
+scikit-learn==1.6.0    # Latest stable
+numpy>=2.0.0           # Use latest 2.x (all our deps support it)
 pandas==2.2.3          # Latest stable 2.x
-scipy==1.11.4          # Compatible with numpy 1.26.x
+scipy>=1.14.0          # Latest (compatible with numpy 2.x)
 
-# TreeLite Ecosystem (required for fast inference)
-treelite==4.1.2        # Required by tl2cgen 1.0.0
-tl2cgen==1.0.0         # Last PyPI wheel release
+# TreeLite Ecosystem
+# Note: tl2cgen 1.0.0 wheel is built against treelite 4.1.2
+# We build tl2cgen from source in Dockerfile to link against treelite 4.6.1
+treelite==4.6.1        # Latest release - but DOES NOT support XGBoost categorical features
+# tl2cgen - built from source in Dockerfile (see multi-stage build)
+
+# Notes:
+# - XGBoost 3.1.3 supports reg:quantileerror for native quantile regression
+# - LightGBM 4.6.0 also supports native quantile regression (objective="quantile")
+# - TreeLite 4.6.1 does NOT support XGBoost categorical encoder (enable_categorical must be False)
+# - Both TreeLite and non-TreeLite modes work with XGBoost 3.1.3
+# - Categorical features (prefill_score_bucket) ONLY work in non-TreeLite mode
