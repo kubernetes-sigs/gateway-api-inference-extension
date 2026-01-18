@@ -18,6 +18,7 @@ theme:
     - navigation.tabs
     - navigation.top
     - navigation.expand
+    - content.tabs.link
   palette:
     primary: custom
   custom_dir: site-src/overrides
