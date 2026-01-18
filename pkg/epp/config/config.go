@@ -29,7 +29,7 @@ import (
 type Config struct {
 	SchedulerConfig           *scheduling.SchedulerConfig
 	SaturationDetectorType    configapi.SaturationDetectorType
-	SaturationDetectorConfig  *utilizationdetector.Config
+	UtilizationDetectorConfig *utilizationdetector.Config
 	ConcurrencyDetectorConfig *concurrencydetector.Config
 	DataConfig                *datalayer.Config
 	FlowControlConfig         *flowcontrol.Config

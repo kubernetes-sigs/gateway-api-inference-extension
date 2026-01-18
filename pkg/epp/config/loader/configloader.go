@@ -117,7 +117,7 @@ func InstantiateAndConfigure(
 	return &config.Config{
 		SchedulerConfig:           schedulerConfig,
 		SaturationDetectorType:    defaultDetectorType(rawConfig.SaturationDetector),
-		SaturationDetectorConfig:  buildSaturationConfig(rawConfig.SaturationDetector),
+		UtilizationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
 		ConcurrencyDetectorConfig: buildConcurrencyConfig(rawConfig.SaturationDetector),
 		DataConfig:                dataConfig,
 		FlowControlConfig:         flowControlConfig,
