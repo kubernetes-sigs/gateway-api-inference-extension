@@ -315,22 +315,45 @@ It has the following form:
 
 ```yaml
 saturationDetector:
+  type: Utilization
   queueDepthThreshold: 8
   kvCacheUtilThreshold: 0.75
   metricsStalenessThreshold: 150ms
 ```
 
+Or for the Concurrency-based detector:
+
+```yaml
+saturationDetector:
+  type: Concurrency
+  concurrency:
+    maxConcurrency: 100
+    headroom: 0.0
+```
+
 The various sub-fields of the `saturationDetector` section are:
 
-- The `queueDepthThreshold` field which defines the backend waiting queue size above which a
-pod is considered to have insufficient capacity for new requests. This field is optional, if
-omitted a value of `5` will be used.
-- The `kvCacheUtilThreshold` field which defines the KV cache utilization (0.0 to 1.0) above
-which a pod is considered to have insufficient capacity. This field is optional, if omitted
-a value of `0.8` will be used.
-- The `metricsStalenessThreshold` field which defines how old a pod's metrics can be. If a pod's
-metrics are older than this, it might be excluded from "good capacity" considerations or treated
-as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
+- The `type` field which specifies the implementation of the saturation detector to use.
+  Supported values are `Utilization` (default) and `Concurrency`.
+
+**For `Utilization` (legacy) detector:**
+
+- The `queueDepthThreshold` field defines the backend waiting queue size above which a
+  pod is considered to have insufficient capacity for new requests. This field is optional; if
+  omitted, a value of `5` will be used.
+- The `kvCacheUtilThreshold` field defines the KV cache utilization (0.0 to 1.0) above
+  which a pod is considered to have insufficient capacity. This field is optional; if
+  omitted, a value of `0.8` will be used.
+- The `metricsStalenessThreshold` field defines how old a pod's metrics can be. If a pod's
+  metrics are older than this, it might be excluded from "good capacity" considerations or treated
+  as having no capacity for safety. This field is optional; if omitted, a value of `200ms` will be used.
+
+**For `Concurrency` detector:**
+
+- The `concurrency.maxConcurrency` field defines the maximum number of in-flight requests allowed per
+  replica. If omitted, a value of `100` will be used.
+- The `concurrency.headroom` field defines the extra capacity (as a fraction of `maxConcurrency`) allowed
+  for traffic shaping but ignored for global saturation. Range [0.0, 1.0]. If omitted, a value of `0.0` will be used.
 
 ## Flow Control Configuration
 
