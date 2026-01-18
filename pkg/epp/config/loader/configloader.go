@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
@@ -118,7 +117,7 @@ func InstantiateAndConfigure(
 		SchedulerConfig:           schedulerConfig,
 		SaturationDetectorType:    defaultDetectorType(rawConfig.SaturationDetector),
 		UtilizationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
-		ConcurrencyDetectorConfig: buildConcurrencyConfig(rawConfig.SaturationDetector),
+		ConcurrencyDetectorConfig: concurrencydetector.NewConfigFromAPI(rawConfig.SaturationDetector),
 		DataConfig:                dataConfig,
 		FlowControlConfig:         flowControlConfig,
 	}, nil
