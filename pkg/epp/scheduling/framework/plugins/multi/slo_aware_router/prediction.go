@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -60,7 +61,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, request *sched
 		logger.V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", endpoint.GetMetadata().String(), "prefixCacheScore", prefixCacheScore)
 
 		metricsStates[i] = endpoint.GetMetrics()
-		prompts[i] = request.Body.Completions.Prompt
+		prompts[i] = requtil.GetPromptText(request)
 		generatedTokenCounts[i] = 1
 		prefixCacheScores[i] = prefixCacheScore
 	}

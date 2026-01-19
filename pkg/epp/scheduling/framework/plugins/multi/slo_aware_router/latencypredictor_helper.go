@@ -85,7 +85,7 @@ func processPreRequestForLatencyPrediction(
 
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
+		InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&sloCtx.schedulingRequest))),
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: 0,
@@ -202,7 +202,7 @@ func predictFirstTPOT(
 	// Predict first TPOT
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
+		InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&sloCtx.schedulingRequest))),
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: sloCtx.generatedTokenCount,
@@ -277,7 +277,7 @@ func processTokenForLatencyPrediction(
 	if sloCtx.tokenSampler.shouldPredict(sloCtx.generatedTokenCount) {
 		in := latencypredictor.PredictionRequest{
 			KVCachePercentage:  m.KVCacheUsagePercent,
-			InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
+			InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&sloCtx.schedulingRequest))),
 			NumRequestWaiting:  m.WaitingQueueSize,
 			NumRequestRunning:  m.RunningRequestsSize,
 			NumTokensGenerated: sloCtx.generatedTokenCount,
