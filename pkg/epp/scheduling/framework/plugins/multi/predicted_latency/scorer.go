@@ -53,9 +53,9 @@ type Config struct {
 	MaxSampledTokens          int     `json:"maxSampledTokens,omitempty"`
 	SLOBufferFactor           float64 `json:"sloBufferFactor,omitempty"`
 	NegHeadroomTTFTWeight     float64 `json:"negHeadroomTTFTWeight,omitempty"`
-	NegHeadroomITLWeight     float64 `json:"negHeadroomITLWeight,omitempty"`
+	NegHeadroomITLWeight      float64 `json:"negHeadroomITLWeight,omitempty"`
 	HeadroomTTFTWeight        float64 `json:"headroomTTFTWeight,omitempty"`
-	HeadroomITLWeight        float64 `json:"headroomITLWeight,omitempty"`
+	HeadroomITLWeight         float64 `json:"headroomITLWeight,omitempty"`
 	HeadroomSelectionStrategy string  `json:"headroomSelectionStrategy,omitempty"`
 	CompositeKVWeight         float64 `json:"compositeKVWeight,omitempty"`
 	CompositeQueueWeight      float64 `json:"compositeQueueWeight,omitempty"`
@@ -73,9 +73,9 @@ var DefaultConfig = Config{
 	MaxSampledTokens:          5,
 	SLOBufferFactor:           1,
 	NegHeadroomTTFTWeight:     0.8,
-	NegHeadroomITLWeight:     0.2,
+	NegHeadroomITLWeight:      0.2,
 	HeadroomTTFTWeight:        0.8,
-	HeadroomITLWeight:        0.2,
+	HeadroomITLWeight:         0.2,
 	HeadroomSelectionStrategy: "least",
 	CompositeKVWeight:         1,
 	CompositeQueueWeight:      1,

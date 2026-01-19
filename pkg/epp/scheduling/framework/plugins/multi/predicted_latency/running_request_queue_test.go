@@ -86,7 +86,7 @@ func TestPriorityOrdering(t *testing.T) {
 
 	// Test removal order
 	expected := []struct {
-		id   string
+		id  string
 		itl float64
 	}{
 		{"high", 1.0},

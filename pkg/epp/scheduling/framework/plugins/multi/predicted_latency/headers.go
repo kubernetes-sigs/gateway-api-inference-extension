@@ -47,7 +47,7 @@ func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (fl
 	return parsedFloat, nil
 }
 
-//parseBoolHeader retrieves a header by name, parses it as a bool,
+// parseBoolHeader retrieves a header by name, parses it as a bool,
 // and returns the value or an error if the header is missing or invalid.
 func parseBoolHeader(request schedulingtypes.LLMRequest, headerName string) (bool, error) {
 	// 1. Get header value from the map
@@ -67,4 +67,4 @@ func parseBoolHeader(request schedulingtypes.LLMRequest, headerName string) (boo
 
 	// 3. Return the successfully parsed value
 	return parsedBool, nil
-}	
+}

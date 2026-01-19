@@ -1177,7 +1177,7 @@ func testPrefixCacheValidation(t *testing.T, predictor *Predictor) {
 		NumRequestRunning:  1,
 		NumTokensGenerated: 20,
 		ActualTTFT:         50.0,
-		ActualITL:         15.0,
+		ActualITL:          15.0,
 		PrefixCacheScore:   0.8,
 		Timestamp:          time.Now(),
 	}
@@ -1561,7 +1561,7 @@ func generateTrainingEntries(count int) []TrainingEntry {
 			NumRequestRunning:  running,
 			NumTokensGenerated: generated,
 			ActualTTFT:         ttft,
-			ActualITL:         itl,
+			ActualITL:          itl,
 			PrefixCacheScore:   prefixCache, // Added prefix cache score
 			Timestamp:          time.Now().Add(-time.Duration(rng.Intn(3600)) * time.Second),
 		}
@@ -2139,7 +2139,7 @@ func TestOfflineValidation(t *testing.T) {
 			NumRequestRunning:  1,
 			NumTokensGenerated: 50,
 			ActualTTFT:         45.5,
-			ActualITL:         12.3,
+			ActualITL:          12.3,
 			PrefixCacheScore:   0.75,
 			Timestamp:          time.Now(),
 		}

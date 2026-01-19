@@ -863,31 +863,31 @@ func TestPredictedLatencyContext_SLOValidation(t *testing.T) {
 	tests := []struct {
 		name       string
 		ttftSLO    float64
-		itlSLO    float64
+		itlSLO     float64
 		expectSLOs bool
 	}{
 		{
 			name:       "Both SLOs set",
 			ttftSLO:    100,
-			itlSLO:    50,
+			itlSLO:     50,
 			expectSLOs: true,
 		},
 		{
 			name:       "No SLOs",
 			ttftSLO:    0,
-			itlSLO:    0,
+			itlSLO:     0,
 			expectSLOs: false,
 		},
 		{
 			name:       "Only TTFT SLO",
 			ttftSLO:    100,
-			itlSLO:    0,
+			itlSLO:     0,
 			expectSLOs: false,
 		},
 		{
 			name:       "Only ITL SLO",
 			ttftSLO:    0,
-			itlSLO:    50,
+			itlSLO:     50,
 			expectSLOs: false,
 		},
 	}

@@ -56,7 +56,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		s.updateRequestContextWithPredictions(predictedLatencyCtx, predictions)
 		s.updateHasValidEndpoint(ctx, predictedLatencyCtx, endpoints)
 	}
-	
+
 	s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 	return nil
 }

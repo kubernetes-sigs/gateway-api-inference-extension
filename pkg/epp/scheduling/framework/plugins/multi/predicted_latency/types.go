@@ -47,9 +47,9 @@ const (
 
 const (
 	PredictedLatencyPluginType = "predicted-latency-scorer"
-	eps                      = 1e-9
-	wMax                     = 100
-	minWeight                = 1
+	eps                        = 1e-9
+	wMax                       = 100
+	minWeight                  = 1
 )
 
 type podSelectionMode string

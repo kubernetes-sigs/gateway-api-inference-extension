@@ -80,11 +80,11 @@ func (p *Predictor) parsePrometheusMetrics(rawMetrics string) (*ModelCoefficient
 
 	coefficients := &ModelCoefficients{
 		TTFTCoeffs: make(map[string]float64),
-		ITLCoeffs: make(map[string]float64),
+		ITLCoeffs:  make(map[string]float64),
 	}
 	bucketCounts := &BucketCounts{
 		TTFTBuckets: make(map[int]int),
-		ITLBuckets: make(map[int]int),
+		ITLBuckets:  make(map[int]int),
 	}
 	var firstErr error
 

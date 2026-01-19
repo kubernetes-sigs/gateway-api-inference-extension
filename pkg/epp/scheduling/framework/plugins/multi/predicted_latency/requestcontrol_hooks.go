@@ -40,21 +40,20 @@ var _ requestcontrol.ResponseStreaming = &PredictedLatency{}
 var _ requestcontrol.ResponseComplete = &PredictedLatency{}
 var _ requestcontrol.AdmissionPlugin = &PredictedLatency{}
 
-
 type predictedLatencyCtx struct {
-	schedulingRequest         schedulingtypes.LLMRequest
-	targetMetadata            *datalayer.EndpointMetadata
-	schedulingResult          *schedulingtypes.SchedulingResult
-	lastSeenMetrics           map[string]*datalayer.Metrics
-	lastTokenTimestamp        time.Time
-	requestReceivedTimestamp  time.Time
-	generatedTokenCount       int
-	incomingModelName         string
-	ttft                      float64
-	predictedTTFT             float64
+	schedulingRequest        schedulingtypes.LLMRequest
+	targetMetadata           *datalayer.EndpointMetadata
+	schedulingResult         *schedulingtypes.SchedulingResult
+	lastSeenMetrics          map[string]*datalayer.Metrics
+	lastTokenTimestamp       time.Time
+	requestReceivedTimestamp time.Time
+	generatedTokenCount      int
+	incomingModelName        string
+	ttft                     float64
+	predictedTTFT            float64
 	avgITL                   float64
 	avgPredictedITL          float64
-	tokenSampler              *tokenSampler
+	tokenSampler             *tokenSampler
 	itlObservations          []float64
 	predictedITLObservations []float64
 
@@ -81,8 +80,8 @@ func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedL
 		lastSeenMetrics:               make(map[string]*datalayer.Metrics),
 		prefixCacheScoresForEndpoints: make(map[string]float64),
 		predictionsForScheduling:      make([]endpointPredictionResult, 0),
-		hasValidEndpoint: true,
-		sheddable: false,
+		hasValidEndpoint:              true,
+		sheddable:                     false,
 	}
 }
 
@@ -272,7 +271,7 @@ func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *datalaye
 	return true
 }
 
-func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {	
+func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.AdmitRequest: request is nil, skipping")

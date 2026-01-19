@@ -1,0 +1,23 @@
+apiVersion: v1
+data:
+  LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
+  LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
+  LATENCY_MODEL_TYPE: xgboost
+  LATENCY_QUANTILE_ALPHA: "0.9"
+  LATENCY_RETRAINING_INTERVAL_SEC: "1"
+  LATENCY_ITL_MODEL_PATH: /models/itl.joblib
+  LATENCY_ITL_SCALER_PATH: /models/itl_scaler.joblib
+  LATENCY_TTFT_MODEL_PATH: /models/ttft.joblib
+  LATENCY_TTFT_SCALER_PATH: /models/ttft_scaler.joblib
+kind: ConfigMap
+metadata:
+  annotations:
+    meta.helm.sh/release-name: vllm-llama3-8b-instruct
+    meta.helm.sh/release-namespace: default
+  creationTimestamp: "2025-12-27T20:36:53Z"
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  name: vllm-llama3-8b-instruct-epp-latency-predictor-training
+  namespace: default
+  resourceVersion: "1766867813743967017"
+  uid: f874ed22-a931-4f83-9b5d-0530f9e67937

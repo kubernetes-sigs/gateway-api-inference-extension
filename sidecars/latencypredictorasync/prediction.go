@@ -204,7 +204,7 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 
 	return &PredictionResponse{
 		TTFT:        ttft,
-		ITL:        itl,
+		ITL:         itl,
 		PredictedAt: time.Now(),
 		ModelType:   "bayesian_ridge",
 		Quantile:    quantile,

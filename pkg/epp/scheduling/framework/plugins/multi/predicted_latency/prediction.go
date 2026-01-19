@@ -30,9 +30,9 @@ import (
 type endpointPredictionResult struct {
 	Endpoint         schedulingtypes.Endpoint
 	TTFT             float64
-	ITL             float64
+	ITL              float64
 	TTFTValid        bool
-	ITLValid        bool
+	ITLValid         bool
 	IsValid          bool
 	Error            error
 	Headroom         float64 // Headroom for the pod, if applicable

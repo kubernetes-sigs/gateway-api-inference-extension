@@ -28,7 +28,7 @@ import (
 // The index is needed by heap.Remove and is maintained by the heap.Interface methods.
 type request struct {
 	id    string  // Unique identifier
-	itl  float64 // The priority value (lower is higher priority)
+	itl   float64 // The priority value (lower is higher priority)
 	index int
 }
 
@@ -64,7 +64,7 @@ func (pq *requestPriorityQueue) Clone() *requestPriorityQueue {
 		// Create a new Request struct, copying all values.
 		newItem := &request{
 			id:    oldItem.id,
-			itl:  oldItem.itl,
+			itl:   oldItem.itl,
 			index: oldItem.index,
 		}
 
@@ -129,7 +129,7 @@ func (pq *requestPriorityQueue) Add(id string, itl float64) bool {
 	}
 
 	item := &request{
-		id:   id,
+		id:  id,
 		itl: itl,
 	}
 	pq.lookup[id] = item

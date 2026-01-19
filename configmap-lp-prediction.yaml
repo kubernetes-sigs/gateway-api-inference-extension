@@ -1,0 +1,20 @@
+apiVersion: v1
+data:
+  LATENCY_MODEL_TYPE: xgboost
+  LOCAL_ITL_MODEL_PATH: /server_models/itl.joblib
+  LOCAL_ITL_SCALER_PATH: /server_models/itl_scaler.joblib
+  LOCAL_TTFT_MODEL_PATH: /server_models/ttft.joblib
+  LOCAL_TTFT_SCALER_PATH: /server_models/ttft_scaler.joblib
+  PREDICT_HOST: 0.0.0.0
+kind: ConfigMap
+metadata:
+  annotations:
+    meta.helm.sh/release-name: vllm-llama3-8b-instruct
+    meta.helm.sh/release-namespace: default
+  creationTimestamp: "2025-12-27T20:36:53Z"
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  name: vllm-llama3-8b-instruct-epp-latency-predictor-prediction
+  namespace: default
+  resourceVersion: "1766867813746287011"
+  uid: 77ee34dc-5c32-4668-9bab-b48c95e3f36d

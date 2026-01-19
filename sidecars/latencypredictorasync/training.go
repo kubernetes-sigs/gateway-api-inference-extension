@@ -241,7 +241,7 @@ func NewTrainingEntry(
 		NumRequestRunning:  numRequestRunning,
 		NumTokensGenerated: numTokensGenerated,
 		ActualTTFT:         actualTTFT,
-		ActualITL:         actualITL,
+		ActualITL:          actualITL,
 		PrefixCacheScore:   prefixCacheScore,
 		Timestamp:          time.Now(),
 	}

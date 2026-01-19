@@ -149,7 +149,7 @@ func (ps *PredictedLatency) weightEndpointsByBlendedDeficit(
 	type deficits struct {
 		endpoint endpointPredictionResult
 		ttftDef  float64
-		itlDef  float64
+		itlDef   float64
 	}
 	defs := make([]deficits, 0, len(endpoints))
 
