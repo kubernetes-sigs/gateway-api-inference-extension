@@ -132,6 +132,20 @@ Set the Helm chart version (unless already set).
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
 
+  === "Kgateway"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
+      helm install vllm-deepseek-r1 \
+      --dependency-update \
+      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --set experimentalHttpRoute.enabled=true \
+      --set experimentalHttpRoute.baseModel=deepseek/vllm-deepseek-r1 \
+      --version $IGW_CHART_VERSION \
+      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      ```
+
 === "Other"
 
       ```bash
@@ -181,6 +195,19 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 
       ```bash
       export GATEWAY_PROVIDER=istio
+      helm upgrade vllm-llama3-8b-instruct oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      --dependency-update \
+      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set provider.name=$GATEWAY_PROVIDER \
+      --set experimentalHttpRoute.enabled=true \
+      --set experimentalHttpRoute.baseModel=meta-llama/Llama-3.1-8B-Instruct \
+      --version $IGW_CHART_VERSION
+      ```
+
+=== "Kgateway"
+
+      ```bash
+      export GATEWAY_PROVIDER=none
       helm upgrade vllm-llama3-8b-instruct oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
       --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
