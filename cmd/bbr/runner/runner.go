@@ -115,13 +115,13 @@ func (r *Runner) Run(ctx context.Context) error {
 			return nil
 		}(),
 	}
-	// label "inference-gateway.k8s.io/managed" = "true" is used for server-side filtering of configmaps.
+	// label "inference.networking.k8s.io/bbr-managed" = "true" is used for server-side filtering of configmaps.
 	// only the configmap objects with this label will be tracked by bbr.
 	cacheOptions := cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
 			&corev1.ConfigMap{}: {
 				Label: labels.SelectorFromSet(labels.Set{
-					"inference-gateway.k8s.io/managed": "true",
+					"inference.networking.k8s.io/bbr-managed": "true",
 				}),
 			},
 		},
