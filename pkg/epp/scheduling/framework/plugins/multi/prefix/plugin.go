@@ -27,7 +27,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
@@ -128,12 +128,28 @@ func (s ServerID) String() string {
 // compile-time type validation
 var _ plugins.StateData = &SchedulingContextState{}
 
+// compile-time type assertion
+var (
+	_ framework.Scorer                = &Plugin{}
+	_ requestcontrol.PreRequest       = &Plugin{}
+	_ requestcontrol.ResponseReceived = &Plugin{}
+)
+
 // SchedulingContextState is the state of this plugin to be used during a scheduling cycle.
 type SchedulingContextState struct {
 	// PrefixHashes is a list of prefix hashes of the request prompt broken into blocks.
 	PrefixHashes []BlockHash
 	// A map of server to its longest prefix cache match length.
 	PrefixCacheServers map[ServerID]int
+	// SelectedServers is a list of servers that have been selected for the request.
+	// Populated at PreRequest.
+	SelectedServers []Server
+	// StatsBlockSize is the block size used for metrics.
+	// Populated at PreRequest.
+	StatsBlockSize int
+	// StatsMatchLen is the length of the longest prefix match for the target server.
+	// Populated at PreRequest.
+	StatsMatchLen int
 }
 
 func (s *SchedulingContextState) Clone() plugins.StateData {
@@ -143,18 +159,17 @@ func (s *SchedulingContextState) Clone() plugins.StateData {
 	for key, value := range s.PrefixCacheServers {
 		prefixCacheServers[key] = value
 	}
+	selectedServers := make([]Server, len(s.SelectedServers))
+	copy(selectedServers, s.SelectedServers)
 
 	return &SchedulingContextState{
 		PrefixHashes:       prefixHashes,
 		PrefixCacheServers: prefixCacheServers,
+		SelectedServers:    selectedServers,
+		StatsBlockSize:     s.StatsBlockSize,
+		StatsMatchLen:      s.StatsMatchLen,
 	}
 }
-
-// compile-time type assertion
-var (
-	_ framework.Scorer          = &Plugin{}
-	_ requestcontrol.PreRequest = &Plugin{}
-)
 
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
@@ -287,9 +302,23 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	}
 
 	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
-	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
+		return
+	}
+
+	// Update the state with selected servers and stats, then write it back.
+	state.SelectedServers = servers
+	state.StatsMatchLen = state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
+	state.StatsBlockSize = getBlockSize(primaryProfileResult.TargetEndpoints, p.config)
+	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+}
+
+func (p *Plugin) ResponseReceived(ctx context.Context, request *types.LLMRequest, _ *requestcontrol.Response, targetPod *datalayer.EndpointMetadata) {
+	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
+	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
+	if err != nil {
+		// This is expected if the request was shedded before PreRequest or if PreRequest failed.
 		return
 	}
 
@@ -299,17 +328,14 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	// WaitGroup is added to the Plugin struct to allow waiting in tests.
 	p.wg.Add(1)
 	go func() {
-		for _, s := range servers {
+		for _, s := range state.SelectedServers {
 			p.indexer.Add(state.PrefixHashes, s)
 		}
 		p.wg.Done()
 	}()
 
 	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
-
-	blockSize := getBlockSize(primaryProfileResult.TargetEndpoints, p.config)
-	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
+	metrics.RecordPrefixCacheMatch(state.StatsMatchLen*state.StatsBlockSize, total*state.StatsBlockSize)
 }
 
 func (p *Plugin) makeServer(targetEndpoint types.Endpoint) Server {
