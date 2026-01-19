@@ -22,9 +22,9 @@ import (
 	"math/rand"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func (s *SLOAwareRouter) parseSLOHeaders(ctx context.Context, request *schedulingtypes.LLMRequest, sloCtx *sloRequestContext) {

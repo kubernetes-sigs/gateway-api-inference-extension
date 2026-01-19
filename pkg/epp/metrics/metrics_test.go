@@ -29,8 +29,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (

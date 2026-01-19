@@ -22,8 +22,8 @@ import (
 	"math/rand"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds []endpointPredictionResult, r *rand.Rand, strategy headroomStrategy) schedulingtypes.Endpoint {
