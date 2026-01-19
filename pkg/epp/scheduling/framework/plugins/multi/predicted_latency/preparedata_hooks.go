@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"context"
@@ -28,11 +28,11 @@ import (
 )
 
 // PrepareRequestData prepares the SLO context for the request, including parsing SLO headers and gathering prefix cache scores abds generating predictions.
-func (s *SLOAwareRouter) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
-	sloCtx := s.getOrMakeSLORequestContext(request)
+	predictedLatencyCtx := s.getOrMakePredictedLatencyContext(request)
 
-	s.parseSLOHeaders(ctx, request, sloCtx)
+	s.parseSLOHeaders(ctx, request, predictedLatencyCtx)
 	var prefixCacheScore float64
 	for _, endpoint := range endpoints {
 
@@ -49,16 +49,22 @@ func (s *SLOAwareRouter) PrepareRequestData(ctx context.Context, request *schedu
 			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
 			prefixCacheScore = 0.0
 		}
-		sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
+		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
 	}
-	s.setSLOContextForRequest(request, sloCtx)
+	predictions, err := s.generatePredictions(ctx, request, predictedLatencyCtx, endpoints)
+	if err == nil && len(predictions) == len(endpoints) {
+		s.updateRequestContextWithPredictions(predictedLatencyCtx, predictions)
+		s.updateHasValidEndpoint(ctx, predictedLatencyCtx, endpoints)
+	}
+	
+	s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 	return nil
 }
 
-func (p *SLOAwareRouter) Produces() map[string]any {
+func (p *PredictedLatency) Produces() map[string]any {
 	return map[string]any{}
 }
 
-func (p *SLOAwareRouter) Consumes() map[string]any {
+func (p *PredictedLatency) Consumes() map[string]any {
 	return map[string]any{approximateprefix.PrefixCacheMatchInfoKey: approximateprefix.PrefixCacheMatchInfo{}}
 }

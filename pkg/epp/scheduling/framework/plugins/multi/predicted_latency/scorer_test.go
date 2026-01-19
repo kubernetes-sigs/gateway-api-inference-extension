@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"context"
@@ -49,7 +49,7 @@ func (m *mockPredictor) Predict(ctx context.Context, request latencypredictor.Pr
 		return pred, nil
 	}
 	// Default prediction
-	return &latencypredictor.PredictionResponse{TTFT: 0.5, TPOT: 0.03}, nil
+	return &latencypredictor.PredictionResponse{TTFT: 0.5, ITL: 0.03}, nil
 }
 
 func (m *mockPredictor) PredictBulk(ctx context.Context, requests []latencypredictor.PredictionRequest) (*latencypredictor.BulkPredictionResponse, error) {
@@ -118,14 +118,14 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 	}
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *schedulingtypes.LLMRequest {
+func createTestLLMRequest(reqID string, ttftSLO, itlSLO float64) *schedulingtypes.LLMRequest {
 	headers := make(map[string]string)
 	headers[requtil.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
 		headers["x-ttft-slo"] = fmt.Sprintf("%f", ttftSLO)
 	}
-	if tpotSLO > 0 {
-		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
+	if itlSLO > 0 {
+		headers["x-avg-itl-slo"] = fmt.Sprintf("%f", itlSLO)
 	}
 
 	return &schedulingtypes.LLMRequest{
@@ -138,7 +138,7 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *schedulingtyp
 	}
 }
 
-func TestSLOAwareRouter_Score(t *testing.T) {
+func TestPredictedLatency_Score(t *testing.T) {
 	tests := []struct {
 		name           string
 		predictor      *mockPredictor
@@ -162,9 +162,9 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name: "All pods have positive headroom",
 			predictor: &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.5": {TTFT: 0.5, TPOT: 0.03}, // 50% KV cache
-					"0.6": {TTFT: 0.6, TPOT: 0.04}, // 60% KV cache
-					"0.3": {TTFT: 0.4, TPOT: 0.02}, // 30% KV cache
+					"0.5": {TTFT: 0.5, ITL: 0.03}, // 50% KV cache
+					"0.6": {TTFT: 0.6, ITL: 0.04}, // 60% KV cache
+					"0.3": {TTFT: 0.4, ITL: 0.02}, // 30% KV cache
 				},
 			},
 			strategy: headroomStrategyLeast,
@@ -183,8 +183,8 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name: "All pods have negative headroom",
 			predictor: &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.8": {TTFT: 1.5, TPOT: 0.08}, // 80% KV cache - high load
-					"0.9": {TTFT: 1.8, TPOT: 0.09}, // 90% KV cache - very high load
+					"0.8": {TTFT: 1.5, ITL: 0.08}, // 80% KV cache - high load
+					"0.9": {TTFT: 1.8, ITL: 0.09}, // 90% KV cache - very high load
 				},
 			},
 			strategy: headroomStrategyLeast,
@@ -200,8 +200,8 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 			name: "Mixed positive and negative headroom",
 			predictor: &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.3": {TTFT: 0.5, TPOT: 0.03}, // 30% KV cache - Positive headroom
-					"0.9": {TTFT: 1.5, TPOT: 0.08}, // 90% KV cache - Negative headroom
+					"0.3": {TTFT: 0.5, ITL: 0.03}, // 30% KV cache - Positive headroom
+					"0.9": {TTFT: 1.5, ITL: 0.08}, // 90% KV cache - Negative headroom
 				},
 			},
 			strategy: headroomStrategyLeast,
@@ -242,7 +242,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var router *SLOAwareRouter
+			var router *PredictedLatency
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(tt.strategy)
 
@@ -255,7 +255,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 				predictor = nil
 			}
 
-			router = NewSLOAwareRouter(cfg, predictor)
+			router = NewPredictedLatency(cfg, predictor)
 
 			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), tt.request, tt.endpoints)
 
@@ -293,7 +293,7 @@ func TestSLOAwareRouter_Score(t *testing.T) {
 	}
 }
 
-func TestSLOAwareRouter_Strategies(t *testing.T) {
+func TestPredictedLatency_Strategies(t *testing.T) {
 	tests := []struct {
 		name     string
 		strategy headroomStrategy
@@ -324,14 +324,14 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.5": {TTFT: 0.5, TPOT: 0.03},
-					"0.6": {TTFT: 0.6, TPOT: 0.04},
-					"0.3": {TTFT: 0.4, TPOT: 0.02},
+					"0.5": {TTFT: 0.5, ITL: 0.03},
+					"0.6": {TTFT: 0.6, ITL: 0.04},
+					"0.3": {TTFT: 0.4, ITL: 0.02},
 				},
 			}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(tt.strategy)
-			router := NewSLOAwareRouter(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor)
 
 			request := createTestLLMRequest("test", 1.0, 0.05)
 			endpoints := []schedulingtypes.Endpoint{
@@ -356,22 +356,22 @@ func TestSLOAwareRouter_Strategies(t *testing.T) {
 	}
 }
 
-func TestSLOAwareRouter_TypedName(t *testing.T) {
+func TestPredictedLatency_TypedName(t *testing.T) {
 	predictor := &mockPredictor{}
 	cfg := DefaultConfig
 	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-	router := NewSLOAwareRouter(cfg, predictor)
+	router := NewPredictedLatency(cfg, predictor)
 
 	tn := router.TypedName()
 	assert.Equal(t, "predicted-latency-scorer", tn.Type, "Type should be predicted-latency-scorer")
 	assert.Equal(t, "predicted-latency-scorer", tn.Name, "Default name should be predicted-latency-scorer")
 }
 
-func TestSLOAwareRouter_WithName(t *testing.T) {
+func TestPredictedLatency_WithName(t *testing.T) {
 	predictor := &mockPredictor{}
 	cfg := DefaultConfig
 	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-	router := NewSLOAwareRouter(cfg, predictor)
+	router := NewPredictedLatency(cfg, predictor)
 
 	customName := "custom-router"
 	router = router.WithName(customName)
@@ -381,20 +381,20 @@ func TestSLOAwareRouter_WithName(t *testing.T) {
 	assert.Equal(t, customName, tn.Name, "Name should be updated to custom name")
 }
 
-func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
+func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupRequests func(*SLOAwareRouter, schedulingtypes.Endpoint)
+		setupRequests func(*PredictedLatency, schedulingtypes.Endpoint)
 		expectedCount int
 	}{
 		{
 			name:          "No running requests",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {},
+			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {},
 			expectedCount: 0,
 		},
 		{
 			name: "One running request",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {
 				podName := types.NamespacedName{
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
@@ -406,7 +406,7 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 		},
 		{
 			name: "Multiple running requests",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {
 				endpointName := types.NamespacedName{
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
@@ -425,7 +425,7 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-			router := NewSLOAwareRouter(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor)
 			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -436,20 +436,20 @@ func TestSLOAwareRouter_GetPodRunningRequestCount(t *testing.T) {
 	}
 }
 
-func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
+func TestPredictedLatency_GetPodMinITLSLO(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupRequests func(*SLOAwareRouter, schedulingtypes.Endpoint)
+		setupRequests func(*PredictedLatency, schedulingtypes.Endpoint)
 		expectedSLO   float64
 	}{
 		{
 			name:          "No running requests",
-			setupRequests: func(r *SLOAwareRouter, p schedulingtypes.Endpoint) {},
+			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {},
 			expectedSLO:   0.0,
 		},
 		{
 			name: "One running request",
-			setupRequests: func(r *SLOAwareRouter, e schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, e schedulingtypes.Endpoint) {
 				endpointName := types.NamespacedName{
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
@@ -461,7 +461,7 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 		},
 		{
 			name: "Multiple running requests - should return minimum",
-			setupRequests: func(r *SLOAwareRouter, e schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, e schedulingtypes.Endpoint) {
 				endpointName := types.NamespacedName{
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
@@ -472,7 +472,7 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 				r.runningRequestLists[endpointName].Add("req2", 0.03) // This is the minimum
 				r.runningRequestLists[endpointName].Add("req3", 0.04)
 			},
-			expectedSLO: 0.03, // Minimum TPOT (heap guarantees this is at items[0])
+			expectedSLO: 0.03, // Minimum ITL (heap guarantees this is at items[0])
 		},
 	}
 
@@ -481,18 +481,18 @@ func TestSLOAwareRouter_GetPodMinTPOTSLO(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-			router := NewSLOAwareRouter(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor)
 			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
 
-			minSLO := router.getEndpointMinTPOTSLO(pod)
-			assert.InDelta(t, tt.expectedSLO, minSLO, 0.0001, "Min TPOT SLO should match expected")
+			minSLO := router.getEndpointMinITLSLO(pod)
+			assert.InDelta(t, tt.expectedSLO, minSLO, 0.0001, "Min ITL SLO should match expected")
 		})
 	}
 }
 
-func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
+func TestPredictedLatency_GetPrefixCacheScoreForPod(t *testing.T) {
 	tests := []struct {
 		name          string
 		setupState    func(*schedulingtypes.CycleState)
@@ -510,7 +510,7 @@ func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-			router := NewSLOAwareRouter(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor)
 
 			state := schedulingtypes.NewCycleState()
 			tt.setupState(state)
@@ -523,7 +523,7 @@ func TestSLOAwareRouter_GetPrefixCacheScoreForPod(t *testing.T) {
 	}
 }
 
-func TestSLOAwareRouterFactory(t *testing.T) {
+func TestPredictedLatencyFactory(t *testing.T) {
 	tests := []struct {
 		name       string
 		pluginName string
@@ -538,9 +538,9 @@ func TestSLOAwareRouterFactory(t *testing.T) {
 				"maxSampledTokens": 30,
 				"sloBufferFactor": 1.2,
 				"negHeadroomTTFTWeight": 0.7,
-				"negHeadroomTPOTWeight": 0.3,
+				"negHeadroomITLWeight": 0.3,
 				"headroomTTFTWeight": 0.9,
-				"headroomTPOTWeight": 0.1,
+				"headroomITLWeight": 0.1,
 				"headroomSelectionStrategy": "least",
 				"compositeKVWeight": 1.0,
 				"compositeQueueWeight": 0.8,
@@ -633,7 +633,7 @@ func TestSLOAwareRouterFactory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			handle := utils.NewTestHandle(context.Background())
 			rawParams := json.RawMessage(tt.jsonParams)
-			plugin, err := SLOAwareRouterFactory(tt.pluginName, rawParams, handle)
+			plugin, err := PredictedLatencyFactory(tt.pluginName, rawParams, handle)
 
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -646,7 +646,7 @@ func TestSLOAwareRouterFactory(t *testing.T) {
 	}
 }
 
-func TestSLOAwareRouterFactoryInvalidJSON(t *testing.T) {
+func TestPredictedLatencyFactoryInvalidJSON(t *testing.T) {
 	invalidTests := []struct {
 		name       string
 		jsonParams string
@@ -673,7 +673,7 @@ func TestSLOAwareRouterFactoryInvalidJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			handle := utils.NewTestHandle(context.Background())
 			rawParams := json.RawMessage(tt.jsonParams)
-			plugin, err := SLOAwareRouterFactory("test", rawParams, handle)
+			plugin, err := PredictedLatencyFactory("test", rawParams, handle)
 
 			assert.Error(t, err)
 			assert.Nil(t, plugin)

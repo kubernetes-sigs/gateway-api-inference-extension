@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"container/heap"
@@ -28,7 +28,7 @@ import (
 // The index is needed by heap.Remove and is maintained by the heap.Interface methods.
 type request struct {
 	id    string  // Unique identifier
-	tpot  float64 // The priority value (lower is higher priority)
+	itl  float64 // The priority value (lower is higher priority)
 	index int
 }
 
@@ -64,7 +64,7 @@ func (pq *requestPriorityQueue) Clone() *requestPriorityQueue {
 		// Create a new Request struct, copying all values.
 		newItem := &request{
 			id:    oldItem.id,
-			tpot:  oldItem.tpot,
+			itl:  oldItem.itl,
 			index: oldItem.index,
 		}
 
@@ -82,7 +82,7 @@ func (pq *requestPriorityQueue) Len() int { return len(pq.items) }
 
 // Less reports whether the item with index i should sort before the item with index j.
 func (pq *requestPriorityQueue) Less(i, j int) bool {
-	return pq.items[i].tpot < pq.items[j].tpot
+	return pq.items[i].itl < pq.items[j].itl
 }
 
 // Swap swaps the items with indexes i and j.
@@ -111,7 +111,7 @@ func (pq *requestPriorityQueue) Pop() any {
 
 // Add adds a new item to the queue.
 // Returns true if the item was added, false if an item with the same ID already exists.
-func (pq *requestPriorityQueue) Add(id string, tpot float64) bool {
+func (pq *requestPriorityQueue) Add(id string, itl float64) bool {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
 
@@ -119,7 +119,7 @@ func (pq *requestPriorityQueue) Add(id string, tpot float64) bool {
 	if id == "" {
 		return false
 	}
-	if tpot < 0 {
+	if itl < 0 {
 		return false
 	}
 
@@ -130,21 +130,21 @@ func (pq *requestPriorityQueue) Add(id string, tpot float64) bool {
 
 	item := &request{
 		id:   id,
-		tpot: tpot,
+		itl: itl,
 	}
 	pq.lookup[id] = item
 	heap.Push(pq, item)
 	return true
 }
 
-// Update modifies the TPOT value of an existing item in the queue.
+// Update modifies the ITL value of an existing item in the queue.
 // If the item doesn't exist, this method does nothing.
-func (pq *requestPriorityQueue) Update(id string, tpot float64) bool {
+func (pq *requestPriorityQueue) Update(id string, itl float64) bool {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
 
 	// Validate input
-	if tpot < 0 {
+	if itl < 0 {
 		return false
 	}
 
@@ -153,7 +153,7 @@ func (pq *requestPriorityQueue) Update(id string, tpot float64) bool {
 		return false
 	}
 
-	item.tpot = tpot
+	item.itl = itl
 	heap.Fix(pq, item.index)
 	return true
 }
@@ -234,7 +234,7 @@ func (pq *requestPriorityQueue) String() string {
 		}
 		builder.WriteString(item.id)
 		builder.WriteString("(")
-		builder.WriteString(fmt.Sprintf("%.2f", item.tpot))
+		builder.WriteString(fmt.Sprintf("%.2f", item.itl))
 		builder.WriteString(")")
 	}
 

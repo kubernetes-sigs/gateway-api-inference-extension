@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"context"
@@ -57,8 +57,8 @@ func createTestSchedulingResult(metadata *datalayer.EndpointMetadata) *schedulin
 	}
 }
 
-func createTestRouter() *SLOAwareRouter {
-	return &SLOAwareRouter{
+func createTestRouter() *PredictedLatency {
+	return &PredictedLatency{
 		sloContextStore:     sync.Map{},
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		latencypredictor:    nil,
@@ -68,10 +68,10 @@ func createTestRouter() *SLOAwareRouter {
 
 // Test cases
 
-func TestNewSLORequestContext(t *testing.T) {
+func TestNewPredictedLatencyContext(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 
-	ctx := newSLORequestContext(request)
+	ctx := newPredictedLatencyContext(request)
 
 	assert.NotNil(t, ctx)
 	assert.Equal(t, *request, ctx.schedulingRequest)
@@ -82,49 +82,49 @@ func TestNewSLORequestContext(t *testing.T) {
 	assert.Empty(t, ctx.prefixCacheScoresForEndpoints)
 }
 
-func TestSLOAwareRouter_SetAndGetSLOContext(t *testing.T) {
+func TestPredictedLatency_SetAndGetSLOContext(t *testing.T) {
 	router := createTestRouter()
 	request := createTestLLMRequest("test", 100, 50)
-	sloCtx := newSLORequestContext(request)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
 
 	// Set context
-	router.setSLOContextForRequest(request, sloCtx)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Get context
-	retrievedCtx, err := router.getSLOContextForRequest(request)
+	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
 
 	require.NoError(t, err)
-	assert.Equal(t, sloCtx, retrievedCtx)
+	assert.Equal(t, predictedLatencyCtx, retrievedCtx)
 }
 
-func TestSLOAwareRouter_GetSLOContext_NotFound(t *testing.T) {
+func TestPredictedLatency_GetSLOContext_NotFound(t *testing.T) {
 	router := createTestRouter()
 	request := createTestLLMRequest("test", 100, 50)
 
 	// Try to get context that doesn't exist
-	ctx, err := router.getSLOContextForRequest(request)
+	ctx, err := router.getPredictedLatencyContextForRequest(request)
 
 	assert.Error(t, err)
 	assert.Nil(t, ctx)
 	assert.Contains(t, err.Error(), "SLO context not found")
 }
 
-func TestSLOAwareRouter_DeleteSLOContext(t *testing.T) {
+func TestPredictedLatency_DeleteSLOContext(t *testing.T) {
 	router := createTestRouter()
 	request := createTestLLMRequest("test", 100, 50)
-	sloCtx := newSLORequestContext(request)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
 
 	// Set and then delete context
-	router.setSLOContextForRequest(request, sloCtx)
-	router.deleteSLOContextForRequest(request)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
+	router.deletePredictedLatencyContextForRequest(request)
 
 	// Verify it's deleted
-	ctx, err := router.getSLOContextForRequest(request)
+	ctx, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 	assert.Nil(t, ctx)
 }
 
-func TestSLOAwareRouter_PreRequest_NoSchedulingResult(t *testing.T) {
+func TestPredictedLatency_PreRequest_NoSchedulingResult(t *testing.T) {
 	router := createTestRouter()
 	ctx := context.Background()
 	request := createTestLLMRequest("test", 100, 50)
@@ -133,11 +133,11 @@ func TestSLOAwareRouter_PreRequest_NoSchedulingResult(t *testing.T) {
 	router.PreRequest(ctx, request, nil)
 
 	// Should not create SLO context
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 }
 
-func TestSLOAwareRouter_PreRequest_EmptySchedulingResult(t *testing.T) {
+func TestPredictedLatency_PreRequest_EmptySchedulingResult(t *testing.T) {
 	router := createTestRouter()
 	ctx := context.Background()
 	request := createTestLLMRequest("test", 100, 50)
@@ -150,11 +150,11 @@ func TestSLOAwareRouter_PreRequest_EmptySchedulingResult(t *testing.T) {
 	router.PreRequest(ctx, request, schedulingResult)
 
 	// Should not create SLO context
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 }
 
-func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
+func TestPredictedLatency_PreRequest_Success(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -165,9 +165,9 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set initial SLO context
-	sloCtx := newSLORequestContext(request)
-	sloCtx.avgTPOTSLO = 50
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.avgITLSLO = 50
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Initialize the request priority queue
 	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = newRequestPriorityQueue()
@@ -177,7 +177,7 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 	afterTime := time.Now()
 
 	// Verify SLO context was updated
-	retrievedCtx, err := router.getSLOContextForRequest(request)
+	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
 	require.NoError(t, err)
 	assert.Equal(t, endpoint.GetMetadata(), retrievedCtx.targetMetadata)
 	assert.Equal(t, schedulingResult, retrievedCtx.schedulingResult)
@@ -187,7 +187,7 @@ func TestSLOAwareRouter_PreRequest_Success(t *testing.T) {
 		retrievedCtx.requestReceivedTimestamp.Equal(afterTime))
 }
 
-func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
+func TestPredictedLatency_PreRequest_AddsToQueue(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -198,9 +198,9 @@ func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set initial SLO context
-	sloCtx := newSLORequestContext(request)
-	sloCtx.avgTPOTSLO = 50
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.avgITLSLO = 50
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// PreRequest should create the queue
 	router.PreRequest(ctx, request, schedulingResult)
@@ -211,7 +211,7 @@ func TestSLOAwareRouter_PreRequest_AddsToQueue(t *testing.T) {
 	assert.NotNil(t, queue)
 }
 
-func TestSLOAwareRouter_PreRequest_QueueAlreadyExists(t *testing.T) {
+func TestPredictedLatency_PreRequest_QueueAlreadyExists(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -223,14 +223,13 @@ func TestSLOAwareRouter_PreRequest_QueueAlreadyExists(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set initial SLO contexts
-	sloCtx1 := newSLORequestContext(request1)
-	sloCtx1.avgTPOTSLO = 50
-	router.setSLOContextForRequest(request1, sloCtx1)
+	predictedLatencyCtx1 := newPredictedLatencyContext(request1)
+	predictedLatencyCtx1.avgITLSLO = 50
+	router.setPredictedLatencyContextForRequest(request1, predictedLatencyCtx1)
 
-	sloCtx2 := newSLORequestContext(request2)
-	sloCtx2.avgTPOTSLO = 50
-	router.setSLOContextForRequest(request2, sloCtx2)
-
+	predictedLatencyCtx2 := newPredictedLatencyContext(request2)
+	predictedLatencyCtx2.avgITLSLO = 50
+	router.setPredictedLatencyContextForRequest(request2, predictedLatencyCtx2)
 	// Add first request
 	router.PreRequest(ctx, request1, schedulingResult)
 
@@ -243,7 +242,7 @@ func TestSLOAwareRouter_PreRequest_QueueAlreadyExists(t *testing.T) {
 	assert.NotNil(t, queue)
 }
 
-func TestSLOAwareRouter_ResponseReceived_NilPredictor(t *testing.T) {
+func TestPredictedLatency_ResponseReceived_NilPredictor(t *testing.T) {
 	router := createTestRouter()
 	router.latencypredictor = nil
 
@@ -252,18 +251,18 @@ func TestSLOAwareRouter_ResponseReceived_NilPredictor(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
-	sloCtx := newSLORequestContext(request)
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic and should return early
 	router.ResponseReceived(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.NoError(t, err)
 }
 
-func TestSLOAwareRouter_ResponseReceived_NoPod(t *testing.T) {
+func TestPredictedLatency_ResponseReceived_NoPod(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -272,8 +271,8 @@ func TestSLOAwareRouter_ResponseReceived_NoPod(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
-	sloCtx := newSLORequestContext(request)
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic with nil pod
 	router.ResponseReceived(ctx, request, response, nil)
@@ -282,7 +281,7 @@ func TestSLOAwareRouter_ResponseReceived_NoPod(t *testing.T) {
 
 }
 
-func TestSLOAwareRouter_ResponseReceived_NoContext(t *testing.T) {
+func TestPredictedLatency_ResponseReceived_NoContext(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -299,7 +298,7 @@ func TestSLOAwareRouter_ResponseReceived_NoContext(t *testing.T) {
 
 }
 
-func TestSLOAwareRouter_ResponseStreaming_NilPredictor(t *testing.T) {
+func TestPredictedLatency_ResponseStreaming_NilPredictor(t *testing.T) {
 	router := createTestRouter()
 	router.latencypredictor = nil
 
@@ -308,17 +307,17 @@ func TestSLOAwareRouter_ResponseStreaming_NilPredictor(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
-	sloCtx := newSLORequestContext(request)
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic and should return early
 	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.NoError(t, err)
 }
-func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
+func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -329,27 +328,27 @@ func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
 	response := &requestcontrol.Response{}
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
-	sloCtx := newSLORequestContext(request)
-	sloCtx.requestReceivedTimestamp = time.Now()
-	sloCtx.schedulingResult = schedulingResult
-	sloCtx.schedulingRequest = *request
-	sloCtx.ttftSLO = 100
-	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = testModelName
-	sloCtx.predictedTTFT = 80.0
-	sloCtx.avgPredictedTPOT = 30.0
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.requestReceivedTimestamp = time.Now()
+	predictedLatencyCtx.schedulingResult = schedulingResult
+	predictedLatencyCtx.schedulingRequest = *request
+	predictedLatencyCtx.ttftSLO = 100
+	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.incomingModelName = testModelName
+	predictedLatencyCtx.predictedTTFT = 80.0
+	predictedLatencyCtx.avgPredictedITL = 30.0
 	// ADD THIS - populate metrics
-	sloCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
 	}
-	sloCtx.lastSeenMetrics["default"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["default"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
 	}
-	router.setSLOContextForRequest(request, sloCtx)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Initialize the queue and add the request
 	queue := newRequestPriorityQueue()
@@ -361,7 +360,7 @@ func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
 	afterTime := time.Now()
 
 	// Verify first token timestamp was set
-	retrievedCtx, err := router.getSLOContextForRequest(request)
+	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
 	require.NoError(t, err)
 	assert.True(t, retrievedCtx.lastTokenTimestamp.After(beforeTime) ||
 		retrievedCtx.lastTokenTimestamp.Equal(beforeTime))
@@ -369,7 +368,7 @@ func TestSLOAwareRouter_ResponseStreaming_FirstToken(t *testing.T) {
 		retrievedCtx.lastTokenTimestamp.Equal(afterTime))
 }
 
-func TestSLOAwareRouter_ResponseStreaming_SubsequentTokens(t *testing.T) {
+func TestPredictedLatency_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -380,29 +379,29 @@ func TestSLOAwareRouter_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	response := &requestcontrol.Response{}
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
-	sloCtx := newSLORequestContext(request)
-	sloCtx.requestReceivedTimestamp = time.Now()
-	sloCtx.schedulingResult = schedulingResult
-	sloCtx.schedulingRequest = *request
-	sloCtx.ttftSLO = 100
-	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = testModelName
-	sloCtx.predictedTTFT = 80.0
-	sloCtx.avgPredictedTPOT = 30.0
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.requestReceivedTimestamp = time.Now()
+	predictedLatencyCtx.schedulingResult = schedulingResult
+	predictedLatencyCtx.schedulingRequest = *request
+	predictedLatencyCtx.ttftSLO = 100
+	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.incomingModelName = testModelName
+	predictedLatencyCtx.predictedTTFT = 80.0
+	predictedLatencyCtx.avgPredictedITL = 30.0
 	// ADD THIS - populate metrics
-	sloCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
 	}
-	sloCtx.lastSeenMetrics["default"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["default"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
 	}
 	firstTokenTime := time.Now().Add(-100 * time.Millisecond)
 
-	router.setSLOContextForRequest(request, sloCtx)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Initialize the queue and add the request
 	queue := newRequestPriorityQueue()
@@ -412,12 +411,12 @@ func TestSLOAwareRouter_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify token timestamp was updated
-	retrievedCtx, err := router.getSLOContextForRequest(request)
+	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
 	require.NoError(t, err)
 	assert.True(t, retrievedCtx.lastTokenTimestamp.After(firstTokenTime))
 }
 
-func TestSLOAwareRouter_ResponseComplete_QueueNotFound(t *testing.T) {
+func TestPredictedLatency_ResponseComplete_QueueNotFound(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -427,10 +426,10 @@ func TestSLOAwareRouter_ResponseComplete_QueueNotFound(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
-	sloCtx := newSLORequestContext(request)
-	sloCtx.incomingModelName = testModelName
-	sloCtx.targetMetadata = endpoint.GetMetadata() // ADD THIS to avoid other issues
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.incomingModelName = testModelName
+	predictedLatencyCtx.targetMetadata = endpoint.GetMetadata() // ADD THIS to avoid other issues
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Create an EMPTY queue (not nil, but empty) to test queue.Remove behavior
 	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = newRequestPriorityQueue()
@@ -439,10 +438,10 @@ func TestSLOAwareRouter_ResponseComplete_QueueNotFound(t *testing.T) {
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should be deleted
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 }
-func TestSLOAwareRouter_ResponseStreaming_NoContext(t *testing.T) {
+func TestPredictedLatency_ResponseStreaming_NoContext(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -459,7 +458,7 @@ func TestSLOAwareRouter_ResponseStreaming_NoContext(t *testing.T) {
 
 }
 
-func TestSLOAwareRouter_ResponseComplete_Success(t *testing.T) {
+func TestPredictedLatency_ResponseComplete_Success(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -474,27 +473,27 @@ func TestSLOAwareRouter_ResponseComplete_Success(t *testing.T) {
 	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 50.0)
 
-	sloCtx := newSLORequestContext(request)
-	sloCtx.ttft = 80
-	sloCtx.avgTPOT = 30
-	sloCtx.predictedTTFT = 85
-	sloCtx.avgPredictedTPOT = 32
-	sloCtx.ttftSLO = 100
-	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = "incoming-model"
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.ttft = 80
+	predictedLatencyCtx.avgITL = 30
+	predictedLatencyCtx.predictedTTFT = 85
+	predictedLatencyCtx.avgPredictedITL = 32
+	predictedLatencyCtx.ttftSLO = 100
+	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.incomingModelName = "incoming-model"
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify context was deleted
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 
 	// Verify request was removed from queue
 	assert.Equal(t, 0, queue.Len())
 }
 
-func TestSLOAwareRouter_ResponseComplete_NilPredictor(t *testing.T) {
+func TestPredictedLatency_ResponseComplete_NilPredictor(t *testing.T) {
 	router := createTestRouter()
 	router.latencypredictor = nil
 
@@ -503,18 +502,18 @@ func TestSLOAwareRouter_ResponseComplete_NilPredictor(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
-	sloCtx := newSLORequestContext(request)
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist (deletion happens only with predictor)
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.NoError(t, err)
 }
 
-func TestSLOAwareRouter_ResponseComplete_NoPod(t *testing.T) {
+func TestPredictedLatency_ResponseComplete_NoPod(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -523,18 +522,18 @@ func TestSLOAwareRouter_ResponseComplete_NoPod(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 	response := &requestcontrol.Response{}
 
-	sloCtx := newSLORequestContext(request)
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic with nil pod
 	router.ResponseComplete(ctx, request, response, nil)
 
 	// Context should still exist (deletion happens only with validpod.GetPod())
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.NoError(t, err)
 }
 
-func TestSLOAwareRouter_ResponseComplete_NoContext(t *testing.T) {
+func TestPredictedLatency_ResponseComplete_NoContext(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -551,7 +550,7 @@ func TestSLOAwareRouter_ResponseComplete_NoContext(t *testing.T) {
 
 }
 
-func TestSLOAwareRouter_ResponseComplete_WithMetrics(t *testing.T) {
+func TestPredictedLatency_ResponseComplete_WithMetrics(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -566,25 +565,25 @@ func TestSLOAwareRouter_ResponseComplete_WithMetrics(t *testing.T) {
 	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 50.0)
 
-	sloCtx := newSLORequestContext(request)
-	sloCtx.ttft = 80
-	sloCtx.avgTPOT = 30
-	sloCtx.predictedTTFT = 85
-	sloCtx.avgPredictedTPOT = 32
-	sloCtx.ttftSLO = 100
-	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = "incoming-model"
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.ttft = 80
+	predictedLatencyCtx.avgITL = 30
+	predictedLatencyCtx.predictedTTFT = 85
+	predictedLatencyCtx.avgPredictedITL = 32
+	predictedLatencyCtx.ttftSLO = 100
+	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.incomingModelName = "incoming-model"
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should record metrics without panicking
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify cleanup
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 }
 
-func TestSLOAwareRouter_ResponseComplete_NoSLOs(t *testing.T) {
+func TestPredictedLatency_ResponseComplete_NoSLOs(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -599,21 +598,21 @@ func TestSLOAwareRouter_ResponseComplete_NoSLOs(t *testing.T) {
 	router.runningRequestLists[endpoint.GetMetadata().NamespacedName] = queue
 	queue.Add(request.Headers[requtil.RequestIdHeaderKey], 0)
 
-	sloCtx := newSLORequestContext(request)
-	sloCtx.ttft = 80
-	sloCtx.avgTPOT = 30
-	sloCtx.incomingModelName = testModelName
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.ttft = 80
+	predictedLatencyCtx.avgITL = 30
+	predictedLatencyCtx.incomingModelName = testModelName
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should handle missing SLOs gracefully
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify cleanup
-	_, err := router.getSLOContextForRequest(request)
+	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 }
 
-func TestSLOAwareRouter_CheckPredictor_NilPod(t *testing.T) {
+func TestPredictedLatency_CheckPredictor_NilPod(t *testing.T) {
 	router := createTestRouter()
 	logger := logr.Discard()
 
@@ -622,7 +621,7 @@ func TestSLOAwareRouter_CheckPredictor_NilPod(t *testing.T) {
 	assert.False(t, result)
 }
 
-func TestSLOAwareRouter_CheckPredictor_NilPredictor(t *testing.T) {
+func TestPredictedLatency_CheckPredictor_NilPredictor(t *testing.T) {
 	router := createTestRouter()
 	router.latencypredictor = nil
 	logger := logr.Discard()
@@ -633,7 +632,7 @@ func TestSLOAwareRouter_CheckPredictor_NilPredictor(t *testing.T) {
 	assert.False(t, result)
 }
 
-func TestSLOAwareRouter_CheckPredictor_Success(t *testing.T) {
+func TestPredictedLatency_CheckPredictor_Success(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -645,27 +644,27 @@ func TestSLOAwareRouter_CheckPredictor_Success(t *testing.T) {
 	assert.True(t, result)
 }
 
-func TestSLORequestContext_Fields(t *testing.T) {
+func TestPredictedLatencyContext_Fields(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
-	ctx := newSLORequestContext(request)
+	ctx := newPredictedLatencyContext(request)
 
 	// Test all field initialization
 	assert.NotNil(t, ctx.lastSeenMetrics)
 	assert.NotNil(t, ctx.prefixCacheScoresForEndpoints)
 	assert.NotNil(t, ctx.predictionsForScheduling)
-	assert.Empty(t, ctx.tpotObservations)
-	assert.Empty(t, ctx.predictedTPOTObservations)
+	assert.Empty(t, ctx.itlObservations)
+	assert.Empty(t, ctx.predictedITLObservations)
 	assert.Zero(t, ctx.generatedTokenCount)
 	assert.Zero(t, ctx.ttft)
-	assert.Zero(t, ctx.avgTPOT)
+	assert.Zero(t, ctx.avgITL)
 	assert.Nil(t, ctx.targetMetadata)
 	assert.Nil(t, ctx.schedulingResult)
 	assert.Nil(t, ctx.tokenSampler)
 }
 
-func TestSLORequestContext_UpdateMetrics(t *testing.T) {
+func TestPredictedLatencyContext_UpdateMetrics(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
-	ctx := newSLORequestContext(request)
+	ctx := newPredictedLatencyContext(request)
 
 	// Add some metrics
 	metricsState := &datalayer.Metrics{
@@ -679,24 +678,24 @@ func TestSLORequestContext_UpdateMetrics(t *testing.T) {
 	assert.Equal(t, 3, ctx.lastSeenMetrics["test-pod"].WaitingQueueSize)
 }
 
-func TestSLORequestContext_PredictionData(t *testing.T) {
+func TestPredictedLatencyContext_PredictionData(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
-	ctx := newSLORequestContext(request)
+	ctx := newPredictedLatencyContext(request)
 
 	ctx.predictionsForScheduling = make([]endpointPredictionResult, 0)
 
 	// Set prediction data
-	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TTFT: 80.0, TPOT: 25.0})
-	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TPOT: 30.0, TTFT: 85.0})
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TTFT: 80.0, ITL: 25.0})
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), ITL: 30.0, TTFT: 85.0})
 
 	assert.Len(t, ctx.predictionsForScheduling, 2)
 	assert.Equal(t, 80.0, ctx.predictionsForScheduling[0].TTFT)
-	assert.Equal(t, 30.0, ctx.predictionsForScheduling[1].TPOT)
+	assert.Equal(t, 30.0, ctx.predictionsForScheduling[1].ITL)
 }
 
-func TestSLORequestContext_PrefixCacheScores(t *testing.T) {
+func TestPredictedLatencyContext_PrefixCacheScores(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
-	ctx := newSLORequestContext(request)
+	ctx := newPredictedLatencyContext(request)
 
 	// Set prefix cache scores
 	ctx.prefixCacheScoresForEndpoints["pod1"] = 0.8
@@ -708,7 +707,7 @@ func TestSLORequestContext_PrefixCacheScores(t *testing.T) {
 	assert.Equal(t, 0.9, ctx.prefixCacheScoresForEndpoints["pod3"])
 }
 
-func TestSLOAwareRouter_ConcurrentContextAccess(t *testing.T) {
+func TestPredictedLatency_ConcurrentContextAccess(t *testing.T) {
 	router := createTestRouter()
 
 	// Test concurrent access to context store
@@ -722,25 +721,25 @@ func TestSLOAwareRouter_ConcurrentContextAccess(t *testing.T) {
 
 			requestID := uuid.New().String()
 			request := createTestLLMRequest(requestID, 100, 50)
-			sloCtx := newSLORequestContext(request)
+			predictedLatencyCtx := newPredictedLatencyContext(request)
 
 			// Set context
-			router.setSLOContextForRequest(request, sloCtx)
+			router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 			// Get context
-			retrievedCtx, err := router.getSLOContextForRequest(request)
+			retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
 			assert.NoError(t, err)
 			assert.NotNil(t, retrievedCtx)
 
 			// Delete context
-			router.deleteSLOContextForRequest(request)
+			router.deletePredictedLatencyContextForRequest(request)
 		}()
 	}
 
 	wg.Wait()
 }
 
-func TestSLOAwareRouter_MultipleRequests_SamePod(t *testing.T) {
+func TestPredictedLatency_MultipleRequests_SamePod(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -756,9 +755,9 @@ func TestSLOAwareRouter_MultipleRequests_SamePod(t *testing.T) {
 
 	// Create and set SLO contexts
 	for _, req := range []*schedulingtypes.LLMRequest{request1, request2, request3} {
-		sloCtx := newSLORequestContext(req)
-		sloCtx.avgTPOTSLO = 50
-		router.setSLOContextForRequest(req, sloCtx)
+		predictedLatencyCtx := newPredictedLatencyContext(req)
+		predictedLatencyCtx.avgITLSLO = 50
+		router.setPredictedLatencyContextForRequest(req, predictedLatencyCtx)
 	}
 
 	// Add all requests
@@ -772,7 +771,7 @@ func TestSLOAwareRouter_MultipleRequests_SamePod(t *testing.T) {
 	assert.NotNil(t, queue)
 }
 
-func TestSLOAwareRouter_RequestLifecycle_Complete(t *testing.T) {
+func TestPredictedLatency_RequestLifecycle_Complete(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -784,16 +783,16 @@ func TestSLOAwareRouter_RequestLifecycle_Complete(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create initial context
-	sloCtx := newSLORequestContext(request)
-	sloCtx.avgTPOTSLO = 50
-	sloCtx.incomingModelName = testModelName
-	router.setSLOContextForRequest(request, sloCtx)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.incomingModelName = testModelName
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// 1. PreRequest
 	router.PreRequest(ctx, request, schedulingResult)
 
 	// Verify context exists
-	retrievedCtx, err := router.getSLOContextForRequest(request)
+	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
 	require.NoError(t, err)
 	assert.NotNil(t, retrievedCtx.targetMetadata)
 
@@ -804,24 +803,24 @@ func TestSLOAwareRouter_RequestLifecycle_Complete(t *testing.T) {
 	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// 4. ResponseStreaming (subsequent tokens)
-	retrievedCtx, _ = router.getSLOContextForRequest(request)
+	retrievedCtx, _ = router.getPredictedLatencyContextForRequest(request)
 	retrievedCtx.ttft = 100 // Mark first token received
-	router.setSLOContextForRequest(request, retrievedCtx)
+	router.setPredictedLatencyContextForRequest(request, retrievedCtx)
 	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
 
 	// 5. ResponseComplete
-	retrievedCtx, _ = router.getSLOContextForRequest(request)
+	retrievedCtx, _ = router.getPredictedLatencyContextForRequest(request)
 	retrievedCtx.ttft = 80
-	retrievedCtx.avgTPOT = 30
-	router.setSLOContextForRequest(request, retrievedCtx)
+	retrievedCtx.avgITL = 30
+	router.setPredictedLatencyContextForRequest(request, retrievedCtx)
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify context was cleaned up
-	_, err = router.getSLOContextForRequest(request)
+	_, err = router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 }
 
-func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
+func TestPredictedLatency_MultipleRequests_DifferentPods(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -838,14 +837,13 @@ func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
 	schedulingResult2 := createTestSchedulingResult(endpoint2.GetMetadata())
 
 	// Create and set SLO contexts
-	sloCtx1 := newSLORequestContext(request1)
-	sloCtx1.avgTPOTSLO = 50
-	router.setSLOContextForRequest(request1, sloCtx1)
+	predictedLatencyCtx1 := newPredictedLatencyContext(request1)
+	predictedLatencyCtx1.avgITLSLO = 50
+	router.setPredictedLatencyContextForRequest(request1, predictedLatencyCtx1)
 
-	sloCtx2 := newSLORequestContext(request2)
-	sloCtx2.avgTPOTSLO = 50
-	router.setSLOContextForRequest(request2, sloCtx2)
-
+	predictedLatencyCtx2 := newPredictedLatencyContext(request2)
+	predictedLatencyCtx2.avgITLSLO = 50
+	router.setPredictedLatencyContextForRequest(request2, predictedLatencyCtx2)
 	// Add requests to different pods
 	router.PreRequest(ctx, request1, schedulingResult1)
 	router.PreRequest(ctx, request2, schedulingResult2)
@@ -861,47 +859,47 @@ func TestSLOAwareRouter_MultipleRequests_DifferentPods(t *testing.T) {
 	assert.NotEqual(t, queue1, queue2)
 }
 
-func TestSLORequestContext_SLOValidation(t *testing.T) {
+func TestPredictedLatencyContext_SLOValidation(t *testing.T) {
 	tests := []struct {
 		name       string
 		ttftSLO    float64
-		tpotSLO    float64
+		itlSLO    float64
 		expectSLOs bool
 	}{
 		{
 			name:       "Both SLOs set",
 			ttftSLO:    100,
-			tpotSLO:    50,
+			itlSLO:    50,
 			expectSLOs: true,
 		},
 		{
 			name:       "No SLOs",
 			ttftSLO:    0,
-			tpotSLO:    0,
+			itlSLO:    0,
 			expectSLOs: false,
 		},
 		{
 			name:       "Only TTFT SLO",
 			ttftSLO:    100,
-			tpotSLO:    0,
+			itlSLO:    0,
 			expectSLOs: false,
 		},
 		{
-			name:       "Only TPOT SLO",
+			name:       "Only ITL SLO",
 			ttftSLO:    0,
-			tpotSLO:    50,
+			itlSLO:    50,
 			expectSLOs: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := createTestLLMRequest("test-id", tt.ttftSLO, tt.tpotSLO)
-			ctx := newSLORequestContext(request)
+			request := createTestLLMRequest("test-id", tt.ttftSLO, tt.itlSLO)
+			ctx := newPredictedLatencyContext(request)
 			ctx.ttftSLO = tt.ttftSLO
-			ctx.avgTPOTSLO = tt.tpotSLO
+			ctx.avgITLSLO = tt.itlSLO
 
-			hasBothSLOs := ctx.ttftSLO > 0 && ctx.avgTPOTSLO > 0
+			hasBothSLOs := ctx.ttftSLO > 0 && ctx.avgITLSLO > 0
 			assert.Equal(t, tt.expectSLOs, hasBothSLOs)
 		})
 	}
@@ -909,7 +907,7 @@ func TestSLORequestContext_SLOValidation(t *testing.T) {
 
 // Benchmark tests
 
-func BenchmarkSLOAwareRouter_PreRequest(b *testing.B) {
+func BenchmarkPredictedLatency_PreRequest(b *testing.B) {
 	router := createTestRouter()
 	ctx := context.Background()
 	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
@@ -919,31 +917,31 @@ func BenchmarkSLOAwareRouter_PreRequest(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		requestID := uuid.New().String()
 		request := createTestLLMRequest(requestID, 100, 50)
-		sloCtx := newSLORequestContext(request)
-		sloCtx.avgTPOTSLO = 50
-		router.setSLOContextForRequest(request, sloCtx)
+		predictedLatencyCtx := newPredictedLatencyContext(request)
+		predictedLatencyCtx.avgITLSLO = 50
+		router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 		router.PreRequest(ctx, request, schedulingResult)
 	}
 }
 
-func BenchmarkSLOAwareRouter_ContextOperations(b *testing.B) {
+func BenchmarkPredictedLatency_ContextOperations(b *testing.B) {
 	router := createTestRouter()
 	request := createTestLLMRequest("test", 100, 50)
-	sloCtx := newSLORequestContext(request)
+	predictedLatencyCtx := newPredictedLatencyContext(request)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		router.setSLOContextForRequest(request, sloCtx)
-		_, _ = router.getSLOContextForRequest(request)
-		router.deleteSLOContextForRequest(request)
+		router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
+		_, _ = router.getPredictedLatencyContextForRequest(request)
+		router.deletePredictedLatencyContextForRequest(request)
 	}
 }
 
-func BenchmarkSLORequestContext_Creation(b *testing.B) {
+func BenchmarkPredictedLatencyContext_Creation(b *testing.B) {
 	request := createTestLLMRequest("test", 100, 50)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = newSLORequestContext(request)
+		_ = newPredictedLatencyContext(request)
 	}
 }

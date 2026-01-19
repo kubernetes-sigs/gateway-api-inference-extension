@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"context"
@@ -27,36 +27,40 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-func (s *SLOAwareRouter) parseSLOHeaders(ctx context.Context, request *schedulingtypes.LLMRequest, sloCtx *sloRequestContext) {
+func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedulingtypes.LLMRequest, predictedLatencyCtx *predictedLatencyCtx) {
 	logger := log.FromContext(ctx)
 	var err error
 
 	// Get Request SLOs from request header
-	sloCtx.ttftSLO, err = parseFloatHeader(*request, ttftSLOHeaderKey)
+	predictedLatencyCtx.ttftSLO, err = parseFloatHeader(*request, ttftSLOHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TTFT SLO from header")
+		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "PredictedLatency: Error parsing TTFT SLO from header")
 	}
 
-	sloCtx.avgTPOTSLO, err = parseFloatHeader(*request, tpotSLOHeaderKey)
+	predictedLatencyCtx.avgITLSLO, err = parseFloatHeader(*request, itlSLOHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "SLOAwareRouter: Error parsing TPOT SLO from header")
+		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", itlSLOHeaderKey, err)}, "PredictedLatency: Error parsing ITL SLO from header")
+	}
+	predictedLatencyCtx.sheddable, err = parseBoolHeader(*request, sheddableHeaderKey)
+	if err != nil {
+		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a bool: %v", sheddableHeaderKey, err)}, "PredictedLatency: Error parsing Sheddable from header")
 	}
 }
 
-func (s *SLOAwareRouter) classifyEndpointsByHeadroom(allPreds []endpointPredictionResult) (posHeadroomEndpoints, negHeadroomEndpoints []endpointPredictionResult) {
+func (s *PredictedLatency) classifyEndpointsByHeadroom(allPreds []endpointPredictionResult) (posHeadroomEndpoints, negHeadroomEndpoints []endpointPredictionResult) {
 	for _, p := range allPreds {
-		// An endpoint has positive headroom only if BOTH TTFT and TPOT have positive headroom
+		// An endpoint has positive headroom only if BOTH TTFT and ITL have positive headroom
 		if (p.Headroom >= 0) && p.TTFTHeadroom >= 0 {
 			posHeadroomEndpoints = append(posHeadroomEndpoints, p)
 		} else {
-			// An endpoint has negative headroom if EITHER TTFT or TPOT has negative/zero headroom
+			// An endpoint has negative headroom if EITHER TTFT or ITL has negative/zero headroom
 			negHeadroomEndpoints = append(negHeadroomEndpoints, p)
 		}
 	}
 	return
 }
 
-func (s *SLOAwareRouter) selectEndpointBasedOnStrategy(
+func (s *PredictedLatency) selectEndpointBasedOnStrategy(
 	ctx context.Context,
 	r *rand.Rand,
 	allPreds, posHeadroomEndpoints, negHeadroomEndpoints []endpointPredictionResult,

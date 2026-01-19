@@ -46,11 +46,11 @@ const (
 	UpdateTimeKey          = "UpdateTime"
 
 	// Metric Type Values
-	TypeTPOT                   = "tpot"
-	TypePredictedTPOT          = "predicted_tpot"
-	TypeTPOTPredictionDuration = "tpot_prediction_duration"
-	TypeTPOTSLOViolation       = "tpot_slo_violation"
-	TypeTPOTSLOThreshold       = "tpot_slo_threshold"
+	TypeITL                   = "itl"
+	TypePredictedITL          = "predicted_itl"
+	TypeITLPredictionDuration = "itl_prediction_duration"
+	TypeITLSLOViolation       = "itl_slo_violation"
+	TypeITLSLOThreshold       = "itl_slo_threshold"
 
 	TypeTTFT                   = "ttft"
 	TypePredictedTTFT          = "predicted_ttft"
@@ -74,8 +74,8 @@ var (
 		1800, 2700, 3600,
 	}
 
-	// TPOTBuckets for time-per-output-token (usually milliseconds to seconds)
-	TPOTBuckets = []float64{
+	// ITLBuckets for time-per-output-token (usually milliseconds to seconds)
+	ITLBuckets = []float64{
 		0.0005, 0.00205, 0.005, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.125, 0.15, 0.2,
 		0.3, 0.4, 0.5, 0.6, 0.8, 1, 1.5, 2, 3, 4.5, 6, 12, 18, 24, 30, 36, 48, 60,
 		90, 120, 180, 270, 360,
@@ -111,7 +111,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferenceObjectiveComponent,
 			Name:      "inference_request_metric",
-			Help:      metricsutil.HelpMsgWithStability("Consolidated gauge for various inference request metrics including TTFT, TPOT, SLOs, and prediction durations.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Consolidated gauge for various inference request metrics including TTFT, ITL, SLOs, and prediction durations.", compbasemetrics.ALPHA),
 		},
 		ModelTypeLabels,
 	)
@@ -146,31 +146,31 @@ var (
 		ModelLabels,
 	)
 
-	requestTPOT = prometheus.NewHistogramVec(
+	requestITL = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceObjectiveComponent,
-			Name:      "request_tpot_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Inference model TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
-			Buckets:   TPOTBuckets,
+			Name:      "request_itl_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model ITL distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets:   ITLBuckets,
 		},
 		ModelLabels,
 	)
 
-	requestPredictedTPOT = prometheus.NewHistogramVec(
+	requestPredictedITL = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceObjectiveComponent,
-			Name:      "request_predicted_tpot_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted TPOT distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
-			Buckets:   TPOTBuckets,
+			Name:      "request_predicted_itl_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model Predicted ITL distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets:   ITLBuckets,
 		},
 		ModelLabels,
 	)
 
-	requestTPOTPredictionDuration = prometheus.NewHistogramVec(
+	requestITLPredictionDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceObjectiveComponent,
-			Name:      "request_tpot_prediction_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Name:      "request_itl_prediction_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate ITL predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets:   PredictionLatencyBuckets,
 		},
 		ModelLabels,
@@ -264,7 +264,7 @@ var (
 		[]string{"model_name"},
 	)
 
-	// NTPOT - Normalized Time Per Output Token
+	// NITL - Normalized Time Per Output Token
 	NormalizedTimePerOutputToken = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceObjectiveComponent,
@@ -428,11 +428,11 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(inferenceGauges)
 
 		// Register Histograms
-		metrics.Registry.MustRegister(requestTPOT)
+		metrics.Registry.MustRegister(requestITL)
 		metrics.Registry.MustRegister(requestTTFT)
-		metrics.Registry.MustRegister(requestPredictedTPOT)
+		metrics.Registry.MustRegister(requestPredictedITL)
 		metrics.Registry.MustRegister(requestPredictedTTFT)
-		metrics.Registry.MustRegister(requestTPOTPredictionDuration)
+		metrics.Registry.MustRegister(requestITLPredictionDuration)
 		metrics.Registry.MustRegister(requestTTFTPredictionDuration)
 
 		// Register SLO violation counters
@@ -474,11 +474,11 @@ func Reset() {
 	inferenceGauges.Reset()
 
 	// Reset Histograms
-	requestTPOT.Reset()
+	requestITL.Reset()
 	requestTTFT.Reset()
-	requestPredictedTPOT.Reset()
+	requestPredictedITL.Reset()
 	requestPredictedTTFT.Reset()
-	requestTPOTPredictionDuration.Reset()
+	requestITLPredictionDuration.Reset()
 	requestTTFTPredictionDuration.Reset()
 
 	// Reset SLO violation counter
@@ -539,61 +539,61 @@ func RecordRequestLatencies(ctx context.Context, modelName, targetModelName stri
 	return true
 }
 
-func RecordRequestTPOT(ctx context.Context, modelName, targetModelName string, tpot float64) bool {
-	if tpot < 0 {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT value must be non-negative",
-			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot)
+func RecordRequestITL(ctx context.Context, modelName, targetModelName string, itl float64) bool {
+	if itl < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "ITL value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "itl", itl)
 		return false
 	}
-	requestTPOT.WithLabelValues(modelName, targetModelName).Observe(tpot)
-	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeTPOT).Set(tpot)
+	requestITL.WithLabelValues(modelName, targetModelName).Observe(itl)
+	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeITL).Set(itl)
 	return true
 }
 
-// RecordRequestTPOTWithSLO records TPOT and checks for SLO violation.
-// If tpot exceeds the threshold, it records a violation (sets gauge to 1 and increments counter).
-// If tpot is within limits, it sets gauge to 0.
-func RecordRequestTPOTWithSLO(ctx context.Context, modelName, targetModelName string, tpot float64, sloThreshold float64) bool {
-	if tpot < 0 {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT value must be non-negative",
-			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot)
+// RecordRequestITLWithSLO records ITL and checks for SLO violation.
+// If itl exceeds the threshold, it records a violation (sets gauge to 1 and increments counter).
+// If itl is within limits, it sets gauge to 0.
+func RecordRequestITLWithSLO(ctx context.Context, modelName, targetModelName string, itl float64, sloThreshold float64) bool {
+	if itl < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "ITL value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "itl", itl)
 		return false
 	}
 
-	// Check for SLO violation (tpot exceeds threshold)
-	if tpot > sloThreshold {
-		inferenceGauges.WithLabelValues(modelName, targetModelName, TypeTPOTSLOViolation).Set(1)
-		sloViolationCounter.WithLabelValues(modelName, targetModelName, TypeTPOT).Inc()
-		log.FromContext(ctx).V(logutil.DEFAULT).Info("TPOT SLO violation detected",
-			"modelName", modelName, "targetModelName", targetModelName, "tpot", tpot, "threshold", sloThreshold)
+	// Check for SLO violation (itl exceeds threshold)
+	if itl > sloThreshold {
+		inferenceGauges.WithLabelValues(modelName, targetModelName, TypeITLSLOViolation).Set(1)
+		sloViolationCounter.WithLabelValues(modelName, targetModelName, TypeITL).Inc()
+		log.FromContext(ctx).V(logutil.DEFAULT).Info("ITL SLO violation detected",
+			"modelName", modelName, "targetModelName", targetModelName, "itl", itl, "threshold", sloThreshold)
 	} else {
-		inferenceGauges.WithLabelValues(modelName, targetModelName, TypeTPOTSLOViolation).Set(0)
+		inferenceGauges.WithLabelValues(modelName, targetModelName, TypeITLSLOViolation).Set(0)
 	}
 
 	return true
 }
 
-// TPOT records duration of request.
-func RecordRequestPredictedTPOT(ctx context.Context, modelName, targetModelName string, predicted_tpot float64) bool {
-	if predicted_tpot < 0 {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Predicted TPOT value must be non-negative",
-			"modelName", modelName, "targetModelName", targetModelName, "tpot", predicted_tpot)
+// ITL records duration of request.
+func RecordRequestPredictedITL(ctx context.Context, modelName, targetModelName string, predicted_itl float64) bool {
+	if predicted_itl < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Predicted ITL value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "itl", predicted_itl)
 		return false
 	}
-	requestPredictedTPOT.WithLabelValues(modelName, targetModelName).Observe(predicted_tpot)
-	inferenceGauges.WithLabelValues(modelName, targetModelName, TypePredictedTPOT).Set(predicted_tpot)
+	requestPredictedITL.WithLabelValues(modelName, targetModelName).Observe(predicted_itl)
+	inferenceGauges.WithLabelValues(modelName, targetModelName, TypePredictedITL).Set(predicted_itl)
 	return true
 }
 
-// RecordRequestTPOTPredictionDuration records the duration taken to generate TPOT predictions.
-func RecordRequestTPOTPredictionDuration(ctx context.Context, modelName, targetModelName string, duration float64) bool {
+// RecordRequestITLPredictionDuration records the duration taken to generate ITL predictions.
+func RecordRequestITLPredictionDuration(ctx context.Context, modelName, targetModelName string, duration float64) bool {
 	if duration < 0 {
-		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "TPOT prediction duration must be non-negative",
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "ITL prediction duration must be non-negative",
 			"modelName", modelName, "targetModelName", targetModelName, "duration", duration)
 		return false
 	}
-	requestTPOTPredictionDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
-	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeTPOTPredictionDuration).Set(duration)
+	requestITLPredictionDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
+	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeITLPredictionDuration).Set(duration)
 	return true
 }
 
@@ -632,7 +632,7 @@ func RecordRequestTTFTWithSLO(ctx context.Context, modelName, targetModelName st
 	return true
 }
 
-// TPOT records duration of request.
+// ITL records duration of request.
 func RecordRequestPredictedTTFT(ctx context.Context, modelName, targetModelName string, predicted_ttft float64) bool {
 	if predicted_ttft < 0 {
 		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Predicted TTFT value must be non-negative",
@@ -680,16 +680,16 @@ func RecordPromptCachedTokens(modelName, targetModelName string, size int) {
 	promptCachedTokens.WithLabelValues(modelName, targetModelName).Observe(float64(size))
 }
 
-// RecordNormalizedTimePerOutputToken (NTPOT) records the normalized time per output token.
+// RecordNormalizedTimePerOutputToken (NITL) records the normalized time per output token.
 func RecordNormalizedTimePerOutputToken(ctx context.Context, modelName, targetModelName string, received time.Time, complete time.Time, outputTokenCount int) bool {
 	if !complete.After(received) {
-		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NTPOT calculation",
+		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NITL calculation",
 			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
 		return false
 	}
 
 	if outputTokenCount <= 0 {
-		log.FromContext(ctx).Error(nil, "Output token count must be positive for NTPOT calculation",
+		log.FromContext(ctx).Error(nil, "Output token count must be positive for NITL calculation",
 			"modelName", modelName, "targetModelName", targetModelName, "outputTokenCount", outputTokenCount)
 		return false
 	}
@@ -803,10 +803,10 @@ func SetTTFTSLOThreshold(modelName, targetModelName string, threshold float64) {
 	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeTTFTSLOThreshold).Set(threshold)
 }
 
-// SetTPOTSLOThreshold sets the TPOT SLO threshold for a model.
+// SetITLSLOThreshold sets the ITL SLO threshold for a model.
 // This allows dynamic threshold management and makes the threshold visible in metrics.
-func SetTPOTSLOThreshold(modelName, targetModelName string, threshold float64) {
-	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeTPOTSLOThreshold).Set(threshold)
+func SetITLSLOThreshold(modelName, targetModelName string, threshold float64) {
+	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeITLSLOThreshold).Set(threshold)
 }
 
 // RecordInferenceModelRewriteDecision records the routing decision for InferenceModelRewrite.

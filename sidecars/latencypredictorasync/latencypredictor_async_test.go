@@ -246,9 +246,9 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 
 	t.Logf("Prediction Response:")
 	t.Logf("  TTFT: %.2f ms (uncertainty: %.2f)", response.TTFT, response.TTFTUncertainty)
-	t.Logf("  TPOT: %.2f ms (uncertainty: %.2f)", response.TPOT, response.TPOTUncertainty)
+	t.Logf("  ITL: %.2f ms (uncertainty: %.2f)", response.ITL, response.ITLUncertainty)
 	t.Logf("  TTFT Bounds: [%.2f, %.2f]", response.TTFTPredictionBounds[0], response.TTFTPredictionBounds[1])
-	t.Logf("  TPOT Bounds: [%.2f, %.2f]", response.TPOTPredictionBounds[0], response.TPOTPredictionBounds[1])
+	t.Logf("  ITL Bounds: [%.2f, %.2f]", response.ITLPredictionBounds[0], response.ITLPredictionBounds[1])
 	t.Logf("  Model Type: %s", response.ModelType)
 	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  Predicted At: %s", response.PredictedAt.Format(time.RFC3339))
@@ -257,8 +257,8 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	if response.TTFT <= 0 {
 		t.Error("TTFT should be positive")
 	}
-	if response.TPOT <= 0 {
-		t.Error("TPOT should be positive")
+	if response.ITL <= 0 {
+		t.Error("ITL should be positive")
 	}
 	if response.ModelType == "" {
 		t.Error("Model type should not be empty")
@@ -285,8 +285,8 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 			continue
 		}
 
-		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix_cache=%.1f%%, quantile=%.2f)",
-			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100, resp.Quantile)
+		t.Logf("Prediction %d: TTFT=%.2f, ITL=%.2f (prefix_cache=%.1f%%, quantile=%.2f)",
+			i+1, resp.TTFT, resp.ITL, testReq.PrefixCacheScore*100, resp.Quantile)
 	}
 }
 
@@ -337,15 +337,15 @@ func testBulkPredictions(t *testing.T, ctx context.Context, predictor *Predictor
 		if prediction.TTFT <= 0 {
 			t.Errorf("Prediction %d: TTFT should be positive, got %.2f", i, prediction.TTFT)
 		}
-		if prediction.TPOT <= 0 {
-			t.Errorf("Prediction %d: TPOT should be positive, got %.2f", i, prediction.TPOT)
+		if prediction.ITL <= 0 {
+			t.Errorf("Prediction %d: ITL should be positive, got %.2f", i, prediction.ITL)
 		}
 		if prediction.ModelType == "" {
 			t.Errorf("Prediction %d: Model type should not be empty", i)
 		}
 
-		t.Logf("  Prediction %d: TTFT=%.2f, TPOT=%.2f, quantile=%.2f",
-			i+1, prediction.TTFT, prediction.TPOT, prediction.Quantile)
+		t.Logf("  Prediction %d: TTFT=%.2f, ITL=%.2f, quantile=%.2f",
+			i+1, prediction.TTFT, prediction.ITL, prediction.Quantile)
 	}
 
 	// Test performance expectation
@@ -446,8 +446,8 @@ func testLightGBMSupport(t *testing.T, ctx context.Context, predictor *Predictor
 			if err != nil {
 				t.Errorf("LightGBM prediction failed: %v", err)
 			} else {
-				t.Logf("LightGBM prediction successful: TTFT=%.2f, TPOT=%.2f",
-					response.TTFT, response.TPOT)
+				t.Logf("LightGBM prediction successful: TTFT=%.2f, ITL=%.2f",
+					response.TTFT, response.ITL)
 
 				if response.ModelType != gbmModelType {
 					t.Errorf("Expected model type 'lightgbm', got '%s'", response.ModelType)
@@ -506,8 +506,8 @@ func testPredictionWithPrefixCache(t *testing.T, ctx context.Context, predictor 
 
 		ttftResults = append(ttftResults, response.TTFT)
 		quantileResults = append(quantileResults, response.Quantile)
-		t.Logf("Prefix cache %.0f%%: TTFT=%.2f ms, TPOT=%.2f ms, quantile=%.2f",
-			prefixScore*100, response.TTFT, response.TPOT, response.Quantile)
+		t.Logf("Prefix cache %.0f%%: TTFT=%.2f ms, ITL=%.2f ms, quantile=%.2f",
+			prefixScore*100, response.TTFT, response.ITL, response.Quantile)
 	}
 
 	// Verify quantile consistency
@@ -571,7 +571,7 @@ func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Pr
 
 	t.Logf("HTTP Prediction Response:")
 	t.Logf("  TTFT: %.2f ms", response.TTFT)
-	t.Logf("  TPOT: %.2f ms", response.TPOT)
+	t.Logf("  ITL: %.2f ms", response.ITL)
 	t.Logf("  Model Type: %s", response.ModelType)
 	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  Prefix Cache Score Used: %.1f%%", req.PrefixCacheScore*100)
@@ -580,8 +580,8 @@ func testHTTPFallbackPrediction(t *testing.T, ctx context.Context, predictor *Pr
 	if response.TTFT <= 0 {
 		t.Error("TTFT should be positive")
 	}
-	if response.TPOT <= 0 {
-		t.Error("TPOT should be positive")
+	if response.ITL <= 0 {
+		t.Error("ITL should be positive")
 	}
 
 	// The model type should indicate the correct type
@@ -653,8 +653,8 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 		}
 
 		durationMs := float64(duration.Nanoseconds()) / 1e6
-		t.Logf("Prediction %d: %.2fms - TTFT: %.1fms, TPOT: %.1fms (prefix: %.0f%%, quantile: %.2f)",
-			i+1, durationMs, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100, response.Quantile)
+		t.Logf("Prediction %d: %.2fms - TTFT: %.1fms, ITL: %.1fms (prefix: %.0f%%, quantile: %.2f)",
+			i+1, durationMs, response.TTFT, response.ITL, testReq.PrefixCacheScore*100, response.Quantile)
 	}
 
 	// Calculate statistics
@@ -889,8 +889,8 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 
 		status := "✅"
 
-		t.Logf("%s Test %d: %.1fms (TTFT: %.0fms, TPOT: %.0fms, prefix: %.0f%%, quantile: %.2f)",
-			status, i+1, durationMs, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100, response.Quantile)
+		t.Logf("%s Test %d: %.1fms (TTFT: %.0fms, ITL: %.0fms, prefix: %.0f%%, quantile: %.2f)",
+			status, i+1, durationMs, response.TTFT, response.ITL, testReq.PrefixCacheScore*100, response.Quantile)
 	}
 
 	// Calculate statistics
@@ -1040,19 +1040,19 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 
 	t.Logf("HTTP-Only Prediction Response:")
 	t.Logf("  TTFT: %.2f ms", response.TTFT)
-	t.Logf("  TPOT: %.2f ms", response.TPOT)
+	t.Logf("  ITL: %.2f ms", response.ITL)
 	t.Logf("  Model Type: %s", response.ModelType)
 	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  TTFT Uncertainty: %.2f", response.TTFTUncertainty)
-	t.Logf("  TPOT Uncertainty: %.2f", response.TPOTUncertainty)
+	t.Logf("  ITL Uncertainty: %.2f", response.ITLUncertainty)
 	t.Logf("  Prefix Cache Score Used: %.1f%%", req.PrefixCacheScore*100)
 
 	// Validate response
 	if response.TTFT <= 0 {
 		t.Error("TTFT should be positive")
 	}
-	if response.TPOT <= 0 {
-		t.Error("TPOT should be positive")
+	if response.ITL <= 0 {
+		t.Error("ITL should be positive")
 	}
 
 	// Test multiple HTTP-only predictions with varying prefix cache
@@ -1073,8 +1073,8 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 			continue
 		}
 
-		t.Logf("HTTP-only prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%, quantile: %.2f)",
-			i+1, resp.TTFT, resp.TPOT, testReq.PrefixCacheScore*100, resp.Quantile)
+		t.Logf("HTTP-only prediction %d: TTFT=%.2f, ITL=%.2f (prefix: %.0f%%, quantile: %.2f)",
+			i+1, resp.TTFT, resp.ITL, testReq.PrefixCacheScore*100, resp.Quantile)
 	}
 
 	t.Log("Successfully tested HTTP-only predictions with prefix cache")
@@ -1114,8 +1114,8 @@ func testLoadBalancing(t *testing.T, ctx context.Context, predictor *Predictor) 
 		}
 
 		successfulPredictions++
-		t.Logf("Prediction %d: TTFT=%.2f, TPOT=%.2f (prefix: %.0f%%, quantile: %.2f)",
-			i+1, response.TTFT, response.TPOT, testReq.PrefixCacheScore*100, response.Quantile)
+		t.Logf("Prediction %d: TTFT=%.2f, ITL=%.2f (prefix: %.0f%%, quantile: %.2f)",
+			i+1, response.TTFT, response.ITL, testReq.PrefixCacheScore*100, response.Quantile)
 	}
 
 	successRate := float64(successfulPredictions) / float64(numPredictions) * 100
@@ -1177,7 +1177,7 @@ func testPrefixCacheValidation(t *testing.T, predictor *Predictor) {
 		NumRequestRunning:  1,
 		NumTokensGenerated: 20,
 		ActualTTFT:         50.0,
-		ActualTPOT:         15.0,
+		ActualITL:         15.0,
 		PrefixCacheScore:   0.8,
 		Timestamp:          time.Now(),
 	}
@@ -1242,14 +1242,14 @@ func testPredictionConstructors(t *testing.T) {
 		1,    // num_request_running
 		50,   // num_tokens_generated
 		45.5, // actual_ttft_ms
-		12.3, // actual_tpot_ms
+		12.3, // actual_itl_ms
 		0.75, // prefix_cache_score
 	)
 	if err != nil {
 		t.Errorf("Valid training entry constructor failed: %v", err)
 	} else {
-		t.Logf("✓ Created training entry: TTFT=%.1fms, TPOT=%.1fms, prefix cache=%.0f%%",
-			entry.ActualTTFT, entry.ActualTPOT, entry.PrefixCacheScore*100)
+		t.Logf("✓ Created training entry: TTFT=%.1fms, ITL=%.1fms, prefix cache=%.0f%%",
+			entry.ActualTTFT, entry.ActualITL, entry.PrefixCacheScore*100)
 	}
 
 	// Test invalid training entry constructor
@@ -1260,7 +1260,7 @@ func testPredictionConstructors(t *testing.T) {
 		1,    // num_request_running
 		50,   // num_tokens_generated
 		45.5, // actual_ttft_ms
-		12.3, // actual_tpot_ms
+		12.3, // actual_itl_ms
 		-0.1, // prefix_cache_score (invalid)
 	)
 	if err == nil {
@@ -1439,23 +1439,23 @@ func testBayesianRidgeMetrics(t *testing.T, ctx context.Context, predictor *Pred
 		t.Logf("  %s: %.6f", feature, coeff)
 	}
 
-	t.Logf("TPOT Coefficients (should NOT include prefix_cache_score):")
-	t.Logf("  Intercept: %.6f", metrics.Coefficients.TPOTIntercept)
-	for feature, coeff := range metrics.Coefficients.TPOTCoeffs {
+	t.Logf("ITL Coefficients (should NOT include prefix_cache_score):")
+	t.Logf("  Intercept: %.6f", metrics.Coefficients.ITLIntercept)
+	for feature, coeff := range metrics.Coefficients.ITLCoeffs {
 		t.Logf("  %s: %.6f", feature, coeff)
 	}
 
-	// Validate prefix cache score is in TTFT but not TPOT
+	// Validate prefix cache score is in TTFT but not ITL
 	if _, hasPrefixCache := metrics.Coefficients.TTFTCoeffs["prefix_cache_score"]; hasPrefixCache {
 		t.Log("✓ TTFT model includes prefix_cache_score coefficient")
 	} else {
 		t.Log("ℹ TTFT model does not include prefix_cache_score coefficient (may not be trained yet)")
 	}
 
-	if _, hasPrefixCache := metrics.Coefficients.TPOTCoeffs["prefix_cache_score"]; hasPrefixCache {
-		t.Error("❌ TPOT model should NOT include prefix_cache_score coefficient")
+	if _, hasPrefixCache := metrics.Coefficients.ITLCoeffs["prefix_cache_score"]; hasPrefixCache {
+		t.Error("❌ ITL model should NOT include prefix_cache_score coefficient")
 	} else {
-		t.Log("✓ TPOT model correctly excludes prefix_cache_score coefficient")
+		t.Log("✓ ITL model correctly excludes prefix_cache_score coefficient")
 	}
 
 	// Test individual coefficient and bucket retrieval
@@ -1463,16 +1463,16 @@ func testBayesianRidgeMetrics(t *testing.T, ctx context.Context, predictor *Pred
 	if err != nil {
 		t.Errorf("Failed to get model coefficients: %v", err)
 	} else {
-		t.Logf("Retrieved coefficients separately: %d TTFT, %d TPOT features",
-			len(coeffs.TTFTCoeffs), len(coeffs.TPOTCoeffs))
+		t.Logf("Retrieved coefficients separately: %d TTFT, %d ITL features",
+			len(coeffs.TTFTCoeffs), len(coeffs.ITLCoeffs))
 	}
 
 	buckets, err := predictor.GetBucketCounts(ctx)
 	if err != nil {
 		t.Errorf("Failed to get bucket counts: %v", err)
 	} else {
-		t.Logf("Retrieved bucket counts: %d TTFT, %d TPOT buckets",
-			len(buckets.TTFTBuckets), len(buckets.TPOTBuckets))
+		t.Logf("Retrieved bucket counts: %d TTFT, %d ITL buckets",
+			len(buckets.TTFTBuckets), len(buckets.ITLBuckets))
 	}
 }
 
@@ -1490,13 +1490,13 @@ func testXGBoostMetrics(t *testing.T, ctx context.Context, predictor *Predictor)
 
 	t.Logf("XGBoost Trees:")
 	t.Logf("  TTFT Trees: %d", len(trees.TTFTTrees))
-	t.Logf("  TPOT Trees: %d", len(trees.TPOTTrees))
+	t.Logf("  ITL Trees: %d", len(trees.ITLTrees))
 
 	if len(trees.TTFTTrees) == 0 {
 		t.Error("Expected at least one TTFT tree")
 	}
-	if len(trees.TPOTTrees) == 0 {
-		t.Error("Expected at least one TPOT tree")
+	if len(trees.ITLTrees) == 0 {
+		t.Error("Expected at least one ITL tree")
 	}
 
 	// Test native XGBoost readiness
@@ -1541,7 +1541,7 @@ func generateTrainingEntries(count int) []TrainingEntry {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < count; i++ {
-		// Generate TTFT and TPOT using a simple equation based on features, plus some noise
+		// Generate TTFT and ITL using a simple equation based on features, plus some noise
 		kv := rng.Float64() // 0.0 to 1.0
 		inputLen := rng.Intn(2048) + 1
 		waiting := rng.Intn(20)
@@ -1550,9 +1550,9 @@ func generateTrainingEntries(count int) []TrainingEntry {
 		prefixCache := rng.Float64() // 0.0 to 1.0
 
 		// Updated equations to include prefix cache impact on TTFT:
-		// TTFT includes prefix cache, TPOT does not
+		// TTFT includes prefix cache, ITL does not
 		ttft := 100 + 2*float64(inputLen) + 10*kv + 5*float64(waiting) + 30*prefixCache + rng.NormFloat64()*20
-		tpot := 20 + 0.5*float64(generated) + 2*float64(running) + rng.NormFloat64()*5 + 9*kv
+		itl := 20 + 0.5*float64(generated) + 2*float64(running) + rng.NormFloat64()*5 + 9*kv
 
 		entries[i] = TrainingEntry{
 			KVCachePercentage:  kv,
@@ -1561,7 +1561,7 @@ func generateTrainingEntries(count int) []TrainingEntry {
 			NumRequestRunning:  running,
 			NumTokensGenerated: generated,
 			ActualTTFT:         ttft,
-			ActualTPOT:         tpot,
+			ActualITL:         itl,
 			PrefixCacheScore:   prefixCache, // Added prefix cache score
 			Timestamp:          time.Now().Add(-time.Duration(rng.Intn(3600)) * time.Second),
 		}
@@ -1938,7 +1938,7 @@ func TestPrefixCacheIntegration(t *testing.T) {
 			1,                 // num_request_running (always > 0)
 			10+i*5,            // num_tokens_generated
 			50.0+float64(i)*5, // actual_ttft_ms
-			10.0+float64(i)*2, // actual_tpot_ms
+			10.0+float64(i)*2, // actual_itl_ms
 			float64(i)/4.0,    // prefix_cache_score (0.0 to 1.0)
 		)
 		if err != nil {
@@ -1946,8 +1946,8 @@ func TestPrefixCacheIntegration(t *testing.T) {
 		}
 		entries[i] = entry
 
-		t.Logf("Entry %d: prefix_cache=%.1f%%, ttft=%.1f, tpot=%.1f",
-			i, entry.PrefixCacheScore*100, entry.ActualTTFT, entry.ActualTPOT)
+		t.Logf("Entry %d: prefix_cache=%.1f%%, ttft=%.1f, itl=%.1f",
+			i, entry.PrefixCacheScore*100, entry.ActualTTFT, entry.ActualITL)
 	}
 
 	// Add training data to buffer (won't flush due to long interval)
@@ -2139,7 +2139,7 @@ func TestOfflineValidation(t *testing.T) {
 			NumRequestRunning:  1,
 			NumTokensGenerated: 50,
 			ActualTTFT:         45.5,
-			ActualTPOT:         12.3,
+			ActualITL:         12.3,
 			PrefixCacheScore:   0.75,
 			Timestamp:          time.Now(),
 		}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds []endpointPredictionResult, r *rand.Rand, strategy headroomStrategy) schedulingtypes.Endpoint {
+func (s *PredictedLatency) selectFromCompositeScores(ctx context.Context, allPreds []endpointPredictionResult, r *rand.Rand, strategy headroomStrategy) schedulingtypes.Endpoint {
 	total := 0
 	choices := s.buildCompositeChoices(
 		ctx, allPreds, s.config.CompositeKVWeight, s.config.CompositeQueueWeight, s.config.CompositePrefixWeight, &total,
@@ -40,7 +40,7 @@ func (s *SLOAwareRouter) selectFromCompositeScores(ctx context.Context, allPreds
 	selectedEndpoint := s.performWeightedRandomSelection(choices, total, allPreds, r)
 	return selectedEndpoint
 }
-func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []choice, total int, candidates []endpointPredictionResult, r *rand.Rand) schedulingtypes.Endpoint {
+func (s *PredictedLatency) performWeightedRandomSelection(weightedChoices []choice, total int, candidates []endpointPredictionResult, r *rand.Rand) schedulingtypes.Endpoint {
 	if total == 0 {
 		return nil
 	}
@@ -84,7 +84,7 @@ func (s *SLOAwareRouter) performWeightedRandomSelection(weightedChoices []choice
 
 	return selectedEndpoint
 }
-func (s *SLOAwareRouter) buildCompositeChoices(
+func (s *PredictedLatency) buildCompositeChoices(
 	ctx context.Context,
 	candidates []endpointPredictionResult,
 	wkv, wq, wpref float64,

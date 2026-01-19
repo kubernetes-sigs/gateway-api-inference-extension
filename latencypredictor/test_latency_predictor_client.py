@@ -102,7 +102,7 @@ def test_add_training_data_bulk():
       actual_ttft_ms = 2*input_token_length + 3*num_request_waiting +
                        4*num_request_running + 50*kv_cache_percentage + 
                        30*prefix_cache_score + 95
-      actual_tpot_ms = 100*kv_cache_percentage + 0.5*input_token_length + 1*num_tokens_generated +
+      actual_itl_ms = 100*kv_cache_percentage + 0.5*input_token_length + 1*num_tokens_generated +
                        5*num_request_running + 9
     """
     entries = []
@@ -126,8 +126,8 @@ def test_add_training_data_bulk():
             "num_request_running": running,
             # Updated TTFT formula to include prefix_cache_score
             "actual_ttft_ms": (inp_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix_cache*30.0) + 95,
-            # TPOT formula remains unchanged
-            "actual_tpot_ms": (kv*100.0 + inp_len*0.5 + tokens*1.0 + running*5.0) + 9,
+            # ITL formula remains unchanged
+            "actual_itl_ms": (kv*100.0 + inp_len*0.5 + tokens*1.0 + running*5.0) + 9,
             "num_tokens_generated": tokens,
             "prefix_cache_score": prefix_cache,  # Added prefix cache score
             "timestamp": time.time()  # FastAPI will coerce to datetime
@@ -167,8 +167,8 @@ def test_model_learns_equation():
         + features["prefix_cache_score"] * 30.0  # New term
         + 95
     )
-    # TPOT formula remains unchanged
-    expected_tpot = (
+    # ITL formula remains unchanged
+    expected_itl = (
         features["kv_cache_percentage"] * 100.0
         + features["input_token_length"] * 0.5
         + features["num_tokens_generated"] * 1.0
@@ -180,7 +180,7 @@ def test_model_learns_equation():
     tolerance = 0.15 if model_type == "xgboost" else 0.1
     
     deadline = time.time() + 60.0
-    last_ttft, last_tpot = None, None
+    last_ttft, last_itl = None, None
 
     while time.time() < deadline:
         r = requests.post(f"{BASE_URL}/predict", json=features)
@@ -190,18 +190,18 @@ def test_model_learns_equation():
 
         body = r.json()
         last_ttft = body["ttft_ms"]
-        last_tpot = body["tpot_ms"]
+        last_itl = body["itl_ms"]
         
         # Verify the response includes model_type
         assert "model_type" in body, "Response should include model_type"
         assert body["model_type"] == model_type
 
         ttft_ok = abs(last_ttft - expected_ttft) <= tolerance * expected_ttft
-        tpot_ok = abs(last_tpot - expected_tpot) <= tolerance * expected_tpot
-        if ttft_ok and tpot_ok:
+        itl_ok = abs(last_itl - expected_itl) <= tolerance * expected_itl
+        if ttft_ok and itl_ok:
             print(f"Model converged with {model_type} in {60.0 - (deadline - time.time()):.1f}s")
             print(f"  Expected TTFT: {expected_ttft:.1f}, Got: {last_ttft:.1f}")
-            print(f"  Expected TPOT: {expected_tpot:.1f}, Got: {last_tpot:.1f}")
+            print(f"  Expected ITL: {expected_itl:.1f}, Got: {last_itl:.1f}")
             break
 
         time.sleep(1)
@@ -210,8 +210,8 @@ def test_model_learns_equation():
     assert abs(last_ttft - expected_ttft) <= tolerance * expected_ttft, (
         f"TTFT={last_ttft:.1f} not within ±{tolerance*100}% of {expected_ttft:.1f} (model: {model_type})"
     )
-    assert abs(last_tpot - expected_tpot) <= tolerance * expected_tpot, (
-        f"TPOT={last_tpot:.1f} not within ±{tolerance*100}% of {expected_tpot:.1f} (model: {model_type})"
+    assert abs(last_itl - expected_itl) <= tolerance * expected_itl, (
+        f"ITL={last_itl:.1f} not within ±{tolerance*100}% of {expected_itl:.1f} (model: {model_type})"
     )
 
 
@@ -260,10 +260,10 @@ def test_prefix_cache_score_impact_on_ttft():
         predictions.append({
             "prefix_cache_score": prefix_score,
             "ttft_ms": pred_data["ttft_ms"],
-            "tpot_ms": pred_data["tpot_ms"]
+            "itl_ms": pred_data["itl_ms"]
         })
         
-        print(f"  Prefix cache {prefix_score:.1f}: TTFT={pred_data['ttft_ms']:.1f}ms, TPOT={pred_data['tpot_ms']:.1f}ms")
+        print(f"  Prefix cache {prefix_score:.1f}: TTFT={pred_data['ttft_ms']:.1f}ms, ITL={pred_data['itl_ms']:.1f}ms")
     
     # Check that TTFT increases as prefix cache score increases
     # (since our test equation has +30*prefix_cache_score)
@@ -283,14 +283,14 @@ def test_prefix_cache_score_impact_on_ttft():
     # Should be positive difference (higher prefix cache = higher TTFT in our test equation)
     assert ttft_difference > 10, f"Expected TTFT to increase with prefix cache score, got difference: {ttft_difference:.1f}ms"
     
-    # TPOT should not be significantly affected by prefix cache score
-    tpot_values = [p["tpot_ms"] for p in predictions]
-    tpot_first_half = sum(tpot_values[:3]) / 3
-    tpot_second_half = sum(tpot_values[3:]) / 3
-    tpot_difference = abs(tpot_second_half - tpot_first_half)
+    # ITL should not be significantly affected by prefix cache score
+    itl_values = [p["itl_ms"] for p in predictions]
+    itl_first_half = sum(itl_values[:3]) / 3
+    itl_second_half = sum(itl_values[3:]) / 3
+    itl_difference = abs(itl_second_half - itl_first_half)
     
-    print(f"TPOT difference (should be small): {tpot_difference:.1f}ms")
-    assert tpot_difference < 5, f"TPOT should not be significantly affected by prefix cache, got difference: {tpot_difference:.1f}ms"
+    print(f"ITL difference (should be small): {itl_difference:.1f}ms")
+    assert itl_difference < 5, f"ITL should not be significantly affected by prefix cache, got difference: {itl_difference:.1f}ms"
     
     print("✓ Prefix cache score impact test passed")
 
@@ -304,8 +304,8 @@ def test_prediction_response_format():
     
     data = r.json()
     required_fields = [
-        "ttft_ms", "tpot_ms", "ttft_uncertainty", "tpot_uncertainty",
-        "ttft_prediction_bounds", "tpot_prediction_bounds", 
+        "ttft_ms", "itl_ms", "ttft_uncertainty", "itl_uncertainty",
+        "ttft_prediction_bounds", "itl_prediction_bounds", 
         "predicted_at", "model_type"
     ]
     
@@ -317,13 +317,13 @@ def test_prediction_response_format():
     
     # Verify numeric fields are reasonable
     assert data["ttft_ms"] >= 0
-    assert data["tpot_ms"] >= 0
+    assert data["itl_ms"] >= 0
     assert data["ttft_uncertainty"] >= 0
-    assert data["tpot_uncertainty"] >= 0
+    assert data["itl_uncertainty"] >= 0
     
     # Verify bounds are tuples
     assert len(data["ttft_prediction_bounds"]) == 2
-    assert len(data["tpot_prediction_bounds"]) == 2
+    assert len(data["itl_prediction_bounds"]) == 2
 
 
 def test_metrics_endpoint_enhanced():
@@ -337,14 +337,14 @@ def test_metrics_endpoint_enhanced():
     assert "model_type{" in content
     
     # Should contain either coefficients (Bayesian Ridge) or importance (XGBoost)
-    has_coef = "ttft_coef{" in content or "tpot_coef{" in content
-    has_importance = "ttft_importance{" in content or "tpot_importance{" in content
+    has_coef = "ttft_coef{" in content or "itl_coef{" in content
+    has_importance = "ttft_importance{" in content or "itl_importance{" in content
     
     assert has_coef or has_importance, "Should have either coefficients or feature importance metrics"
     
     # Should have standard metrics
     assert "ttft_r2_score{" in content
-    assert "tpot_r2_score{" in content
+    assert "itl_r2_score{" in content
     assert "training_samples_count" in content
     
     # Check for prefix_cache_score in TTFT metrics
@@ -362,8 +362,8 @@ def test_metrics_endpoint_enhanced():
         lines = content.split('\n')
         ttft_intercept = None
         ttft_coefs = {}
-        tpot_intercept = None
-        tpot_coefs = {}
+        itl_intercept = None
+        itl_coefs = {}
         
         for line in lines:
             if line.startswith('ttft_intercept{'):
@@ -372,32 +372,32 @@ def test_metrics_endpoint_enhanced():
                 feature = line.split('feature="')[1].split('"')[0]
                 value = float(line.split('}')[1].strip())
                 ttft_coefs[feature] = value
-            elif line.startswith('tpot_intercept{'):
-                tpot_intercept = float(line.split('}')[1].strip())
-            elif line.startswith('tpot_coef{'):
+            elif line.startswith('itl_intercept{'):
+                itl_intercept = float(line.split('}')[1].strip())
+            elif line.startswith('itl_coef{'):
                 feature = line.split('feature="')[1].split('"')[0]
                 value = float(line.split('}')[1].strip())
-                tpot_coefs[feature] = value
+                itl_coefs[feature] = value
         
         # Validate coefficients are present
         assert ttft_intercept is not None, "TTFT intercept should be present"
-        assert tpot_intercept is not None, "TPOT intercept should be present"
+        assert itl_intercept is not None, "ITL intercept should be present"
         
         # Updated expected features to include prefix_cache_score for TTFT
         expected_ttft_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", "num_request_running", "prefix_cache_score"]
-        expected_tpot_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", "num_request_running", "num_tokens_generated"]
+        expected_itl_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", "num_request_running", "num_tokens_generated"]
         
         for feature in expected_ttft_features:
             assert feature in ttft_coefs, f"TTFT coefficient for {feature} should be present"
             
-        for feature in expected_tpot_features:
-            assert feature in tpot_coefs, f"TPOT coefficient for {feature} should be present"
+        for feature in expected_itl_features:
+            assert feature in itl_coefs, f"ITL coefficient for {feature} should be present"
         
         print(f"✓ Bayesian Ridge coefficients validated:")
         print(f"  TTFT intercept: {ttft_intercept:.4f}")
         print(f"  TTFT coefficients: {ttft_coefs}")
-        print(f"  TPOT intercept: {tpot_intercept:.4f}")
-        print(f"  TPOT coefficients: {tpot_coefs}")
+        print(f"  ITL intercept: {itl_intercept:.4f}")
+        print(f"  ITL coefficients: {itl_coefs}")
         
         # Validate prefix_cache_score coefficient is reasonable
         if "prefix_cache_score" in ttft_coefs:
@@ -428,15 +428,15 @@ def test_xgboost_tree_endpoints():
     assert len(ttft_trees) > 0, "Should have TTFT trees"
     assert isinstance(ttft_trees[0], dict), "Each tree should be a dict"
     
-    # Test TPOT trees
-    tpot_response = requests.get(f"{BASE_URL}/model/tpot/xgb/json")
-    assert tpot_response.status_code == 200, "TPOT XGBoost trees should be available"
-    tpot_trees = tpot_response.json()
-    assert isinstance(tpot_trees, list), "TPOT trees should be a list"
-    assert len(tpot_trees) > 0, "Should have TPOT trees"
-    assert isinstance(tpot_trees[0], dict), "Each tree should be a dict"
+    # Test ITL trees
+    itl_response = requests.get(f"{BASE_URL}/model/itl/xgb/json")
+    assert itl_response.status_code == 200, "ITL XGBoost trees should be available"
+    itl_trees = itl_response.json()
+    assert isinstance(itl_trees, list), "ITL trees should be a list"
+    assert len(itl_trees) > 0, "Should have ITL trees"
+    assert isinstance(itl_trees[0], dict), "Each tree should be a dict"
     
-    print(f"✓ XGBoost trees available: {len(ttft_trees)} TTFT trees, {len(tpot_trees)} TPOT trees")
+    print(f"✓ XGBoost trees available: {len(ttft_trees)} TTFT trees, {len(itl_trees)} ITL trees")
 
 
 def test_bayesian_ridge_coefficients():
@@ -458,17 +458,17 @@ def test_bayesian_ridge_coefficients():
     # Parse coefficients from metrics
     lines = content.split('\n')
     ttft_coefs = {}
-    tpot_coefs = {}
+    itl_coefs = {}
     
     for line in lines:
         if line.startswith('ttft_coef{'):
             feature = line.split('feature="')[1].split('"')[0]
             value = float(line.split('}')[1].strip())
             ttft_coefs[feature] = value
-        elif line.startswith('tpot_coef{'):
+        elif line.startswith('itl_coef{'):
             feature = line.split('feature="')[1].split('"')[0]
             value = float(line.split('}')[1].strip())
-            tpot_coefs[feature] = value
+            itl_coefs[feature] = value
     
     # Test a prediction to see if coefficients make sense
     test_features = {
@@ -487,13 +487,13 @@ def test_bayesian_ridge_coefficients():
     
     print(f"✓ Coefficients extracted from metrics:")
     print(f"  TTFT coefficients: {ttft_coefs}")
-    print(f"  TPOT coefficients: {tpot_coefs}")
+    print(f"  ITL coefficients: {itl_coefs}")
     print(f"  API TTFT prediction: {api_prediction['ttft_ms']:.2f}")
-    print(f"  API TPOT prediction: {api_prediction['tpot_ms']:.2f}")
+    print(f"  API ITL prediction: {api_prediction['itl_ms']:.2f}")
     
     # Verify prefix_cache_score coefficient exists for TTFT
     assert "prefix_cache_score" in ttft_coefs, "prefix_cache_score should be in TTFT coefficients"
-    assert "prefix_cache_score" not in tpot_coefs, "prefix_cache_score should NOT be in TPOT coefficients"
+    assert "prefix_cache_score" not in itl_coefs, "prefix_cache_score should NOT be in ITL coefficients"
 
 
 def test_model_endpoints_by_type():
@@ -556,8 +556,8 @@ def generate_random_training_payload():
             + prefix_cache * 30.0  # New term for prefix cache
             + 95 + random.uniform(-10, 10)
         ),
-        # TPOT formula remains unchanged
-        "actual_tpot_ms": (
+        # ITL formula remains unchanged
+        "actual_itl_ms": (
             kv * 100.0
             + input_tokens * 0.5
             + tokens_generated * 1.0
@@ -642,7 +642,7 @@ async def run_stress_test_async(duration_seconds=10, target_qps=300):
 
 def fetch_and_parse_xgb_json(path_suffix):
     """
-    Download the XGBoost JSON dump for `path_suffix` (ttft or tpot),
+    Download the XGBoost JSON dump for `path_suffix` (ttft or itl),
     parse into a Python list of dicts, and return it.
     """
     url = f"{BASE_URL}/model/{path_suffix}/xgb/json"
@@ -718,7 +718,7 @@ async def run_simplified_stress_test(duration_seconds=10, target_qps=2):
                         )
                     else:  # 30% tree downloads (only for XGBoost)
                         if model_type == "xgboost":
-                            suffix = random.choice(["ttft", "tpot"])
+                            suffix = random.choice(["ttft", "itl"])
                             task = asyncio.create_task(
                                 async_fetch_and_parse_xgb_json(sess, suffix, req_id)
                             )
@@ -1093,14 +1093,14 @@ def test_xgboost_vs_bayesian_ridge_performance():
     print(f"Average response time: {avg_response_time:.2f}ms")
     print(f"Average prefix cache score: {avg_prefix_cache:.2f}")
     print(f"Average TTFT prediction: {sum(p['ttft_ms'] for p in predictions)/len(predictions):.2f}ms")
-    print(f"Average TPOT prediction: {sum(p['tpot_ms'] for p in predictions)/len(predictions):.2f}ms")
+    print(f"Average ITL prediction: {sum(p['itl_ms'] for p in predictions)/len(predictions):.2f}ms")
     print(f"Average TTFT uncertainty: {sum(p['ttft_uncertainty'] for p in predictions)/len(predictions):.2f}")
-    print(f"Average TPOT uncertainty: {sum(p['tpot_uncertainty'] for p in predictions)/len(predictions):.2f}")
+    print(f"Average ITL uncertainty: {sum(p['itl_uncertainty'] for p in predictions)/len(predictions):.2f}")
     
     # Basic sanity checks
     assert avg_response_time < 1000, f"Response time too slow: {avg_response_time:.2f}ms"
     assert all(p['ttft_ms'] > 0 for p in predictions), "All TTFT predictions should be positive"
-    assert all(p['tpot_ms'] > 0 for p in predictions), "All TPOT predictions should be positive"
+    assert all(p['itl_ms'] > 0 for p in predictions), "All ITL predictions should be positive"
 
 
 def test_uncertainty_estimation_quality():
@@ -1128,36 +1128,36 @@ def test_uncertainty_estimation_quality():
     
     # Check that predictions are consistent (should be identical for same input)
     ttft_values = [p['ttft_ms'] for p in predictions]
-    tpot_values = [p['tpot_ms'] for p in predictions]
+    itl_values = [p['itl_ms'] for p in predictions]
     
     ttft_std = sum((x - ttft_values[0])**2 for x in ttft_values)**0.5 / len(ttft_values)
-    tpot_std = sum((x - tpot_values[0])**2 for x in tpot_values)**0.5 / len(tpot_values)
+    itl_std = sum((x - itl_values[0])**2 for x in itl_values)**0.5 / len(itl_values)
     
     # For deterministic models, predictions should be identical
     if model_type == "bayesian_ridge":
         assert ttft_std < 0.01, f"TTFT predictions should be consistent, got std: {ttft_std}"
-        assert tpot_std < 0.01, f"TPOT predictions should be consistent, got std: {tpot_std}"
+        assert itl_std < 0.01, f"ITL predictions should be consistent, got std: {itl_std}"
     
     # Check uncertainty values are reasonable
     pred = predictions[0]
     ttft_uncertainty_ratio = pred['ttft_uncertainty'] / pred['ttft_ms']
-    tpot_uncertainty_ratio = pred['tpot_uncertainty'] / pred['tpot_ms']
+    itl_uncertainty_ratio = pred['itl_uncertainty'] / pred['itl_ms']
     
     print(f"Model: {model_type}")
     print(f"Prefix cache score: {test_payload['prefix_cache_score']}")
     print(f"TTFT: {pred['ttft_ms']:.2f} ± {pred['ttft_uncertainty']:.2f} ({ttft_uncertainty_ratio*100:.1f}%)")
-    print(f"TPOT: {pred['tpot_ms']:.2f} ± {pred['tpot_uncertainty']:.2f} ({tpot_uncertainty_ratio*100:.1f}%)")
+    print(f"ITL: {pred['itl_ms']:.2f} ± {pred['itl_uncertainty']:.2f} ({itl_uncertainty_ratio*100:.1f}%)")
     
     # Uncertainty should be reasonable (not too high or too low)
     assert 0.01 < ttft_uncertainty_ratio < 0.5, f"TTFT uncertainty ratio should be reasonable: {ttft_uncertainty_ratio}"
-    assert 0.01 < tpot_uncertainty_ratio < 0.5, f"TPOT uncertainty ratio should be reasonable: {tpot_uncertainty_ratio}"
+    assert 0.01 < itl_uncertainty_ratio < 0.5, f"ITL uncertainty ratio should be reasonable: {itl_uncertainty_ratio}"
     
     # Check prediction bounds contain the prediction
     ttft_bounds = pred['ttft_prediction_bounds']
-    tpot_bounds = pred['tpot_prediction_bounds']
+    itl_bounds = pred['itl_prediction_bounds']
     
     assert ttft_bounds[0] <= pred['ttft_ms'] <= ttft_bounds[1], "TTFT should be within prediction bounds"
-    assert tpot_bounds[0] <= pred['tpot_ms'] <= tpot_bounds[1], "TPOT should be within prediction bounds"
+    assert itl_bounds[0] <= pred['itl_ms'] <= itl_bounds[1], "ITL should be within prediction bounds"
 
 
 def test_edge_cases():
@@ -1178,7 +1178,7 @@ def test_edge_cases():
     assert response.status_code == 200
     data = response.json()
     assert data['ttft_ms'] > 0
-    assert data['tpot_ms'] > 0
+    assert data['itl_ms'] > 0
     
     # Test maximum reasonable values
     max_payload = {
@@ -1194,7 +1194,7 @@ def test_edge_cases():
     assert response.status_code == 200
     data = response.json()
     assert data['ttft_ms'] > 0
-    assert data['tpot_ms'] > 0
+    assert data['itl_ms'] > 0
     
     # Test invalid values (should fail validation)
     invalid_payloads = [

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"context"
@@ -24,16 +24,16 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-func (s *SLOAwareRouter) calculateHeadroomRanges(candidates []endpointPredictionResult) (minTPOTH, maxTPOTH, minTTFTH, maxTTFTH float64) {
-	minTPOTH, maxTPOTH = math.MaxFloat64, -math.MaxFloat64
+func (s *PredictedLatency) calculateHeadroomRanges(candidates []endpointPredictionResult) (minITLH, maxITLH, minTTFTH, maxTTFTH float64) {
+	minITLH, maxITLH = math.MaxFloat64, -math.MaxFloat64
 	minTTFTH, maxTTFTH = math.MaxFloat64, -math.MaxFloat64
 
 	for _, p := range candidates {
-		if p.Headroom < minTPOTH {
-			minTPOTH = p.Headroom
+		if p.Headroom < minITLH {
+			minITLH = p.Headroom
 		}
-		if p.Headroom > maxTPOTH {
-			maxTPOTH = p.Headroom
+		if p.Headroom > maxITLH {
+			maxITLH = p.Headroom
 		}
 		if p.TTFTHeadroom < minTTFTH {
 			minTTFTH = p.TTFTHeadroom
@@ -45,18 +45,18 @@ func (s *SLOAwareRouter) calculateHeadroomRanges(candidates []endpointPrediction
 	return
 }
 
-func (s *SLOAwareRouter) calculateWeightedChoices(
+func (s *PredictedLatency) calculateWeightedChoices(
 	ctx context.Context,
 	candidates []endpointPredictionResult,
-	minTPOTH, maxTPOTH, minTTFTH, maxTTFTH float64,
+	minITLH, maxITLH, minTTFTH, maxTTFTH float64,
 ) ([]choice, int) {
 	logger := log.FromContext(ctx)
-	tpotRange := maxTPOTH - minTPOTH
+	itlRange := maxITLH - minITLH
 	ttftRange := maxTTFTH - minTTFTH
 
 	// Precompute blend weights (renormalize if user sets both to 0)
 	alpha := s.config.HeadroomTTFTWeight
-	beta := s.config.HeadroomTPOTWeight
+	beta := s.config.HeadroomITLWeight
 
 	if !s.config.StreamingMode {
 		alpha = 1
@@ -71,18 +71,18 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 	beta /= sum
 
 	logger.V(logutil.DEBUG).Info("Positive headroom normalization ranges",
-		"minTPOTHeadroom", minTPOTH, "maxTPOTHeadroom", maxTPOTH,
+		"minITLHeadroom", minITLH, "maxITLHeadroom", maxITLH,
 		"minTTFTHeadroom", minTTFTH, "maxTTFTHeadroom", maxTTFTH,
-		"alphaTTFT", alpha, "betaTPOT", beta, "strategy", s.headroomStrategy)
+		"alphaTTFT", alpha, "betaITL", beta, "strategy", s.headroomStrategy)
 
 	weightedChoices := make([]choice, 0, len(candidates))
 	total := 0
 
 	for _, e := range candidates {
 		// Normalize to [0,1] within the cohort
-		nTPOTH := 0.5
-		if tpotRange > eps {
-			nTPOTH = (e.Headroom - minTPOTH) / (tpotRange + eps)
+		nITLH := 0.5
+		if itlRange > eps {
+			nITLH = (e.Headroom - minITLH) / (itlRange + eps)
 		}
 		nTTFTH := 0.5
 		if ttftRange > eps {
@@ -90,7 +90,7 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 		}
 
 		// Blend: larger combined -> "safer"; smaller -> "tighter packing"
-		combined := alpha*nTTFTH + beta*nTPOTH
+		combined := alpha*nTTFTH + beta*nITLH
 
 		// Map to integer weights
 		var w int
@@ -112,7 +112,7 @@ func (s *SLOAwareRouter) calculateWeightedChoices(
 		logger.V(logutil.TRACE).Info("Positive headroom blended weight",
 			"endpoint", e.Endpoint.GetMetadata().String(),
 			"ttftHeadroom", e.TTFTHeadroom, "normTTFTHeadroom", nTTFTH,
-			"tpotHeadroom", e.Headroom, "normTPOTHeadroom", nTPOTH,
+			"itlHeadroom", e.Headroom, "normITLHeadroom", nITLH,
 			"combined", combined, "weight", w)
 	}
 	return weightedChoices, total

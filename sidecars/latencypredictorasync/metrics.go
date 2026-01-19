@@ -80,11 +80,11 @@ func (p *Predictor) parsePrometheusMetrics(rawMetrics string) (*ModelCoefficient
 
 	coefficients := &ModelCoefficients{
 		TTFTCoeffs: make(map[string]float64),
-		TPOTCoeffs: make(map[string]float64),
+		ITLCoeffs: make(map[string]float64),
 	}
 	bucketCounts := &BucketCounts{
 		TTFTBuckets: make(map[int]int),
-		TPOTBuckets: make(map[int]int),
+		ITLBuckets: make(map[int]int),
 	}
 	var firstErr error
 
@@ -127,15 +127,15 @@ func (p *Predictor) parseMetricLine(line string, coefficients *ModelCoefficients
 	switch metricName {
 	case "ttft_intercept":
 		coefficients.TTFTIntercept = value
-	case "tpot_intercept":
-		coefficients.TPOTIntercept = value
+	case "itl_intercept":
+		coefficients.ITLIntercept = value
 	case "ttft_coef":
 		if feature := p.extractLabel(metricPart, "feature"); feature != "" {
 			coefficients.TTFTCoeffs[feature] = value
 		}
-	case "tpot_coef":
+	case "itl_coef":
 		if feature := p.extractLabel(metricPart, "feature"); feature != "" {
-			coefficients.TPOTCoeffs[feature] = value
+			coefficients.ITLCoeffs[feature] = value
 		}
 	case "training_samples_count":
 		model := p.extractLabel(metricPart, "model")
@@ -144,8 +144,8 @@ func (p *Predictor) parseMetricLine(line string, coefficients *ModelCoefficients
 			switch model {
 			case "ttft":
 				bucketCounts.TTFTBuckets[bucket] = int(value)
-			case "tpot":
-				bucketCounts.TPOTBuckets[bucket] = int(value)
+			case "itl":
+				bucketCounts.ITLBuckets[bucket] = int(value)
 			}
 		}
 	}

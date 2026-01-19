@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package slo_aware_router
+package predicted_latency
 
 import (
 	"fmt"
@@ -66,7 +66,7 @@ func TestAdd(t *testing.T) {
 	}
 
 	if pq.Add("req2", -1.0) {
-		t.Error("Expected Add to return false for negative TPOT")
+		t.Error("Expected Add to return false for negative ITL")
 	}
 }
 
@@ -74,20 +74,20 @@ func TestPriorityOrdering(t *testing.T) {
 	pq := newRequestPriorityQueue()
 
 	// Add items with different priorities
-	pq.Add("high", 1.0)   // highest priority (lowest TPOT)
+	pq.Add("high", 1.0)   // highest priority (lowest ITL)
 	pq.Add("medium", 5.0) // medium priority
-	pq.Add("low", 10.0)   // lowest priority (highest TPOT)
+	pq.Add("low", 10.0)   // lowest priority (highest ITL)
 
 	// Check that highest priority item is at the top
 	peek := pq.Peek()
-	if peek == nil || peek.id != "high" || peek.tpot != 1.0 {
+	if peek == nil || peek.id != "high" || peek.itl != 1.0 {
 		t.Errorf("Expected high priority item at top, got %+v", peek)
 	}
 
 	// Test removal order
 	expected := []struct {
 		id   string
-		tpot float64
+		itl float64
 	}{
 		{"high", 1.0},
 		{"medium", 5.0},
@@ -96,8 +96,8 @@ func TestPriorityOrdering(t *testing.T) {
 
 	for _, exp := range expected {
 		item := pq.Peek()
-		if item.id != exp.id || item.tpot != exp.tpot {
-			t.Errorf("Expected %s(%.1f), got %s(%.1f)", exp.id, exp.tpot, item.id, item.tpot)
+		if item.id != exp.id || item.itl != exp.itl {
+			t.Errorf("Expected %s(%.1f), got %s(%.1f)", exp.id, exp.itl, item.id, item.itl)
 		}
 
 		removed, ok := pq.Remove(item.id)
@@ -122,7 +122,7 @@ func TestRemove(t *testing.T) {
 
 	// Test successful remove
 	removed, ok := pq.Remove("req2")
-	if !ok || removed.id != "req2" || removed.tpot != 2.0 {
+	if !ok || removed.id != "req2" || removed.itl != 2.0 {
 		t.Errorf("Expected to remove req2(2.0), got %+v, ok=%v", removed, ok)
 	}
 
@@ -160,13 +160,13 @@ func TestUpdate(t *testing.T) {
 	}
 
 	// Check that req3 is now at the top
-	if peek := pq.Peek(); peek.id != "req3" || peek.tpot != 0.5 {
-		t.Errorf("Expected req3(0.5) at top, got %s(%.1f)", peek.id, peek.tpot)
+	if peek := pq.Peek(); peek.id != "req3" || peek.itl != 0.5 {
+		t.Errorf("Expected req3(0.5) at top, got %s(%.1f)", peek.id, peek.itl)
 	}
 
 	// Test validation
 	if pq.Update("req1", -1.0) {
-		t.Error("Expected Update to return false for negative TPOT")
+		t.Error("Expected Update to return false for negative ITL")
 	}
 }
 
@@ -275,8 +275,8 @@ func TestConcurrency(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < itemsPerWorker; j++ {
 				id := fmt.Sprintf("worker%d-item%d", workerID, j)
-				tpot := float64(j) + float64(workerID)*0.1
-				pq.Add(id, tpot)
+				itl := float64(j) + float64(workerID)*0.1
+				pq.Add(id, itl)
 			}
 		}(i)
 	}
@@ -310,8 +310,8 @@ func TestLargeQueue(t *testing.T) {
 	// Add many items
 	for i := 0; i < numItems; i++ {
 		id := fmt.Sprintf("item%d", i)
-		tpot := float64(numItems - i) // Reverse order so item0 has highest priority
-		pq.Add(id, tpot)
+		itl := float64(numItems - i) // Reverse order so item0 has highest priority
+		pq.Add(id, itl)
 	}
 
 	if pq.GetSize() != numItems {
@@ -319,13 +319,13 @@ func TestLargeQueue(t *testing.T) {
 	}
 
 	// Verify priority ordering by removing items
-	lastTPOT := -1.0
+	lastITL := -1.0
 	for i := 0; i < numItems; i++ {
 		item := pq.Peek()
-		if item.tpot < lastTPOT {
-			t.Errorf("Priority order violated: %.1f < %.1f", item.tpot, lastTPOT)
+		if item.itl < lastITL {
+			t.Errorf("Priority order violated: %.1f < %.1f", item.itl, lastITL)
 		}
-		lastTPOT = item.tpot
+		lastITL = item.itl
 		pq.Remove(item.id)
 	}
 

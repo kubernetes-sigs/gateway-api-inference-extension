@@ -94,9 +94,9 @@ class Settings:
     Reads settings from environment variables with sensible defaults.
     """
     TTFT_MODEL_PATH: str = os.getenv("LATENCY_TTFT_MODEL_PATH", "/tmp/models/ttft.joblib")
-    TPOT_MODEL_PATH: str = os.getenv("LATENCY_TPOT_MODEL_PATH", "/tmp/models/tpot.joblib")
+    ITL_MODEL_PATH: str = os.getenv("LATENCY_ITL_MODEL_PATH", "/tmp/models/itl.joblib")
     TTFT_SCALER_PATH: str = os.getenv("LATENCY_TTFT_SCALER_PATH", "/tmp/models/ttft_scaler.joblib")
-    TPOT_SCALER_PATH: str = os.getenv("LATENCY_TPOT_SCALER_PATH", "/tmp/models/tpot_scaler.joblib")
+    ITL_SCALER_PATH: str = os.getenv("LATENCY_ITL_SCALER_PATH", "/tmp/models/itl_scaler.joblib")
     RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))
     MIN_SAMPLES_FOR_RETRAIN_FRESH: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN_FRESH", 10))
     MIN_SAMPLES_FOR_RETRAIN: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_RETRAIN", 1000))
@@ -118,9 +118,9 @@ class ModelInfoResponse(BaseModel):
 
     is_ready: bool
     ttft_training_samples: int = Field(default=0, description="Number of TTFT training samples")
-    tpot_training_samples: int = Field(default=0, description="Number of TPOT training samples") 
+    itl_training_samples: int = Field(default=0, description="Number of ITL training samples") 
     ttft_test_samples: int = Field(default=0, description="Number of TTFT test samples")
-    tpot_test_samples: int = Field(default=0, description="Number of TPOT test samples")
+    itl_test_samples: int = Field(default=0, description="Number of ITL test samples")
     last_retrain_time: Optional[datetime] = Field(default=None, description="Last retraining timestamp")
     min_samples_for_retrain: int = Field(default=0, description="Minimum samples required for retraining")
     retraining_interval_sec: int = Field(default=0, description="Retraining interval in seconds")
@@ -137,9 +137,9 @@ class FlushResponse(BaseModel):
     flushed_at: datetime
     reason: Optional[str] = None
     ttft_training_samples_flushed: int
-    tpot_training_samples_flushed: int
+    itl_training_samples_flushed: int
     ttft_test_samples_flushed: int
-    tpot_test_samples_flushed: int
+    itl_test_samples_flushed: int
     metrics_cleared: bool
     message: str
 
@@ -239,7 +239,7 @@ class LatencyPredictor:
             for c in range(self.cache_buckets)
             for p in range(self.prefix_buckets)  # NEW: Added prefix dimension
         }
-        self.tpot_data_buckets = {
+        self.itl_data_buckets = {
             (q, c, p): deque(maxlen=self.bucket_size)
             for q in range(self.queue_buckets)
             for c in range(self.cache_buckets)
@@ -248,23 +248,23 @@ class LatencyPredictor:
 
         # Test data storage with configurable max size
         self.ttft_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
-        self.tpot_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
+        self.itl_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
     
         # Quantile-specific metric tracking (store last 5 scores)
         self.ttft_quantile_loss_scores = deque(maxlen=5)
-        self.tpot_quantile_loss_scores = deque(maxlen=5)
+        self.itl_quantile_loss_scores = deque(maxlen=5)
         self.ttft_coverage_scores = deque(maxlen=5)
-        self.tpot_coverage_scores = deque(maxlen=5)
+        self.itl_coverage_scores = deque(maxlen=5)
         self.ttft_violation_rates = deque(maxlen=5)
-        self.tpot_violation_rates = deque(maxlen=5)
+        self.itl_violation_rates = deque(maxlen=5)
 
         self.ttft_model = None
-        self.tpot_model = None
+        self.itl_model = None
         self.ttft_scaler = None
-        self.tpot_scaler = None
+        self.itl_scaler = None
     
         self.ttft_coefficients = None  # Will store descaled coefficients as dict
-        self.tpot_coefficients = None  # Will store descaled coefficients as dict
+        self.itl_coefficients = None  # Will store descaled coefficients as dict
 
         self.lock = threading.Lock()
         self.last_retrain_time = None
@@ -339,7 +339,7 @@ class LatencyPredictor:
     
         Args:
             df: DataFrame with raw features
-            model_type: 'ttft' or 'tpot'
+            model_type: 'ttft' or 'itl'
     
         Returns:
             DataFrame with engineered features including interactions
@@ -371,8 +371,8 @@ class LatencyPredictor:
         
             return df[feature_cols]
         
-        else:  # tpot
-            # TPOT doesn't use prefix_cache_score, so no interaction needed
+        else:  # itl
+            # ITL doesn't use prefix_cache_score, so no interaction needed
             feature_cols = [
                 'kv_cache_percentage',
                 'input_token_length',
@@ -394,9 +394,9 @@ class LatencyPredictor:
     def is_ready(self) -> bool:
         """Checks if all models and scalers are loaded/trained."""
         if self.model_type == ModelType.BAYESIAN_RIDGE:
-            return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
+            return all([self.ttft_model, self.itl_model, self.ttft_scaler, self.itl_scaler])
         else:  # XGBoost or LightGBM
-            return all([self.ttft_model, self.tpot_model])
+            return all([self.ttft_model, self.itl_model])
 
     @is_ready.setter
     def is_ready(self, value: bool):
@@ -490,13 +490,13 @@ class LatencyPredictor:
                         return model
 
 
-                elif model_name == "tpot":
-                    tpot_order = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated"]
-                    if list(features.columns) != tpot_order:
+                elif model_name == "itl":
+                    itl_order = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated"]
+                    if list(features.columns) != itl_order:
                         try:
-                            features = features[tpot_order]
+                            features = features[itl_order]
                         except Exception as _:
-                            raise ValueError(f"TPOT features must be exactly {tpot_order}; got {list(features.columns)}")
+                            raise ValueError(f"ITL features must be exactly {itl_order}; got {list(features.columns)}")
                     mono_str = "(1,1,1,1,1)" 
                 else:
                     mono_str = "(0,0,0,0,0)"  # default
@@ -576,7 +576,7 @@ class LatencyPredictor:
                         'kv_cache_percentage','input_token_length','num_request_waiting',
                         'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket'
                     ]
-            else:  # tpot
+            else:  # itl
                 feature_cols = ['kv_cache_percentage', 'input_token_length', 
                    'num_request_waiting', 'num_request_running', 'num_tokens_generated']
 
@@ -645,15 +645,15 @@ class LatencyPredictor:
         try:
             with self.lock:
                 ttft_snap = list(self._all_samples(self.ttft_data_buckets))
-                tpot_snap = list(self._all_samples(self.tpot_data_buckets))
-                total = len(ttft_snap) + len(tpot_snap)
+                itl_snap = list(self._all_samples(self.itl_data_buckets))
+                total = len(ttft_snap) + len(itl_snap)
                 if total < settings.MIN_SAMPLES_FOR_RETRAIN:
                     logging.info(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
                     return
                 logging.info(f"Initiating training with {total} samples using {self.model_type} for quantile {self.quantile}.")
 
             new_ttft_model = new_ttft_scaler = None
-            new_tpot_model = new_tpot_scaler = None
+            new_itl_model = new_itl_scaler = None
 
             # Train TTFT
             if ttft_snap:
@@ -729,45 +729,45 @@ class LatencyPredictor:
                         logging.error("Error training TTFT model", exc_info=True)
 
 
-            # Train TPOT
-            if tpot_snap:
-                df_tpot = pd.DataFrame(tpot_snap).dropna()
-                df_tpot = df_tpot[df_tpot['actual_tpot_ms'] > 0]
-                if len(df_tpot) >= settings.MIN_SAMPLES_FOR_RETRAIN:
-                    # TPOT features remain unchanged
-                    X_tpot = df_tpot[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
-                    y_tpot = df_tpot['actual_tpot_ms']
+            # Train ITL
+            if itl_snap:
+                df_itl = pd.DataFrame(itl_snap).dropna()
+                df_itl = df_itl[df_itl['actual_itl_ms'] > 0]
+                if len(df_itl) >= settings.MIN_SAMPLES_FOR_RETRAIN:
+                    # ITL features remain unchanged
+                    X_itl = df_itl[['kv_cache_percentage', 'input_token_length', 'num_request_waiting', 'num_request_running', 'num_tokens_generated']]
+                    y_itl = df_itl['actual_itl_ms']
                     try:
-                        result = self._train_model_with_scaling(X_tpot, y_tpot, model_name="tpot")
+                        result = self._train_model_with_scaling(X_itl, y_itl, model_name="itl")
                         if self.model_type == ModelType.BAYESIAN_RIDGE:
-                            new_tpot_model, new_tpot_scaler = result
+                            new_itl_model, new_itl_scaler = result
                         else:
-                            new_tpot_model = result
-                            new_tpot_scaler = None
+                            new_itl_model = result
+                            new_itl_scaler = None
                         
                         # Calculate quantile metrics on test data
                         ql, coverage, violation_rate = self._calculate_quantile_metrics_on_test(
-                            new_tpot_model, new_tpot_scaler, 
-                            list(self.tpot_test_data),  # Pass raw data
-                        "tpot",                      # Pass model name instead of feature_cols
-                        'actual_tpot_ms'
+                            new_itl_model, new_itl_scaler, 
+                            list(self.itl_test_data),  # Pass raw data
+                        "itl",                      # Pass model name instead of feature_cols
+                        'actual_itl_ms'
                 )
                         
                         if ql is not None:
-                            self.tpot_quantile_loss_scores.append(ql)
-                            self.tpot_coverage_scores.append(coverage)
-                            self.tpot_violation_rates.append(violation_rate)
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. "
+                            self.itl_quantile_loss_scores.append(ql)
+                            self.itl_coverage_scores.append(coverage)
+                            self.itl_violation_rates.append(violation_rate)
+                            logging.info(f"ITL model trained on {len(df_itl)} samples. "
                                        f"Quantile Loss = {ql:.4f}, "
                                        f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
                                        f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
                         else:
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. Quantile metrics = N/A (insufficient test data)")
+                            logging.info(f"ITL model trained on {len(df_itl)} samples. Quantile metrics = N/A (insufficient test data)")
                             
                     except Exception:
-                        logging.error("Error training TPOT model", exc_info=True)
+                        logging.error("Error training ITL model", exc_info=True)
                 else:
-                    logging.warning("Not enough TPOT samples, skipping TPOT training.")
+                    logging.warning("Not enough ITL samples, skipping ITL training.")
 
             with self.lock:
                 if new_ttft_model:
@@ -782,17 +782,17 @@ class LatencyPredictor:
                         new_ttft_model, new_ttft_scaler, ttft_features, "TTFT"
                 )
                         
-                if new_tpot_model:
-                    self.tpot_model = new_tpot_model
-                    if new_tpot_scaler is not None:
-                        self.tpot_scaler = new_tpot_scaler
+                if new_itl_model:
+                    self.itl_model = new_itl_model
+                    if new_itl_scaler is not None:
+                        self.itl_scaler = new_itl_scaler
                     
                     # Store descaled coefficients for Bayesian Ridge
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
-                        tpot_features = ['kv_cache_percentage', 'input_token_length', 
+                        itl_features = ['kv_cache_percentage', 'input_token_length', 
                                        'num_request_waiting', 'num_request_running', 'num_tokens_generated']
-                        self.tpot_coefficients = self._store_descaled_coefficients(
-                            new_tpot_model, new_tpot_scaler, tpot_features, "TPOT"
+                        self.itl_coefficients = self._store_descaled_coefficients(
+                            new_itl_model, new_itl_scaler, itl_features, "ITL"
                         )
                 
                 if self.is_ready:
@@ -818,51 +818,51 @@ class LatencyPredictor:
 
                 # Updated TTFT features to include prefix_cache_score
                 ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
-                tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
+                itl_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
                 
                 # Create DataFrames for predictions
                 df_ttft = pd.DataFrame([{col: features[col] for col in ttft_cols}])
                 # Add interaction term for TTFT
                 df_ttft = self._prepare_features_with_interaction(df_ttft, model_type="ttft")
-                df_tpot = pd.DataFrame([{col: features[col] for col in tpot_cols}])
+                df_itl = pd.DataFrame([{col: features[col] for col in itl_cols}])
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     # Use scaling for Bayesian Ridge
                     df_ttft = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
                     ttft_scaled = self.ttft_scaler.transform(df_ttft)
-                    tpot_scaled = self.tpot_scaler.transform(df_tpot)
+                    itl_scaled = self.itl_scaler.transform(df_itl)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
-                    tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
+                    itl_pred_mean, itl_std = self.itl_model.predict(itl_scaled, return_std=True)
                     
                     # Approximate quantile prediction by adding factor to mean
                     std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                     ttft_pred = ttft_pred_mean[0] + std_factor * ttft_std[0]
-                    tpot_pred = tpot_pred_mean[0] + std_factor * tpot_std[0]
+                    itl_pred = itl_pred_mean[0] + std_factor * itl_std[0]
                     
-                    return ttft_pred, tpot_pred, ttft_std[0], tpot_std[0]
+                    return ttft_pred, itl_pred, ttft_std[0], itl_std[0]
                 
                 elif self.model_type == ModelType.XGBOOST:
                     # XGBoost quantile regression directly predicts the quantile
                     ttft_pred = self.ttft_model.predict(df_ttft)
-                    tpot_pred = self.tpot_model.predict(df_tpot)
+                    itl_pred = self.itl_model.predict(df_itl)
                 
                     # For XGBoost quantile regression, uncertainty estimation is more complex
                     ttft_std = ttft_pred[0] * 0.1  # 10% of prediction as uncertainty estimate
-                    tpot_std = tpot_pred[0] * 0.1
+                    itl_std = itl_pred[0] * 0.1
                 
-                    return ttft_pred[0], tpot_pred[0], ttft_std, tpot_std
+                    return ttft_pred[0], itl_pred[0], ttft_std, itl_std
                 
                 else:  # LightGBM with quantile regression
                     # LightGBM quantile regression directly predicts the quantile
                     ttft_pred = self.ttft_model.predict(df_ttft)
-                    tpot_pred = self.tpot_model.predict(df_tpot)
+                    itl_pred = self.itl_model.predict(df_itl)
                 
                     # For LightGBM quantile regression, use a similar uncertainty estimate as XGBoost
                     ttft_std = ttft_pred[0] * 0.1  # 10% of prediction as uncertainty estimate
-                    tpot_std = tpot_pred[0] * 0.1
+                    itl_std = itl_pred[0] * 0.1
                 
-                    return ttft_pred[0], tpot_pred[0], ttft_std, tpot_std
+                    return ttft_pred[0], itl_pred[0], ttft_std, itl_std
                     
         except ValueError as ve:
             logging.warning(f"Client error in predict(): {ve}")
@@ -875,7 +875,7 @@ class LatencyPredictor:
 
     def add_training_sample(self, sample: dict):
         try:
-            required = ['kv_cache_percentage', 'actual_ttft_ms', 'actual_tpot_ms', 'num_tokens_generated', 'input_token_length', 'num_request_waiting', 'num_request_running', 'prefix_cache_score']
+            required = ['kv_cache_percentage', 'actual_ttft_ms', 'actual_itl_ms', 'num_tokens_generated', 'input_token_length', 'num_request_waiting', 'num_request_running', 'prefix_cache_score']
             for field in required:
                 if field not in sample or not isinstance(sample[field], (int, float)):
                     logging.warning(f"Invalid sample field: {field}")
@@ -888,22 +888,22 @@ class LatencyPredictor:
         
             # Create subsets based on conditions
             ttft_valid = sample['actual_ttft_ms'] > 0
-            tpot_valid = sample['actual_tpot_ms'] > 0
+            itl_valid = sample['actual_itl_ms'] > 0
         
             if is_test:
                 # Add to test data only if the respective metric is valid
                 if ttft_valid:
                     self.ttft_test_data.append(sample.copy())
-                if tpot_valid:
-                    self.tpot_test_data.append(sample.copy())
+                if itl_valid:
+                    self.itl_test_data.append(sample.copy())
             else:
                 # Add to training buckets only if the respective metric is valid
                 bucket_key = self._get_bucket_key(sample)
             
                 if ttft_valid:
                     self.ttft_data_buckets[bucket_key].append(sample)
-                if tpot_valid:
-                    self.tpot_data_buckets[bucket_key].append(sample)
+                if itl_valid:
+                    self.itl_data_buckets[bucket_key].append(sample)
                 
         except Exception as e:
             logging.error(f"Error adding training sample: {e}", exc_info=True)
@@ -968,49 +968,49 @@ class LatencyPredictor:
                 joblib.dump(self.ttft_scaler, settings.TTFT_SCALER_PATH)
                 logging.info("TTFT scaler saved.")
         
-            if self.tpot_model:
-                os.makedirs(os.path.dirname(settings.TPOT_MODEL_PATH), exist_ok=True)
-                joblib.dump(self.tpot_model, settings.TPOT_MODEL_PATH)
-                logging.info("TPOT model saved.")
+            if self.itl_model:
+                os.makedirs(os.path.dirname(settings.ITL_MODEL_PATH), exist_ok=True)
+                joblib.dump(self.itl_model, settings.ITL_MODEL_PATH)
+                logging.info("ITL model saved.")
         
                 # Save model-specific exports
                 if self.model_type == ModelType.XGBOOST:
                     try:
-                        booster = self.tpot_model.get_booster()
+                        booster = self.itl_model.get_booster()
                         raw_trees = booster.get_dump(dump_format="json")
                         trees = [json.loads(t) for t in raw_trees]
                 
-                        tpot_json_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_trees.json')
-                        with open(tpot_json_path, 'w') as f:
+                        itl_json_path = settings.ITL_MODEL_PATH.replace('.joblib', '_trees.json')
+                        with open(itl_json_path, 'w') as f:
                             json.dump(trees, f, indent=2)
-                        logging.info(f"TPOT XGBoost trees saved to {tpot_json_path}")
+                        logging.info(f"ITL XGBoost trees saved to {itl_json_path}")
                     except Exception as e:
-                        logging.error(f"Error saving TPOT XGBoost trees: {e}", exc_info=True)
+                        logging.error(f"Error saving ITL XGBoost trees: {e}", exc_info=True)
             
                 elif self.model_type == ModelType.LIGHTGBM:
                     try:
                         # Save LightGBM model as text format
-                        tpot_txt_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_lgb.txt')
-                        self.tpot_model.booster_.save_model(tpot_txt_path)
+                        itl_txt_path = settings.ITL_MODEL_PATH.replace('.joblib', '_lgb.txt')
+                        self.itl_model.booster_.save_model(itl_txt_path)
                     
                         # Save feature importances as JSON
                         feature_names = ['kv_cache_percentage', 'input_token_length', 
                                        'num_request_waiting', 'num_request_running', 'num_tokens_generated']
-                        importances = dict(zip(feature_names, self.tpot_model.feature_importances_))
+                        importances = dict(zip(feature_names, self.itl_model.feature_importances_))
                     
-                        tpot_imp_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_importances.json')
-                        with open(tpot_imp_path, 'w') as f:
+                        itl_imp_path = settings.ITL_MODEL_PATH.replace('.joblib', '_importances.json')
+                        with open(itl_imp_path, 'w') as f:
                             json.dump(importances, f, indent=2)
                     
-                        logging.info(f"TPOT LightGBM model saved to {tpot_txt_path}")
-                        logging.info(f"TPOT LightGBM importances saved to {tpot_imp_path}")
+                        logging.info(f"ITL LightGBM model saved to {itl_txt_path}")
+                        logging.info(f"ITL LightGBM importances saved to {itl_imp_path}")
                     except Exception as e:
-                        logging.error(f"Error saving TPOT LightGBM exports: {e}", exc_info=True)
+                        logging.error(f"Error saving ITL LightGBM exports: {e}", exc_info=True)
         
-            if self.tpot_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
-                os.makedirs(os.path.dirname(settings.TPOT_SCALER_PATH), exist_ok=True)
-                joblib.dump(self.tpot_scaler, settings.TPOT_SCALER_PATH)
-                logging.info("TPOT scaler saved.")
+            if self.itl_scaler and self.model_type == ModelType.BAYESIAN_RIDGE:
+                os.makedirs(os.path.dirname(settings.ITL_SCALER_PATH), exist_ok=True)
+                joblib.dump(self.itl_scaler, settings.ITL_SCALER_PATH)
+                logging.info("ITL scaler saved.")
         
         except Exception as e:
             logging.error(f"Error saving models: {e}", exc_info=True)
@@ -1034,9 +1034,9 @@ class LatencyPredictor:
             with self.lock:
                 # Count samples before flushing (handles 3D buckets)
                 ttft_training_count = sum(len(bucket) for bucket in self.ttft_data_buckets.values())
-                tpot_training_count = sum(len(bucket) for bucket in self.tpot_data_buckets.values())
+                itl_training_count = sum(len(bucket) for bucket in self.itl_data_buckets.values())
                 ttft_test_count = len(self.ttft_test_data)
-                tpot_test_count = len(self.tpot_test_data)
+                itl_test_count = len(self.itl_test_data)
         
                 reason_str = f" Reason: {reason}" if reason else ""
                 logging.info(
@@ -1048,38 +1048,38 @@ class LatencyPredictor:
                 if flush_training:
                     for bucket_key in self.ttft_data_buckets:
                         self.ttft_data_buckets[bucket_key].clear()
-                    for bucket_key in self.tpot_data_buckets:
-                        self.tpot_data_buckets[bucket_key].clear()
+                    for bucket_key in self.itl_data_buckets:
+                        self.itl_data_buckets[bucket_key].clear()
                     logging.info(
-                        f"Flushed {ttft_training_count} TTFT and {tpot_training_count} TPOT training samples"
+                        f"Flushed {ttft_training_count} TTFT and {itl_training_count} ITL training samples"
                     )
         
                 # Flush test data
                 if flush_test:
                     self.ttft_test_data.clear()
-                    self.tpot_test_data.clear()
+                    self.itl_test_data.clear()
                     logging.info(
-                        f"Flushed {ttft_test_count} TTFT and {tpot_test_count} TPOT test samples"
+                        f"Flushed {ttft_test_count} TTFT and {itl_test_count} ITL test samples"
                     )
         
                 # Clear metrics
                 metrics_cleared = False
                 if flush_metrics:
                     self.ttft_quantile_loss_scores.clear()
-                    self.tpot_quantile_loss_scores.clear()
+                    self.itl_quantile_loss_scores.clear()
                     self.ttft_coverage_scores.clear()
-                    self.tpot_coverage_scores.clear()
+                    self.itl_coverage_scores.clear()
                     self.ttft_violation_rates.clear()
-                    self.tpot_violation_rates.clear()
+                    self.itl_violation_rates.clear()
                     metrics_cleared = True
                     logging.info("Cleared all quantile metric scores")
         
                 return {
                     "success": True,
                     "ttft_training_samples_flushed": ttft_training_count if flush_training else 0,
-                    "tpot_training_samples_flushed": tpot_training_count if flush_training else 0,
+                    "itl_training_samples_flushed": itl_training_count if flush_training else 0,
                     "ttft_test_samples_flushed": ttft_test_count if flush_test else 0,
-                    "tpot_test_samples_flushed": tpot_test_count if flush_test else 0,
+                    "itl_test_samples_flushed": itl_test_count if flush_test else 0,
                     "metrics_cleared": metrics_cleared
                 }
         
@@ -1103,16 +1103,16 @@ class LatencyPredictor:
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
                     self._save_models_unlocked()
 
-                if os.path.exists(settings.TPOT_MODEL_PATH):
-                    self.tpot_model = joblib.load(settings.TPOT_MODEL_PATH)
-                    if self.model_type == ModelType.BAYESIAN_RIDGE and os.path.exists(settings.TPOT_SCALER_PATH):
-                        self.tpot_scaler = joblib.load(settings.TPOT_SCALER_PATH)
+                if os.path.exists(settings.ITL_MODEL_PATH):
+                    self.itl_model = joblib.load(settings.ITL_MODEL_PATH)
+                    if self.model_type == ModelType.BAYESIAN_RIDGE and os.path.exists(settings.ITL_SCALER_PATH):
+                        self.itl_scaler = joblib.load(settings.ITL_SCALER_PATH)
                 else:
-                    result = self._create_default_model("tpot")
+                    result = self._create_default_model("itl")
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
-                        self.tpot_model, self.tpot_scaler = result
+                        self.itl_model, self.itl_scaler = result
                     else:
-                        self.tpot_model = result
+                        self.itl_model = result
                     settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
                     self._save_models_unlocked()
 
@@ -1126,8 +1126,8 @@ class LatencyPredictor:
         """Render Prometheus-style metrics: model, coefficients/importances, bucket counts, and quantile-specific scores."""
         try:
         # Snapshot models & scalers
-            ttft_model, tpot_model = self.ttft_model, self.tpot_model
-            ttft_scaler, tpot_scaler = self.ttft_scaler, self.tpot_scaler
+            ttft_model, itl_model = self.ttft_model, self.itl_model
+            ttft_scaler, itl_scaler = self.ttft_scaler, self.itl_scaler
 
             lines: List[str] = []
             # 1) Model type and quantile info
@@ -1173,48 +1173,48 @@ class LatencyPredictor:
                 ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
                   "num_request_running","prefix_cache_score","effective_input_tokens","prefill_score_bucket"]
 
-            tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+            itl_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
               "num_request_running","num_tokens_generated"]
             emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
-            emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
+            emit_metrics(itl_model, self.itl_coefficients, itl_feats, "itl")
 
             # 3) Multi-dimensional bucket counts with 3D keys
             for (queue_bucket, cache_bucket, prefix_bucket), bucket_deque in self.ttft_data_buckets.items():
                 count = len(bucket_deque)
                 lines.append(f'training_samples_count{{model="ttft",queue_bucket="{queue_bucket}",cache_bucket="{cache_bucket}",prefix_bucket="{prefix_bucket}"}} {count}')
     
-            for (queue_bucket, cache_bucket, prefix_bucket), bucket_deque in self.tpot_data_buckets.items():
+            for (queue_bucket, cache_bucket, prefix_bucket), bucket_deque in self.itl_data_buckets.items():
                 count = len(bucket_deque)
-                lines.append(f'training_samples_count{{model="tpot",queue_bucket="{queue_bucket}",cache_bucket="{cache_bucket}",prefix_bucket="{prefix_bucket}"}} {count}')
+                lines.append(f'training_samples_count{{model="itl",queue_bucket="{queue_bucket}",cache_bucket="{cache_bucket}",prefix_bucket="{prefix_bucket}"}} {count}')
     
             # Summary metrics by queue state
             for q in range(self.queue_buckets):
                 ttft_total = sum(len(self.ttft_data_buckets[(q, c, p)]) 
                                for c in range(self.cache_buckets) 
                                for p in range(self.prefix_buckets))
-                tpot_total = sum(len(self.tpot_data_buckets[(q, c, p)]) 
+                itl_total = sum(len(self.itl_data_buckets[(q, c, p)]) 
                                for c in range(self.cache_buckets) 
                                for p in range(self.prefix_buckets))
                 lines.append(f'training_samples_queue_total{{model="ttft",queue_bucket="{q}"}} {ttft_total}')
-                lines.append(f'training_samples_queue_total{{model="tpot",queue_bucket="{q}"}} {tpot_total}')
+                lines.append(f'training_samples_queue_total{{model="itl",queue_bucket="{q}"}} {itl_total}')
 
             # Summary metrics by cache state
             for c in range(self.cache_buckets):
                 ttft_total = sum(len(self.ttft_data_buckets[(q, c, p)]) 
                                for q in range(self.queue_buckets) 
                                for p in range(self.prefix_buckets))
-                tpot_total = sum(len(self.tpot_data_buckets[(q, c, p)]) 
+                itl_total = sum(len(self.itl_data_buckets[(q, c, p)]) 
                                for q in range(self.queue_buckets) 
                                for p in range(self.prefix_buckets))
                 lines.append(f'training_samples_cache_total{{model="ttft",cache_bucket="{c}"}} {ttft_total}')
-                lines.append(f'training_samples_cache_total{{model="tpot",cache_bucket="{c}"}} {tpot_total}')
+                lines.append(f'training_samples_cache_total{{model="itl",cache_bucket="{c}"}} {itl_total}')
 
             # Summary metrics by prefix state
             for p in range(self.prefix_buckets):
                 ttft_total = sum(len(self.ttft_data_buckets[(q, c, p)]) 
                                for q in range(self.queue_buckets) 
                                for c in range(self.cache_buckets))
-                tpot_total = sum(len(self.tpot_data_buckets[(q, c, p)]) 
+                itl_total = sum(len(self.itl_data_buckets[(q, c, p)]) 
                                for q in range(self.queue_buckets) 
                                for c in range(self.cache_buckets))
             
@@ -1223,7 +1223,7 @@ class LatencyPredictor:
                 prefix_high = (p + 1) / self.prefix_buckets
             
                 lines.append(f'training_samples_prefix_total{{model="ttft",prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {ttft_total}')
-                lines.append(f'training_samples_prefix_total{{model="tpot",prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {tpot_total}')
+                lines.append(f'training_samples_prefix_total{{model="itl",prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {itl_total}')
 
             # Add prefix score distribution statistics
             all_ttft_samples = self._all_samples(self.ttft_data_buckets)
@@ -1256,20 +1256,20 @@ class LatencyPredictor:
             # 4) Quantile Loss scores (last up to 5)
             for idx, score in enumerate(self.ttft_quantile_loss_scores):
                 lines.append(f'ttft_quantile_loss{{idx="{idx}"}} {score:.6f}')
-            for idx, score in enumerate(self.tpot_quantile_loss_scores):
-                lines.append(f'tpot_quantile_loss{{idx="{idx}"}} {score:.6f}')
+            for idx, score in enumerate(self.itl_quantile_loss_scores):
+                lines.append(f'itl_quantile_loss{{idx="{idx}"}} {score:.6f}')
 
             # 5) Coverage scores (should be close to quantile * 100)
             for idx, coverage in enumerate(self.ttft_coverage_scores):
                 lines.append(f'ttft_coverage_percent{{idx="{idx}"}} {coverage:.6f}')
-            for idx, coverage in enumerate(self.tpot_coverage_scores):
-                lines.append(f'tpot_coverage_percent{{idx="{idx}"}} {coverage:.6f}')
+            for idx, coverage in enumerate(self.itl_coverage_scores):
+                lines.append(f'itl_coverage_percent{{idx="{idx}"}} {coverage:.6f}')
 
             # 6) Violation rates (should be close to (1-quantile) * 100)
             for idx, violation_rate in enumerate(self.ttft_violation_rates):
                 lines.append(f'ttft_violation_rate_percent{{idx="{idx}"}} {violation_rate:.6f}')
-            for idx, violation_rate in enumerate(self.tpot_violation_rates):
-                lines.append(f'tpot_violation_rate_percent{{idx="{idx}"}} {violation_rate:.6f}')
+            for idx, violation_rate in enumerate(self.itl_violation_rates):
+                lines.append(f'itl_violation_rate_percent{{idx="{idx}"}} {violation_rate:.6f}')
 
             # 7) Target metrics for reference
             target_coverage = self.quantile * 100
@@ -1287,7 +1287,7 @@ class LatencyPredictor:
 # --- FastAPI Application ---
 app = FastAPI(
     title="Latency Predictor Service",
-    description="A service to predict TTFT and TPOT using quantile regression with continuous training and feature scaling.",
+    description="A service to predict TTFT and ITL using quantile regression with continuous training and feature scaling.",
 )
 
 predictor = LatencyPredictor()
@@ -1299,7 +1299,7 @@ class TrainingEntry(BaseModel):
     num_request_waiting: int = Field(..., ge=0)
     num_request_running: int = Field(..., ge=0)
     actual_ttft_ms: float = Field(..., ge=0.0)
-    actual_tpot_ms: float = Field(..., ge=0.0)
+    actual_itl_ms: float = Field(..., ge=0.0)
     num_tokens_generated: int = Field(..., ge=0)
     prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -1314,11 +1314,11 @@ class PredictionRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     ttft_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TTFT in milliseconds")
-    tpot_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TPOT in milliseconds")
+    itl_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile ITL in milliseconds")
     ttft_uncertainty: float = Field(..., description="Uncertainty estimate for TTFT prediction")
-    tpot_uncertainty: float = Field(..., description="Uncertainty estimate for TPOT prediction")
+    itl_uncertainty: float = Field(..., description="Uncertainty estimate for ITL prediction")
     ttft_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TTFT")
-    tpot_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TPOT")
+    itl_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for ITL")
     predicted_at: datetime
     model_type: ModelType = Field(default=predictor.model_type.value, description="Type of model used for prediction")
     quantile: float = Field(default=settings.QUANTILE_ALPHA, description="Quantile being predicted")
@@ -1373,18 +1373,18 @@ async def add_training_data_bulk(batch: BulkTrainingRequest):
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_endpoint(request: PredictionRequest):
     try:
-        ttft_pred, tpot_pred, ttft_std, tpot_std = predictor.predict(request.dict())
+        ttft_pred, itl_pred, ttft_std, itl_std = predictor.predict(request.dict())
         ttft_pred = max(0, ttft_pred)
-        tpot_pred = max(0, tpot_pred)
+        itl_pred = max(0, itl_pred)
         ttft_bounds = (max(0, ttft_pred - 2*ttft_std), ttft_pred + 2*ttft_std)
-        tpot_bounds = (max(0, tpot_pred - 2*tpot_std), tpot_pred + 2*tpot_std)
+        itl_bounds = (max(0, itl_pred - 2*itl_std), itl_pred + 2*itl_std)
         return PredictionResponse(
             ttft_ms=ttft_pred,
-            tpot_ms=tpot_pred,
+            itl_ms=itl_pred,
             ttft_uncertainty=ttft_std,
-            tpot_uncertainty=tpot_std,
+            itl_uncertainty=itl_std,
             ttft_prediction_bounds=ttft_bounds,
-            tpot_prediction_bounds=tpot_bounds,
+            itl_prediction_bounds=itl_bounds,
             predicted_at=datetime.now(timezone.utc),
             model_type=predictor.model_type.value,
             quantile=predictor.quantile
@@ -1424,7 +1424,7 @@ async def root():
         "message": "Latency Predictor is running.",
         "model_type": predictor.model_type.value,
         "quantile": predictor.quantile,
-        "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and TPOT latencies"
+        "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and ITL latencies"
     }
 
 @app.post("/flush", response_model=FlushResponse, status_code=status.HTTP_200_OK)
@@ -1453,21 +1453,21 @@ async def flush_data(request: FlushRequest = FlushRequest()):
         
         total_flushed = (
             result["ttft_training_samples_flushed"] + 
-            result["tpot_training_samples_flushed"] +
+            result["itl_training_samples_flushed"] +
             result["ttft_test_samples_flushed"] + 
-            result["tpot_test_samples_flushed"]
+            result["itl_test_samples_flushed"]
         )
         
         message_parts = []
         if request.flush_training_data:
             message_parts.append(
                 f"{result['ttft_training_samples_flushed']} TTFT and "
-                f"{result['tpot_training_samples_flushed']} TPOT training samples"
+                f"{result['itl_training_samples_flushed']} ITL training samples"
             )
         if request.flush_test_data:
             message_parts.append(
                 f"{result['ttft_test_samples_flushed']} TTFT and "
-                f"{result['tpot_test_samples_flushed']} TPOT test samples"
+                f"{result['itl_test_samples_flushed']} ITL test samples"
             )
         if request.flush_metrics:
             message_parts.append("all metric scores")
@@ -1479,9 +1479,9 @@ async def flush_data(request: FlushRequest = FlushRequest()):
             flushed_at=datetime.now(timezone.utc),
             reason=request.reason,
             ttft_training_samples_flushed=result["ttft_training_samples_flushed"],
-            tpot_training_samples_flushed=result["tpot_training_samples_flushed"],
+            itl_training_samples_flushed=result["itl_training_samples_flushed"],
             ttft_test_samples_flushed=result["ttft_test_samples_flushed"],
-            tpot_test_samples_flushed=result["tpot_test_samples_flushed"],
+            itl_test_samples_flushed=result["itl_test_samples_flushed"],
             metrics_cleared=result["metrics_cleared"],
             message=message
         )
@@ -1501,7 +1501,7 @@ async def get_data_status():
     Useful for monitoring and deciding whether to flush.
     """
     ttft_training_count = sum(len(bucket) for bucket in predictor.ttft_data_buckets.values())
-    tpot_training_count = sum(len(bucket) for bucket in predictor.tpot_data_buckets.values())
+    itl_training_count = sum(len(bucket) for bucket in predictor.itl_data_buckets.values())
     
     bucket_distribution = {}
     for (q, c, p), bucket in predictor.ttft_data_buckets.items():
@@ -1512,17 +1512,17 @@ async def get_data_status():
     return {
         "training_data": {
             "ttft_samples": ttft_training_count,
-            "tpot_samples": tpot_training_count,
-            "total_samples": ttft_training_count + tpot_training_count
+            "itl_samples": itl_training_count,
+            "total_samples": ttft_training_count + itl_training_count
         },
         "test_data": {
             "ttft_samples": len(predictor.ttft_test_data),
-            "tpot_samples": len(predictor.tpot_test_data),
-            "total_samples": len(predictor.ttft_test_data) + len(predictor.tpot_test_data)
+            "itl_samples": len(predictor.itl_test_data),
+            "total_samples": len(predictor.ttft_test_data) + len(predictor.itl_test_data)
         },
         "metrics": {
             "ttft_scores_count": len(predictor.ttft_quantile_loss_scores),
-            "tpot_scores_count": len(predictor.tpot_quantile_loss_scores)
+            "itl_scores_count": len(predictor.itl_quantile_loss_scores)
         },
         "bucket_distribution": bucket_distribution,
         "model_ready": predictor.is_ready,
@@ -1544,30 +1544,30 @@ async def model_download_info():
         info["available_endpoints"]["coefficients"] = "/metrics"
         info["coefficients_info"] = {
             "ttft_coefficients_available": predictor.ttft_coefficients is not None,
-            "tpot_coefficients_available": predictor.tpot_coefficients is not None,
+            "itl_coefficients_available": predictor.itl_coefficients is not None,
             "description": "Descaled coefficients available in Prometheus metrics endpoint"
         }
     elif predictor.model_type == ModelType.XGBOOST:
         info["available_endpoints"]["trees"] = {
             "ttft_trees": "/model/ttft/xgb/json",
-            "tpot_trees": "/model/tpot/xgb/json"
+            "itl_trees": "/model/itl/xgb/json"
         }
     else: 
         info["available_endpoints"]["lightgbm"] = {
             "ttft_model_txt": "/model/ttft/lgb/txt",
-            "tpot_model_txt": "/model/tpot/lgb/txt",
+            "itl_model_txt": "/model/itl/lgb/txt",
             "ttft_importances": "/model/ttft/lgb/importances",
-            "tpot_importances": "/model/tpot/lgb/importances"
+            "itl_importances": "/model/itl/lgb/importances"
         }
     
     info["model_status"] = {
         "ttft_model_ready": predictor.ttft_model is not None,
-        "tpot_model_ready": predictor.tpot_model is not None,
+        "itl_model_ready": predictor.itl_model is not None,
     }
     
     if predictor.model_type == ModelType.BAYESIAN_RIDGE:
         info["model_status"]["ttft_coefficients_ready"] = predictor.ttft_coefficients is not None
-        info["model_status"]["tpot_coefficients_ready"] = predictor.tpot_coefficients is not None
+        info["model_status"]["itl_coefficients_ready"] = predictor.itl_coefficients is not None
     
     # Add quantile-specific evaluation info
     info["evaluation_info"] = {
@@ -1601,25 +1601,25 @@ async def ttft_xgb_json():
         raise HTTPException(status_code=500, detail="Error dumping TTFT XGBoost trees")
 
 
-@app.get("/model/tpot/xgb/json")
-async def tpot_xgb_json():
+@app.get("/model/itl/xgb/json")
+async def itl_xgb_json():
     """
-    Dump the TPOT XGBoost model as JSON trees.
+    Dump the ITL XGBoost model as JSON trees.
     """
     if predictor.model_type != ModelType.XGBOOST:
-        raise HTTPException(status_code=404, detail="TPOT model is not XGBoost")
+        raise HTTPException(status_code=404, detail="ITL model is not XGBoost")
     
-    if not predictor.tpot_model:
-        raise HTTPException(status_code=404, detail="TPOT model not available")
+    if not predictor.itl_model:
+        raise HTTPException(status_code=404, detail="ITL model not available")
         
     try:
-        booster = predictor.tpot_model.get_booster()
+        booster = predictor.itl_model.get_booster()
         raw_trees = booster.get_dump(dump_format="json")
         trees = [json.loads(t) for t in raw_trees]
         return JSONResponse(content=trees)
     except Exception as e:
-        logging.error(f"Error dumping TPOT XGBoost trees: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error dumping TPOT XGBoost trees")
+        logging.error(f"Error dumping ITL XGBoost trees: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error dumping ITL XGBoost trees")
 
 
 
@@ -1628,9 +1628,9 @@ async def model_info(model_name: str):
     """Get model file information including last modified time."""
     model_paths = {
         "ttft": settings.TTFT_MODEL_PATH,
-        "tpot": settings.TPOT_MODEL_PATH,
+        "itl": settings.ITL_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "itl_scaler": settings.ITL_SCALER_PATH
     }
     
     if model_name not in model_paths:
@@ -1652,7 +1652,7 @@ async def model_info(model_name: str):
         "last_modified": last_modified.isoformat(),
         "exists": True,
         "model_type": predictor.model_type.value,
-        "quantile": predictor.quantile if model_name in ["ttft", "tpot"] else None
+        "quantile": predictor.quantile if model_name in ["ttft", "itl"] else None
     }
 
 
@@ -1661,9 +1661,9 @@ async def download_model(model_name: str):
     """Download a model file."""
     model_paths = {
         "ttft": settings.TTFT_MODEL_PATH,
-        "tpot": settings.TPOT_MODEL_PATH,
+        "itl": settings.ITL_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "itl_scaler": settings.ITL_SCALER_PATH
     }
     
     if model_name not in model_paths:
@@ -1689,9 +1689,9 @@ async def list_models():
     models = {}
     model_paths = {
         "ttft": settings.TTFT_MODEL_PATH,
-        "tpot": settings.TPOT_MODEL_PATH,
+        "itl": settings.ITL_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "itl_scaler": settings.ITL_SCALER_PATH
     }
     
     for model_name, model_path in model_paths.items():
@@ -1743,25 +1743,25 @@ async def ttft_lgb_txt():
         filename='ttft_lgb_model.txt'
     )
 
-@app.get("/model/tpot/lgb/txt")
-async def tpot_lgb_txt():
+@app.get("/model/itl/lgb/txt")
+async def itl_lgb_txt():
     """
-    Download the TPOT LightGBM model as text format.
+    Download the ITL LightGBM model as text format.
     """
     if predictor.model_type != ModelType.LIGHTGBM:
-        raise HTTPException(status_code=404, detail="TPOT model is not LightGBM")
+        raise HTTPException(status_code=404, detail="ITL model is not LightGBM")
     
-    if not predictor.tpot_model:
-        raise HTTPException(status_code=404, detail="TPOT model not available")
+    if not predictor.itl_model:
+        raise HTTPException(status_code=404, detail="ITL model not available")
         
-    txt_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_lgb.txt')
+    txt_path = settings.ITL_MODEL_PATH.replace('.joblib', '_lgb.txt')
     if not os.path.exists(txt_path):
-        raise HTTPException(status_code=404, detail="TPOT LightGBM text model not found")
+        raise HTTPException(status_code=404, detail="ITL LightGBM text model not found")
     
     return FileResponse(
         txt_path,
         media_type='text/plain',
-        filename='tpot_lgb_model.txt'
+        filename='itl_lgb_model.txt'
     )
 
 @app.get("/model/ttft/lgb/importances")
@@ -1784,20 +1784,20 @@ async def ttft_lgb_importances():
     
     return JSONResponse(content=importances)
 
-@app.get("/model/tpot/lgb/importances")
-async def tpot_lgb_importances():
+@app.get("/model/itl/lgb/importances")
+async def itl_lgb_importances():
     """
-    Get TPOT LightGBM feature importances as JSON.
+    Get ITL LightGBM feature importances as JSON.
     """
     if predictor.model_type != ModelType.LIGHTGBM:
-        raise HTTPException(status_code=404, detail="TPOT model is not LightGBM")
+        raise HTTPException(status_code=404, detail="ITL model is not LightGBM")
     
-    if not predictor.tpot_model:
-        raise HTTPException(status_code=404, detail="TPOT model not available")
+    if not predictor.itl_model:
+        raise HTTPException(status_code=404, detail="ITL model not available")
         
-    imp_path = settings.TPOT_MODEL_PATH.replace('.joblib', '_importances.json')
+    imp_path = settings.ITL_MODEL_PATH.replace('.joblib', '_importances.json')
     if not os.path.exists(imp_path):
-        raise HTTPException(status_code=404, detail="TPOT LightGBM importances not found")
+        raise HTTPException(status_code=404, detail="ITL LightGBM importances not found")
     
     with open(imp_path, 'r') as f:
         importances = json.load(f)

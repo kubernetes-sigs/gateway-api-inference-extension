@@ -15,10 +15,11 @@ limitations under the License.
 */
 
 // Package requestcontrol contains helpers to decouple latency-predictor logic.
-package slo_aware_router
+package predicted_latency
 
 import (
 	"strconv"
+	"strings"
 
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -45,3 +46,25 @@ func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (fl
 	// 3. Return the successfully parsed value
 	return parsedFloat, nil
 }
+
+//parseBoolHeader retrieves a header by name, parses it as a bool,
+// and returns the value or an error if the header is missing or invalid.
+func parseBoolHeader(request schedulingtypes.LLMRequest, headerName string) (bool, error) {
+	// 1. Get header value from the map
+	headerValue, ok := request.Headers[headerName]
+	if !ok {
+		return false, nil // Header not found, return false and false
+	}
+
+	// 2. Parse the header value to a bool
+	parsedBool, err := strconv.ParseBool(strings.ToLower(headerValue))
+	if err != nil {
+		return false, errutil.Error{
+			Code: errutil.BadRequest,
+			Msg:  headerName + " must be a boolean",
+		}
+	}
+
+	// 3. Return the successfully parsed value
+	return parsedBool, nil
+}	

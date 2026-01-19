@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package requestcontrol contains helpers to decouple latency-predictor logic.
-package slo_aware_router
+package predicted_latency
 
 import schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 
@@ -38,12 +38,15 @@ const (
 
 	// TTFT header string
 	ttftSLOHeaderKey = "x-slo-ttft-ms"
-	// TPOT header string
-	tpotSLOHeaderKey = "x-slo-tpot-ms"
+	// ITL header string
+	itlSLOHeaderKey = "x-slo-itl-ms"
+
+	// Sheddable header string
+	sheddableHeaderKey = "x-request-sheddable"
 )
 
 const (
-	SLOAwareRouterPluginType = "predicted-latency-scorer"
+	PredictedLatencyPluginType = "predicted-latency-scorer"
 	eps                      = 1e-9
 	wMax                     = 100
 	minWeight                = 1

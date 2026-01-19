@@ -126,9 +126,9 @@ def test_training_server_models_list():
     assert "server_time" in data
     
     models = data["models"]
-    expected_models = ["ttft", "tpot"]
+    expected_models = ["ttft", "itl"]
     if data["model_type"] == "bayesian_ridge":
-        expected_models.extend(["ttft_scaler", "tpot_scaler"])
+        expected_models.extend(["ttft_scaler", "itl_scaler"])
     
     for model_name in expected_models:
         assert model_name in models, f"Model {model_name} should be listed"
@@ -141,7 +141,7 @@ def test_model_download_from_training_server():
     models_r = requests.get(f"{TRAINING_URL}/models/list")
     models_data = models_r.json()
     
-    for model_name in ["ttft", "tpot"]:
+    for model_name in ["ttft", "itl"]:
         if models_data["models"][model_name]["exists"]:
             # Test model info endpoint
             info_r = requests.get(f"{TRAINING_URL}/model/{model_name}/info")
@@ -195,13 +195,13 @@ def test_lightgbm_endpoints_on_training_server():
     else:
         print(f"TTFT LightGBM text model not yet available (status: {ttft_txt_response.status_code})")
     
-    # Test TPOT model text format
-    tpot_txt_response = requests.get(f"{TRAINING_URL}/model/tpot/lgb/txt")
-    if tpot_txt_response.status_code == 200:
-        print("✓ TPOT LightGBM text model available")
-        assert tpot_txt_response.headers.get('content-type') == 'text/plain; charset=utf-8'
+    # Test ITL model text format
+    itl_txt_response = requests.get(f"{TRAINING_URL}/model/itl/lgb/txt")
+    if itl_txt_response.status_code == 200:
+        print("✓ ITL LightGBM text model available")
+        assert itl_txt_response.headers.get('content-type') == 'text/plain; charset=utf-8'
     else:
-        print(f"TPOT LightGBM text model not yet available (status: {tpot_txt_response.status_code})")
+        print(f"ITL LightGBM text model not yet available (status: {itl_txt_response.status_code})")
     
     # Test TTFT feature importances
     ttft_imp_response = requests.get(f"{TRAINING_URL}/model/ttft/lgb/importances")
@@ -219,21 +219,21 @@ def test_lightgbm_endpoints_on_training_server():
     else:
         print(f"TTFT LightGBM importances not yet available (status: {ttft_imp_response.status_code})")
     
-    # Test TPOT feature importances
-    tpot_imp_response = requests.get(f"{TRAINING_URL}/model/tpot/lgb/importances")
-    if tpot_imp_response.status_code == 200:
-        tpot_importances = tpot_imp_response.json()
-        assert isinstance(tpot_importances, dict), "TPOT importances should be a dict"
+    # Test ITL feature importances
+    itl_imp_response = requests.get(f"{TRAINING_URL}/model/itl/lgb/importances")
+    if itl_imp_response.status_code == 200:
+        itl_importances = itl_imp_response.json()
+        assert isinstance(itl_importances, dict), "ITL importances should be a dict"
         
         # Check for expected features
         expected_features = ["kv_cache_percentage", "input_token_length", "num_request_waiting", 
                            "num_request_running", "num_tokens_generated"]
         for feature in expected_features:
-            assert feature in tpot_importances, f"Missing feature importance: {feature}"
+            assert feature in itl_importances, f"Missing feature importance: {feature}"
         
-        print(f"✓ TPOT LightGBM importances available with {len(tpot_importances)} features")
+        print(f"✓ ITL LightGBM importances available with {len(itl_importances)} features")
     else:
-        print(f"TPOT LightGBM importances not yet available (status: {tpot_imp_response.status_code})")
+        print(f"ITL LightGBM importances not yet available (status: {itl_imp_response.status_code})")
         
         
 def test_add_training_data_to_training_server():
@@ -258,7 +258,7 @@ def test_add_training_data_to_training_server():
             "num_request_waiting": waiting,
             "num_request_running": running,
             "actual_ttft_ms": (inp_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix_cache*30.0) + 95,  # Include prefix_cache effect
-            "actual_tpot_ms": (kv*100.0 + inp_len*0.5 + tokens*1.0 + running*5.0) + 9,
+            "actual_itl_ms": (kv*100.0 + inp_len*0.5 + tokens*1.0 + running*5.0) + 9,
             "num_tokens_generated": tokens,
             "prefix_cache_score": prefix_cache,  # Added prefix_cache_score field
         })
@@ -321,7 +321,7 @@ def test_prediction_via_prediction_server():
     
     data = r.json()
     required_fields = [
-        "ttft_ms", "tpot_ms", 
+        "ttft_ms", "itl_ms", 
         "predicted_at", "model_type", "last_model_load"
     ]
     
@@ -330,11 +330,11 @@ def test_prediction_via_prediction_server():
     
     # Verify predictions are reasonable
     assert data["ttft_ms"] > 0
-    assert data["tpot_ms"] > 0
+    assert data["itl_ms"] > 0
     #assert data["ttft_uncertainty"] >= 0
-    #assert data["tpot_uncertainty"] >= 0
+    #assert data["itl_uncertainty"] >= 0
     
-    print(f"Prediction successful: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
+    print(f"Prediction successful: TTFT={data['ttft_ms']:.2f}ms, ITL={data['itl_ms']:.2f}ms")
     print(f"Model type: {data['model_type']}")
 
 
@@ -383,11 +383,11 @@ def test_bulk_prediction_strict():
     # Check individual prediction structure
     for prediction in data["predictions"]:
         assert "ttft_ms" in prediction
-        assert "tpot_ms" in prediction
+        assert "itl_ms" in prediction
         #assert "ttft_uncertainty" in prediction
-        #assert "tpot_uncertainty" in prediction
+        #assert "itl_uncertainty" in prediction
        #assert "ttft_prediction_bounds" in prediction
-        #assert "tpot_prediction_bounds" in prediction
+        #assert "itl_prediction_bounds" in prediction
         assert "predicted_at" in prediction
         assert "model_type" in prediction
         assert "quantile" in prediction
@@ -495,8 +495,8 @@ def test_training_server_metrics():
     assert "model_type{" in content
     
     # Should contain either coefficients (Bayesian Ridge) or importance (XGBoost)
-    has_coef = "ttft_coef{" in content or "tpot_coef{" in content
-    has_importance = "ttft_importance{" in content or "tpot_importance{" in content
+    has_coef = "ttft_coef{" in content or "itl_coef{" in content
+    has_importance = "ttft_importance{" in content or "itl_importance{" in content
     
     assert has_coef or has_importance, "Should have either coefficients or feature importance metrics"
     
@@ -548,14 +548,14 @@ def test_model_specific_endpoints_on_training_server():
         else:
             print(f"TTFT XGBoost trees not yet available (status: {ttft_response.status_code})")
         
-        # Test TPOT trees  
-        tpot_response = requests.get(f"{TRAINING_URL}/model/tpot/xgb/json")
-        if tpot_response.status_code == 200:
-            tpot_trees = tpot_response.json()
-            assert isinstance(tpot_trees, list), "TPOT trees should be a list"
-            print(f"✓ TPOT XGBoost trees available: {len(tpot_trees)} trees")
+        # Test ITL trees  
+        itl_response = requests.get(f"{TRAINING_URL}/model/itl/xgb/json")
+        if itl_response.status_code == 200:
+            itl_trees = itl_response.json()
+            assert isinstance(itl_trees, list), "ITL trees should be a list"
+            print(f"✓ ITL XGBoost trees available: {len(itl_trees)} trees")
         else:
-            print(f"TPOT XGBoost trees not yet available (status: {tpot_response.status_code})")
+            print(f"ITL XGBoost trees not yet available (status: {itl_response.status_code})")
     
     elif model_type == "lightgbm":
         test_lightgbm_endpoints_on_training_server()
@@ -669,7 +669,7 @@ def generate_random_training_payload():
             + prefix_cache * 30.0  # Added prefix cache effect
             + 95 + random.uniform(-10, 10)
         ),
-        "actual_tpot_ms": (
+        "actual_itl_ms": (
             kv * 100.0
             + input_tokens * 0.5
             + tokens_generated * 1.0
@@ -698,7 +698,7 @@ def test_dual_server_quantile_regression_learns_distribution():
     # Config
     TRAIN_N = 3000
     TEST_N  = 200
-    TTFT_STD, TPOT_STD = 20.0, 10.0
+    TTFT_STD, ITL_STD = 20.0, 10.0
     REL_ERR_TOL = 0.15  # 15%
     COVERAGE_TOL = 0.05 # ±5% around target quantile
     MAX_WAIT_S = 180
@@ -726,10 +726,10 @@ def test_dual_server_quantile_regression_learns_distribution():
     prefix = np.random.uniform(0.0, 1.0, size=TRAIN_N)
 
     ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
-    tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+    itl_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
 
     ttft_y = np.maximum(1.0, ttft_mu + np.random.normal(0, TTFT_STD, size=TRAIN_N))
-    tpot_y = np.maximum(1.0, tpot_mu + np.random.normal(0, TPOT_STD, size=TRAIN_N))
+    itl_y = np.maximum(1.0, itl_mu + np.random.normal(0, ITL_STD, size=TRAIN_N))
 
     entries = [dict(
         kv_cache_percentage=float(kv[i]),
@@ -737,7 +737,7 @@ def test_dual_server_quantile_regression_learns_distribution():
         num_request_waiting=int(waiting[i]),
         num_request_running=int(running[i]),
         actual_ttft_ms=float(ttft_y[i]),
-        actual_tpot_ms=float(tpot_y[i]),
+        actual_itl_ms=float(itl_y[i]),
         num_tokens_generated=int(tokens_gen[i]),
         prefix_cache_score=float(prefix[i]),
     ) for i in range(TRAIN_N)]
@@ -771,9 +771,9 @@ def test_dual_server_quantile_regression_learns_distribution():
     pre_t = np.random.uniform(0.0, 1.0, size=TEST_N)
 
     ttft_mu_t = (in_t*2.0 + wait_t*3.0 + run_t*4.0 + kv_t*50.0 + pre_t*30.0 + 95)
-    tpot_mu_t = (kv_t*100.0 + in_t*0.5 + tok_t*1.0 + run_t*5.0 + 9)
+    itl_mu_t = (kv_t*100.0 + in_t*0.5 + tok_t*1.0 + run_t*5.0 + 9)
     ttft_q_exp = ttft_mu_t + z*TTFT_STD
-    tpot_q_exp = tpot_mu_t + z*TPOT_STD
+    itl_q_exp = itl_mu_t + z*ITL_STD
 
     test_cases = [dict(
         kv_cache_percentage=float(kv_t[i]),
@@ -792,23 +792,23 @@ def test_dual_server_quantile_regression_learns_distribution():
     preds = jd["predictions"]
 
     ttft_pred = np.array([p["ttft_ms"] for p in preds], dtype=float)
-    tpot_pred = np.array([p["tpot_ms"] for p in preds], dtype=float)
+    itl_pred = np.array([p["itl_ms"] for p in preds], dtype=float)
 
     # 8) Relative error vs μ + zσ
     ttft_rel_err = np.abs(ttft_pred - ttft_q_exp) / ttft_q_exp
-    tpot_rel_err = np.abs(tpot_pred - tpot_q_exp) / tpot_q_exp
-    acc_mask = (ttft_rel_err <= REL_ERR_TOL) & (tpot_rel_err <= REL_ERR_TOL)
+    itl_rel_err = np.abs(itl_pred - itl_q_exp) / itl_q_exp
+    acc_mask = (ttft_rel_err <= REL_ERR_TOL) & (itl_rel_err <= REL_ERR_TOL)
     rel_accuracy = acc_mask.mean()
     print(f"Relative-err accuracy (≤{int(REL_ERR_TOL*100)}%): {rel_accuracy*100:.1f}%")
 
     # 9) Coverage calibration (simulate actuals for the same test X)
     # Generate fresh noise so it's an *unseen* draw from the same D|X:
     ttft_actual = np.maximum(1.0, ttft_mu_t + np.random.normal(0, TTFT_STD, size=TEST_N))
-    tpot_actual = np.maximum(1.0, tpot_mu_t + np.random.normal(0, TPOT_STD, size=TEST_N))
+    itl_actual = np.maximum(1.0, itl_mu_t + np.random.normal(0, ITL_STD, size=TEST_N))
 
     ttft_cov = (ttft_actual <= ttft_pred).mean()
-    tpot_cov = (tpot_actual <= tpot_pred).mean()
-    print(f"Coverage: TTFT={ttft_cov:.3f}, TPOT={tpot_cov:.3f} (target {target_quantile:.3f} ± {COVERAGE_TOL})")
+    itl_cov = (itl_actual <= itl_pred).mean()
+    print(f"Coverage: TTFT={ttft_cov:.3f}, ITL={itl_cov:.3f} (target {target_quantile:.3f} ± {COVERAGE_TOL})")
 
     # 10) Monotonic sanity checks on a few random pairs (no hard fail, just helpful asserts)
     # pick one sample index and perturb input_token_length upward
@@ -822,7 +822,7 @@ def test_dual_server_quantile_regression_learns_distribution():
     # 11) Final assertions
     assert rel_accuracy >= 0.70, f"Only {rel_accuracy*100:.1f}% within ±{int(REL_ERR_TOL*100)}% (expected ≥70%)"
     assert abs(ttft_cov - target_quantile) <= COVERAGE_TOL, f"TTFT coverage {ttft_cov:.3f} not within ±{COVERAGE_TOL} of {target_quantile:.3f}"
-    assert abs(tpot_cov - target_quantile) <= COVERAGE_TOL, f"TPOT coverage {tpot_cov:.3f} not within ±{COVERAGE_TOL} of {target_quantile:.3f}"
+    assert abs(itl_cov - target_quantile) <= COVERAGE_TOL, f"ITL coverage {itl_cov:.3f} not within ±{COVERAGE_TOL} of {target_quantile:.3f}"
 
 
 
@@ -1103,7 +1103,7 @@ def test_end_to_end_workflow():
                 if pred_r.status_code == 200:
                     successful_predictions += 1
                     pred_data = pred_r.json()
-                    print(f"  Prediction {i+1}: TTFT={pred_data['ttft_ms']:.2f}ms, TPOT={pred_data['tpot_ms']:.2f}ms (prefix_cache={payload['prefix_cache_score']:.2f})")
+                    print(f"  Prediction {i+1}: TTFT={pred_data['ttft_ms']:.2f}ms, ITL={pred_data['itl_ms']:.2f}ms (prefix_cache={payload['prefix_cache_score']:.2f})")
                     break
                 else:
                     print(f"  Prediction {i+1} attempt {attempt+1} failed with status {pred_r.status_code}")
@@ -1158,9 +1158,9 @@ def test_training_server_flush_api():
     initial_status = initial_status_r.json()
     
     print(f"  Initial training samples: TTFT={initial_status['training_data']['ttft_samples']}, "
-          f"TPOT={initial_status['training_data']['tpot_samples']}")
+          f"ITL={initial_status['training_data']['itl_samples']}")
     print(f"  Initial test samples: TTFT={initial_status['test_data']['ttft_samples']}, "
-          f"TPOT={initial_status['test_data']['tpot_samples']}")
+          f"ITL={initial_status['test_data']['itl_samples']}")
     
     # 2. Add training data
     print("Step 2: Adding training data...")
@@ -1205,9 +1205,9 @@ def test_training_server_flush_api():
     assert flush_response["reason"] == "Test flush training data only"
     
     print(f"  Flushed {flush_response['ttft_training_samples_flushed']} TTFT training samples")
-    print(f"  Flushed {flush_response['tpot_training_samples_flushed']} TPOT training samples")
+    print(f"  Flushed {flush_response['itl_training_samples_flushed']} ITL training samples")
     print(f"  Test samples flushed: {flush_response['ttft_test_samples_flushed']} TTFT, "
-          f"{flush_response['tpot_test_samples_flushed']} TPOT (should be 0)")
+          f"{flush_response['itl_test_samples_flushed']} ITL (should be 0)")
     
     # Verify training data was flushed but test data remains
     after_flush_training_r = requests.get(f"{TRAINING_URL}/data/status")
@@ -1294,7 +1294,7 @@ def test_training_server_flush_api():
     flush_test_response = flush_test_r.json()
     
     print(f"  Test data flush: {flush_test_response['ttft_test_samples_flushed']} TTFT, "
-          f"{flush_test_response['tpot_test_samples_flushed']} TPOT")
+          f"{flush_test_response['itl_test_samples_flushed']} ITL")
     
     # Verify only test data was flushed
     after_test_flush_r = requests.get(f"{TRAINING_URL}/data/status")
@@ -1342,7 +1342,7 @@ def test_training_server_flush_error_handling():
     response = r.json()
     assert response["metrics_cleared"] == True
     assert response["ttft_training_samples_flushed"] == 0
-    assert response["tpot_training_samples_flushed"] == 0
+    assert response["itl_training_samples_flushed"] == 0
     
     print("✓ Flush error handling tests passed!")
 
