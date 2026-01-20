@@ -411,19 +411,19 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens 
 	}
 
 	// convert block size from tokens to characters
-	cacheBlockSize := blockSizeTokens * averageCharactersPerToken
+	cacheBlockSizeChars := blockSizeTokens * averageCharactersPerToken
 
-	if len(userInput) < cacheBlockSize {
-		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", cacheBlockSize)
+	if len(userInput) < cacheBlockSizeChars {
+		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", cacheBlockSizeChars)
 		return nil
 	}
-	if len(userInput) > cacheBlockSize*maxPrefixBlocks {
-		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", cacheBlockSize)
-		userInput = userInput[:maxPrefixBlocks*cacheBlockSize]
+	if len(userInput) > cacheBlockSizeChars*maxPrefixBlocks {
+		loggerDebug.Info("Truncating input", "size", len(userInput), "max prefix blocks", maxPrefixBlocks, "block size in chars", cacheBlockSizeChars)
+		userInput = userInput[:maxPrefixBlocks*cacheBlockSizeChars]
 	}
 	// Split the body into blocks of size cacheBlockSize.
 	// If the last block is smaller than cacheBlockSize, it will be ignored.
-	res := make([]BlockHash, 0, len(userInput)/cacheBlockSize)
+	res := make([]BlockHash, 0, len(userInput)/cacheBlockSizeChars)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	h := xxhash.New()
 	_, _ = h.Write([]byte(request.TargetModel))
@@ -432,9 +432,9 @@ func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens 
 	}
 
 	prevBlockHash := BlockHash(h.Sum64())
-	for i := 0; i+cacheBlockSize <= len(userInput); i += cacheBlockSize {
+	for i := 0; i+cacheBlockSizeChars <= len(userInput); i += cacheBlockSizeChars {
 		h.Reset()
-		_, _ = h.Write(userInput[i : i+cacheBlockSize])
+		_, _ = h.Write(userInput[i : i+cacheBlockSizeChars])
 		_, _ = h.Write(toBytes(prevBlockHash))
 		res = append(res, BlockHash(h.Sum64()))
 
