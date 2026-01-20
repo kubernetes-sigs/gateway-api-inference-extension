@@ -87,7 +87,7 @@ inferencePool:
   apiVersion: inference.networking.k8s.io/v1
   # modelServers: # REQUIRED
   #   matchLabels:
-  #     app: vllm-llama3-8b-instruct
+  #     app: vllm-qwen3-32b
 
   # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.

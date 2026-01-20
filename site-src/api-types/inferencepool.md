@@ -30,23 +30,23 @@ Here is an example InferencePool configuration:
 apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
-  name: vllm-llama3-8b-instruct
+  name: vllm-qwen3-32b
 spec:
   targetPorts:
     - number: 8000
   selector:
-    app: vllm-llama3-8b-instruct
+    app: vllm-qwen3-32b
   extensionRef:
-    name: vllm-llama3-8b-instruct-epp
+    name: vllm-qwen3-32b-epp
     port: 9002
     failureMode: FailClose
 ```
 
 In this example: 
 
-- An InferencePool named `vllm-llama3-8b-instruct` is created in the `default` namespace.
-- It will select Pods that have the label `app: vllm-llama3-8b-instruct`.
-- Traffic routed to this InferencePool will call out to the EPP service `vllm-llama3-8b-instruct-epp` on port `9002` for making routing decisions. If EPP fails to pick an endpoint, or is not responsive, the request will be dropped.
+- An InferencePool named `vllm-qwen3-32b` is created in the `default` namespace.
+- It will select Pods that have the label `app: vllm-qwen3-32b`.
+- Traffic routed to this InferencePool will call out to the EPP service `vllm-qwen3-32b-epp` on port `9002` for making routing decisions. If EPP fails to pick an endpoint, or is not responsive, the request will be dropped.
 - Traffic routed to this InferencePool will be forwarded to the port `8000` on the selected Pods.
 
 ## Overlap with Service
