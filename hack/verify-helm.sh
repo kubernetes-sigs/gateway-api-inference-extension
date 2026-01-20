@@ -22,7 +22,7 @@ declare -A test_cases_inference_pool
 test_cases_inference_pool["basic"]="--set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 test_cases_inference_pool["gke-provider"]="--set provider.name=gke --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 test_cases_inference_pool["multiple-replicas"]="--set inferencePool.replicas=3 --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
-test_cases_inference_pool["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true"
+test_cases_inference_pool["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 
 # Run the install command in case this script runs from a different bash
 # source (such as in the verify-all script)
@@ -50,9 +50,9 @@ done
 declare -A test_cases_epp_standalone
 
 # InferencePool Helm Chart test cases
-test_cases_epp_standalone["basic"]="--set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
-test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
-test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true"
+test_cases_epp_standalone["basic"]="--set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
+test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
+test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
 
 
 echo "Building dependencies for epp-standalone chart..."
