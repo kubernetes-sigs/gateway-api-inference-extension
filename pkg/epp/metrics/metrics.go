@@ -400,13 +400,15 @@ var (
 			},
 		},
 		[]string{},
+	)
+
 	flowControlRequestEnqueueDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: InferenceExtension,
 			Name:      "flow_control_request_enqueue_duration_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken to enqueue requests by the EPP flow control layer.", compbasemetrics.ALPHA),
 			Buckets: []float64{
-				5, 10, 25, 50, 100, 250, 500, 1000,
+				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
 		},
 		[]string{"priority", "outcome"},
