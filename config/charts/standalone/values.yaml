@@ -18,7 +18,7 @@ inferenceExtension:
     # set it to false when you want to deploy EPP with inferencepool
     createInferencePool: true
     # Required when createInferencePool is false
-#    endpointSelector: app=vllm-llama3-8b-instruct
+#    endpointSelector: app=vllm-qwen3-32b
     # unused when createInferencePool is true
     targetPorts: 8000
     # unused when createInferencePool is true

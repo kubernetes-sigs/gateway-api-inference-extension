@@ -1,26 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sgl-llama3-8b-instruct
+  name: sgl-qwen3-32b-instruct
   labels:
-    app: sgl-llama3-8b-instruct
+    app: sgl-qwen3-32b-instruct
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: sgl-llama3-8b-instruct
+      app: sgl-qwen3-32b-instruct
   template:
     metadata:
       labels:
-        app: sgl-llama3-8b-instruct
-        inference.networking.k8s.io/engine-type: sglang
+        app: sgl-qwen3-32b-instruct
     spec:
       containers:
         - name: sglang
           image: lmsysorg/sglang:latest
           command: ["python3", "-m", "sglang.launch_server"]
           args:
-            - "--model-path=meta-llama/Llama-3.1-8B-Instruct"
+            - "--model-path=Qwen/Qwen3-32B"
             - "--host=0.0.0.0"
             - "--port=8000"
             - "--dtype=bfloat16"

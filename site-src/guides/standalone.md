@@ -62,7 +62,7 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
 
 === "With Inference APIs Support"
 
-      Deploy an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and
+      Deploy an InferencePool named `vllm-qwen3-32b` that selects from endpoints with label app: vllm-qwen3-32b and
       listening on port 8000. The Helm install command automatically deploys an InferencePool instance, the epp along with provider specific resources.
         
       Set the chart version and then select a tab to follow the provider-specific instructions.
@@ -72,9 +72,9 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
             
             export STANDALONE_CHART_VERSION=v0
             export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
-            helm install vllm-llama3-8b-instruct-standalone \
+            helm install vllm-qwen3-32b-standalone \
             --dependency-update \
-            --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+            --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
             --set provider.name=$PROVIDER \
             --version $STANDALONE_CHART_VERSION \
              oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
@@ -82,16 +82,16 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
 
 === "Without Inference APIs Support"
 
-     Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. 
+     Deploy an Endpoint Picker Extension named `vllm-qwen3-32b` that selects from endpoints with label `app=vllm-qwen3-32b` and listening on port 8000. 
      The Helm install command automatically deploys the epp along with provider specific resources.
         
      Set the chart version and then select a tab to follow the provider-specific instructions.
            ```bash
             export STANDALONE_CHART_VERSION=v0
             export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
-            helm install vllm-llama3-8b-instruct-standalone \
+            helm install vllm-qwen3-32b-standalone \
             --dependency-update \
-            --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
+            --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-qwen3-32b" \
             --set inferenceExtension.endpointsServer.createInferencePool=false
             --set provider.name=$PROVIDER \
             --version $STANDALONE_CHART_VERSION \
@@ -126,7 +126,7 @@ EOF
 ```
 Send an inference request via
 ```bash
-kubectl exec curl -- curl -i http://vllm-llama3-8b-instruct-standalone-epp:8081/v1/completions \
+kubectl exec curl -- curl -i http://vllm-qwen3-32b-epp:8081/v1/completions \
 -H 'Content-Type: application/json' \
 -d '{"model": "food-review-1","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
 ```
@@ -140,7 +140,7 @@ Please be careful not to delete resources you'd like to keep.
 1. Uninstall the EPP, curl pod and model server resources:
 
    ```bash
-   helm uninstall vllm-llama3-8b-instruct
+   helm uninstall vllm-qwen3-32b
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found

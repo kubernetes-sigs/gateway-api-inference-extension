@@ -5,7 +5,7 @@
         CPU deployment can be unreliable i.e. the pods may crash/restart because of resource contraints.
 
     This setup is using the formal `vllm-cpu` image, which according to the documentation can run vLLM on x86 CPU platform.
-    For this setup, we use approximately 9.5GB of memory and 12 CPUs for each replica.
+    For this setup, we use approximately 64GB of memory and 48 CPUs for each replica.
 
     While it is possible to deploy the model server with less resources, this is not recommended. For example, in our tests, loading the model using 8GB of memory and 1 CPU was possible but took almost 3.5 minutes and inference requests took unreasonable time. In general, there is a tradeoff between the memory and CPU we allocate to our pods and the performance. The more memory and CPU we allocate the better performance we can get.
 

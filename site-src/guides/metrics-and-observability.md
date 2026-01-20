@@ -12,7 +12,7 @@ This guide describes the current state of exposed metrics and how to scrape them
 
       ```
       curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-      "model": "food-review",
+      "model": "small-segment-lora",
       "prompt": "whats your fav movie?",
       "max_tokens": 10,
       "temperature": 0,

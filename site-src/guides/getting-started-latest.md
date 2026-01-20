@@ -236,7 +236,7 @@ If you wish to exercise that function, then retain the setup you have deployed s
    1. Uninstall the InferencePool, InferenceObjective and model server resources:
 
       ```bash
-      helm uninstall ${MODEL_SERVER}-llama3-8b-instruct --ignore-not-found
+      helm uninstall ${MODEL_SERVER}-vllm-qwen3-32b --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml --ignore-not-found

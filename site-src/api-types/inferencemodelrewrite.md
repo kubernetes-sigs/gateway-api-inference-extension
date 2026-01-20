@@ -12,7 +12,7 @@ This capability is essential for managing model lifecycles without disrupting cl
 
 ## Usages
 
-*   **Model Aliasing**: Map a model name in the request body (e.g., `food-review`) to a specific version (e.g., `food-review-v1`).
+*   **Model Aliasing**: Map a model name in the request body (e.g., `small-segment-lora`) to a specific version (e.g., `small-segment-lora-v1`).
 *   **Generic Fallbacks**: Redirect unknown model requests to a default model.
 *   **Traffic Splitting**: Gradually roll out new model versions (Canary deployment) by splitting traffic between two models based on percentage weights.
 
@@ -27,24 +27,24 @@ The full spec of the InferenceModelRewrite is defined [here](/reference/x-v1a2-s
 
 ### Model Aliasing
 
-Map a virtual model name (e.g., `food-review`) to a specific backend model version (e.g., `food-review-v1`).
+Map a virtual model name (e.g., `small-segment-lora`) to a specific backend model version (e.g., `small-segment-lora-v1`).
 
 ```yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModelRewrite
 metadata:
-  name: food-review-alias
+  name: small-segment-lora-alias
 spec:
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
   rules:
     - matches:
         - model:
             type: Exact
-            value: food-review
+            value: small-segment-lora
       targets:
-        - modelRewrite: "food-review-v1"
+        - modelRewrite: "small-segment-lora-v1"
 ```
 
 ### Generic (Wildcard) Rewrites
@@ -59,11 +59,11 @@ metadata:
 spec:
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
   rules:
     - matches: [] # Empty means this rule matches everything
       targets: 
-        - modelRewrite: "meta-llama/Llama-3.1-8B-Instruct"
+        - modelRewrite: "Qwen/Qwen3-32B"
 ```
 
 ### Traffic Splitting (Canary Rollout)
@@ -74,20 +74,20 @@ Divide incoming traffic for a single model name across multiple adapters within 
 apiVersion: inference.networking.k8s.io/v1alpha2
 kind: InferenceModelRewrite
 metadata:
-  name: food-review-canary
+  name: small-segment-lora-canary
 spec:
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
   rules:
     - matches:
         - model:
             type: Exact
-            value: food-review
+            value: small-segment-lora
       targets:
-        - modelRewrite: "food-review-v1"
+        - modelRewrite: "small-segment-lora-v1"
           weight: 90
-        - modelRewrite: "food-review-v2"
+        - modelRewrite: "small-segment-lora-v2"
           weight: 10
 ```
 

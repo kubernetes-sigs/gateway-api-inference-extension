@@ -1,17 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama3-8b-instruct
+  name: vllm-qwen3-32b
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: vllm-llama3-8b-instruct
+      app: vllm-qwen3-32b
   template:
     metadata:
       labels:
-        app: vllm-llama3-8b-instruct
-        inference.networking.k8s.io/engine-type: vllm
+        app: vllm-qwen3-32b
     spec:
       containers:
         - name: vllm
@@ -20,7 +19,7 @@ spec:
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
           - "--model"
-          - "meta-llama/Llama-3.1-8B-Instruct"
+          - "Qwen/Qwen3-32B"
           - "--tensor-parallel-size"
           - "1"
           - "--port"
@@ -239,19 +238,19 @@ spec:
           emptyDir: {}
         - name: config-volume
           configMap:
-            name: vllm-llama3-8b-instruct-adapters
+            name: vllm-qwen3-32b-adapters
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama3-8b-instruct-adapters
+  name: vllm-qwen3-32b-adapters
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: vllm-llama3-8b-instruct-adapters
+        name: vllm-qwen3-32b-adapters
         port: 8000
-        defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
+        defaultBaseModel: Qwen/Qwen3-32B
         ensureExist:
           models:
-          - id: food-review-1
-            source: Kawon/llama3.1-food-finetune_v14_r8
+          - id: small-segment-lora-1
+            source: ttt421/nec119-small-segment-lora

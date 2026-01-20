@@ -43,14 +43,14 @@ This is an example of InferencePool rollout with node(compute, accelerator) upda
 Follow the steps in the [main guide](index.md)
 
 ### Deploy new infrastructure
-You start with an existing InferencePool named vllm-llama3-8b-instruct.
+You start with an existing InferencePool named vllm-qwen3-32b.
 To replace the original InferencePool, you create a new InferencePool, configured to select the pods with the `nvidia-h100-80gb` accelerator type.
 
 Assuming the new model servers already exist, simply:
 **Create a new helm-managed InferencePool of a different name, with a new selector specified**
 
 ### Direct traffic to the new inference pool
-By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original `vllm-llama3-8b-instruct` and new `vllm-llama3-8b-instruct-new`.
+By configuring an **HTTPRoute**, as shown below, you can incrementally split traffic between the original `vllm-qwen3-32b` and new `vllm-qwen3-32b-new`.
 
 ```bash
 kubectl edit httproute llm-route
@@ -73,11 +73,11 @@ spec:
     - backendRefs:
         - group: inference.networking.k8s.io
           kind: InferencePool
-          name: vllm-llama3-8b-instruct
+          name: vllm-qwen3-32b
           weight: 90
         - group: inference.networking.k8s.io
           kind: InferencePool
-          name: vllm-llama3-8b-instruct-new
+          name: vllm-qwen3-32b-new
           weight: 10
       matches:
         - path:
@@ -95,7 +95,7 @@ IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].va
 2. Send a few requests as follows:
 ```bash
 curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-"model": "food-review",
+"model": "small-segment-lora",
 "prompt": "Write as if you were a critic: San Francisco",
 "max_tokens": 100,
 "temperature": 0
@@ -121,7 +121,7 @@ spec:
     - backendRefs:
         - group: inference.networking.k8s.io
           kind: InferencePool
-          name: vllm-llama3-8b-instruct-new
+          name: vllm-qwen3-32b-new
           weight: 100
       matches:
         - path:
