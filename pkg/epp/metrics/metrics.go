@@ -391,7 +391,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: InferenceExtension,
 			Name:      "flow_control_request_queue_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Distribution of the total time requests spend in the EPP flow control layer, measured from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Distribution of the total time requests spend in the EPP flow control layer.", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
 			},
@@ -403,7 +403,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: InferenceExtension,
 			Name:      "flow_control_queue_size",
-			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer, from the start of the EnqueueAndWait call until a final outcome is reached.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer.", compbasemetrics.ALPHA),
 		},
 		append([]string{"fairness_id", "priority", "inference_pool"}, ModelLabels...),
 	)
