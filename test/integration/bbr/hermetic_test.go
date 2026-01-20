@@ -98,12 +98,12 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			name: "success: buffers split chunks and extracts model",
 			reqs: integration.ReqRaw(
 				map[string]string{"hi": "mom"},
-				`{"max_tokens":100,"model":"sql-lo`,
+				`{"max_tokens":100,"model":"uncensored-lo`,
 				`ra-sheddable","prompt":"test","temperature":0}`,
 			),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRHeader("sql-lora-sheddable"),
-				ExpectBBRBodyPassThrough("test", "sql-lora-sheddable"),
+				ExpectBBRHeader("uncensored-lora-sheddable"),
+				ExpectBBRBodyPassThrough("test", "uncensored-lora-sheddable"),
 			},
 		},
 		{

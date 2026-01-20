@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: llama-deployment
+  name: qwen-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: llama-server
+      app: qwen-server
   template:
     metadata:
       labels:
-        app: llama-server
-        ai.gke.io/model: LLaMA2_7B
+        app: qwen-server
+        ai.gke.io/model: Qwen3_32B
         ai.gke.io/inference-server: vllm
         examples.ai.gke.io/source: model-garden
     spec:
@@ -32,7 +32,7 @@ spec:
             nvidia.com/gpu : 1
         command: ["/bin/sh", "-c"]
         args:
-        - vllm serve meta-llama/Llama-3.1-8B-Instruct
+        - vllm serve Qwen/Qwen3-32B
         - --host=0.0.0.0
         - --port=8000
         - --tensor-parallel-size=1
@@ -47,9 +47,9 @@ spec:
         - name: DEPLOY_SOURCE
           value: UI_NATIVE_MODEL
         - name: MODEL_ID
-          value: "Llama2-7B"
+          value: "Qwen3-32B"
         - name: AIP_STORAGE_URI
-          value: "gs://vertex-model-garden-public-us/llama2/llama2-7b-hf"
+          value: "gs://vertex-model-garden-public-us/qwen/qwen3-32b-hf"
         - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
           value: "true"
         - name: HF_TOKEN
@@ -90,10 +90,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: llama-service
+  name: qwen-service
 spec:
   selector:
-    app: llama-server
+    app: qwen-server
   type: ClusterIP
   ports:
   - protocol: TCP
@@ -109,17 +109,17 @@ metadata:
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: sql-loras-llama
-        defaultBaseModel: meta-llama/Llama-2-7b-hf
+        name: uncensored-loras-qwen
+        defaultBaseModel: Qwen/Qwen3-32B
         ensureExist:
           models:
-          - id: sql-lora-v1
-            source: yard1/llama-2-7b-sql-lora-test
-          - id: sql-lora-v3
-            source: yard1/llama-2-7b-sql-lora-test
-          - id: sql-lora-v4
-            source: yard1/llama-2-7b-sql-lora-test
+          - id: uncensored-lora-v1
+            source: nicoboss/Qwen3-32B-Uncensored
+          - id: uncensored-lora-v3
+            source: nicoboss/Qwen3-32B-Uncensored
+          - id: uncensored-lora-v4
+            source: nicoboss/Qwen3-32B-Uncensored
         ensureNotExist:
           models:
-          - id: sql-lora-v2
-            source: yard1/llama-2-7b-sql-lora-test
+          - id: uncensored-lora-v2
+            source: nicoboss/Qwen3-32B-Uncensored

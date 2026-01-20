@@ -24,6 +24,7 @@ import logging
 import datetime
 import os
 import sys
+from typing import Optional
 from prometheus_client import Gauge, start_http_server
 from watchdog.observers.polling import PollingObserver as Observer
 from watchdog.events import FileSystemEventHandler
@@ -236,7 +237,7 @@ class LoraReconciler:
             time.sleep(self.health_check_interval.seconds)
         return False
 
-    def load_adapter(self, adapter: LoraAdapter) -> None | str:
+    def load_adapter(self, adapter: LoraAdapter) -> Optional[str]:
         """Sends a request to load the specified model."""
         if adapter in self.registered_adapters:
             logging.info(
@@ -258,7 +259,7 @@ class LoraReconciler:
             logging.error(f"error loading model {adapter.id}: {e}")
             return f"error loading model {adapter.id}: {e}"
 
-    def unload_adapter(self, adapter: LoraAdapter) -> None | str:
+    def unload_adapter(self, adapter: LoraAdapter) -> Optional[str]:
         """Sends a request to unload the specified model."""
         if adapter not in self.registered_adapters:
             logging.info(
