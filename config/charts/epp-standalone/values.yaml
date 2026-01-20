@@ -296,3 +296,13 @@ inferenceExtension:
 
   latencyPredictor:
     enabled: false
+
+# Options: ["gke"]
+provider:
+  name: none
+
+  # GKE-specific configuration.
+  # This block is only used if name is "gke".
+  gke:
+    # Set to true if the cluster is an Autopilot cluster.
+    autopilot: false
