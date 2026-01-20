@@ -22,6 +22,7 @@ declare -A test_cases_inference_pool
 test_cases_inference_pool["basic"]="--set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 test_cases_inference_pool["gke-provider"]="--set provider.name=gke --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 test_cases_inference_pool["multiple-replicas"]="--set inferencePool.replicas=3 --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_inference_pool["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true"
 
 # Run the install command in case this script runs from a different bash
 # source (such as in the verify-all script)
@@ -46,5 +47,30 @@ for key in "${!test_cases_inference_pool[@]}"; do
   fi
 done
 
+declare -A test_cases_epp_standalone
 
+# InferencePool Helm Chart test cases
+test_cases_epp_standalone["basic"]="--set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true"
+
+
+echo "Building dependencies for epp-standalone chart..."
+${SCRIPT_ROOT}/bin/helm dependency build ${SCRIPT_ROOT}/config/charts/epp-standalone
+if [ $? -ne 0 ]; then
+  echo "Helm dependency build failed."
+  exit 1
+fi
+
+# Running tests cases
+echo "Running helm template command for epp-standalone chart..."
+# Loop through the keys of the associative array
+for key in "${!test_cases_epp_standalone[@]}"; do
+  echo "Running test: $key"
+  ${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --output-dir="${SCRIPT_ROOT}/bin"
+  if [ $? -ne 0 ]; then
+    echo "Helm template command failed for test: $key"
+    exit 1
+  fi
+done
 
