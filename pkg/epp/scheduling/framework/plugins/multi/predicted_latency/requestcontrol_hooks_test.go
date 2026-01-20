@@ -338,8 +338,7 @@ func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 	predictedLatencyCtx.incomingModelName = testModelName
 	predictedLatencyCtx.predictedTTFT = 80.0
 	predictedLatencyCtx.avgPredictedITL = 30.0
-	
-	// ADD THIS - populate metrics
+
 	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
@@ -350,6 +349,7 @@ func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
 	}
+
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Initialize the queue and add the request

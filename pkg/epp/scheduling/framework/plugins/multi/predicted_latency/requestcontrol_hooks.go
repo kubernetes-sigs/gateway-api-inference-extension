@@ -288,7 +288,7 @@ func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *scheduling
 	// If there is no valid endpoint for the request, reject it
 	if !predictedLatencyCtx.hasValidEndpoint && predictedLatencyCtx.sheddable {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.AdmitRequest: Rejecting request as no valid endpoint available due to slo violation", "requestID", request.Headers[requtil.RequestIdHeaderKey])
-		return fmt.Errorf("no valid endpoint available to serve the request")
+		return errors.New("no valid endpoint available to serve the request")
 	}
 
 	return nil

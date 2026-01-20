@@ -142,15 +142,15 @@ func createTestLLMRequest(reqID string, ttftSLO, itlSLO float64) *schedulingtype
 
 func setupPredictionContext(t *testing.T, router *PredictedLatency, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint, predictor *mockPredictor) {
 	ctx := context.Background()
-	
+
 	// Create prediction context
 	predictedLatencyCtx := newPredictedLatencyContext(request)
-	
+
 	// Populate prefix cache scores (default to 0.0 for simplicity)
 	for _, endpoint := range endpoints {
 		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = 0.0
 	}
-	
+
 	// If we have a predictor, generate predictions for each endpoint
 	if predictor != nil && predictor.err == nil {
 		predictions := make([]endpointPredictionResult, 0, len(endpoints))
@@ -159,18 +159,17 @@ func setupPredictionContext(t *testing.T, router *PredictedLatency, request *sch
 			if !ok {
 				t.Fatalf("Expected PodMetrics endpoint")
 			}
-			
-			kvCacheUsage := pm.Metrics.KVCacheUsagePercent
+
 			predReq := latencypredictor.PredictionRequest{
-				KVCachePercentage: kvCacheUsage,
+				KVCachePercentage: pm.KVCacheUsagePercent,
 			}
-			
+
 			predResp, err := predictor.Predict(ctx, predReq)
 			if err == nil {
 				predictions = append(predictions, endpointPredictionResult{
 					Endpoint:         endpoint,
-					TTFT:    predResp.TTFT,
-					ITL:     predResp.ITL,
+					TTFT:             predResp.TTFT,
+					ITL:              predResp.ITL,
 					PrefixCacheScore: 0.0,
 					IsValid:          true,
 				})
@@ -178,7 +177,7 @@ func setupPredictionContext(t *testing.T, router *PredictedLatency, request *sch
 		}
 		predictedLatencyCtx.predictionsForScheduling = predictions
 	}
-	
+
 	// Store the context using the request ID
 	reqID := request.Headers[requtil.RequestIdHeaderKey]
 	router.sloContextStore.Store(reqID, predictedLatencyCtx)
