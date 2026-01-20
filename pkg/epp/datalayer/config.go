@@ -37,7 +37,8 @@ type DataSourceConfig struct {
 // the code needs validates that new and existing metrics collection are not both
 // configured. This is done by passing in the new metrics extractor as "disallowed"
 // when the new data layer is enabled in the runner (otherwise it passes an empty string).
-// Note that can still configure the new metrics data source with other extractors.
+// Note that it is still possible to configure the new metrics data source with different
+// extractors beyond model-server-protocol.
 // Referring the "type" directly here would create an import cycle.
 // This should be removed once PodMetrics is deprecated.
 func WithConfig(cfg *Config, disallowedExtractorType string) error {
