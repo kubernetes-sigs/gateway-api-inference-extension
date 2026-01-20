@@ -88,25 +88,25 @@ The sidecar supports the following command-line arguments:
 
 ## Example Configuration
 
-In this example, both adapters will use `meta-llama/Llama-3.1-8B-Instruct` as their base model:
+In this example, both adapters will use `Qwen/Qwen3-32B` as their base model:
 
 ```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama3-8b-instruct-adapters
+  name: vllm-qwen3-32b-adapters
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: vllm-llama3-8b
+        name: vllm-qwen3-32b
         port: 8000
-        defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
+        defaultBaseModel: Qwen/Qwen3-32B
         ensureExist:
           models:
-          - id: food-review-1
-            source: Kawon/llama3.1-food-finetune_v14_r8
-          - id: food-review-2
-            source: Kawon/llama3.1-food-finetune_v14_r8
+          - id: qwen-uncensored-1
+            source: nicoboss/Qwen3-32B-Uncensored
+          - id: qwen-uncensored-2
+            source: nicoboss/Qwen3-32B-Uncensored
 ```
 
 ## Example Deployment

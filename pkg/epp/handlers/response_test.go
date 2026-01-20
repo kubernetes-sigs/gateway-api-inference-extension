@@ -36,7 +36,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -59,7 +59,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -81,13 +81,13 @@ const (
 	}
 	`
 
-	streamingBodyWithoutUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":null}
+	streamingBodyWithoutUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"qwen-uncensored-0","choices":[],"usage":null}
 	`
 
-	streamingBodyWithUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+	streamingBodyWithUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"qwen-uncensored-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
 data: [DONE]
 	`
-	streamingBodyWithUsageAndCachedTokens = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10,"prompt_token_details":{"cached_tokens":5}}}
+	streamingBodyWithUsageAndCachedTokens = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"qwen-uncensored-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10,"prompt_token_details":{"cached_tokens":5}}}
 data: [DONE]
 	`
 )

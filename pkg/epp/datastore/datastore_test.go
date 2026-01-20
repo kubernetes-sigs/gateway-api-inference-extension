@@ -121,7 +121,7 @@ func TestPool(t *testing.T) {
 
 func TestObjective(t *testing.T) {
 	chatModel := "chat"
-	tsModel := "food-review"
+	tsModel := "qwen-uncensored"
 	model1ts := testutil.MakeInferenceObjective("model1").ObjRef()
 	// Same model name as model1ts, different object name.
 	model2ts := testutil.MakeInferenceObjective("model2").ObjRef()
@@ -139,7 +139,7 @@ func TestObjective(t *testing.T) {
 		wantModels     []*v1alpha2.InferenceObjective
 	}{
 		{
-			name: "Add model1 with food-review as modelName",
+			name: "Add model1 with qwen-uncensored as modelName",
 			op: func(ds Datastore) bool {
 				ds.ObjectiveSet(model1ts)
 				return cmp.Diff(ds.ObjectiveGet(model1ts.Name), model1ts) == ""
@@ -158,7 +158,7 @@ func TestObjective(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceObjective{model1tsCritical},
 		},
 		{
-			name:           "Set model1 with the food-review modelName, both models should exist",
+			name:           "Set model1 with the qwen-uncensored modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceObjective{model2chat},
 			op: func(ds Datastore) bool {
 				ds.ObjectiveSet(model1ts)
@@ -168,7 +168,7 @@ func TestObjective(t *testing.T) {
 			wantModels:   []*v1alpha2.InferenceObjective{model2chat, model1ts},
 		},
 		{
-			name:           "Set model1 with the food-review modelName, both models should exist",
+			name:           "Set model1 with the qwen-uncensored modelName, both models should exist",
 			existingModels: []*v1alpha2.InferenceObjective{model2chat, model1ts},
 			op: func(ds Datastore) bool {
 				ds.ObjectiveSet(model1ts)

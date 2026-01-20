@@ -196,25 +196,25 @@ func TestDirector_HandleRequest(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	// --- Setup common objects ---
-	model := "food-review"
-	modelSheddable := "food-review-sheddable"
-	modelWithResolvedTarget := "food-review-resolve"
-	modelToBeRewritten := "food-review-to-be-rewritten"
-	modelRewritten := "food-review-rewritten"
+	model := "qwen-uncensored"
+	modelSheddable := "qwen-uncensored-sheddable"
+	modelWithResolvedTarget := "qwen-uncensored-resolve"
+	modelToBeRewritten := "qwen-uncensored-to-be-rewritten"
+	modelRewritten := "qwen-uncensored-rewritten"
 
-	objectiveName := "ioFoodReview"
-	objectiveNameSheddable := "imFoodReviewSheddable"
-	objectiveNameResolve := "imFoodReviewResolve"
+	objectiveName := "ioUncensored"
+	objectiveNameSheddable := "imUncensoredSheddable"
+	objectiveNameResolve := "imUncensoredResolve"
 	// InferenceObjective definitions
-	ioFoodReview := testutil.MakeInferenceObjective("ioFoodReview").
+	ioUncensored := testutil.MakeInferenceObjective("ioUncensored").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		Priority(2).
 		ObjRef()
-	ioFoodReviewSheddable := testutil.MakeInferenceObjective("imFoodReviewSheddable").
+	imUncensoredSheddable := testutil.MakeInferenceObjective("imUncensoredSheddable").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		Priority(-1).
 		ObjRef()
-	ioFoodReviewResolve := testutil.MakeInferenceObjective("imFoodReviewResolve").
+	imUncensoredResolve := testutil.MakeInferenceObjective("imUncensoredResolve").
 		CreationTimestamp(metav1.Unix(1000, 0)).
 		Priority(1).
 		ObjRef()
@@ -532,10 +532,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
-			initialTargetModelName: "food-review-1",
+			initialTargetModelName: "qwen-uncensored-1",
 			wantReqCtx: &handlers.RequestContext{
-				ObjectiveKey:    "food-review-1",
-				TargetModelName: "food-review-1",
+				ObjectiveKey:    "qwen-uncensored-1",
+				TargetModelName: "qwen-uncensored-1",
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -544,13 +544,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: "food-review-1",
+			wantMutatedBodyModel: "qwen-uncensored-1",
 			reqBodyMap: map[string]any{
-				"model":  "food-review-1",
+				"model":  "qwen-uncensored-1",
 				"prompt": "test prompt",
 			},
 			mockAdmissionController: &mockAdmissionController{admitErr: nil},
-			inferenceObjectiveName:  "food-review-1",
+			inferenceObjectiveName:  "qwen-uncensored-1",
 		},
 		{
 			name: "request rejected by admission controller",
@@ -618,9 +618,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 	for _, epf := range factories {
 		// Datastore setup
 		ds := datastore.NewDatastore(t.Context(), epf, 0)
-		ds.ObjectiveSet(ioFoodReview)
-		ds.ObjectiveSet(ioFoodReviewResolve)
-		ds.ObjectiveSet(ioFoodReviewSheddable)
+		ds.ObjectiveSet(ioUncensored)
+		ds.ObjectiveSet(imUncensoredSheddable)
+		ds.ObjectiveSet(imUncensoredResolve)
 		ds.ModelRewriteSet(rewrite)
 
 		scheme := runtime.NewScheme()
