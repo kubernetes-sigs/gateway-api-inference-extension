@@ -138,6 +138,52 @@ func createTestLLMRequest(reqID string, ttftSLO, itlSLO float64) *schedulingtype
 	}
 }
 
+// Add this helper function after the createTestLLMRequest function
+
+func setupPredictionContext(t *testing.T, router *PredictedLatency, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint, predictor *mockPredictor) {
+	ctx := context.Background()
+	
+	// Create prediction context
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	
+	// Populate prefix cache scores (default to 0.0 for simplicity)
+	for _, endpoint := range endpoints {
+		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = 0.0
+	}
+	
+	// If we have a predictor, generate predictions for each endpoint
+	if predictor != nil && predictor.err == nil {
+		predictions := make([]endpointPredictionResult, 0, len(endpoints))
+		for _, endpoint := range endpoints {
+			pm, ok := endpoint.(*schedulingtypes.PodMetrics)
+			if !ok {
+				t.Fatalf("Expected PodMetrics endpoint")
+			}
+			
+			kvCacheUsage := pm.Metrics.KVCacheUsagePercent
+			predReq := latencypredictor.PredictionRequest{
+				KVCachePercentage: kvCacheUsage,
+			}
+			
+			predResp, err := predictor.Predict(ctx, predReq)
+			if err == nil {
+				predictions = append(predictions, endpointPredictionResult{
+					Endpoint:         endpoint,
+					TTFT:    predResp.TTFT,
+					ITL:     predResp.ITL,
+					PrefixCacheScore: 0.0,
+					IsValid:          true,
+				})
+			}
+		}
+		predictedLatencyCtx.predictionsForScheduling = predictions
+	}
+	
+	// Store the context using the request ID
+	reqID := request.Headers[requtil.RequestIdHeaderKey]
+	router.sloContextStore.Store(reqID, predictedLatencyCtx)
+}
+
 func TestPredictedLatency_Score(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -250,12 +296,15 @@ func TestPredictedLatency_Score(t *testing.T) {
 			if tt.predictor != nil {
 				predictor = tt.predictor
 			} else if tt.name != "No predictor configured" {
-				// Keep logic consistent with original test setup if needed,
-				// but here we just use what's in tt.predictor which is nil or set.
 				predictor = nil
 			}
 
 			router = NewPredictedLatency(cfg, predictor)
+
+			// ADD THIS: Setup prediction context before scoring
+			if tt.predictor != nil {
+				setupPredictionContext(t, router, tt.request, tt.endpoints, tt.predictor)
+			}
 
 			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), tt.request, tt.endpoints)
 
@@ -340,6 +389,9 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 				createTestEndpoint("pod3", 0.3, 1, 0),
 			}
 
+			// ADD THIS: Setup prediction context before scoring
+			setupPredictionContext(t, router, request, endpoints, predictor)
+
 			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), request, endpoints)
 
 			assert.NotNil(t, scores, "Expected non-nil scores for strategy %s", tt.strategy)
@@ -355,7 +407,6 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 		})
 	}
 }
-
 func TestPredictedLatency_TypedName(t *testing.T) {
 	predictor := &mockPredictor{}
 	cfg := DefaultConfig

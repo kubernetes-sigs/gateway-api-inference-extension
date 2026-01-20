@@ -329,6 +329,7 @@ func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.targetMetadata = endpoint.GetMetadata()
 	predictedLatencyCtx.requestReceivedTimestamp = time.Now()
 	predictedLatencyCtx.schedulingResult = schedulingResult
 	predictedLatencyCtx.schedulingRequest = *request
@@ -337,6 +338,7 @@ func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 	predictedLatencyCtx.incomingModelName = testModelName
 	predictedLatencyCtx.predictedTTFT = 80.0
 	predictedLatencyCtx.avgPredictedITL = 30.0
+	
 	// ADD THIS - populate metrics
 	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
@@ -380,6 +382,7 @@ func TestPredictedLatency_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.targetMetadata = endpoint.GetMetadata()
 	predictedLatencyCtx.requestReceivedTimestamp = time.Now()
 	predictedLatencyCtx.schedulingResult = schedulingResult
 	predictedLatencyCtx.schedulingRequest = *request
