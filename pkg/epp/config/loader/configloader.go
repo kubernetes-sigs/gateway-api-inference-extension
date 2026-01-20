@@ -234,38 +234,33 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilization
 }
 
 func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle plugins.Handle) (*datalayer.Config, error) {
-	if !dataLayerEnabled {
-		if rawDataConfig != nil {
-			return nil, errors.New("the Datalayer has not been enabled, but you specified a configuration for it")
-		}
-		return nil, nil
-	}
-
-	if rawDataConfig == nil {
+	if dataLayerEnabled && (rawDataConfig == nil || rawDataConfig.Sources == nil) { // enabled but no configuration
 		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
 	}
 
 	cfg := datalayer.Config{
 		Sources: []datalayer.DataSourceConfig{},
 	}
-	for _, source := range rawDataConfig.Sources {
-		if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
-			sourceConfig := datalayer.DataSourceConfig{
-				Plugin:     sourcePlugin,
-				Extractors: []datalayer.Extractor{},
-			}
-			for _, extractor := range source.Extractors {
-				if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(datalayer.Extractor); ok {
-					sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
-				} else {
-					return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)
+
+	if rawDataConfig != nil {
+		for _, source := range rawDataConfig.Sources {
+			if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
+				sourceConfig := datalayer.DataSourceConfig{
+					Plugin:     sourcePlugin,
+					Extractors: []datalayer.Extractor{},
 				}
+				for _, extractor := range source.Extractors {
+					if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(datalayer.Extractor); ok {
+						sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
+					} else {
+						return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)
+					}
+				}
+				cfg.Sources = append(cfg.Sources, sourceConfig)
+			} else {
+				return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
 			}
-			cfg.Sources = append(cfg.Sources, sourceConfig)
-		} else {
-			return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
 		}
 	}
-
 	return &cfg, nil
 }

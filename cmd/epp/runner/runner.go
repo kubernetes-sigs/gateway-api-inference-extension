@@ -286,21 +286,10 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] { // initialize the data layer from configuration
-		if err := datalayer.WithConfig(eppConfig.DataConfig); err != nil {
-			setupLog.Error(err, "failed to initialize data layer")
-			return err
-		}
-		sources := datalayer.GetSources()
-		if len(sources) == 0 {
-			err := errors.New("data layer enabled but no data sources configured")
-			setupLog.Error(err, "failed to initialize data layer")
-			return err
-		}
-		epf.SetSources(sources)
-		for _, src := range sources {
-			setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
-		}
+	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
+	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, setupLog); err != nil {
+		setupLog.Error(err, "failed to initialize data layer")
+		return err
 	}
 
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
@@ -540,13 +529,33 @@ func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.L
 	}
 }
 
-func (r *Runner) setupMetricsCollection(useExperimentalDatalayer bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
-	if useExperimentalDatalayer {
-		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval), nil
+func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, epf datalayer.EndpointFactory,
+	setupLog logr.Logger) error {
+	disallowedMetricsExtractor := ""
+	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
+		disallowedMetricsExtractor = dlmetrics.MetricsExtractorType
 	}
 
-	if len(datalayer.GetSources()) != 0 {
-		setupLog.Info("data sources registered but pluggable datalayer is disabled")
+	if err := datalayer.WithConfig(cfg, disallowedMetricsExtractor); err != nil {
+		return err
+	}
+
+	sources := datalayer.GetSources()
+	if enableNewMetrics && len(sources) == 0 {
+		err := errors.New("data layer enabled but no data sources configured")
+		return err
+	}
+
+	epf.SetSources(sources)
+	for _, src := range sources {
+		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
+	}
+	return nil
+}
+
+func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
+	if enableNewMetrics {
+		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval), nil
 	}
 	return setupMetricsV1(opts)
 }
