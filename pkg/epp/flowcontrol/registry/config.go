@@ -142,6 +142,7 @@ type Config struct {
 }
 
 // PriorityBandConfig defines the configuration template for a single priority band.
+// A "Band" is defined as the collection (or range) of all flows having the same priority level.
 // It establishes the default behaviors (such as queueing and dispatch policies) and total capacity limits for all flows
 // that operate at this priority level.
 type PriorityBandConfig struct {
@@ -161,6 +162,7 @@ type PriorityBandConfig struct {
 	IntraFlowDispatchPolicy intraflow.RegisteredPolicyName
 
 	// FairnessPolicy is the hydrated singleton instance of the policy.
+	// This policy governs which Flow *within this band* to select next (e.g., "round-robin").
 	// This field is populated either via WithFairnessPolicy (using a handle lookup) or via applyDefaults.
 	// Optional: Defaults to defaultFairnessPolicyRef ("global-strict-fairness-policy").
 	FairnessPolicy framework.FairnessPolicy
@@ -269,6 +271,8 @@ func WithIntraFlowPolicy(name intraflow.RegisteredPolicyName) PriorityBandConfig
 }
 
 // WithFairnessPolicy sets the name/reference of the inter-flow fairness policy (e.g., "RoundRobin").
+// TODO(kubernetes-sigs/gateway-api-inference-extension#1794): This option is primarily used by the configuration
+// loader to wire up policies instantiated from the plugin registry.
 func WithFairnessPolicy(ref string, handle plugins.Handle) PriorityBandConfigOption {
 	return func(p *PriorityBandConfig) error {
 		policy, err := fairnessPolicy(ref, handle)

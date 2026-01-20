@@ -67,6 +67,9 @@ var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
 // MockPriorityBandAccessor is a behavioral mock for the PriorityBandAccessor interface.
 // Simple accessors are configured with public value fields (e.g., PriorityV).
 // Complex methods with logic are configured with function fields (e.g., IterateQueuesFunc).
+//
+// Convention: Fields suffixed with 'V' (e.g., PriorityV) are static Value return fields.
+// This avoids collision with the interface method of the same name.
 type MockPriorityBandAccessor struct {
 	PriorityV         int
 	PriorityNameV     string

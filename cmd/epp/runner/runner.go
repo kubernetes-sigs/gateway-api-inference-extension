@@ -94,7 +94,6 @@ const (
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
 
-
 var (
 	setupLog = ctrl.Log.WithName("setup")
 )
