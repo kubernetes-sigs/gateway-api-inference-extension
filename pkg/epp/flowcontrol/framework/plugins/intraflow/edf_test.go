@@ -32,7 +32,7 @@ import (
 func TestEDFPolicy_Name(t *testing.T) {
 	t.Parallel()
 	policy := newEDFPolicy()
-	assert.Equal(t, EDFPolicyName, policy.Name())
+	assert.Equal(t, EDFOrderingPolicyType, policy.Name())
 }
 
 func TestEDFPolicy_RequiredQueueCapabilities(t *testing.T) {
@@ -60,7 +60,8 @@ func TestEDFPolicy_SelectItem(t *testing.T) {
 
 func TestEDFComparator_Func(t *testing.T) {
 	t.Parallel()
-	comparator := &edfComparator{}
+	policy := newEDFPolicy()
+	comparator := policy.Comparator()
 	compareFunc := comparator.Func()
 	require.NotNil(t, compareFunc)
 
@@ -124,7 +125,8 @@ func TestEDFComparator_Func(t *testing.T) {
 
 func TestEDFComparator_ScoreType(t *testing.T) {
 	t.Parallel()
-	comparator := &edfComparator{}
+	policy := newEDFPolicy()
+	comparator := policy.Comparator()
 	assert.Equal(t, string(framework.EDFPriorityScoreType), comparator.ScoreType())
 }
 

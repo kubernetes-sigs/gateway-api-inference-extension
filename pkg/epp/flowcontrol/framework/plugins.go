@@ -19,12 +19,16 @@ package framework
 import (
 	"context"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 const (
 	// FairnessPolicyExtensionPoint identifies the plugin type responsible for managing contention between Flows.
 	FairnessPolicyExtensionPoint = "FairnessPolicy"
+
+	// OrderingPolicyExtensionPoint identifies the plugin type responsible for sorting requests within a Flow.
+	OrderingPolicyExtensionPoint = "OrderingPolicy"
 )
 
 // FairnessPolicy governs the distribution of dispatch opportunities among competing Flows within the same Priority
@@ -76,4 +80,40 @@ type FairnessPolicy interface {
 	//   - err: Only returned for unrecoverable internal errors. Policies should generally return (nil, nil) if simply
 	//     nothing is eligible.
 	Pick(ctx context.Context, flowGroup PriorityBandAccessor) (flow FlowQueueAccessor, err error)
+}
+
+// OrderingPolicy governs the strict sequence of service within a single Flow.
+//
+// In simple terms, this policy answers the question: "Which request in this specific queue should be processed next?"
+//
+// While "Fairness" governs the competition between flows, "Ordering" dictates the internal discipline of a single
+// flow. This allows different flows to have different internal service objectives (e.g., FCFS vs. EDF).
+//
+// Architecture (Flyweight Pattern):
+// Ordering policies are Singletons. A single instance handles the logic for all queues in a Priority Band.
+// The policy is purely functional.
+//
+//   - Logic: Defined here as a Comparator-centric interface.
+//   - State: Ordering policies are generally stateless, operating on the intrinsic properties of the items.
+//
+// Conformance: Implementations MUST ensure all methods are goroutine-safe.
+type OrderingPolicy interface {
+	plugin.Plugin
+
+	// Less reports whether item 'a' should be dispatched before item 'b'.
+	// This makes the policy act as a sort.Interface for the queue.
+	//
+	// Invariants:
+	//   - Returning true means 'a' has higher priority than 'b'.
+	//   - If the queue supports CapabilityPriorityConfigurable, this function determines the heap order.
+	Less(a, b types.QueueItemAccessor) bool
+
+	// RequiredQueueCapabilities returns the set of capabilities that a SafeQueue MUST support to effectively apply this
+	// policy.
+	//
+	// For example:
+	//   - "fcfs-ordering-policy" coupled with CapabilityFIFO is O(1).
+	//   - "edf-ordering-policy" (Earliest Deadline First) REQUIRES CapabilityPriorityConfigurable (Heap) to function
+	//     correctly.
+	RequiredQueueCapabilities() []QueueCapability
 }

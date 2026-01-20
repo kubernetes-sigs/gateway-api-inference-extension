@@ -38,7 +38,7 @@ const (
 	// It is set to 1 GB.
 	defaultPriorityBandMaxBytes uint64 = 1_000_000_000
 	// defaultIntraFlowDispatchPolicy is the default policy for selecting items within a single flow's queue.
-	defaultIntraFlowDispatchPolicy intraflow.RegisteredPolicyName = intraflow.FCFSPolicyName
+	defaultIntraFlowDispatchPolicy intraflow.RegisteredPolicyName = intraflow.FCFSOrderingPolicyType
 	// defaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
 	defaultFairnessPolicyRef string = interflow.GlobalStrictFairnessPolicyType
 	// defaultQueue is the default queue implementation for flows.

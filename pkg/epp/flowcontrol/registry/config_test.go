@@ -298,7 +298,7 @@ func TestNewConfig(t *testing.T) {
 			name: "ShouldError_WhenDefaultRuntimeCheckerDetectsUnknownQueue",
 			opts: []ConfigOption{
 				WithPriorityBand(mustBand(t, 1, "BadBand",
-					WithIntraFlowPolicy(intraflow.FCFSPolicyName),
+					WithIntraFlowPolicy(intraflow.FCFSOrderingPolicyType),
 					WithQueue("non-existent-queue"),
 				)),
 			},

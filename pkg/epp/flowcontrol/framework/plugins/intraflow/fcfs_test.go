@@ -34,7 +34,7 @@ var testFlowKey = types.FlowKey{ID: "test-flow", Priority: 0}
 func TestFCFS_Name(t *testing.T) {
 	t.Parallel()
 	policy := newFCFS()
-	assert.Equal(t, FCFSPolicyName, policy.Name())
+	assert.Equal(t, FCFSOrderingPolicyType, policy.Name())
 }
 
 func TestFCFS_RequiredQueueCapabilities(t *testing.T) {
@@ -63,7 +63,8 @@ func TestFCFS_SelectItem(t *testing.T) {
 
 func TestEnqueueTimeComparator_Func(t *testing.T) {
 	t.Parallel()
-	comparator := &enqueueTimeComparator{} // Test the internal comparator directly
+	policy := newFCFS()
+	comparator := policy.Comparator()
 	compareFunc := comparator.Func()
 	require.NotNil(t, compareFunc)
 
@@ -102,6 +103,7 @@ func TestEnqueueTimeComparator_Func(t *testing.T) {
 
 func TestEnqueueTimeComparator_ScoreType(t *testing.T) {
 	t.Parallel()
-	comparator := &enqueueTimeComparator{}
+	policy := newFCFS()
+	comparator := policy.Comparator()
 	assert.Equal(t, string(framework.EnqueueTimePriorityScoreType), comparator.ScoreType())
 }

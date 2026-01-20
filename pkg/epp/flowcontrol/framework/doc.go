@@ -14,19 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package framework defines the core plugin interfaces for extending the `controller.FlowController`.
+// Package framework defines the core plugin interfaces for extending the Flow Control layer.
 //
 // It establishes the contracts that custom logic, such as queueing disciplines and dispatching policies, must adhere
-// to. By building on these interfaces, the Flow Control system can be extended and customized without modifying the
+// to. By building on these interfaces, the Flow Control layer can be extended and customized without modifying the
 // core controller logic.
 //
 // The primary contracts are:
-//   - `SafeQueue`: An interface for concurrent-safe queue implementations.
-//   - `IntraFlowDispatchPolicy`: An interface for policies that decide which item to select from within a single flow's
-//     queue.
-//   - `ItemComparator`: An interface vended by policies to make their internal item-ordering logic explicit and
-//     available to other components.
+//   - SafeQueue: An interface for concurrent-safe queue implementations.
+//   - FairnessPolicy: The interface for policies that govern the competition between flows.
+//   - OrderingPolicy: The interface for policies that decide the strict sequence of service within a flow.
+//   - IntraFlowDispatchPolicy: (Deprecated) Legacy interface for intra-flow ordering. Replaced by OrderingPolicy.
+//   - ItemComparator: (Deprecated) Legacy interface for exposing ordering logic. Replaced by OrderingPolicy.
 //
-// These components are linked by `QueueCapability`, which allows policies to declare their queue requirements (e.g.,
+// These components are linked by QueueCapability, which allows policies to declare their queue requirements (e.g.,
 // FIFO or priority-based ordering).
 package framework
