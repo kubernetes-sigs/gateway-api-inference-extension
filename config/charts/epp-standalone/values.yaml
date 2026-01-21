@@ -295,6 +295,7 @@ inferenceExtension:
     enabled: false
 
   latencyPredictor:
+    # common latencyPredictor setting exists in config/charts/inference-extension/values.yaml
     enabled: false
 
 # Options: ["gke"]
