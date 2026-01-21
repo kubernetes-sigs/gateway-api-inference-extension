@@ -117,13 +117,6 @@ type RegistryShard interface {
 	// `ErrFlowInstanceNotFound` if no instance exists for the given `key`.
 	ManagedQueue(key types.FlowKey) (ManagedQueue, error)
 
-	// IntraFlowDispatchPolicy retrieves a flow's configured `framework.IntraFlowDispatchPolicy` for this shard,
-	// identified by its unique `types.FlowKey`.
-	// The registry guarantees that a non-nil default policy (as configured at the priority-band level) is returned if
-	// none is specified for the flow.
-	// Returns an error wrapping `ErrFlowInstanceNotFound` if the flow instance does not exist.
-	IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
-
 	// FairnessPolicy retrieves the FairnessPolicy singleton configured for the specified priority band on this shard.
 	// This method provides access to the immutable logic component that governs inter-flow contention.
 	// The registry guarantees that a non-nil policy is returned for any active priority band.

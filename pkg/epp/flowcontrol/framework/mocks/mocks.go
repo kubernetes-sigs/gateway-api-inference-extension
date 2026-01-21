@@ -24,33 +24,24 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// MockItemComparator is a simple stub mock for the `framework.ItemComparator` interface.
-type MockItemComparator struct {
-	FuncV      framework.ItemComparatorFunc
-	ScoreTypeV string
-}
-
-func (m *MockItemComparator) Func() framework.ItemComparatorFunc { return m.FuncV }
-func (m *MockItemComparator) ScoreType() string                  { return m.ScoreTypeV }
-
 // MockFlowQueueAccessor is a simple stub mock for the FlowQueueAccessor interface.
 // It is used for tests that require static, predictable return values from a queue accessor.
 // For complex, stateful queue behavior, use the mock in ../../contracts/mocks.MockManagedQueue.
 type MockFlowQueueAccessor struct {
-	NameV         string
-	LenV          int
-	ByteSizeV     uint64
-	PeekHeadV     types.QueueItemAccessor
-	PeekTailV     types.QueueItemAccessor
-	FlowKeyV      types.FlowKey
-	ComparatorV   framework.ItemComparator
-	CapabilitiesV []framework.QueueCapability
+	NameV           string
+	LenV            int
+	ByteSizeV       uint64
+	PeekHeadV       types.QueueItemAccessor
+	PeekTailV       types.QueueItemAccessor
+	FlowKeyV        types.FlowKey
+	OrderingPolicyV framework.OrderingPolicy
+	CapabilitiesV   []framework.QueueCapability
 }
 
 func (m *MockFlowQueueAccessor) Name() string                              { return m.NameV }
 func (m *MockFlowQueueAccessor) Len() int                                  { return m.LenV }
 func (m *MockFlowQueueAccessor) ByteSize() uint64                          { return m.ByteSizeV }
-func (m *MockFlowQueueAccessor) Comparator() framework.ItemComparator      { return m.ComparatorV }
+func (m *MockFlowQueueAccessor) OrderingPolicy() framework.OrderingPolicy  { return m.OrderingPolicyV }
 func (m *MockFlowQueueAccessor) FlowKey() types.FlowKey                    { return m.FlowKeyV }
 func (m *MockFlowQueueAccessor) Capabilities() []framework.QueueCapability { return m.CapabilitiesV }
 
@@ -163,30 +154,29 @@ func (m *MockSafeQueue) Drain() []types.QueueItemAccessor {
 
 var _ framework.SafeQueue = &MockSafeQueue{}
 
-// MockIntraFlowDispatchPolicy is a behavioral mock for the `framework.IntraFlowDispatchPolicy` interface.
-// Simple accessors are configured with public value fields (e.g., `NameV`).
-// Complex methods with logic are configured with function fields (e.g., `SelectItemFunc`).
-type MockIntraFlowDispatchPolicy struct {
-	NameV                      string
-	ComparatorV                framework.ItemComparator
+// MockOrderingPolicy is a behavioral mock for the OrderingPolicy interface.
+// Simple accessors are configured with public value fields (e.g., TypedNameV).
+// Complex methods with logic are configured with function fields (e.g., LessFunc).
+type MockOrderingPolicy struct {
+	TypedNameV                 plugins.TypedName
+	LessFunc                   func(a, b types.QueueItemAccessor) bool
 	RequiredQueueCapabilitiesV []framework.QueueCapability
-	SelectItemFunc             func(queue framework.FlowQueueAccessor) (types.QueueItemAccessor, error)
 }
 
-func (m *MockIntraFlowDispatchPolicy) Name() string                         { return m.NameV }
-func (m *MockIntraFlowDispatchPolicy) Comparator() framework.ItemComparator { return m.ComparatorV }
-func (m *MockIntraFlowDispatchPolicy) RequiredQueueCapabilities() []framework.QueueCapability {
+func (m *MockOrderingPolicy) TypedName() plugins.TypedName { return m.TypedNameV }
+
+func (m *MockOrderingPolicy) Less(a, b types.QueueItemAccessor) bool {
+	if m.LessFunc != nil {
+		return m.LessFunc(a, b)
+	}
+	return false
+}
+
+func (m *MockOrderingPolicy) RequiredQueueCapabilities() []framework.QueueCapability {
 	return m.RequiredQueueCapabilitiesV
 }
 
-func (m *MockIntraFlowDispatchPolicy) SelectItem(queue framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-	if m.SelectItemFunc != nil {
-		return m.SelectItemFunc(queue)
-	}
-	return nil, nil
-}
-
-var _ framework.IntraFlowDispatchPolicy = &MockIntraFlowDispatchPolicy{}
+var _ framework.OrderingPolicy = &MockOrderingPolicy{}
 
 // MockFairnessPolicy is a behavioral mock for the FairnessPolicy interface.
 // Simple accessors are configured with public value fields (e.g., NameV).

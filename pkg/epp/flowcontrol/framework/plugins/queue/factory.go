@@ -29,7 +29,7 @@ import (
 type RegisteredQueueName string
 
 // QueueConstructor defines the function signature for creating a `framework.SafeQueue`.
-type QueueConstructor func(comparator framework.ItemComparator) (framework.SafeQueue, error)
+type QueueConstructor func(policy framework.OrderingPolicy) (framework.SafeQueue, error)
 
 var (
 	// mu guards the registration map.
@@ -49,15 +49,15 @@ func MustRegisterQueue(name RegisteredQueueName, constructor QueueConstructor) {
 	RegisteredQueues[name] = constructor
 }
 
-// NewQueueFromName creates a new SafeQueue given its registered name and the `framework.ItemComparator` that will be
-// optionally used to configure the queue (provided it declares `framework.CapabilityPriorityConfigurable`).
-// This is called by the `registry.FlowRegistry` during initialization of a flow's `contracts.ManagedQueue`.
-func NewQueueFromName(name RegisteredQueueName, comparator framework.ItemComparator) (framework.SafeQueue, error) {
+// NewQueueFromName creates a new SafeQueue given its registered name and the OrderingPolicy that will be optionally
+// used to configure the queue (provided it declares CapabilityPriorityConfigurable).
+// This is called by the FlowRegistry during initialization of a flow's ManagedQueue.
+func NewQueueFromName(name RegisteredQueueName, policy framework.OrderingPolicy) (framework.SafeQueue, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	constructor, ok := RegisteredQueues[name]
 	if !ok {
 		return nil, fmt.Errorf("no framework.SafeQueue registered with name %q", name)
 	}
-	return constructor(comparator)
+	return constructor(policy)
 }

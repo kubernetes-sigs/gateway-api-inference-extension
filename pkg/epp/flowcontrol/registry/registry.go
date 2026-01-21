@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
@@ -841,7 +840,7 @@ func (fr *FlowRegistry) repartitionShardConfigsLocked() {
 
 // flowComponents holds the plugin instances created for a single flow on a single shard.
 type flowComponents struct {
-	policy framework.IntraFlowDispatchPolicy
+	policy framework.OrderingPolicy
 	queue  framework.SafeQueue
 }
 
@@ -855,17 +854,12 @@ func (fr *FlowRegistry) buildFlowComponents(key types.FlowKey, numInstances int)
 
 	allComponents := make([]flowComponents, numInstances)
 	for i := range numInstances {
-		policy, err := intraflow.NewPolicyFromName(bandConfig.IntraFlowDispatchPolicy)
-		if err != nil {
-			return nil, fmt.Errorf("failed to instantiate intra-flow policy %q for flow %s: %w",
-				bandConfig.IntraFlowDispatchPolicy, key, err)
-		}
-		q, err := queue.NewQueueFromName(bandConfig.Queue, policy.Comparator())
+		q, err := queue.NewQueueFromName(bandConfig.Queue, bandConfig.OrderingPolicy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to instantiate queue %q for flow %s: %w",
 				bandConfig.Queue, key, err)
 		}
-		allComponents[i] = flowComponents{policy: policy, queue: q}
+		allComponents[i] = flowComponents{policy: bandConfig.OrderingPolicy, queue: q}
 	}
 	return allComponents, nil
 }

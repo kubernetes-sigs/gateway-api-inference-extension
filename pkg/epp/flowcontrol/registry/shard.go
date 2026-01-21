@@ -226,25 +226,6 @@ func (s *registryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue,
 	return mq, nil
 }
 
-// IntraFlowDispatchPolicy retrieves a flow's configured `framework.IntraFlowDispatchPolicy`.
-func (s *registryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	val, ok := s.priorityBands.Load(key.Priority)
-	if !ok {
-		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w", key, contracts.ErrPriorityBandNotFound)
-	}
-	band := val.(*priorityBand)
-
-	mq, ok := band.queues[key.ID]
-	if !ok {
-		return nil, fmt.Errorf("failed to get intra-flow policy for flow %q: %w", key, contracts.ErrFlowInstanceNotFound)
-	}
-	// The policy is stored on the `managedQueue` and is immutable after creation.
-	return mq.dispatchPolicy, nil
-}
-
 // FairnessPolicy retrieves a priority band's configured FairnessPolicy.
 // This read is lock-free as the policy instance is immutable after the shard is initialized.
 func (s *registryShard) FairnessPolicy(priority int) (framework.FairnessPolicy, error) {
@@ -316,7 +297,7 @@ func (s *registryShard) Stats() contracts.ShardStats {
 // It is an idempotent "create if not exists" operation.
 func (s *registryShard) synchronizeFlow(
 	key types.FlowKey,
-	policy framework.IntraFlowDispatchPolicy,
+	policy framework.OrderingPolicy,
 	q framework.SafeQueue,
 ) {
 	s.mu.Lock()

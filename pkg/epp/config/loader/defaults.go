@@ -21,6 +21,7 @@ import (
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -144,6 +145,9 @@ func ensureFlowControlLayer(
 	handle fwkplugin.Handle,
 	_ map[string]fwkplugin.Plugin,
 ) error {
+	if err := registerDefaultPlugin(cfg, handle, intraflow.FCFSOrderingPolicyType); err != nil {
+		return err
+	}
 	return registerDefaultPlugin(cfg, handle, interflow.GlobalStrictFairnessPolicyType)
 }
 

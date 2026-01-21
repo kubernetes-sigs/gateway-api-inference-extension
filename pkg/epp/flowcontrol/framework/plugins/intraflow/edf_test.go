@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -43,27 +42,9 @@ func TestEDFPolicy_RequiredQueueCapabilities(t *testing.T) {
 	assert.Equal(t, framework.CapabilityPriorityConfigurable, caps[0])
 }
 
-func TestEDFPolicy_SelectItem(t *testing.T) {
+func TestEDF_Less(t *testing.T) {
 	t.Parallel()
 	policy := newEDFPolicy()
-
-	mockItem := typesmocks.NewMockQueueItemAccessor(1, "item1", testFlowKey)
-	mockQueue := &frameworkmocks.MockFlowQueueAccessor{
-		PeekHeadV: mockItem,
-		LenV:      1,
-	}
-
-	item, err := policy.SelectItem(mockQueue)
-	require.NoError(t, err)
-	assert.Equal(t, mockItem, item, "Should return the head of the queue")
-}
-
-func TestEDFComparator_Func(t *testing.T) {
-	t.Parallel()
-	policy := newEDFPolicy()
-	comparator := policy.Comparator()
-	compareFunc := comparator.Func()
-	require.NotNil(t, compareFunc)
 
 	now := time.Now()
 
@@ -118,16 +99,9 @@ func TestEDFComparator_Func(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.expected, compareFunc(tc.a, tc.b))
+			assert.Equal(t, tc.expected, policy.Less(tc.a, tc.b))
 		})
 	}
-}
-
-func TestEDFComparator_ScoreType(t *testing.T) {
-	t.Parallel()
-	policy := newEDFPolicy()
-	comparator := policy.Comparator()
-	assert.Equal(t, string(framework.EDFPriorityScoreType), comparator.ScoreType())
 }
 
 func TestCalculateDeadline(t *testing.T) {

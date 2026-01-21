@@ -346,16 +346,9 @@ func (sp *ShardProcessor) selectItem(
 	if queue == nil {
 		return nil, nil
 	}
-	key := queue.FlowKey()
-	intraP, err := sp.shard.IntraFlowDispatchPolicy(key)
-	if err != nil {
-		return nil, fmt.Errorf("could not get IntraFlowDispatchPolicy for flow %s: %w", key, err)
-	}
-	item, err := intraP.SelectItem(queue)
-	if err != nil {
-		return nil, fmt.Errorf("IntraFlowDispatchPolicy %q failed to select item for flow %s: %w", intraP.Name(), key, err)
-	}
-	return item, nil
+	// The queue itself is responsible for explicit ordering via its configured OrderingPolicy.
+	// We simply peek at the head.
+	return queue.PeekHead(), nil
 }
 
 // dispatchItem handles the final steps of dispatching an item: removing it from the queue and finalizing its outcome.

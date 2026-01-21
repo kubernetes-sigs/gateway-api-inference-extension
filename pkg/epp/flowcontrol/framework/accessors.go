@@ -30,9 +30,10 @@ import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 type FlowQueueAccessor interface {
 	QueueInspectionMethods
 
-	// Comparator returns the ItemComparator that defines the ordering logic of the items within this queue.
-	// This is determined by the IntraFlowDispatchPolicy associated with this queue's flow.
-	Comparator() ItemComparator
+	// OrderingPolicy returns the policy implementation that rules this queue's internal ordering.
+	// This allows fairness policies (like "global-strict-fairness-policy") to inspect the ordering logic when comparing
+	// items across queues.
+	OrderingPolicy() OrderingPolicy
 
 	// FlowKey returns the unique, immutable identity of the flow instance this queue belongs to.
 	// This provides essential context (like the logical grouping ID and Priority) to policies.

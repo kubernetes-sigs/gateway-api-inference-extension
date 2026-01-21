@@ -27,7 +27,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
@@ -87,9 +86,8 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 // synchronizeFlow simulates the registry synchronizing a flow with a real queue.
 func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 	h.t.Helper()
-	policy, err := intraflow.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
-	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
-	q, err := queue.NewQueueFromName(defaultQueue, policy.Comparator())
+	policy := h.shard.config.PriorityBands[key.Priority].OrderingPolicy
+	q, err := queue.NewQueueFromName(defaultQueue, policy)
 	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
 	h.shard.synchronizeFlow(key, policy, q)
 }
@@ -173,15 +171,6 @@ func TestShard_Accessors(t *testing.T) {
 				"The returned queue instance must correspond to the requested FlowKey")
 		})
 
-		t.Run("IntraFlowDispatchPolicy", func(t *testing.T) {
-			t.Parallel()
-			policy, err := h.shard.IntraFlowDispatchPolicy(h.highPriorityKey1)
-			require.NoError(t, err, "IntraFlowDispatchPolicy accessor must succeed for a synchronized flow")
-			require.NotNil(t, policy, "Returned policy must not be nil (guaranteed by contract)")
-			assert.Equal(t, string(defaultIntraFlowDispatchPolicy), policy.Name(),
-				"Must return the default intra-flow policy implementation")
-		})
-
 		t.Run("FairnessPolicy", func(t *testing.T) {
 			t.Parallel()
 			policy, err := h.shard.FairnessPolicy(highPriority)
@@ -222,22 +211,6 @@ func TestShard_Accessors(t *testing.T) {
 					return err
 				},
 				expectErr: contracts.ErrPriorityBandNotFound,
-			},
-			{
-				name: "IntraFlowDispatchPolicy_PriorityNotFound",
-				action: func(s *registryShard) error {
-					_, err := s.IntraFlowDispatchPolicy(types.FlowKey{Priority: nonExistentPriority})
-					return err
-				},
-				expectErr: contracts.ErrPriorityBandNotFound,
-			},
-			{
-				name: "IntraFlowDispatchPolicy_FlowNotFound",
-				action: func(s *registryShard) error {
-					_, err := s.IntraFlowDispatchPolicy(types.FlowKey{ID: "missing", Priority: highPriority})
-					return err
-				},
-				expectErr: contracts.ErrFlowInstanceNotFound,
 			},
 		}
 		for _, tc := range testCases {

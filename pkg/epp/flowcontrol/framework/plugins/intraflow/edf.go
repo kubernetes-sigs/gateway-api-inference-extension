@@ -33,30 +33,20 @@ import (
 const EDFOrderingPolicyType = "edf-ordering-policy"
 
 func init() {
-	// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-	MustRegisterPolicy(RegisteredPolicyName(EDFOrderingPolicyType),
-		func() (framework.IntraFlowDispatchPolicy, error) {
-			return newEDFPolicy(), nil
-		})
-
 	plugin.Register(EDFOrderingPolicyType, func(string, json.RawMessage, plugin.Handle) (plugin.Plugin, error) {
 		return newEDFPolicy(), nil
 	})
 }
 
-// EDFPolicy implements an intra-flow dispatch policy based on the Earliest Deadline First (EDF) scheduling algorithm.
+// EDFPolicy implements an OrderingPolicy based on the Earliest Deadline First (EDF) scheduling algorithm.
 // Requests with earlier absolute deadlines (EnqueueTime + EffectiveTTL) are dispatched first.
-// See the documentation for the exported `EDFPolicyName` constant for detailed behavioral guarantees.
-type EDFPolicy struct {
-	comparator framework.ItemComparator
-}
+// See the documentation for the exported EDFOrderingPolicyType constant for detailed behavioral guarantees.
+type EDFPolicy struct{}
 
-var _ framework.IntraFlowDispatchPolicy = &EDFPolicy{}
+var _ framework.OrderingPolicy = &EDFPolicy{}
 
 func newEDFPolicy() *EDFPolicy {
-	p := &EDFPolicy{}
-	p.comparator = &edfComparator{policy: p}
-	return p
+	return &EDFPolicy{}
 }
 
 func (p *EDFPolicy) Name() string {
@@ -77,22 +67,6 @@ func (p *EDFPolicy) TypedName() plugin.TypedName {
 	}
 }
 
-// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-func (p *EDFPolicy) Comparator() framework.ItemComparator {
-	return p.comparator
-}
-
-// SelectItem selects the next item to dispatch by returning the head of the queue.
-// This assumes the underlying queue is ordered according to the policy's comparator
-// (enforced via RequiredQueueCapabilities). Thus, the most urgent request is always at the head.
-// Returns (nil, nil) if the queue is empty or nil.
-func (p *EDFPolicy) SelectItem(queue framework.FlowQueueAccessor) (selectedItem types.QueueItemAccessor, err error) {
-	if queue == nil {
-		return nil, nil
-	}
-	return queue.PeekHead(), nil
-}
-
 var maxDeadlineTime = time.Unix(0, 1<<63-1)
 
 // calculateDeadline computes the absolute deadline for a request.
@@ -106,17 +80,6 @@ func calculateDeadline(item types.QueueItemAccessor) time.Time {
 		return maxDeadlineTime
 	}
 	return item.EnqueueTime().Add(ttl)
-}
-
-type edfComparator struct {
-	policy framework.OrderingPolicy
-}
-
-// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-func (d *edfComparator) Func() framework.ItemComparatorFunc {
-	return func(a, b types.QueueItemAccessor) bool {
-		return d.policy.Less(a, b)
-	}
 }
 
 // Less returns true if item 'a' should be dispatched before item 'b'.
@@ -140,10 +103,4 @@ func (p *EDFPolicy) Less(a, b types.QueueItemAccessor) bool {
 
 	// Same deadline: FCFS (earlier enqueue time = higher priority)
 	return a.EnqueueTime().Before(b.EnqueueTime())
-}
-
-// ScoreType indicates this policy uses EDF-based scoring.
-// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-func (d *edfComparator) ScoreType() string {
-	return string(framework.EDFPriorityScoreType)
 }

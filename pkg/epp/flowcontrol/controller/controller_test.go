@@ -1238,14 +1238,6 @@ func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey types.Flow
 				}
 				return nil, fmt.Errorf("unexpected priority %d", priority)
 			},
-			// Configure dispatch policies (FIFO).
-			IntraFlowDispatchPolicyFunc: func(_ types.FlowKey) (framework.IntraFlowDispatchPolicy, error) {
-				return &frameworkmocks.MockIntraFlowDispatchPolicy{
-					SelectItemFunc: func(qa framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-						return qa.PeekHead(), nil
-					},
-				}, nil
-			},
 			FairnessPolicyFunc: func(_ int) (framework.FairnessPolicy, error) {
 				return &frameworkmocks.MockFairnessPolicy{
 					PickFunc: func(_ context.Context, _ framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {

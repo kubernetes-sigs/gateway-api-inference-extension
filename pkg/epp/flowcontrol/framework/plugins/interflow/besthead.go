@@ -108,13 +108,13 @@ func (p *globalStrict) Pick(
 			return true
 		}
 
-		if queue.Comparator().ScoreType() != bestQueue.Comparator().ScoreType() {
+		if queue.OrderingPolicy().TypedName().Type != bestQueue.OrderingPolicy().TypedName().Type {
 			iterationErr = fmt.Errorf("%w: expected %q, got %q", framework.ErrIncompatiblePriorityType,
-				bestQueue.Comparator().ScoreType(), queue.Comparator().ScoreType())
+				bestQueue.OrderingPolicy().TypedName().Type, queue.OrderingPolicy().TypedName().Type)
 			return false
 		}
 
-		if bestQueue.Comparator().Func()(item, bestItem) {
+		if bestQueue.OrderingPolicy().Less(item, bestItem) {
 			bestQueue = queue
 			bestItem = item
 		}

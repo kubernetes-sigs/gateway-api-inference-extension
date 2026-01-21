@@ -53,8 +53,8 @@ const ListQueueName = "ListQueue"
 
 func init() {
 	MustRegisterQueue(RegisteredQueueName(ListQueueName),
-		func(_ framework.ItemComparator) (framework.SafeQueue, error) {
-			// The list queue is a simple FIFO queue and does not use a comparator.
+		func(_ framework.OrderingPolicy) (framework.SafeQueue, error) {
+			// The list queue is a simple FIFO queue and does not use an ordering policy.
 			return newListQueue(), nil
 		})
 }

@@ -28,19 +28,15 @@ import (
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-const commonScoreType = "enqueue_time_ns_asc"
-
-// enqueueTimeComparatorFunc is a test utility. Lower enqueue time is better.
-func enqueueTimeComparatorFunc(a, b types.QueueItemAccessor) bool {
-	return a.EnqueueTime().Before(b.EnqueueTime())
-}
-
-func newTestComparator() *frameworkmocks.MockItemComparator {
-	return &frameworkmocks.MockItemComparator{
-		ScoreTypeV: commonScoreType,
-		FuncV:      enqueueTimeComparatorFunc,
+func newTestOrderingPolicy() *frameworkmocks.MockOrderingPolicy {
+	return &frameworkmocks.MockOrderingPolicy{
+		TypedNameV: plugins.TypedName{Type: "enqueue_time_ns_asc"},
+		LessFunc: func(a, b types.QueueItemAccessor) bool {
+			return a.EnqueueTime().Before(b.EnqueueTime())
+		},
 	}
 }
 
@@ -88,22 +84,22 @@ func TestGlobalStrict_Pick(t *testing.T) {
 	itemWorse.EnqueueTimeV = now.Add(-5 * time.Second)
 
 	queue1 := &frameworkmocks.MockFlowQueueAccessor{
-		LenV:        1,
-		PeekHeadV:   itemBetter,
-		FlowKeyV:    flow1Key,
-		ComparatorV: newTestComparator(),
+		LenV:            1,
+		PeekHeadV:       itemBetter,
+		FlowKeyV:        flow1Key,
+		OrderingPolicyV: newTestOrderingPolicy(),
 	}
 	queue2 := &frameworkmocks.MockFlowQueueAccessor{
-		LenV:        1,
-		PeekHeadV:   itemWorse,
-		FlowKeyV:    flow2Key,
-		ComparatorV: newTestComparator(),
+		LenV:            1,
+		PeekHeadV:       itemWorse,
+		FlowKeyV:        flow2Key,
+		OrderingPolicyV: newTestOrderingPolicy(),
 	}
 	queueEmpty := &frameworkmocks.MockFlowQueueAccessor{
-		LenV:        0,
-		PeekHeadV:   nil,
-		FlowKeyV:    types.FlowKey{ID: "flowEmpty"},
-		ComparatorV: newTestComparator(),
+		LenV:            0,
+		PeekHeadV:       nil,
+		FlowKeyV:        types.FlowKey{ID: "flowEmpty"},
+		OrderingPolicyV: newTestOrderingPolicy(),
 	}
 
 	testCases := []struct {
@@ -129,44 +125,41 @@ func TestGlobalStrict_Pick(t *testing.T) {
 			expectedQueueID: flow1ID,
 		},
 		{
-			name: "ComparatorCompatibility",
+			name: "OrderingPolicyCompatibility",
 			band: newTestBand(
 				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:        1,
-					PeekHeadV:   itemBetter,
-					FlowKeyV:    flow1Key,
-					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: "typeA", FuncV: enqueueTimeComparatorFunc},
+					LenV:      1,
+					PeekHeadV: itemBetter,
+					FlowKeyV:  flow1Key,
+					OrderingPolicyV: &frameworkmocks.MockOrderingPolicy{
+						TypedNameV: plugins.TypedName{Type: "typeA"},
+						LessFunc: func(a, b types.QueueItemAccessor) bool {
+							return a.EnqueueTime().Before(b.EnqueueTime())
+						},
+					},
 				},
 				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:        1,
-					PeekHeadV:   itemWorse,
-					FlowKeyV:    flow2Key,
-					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: "typeB", FuncV: enqueueTimeComparatorFunc},
+					LenV:      1,
+					PeekHeadV: itemWorse,
+					FlowKeyV:  flow2Key,
+					OrderingPolicyV: &frameworkmocks.MockOrderingPolicy{
+						TypedNameV: plugins.TypedName{Type: "typeB"},
+						LessFunc: func(a, b types.QueueItemAccessor) bool {
+							return a.EnqueueTime().Before(b.EnqueueTime())
+						},
+					},
 				},
 			),
 			expectedErr: framework.ErrIncompatiblePriorityType,
 		},
 		{
-			name: "QueueComparatorIsNil",
+			name: "OrderingPolicyIsNil",
 			band: newTestBand(
 				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:        1,
-					PeekHeadV:   itemBetter,
-					FlowKeyV:    flow1Key,
-					ComparatorV: nil,
-				},
-				queue2,
-			),
-			shouldPanic: true,
-		},
-		{
-			name: "ComparatorFuncIsNil",
-			band: newTestBand(
-				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:        1,
-					PeekHeadV:   itemBetter,
-					FlowKeyV:    flow1Key,
-					ComparatorV: &frameworkmocks.MockItemComparator{ScoreTypeV: commonScoreType, FuncV: nil},
+					LenV:            1,
+					PeekHeadV:       itemBetter,
+					FlowKeyV:        flow1Key,
+					OrderingPolicyV: nil,
 				},
 				queue2,
 			),
@@ -177,10 +170,10 @@ func TestGlobalStrict_Pick(t *testing.T) {
 			band: newTestBand(
 				queueEmpty,
 				&frameworkmocks.MockFlowQueueAccessor{
-					LenV:        0,
-					PeekHeadV:   nil,
-					FlowKeyV:    types.FlowKey{ID: "flowEmpty2"},
-					ComparatorV: newTestComparator(),
+					LenV:            0,
+					PeekHeadV:       nil,
+					FlowKeyV:        types.FlowKey{ID: "flowEmpty2"},
+					OrderingPolicyV: newTestOrderingPolicy(),
 				},
 			),
 		},

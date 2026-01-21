@@ -29,7 +29,7 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
@@ -176,8 +176,8 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		t.Parallel()
 
 		handle := newTestPluginsHandle(t)
-		badPolicyName := intraflow.RegisteredPolicyName("non-existent-policy")
-		badBand, err := NewPriorityBandConfig(handle, highPriority, "High", WithIntraFlowPolicy(badPolicyName))
+		badQueueName := queue.RegisteredQueueName("non-existent-queue")
+		badBand, err := NewPriorityBandConfig(handle, highPriority, "High", WithQueue(badQueueName))
 		require.NoError(t, err)
 
 		// Create a Config that uses a mock checker to bypass the strict validation.
@@ -187,7 +187,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 			handle,
 			WithPriorityBand(badBand),
 			withCapabilityChecker(&mockCapabilityChecker{
-				checkCompatibilityFunc: func(_ intraflow.RegisteredPolicyName, _ queue.RegisteredQueueName) error {
+				checkCompatibilityFunc: func(framework.OrderingPolicy, queue.RegisteredQueueName) error {
 					return nil // Approve everything.
 				},
 			}),
@@ -203,8 +203,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		})
 
 		require.Error(t, err, "WithConnection must return an error for a failed flow JIT registration")
-		assert.ErrorContains(t, err, "no IntraFlowDispatchPolicy registered",
-			"The returned error must propagate the reason")
+		assert.ErrorContains(t, err, "no framework.SafeQueue registered", "The returned error must propagate the reason")
 	})
 
 	t.Run("Handle_Shards_ShouldReturnAllActiveShardsAndBeACopy", func(t *testing.T) {

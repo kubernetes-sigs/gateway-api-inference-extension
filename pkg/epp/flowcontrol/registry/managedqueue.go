@@ -57,9 +57,9 @@ import (
 //  2. Non-Autonomous State: The underlying queue must not change state autonomously (e.g., no internal TTL eviction).
 type managedQueue struct {
 	// --- Immutable Identity & Dependencies (set at construction) ---
-	key            types.FlowKey
-	dispatchPolicy framework.IntraFlowDispatchPolicy
-	logger         logr.Logger
+	key    types.FlowKey
+	policy framework.OrderingPolicy
+	logger logr.Logger
 
 	// onStatsDelta is the callback used to propagate statistics changes up to the parent shard.
 	onStatsDelta propagateStatsDeltaFunc
@@ -90,7 +90,7 @@ var _ contracts.ManagedQueue = &managedQueue{}
 // newManagedQueue creates a new instance of a `managedQueue`.
 func newManagedQueue(
 	queue framework.SafeQueue,
-	dispatchPolicy framework.IntraFlowDispatchPolicy,
+	policy framework.OrderingPolicy,
 	key types.FlowKey,
 	logger logr.Logger,
 	onStatsDelta propagateStatsDeltaFunc,
@@ -101,12 +101,12 @@ func newManagedQueue(
 		"queueType", queue.Name(),
 	)
 	return &managedQueue{
-		queue:          queue,
-		dispatchPolicy: dispatchPolicy,
-		key:            key,
-		onStatsDelta:   onStatsDelta,
-		logger:         mqLogger,
-		isDraining:     isDraining,
+		queue:        queue,
+		policy:       policy,
+		key:          key,
+		onStatsDelta: onStatsDelta,
+		logger:       mqLogger,
+		isDraining:   isDraining,
 	}
 }
 
@@ -236,9 +236,7 @@ func (a *flowQueueAccessor) PeekHead() types.QueueItemAccessor { return a.mq.que
 func (a *flowQueueAccessor) PeekTail() types.QueueItemAccessor { return a.mq.queue.PeekTail() }
 
 // --- Read-only methods from the managedQueue wrapper ---
-func (a *flowQueueAccessor) Len() int         { return a.mq.Len() }
-func (a *flowQueueAccessor) ByteSize() uint64 { return a.mq.ByteSize() }
-func (a *flowQueueAccessor) Comparator() framework.ItemComparator {
-	return a.mq.dispatchPolicy.Comparator()
-}
-func (a *flowQueueAccessor) FlowKey() types.FlowKey { return a.mq.key }
+func (a *flowQueueAccessor) Len() int                                 { return a.mq.Len() }
+func (a *flowQueueAccessor) ByteSize() uint64                         { return a.mq.ByteSize() }
+func (a *flowQueueAccessor) OrderingPolicy() framework.OrderingPolicy { return a.mq.policy }
+func (a *flowQueueAccessor) FlowKey() types.FlowKey                   { return a.mq.key }

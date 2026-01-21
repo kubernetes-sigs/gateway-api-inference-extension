@@ -22,53 +22,51 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
-// TestIntraFlowDispatchPolicyConformance is the main conformance test suite for `framework.IntraFlowDispatchPolicy`
-// implementations.
-// It iterates over all policy implementations registered via `dispatch.MustRegisterPolicy` and runs a series of
-// sub-tests to ensure they adhere to the `framework.IntraFlowDispatchPolicy` contract.
-func TestIntraFlowDispatchPolicyConformance(t *testing.T) {
+// TestOrderingPolicyConformance is the main conformance test suite for OrderingPolicy implementations.
+// It iterates over all policy implementations registered via plugins.Register and runs a series of sub-tests to
+// ensure they adhere to the OrderingPolicy contract.
+func TestOrderingPolicyConformance(t *testing.T) {
 	t.Parallel()
 
-	for policyName, constructor := range RegisteredPolicies {
-		t.Run(string(policyName), func(t *testing.T) {
+	if len(plugins.Registry) == 0 {
+		t.Log("No plugins registered. Skipping conformance tests.")
+		return
+	}
+
+	for name, factory := range plugins.Registry {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			policy, err := constructor()
-			require.NoError(t, err, "Policy constructor for %s failed", policyName)
-			require.NotNil(t, policy, "Constructor for %s should return a non-nil policy instance", policyName)
+			plugin, err := factory(name, nil, nil)
+			require.NoError(t, err, "Factory failed for plugin %s", name)
+			require.NotNil(t, plugin, "Factory returned nil for plugin %s", name)
+			policy, ok := plugin.(framework.OrderingPolicy)
+			if !ok {
+				return
+			}
 
 			t.Run("Initialization", func(t *testing.T) {
 				t.Parallel()
-				assert.NotEmpty(t, policy.Name(), "Name() for %s should not be empty", policyName)
-
-				comp := policy.Comparator()
-				require.NotNil(t, comp, "Comparator() for %s should not return nil", policyName)
-				assert.NotNil(t, comp.Func(), "Comparator().Func() for %s should not be nil", policyName)
-				assert.NotEmpty(t, comp.ScoreType(), "Comparator().ScoreType() for %s should not be empty", policyName)
+				assert.Equal(t, name, policy.TypedName().Name, "TypedName().Name should match registered name")
 
 				caps := policy.RequiredQueueCapabilities()
-				assert.NotNil(t, caps, "RequiredQueueCapabilities() for %s should not return a nil slice", policyName)
+				assert.NotNil(t, caps, "RequiredQueueCapabilities() should not return nil slice")
 			})
 
-			t.Run("SelectItemFromNilQueue", func(t *testing.T) {
+			t.Run("Less_Sanity", func(t *testing.T) {
 				t.Parallel()
-				item, err := policy.SelectItem(nil)
-				require.NoError(t, err, "SelectItem(nil) for %s should not return an error", policyName)
-				assert.Nil(t, item, "SelectItem(nil) for %s should return a nil item", policyName)
-			})
+				res := policy.Less(nil, nil)
+				assert.False(t, res, "Less(nil, nil) should be false")
 
-			t.Run("SelectItemFromEmptyQueue", func(t *testing.T) {
-				t.Parallel()
-				mockQueue := &frameworkmocks.MockFlowQueueAccessor{
-					PeekHeadV: nil,
-					LenV:      0,
-				}
-				item, err := policy.SelectItem(mockQueue)
-				require.NoError(t, err, "SelectItem from an empty queue for %s should not return an error", policyName)
-				assert.Nil(t, item, "SelectItem from an empty queue for %s should return a nil item", policyName)
+				mockItem := typesmocks.NewMockQueueItemAccessor(0, "test", types.FlowKey{})
+				assert.True(t, policy.Less(mockItem, nil), "Less(item, nil) should be true (item preferred over nil)")
+				assert.False(t, policy.Less(nil, mockItem), "Less(nil, item) should be false")
 			})
 		})
 	}

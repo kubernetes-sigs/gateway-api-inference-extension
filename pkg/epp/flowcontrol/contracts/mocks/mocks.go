@@ -50,7 +50,6 @@ type MockRegistryShard struct {
 	IDFunc                       func() string
 	IsActiveFunc                 func() bool
 	ManagedQueueFunc             func(key types.FlowKey) (contracts.ManagedQueue, error)
-	IntraFlowDispatchPolicyFunc  func(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
 	FairnessPolicyFunc           func(priority int) (framework.FairnessPolicy, error)
 	PriorityBandAccessorFunc     func(priority int) (framework.PriorityBandAccessor, error)
 	AllOrderedPriorityLevelsFunc func() []int
@@ -74,13 +73,6 @@ func (m *MockRegistryShard) IsActive() bool {
 func (m *MockRegistryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue, error) {
 	if m.ManagedQueueFunc != nil {
 		return m.ManagedQueueFunc(key)
-	}
-	return nil, nil
-}
-
-func (m *MockRegistryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error) {
-	if m.IntraFlowDispatchPolicyFunc != nil {
-		return m.IntraFlowDispatchPolicyFunc(key)
 	}
 	return nil, nil
 }
@@ -182,6 +174,8 @@ type MockManagedQueue struct {
 	CleanupFunc func(predicate framework.PredicateFunc) []types.QueueItemAccessor
 	// DrainFunc allows a test to completely override the default Drain behavior.
 	DrainFunc func() []types.QueueItemAccessor
+	// OrderingPolicyFunc allows a test to override OrderingPolicy.
+	OrderingPolicyFunc func() framework.OrderingPolicy
 
 	// mu protects access to the internal `items` map.
 	mu       sync.Mutex
@@ -275,7 +269,12 @@ func (m *MockManagedQueue) Drain() []types.QueueItemAccessor {
 func (m *MockManagedQueue) FlowKey() types.FlowKey                    { return m.FlowKeyV }
 func (m *MockManagedQueue) Name() string                              { return "" }
 func (m *MockManagedQueue) Capabilities() []framework.QueueCapability { return nil }
-func (m *MockManagedQueue) Comparator() framework.ItemComparator      { return nil }
+func (m *MockManagedQueue) OrderingPolicy() framework.OrderingPolicy {
+	if m.OrderingPolicyFunc != nil {
+		return m.OrderingPolicyFunc()
+	}
+	return nil
+}
 
 // Len returns the actual number of items currently in the mock queue.
 func (m *MockManagedQueue) Len() int {

@@ -33,7 +33,7 @@ func BenchmarkQueues(b *testing.B) {
 	for queueName, constructor := range RegisteredQueues {
 		b.Run(string(queueName), func(b *testing.B) {
 			// All queue implementations must support the default enqueue time comparator.
-			q, err := constructor(enqueueTimeComparator)
+			q, err := constructor(enqueueTimePolicy)
 			if err != nil {
 				b.Fatalf("Failed to construct queue '%s': %v", queueName, err)
 			}

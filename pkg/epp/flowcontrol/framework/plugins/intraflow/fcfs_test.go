@@ -23,8 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 )
@@ -44,29 +42,9 @@ func TestFCFS_RequiredQueueCapabilities(t *testing.T) {
 	require.Empty(t, caps, "No required capabilities should be returned")
 }
 
-func TestFCFS_SelectItem(t *testing.T) {
-	t.Parallel()
-	// Note: The conformance suite validates the policy's contract for nil and empty queues.
-	// This unit test focuses on the policy-specific success path.
-	policy := newFCFS()
-
-	mockItem := typesmocks.NewMockQueueItemAccessor(1, "item1", testFlowKey)
-	mockQueue := &frameworkmocks.MockFlowQueueAccessor{
-		PeekHeadV: mockItem,
-		LenV:      1,
-	}
-
-	item, err := policy.SelectItem(mockQueue)
-	require.NoError(t, err)
-	assert.Equal(t, mockItem, item, "Should return the item from the head of the queue")
-}
-
-func TestEnqueueTimeComparator_Func(t *testing.T) {
+func TestFCFS_Less(t *testing.T) {
 	t.Parallel()
 	policy := newFCFS()
-	comparator := policy.Comparator()
-	compareFunc := comparator.Func()
-	require.NotNil(t, compareFunc)
 
 	now := time.Now()
 	itemA := typesmocks.NewMockQueueItemAccessor(10, "itemA", testFlowKey)
@@ -82,7 +60,7 @@ func TestEnqueueTimeComparator_Func(t *testing.T) {
 		name     string
 		item1    types.QueueItemAccessor
 		item2    types.QueueItemAccessor
-		expected bool // true if item1 is higher priority (earlier) than item2
+		expected bool // true if item1 is less (higher priority) than item2
 	}{
 		{"A before B", itemA, itemB, true},
 		{"B after A", itemB, itemA, false},
@@ -96,14 +74,7 @@ func TestEnqueueTimeComparator_Func(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.expected, compareFunc(tc.item1, tc.item2))
+			assert.Equal(t, tc.expected, policy.Less(tc.item1, tc.item2))
 		})
 	}
-}
-
-func TestEnqueueTimeComparator_ScoreType(t *testing.T) {
-	t.Parallel()
-	policy := newFCFS()
-	comparator := policy.Comparator()
-	assert.Equal(t, string(framework.EnqueueTimePriorityScoreType), comparator.ScoreType())
 }

@@ -41,7 +41,7 @@ type mqTestHarness struct {
 	t          *testing.T
 	mq         *managedQueue
 	propagator *mockStatsPropagator
-	mockPolicy *frameworkmocks.MockIntraFlowDispatchPolicy
+	mockPolicy *frameworkmocks.MockOrderingPolicy
 }
 
 // newMockedMqHarness creates a harness that uses a mocked underlying queue.
@@ -65,9 +65,7 @@ func newMqHarness(t *testing.T, queue framework.SafeQueue, key types.FlowKey, is
 	t.Helper()
 
 	propagator := &mockStatsPropagator{}
-	mockPolicy := &frameworkmocks.MockIntraFlowDispatchPolicy{
-		ComparatorV: &frameworkmocks.MockItemComparator{},
-	}
+	mockPolicy := &frameworkmocks.MockOrderingPolicy{}
 
 	isDrainingFunc := func() bool { return isDraining }
 	mq := newManagedQueue(queue, mockPolicy, key, logr.Discard(), propagator.propagate, isDrainingFunc)
@@ -358,8 +356,8 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 		assert.Equal(t, harness.mq.ByteSize(), accessor.ByteSize(),
 			"Accessor ByteSize() must reflect the managed queue's current byte size")
 		assert.Equal(t, flowKey, accessor.FlowKey(), "Accessor FlowKey() must return the correct identifier for the flow")
-		assert.Equal(t, harness.mockPolicy.Comparator(), accessor.Comparator(),
-			"Accessor Comparator() must return the comparator provided by the configured intra-flow policy")
+		assert.Equal(t, harness.mockPolicy, accessor.OrderingPolicy(),
+			"Accessor OrderingPolicy() must return the policy provided by the configured intra-flow policy")
 
 		peekedHead := accessor.PeekHead()
 		assert.Same(t, item, peekedHead, "Accessor PeekHead() must return the exact item instance at the head")

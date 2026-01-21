@@ -39,8 +39,8 @@ const MaxMinHeapName = "MaxMinHeap"
 
 func init() {
 	MustRegisterQueue(RegisteredQueueName(MaxMinHeapName),
-		func(comparator framework.ItemComparator) (framework.SafeQueue, error) {
-			return newMaxMinHeap(comparator), nil
+		func(policy framework.OrderingPolicy) (framework.SafeQueue, error) {
+			return newMaxMinHeap(policy), nil
 		})
 }
 
@@ -48,11 +48,11 @@ func init() {
 // The heap is ordered by the provided comparator, with higher values considered higher priority.
 // This implementation is concurrent-safe.
 type maxMinHeap struct {
-	items      []types.QueueItemAccessor
-	handles    map[types.QueueItemHandle]*heapItem
-	byteSize   atomic.Uint64
-	mu         sync.RWMutex
-	comparator framework.ItemComparator
+	items    []types.QueueItemAccessor
+	handles  map[types.QueueItemHandle]*heapItem
+	byteSize atomic.Uint64
+	mu       sync.RWMutex
+	policy   framework.OrderingPolicy
 }
 
 // heapItem is an internal struct to hold an item and its index in the heap.
@@ -80,12 +80,12 @@ func (h *heapItem) IsInvalidated() bool {
 
 var _ types.QueueItemHandle = &heapItem{}
 
-// newMaxMinHeap creates a new max-min heap with the given comparator.
-func newMaxMinHeap(comparator framework.ItemComparator) *maxMinHeap {
+// newMaxMinHeap creates a new max-min heap with the given policy.
+func newMaxMinHeap(policy framework.OrderingPolicy) *maxMinHeap {
 	return &maxMinHeap{
-		items:      make([]types.QueueItemAccessor, 0),
-		handles:    make(map[types.QueueItemHandle]*heapItem),
-		comparator: comparator,
+		items:   make([]types.QueueItemAccessor, 0),
+		handles: make(map[types.QueueItemHandle]*heapItem),
+		policy:  policy,
 	}
 }
 
@@ -146,7 +146,7 @@ func (h *maxMinHeap) PeekTail() types.QueueItemAccessor {
 
 	// With three or more items, the minimum element is guaranteed to be one of the two children of the root (at indices 1
 	// and 2). We must compare them to find the true minimum.
-	if h.comparator.Func()(h.items[1], h.items[2]) {
+	if h.policy.Less(h.items[1], h.items[2]) {
 		return h.items[2]
 	}
 	return h.items[1]
@@ -181,7 +181,7 @@ func (h *maxMinHeap) up(i int) {
 	if isMinLevel(i) {
 		// Current node is on a min level, parent is on a max level.
 		// If the current node is greater than its parent, they are in the wrong order.
-		if h.comparator.Func()(h.items[i], h.items[parentIndex]) {
+		if h.policy.Less(h.items[i], h.items[parentIndex]) {
 			h.swap(i, parentIndex)
 			// After swapping, the new parent (originally at i) might be larger than its ancestors.
 			h.upMax(parentIndex)
@@ -192,7 +192,7 @@ func (h *maxMinHeap) up(i int) {
 	} else { // On a max level
 		// Current node is on a max level, parent is on a min level.
 		// If the current node is smaller than its parent, they are in the wrong order.
-		if h.comparator.Func()(h.items[parentIndex], h.items[i]) {
+		if h.policy.Less(h.items[parentIndex], h.items[i]) {
 			h.swap(i, parentIndex)
 			// After swapping, the new parent (originally at i) might be smaller than its ancestors.
 			h.upMin(parentIndex)
@@ -213,7 +213,7 @@ func (h *maxMinHeap) upMin(i int) {
 		}
 		grandparentIndex := (parentIndex - 1) / 2
 		// If the item is smaller than its grandparent, swap them.
-		if h.comparator.Func()(h.items[grandparentIndex], h.items[i]) {
+		if h.policy.Less(h.items[grandparentIndex], h.items[i]) {
 			h.swap(i, grandparentIndex)
 			i = grandparentIndex
 		} else {
@@ -232,7 +232,7 @@ func (h *maxMinHeap) upMax(i int) {
 		}
 		grandparentIndex := (parentIndex - 1) / 2
 		// If the item is larger than its grandparent, swap them.
-		if h.comparator.Func()(h.items[i], h.items[grandparentIndex]) {
+		if h.policy.Less(h.items[i], h.items[grandparentIndex]) {
 			h.swap(i, grandparentIndex)
 			i = grandparentIndex
 		} else {
@@ -317,12 +317,12 @@ func (h *maxMinHeap) downMin(i int) {
 		}
 
 		// If the smallest descendant is smaller than the current item, swap them.
-		if h.comparator.Func()(h.items[i], h.items[m]) {
+		if h.policy.Less(h.items[i], h.items[m]) {
 			h.swap(i, m)
 			parentOfM := (m - 1) / 2
 			// If m was a grandchild, it might be larger than its new parent.
 			if parentOfM != i {
-				if h.comparator.Func()(h.items[m], h.items[parentOfM]) {
+				if h.policy.Less(h.items[m], h.items[parentOfM]) {
 					h.swap(m, parentOfM)
 				}
 			}
@@ -342,12 +342,12 @@ func (h *maxMinHeap) downMax(i int) {
 		}
 
 		// If the largest descendant is larger than the current item, swap them.
-		if h.comparator.Func()(h.items[m], h.items[i]) {
+		if h.policy.Less(h.items[m], h.items[i]) {
 			h.swap(i, m)
 			parentOfM := (m - 1) / 2
 			// If m was a grandchild, it might be smaller than its new parent.
 			if parentOfM != i {
-				if h.comparator.Func()(h.items[parentOfM], h.items[m]) {
+				if h.policy.Less(h.items[parentOfM], h.items[m]) {
 					h.swap(m, parentOfM)
 				}
 			}
@@ -369,7 +369,7 @@ func (h *maxMinHeap) findSmallestChildOrGrandchild(i int) int {
 
 	// Compare with right child.
 	rightChild := 2*i + 2
-	if rightChild < len(h.items) && h.comparator.Func()(h.items[m], h.items[rightChild]) {
+	if rightChild < len(h.items) && h.policy.Less(h.items[m], h.items[rightChild]) {
 		m = rightChild
 	}
 
@@ -377,7 +377,7 @@ func (h *maxMinHeap) findSmallestChildOrGrandchild(i int) int {
 	grandchildStart := 2*leftChild + 1
 	grandchildEnd := grandchildStart + 4
 	for j := grandchildStart; j < grandchildEnd && j < len(h.items); j++ {
-		if h.comparator.Func()(h.items[m], h.items[j]) {
+		if h.policy.Less(h.items[m], h.items[j]) {
 			m = j
 		}
 	}
@@ -395,7 +395,7 @@ func (h *maxMinHeap) findLargestChildOrGrandchild(i int) int {
 
 	// Compare with right child.
 	rightChild := 2*i + 2
-	if rightChild < len(h.items) && h.comparator.Func()(h.items[rightChild], h.items[m]) {
+	if rightChild < len(h.items) && h.policy.Less(h.items[rightChild], h.items[m]) {
 		m = rightChild
 	}
 
@@ -403,7 +403,7 @@ func (h *maxMinHeap) findLargestChildOrGrandchild(i int) int {
 	grandchildStart := 2*leftChild + 1
 	grandchildEnd := grandchildStart + 4
 	for j := grandchildStart; j < grandchildEnd && j < len(h.items); j++ {
-		if h.comparator.Func()(h.items[j], h.items[m]) {
+		if h.policy.Less(h.items[j], h.items[m]) {
 			m = j
 		}
 	}

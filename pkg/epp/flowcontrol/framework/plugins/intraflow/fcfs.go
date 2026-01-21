@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fcfs provides a First-Come, First-Served implementation of the `framework.IntraFlowDispatchPolicy`.
 package intraflow
 
 import (
@@ -38,29 +37,22 @@ import (
 //
 // This policy's behavior changes accordingly:
 //   - Paired with a `CapabilityPriorityConfigurable` queue, it provides strict FCFS ordering based on logical enqueue
-//     time, aligning with this policy's vended `framework.ItemComparator`.
+//     time, aligning with this policy's `Less` implementation.
 //     This configuration ensures that requests are processed in the order they arrived at the controller, providing the
 //     most intuitive behavior.
 //   - Paired with a `CapabilityFIFO` queue, it provides approximate FCFS ordering based on physical arrival order at
 //     the `framework.SafeQueue`.
 //     This configuration offers higher performance at the cost of strict logical-time ordering, as the
 //     `controller.FlowController`'s "bounce-and-retry" mechanic for Draining shards means a bounced request may be
-//     processed after a request that logically darrived later.
+//     processed after a request that logically arrived later.
 //
-// Given that true end-to-end ordering is non-deterministic in a distributd system, this policy defaults to pairing with
-// a CapabilityFIFO` queue (like "ListQueue") to prioritize performance and high throughput. For users who require the
+// Given that true end-to-end ordering is non-deterministic in a distributed system, this policy defaults to pairing with
+// a `CapabilityFIFO` queue (like "ListQueue") to prioritize performance and high throughput. For users who require the
 // strictest possible logical-time ordering that this layer can provide, explicitly pairing this policy with a
 // `CapabilityPriorityConfigurable` queue is recommended.
 const FCFSOrderingPolicyType = "fcfs-ordering-policy"
 
 func init() {
-	// Legacy Registration for IntraFlowDispatchPolicy factory
-	// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-	MustRegisterPolicy(RegisteredPolicyName(FCFSOrderingPolicyType),
-		func() (framework.IntraFlowDispatchPolicy, error) {
-			return newFCFS(), nil
-		})
-
 	plugin.Register(FCFSOrderingPolicyType, func(string, json.RawMessage, plugin.Handle) (plugin.Plugin, error) {
 		return newFCFS(), nil
 	})
@@ -69,35 +61,18 @@ func init() {
 // fcfs is the internal implementation of the FCFS policy.
 // See the documentation for the exported `FCFSPolicyName` constant for detailed user-facing information about its
 // behavior.
-type fcfs struct {
-	comparator framework.ItemComparator
-}
+type fcfs struct{}
+
+var _ framework.OrderingPolicy = &fcfs{}
 
 // newFCFS creates a new `fcfs` policy instance.
 func newFCFS() *fcfs {
-	p := &fcfs{}
-	p.comparator = &enqueueTimeComparator{policy: p}
-	return p
+	return &fcfs{}
 }
 
 // Name returns the name of the policy.
 func (p *fcfs) Name() string {
 	return FCFSOrderingPolicyType
-}
-
-// SelectItem selects the next item from the queue by peeking its head. This implementation relies on the queue being
-// ordered by dispatch preference, as indicated by its `RequiredQueueCapabilities`.
-func (p *fcfs) SelectItem(queue framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-	if queue == nil {
-		return nil, nil
-	}
-	return queue.PeekHead(), nil
-}
-
-// Comparator returns a `framework.ItemComparator` based on enqueue time.
-// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-func (p *fcfs) Comparator() framework.ItemComparator {
-	return p.comparator
 }
 
 // RequiredQueueCapabilities returns an empty slice, indicating that this policy can operate with any queue.
@@ -114,24 +89,6 @@ func (p *fcfs) TypedName() plugin.TypedName {
 	}
 }
 
-// --- enqueueTimeComparator ---
-
-// enqueueTimeComparator implements `framework.ItemComparator` for FCFS logic.
-// It prioritizes items with earlier enqueue times.
-// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-type enqueueTimeComparator struct {
-	policy framework.OrderingPolicy
-}
-
-// Func returns the comparison logic.
-// It delegates to the OrderingPolicy.Less method.
-// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-func (c *enqueueTimeComparator) Func() framework.ItemComparatorFunc {
-	return func(a, b types.QueueItemAccessor) bool {
-		return c.policy.Less(a, b)
-	}
-}
-
 // Less returns true if item 'a' should be dispatched before item 'b'.
 // FCFS orders by logical enqueue time (earliest first).
 func (p *fcfs) Less(a, b types.QueueItemAccessor) bool {
@@ -145,10 +102,4 @@ func (p *fcfs) Less(a, b types.QueueItemAccessor) bool {
 		return true
 	}
 	return a.EnqueueTime().Before(b.EnqueueTime())
-}
-
-// ScoreType returns a string descriptor for the comparison logic.
-// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): Remove once migration to EPP plugin model is complete.
-func (c *enqueueTimeComparator) ScoreType() string {
-	return string(framework.EnqueueTimePriorityScoreType)
 }
