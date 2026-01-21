@@ -41,7 +41,7 @@ type PredictedLatency struct {
 	typedName           plugins.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
 	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
-	sloContextStore     sync.Map // map[string]*PredictedLatencyContext
+	sloContextStore     sync.Map // map[string]*SLORequestContext
 	headroomStrategy    headroomStrategy
 	config              Config
 }
@@ -237,7 +237,7 @@ func (s *PredictedLatency) epsilonGreedyAffinityGate(
 // when latency predictions are unavailable
 func (s *PredictedLatency) scoreWithoutPredictions(
 	ctx context.Context,
-	predictedLatencyCtx *predictedLatencyCtx,
+	sloCtx *predictedLatencyCtx,
 	endpoints []schedulingtypes.Endpoint,
 	r *rand.Rand,
 ) map[schedulingtypes.Endpoint]float64 {
@@ -256,7 +256,7 @@ func (s *PredictedLatency) scoreWithoutPredictions(
 	// Build prediction results with only prefix cache scores
 	endpointResults := make([]endpointPredictionResult, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		prefixScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name]
+		prefixScore := sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name]
 		endpointResults = append(endpointResults, endpointPredictionResult{
 			Endpoint:         endpoint,
 			PrefixCacheScore: prefixScore,
@@ -284,17 +284,15 @@ func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.Cyc
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency: Failed to get predicted latency context, returning nil scores")
-		return nil
-	}
+	sloCtx := s.getOrMakePredictedLatencyContextForRequest(request)
 
-	predictions := predictedLatencyCtx.predictionsForScheduling
-	if len(predictions) == 0 {
-		logger.V(logutil.DEBUG).Error(errors.New("no predictions generated"), "PredictedLatency: Error generating predictions, falling back to composite-only scoring")
-		return s.scoreWithoutPredictions(ctx, predictedLatencyCtx, endpoints, rng)
+	predictions, err := s.generatePredictions(ctx, request, sloCtx, endpoints)
+	if err != nil || len(predictions) == 0 {
+		logger.V(logutil.DEBUG).Error(err, "PredictedLatency: Error generating predictions, falling back to composite-only scoring")
+		s.setPredictedLatencyContextForRequest(request, sloCtx)
+		return s.scoreWithoutPredictions(ctx, sloCtx, endpoints, rng)
 	}
+	s.updateRequestContextWithPredictions(sloCtx, predictions)
 
 	// Initialize scores map with all pods having score 0
 	scores := make(map[schedulingtypes.Endpoint]float64, len(endpoints))
@@ -305,7 +303,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.Cyc
 	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", s.config.AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
-	allEndpointsInvalid := (predictedLatencyCtx.ttftSLO > 0 && (predictedLatencyCtx.avgTPOTSLO > 0 || !s.config.StreamingMode))
+	allEndpointsInvalid := (sloCtx.ttftSLO > 0 && (sloCtx.avgTPOTSLO > 0 || !s.config.StreamingMode))
 	allEndpointsHaveRunningRequests := true
 
 	for _, pred := range allPreds {
@@ -321,7 +319,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.Cyc
 
 	// Set HasValidEndpoint to false if all endpoints are invalid and all have running requests
 	if allEndpointsInvalid && allEndpointsHaveRunningRequests && !sticky {
-		predictedLatencyCtx.hasValidEndpoint = false
+		sloCtx.hasValidEndpoint = false
 		logger.V(logutil.DEBUG).Info("All endpoints are invalid and have running requests, setting HasValidEndpoint to false")
 	}
 
@@ -339,16 +337,19 @@ func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.Cyc
 		scores[selectedEndpoint] = 1
 		logger.V(logutil.DEBUG).Info("Selected endpoint for scheduling", "endpoint", selectedEndpoint.GetMetadata().String())
 	}
+
+	s.setPredictedLatencyContextForRequest(request, sloCtx)
+
 	return scores
 }
 
-func (t *PredictedLatency) getOrMakePredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
-	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
+func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
+	sloCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
-		predictedLatencyCtx = newPredictedLatencyContext(request)
+		sloCtx = newPredictedLatencyContext(request)
 	}
 
-	return predictedLatencyCtx
+	return sloCtx
 }
 
 func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, endpoint schedulingtypes.Endpoint) float64 {

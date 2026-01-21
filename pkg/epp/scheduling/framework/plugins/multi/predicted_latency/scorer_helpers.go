@@ -41,10 +41,6 @@ func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedul
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "PredictedLatency: Error parsing TPOT SLO from header")
 	}
-	predictedLatencyCtx.sheddable, err = parseBoolHeader(*request, sheddableHeaderKey)
-	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a bool: %v", sheddableHeaderKey, err)}, "PredictedLatency: Error parsing Sheddable from header")
-	}
 }
 
 func (s *PredictedLatency) classifyEndpointsByHeadroom(allPreds []endpointPredictionResult) (posHeadroomEndpoints, negHeadroomEndpoints []endpointPredictionResult) {

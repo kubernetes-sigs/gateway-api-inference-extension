@@ -40,9 +40,6 @@ const (
 	ttftSLOHeaderKey = "x-slo-ttft-ms"
 	// TPOT header string
 	tpotSLOHeaderKey = "x-slo-tpot-ms"
-
-	// Sheddable header string
-	sheddableHeaderKey = "x-request-sheddable"
 )
 
 const (
