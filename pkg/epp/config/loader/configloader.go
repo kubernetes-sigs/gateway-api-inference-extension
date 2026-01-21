@@ -242,24 +242,26 @@ func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEna
 		Sources: []datalayer.DataSourceConfig{},
 	}
 
-	if rawDataConfig != nil {
-		for _, source := range rawDataConfig.Sources {
-			if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
-				sourceConfig := datalayer.DataSourceConfig{
-					Plugin:     sourcePlugin,
-					Extractors: []datalayer.Extractor{},
-				}
-				for _, extractor := range source.Extractors {
-					if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(datalayer.Extractor); ok {
-						sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
-					} else {
-						return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)
-					}
-				}
-				cfg.Sources = append(cfg.Sources, sourceConfig)
-			} else {
-				return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
+	if rawDataConfig == nil { // metrics data collection not enabled and no additional configuration
+		return &cfg, nil
+	}
+
+	for _, source := range rawDataConfig.Sources {
+		if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
+			sourceConfig := datalayer.DataSourceConfig{
+				Plugin:     sourcePlugin,
+				Extractors: []datalayer.Extractor{},
 			}
+			for _, extractor := range source.Extractors {
+				if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(datalayer.Extractor); ok {
+					sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
+				} else {
+					return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)
+				}
+			}
+			cfg.Sources = append(cfg.Sources, sourceConfig)
+		} else {
+			return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
 		}
 	}
 	return &cfg, nil
