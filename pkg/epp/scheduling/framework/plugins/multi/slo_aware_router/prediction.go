@@ -66,7 +66,7 @@ func (s *SLOAwareRouter) generatePredictions(ctx context.Context, request *sched
 	}
 
 	// Bulk predict
-	bulkPredictions, err := bulkPredictWithMetrics(ctx, s.latencypredictor, metricsStates, prompts, generatedTokenCounts, prefixCacheScores)
+	bulkPredictions, err := bulkPredictWithMetrics(ctx, s.latencypredictor, metricsStates, s.requestBuilder, candidateEndpoints, prompts, generatedTokenCounts, prefixCacheScores)
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(err, "Bulk prediction failed")
 		return nil, err

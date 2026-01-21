@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -120,7 +121,9 @@ func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	streamingMode bool,
+	requestBuilder PredictionRequestBuilder,
 	sloCtx *sloRequestContext,
+	pod schedulingtypes.Endpoint,
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,
@@ -139,7 +142,7 @@ func processFirstTokenForLatencyPrediction(
 	targetPod := sloCtx.targetMetadata
 	prefixCacheScore := sloCtx.prefixCacheScoresForEndpoints[targetPod.String()]
 
-	recordTTFTTrainingData(ctx, predictor, sloCtx, m, now, prefixCacheScore)
+	recordTTFTTrainingData(ctx, predictor, requestBuilder, sloCtx, m, pod, now, prefixCacheScore)
 
 	if streamingMode {
 		predictFirstTPOT(ctx, predictor, sloCtx)
@@ -163,24 +166,26 @@ func initializeSampler(ctx context.Context, sloCtx *sloRequestContext, samplingM
 func recordTTFTTrainingData(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
+	requestBuilder PredictionRequestBuilder,
 	sloCtx *sloRequestContext,
 	m *datalayer.Metrics,
+	pod schedulingtypes.Endpoint,
 	now time.Time,
 	prefixCacheScore float64,
 ) {
 	logger := log.FromContext(ctx)
-	// Train TTFT
-	entry := latencypredictor.TrainingEntry{
-		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
-		ActualTTFT:         sloCtx.ttft,
-		ActualTPOT:         0,
-		Timestamp:          now,
-		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningRequestsSize,
-		NumTokensGenerated: 0,
-		PrefixCacheScore:   prefixCacheScore,
-	}
+	// Build training entry using the builder
+	entry := requestBuilder.BuildTrainingEntry(
+		ctx,
+		pod,
+		m,
+		sloCtx.schedulingRequest.Body.Completions.Prompt,
+		sloCtx.ttft,
+		0, // TTFT training
+		now,
+		0,
+		prefixCacheScore,
+	)
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
 	}
@@ -227,7 +232,9 @@ func predictFirstTPOT(
 func processTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
+	requestBuilder PredictionRequestBuilder,
 	sloCtx *sloRequestContext,
+	pod schedulingtypes.Endpoint,
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,
@@ -257,18 +264,18 @@ func processTokenForLatencyPrediction(
 			"error", err)
 		return
 	}
-	// Record actual TPOT
-	entry := latencypredictor.TrainingEntry{
-		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(sloCtx.schedulingRequest.Body.Completions.Prompt)),
-		ActualTTFT:         0,
-		ActualTPOT:         latencyMs,
-		Timestamp:          now,
-		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningRequestsSize,
-		NumTokensGenerated: sloCtx.generatedTokenCount - 1,
-		PrefixCacheScore:   0, // TPOT does not use prefix cache score
-	}
+	// Record actual TPOT using builder
+	entry := requestBuilder.BuildTrainingEntry(
+		ctx,
+		pod,
+		m,
+		sloCtx.schedulingRequest.Body.Completions.Prompt,
+		0, // TTFT not recorded for TPOT
+		latencyMs,
+		now,
+		sloCtx.generatedTokenCount-1,
+		0, // TPOT does not use prefix cache score
+	)
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
 	}
@@ -312,6 +319,8 @@ func bulkPredictWithMetrics(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	metricsStates []*datalayer.Metrics,
+	requestBuilder PredictionRequestBuilder,
+	pods []schedulingtypes.Endpoint,
 	prompts []string,
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
@@ -319,9 +328,9 @@ func bulkPredictWithMetrics(
 	logger := log.FromContext(ctx)
 
 	// Validate input lengths
-	if len(metricsStates) != len(prompts) || len(prompts) != len(generatedTokenCounts) || len(generatedTokenCounts) != len(prefixCacheScores) {
-		return nil, fmt.Errorf("input slice lengths must match: metrics=%d, prompts=%d, tokenCounts=%d, prefixScores=%d",
-			len(metricsStates), len(prompts), len(generatedTokenCounts), len(prefixCacheScores))
+	if len(pods) != len(metricsStates) || len(metricsStates) != len(prompts) || len(prompts) != len(generatedTokenCounts) || len(generatedTokenCounts) != len(prefixCacheScores) {
+		return nil, fmt.Errorf("input slice lengths must match: pods=%d, metrics=%d, prompts=%d, tokenCounts=%d, prefixScores=%d",
+			len(pods), len(metricsStates), len(prompts), len(generatedTokenCounts), len(prefixCacheScores))
 	}
 
 	if len(metricsStates) == 0 {
@@ -335,17 +344,17 @@ func bulkPredictWithMetrics(
 		}
 	}
 
-	// Build bulk prediction requests
+	// Build bulk prediction requests using the builder
 	bulkRequests := make([]latencypredictor.PredictionRequest, len(metricsStates))
 	for i := range metricsStates {
-		bulkRequests[i] = latencypredictor.PredictionRequest{
-			KVCachePercentage:  metricsStates[i].KVCacheUsagePercent,
-			InputTokenLength:   len(strings.Fields(prompts[i])),
-			NumRequestWaiting:  metricsStates[i].WaitingQueueSize,
-			NumRequestRunning:  metricsStates[i].RunningRequestsSize,
-			NumTokensGenerated: generatedTokenCounts[i],
-			PrefixCacheScore:   prefixCacheScores[i],
-		}
+		bulkRequests[i] = requestBuilder.BuildPredictionRequest(
+			ctx,
+			pods[i],
+			metricsStates[i],
+			prompts[i],
+			generatedTokenCounts[i],
+			prefixCacheScores[i],
+		)
 	}
 
 	// Perform bulk prediction

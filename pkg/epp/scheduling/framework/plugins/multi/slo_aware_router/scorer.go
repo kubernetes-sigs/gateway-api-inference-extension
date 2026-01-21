@@ -40,6 +40,7 @@ import (
 type SLOAwareRouter struct {
 	typedName           plugins.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
+	requestBuilder      PredictionRequestBuilder
 	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
 	sloContextStore     sync.Map // map[string]*SLORequestContext
 	headroomStrategy    headroomStrategy
@@ -66,6 +67,11 @@ type Config struct {
 	AffinityGateTauGlobal     float64 `json:"affinityGateTauGlobal,omitempty"`
 	SelectionMode             string  `json:"selectionMode,omitempty"`
 	StreamingMode             bool    `json:"streamingMode,omitempty"`
+
+	// RequestBuilder allows customization of prediction and training request construction.
+	// This field is not serialized and must be set programmatically.
+	// If nil, defaults to DefaultPredictionRequestBuilder.
+	RequestBuilder PredictionRequestBuilder `json:"-"`
 }
 
 var DefaultConfig = Config{
@@ -94,6 +100,11 @@ func SLOAwareRouterFactory(name string, rawParameters json.RawMessage, handle pl
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal config for SLOAwareRouter: %w", err)
 		}
+	}
+
+	// Use provided builder or default to DefaultPredictionRequestBuilder
+	if parameters.RequestBuilder == nil {
+		parameters.RequestBuilder = &DefaultPredictionRequestBuilder{}
 	}
 
 	if err := parameters.validate(); err != nil {
@@ -158,9 +169,16 @@ func NewSLOAwareRouter(config Config, predictor latencypredictor.PredictorInterf
 		strategy = headroomStrategyLeast
 	}
 
+	// Ensure requestBuilder is set
+	requestBuilder := config.RequestBuilder
+	if requestBuilder == nil {
+		requestBuilder = &DefaultPredictionRequestBuilder{}
+	}
+
 	return &SLOAwareRouter{
 		typedName:           plugins.TypedName{Type: SLOAwareRouterPluginType, Name: SLOAwareRouterPluginType},
 		latencypredictor:    predictor,
+		requestBuilder:      requestBuilder,
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		sloContextStore:     sync.Map{},
 		headroomStrategy:    strategy,
