@@ -26,6 +26,10 @@ type Response struct {
 	Body string
 	// IsStreaming indicates whether or not the response is being streamed by the model
 	IsStreaming bool
+	// IsFirstToken when true indicates this is the first chunk of a streaming response.
+	// This is useful for plugins that need to perform actions at the time-to-first-token (TTFT) moment,
+	// such as marking prefill completion in disaggregated inference architectures.
+	IsFirstToken bool
 	// EndOfStream when true indicates that this invocation contains the last chunk of the response
 	EndOfStream bool
 	// ReqMetadata is a map of metadata that can be passed from Envoy.

@@ -298,16 +298,17 @@ func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.
 func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
-	response := &Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:     reqCtx.Response.Headers,
-		EndOfStream: reqCtx.ResponseComplete,
+
+	isFirstToken := !reqCtx.FirstTokenReceived
+	if isFirstToken {
+		reqCtx.FirstTokenReceived = true
 	}
 
-	// Check if this is the first token and run FirstTokenReceived plugins
-	if !reqCtx.FirstTokenReceived {
-		reqCtx.FirstTokenReceived = true
-		d.runFirstTokenReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	response := &Response{
+		RequestId:    reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:      reqCtx.Response.Headers,
+		IsFirstToken: isFirstToken,
+		EndOfStream:  reqCtx.ResponseComplete,
 	}
 
 	d.runResponseStreamingPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
@@ -393,17 +394,6 @@ func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *sch
 		plugin.ResponseStreaming(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerTrace.Info("Completed running ResponseStreaming plugin successfully", "plugin", plugin.TypedName())
-	}
-}
-
-func (d *Director) runFirstTokenReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata) {
-	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	for _, plugin := range d.requestControlPlugins.firstTokenReceivedPlugins {
-		loggerDebug.Info("Running FirstTokenReceived plugin", "plugin", plugin.TypedName())
-		before := time.Now()
-		plugin.FirstTokenReceived(ctx, request, response, targetEndpoint)
-		metrics.RecordPluginProcessingLatency(FirstTokenReceivedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
-		loggerDebug.Info("Completed running FirstTokenReceived plugin successfully", "plugin", plugin.TypedName())
 	}
 }
 

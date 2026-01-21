@@ -23,25 +23,23 @@ import (
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
 	return &Config{
-		admissionPlugins:          []AdmissionPlugin{},
-		prepareDataPlugins:        []PrepareDataPlugin{},
-		preRequestPlugins:         []PreRequest{},
-		responseReceivedPlugins:   []ResponseReceived{},
-		responseStreamingPlugins:  []ResponseStreaming{},
-		responseCompletePlugins:   []ResponseComplete{},
-		firstTokenReceivedPlugins: []FirstTokenReceived{},
+		admissionPlugins:         []AdmissionPlugin{},
+		prepareDataPlugins:       []PrepareDataPlugin{},
+		preRequestPlugins:        []PreRequest{},
+		responseReceivedPlugins:  []ResponseReceived{},
+		responseStreamingPlugins: []ResponseStreaming{},
+		responseCompletePlugins:  []ResponseComplete{},
 	}
 }
 
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
-	admissionPlugins          []AdmissionPlugin
-	prepareDataPlugins        []PrepareDataPlugin
-	preRequestPlugins         []PreRequest
-	responseReceivedPlugins   []ResponseReceived
-	responseStreamingPlugins  []ResponseStreaming
-	responseCompletePlugins   []ResponseComplete
-	firstTokenReceivedPlugins []FirstTokenReceived
+	admissionPlugins         []AdmissionPlugin
+	prepareDataPlugins       []PrepareDataPlugin
+	preRequestPlugins        []PreRequest
+	responseReceivedPlugins  []ResponseReceived
+	responseStreamingPlugins []ResponseStreaming
+	responseCompletePlugins  []ResponseComplete
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -69,13 +67,6 @@ func (c *Config) WithResponseStreamingPlugins(plugins ...ResponseStreaming) *Con
 // If the Config has ResponseComplete plugins already, this call replaces the existing plugins with the given ones.
 func (c *Config) WithResponseCompletePlugins(plugins ...ResponseComplete) *Config {
 	c.responseCompletePlugins = plugins
-	return c
-}
-
-// WithFirstTokenReceivedPlugins sets the given plugins as the FirstTokenReceived plugins.
-// If the Config has FirstTokenReceived plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithFirstTokenReceivedPlugins(plugins ...FirstTokenReceived) *Config {
-	c.firstTokenReceivedPlugins = plugins
 	return c
 }
 
@@ -107,9 +98,6 @@ func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
 		}
 		if responseCompletePlugin, ok := plugin.(ResponseComplete); ok {
 			c.responseCompletePlugins = append(c.responseCompletePlugins, responseCompletePlugin)
-		}
-		if firstTokenReceivedPlugin, ok := plugin.(FirstTokenReceived); ok {
-			c.firstTokenReceivedPlugins = append(c.firstTokenReceivedPlugins, firstTokenReceivedPlugin)
 		}
 		if prepareDataPlugin, ok := plugin.(PrepareDataPlugin); ok {
 			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)
