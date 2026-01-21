@@ -38,7 +38,6 @@ var _ requestcontrol.PreRequest = &PredictedLatency{}
 var _ requestcontrol.ResponseReceived = &PredictedLatency{}
 var _ requestcontrol.ResponseStreaming = &PredictedLatency{}
 var _ requestcontrol.ResponseComplete = &PredictedLatency{}
-var _ requestcontrol.AdmissionPlugin = &PredictedLatency{}
 
 type predictedLatencyCtx struct {
 	schedulingRequest         schedulingtypes.LLMRequest
@@ -269,27 +268,4 @@ func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *datalaye
 		return false
 	}
 	return true
-}
-
-func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
-	logger := log.FromContext(ctx)
-	if request == nil {
-		logger.V(logutil.DEBUG).Info("PredictedLatency.AdmitRequest: request is nil, skipping")
-		return nil
-	}
-
-	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		id := request.Headers[requtil.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency.AdmitRequest: Failed to get SLO context for request", "requestID", id)
-		return nil
-	}
-
-	// If there is no valid endpoint for the request, reject it
-	if !predictedLatencyCtx.hasValidEndpoint && predictedLatencyCtx.sheddable {
-		logger.V(logutil.DEBUG).Info("PredictedLatency.AdmitRequest: Rejecting request as no valid endpoint available due to slo violation", "requestID", request.Headers[requtil.RequestIdHeaderKey])
-		return errors.New("no valid endpoint available to serve the request")
-	}
-
-	return nil
 }
