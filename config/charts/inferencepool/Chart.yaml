@@ -11,3 +11,4 @@ dependencies:
   - name: inference-extension
     version: 0.0.0
     repository: "file://../inference-extension"
+    alias: inferenceExtension
