@@ -1,1 +1,0 @@
-{{- include "inference-extension.service" . -}}
