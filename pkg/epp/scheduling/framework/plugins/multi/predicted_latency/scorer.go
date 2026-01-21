@@ -31,7 +31,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
@@ -238,13 +237,13 @@ func (s *PredictedLatency) epsilonGreedyAffinityGate(
 func (s *PredictedLatency) scoreWithoutPredictions(
 	ctx context.Context,
 	sloCtx *predictedLatencyCtx,
-	endpoints []schedulingtypes.Endpoint,
+	endpoints []framework.Endpoint,
 	r *rand.Rand,
-) map[schedulingtypes.Endpoint]float64 {
+) map[framework.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.TRACE).Info("Using composite-only scoring without predictions")
 
-	scores := make(map[schedulingtypes.Endpoint]float64, len(endpoints))
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = 0
 	}
@@ -275,7 +274,7 @@ func (s *PredictedLatency) scoreWithoutPredictions(
 	return scores
 }
 
-func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.CycleState, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) map[schedulingtypes.Endpoint]float64 {
+func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	if s.latencypredictor == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency: no predictor configured, returning nil scores")
@@ -295,7 +294,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.Cyc
 	s.updateRequestContextWithPredictions(sloCtx, predictions)
 
 	// Initialize scores map with all pods having score 0
-	scores := make(map[schedulingtypes.Endpoint]float64, len(endpoints))
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = 0
 	}
@@ -343,7 +342,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.Cyc
 	return scores
 }
 
-func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
+func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *framework.LLMRequest) *predictedLatencyCtx {
 	sloCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		sloCtx = newPredictedLatencyContext(request)
@@ -352,7 +351,7 @@ func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *s
 	return sloCtx
 }
 
-func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleState *schedulingtypes.CycleState, endpoint schedulingtypes.Endpoint) float64 {
+func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleState *framework.CycleState, endpoint framework.Endpoint) float64 {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String())
 	plugintype := prefix.PrefixCachePluginType
 	pluginname := prefix.PrefixCachePluginType

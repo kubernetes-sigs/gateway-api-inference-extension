@@ -25,7 +25,6 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
@@ -78,7 +77,7 @@ func (p *RandomPicker) TypedName() plugins.TypedName {
 }
 
 // Pick selects random endpoint(s) from the list of candidates.
-func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (p *RandomPicker) Pick(ctx context.Context, _ *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
@@ -90,10 +89,10 @@ func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredEndp
 		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
 	}
 
-	targetEndpoints := make([]types.Endpoint, len(scoredEndpoints))
+	targetEndpoints := make([]framework.Endpoint, len(scoredEndpoints))
 	for i, scoredEndpoint := range scoredEndpoints {
 		targetEndpoints[i] = scoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
+	return &framework.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

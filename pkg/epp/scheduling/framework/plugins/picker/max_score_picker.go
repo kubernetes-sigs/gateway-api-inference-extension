@@ -26,7 +26,6 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
@@ -79,14 +78,14 @@ func (p *MaxScorePicker) TypedName() plugins.TypedName {
 }
 
 // Pick selects the endpoint with the maximum score from the list of candidates.
-func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
 	// Shuffle in-place - needed for random tie break when scores are equal
 	shuffleScoredEndpoints(scoredEndpoints)
 
-	slices.SortStableFunc(scoredEndpoints, func(i, j *types.ScoredEndpoint) int { // highest score first
+	slices.SortStableFunc(scoredEndpoints, func(i, j *framework.ScoredEndpoint) int { // highest score first
 		if i.Score > j.Score {
 			return -1
 		}
@@ -101,10 +100,10 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
 	}
 
-	targetEndpoints := make([]types.Endpoint, len(scoredEndpoints))
+	targetEndpoints := make([]framework.Endpoint, len(scoredEndpoints))
 	for i, scoredEndpoint := range scoredEndpoints {
 		targetEndpoints[i] = scoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
+	return &framework.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

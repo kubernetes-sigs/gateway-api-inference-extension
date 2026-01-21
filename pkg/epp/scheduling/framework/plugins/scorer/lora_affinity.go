@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
@@ -74,8 +73,8 @@ func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
 	return s
 }
 
-func (s *LoraAffinityScorer) Score(_ context.Context, _ *types.CycleState, request *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
-	scores := make(map[types.Endpoint]float64, len(endpoints))
+func (s *LoraAffinityScorer) Score(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 
 	// Assign a score to each endpoint for loading the target adapter.
 	for _, endpoint := range endpoints {

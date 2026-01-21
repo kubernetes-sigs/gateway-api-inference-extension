@@ -22,7 +22,6 @@ import (
 	"math"
 
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
@@ -76,7 +75,7 @@ func (s *QueueScorer) WithName(name string) *QueueScorer {
 }
 
 // Score returns the scoring result for the given list of endpoints based on context.
-func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
+func (s *QueueScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 
@@ -92,7 +91,7 @@ func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLM
 	}
 
 	// endpointScoreFunc calculates the score based on the queue size of each endpoint. Longer queue gets a lower score.
-	endpointScoreFunc := func(endpoint types.Endpoint) float64 {
+	endpointScoreFunc := func(endpoint framework.Endpoint) float64 {
 		if maxQueueSize == minQueueSize {
 			// If all pods have the same queue size, return a neutral score
 			return 1.0
@@ -101,7 +100,7 @@ func (s *QueueScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLM
 	}
 
 	// Create a map to hold the scores for each endpoint
-	scores := make(map[types.Endpoint]float64, len(endpoints))
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = endpointScoreFunc(endpoint)
 	}
