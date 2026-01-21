@@ -20,10 +20,10 @@ import (
 	"context"
 	"encoding/json"
 
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (

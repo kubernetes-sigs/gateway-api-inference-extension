@@ -23,8 +23,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 type mockPrepareRequestDataP struct {

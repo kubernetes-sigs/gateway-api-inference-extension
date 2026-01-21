@@ -33,12 +33,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -421,7 +420,7 @@ func (m *mockScorer) Category() framework.ScorerCategory {
 	return framework.Distribution
 }
 
-func (m *mockScorer) Score(context.Context, *types.CycleState, *types.LLMRequest, []types.Endpoint) map[types.Endpoint]float64 {
+func (m *mockScorer) Score(context.Context, *framework.CycleState, *framework.LLMRequest, []framework.Endpoint) map[framework.Endpoint]float64 {
 	return nil
 }
 
@@ -431,7 +430,7 @@ type mockPicker struct{ mockPlugin }
 // compile-time type assertion
 var _ framework.Picker = &mockPicker{}
 
-func (m *mockPicker) Pick(context.Context, *types.CycleState, []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (m *mockPicker) Pick(context.Context, *framework.CycleState, []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	return nil
 }
 
@@ -441,12 +440,12 @@ type mockHandler struct{ mockPlugin }
 // compile-time type assertion
 var _ framework.ProfileHandler = &mockHandler{}
 
-func (m *mockHandler) Pick(context.Context, *types.CycleState, *types.LLMRequest, map[string]*framework.SchedulerProfile,
-	map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
+func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.LLMRequest, map[string]*framework.SchedulerProfile,
+	map[string]*framework.ProfileRunResult) map[string]*framework.SchedulerProfile {
 	return nil
 }
-func (m *mockHandler) ProcessResults(context.Context, *types.CycleState, *types.LLMRequest,
-	map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
+func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *framework.LLMRequest,
+	map[string]*framework.ProfileRunResult) (*framework.SchedulingResult, error) {
 	return nil, nil
 }
 

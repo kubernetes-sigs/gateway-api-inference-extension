@@ -26,8 +26,8 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 )
 
 func TestPickMaxScorePicker(t *testing.T) {

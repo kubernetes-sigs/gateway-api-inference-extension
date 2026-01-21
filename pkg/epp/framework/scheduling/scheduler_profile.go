@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package scheduling
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
@@ -114,7 +113,7 @@ func (p *SchedulerProfile) String() string {
 
 // Run runs a SchedulerProfile. It invokes all the SchedulerProfile plugins for the given request in this
 // order - Filters, Scorers, Picker. After completing all, it returns the result.
-func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, candidateEndpoints []types.Endpoint) (*types.ProfileRunResult, error) {
+func (p *SchedulerProfile) Run(ctx context.Context, request *LLMRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error) {
 	endpoints := p.runFilterPlugins(ctx, request, cycleState, candidateEndpoints)
 	if len(endpoints) == 0 {
 		return nil, errutil.Error{Code: errutil.Internal, Msg: "no endpoints available for the given request"}
@@ -127,7 +126,7 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *types.LLMRequest, c
 	return result, nil
 }
 
-func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, endpoints []types.Endpoint) []types.Endpoint {
+func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *LLMRequest, cycleState *CycleState, endpoints []Endpoint) []Endpoint {
 	logger := log.FromContext(ctx)
 	filteredEndpoints := endpoints
 	logger.V(logutil.DEBUG).Info("Before running filter plugins", "endpoints", filteredEndpoints)
@@ -147,11 +146,11 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *types.
 	return filteredEndpoints
 }
 
-func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.LLMRequest, cycleState *types.CycleState, endpoints []types.Endpoint) map[types.Endpoint]float64 {
+func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *LLMRequest, cycleState *CycleState, endpoints []Endpoint) map[Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.DEBUG).Info("Before running scorer plugins", "endpoints", endpoints)
 
-	weightedScorePerEndpoint := make(map[types.Endpoint]float64, len(endpoints))
+	weightedScorePerEndpoint := make(map[Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		weightedScorePerEndpoint[endpoint] = float64(0) // initialize weighted score per endpoint with 0 value
 	}
@@ -172,12 +171,12 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *types.
 	return weightedScorePerEndpoint
 }
 
-func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *types.CycleState, weightedScorePerEndpoint map[types.Endpoint]float64) *types.ProfileRunResult {
+func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *CycleState, weightedScorePerEndpoint map[Endpoint]float64) *ProfileRunResult {
 	logger := log.FromContext(ctx)
-	scoredEndpoints := make([]*types.ScoredEndpoint, len(weightedScorePerEndpoint))
+	scoredEndpoints := make([]*ScoredEndpoint, len(weightedScorePerEndpoint))
 	i := 0
 	for endpoint, score := range weightedScorePerEndpoint {
-		scoredEndpoints[i] = &types.ScoredEndpoint{Endpoint: endpoint, Score: score}
+		scoredEndpoints[i] = &ScoredEndpoint{Endpoint: endpoint, Score: score}
 		i++
 	}
 	logger.V(logutil.VERBOSE).Info("Running picker plugin", "plugin", p.picker.TypedName())

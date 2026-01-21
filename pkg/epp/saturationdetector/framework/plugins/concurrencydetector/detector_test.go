@@ -26,7 +26,7 @@ import (
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 )
 
 // TestNewPlugin_Configuration validates that the plugin correctly applies defaults and respects explicit configuration

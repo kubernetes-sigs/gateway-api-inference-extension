@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package scheduling
 
 // NewWeightedScorer initializes a new WeightedScorer and returns its pointer.
 func NewWeightedScorer(scorer Scorer, weight int) *WeightedScorer {

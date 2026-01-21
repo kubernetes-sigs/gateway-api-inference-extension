@@ -20,8 +20,8 @@ import (
 	"context"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (

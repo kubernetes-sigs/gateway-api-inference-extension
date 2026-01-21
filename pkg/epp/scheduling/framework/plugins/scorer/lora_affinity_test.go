@@ -24,7 +24,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 )
 
 func TestLoraAffinityScorer(t *testing.T) {

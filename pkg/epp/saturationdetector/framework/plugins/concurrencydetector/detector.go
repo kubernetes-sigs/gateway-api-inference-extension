@@ -56,10 +56,9 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const ConcurrencyDetectorType = "concurrency-detector"
@@ -145,14 +144,14 @@ func (d *Detector) IsSaturated(ctx context.Context, candidateEndpoints []metrics
 // It applies a relaxed limit (MaxConcurrency * (1 + Headroom)) to allow for scheduling flexibility and burst tolerance.
 func (d *Detector) Filter(
 	_ context.Context,
-	_ *types.CycleState,
-	_ *types.LLMRequest,
-	endpoints []types.Endpoint,
-) []types.Endpoint {
+	_ *framework.CycleState,
+	_ *framework.LLMRequest,
+	endpoints []framework.Endpoint,
+) []framework.Endpoint {
 	limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
 
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
-	filtered := make([]types.Endpoint, 0, len(endpoints))
+	filtered := make([]framework.Endpoint, 0, len(endpoints))
 
 	for _, endpoint := range endpoints {
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
@@ -165,14 +164,14 @@ func (d *Detector) Filter(
 
 // PreRequest increments the atomic in-flight counter for the target endpoint.
 // We assume the scheduling result is valid based on the Director's contract.
-func (d *Detector) PreRequest(_ context.Context, _ *types.LLMRequest, result *types.SchedulingResult) {
+func (d *Detector) PreRequest(_ context.Context, _ *framework.LLMRequest, result *framework.SchedulingResult) {
 	d.tracker.inc(result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String())
 }
 
 // ResponseComplete decrements the atomic in-flight counter for the target endpoint.
 func (d *Detector) ResponseComplete(
 	_ context.Context,
-	_ *types.LLMRequest,
+	_ *framework.LLMRequest,
 	_ *requestcontrol.Response,
 	targetEndpoint *datalayer.EndpointMetadata,
 ) {

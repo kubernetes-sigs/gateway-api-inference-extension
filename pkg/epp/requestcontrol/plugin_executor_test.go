@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 var _ PrepareDataPlugin = &mockPrepareRequestDataPlugin{}

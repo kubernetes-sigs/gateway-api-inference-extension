@@ -20,7 +20,7 @@ package predicted_latency
 import (
 	"strconv"
 
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 

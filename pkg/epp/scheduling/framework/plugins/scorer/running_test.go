@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 )
 
 func TestRunningRequestsSizeScorer(t *testing.T) {

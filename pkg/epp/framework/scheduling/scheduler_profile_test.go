@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package scheduling
 
 import (
 	"context"
@@ -26,7 +26,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 func TestSchedulePlugins(t *testing.T) {
@@ -52,7 +51,7 @@ func TestSchedulePlugins(t *testing.T) {
 	tests := []struct {
 		name                string
 		profile             *SchedulerProfile
-		input               []types.Endpoint
+		input               []Endpoint
 		wantTargetEndpoint  k8stypes.NamespacedName
 		targetEndpointScore float64
 		// Number of expected endpoints to score (after filter)
@@ -65,10 +64,10 @@ func TestSchedulePlugins(t *testing.T) {
 				WithFilters(tp1, tp2).
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin),
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []Endpoint{
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1"},
 			targetEndpointScore: 1.1,
@@ -81,10 +80,10 @@ func TestSchedulePlugins(t *testing.T) {
 				WithFilters(tp1, tp2).
 				WithScorers(NewWeightedScorer(tp1, 60), NewWeightedScorer(tp2, 40)).
 				WithPicker(pickerPlugin),
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []Endpoint{
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1"},
 			targetEndpointScore: 50,
@@ -97,10 +96,10 @@ func TestSchedulePlugins(t *testing.T) {
 				WithFilters(tp1, tp_filterAll).
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin),
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+			input: []Endpoint{
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			numEndpointsToScore: 0,
 			err:                 true, // no available endpoints to server after filter all
@@ -119,12 +118,12 @@ func TestSchedulePlugins(t *testing.T) {
 			test.profile.picker.(*testPlugin).reset()
 
 			// Initialize the scheduling context
-			request := &types.LLMRequest{
+			request := &LLMRequest{
 				TargetModel: "test-model",
 				RequestId:   uuid.NewString(),
 			}
 			// Run profile cycle
-			got, err := test.profile.Run(context.Background(), request, types.NewCycleState(), test.input)
+			got, err := test.profile.Run(context.Background(), request, NewCycleState(), test.input)
 
 			// Validate error state
 			if test.err != (err != nil) {
@@ -136,9 +135,9 @@ func TestSchedulePlugins(t *testing.T) {
 			}
 
 			// Validate output
-			wantRes := &types.ProfileRunResult{
-				TargetEndpoints: []types.Endpoint{
-					&types.PodMetrics{
+			wantRes := &ProfileRunResult{
+				TargetEndpoints: []Endpoint{
+					&PodMetrics{
 						EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: test.wantTargetEndpoint},
 					},
 				},
@@ -205,15 +204,15 @@ func (tp *testPlugin) Category() ScorerCategory {
 	return Distribution
 }
 
-func (tp *testPlugin) Filter(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, endpoints []types.Endpoint) []types.Endpoint {
+func (tp *testPlugin) Filter(_ context.Context, _ *CycleState, _ *LLMRequest, endpoints []Endpoint) []Endpoint {
 	tp.FilterCallCount++
 	return findEndpoints(endpoints, tp.FilterRes...)
 
 }
 
-func (tp *testPlugin) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
+func (tp *testPlugin) Score(_ context.Context, _ *CycleState, _ *LLMRequest, endpoints []Endpoint) map[Endpoint]float64 {
 	tp.ScoreCallCount++
-	scoredEndpoints := make(map[types.Endpoint]float64, len(endpoints))
+	scoredEndpoints := make(map[Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scoredEndpoints[endpoint] += tp.ScoreRes
 	}
@@ -221,11 +220,11 @@ func (tp *testPlugin) Score(_ context.Context, _ *types.CycleState, _ *types.LLM
 	return scoredEndpoints
 }
 
-func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (tp *testPlugin) Pick(_ context.Context, _ *CycleState, scoredEndpoints []*ScoredEndpoint) *ProfileRunResult {
 	tp.PickCallCount++
 	tp.NumOfPickerCandidates = len(scoredEndpoints)
 
-	winnerEndpoints := []types.Endpoint{}
+	winnerEndpoints := []Endpoint{}
 	for _, scoredEndpoint := range scoredEndpoints {
 		if scoredEndpoint.GetMetadata().NamespacedName.String() == tp.PickRes.String() {
 			winnerEndpoints = append(winnerEndpoints, scoredEndpoint.Endpoint)
@@ -233,7 +232,7 @@ func (tp *testPlugin) Pick(_ context.Context, _ *types.CycleState, scoredEndpoin
 		}
 	}
 
-	return &types.ProfileRunResult{TargetEndpoints: winnerEndpoints}
+	return &ProfileRunResult{TargetEndpoints: winnerEndpoints}
 }
 
 func (tp *testPlugin) reset() {
@@ -244,8 +243,8 @@ func (tp *testPlugin) reset() {
 	tp.NumOfPickerCandidates = 0
 }
 
-func findEndpoints(endpoints []types.Endpoint, names ...k8stypes.NamespacedName) []types.Endpoint {
-	res := []types.Endpoint{}
+func findEndpoints(endpoints []Endpoint, names ...k8stypes.NamespacedName) []Endpoint {
+	res := []Endpoint{}
 	for _, endpoint := range endpoints {
 		for _, name := range names {
 			if endpoint.GetMetadata().NamespacedName.String() == name.String() {

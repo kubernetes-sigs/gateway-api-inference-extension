@@ -5,6 +5,7 @@ go 1.24.9
 replace sigs.k8s.io/gateway-api-inference-extension => ../
 
 require (
+	golang.org/x/net v0.48.0
 	sigs.k8s.io/gateway-api v1.4.0
 	sigs.k8s.io/gateway-api-inference-extension v0.0.0-00010101000000-000000000000
 )
@@ -58,7 +59,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.39.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
