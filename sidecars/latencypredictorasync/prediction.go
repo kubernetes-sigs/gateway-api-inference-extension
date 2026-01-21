@@ -194,17 +194,17 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 		c.TTFTCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
 		c.TTFTCoeffs["prefix_cache_score"]*req.PrefixCacheScore
 
-	// Linear combination for ITL (remains unchanged - no prefix cache effect)
-	itl := c.ITLIntercept +
-		c.ITLCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
-		c.ITLCoeffs["input_token_length"]*float64(req.InputTokenLength) +
-		c.ITLCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
-		c.ITLCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
-		c.ITLCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated)
+	// Linear combination for TPOT (remains unchanged - no prefix cache effect)
+	tpot := c.TPOTIntercept +
+		c.TPOTCoeffs["kv_cache_percentage"]*req.KVCachePercentage +
+		c.TPOTCoeffs["input_token_length"]*float64(req.InputTokenLength) +
+		c.TPOTCoeffs["num_request_waiting"]*float64(req.NumRequestWaiting) +
+		c.TPOTCoeffs["num_request_running"]*float64(req.NumRequestRunning) +
+		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated)
 
 	return &PredictionResponse{
 		TTFT:        ttft,
-		ITL:         itl,
+		TPOT:        tpot,
 		PredictedAt: time.Now(),
 		ModelType:   "bayesian_ridge",
 		Quantile:    quantile,

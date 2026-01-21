@@ -53,9 +53,9 @@ type Config struct {
 	MaxSampledTokens          int     `json:"maxSampledTokens,omitempty"`
 	SLOBufferFactor           float64 `json:"sloBufferFactor,omitempty"`
 	NegHeadroomTTFTWeight     float64 `json:"negHeadroomTTFTWeight,omitempty"`
-	NegHeadroomITLWeight      float64 `json:"negHeadroomITLWeight,omitempty"`
+	NegHeadroomTPOTWeight     float64 `json:"negHeadroomTPOTWeight,omitempty"`
 	HeadroomTTFTWeight        float64 `json:"headroomTTFTWeight,omitempty"`
-	HeadroomITLWeight         float64 `json:"headroomITLWeight,omitempty"`
+	HeadroomTPOTWeight        float64 `json:"headroomTPOTWeight,omitempty"`
 	HeadroomSelectionStrategy string  `json:"headroomSelectionStrategy,omitempty"`
 	CompositeKVWeight         float64 `json:"compositeKVWeight,omitempty"`
 	CompositeQueueWeight      float64 `json:"compositeQueueWeight,omitempty"`
@@ -73,9 +73,9 @@ var DefaultConfig = Config{
 	MaxSampledTokens:          5,
 	SLOBufferFactor:           1,
 	NegHeadroomTTFTWeight:     0.8,
-	NegHeadroomITLWeight:      0.2,
+	NegHeadroomTPOTWeight:     0.2,
 	HeadroomTTFTWeight:        0.8,
-	HeadroomITLWeight:         0.2,
+	HeadroomTPOTWeight:        0.2,
 	HeadroomSelectionStrategy: "least",
 	CompositeKVWeight:         1,
 	CompositeQueueWeight:      1,
@@ -123,8 +123,8 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("sloBufferFactor must be > 0, got %f", c.SLOBufferFactor))
 	}
 
-	if c.NegHeadroomTTFTWeight < 0 || c.NegHeadroomITLWeight < 0 ||
-		c.HeadroomTTFTWeight < 0 || c.HeadroomITLWeight < 0 {
+	if c.NegHeadroomTTFTWeight < 0 || c.NegHeadroomTPOTWeight < 0 ||
+		c.HeadroomTTFTWeight < 0 || c.HeadroomTPOTWeight < 0 {
 		errs = append(errs, errors.New("all headroom weights must be >= 0"))
 	}
 
@@ -305,7 +305,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *schedulingtypes.Cyc
 	allPreds, sticky := s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", s.config.AffinityGateTauGlobal)
 
 	// Check if all pods are invalid and all have running requests
-	allEndpointsInvalid := (predictedLatencyCtx.ttftSLO > 0 && (predictedLatencyCtx.avgITLSLO > 0 || !s.config.StreamingMode))
+	allEndpointsInvalid := (predictedLatencyCtx.ttftSLO > 0 && (predictedLatencyCtx.avgTPOTSLO > 0 || !s.config.StreamingMode))
 	allEndpointsHaveRunningRequests := true
 
 	for _, pred := range allPreds {

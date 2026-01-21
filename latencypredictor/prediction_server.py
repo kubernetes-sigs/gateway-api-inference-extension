@@ -57,9 +57,9 @@ class PredictSettings:
 
     # Local model paths
     LOCAL_TTFT_MODEL_PATH: str = os.getenv("LOCAL_TTFT_MODEL_PATH", "/local_models/ttft.joblib")
-    LOCAL_ITL_MODEL_PATH: str = os.getenv("LOCAL_ITL_MODEL_PATH", "/local_models/itl.joblib")
+    LOCAL_TPOT_MODEL_PATH: str = os.getenv("LOCAL_TPOT_MODEL_PATH", "/local_models/tpot.joblib")
     LOCAL_TTFT_SCALER_PATH: str = os.getenv("LOCAL_TTFT_SCALER_PATH", "/local_models/ttft_scaler.joblib")
-    LOCAL_ITL_SCALER_PATH: str = os.getenv("LOCAL_ITL_SCALER_PATH", "/local_models/itl_scaler.joblib")
+    LOCAL_TPOT_SCALER_PATH: str = os.getenv("LOCAL_TPOT_SCALER_PATH", "/local_models/tpot_scaler.joblib")
 
     # Sync interval and model type
     MODEL_SYNC_INTERVAL_SEC: int = int(os.getenv("MODEL_SYNC_INTERVAL_SEC", "10"))
@@ -91,9 +91,9 @@ class ModelSyncer:
         # Ensure local directories
         for path in [
             settings.LOCAL_TTFT_MODEL_PATH,
-            settings.LOCAL_ITL_MODEL_PATH,
+            settings.LOCAL_TPOT_MODEL_PATH,
             settings.LOCAL_TTFT_SCALER_PATH,
-            settings.LOCAL_ITL_SCALER_PATH,
+            settings.LOCAL_TPOT_SCALER_PATH,
         ]:
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -148,12 +148,12 @@ class ModelSyncer:
             updated = False
             to_sync = [
                 ("ttft", settings.LOCAL_TTFT_MODEL_PATH),
-                ("itl", settings.LOCAL_ITL_MODEL_PATH),
+                ("tpot", settings.LOCAL_TPOT_MODEL_PATH),
             ]
             if settings.MODEL_TYPE == ModelType.BAYESIAN_RIDGE:
                 to_sync += [
                     ("ttft_scaler", settings.LOCAL_TTFT_SCALER_PATH),
-                    ("itl_scaler", settings.LOCAL_ITL_SCALER_PATH),
+                    ("tpot_scaler", settings.LOCAL_TPOT_SCALER_PATH),
                 ]
             for name, path in to_sync:
                 if self._download_model_if_newer(name, path):
@@ -201,9 +201,9 @@ class LightweightPredictor:
         self.model_type = mt
         self.quantile = settings.QUANTILE_ALPHA
         self.ttft_model = None
-        self.itl_model = None
+        self.tpot_model = None
         self.ttft_scaler = None
-        self.itl_scaler = None
+        self.tpot_scaler = None
         self.lock = threading.RLock()
         self.last_load: Optional[datetime] = None
         logging.info(f"Predictor type: {self.model_type}, quantile: {self.quantile}")
@@ -212,9 +212,9 @@ class LightweightPredictor:
     def is_ready(self) -> bool:
         with self.lock:
             if self.model_type == ModelType.BAYESIAN_RIDGE:
-                return all([self.ttft_model, self.itl_model, self.ttft_scaler, self.itl_scaler])
+                return all([self.ttft_model, self.tpot_model, self.ttft_scaler, self.tpot_scaler])
             else:  # XGBoost or LightGBM
-                return all([self.ttft_model, self.itl_model])
+                return all([self.ttft_model, self.tpot_model])
 
     def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
         """
@@ -222,7 +222,7 @@ class LightweightPredictor:
         
         Args:
             df: DataFrame with raw features
-            model_type: 'ttft' or 'itl'
+            model_type: 'ttft' or 'tpot'
         
         Returns:
             DataFrame with engineered features including interactions
@@ -253,8 +253,8 @@ class LightweightPredictor:
             
             return df[feature_cols]
             
-        else:  # itl
-            # ITL doesn't use prefix_cache_score, so no interaction needed
+        else:  # tpot
+            # TPOT doesn't use prefix_cache_score, so no interaction needed
             feature_cols = [
                 'kv_cache_percentage',
                 'input_token_length',
@@ -269,17 +269,17 @@ class LightweightPredictor:
         try:
             with self.lock:
                 new_ttft = joblib.load(settings.LOCAL_TTFT_MODEL_PATH) if os.path.exists(settings.LOCAL_TTFT_MODEL_PATH) else None
-                new_itl = joblib.load(settings.LOCAL_ITL_MODEL_PATH) if os.path.exists(settings.LOCAL_ITL_MODEL_PATH) else None
+                new_tpot = joblib.load(settings.LOCAL_TPOT_MODEL_PATH) if os.path.exists(settings.LOCAL_TPOT_MODEL_PATH) else None
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     new_ttft_scaler = joblib.load(settings.LOCAL_TTFT_SCALER_PATH) if os.path.exists(settings.LOCAL_TTFT_SCALER_PATH) else None
-                    new_itl_scaler = joblib.load(settings.LOCAL_ITL_SCALER_PATH) if os.path.exists(settings.LOCAL_ITL_SCALER_PATH) else None
+                    new_tpot_scaler = joblib.load(settings.LOCAL_TPOT_SCALER_PATH) if os.path.exists(settings.LOCAL_TPOT_SCALER_PATH) else None
                 else:
-                    new_ttft_scaler = new_itl_scaler = None
+                    new_ttft_scaler = new_tpot_scaler = None
 
                 if new_ttft: self.ttft_model = new_ttft
-                if new_itl: self.itl_model = new_itl
+                if new_tpot: self.tpot_model = new_tpot
                 if new_ttft_scaler: self.ttft_scaler = new_ttft_scaler
-                if new_itl_scaler: self.itl_scaler = new_itl_scaler
+                if new_tpot_scaler: self.tpot_scaler = new_tpot_scaler
                 self.last_load = datetime.now(timezone.utc)
                 if self.is_ready:
                     logging.info("Models loaded")
@@ -315,7 +315,7 @@ class LightweightPredictor:
                     'prefix_cache_score': features['prefix_cache_score']
                 }
                 
-                itl_raw_data = {
+                tpot_raw_data = {
                     'kv_cache_percentage': features['kv_cache_percentage'],
                     'input_token_length': features['input_token_length'],
                     'num_request_waiting': features['num_request_waiting'],
@@ -328,36 +328,36 @@ class LightweightPredictor:
                 df_ttft = self._prepare_features_with_interaction(df_ttft_raw, "ttft")
                
                 
-                df_itl_raw = pd.DataFrame([itl_raw_data])
-                df_itl = self._prepare_features_with_interaction(df_itl_raw, "itl")
-                #df_itl = pd.DataFrame([itl_raw_data])
+                df_tpot_raw = pd.DataFrame([tpot_raw_data])
+                df_tpot = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
+                #df_tpot = pd.DataFrame([tpot_raw_data])
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     
                     ttft_for_scale = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
                     ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
-                    itl_scaled = self.itl_scaler.transform(df_itl)
+                    tpot_scaled = self.tpot_scaler.transform(df_tpot)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
-                    itl_pred_mean, itl_std = self.itl_model.predict(itl_scaled, return_std=True)
+                    tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
 
                     std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                     ttft_pred = ttft_pred_mean[0] + std_factor * ttft_std[0]
-                    itl_pred = itl_pred_mean[0] + std_factor * itl_std[0]
+                    tpot_pred = tpot_pred_mean[0] + std_factor * tpot_std[0]
                     
-                    return ttft_pred, itl_pred
+                    return ttft_pred, tpot_pred
                 
                 elif self.model_type == ModelType.XGBOOST:
                     ttft_pred = self.ttft_model.predict(df_ttft)
-                    itl_pred = self.itl_model.predict(df_itl)
+                    tpot_pred = self.tpot_model.predict(df_tpot)
                     
-                    return ttft_pred[0], itl_pred[0]
+                    return ttft_pred[0], tpot_pred[0]
                 
                 else:  # LightGBM
                     ttft_pred = self.ttft_model.predict(df_ttft)
-                    itl_pred = self.itl_model.predict(df_itl)
+                    tpot_pred = self.tpot_model.predict(df_tpot)
                     
-                    return ttft_pred[0], itl_pred[0]
+                    return ttft_pred[0], tpot_pred[0]
                     
         except ValueError as ve:
             logging.warning(f"Client error in predict(): {ve}")
@@ -387,7 +387,7 @@ class LightweightPredictor:
 
                 # Create raw feature data (without interaction)
                 ttft_raw_data = []
-                itl_raw_data = []
+                tpot_raw_data = []
                 
                 for features in features_list:
                     ttft_raw_data.append({
@@ -398,7 +398,7 @@ class LightweightPredictor:
                         'prefix_cache_score': features['prefix_cache_score']
                     })
                     
-                    itl_raw_data.append({
+                    tpot_raw_data.append({
                         'kv_cache_percentage': features['kv_cache_percentage'],
                         'input_token_length': features['input_token_length'],
                         'num_request_waiting': features['num_request_waiting'],
@@ -411,35 +411,35 @@ class LightweightPredictor:
                 df_ttft_batch = self._prepare_features_with_interaction(df_ttft_raw, "ttft")
                 #df_ttft_batch = pd.DataFrame(ttft_raw_data)
                 
-                df_itl_raw = pd.DataFrame(itl_raw_data)
-                df_itl_batch = self._prepare_features_with_interaction(df_itl_raw, "itl")
-                #df_itl_batch = pd.DataFrame(itl_raw_data)
+                df_tpot_raw = pd.DataFrame(tpot_raw_data)
+                df_tpot_batch = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
+                #df_tpot_batch = pd.DataFrame(tpot_raw_data)
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     ttft_for_scale = df_ttft_batch.drop(columns=['prefill_score_bucket'], errors='ignore')
                     ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
-                    itl_scaled = self.itl_scaler.transform(df_itl_batch)
+                    tpot_scaled = self.tpot_scaler.transform(df_tpot_batch)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
-                    itl_pred_mean, itl_std = self.itl_model.predict(itl_scaled, return_std=True)
+                    tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
                     
                     std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                     ttft_pred = ttft_pred_mean + std_factor * ttft_std
-                    itl_pred = itl_pred_mean + std_factor * itl_std
+                    tpot_pred = tpot_pred_mean + std_factor * tpot_std
                     
-                    return ttft_pred, itl_pred
+                    return ttft_pred, tpot_pred
                 
                 elif self.model_type == ModelType.XGBOOST:
                     ttft_pred = self.ttft_model.predict(df_ttft_batch)
-                    itl_pred = self.itl_model.predict(df_itl_batch)
+                    tpot_pred = self.tpot_model.predict(df_tpot_batch)
                     
-                    return ttft_pred, itl_pred
+                    return ttft_pred, tpot_pred
                 
                 else:  # LightGBM
                     ttft_pred = self.ttft_model.predict(df_ttft_batch)
-                    itl_pred = self.itl_model.predict(df_itl_batch)
+                    tpot_pred = self.tpot_model.predict(df_tpot_batch)
                     
-                    return ttft_pred, itl_pred
+                    return ttft_pred, tpot_pred
                     
         except ValueError as ve:
             logging.warning(f"Client error in predict_batch(): {ve}")
@@ -475,7 +475,7 @@ class PredictionRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     ttft_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TTFT in milliseconds")
-    itl_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile ITL in milliseconds")
+    tpot_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TPOT in milliseconds")
     predicted_at: datetime
     model_type: str = Field(..., description="Type of model used for prediction")
     quantile: float = Field(..., description="Quantile being predicted")
@@ -522,13 +522,13 @@ async def status_endpoint():
     """Get server status and model information."""
     models_exist = {
         "ttft_model": os.path.exists(settings.LOCAL_TTFT_MODEL_PATH),
-        "itl_model": os.path.exists(settings.LOCAL_ITL_MODEL_PATH),
+        "tpot_model": os.path.exists(settings.LOCAL_TPOT_MODEL_PATH),
     }
     
     if predictor.model_type == ModelType.BAYESIAN_RIDGE:
         models_exist.update({
             "ttft_scaler": os.path.exists(settings.LOCAL_TTFT_SCALER_PATH),
-            "itl_scaler": os.path.exists(settings.LOCAL_ITL_SCALER_PATH),
+            "tpot_scaler": os.path.exists(settings.LOCAL_TPOT_SCALER_PATH),
         })
     
     return StatusResponse(
@@ -544,15 +544,15 @@ async def status_endpoint():
 async def predict_endpoint(request: PredictionRequest):
     """Make quantile latency predictions."""
     try:
-        ttft_pred, itl_pred = predictor.predict(request.dict())
+        ttft_pred, tpot_pred = predictor.predict(request.dict())
         
         # Ensure non-negative predictions
         ttft_pred = max(0, ttft_pred)
-        itl_pred = max(0, itl_pred)
+        tpot_pred = max(0, tpot_pred)
         
         return PredictionResponse(
             ttft_ms=ttft_pred,
-            itl_ms=itl_pred,
+            tpot_ms=tpot_pred,
             predicted_at=datetime.now(timezone.utc),
             model_type=predictor.model_type.value,
             quantile=predictor.quantile,
@@ -575,7 +575,7 @@ async def predict_bulk_strict_endpoint(request: BulkPredictionRequest):
         features_list = [pred_request.dict() for pred_request in request.requests]
         
         # Make batch prediction
-        ttft_preds, itl_preds = predictor.predict_batch(features_list)
+        ttft_preds, tpot_preds = predictor.predict_batch(features_list)
         
         # Build response list
         predictions = []
@@ -584,11 +584,11 @@ async def predict_bulk_strict_endpoint(request: BulkPredictionRequest):
         for i in range(len(request.requests)):
             # Ensure non-negative predictions
             ttft_pred = max(0, ttft_preds[i])
-            itl_pred = max(0, itl_preds[i])
+            tpot_pred = max(0, tpot_preds[i])
             
             prediction_response = PredictionResponse(
                 ttft_ms=ttft_pred,
-                itl_ms=itl_pred,
+                tpot_ms=tpot_pred,
                 predicted_at=current_time,
                 model_type=predictor.model_type.value,
                 quantile=predictor.quantile,
@@ -656,7 +656,7 @@ async def predict_bulk_endpoint(request: BulkPredictionRequest):
     if valid_requests:
         try:
             # Make batch prediction for all valid requests
-            ttft_preds, itl_preds = predictor.predict_batch(valid_requests)
+            ttft_preds, tpot_preds = predictor.predict_batch(valid_requests)
             
             current_time = datetime.now(timezone.utc)
             
@@ -664,11 +664,11 @@ async def predict_bulk_endpoint(request: BulkPredictionRequest):
             for batch_idx, original_idx in enumerate(valid_indices):
                 # Ensure non-negative predictions
                 ttft_pred = max(0, ttft_preds[batch_idx])
-                itl_pred = max(0, itl_preds[batch_idx])
+                tpot_pred = max(0, tpot_preds[batch_idx])
                 
                 prediction_response = PredictionResponse(
                     ttft_ms=ttft_pred,
-                    itl_ms=itl_pred,
+                    tpot_ms=tpot_pred,
                     predicted_at=current_time,
                     model_type=predictor.model_type.value,
                     quantile=predictor.quantile,
@@ -751,7 +751,7 @@ async def root():
         "message": "HTTP-based Quantile Latency Predictor is running",
         "model_type": predictor.model_type.value,
         "quantile": predictor.quantile,
-        "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and ITL latencies",
+        "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and TPOT latencies",
         "is_ready": predictor.is_ready,
         "sync_interval": settings.MODEL_SYNC_INTERVAL_SEC,
         "training_server": settings.TRAINING_SERVER_URL

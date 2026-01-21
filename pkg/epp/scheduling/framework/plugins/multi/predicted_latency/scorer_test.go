@@ -49,7 +49,7 @@ func (m *mockPredictor) Predict(ctx context.Context, request latencypredictor.Pr
 		return pred, nil
 	}
 	// Default prediction
-	return &latencypredictor.PredictionResponse{TTFT: 0.5, ITL: 0.03}, nil
+	return &latencypredictor.PredictionResponse{TTFT: 0.5, TPOT: 0.03}, nil
 }
 
 func (m *mockPredictor) PredictBulk(ctx context.Context, requests []latencypredictor.PredictionRequest) (*latencypredictor.BulkPredictionResponse, error) {
@@ -118,14 +118,14 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 	}
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, itlSLO float64) *schedulingtypes.LLMRequest {
+func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *schedulingtypes.LLMRequest {
 	headers := make(map[string]string)
 	headers[requtil.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
 		headers["x-ttft-slo"] = fmt.Sprintf("%f", ttftSLO)
 	}
-	if itlSLO > 0 {
-		headers["x-avg-itl-slo"] = fmt.Sprintf("%f", itlSLO)
+	if tpotSLO > 0 {
+		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
 
 	return &schedulingtypes.LLMRequest{
@@ -169,7 +169,7 @@ func setupPredictionContext(t *testing.T, router *PredictedLatency, request *sch
 				predictions = append(predictions, endpointPredictionResult{
 					Endpoint:         endpoint,
 					TTFT:             predResp.TTFT,
-					ITL:              predResp.ITL,
+					TPOT:             predResp.TPOT,
 					PrefixCacheScore: 0.0,
 					IsValid:          true,
 				})
@@ -207,9 +207,9 @@ func TestPredictedLatency_Score(t *testing.T) {
 			name: "All pods have positive headroom",
 			predictor: &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.5": {TTFT: 0.5, ITL: 0.03}, // 50% KV cache
-					"0.6": {TTFT: 0.6, ITL: 0.04}, // 60% KV cache
-					"0.3": {TTFT: 0.4, ITL: 0.02}, // 30% KV cache
+					"0.5": {TTFT: 0.5, TPOT: 0.03}, // 50% KV cache
+					"0.6": {TTFT: 0.6, TPOT: 0.04}, // 60% KV cache
+					"0.3": {TTFT: 0.4, TPOT: 0.02}, // 30% KV cache
 				},
 			},
 			strategy: headroomStrategyLeast,
@@ -228,8 +228,8 @@ func TestPredictedLatency_Score(t *testing.T) {
 			name: "All pods have negative headroom",
 			predictor: &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.8": {TTFT: 1.5, ITL: 0.08}, // 80% KV cache - high load
-					"0.9": {TTFT: 1.8, ITL: 0.09}, // 90% KV cache - very high load
+					"0.8": {TTFT: 1.5, TPOT: 0.08}, // 80% KV cache - high load
+					"0.9": {TTFT: 1.8, TPOT: 0.09}, // 90% KV cache - very high load
 				},
 			},
 			strategy: headroomStrategyLeast,
@@ -245,8 +245,8 @@ func TestPredictedLatency_Score(t *testing.T) {
 			name: "Mixed positive and negative headroom",
 			predictor: &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.3": {TTFT: 0.5, ITL: 0.03}, // 30% KV cache - Positive headroom
-					"0.9": {TTFT: 1.5, ITL: 0.08}, // 90% KV cache - Negative headroom
+					"0.3": {TTFT: 0.5, TPOT: 0.03}, // 30% KV cache - Positive headroom
+					"0.9": {TTFT: 1.5, TPOT: 0.08}, // 90% KV cache - Negative headroom
 				},
 			},
 			strategy: headroomStrategyLeast,
@@ -372,9 +372,9 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{
 				predictions: map[string]*latencypredictor.PredictionResponse{
-					"0.5": {TTFT: 0.5, ITL: 0.03},
-					"0.6": {TTFT: 0.6, ITL: 0.04},
-					"0.3": {TTFT: 0.4, ITL: 0.02},
+					"0.5": {TTFT: 0.5, TPOT: 0.03},
+					"0.6": {TTFT: 0.6, TPOT: 0.04},
+					"0.3": {TTFT: 0.4, TPOT: 0.02},
 				},
 			}
 			cfg := DefaultConfig
@@ -486,7 +486,7 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 	}
 }
 
-func TestPredictedLatency_GetPodMinITLSLO(t *testing.T) {
+func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 	tests := []struct {
 		name          string
 		setupRequests func(*PredictedLatency, schedulingtypes.Endpoint)
@@ -522,7 +522,7 @@ func TestPredictedLatency_GetPodMinITLSLO(t *testing.T) {
 				r.runningRequestLists[endpointName].Add("req2", 0.03) // This is the minimum
 				r.runningRequestLists[endpointName].Add("req3", 0.04)
 			},
-			expectedSLO: 0.03, // Minimum ITL (heap guarantees this is at items[0])
+			expectedSLO: 0.03, // Minimum TPOT (heap guarantees this is at items[0])
 		},
 	}
 
@@ -536,8 +536,8 @@ func TestPredictedLatency_GetPodMinITLSLO(t *testing.T) {
 
 			tt.setupRequests(router, pod)
 
-			minSLO := router.getEndpointMinITLSLO(pod)
-			assert.InDelta(t, tt.expectedSLO, minSLO, 0.0001, "Min ITL SLO should match expected")
+			minSLO := router.getEndpointMinTPOTSLO(pod)
+			assert.InDelta(t, tt.expectedSLO, minSLO, 0.0001, "Min TPOT SLO should match expected")
 		})
 	}
 }
@@ -588,9 +588,9 @@ func TestPredictedLatencyFactory(t *testing.T) {
 				"maxSampledTokens": 30,
 				"sloBufferFactor": 1.2,
 				"negHeadroomTTFTWeight": 0.7,
-				"negHeadroomITLWeight": 0.3,
+				"negHeadroomTPOTWeight": 0.3,
 				"headroomTTFTWeight": 0.9,
-				"headroomITLWeight": 0.1,
+				"headroomTPOTWeight": 0.1,
 				"headroomSelectionStrategy": "least",
 				"compositeKVWeight": 1.0,
 				"compositeQueueWeight": 0.8,

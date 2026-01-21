@@ -30,8 +30,8 @@ import (
 func TestBulkPredictWithMetrics(t *testing.T) {
 	mockPredictor := &mockPredictor{
 		predictions: map[string]*latencypredictor.PredictionResponse{
-			"0.5": {TTFT: 0.5, ITL: 0.03},
-			"0.6": {TTFT: 0.6, ITL: 0.04},
+			"0.5": {TTFT: 0.5, TPOT: 0.03},
+			"0.6": {TTFT: 0.6, TPOT: 0.04},
 		},
 	}
 
@@ -48,9 +48,9 @@ func TestBulkPredictWithMetrics(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, results, 2)
 	assert.Equal(t, 0.5, results[0].TTFT)
-	assert.Equal(t, 0.03, results[0].ITL)
+	assert.Equal(t, 0.03, results[0].TPOT)
 	assert.Equal(t, 0.6, results[1].TTFT)
-	assert.Equal(t, 0.04, results[1].ITL)
+	assert.Equal(t, 0.04, results[1].TPOT)
 }
 
 func TestBulkPredictWithMetrics_Error(t *testing.T) {

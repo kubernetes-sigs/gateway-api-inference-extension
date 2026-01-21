@@ -30,9 +30,9 @@ import (
 type endpointPredictionResult struct {
 	Endpoint         schedulingtypes.Endpoint
 	TTFT             float64
-	ITL              float64
+	TPOT             float64
 	TTFTValid        bool
-	ITLValid         bool
+	TPOTValid        bool
 	IsValid          bool
 	Error            error
 	Headroom         float64 // Headroom for the pod, if applicable
@@ -79,23 +79,23 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, request *sch
 
 		predResult.PrefixCacheScore = prefixCacheScores[i]
 		predResult.TTFT = prediction.TTFT
-		predResult.ITL = prediction.ITL
+		predResult.TPOT = prediction.TPOT
 
-		podMinITLSLO := s.getEndpointMinITLSLO(endpoint)
-		predResult.TTFTValid, predResult.ITLValid, predResult.IsValid, predResult.Headroom, predResult.TTFTHeadroom = s.validatePrediction(prediction, predictedLatencyCtx, podMinITLSLO)
+		podMinTPOTSLO := s.getEndpointMinTPOTSLO(endpoint)
+		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom, predResult.TTFTHeadroom = s.validatePrediction(prediction, predictedLatencyCtx, podMinTPOTSLO)
 
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"endpoint", endpoint.GetMetadata().String(),
 			"prefixCacheScore", predResult.PrefixCacheScore,
 			"TTFT", prediction.TTFT,
-			"ITL", prediction.ITL,
+			"TPOT", prediction.TPOT,
 			"buffer", s.config.SLOBufferFactor,
-			"podMinITLSLO", podMinITLSLO,
+			"podMinTPOTSLO", podMinTPOTSLO,
 			"ttftSLO", predictedLatencyCtx.ttftSLO,
-			"requestITLSLO", predictedLatencyCtx.avgITLSLO,
-			"itlHeadroom", predResult.Headroom,
+			"requestTPOTSLO", predictedLatencyCtx.avgTPOTSLO,
+			"tpotHeadroom", predResult.Headroom,
 			"ttftHeadroom", predResult.TTFTHeadroom,
-			"itlValid", predResult.ITLValid,
+			"tpotValid", predResult.TPOTValid,
 			"ttftValid", predResult.TTFTValid,
 			"headroomStrategy", s.headroomStrategy)
 
@@ -113,30 +113,30 @@ func (s *PredictedLatency) updateRequestContextWithPredictions(predictedLatencyC
 func (s *PredictedLatency) validatePrediction(
 	pred *latencypredictor.PredictionResponse,
 	predictedLatencyCtx *predictedLatencyCtx,
-	podMinITLSLO float64,
-) (ttftOk, itlOk, isValid bool, headroom float64, ttftHeadroom float64) {
+	podMinTPOTSLO float64,
+) (ttftOk, tpotOk, isValid bool, headroom float64, ttftHeadroom float64) {
 
 	ttftOk = pred.TTFT < predictedLatencyCtx.ttftSLO
 	ttftHeadroom = predictedLatencyCtx.ttftSLO - pred.TTFT
 
-	itlOk = true
+	tpotOk = true
 	headroom = 0.0
 
 	if s.config.StreamingMode {
-		bufferedITL := predictedLatencyCtx.avgITLSLO * s.config.SLOBufferFactor
-		// a podMinITLSLO of 0 means no either no requests, or no ITL SLOs specified on running requests
-		if podMinITLSLO > 0 {
-			if podMinITLSLO < predictedLatencyCtx.avgITLSLO {
-				log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min ITL SLO is less than the req SLO, adjusting", "podMinITLSLO", podMinITLSLO, "bufferedITL", predictedLatencyCtx.avgITLSLO)
+		bufferedTPOT := predictedLatencyCtx.avgTPOTSLO * s.config.SLOBufferFactor
+		// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
+		if podMinTPOTSLO > 0 {
+			if podMinTPOTSLO < predictedLatencyCtx.avgTPOTSLO {
+				log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", predictedLatencyCtx.avgTPOTSLO)
 			}
-			bufferedITL = min(bufferedITL, podMinITLSLO*s.config.SLOBufferFactor)
+			bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*s.config.SLOBufferFactor)
 		}
 
-		itlOk = pred.ITL < bufferedITL
-		headroom = bufferedITL - pred.ITL
+		tpotOk = pred.TPOT < bufferedTPOT
+		headroom = bufferedTPOT - pred.TPOT
 	}
 
-	isValid = ttftOk && itlOk
+	isValid = ttftOk && tpotOk
 
 	return
 }

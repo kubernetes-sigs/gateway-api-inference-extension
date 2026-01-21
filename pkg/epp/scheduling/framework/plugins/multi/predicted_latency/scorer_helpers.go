@@ -37,9 +37,9 @@ func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedul
 		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "PredictedLatency: Error parsing TTFT SLO from header")
 	}
 
-	predictedLatencyCtx.avgITLSLO, err = parseFloatHeader(*request, itlSLOHeaderKey)
+	predictedLatencyCtx.avgTPOTSLO, err = parseFloatHeader(*request, tpotSLOHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", itlSLOHeaderKey, err)}, "PredictedLatency: Error parsing ITL SLO from header")
+		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "PredictedLatency: Error parsing TPOT SLO from header")
 	}
 	predictedLatencyCtx.sheddable, err = parseBoolHeader(*request, sheddableHeaderKey)
 	if err != nil {
@@ -49,11 +49,11 @@ func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedul
 
 func (s *PredictedLatency) classifyEndpointsByHeadroom(allPreds []endpointPredictionResult) (posHeadroomEndpoints, negHeadroomEndpoints []endpointPredictionResult) {
 	for _, p := range allPreds {
-		// An endpoint has positive headroom only if BOTH TTFT and ITL have positive headroom
+		// An endpoint has positive headroom only if BOTH TTFT and TPOT have positive headroom
 		if (p.Headroom >= 0) && p.TTFTHeadroom >= 0 {
 			posHeadroomEndpoints = append(posHeadroomEndpoints, p)
 		} else {
-			// An endpoint has negative headroom if EITHER TTFT or ITL has negative/zero headroom
+			// An endpoint has negative headroom if EITHER TTFT or TPOT has negative/zero headroom
 			negHeadroomEndpoints = append(negHeadroomEndpoints, p)
 		}
 	}

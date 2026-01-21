@@ -115,7 +115,7 @@ func processPreRequestForLatencyPrediction(
 	return err
 }
 
-// processFirstTokenForLatencyPrediction records actual TTFT, trains, predicts first ITL, updates predictedLatencyCtx, and advances timestamp.
+// processFirstTokenForLatencyPrediction records actual TTFT, trains, predicts first TPOT, updates predictedLatencyCtx, and advances timestamp.
 func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
@@ -142,7 +142,7 @@ func processFirstTokenForLatencyPrediction(
 	recordTTFTTrainingData(ctx, predictor, predictedLatencyCtx, m, now, prefixCacheScore)
 
 	if streamingMode {
-		predictFirstITL(ctx, predictor, predictedLatencyCtx)
+		predictFirstTPOT(ctx, predictor, predictedLatencyCtx)
 	}
 
 	// Advance timestamp
@@ -174,7 +174,7 @@ func recordTTFTTrainingData(
 		KVCachePercentage:  m.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
 		ActualTTFT:         predictedLatencyCtx.ttft,
-		ActualITL:          0,
+		ActualTPOT:         0,
 		Timestamp:          now,
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningRequestsSize,
@@ -186,7 +186,7 @@ func recordTTFTTrainingData(
 	}
 }
 
-func predictFirstITL(
+func predictFirstTPOT(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	predictedLatencyCtx *predictedLatencyCtx,
@@ -194,12 +194,12 @@ func predictFirstITL(
 	logger := log.FromContext(ctx)
 	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
 	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping first ITL prediction due to missing metrics",
+		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
 		return
 	}
 
-	// Predict first ITL
+	// Predict first TPOT
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
@@ -212,18 +212,18 @@ func predictFirstITL(
 	p, err := predictor.Predict(ctx, in)
 	dur := time.Since(start)
 	if err != nil || p == nil {
-		logger.V(logutil.DEBUG).Error(err, "first ITL predict failed", "duration_ms", dur.Milliseconds())
-		predictedLatencyCtx.predictedITLObservations = append(predictedLatencyCtx.predictedITLObservations, 0)
-		predictedLatencyCtx.avgPredictedITL = calculateRunningAverage(predictedLatencyCtx.avgPredictedITL, 0, len(predictedLatencyCtx.predictedITLObservations))
+		logger.V(logutil.DEBUG).Error(err, "first TPOT predict failed", "duration_ms", dur.Milliseconds())
+		predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, 0)
+		predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, 0, len(predictedLatencyCtx.predictedTPOTObservations))
 	} else {
-		logger.V(logutil.DEBUG).Info("first ITL succeeded", "value_ms", p.ITL, "duration_ms", dur.Milliseconds())
-		predictedLatencyCtx.predictedITLObservations = append(predictedLatencyCtx.predictedITLObservations, p.ITL)
-		predictedLatencyCtx.avgPredictedITL = calculateRunningAverage(predictedLatencyCtx.avgPredictedITL, p.ITL, len(predictedLatencyCtx.predictedITLObservations))
+		logger.V(logutil.DEBUG).Info("first TPOT succeeded", "value_ms", p.TPOT, "duration_ms", dur.Milliseconds())
+		predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, p.TPOT)
+		predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, p.TPOT, len(predictedLatencyCtx.predictedTPOTObservations))
 	}
-	metrics.RecordRequestITLPredictionDuration(ctx, predictedLatencyCtx.schedulingRequest.TargetModel, predictedLatencyCtx.incomingModelName, dur.Seconds())
+	metrics.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyCtx.schedulingRequest.TargetModel, predictedLatencyCtx.incomingModelName, dur.Seconds())
 }
 
-// processTokenForLatencyPrediction records actual inter-token latency, trains, predicts sampled ITL, updates predictedLatencyCtx, and advances timestamp.
+// processTokenForLatencyPrediction records actual inter-token latency, trains, predicts sampled TPOT, updates predictedLatencyCtx, and advances timestamp.
 func processTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
@@ -247,30 +247,30 @@ func processTokenForLatencyPrediction(
 
 	// log the inter-token latency for predicted samples
 	if predictedLatencyCtx.generatedTokenCount == 2 || predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) { // tricky logic, since next sample token is always +1 from current token
-		predictedLatencyCtx.itlObservations = append(predictedLatencyCtx.itlObservations, latencyMs)
-		predictedLatencyCtx.avgITL = calculateRunningAverage(predictedLatencyCtx.avgITL, latencyMs, len(predictedLatencyCtx.itlObservations))
+		predictedLatencyCtx.tpotObservations = append(predictedLatencyCtx.tpotObservations, latencyMs)
+		predictedLatencyCtx.avgTPOT = calculateRunningAverage(predictedLatencyCtx.avgTPOT, latencyMs, len(predictedLatencyCtx.tpotObservations))
 	}
 
 	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
 	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping first ITL prediction due to missing metrics",
+		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
 			"error", err)
 		return
 	}
-	// Record actual ITL
+	// Record actual TPOT
 	entry := latencypredictor.TrainingEntry{
 		KVCachePercentage:  m.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
 		ActualTTFT:         0,
-		ActualITL:          latencyMs,
+		ActualTPOT:         latencyMs,
 		Timestamp:          now,
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: predictedLatencyCtx.generatedTokenCount - 1,
-		PrefixCacheScore:   0, // ITL does not use prefix cache score
+		PrefixCacheScore:   0, // TPOT does not use prefix cache score
 	}
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-		logger.V(logutil.DEBUG).Error(err, "record ITL training failed")
+		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
 	}
 
 	// Sampled predict
@@ -281,21 +281,21 @@ func processTokenForLatencyPrediction(
 			NumRequestWaiting:  m.WaitingQueueSize,
 			NumRequestRunning:  m.RunningRequestsSize,
 			NumTokensGenerated: predictedLatencyCtx.generatedTokenCount,
-			PrefixCacheScore:   0, // ITL does not use prefix cache score
+			PrefixCacheScore:   0, // TPOT does not use prefix cache score
 		}
 		start := time.Now()
 		p, err := predictor.Predict(ctx, in)
 		dur := time.Since(start)
 		if err != nil || p == nil {
-			logger.V(logutil.DEBUG).Error(err, "ITL predict failed", "duration_ms", dur.Milliseconds())
-			predictedLatencyCtx.predictedITLObservations = append(predictedLatencyCtx.predictedITLObservations, 0)
-			predictedLatencyCtx.avgPredictedITL = calculateRunningAverage(predictedLatencyCtx.avgPredictedITL, 0, len(predictedLatencyCtx.predictedITLObservations))
+			logger.V(logutil.DEBUG).Error(err, "TPOT predict failed", "duration_ms", dur.Milliseconds())
+			predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, 0)
+			predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, 0, len(predictedLatencyCtx.predictedTPOTObservations))
 		} else {
-			logger.V(logutil.DEBUG).Info("ITL predict succeeded", "value_ms", p.ITL, "duration_ms", dur.Milliseconds())
-			predictedLatencyCtx.predictedITLObservations = append(predictedLatencyCtx.predictedITLObservations, p.ITL)
-			predictedLatencyCtx.avgPredictedITL = calculateRunningAverage(predictedLatencyCtx.avgPredictedITL, p.ITL, len(predictedLatencyCtx.predictedITLObservations))
+			logger.V(logutil.DEBUG).Info("TPOT predict succeeded", "value_ms", p.TPOT, "duration_ms", dur.Milliseconds())
+			predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, p.TPOT)
+			predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, p.TPOT, len(predictedLatencyCtx.predictedTPOTObservations))
 		}
-		metrics.RecordRequestITLPredictionDuration(ctx, predictedLatencyCtx.schedulingRequest.TargetModel, predictedLatencyCtx.incomingModelName, dur.Seconds())
+		metrics.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyCtx.schedulingRequest.TargetModel, predictedLatencyCtx.incomingModelName, dur.Seconds())
 
 		predictedLatencyCtx.tokenSampler.recordPrediction(predictedLatencyCtx.generatedTokenCount)
 	}
@@ -385,7 +385,7 @@ func bulkPredictWithMetrics(
 			logger.V(logutil.TRACE).Info("bulk prediction result",
 				"index", i,
 				"ttft_ms", result.TTFT,
-				"itl_ms", result.ITL,
+				"tpot_ms", result.TPOT,
 				"input_tokens", bulkRequests[i].InputTokenLength,
 				"generated_tokens", bulkRequests[i].NumTokensGenerated,
 				"kv_cache_percent", bulkRequests[i].KVCachePercentage,

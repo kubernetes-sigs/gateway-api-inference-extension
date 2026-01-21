@@ -166,7 +166,7 @@ func TestPredictedLatency_PreRequest_Success(t *testing.T) {
 
 	// Create and set initial SLO context
 	predictedLatencyCtx := newPredictedLatencyContext(request)
-	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Initialize the request priority queue
@@ -199,7 +199,7 @@ func TestPredictedLatency_PreRequest_AddsToQueue(t *testing.T) {
 
 	// Create and set initial SLO context
 	predictedLatencyCtx := newPredictedLatencyContext(request)
-	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// PreRequest should create the queue
@@ -224,11 +224,11 @@ func TestPredictedLatency_PreRequest_QueueAlreadyExists(t *testing.T) {
 
 	// Create and set initial SLO contexts
 	predictedLatencyCtx1 := newPredictedLatencyContext(request1)
-	predictedLatencyCtx1.avgITLSLO = 50
+	predictedLatencyCtx1.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request1, predictedLatencyCtx1)
 
 	predictedLatencyCtx2 := newPredictedLatencyContext(request2)
-	predictedLatencyCtx2.avgITLSLO = 50
+	predictedLatencyCtx2.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request2, predictedLatencyCtx2)
 	// Add first request
 	router.PreRequest(ctx, request1, schedulingResult)
@@ -334,10 +334,10 @@ func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 	predictedLatencyCtx.schedulingResult = schedulingResult
 	predictedLatencyCtx.schedulingRequest = *request
 	predictedLatencyCtx.ttftSLO = 100
-	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.avgTPOTSLO = 50
 	predictedLatencyCtx.incomingModelName = testModelName
 	predictedLatencyCtx.predictedTTFT = 80.0
-	predictedLatencyCtx.avgPredictedITL = 30.0
+	predictedLatencyCtx.avgPredictedTPOT = 30.0
 
 	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
@@ -387,10 +387,10 @@ func TestPredictedLatency_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	predictedLatencyCtx.schedulingResult = schedulingResult
 	predictedLatencyCtx.schedulingRequest = *request
 	predictedLatencyCtx.ttftSLO = 100
-	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.avgTPOTSLO = 50
 	predictedLatencyCtx.incomingModelName = testModelName
 	predictedLatencyCtx.predictedTTFT = 80.0
-	predictedLatencyCtx.avgPredictedITL = 30.0
+	predictedLatencyCtx.avgPredictedTPOT = 30.0
 	// ADD THIS - populate metrics
 	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
 		KVCacheUsagePercent: 0.5,
@@ -478,11 +478,11 @@ func TestPredictedLatency_ResponseComplete_Success(t *testing.T) {
 
 	predictedLatencyCtx := newPredictedLatencyContext(request)
 	predictedLatencyCtx.ttft = 80
-	predictedLatencyCtx.avgITL = 30
+	predictedLatencyCtx.avgTPOT = 30
 	predictedLatencyCtx.predictedTTFT = 85
-	predictedLatencyCtx.avgPredictedITL = 32
+	predictedLatencyCtx.avgPredictedTPOT = 32
 	predictedLatencyCtx.ttftSLO = 100
-	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.avgTPOTSLO = 50
 	predictedLatencyCtx.incomingModelName = "incoming-model"
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
@@ -570,11 +570,11 @@ func TestPredictedLatency_ResponseComplete_WithMetrics(t *testing.T) {
 
 	predictedLatencyCtx := newPredictedLatencyContext(request)
 	predictedLatencyCtx.ttft = 80
-	predictedLatencyCtx.avgITL = 30
+	predictedLatencyCtx.avgTPOT = 30
 	predictedLatencyCtx.predictedTTFT = 85
-	predictedLatencyCtx.avgPredictedITL = 32
+	predictedLatencyCtx.avgPredictedTPOT = 32
 	predictedLatencyCtx.ttftSLO = 100
-	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.avgTPOTSLO = 50
 	predictedLatencyCtx.incomingModelName = "incoming-model"
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
@@ -603,7 +603,7 @@ func TestPredictedLatency_ResponseComplete_NoSLOs(t *testing.T) {
 
 	predictedLatencyCtx := newPredictedLatencyContext(request)
 	predictedLatencyCtx.ttft = 80
-	predictedLatencyCtx.avgITL = 30
+	predictedLatencyCtx.avgTPOT = 30
 	predictedLatencyCtx.incomingModelName = testModelName
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
@@ -655,11 +655,11 @@ func TestPredictedLatencyContext_Fields(t *testing.T) {
 	assert.NotNil(t, ctx.lastSeenMetrics)
 	assert.NotNil(t, ctx.prefixCacheScoresForEndpoints)
 	assert.NotNil(t, ctx.predictionsForScheduling)
-	assert.Empty(t, ctx.itlObservations)
-	assert.Empty(t, ctx.predictedITLObservations)
+	assert.Empty(t, ctx.tpotObservations)
+	assert.Empty(t, ctx.predictedTPOTObservations)
 	assert.Zero(t, ctx.generatedTokenCount)
 	assert.Zero(t, ctx.ttft)
-	assert.Zero(t, ctx.avgITL)
+	assert.Zero(t, ctx.avgTPOT)
 	assert.Nil(t, ctx.targetMetadata)
 	assert.Nil(t, ctx.schedulingResult)
 	assert.Nil(t, ctx.tokenSampler)
@@ -688,12 +688,12 @@ func TestPredictedLatencyContext_PredictionData(t *testing.T) {
 	ctx.predictionsForScheduling = make([]endpointPredictionResult, 0)
 
 	// Set prediction data
-	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TTFT: 80.0, ITL: 25.0})
-	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), ITL: 30.0, TTFT: 85.0})
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TTFT: 80.0, TPOT: 25.0})
+	ctx.predictionsForScheduling = append(ctx.predictionsForScheduling, endpointPredictionResult{Endpoint: createTestEndpoint("pod1", 0, 0, 0), TPOT: 30.0, TTFT: 85.0})
 
 	assert.Len(t, ctx.predictionsForScheduling, 2)
 	assert.Equal(t, 80.0, ctx.predictionsForScheduling[0].TTFT)
-	assert.Equal(t, 30.0, ctx.predictionsForScheduling[1].ITL)
+	assert.Equal(t, 30.0, ctx.predictionsForScheduling[1].TPOT)
 }
 
 func TestPredictedLatencyContext_PrefixCacheScores(t *testing.T) {
@@ -759,7 +759,7 @@ func TestPredictedLatency_MultipleRequests_SamePod(t *testing.T) {
 	// Create and set SLO contexts
 	for _, req := range []*schedulingtypes.LLMRequest{request1, request2, request3} {
 		predictedLatencyCtx := newPredictedLatencyContext(req)
-		predictedLatencyCtx.avgITLSLO = 50
+		predictedLatencyCtx.avgTPOTSLO = 50
 		router.setPredictedLatencyContextForRequest(req, predictedLatencyCtx)
 	}
 
@@ -787,7 +787,7 @@ func TestPredictedLatency_RequestLifecycle_Complete(t *testing.T) {
 
 	// Create initial context
 	predictedLatencyCtx := newPredictedLatencyContext(request)
-	predictedLatencyCtx.avgITLSLO = 50
+	predictedLatencyCtx.avgTPOTSLO = 50
 	predictedLatencyCtx.incomingModelName = testModelName
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
@@ -814,7 +814,7 @@ func TestPredictedLatency_RequestLifecycle_Complete(t *testing.T) {
 	// 5. ResponseComplete
 	retrievedCtx, _ = router.getPredictedLatencyContextForRequest(request)
 	retrievedCtx.ttft = 80
-	retrievedCtx.avgITL = 30
+	retrievedCtx.avgTPOT = 30
 	router.setPredictedLatencyContextForRequest(request, retrievedCtx)
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
 
@@ -841,11 +841,11 @@ func TestPredictedLatency_MultipleRequests_DifferentPods(t *testing.T) {
 
 	// Create and set SLO contexts
 	predictedLatencyCtx1 := newPredictedLatencyContext(request1)
-	predictedLatencyCtx1.avgITLSLO = 50
+	predictedLatencyCtx1.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request1, predictedLatencyCtx1)
 
 	predictedLatencyCtx2 := newPredictedLatencyContext(request2)
-	predictedLatencyCtx2.avgITLSLO = 50
+	predictedLatencyCtx2.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request2, predictedLatencyCtx2)
 	// Add requests to different pods
 	router.PreRequest(ctx, request1, schedulingResult1)
@@ -866,43 +866,43 @@ func TestPredictedLatencyContext_SLOValidation(t *testing.T) {
 	tests := []struct {
 		name       string
 		ttftSLO    float64
-		itlSLO     float64
+		tpotSLO    float64
 		expectSLOs bool
 	}{
 		{
 			name:       "Both SLOs set",
 			ttftSLO:    100,
-			itlSLO:     50,
+			tpotSLO:    50,
 			expectSLOs: true,
 		},
 		{
 			name:       "No SLOs",
 			ttftSLO:    0,
-			itlSLO:     0,
+			tpotSLO:    0,
 			expectSLOs: false,
 		},
 		{
 			name:       "Only TTFT SLO",
 			ttftSLO:    100,
-			itlSLO:     0,
+			tpotSLO:    0,
 			expectSLOs: false,
 		},
 		{
-			name:       "Only ITL SLO",
+			name:       "Only TPOT SLO",
 			ttftSLO:    0,
-			itlSLO:     50,
+			tpotSLO:    50,
 			expectSLOs: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := createTestLLMRequest("test-id", tt.ttftSLO, tt.itlSLO)
+			request := createTestLLMRequest("test-id", tt.ttftSLO, tt.tpotSLO)
 			ctx := newPredictedLatencyContext(request)
 			ctx.ttftSLO = tt.ttftSLO
-			ctx.avgITLSLO = tt.itlSLO
+			ctx.avgTPOTSLO = tt.tpotSLO
 
-			hasBothSLOs := ctx.ttftSLO > 0 && ctx.avgITLSLO > 0
+			hasBothSLOs := ctx.ttftSLO > 0 && ctx.avgTPOTSLO > 0
 			assert.Equal(t, tt.expectSLOs, hasBothSLOs)
 		})
 	}
@@ -921,7 +921,7 @@ func BenchmarkPredictedLatency_PreRequest(b *testing.B) {
 		requestID := uuid.New().String()
 		request := createTestLLMRequest(requestID, 100, 50)
 		predictedLatencyCtx := newPredictedLatencyContext(request)
-		predictedLatencyCtx.avgITLSLO = 50
+		predictedLatencyCtx.avgTPOTSLO = 50
 		router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 		router.PreRequest(ctx, request, schedulingResult)
 	}

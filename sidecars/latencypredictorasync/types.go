@@ -131,7 +131,7 @@ type TrainingEntry struct {
 	NumRequestRunning  int       `json:"num_request_running"`
 	NumTokensGenerated int       `json:"num_tokens_generated"`
 	ActualTTFT         float64   `json:"actual_ttft_ms"`
-	ActualITL          float64   `json:"actual_itl_ms"`
+	ActualTPOT         float64   `json:"actual_tpot_ms"`
 	PrefixCacheScore   float64   `json:"prefix_cache_score"`
 	Timestamp          time.Time `json:"timestamp"`
 }
@@ -151,11 +151,11 @@ type PredictionRequest struct {
 
 type PredictionResponse struct {
 	TTFT                 float64    `json:"ttft_ms"`
-	ITL                  float64    `json:"itl_ms"`
+	TPOT                 float64    `json:"tpot_ms"`
 	TTFTUncertainty      float64    `json:"ttft_uncertainty,omitempty"`
-	ITLUncertainty       float64    `json:"itl_uncertainty,omitempty"`
+	TPOTUncertainty      float64    `json:"tpot_uncertainty,omitempty"`
 	TTFTPredictionBounds [2]float64 `json:"ttft_prediction_bounds,omitempty"`
-	ITLPredictionBounds  [2]float64 `json:"itl_prediction_bounds,omitempty"`
+	TPOTPredictionBounds [2]float64 `json:"tpot_prediction_bounds,omitempty"`
 	PredictedAt          time.Time  `json:"predicted_at"`
 	ModelType            string     `json:"model_type"`
 	Quantile             float64    `json:"quantile"`
@@ -203,18 +203,18 @@ type ServerStatusResponse struct {
 type ModelCoefficients struct {
 	TTFTIntercept float64            `json:"ttft_intercept"`
 	TTFTCoeffs    map[string]float64 `json:"ttft_coefficients"`
-	ITLIntercept  float64            `json:"itl_intercept"`
-	ITLCoeffs     map[string]float64 `json:"itl_coefficients"`
+	TPOTIntercept float64            `json:"tpot_intercept"`
+	TPOTCoeffs    map[string]float64 `json:"tpot_coefficients"`
 }
 
 type XGBoostTrees struct {
 	TTFTTrees []interface{} `json:"ttft_trees"`
-	ITLTrees  []interface{} `json:"itl_trees"`
+	TPOTTrees []interface{} `json:"tpot_trees"`
 }
 
 type BucketCounts struct {
 	TTFTBuckets map[int]int `json:"ttft_buckets"`
-	ITLBuckets  map[int]int `json:"itl_buckets"`
+	TPOTBuckets map[int]int `json:"tpot_buckets"`
 }
 
 type ModelInfo struct {

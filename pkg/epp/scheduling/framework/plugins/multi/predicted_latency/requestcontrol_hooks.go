@@ -41,28 +41,28 @@ var _ requestcontrol.ResponseComplete = &PredictedLatency{}
 var _ requestcontrol.AdmissionPlugin = &PredictedLatency{}
 
 type predictedLatencyCtx struct {
-	schedulingRequest        schedulingtypes.LLMRequest
-	targetMetadata           *datalayer.EndpointMetadata
-	schedulingResult         *schedulingtypes.SchedulingResult
-	lastSeenMetrics          map[string]*datalayer.Metrics
-	lastTokenTimestamp       time.Time
-	requestReceivedTimestamp time.Time
-	generatedTokenCount      int
-	incomingModelName        string
-	ttft                     float64
-	predictedTTFT            float64
-	avgITL                   float64
-	avgPredictedITL          float64
-	tokenSampler             *tokenSampler
-	itlObservations          []float64
-	predictedITLObservations []float64
+	schedulingRequest         schedulingtypes.LLMRequest
+	targetMetadata            *datalayer.EndpointMetadata
+	schedulingResult          *schedulingtypes.SchedulingResult
+	lastSeenMetrics           map[string]*datalayer.Metrics
+	lastTokenTimestamp        time.Time
+	requestReceivedTimestamp  time.Time
+	generatedTokenCount       int
+	incomingModelName         string
+	ttft                      float64
+	predictedTTFT             float64
+	avgTPOT                   float64
+	avgPredictedTPOT          float64
+	tokenSampler              *tokenSampler
+	tpotObservations          []float64
+	predictedTPOTObservations []float64
 
 	prefixCacheScoresForEndpoints map[string]float64
 
 	// ttftSLO is the target time to first token SLO for the request.
 	ttftSLO float64
-	// ITLSLO is the target time per output token SLO for the request.
-	avgITLSLO float64
+	// TPOTSLO is the target time per output token SLO for the request.
+	avgTPOTSLO float64
 
 	// sheddable indicates if the request can be shed if no valid endpoint is available.
 	sheddable bool
@@ -147,7 +147,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 		return
 	}
 
-	added := endpointRequestList.Add(id, predictedLatencyCtx.avgITLSLO)
+	added := endpointRequestList.Add(id, predictedLatencyCtx.avgTPOTSLO)
 	if !added {
 		logger.V(logutil.TRACE).Info("PredictedLatency: Item already exists in queue", "endpointName", endpointName, "requestID", id)
 	}
@@ -230,12 +230,12 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 		}
 	}
 
-	if predictedLatencyCtx.avgITL > 0 {
-		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualITL", predictedLatencyCtx.avgITL, "avgPredictedITL", predictedLatencyCtx.avgPredictedITL)
-		metrics.RecordRequestITL(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgITL/1000)
-		metrics.RecordRequestPredictedITL(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedITL/1000)
-		if predictedLatencyCtx.avgITLSLO > 0 {
-			metrics.RecordRequestITLWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgITL, predictedLatencyCtx.avgITLSLO)
+	if predictedLatencyCtx.avgTPOT > 0 {
+		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", predictedLatencyCtx.avgTPOT, "avgPredictedTPOT", predictedLatencyCtx.avgPredictedTPOT)
+		metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT/1000)
+		metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
+		if predictedLatencyCtx.avgTPOTSLO > 0 {
+			metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
 		}
 	}
 

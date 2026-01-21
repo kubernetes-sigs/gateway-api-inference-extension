@@ -37,7 +37,7 @@ func (p *Predictor) AddTrainingDataBulk(entries []TrainingEntry) error {
 }
 
 // randomSample returns up to maxSize entries via stratified sampling to preserve
-// the ratio of TTFT entries (ActualTTFT > 0) and ITL entries (ActualITL > 0).
+// the ratio of TTFT entries (ActualTTFT > 0) and TPOT entries (ActualTPOT > 0).
 func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []TrainingEntry {
 	if len(entries) <= maxSize {
 		return entries
@@ -45,18 +45,18 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 
 	// Separate entries into three groups
 	var ttftEntries []TrainingEntry
-	var itlEntries []TrainingEntry
+	var tpotEntries []TrainingEntry
 	var otherEntries []TrainingEntry
 
 	for _, entry := range entries {
 		hasTTFT := entry.ActualTTFT > 0
-		hasITL := entry.ActualITL > 0
+		hasTPOT := entry.ActualTPOT > 0
 
 		switch {
 		case hasTTFT:
 			ttftEntries = append(ttftEntries, entry)
-		case hasITL:
-			itlEntries = append(itlEntries, entry)
+		case hasTPOT:
+			tpotEntries = append(tpotEntries, entry)
 		default:
 			otherEntries = append(otherEntries, entry)
 		}
@@ -69,20 +69,20 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 
 	// Calculate proportional sample sizes
 	ttftSampleSize := int(float64(len(ttftEntries)) / float64(totalEntries) * float64(maxSize))
-	itlSampleSize := int(float64(len(itlEntries)) / float64(totalEntries) * float64(maxSize))
+	tpotSampleSize := int(float64(len(tpotEntries)) / float64(totalEntries) * float64(maxSize))
 	otherSampleSize := int(float64(len(otherEntries)) / float64(totalEntries) * float64(maxSize))
 
 	// Adjust for rounding errors to ensure we reach exactly maxSize
-	totalSampled := ttftSampleSize + itlSampleSize + otherSampleSize
+	totalSampled := ttftSampleSize + tpotSampleSize + otherSampleSize
 	if totalSampled < maxSize {
 		remaining := maxSize - totalSampled
 
 		// Distribute remaining samples to the largest *original* group
 		switch {
-		case len(ttftEntries) >= len(itlEntries) && len(ttftEntries) >= len(otherEntries):
+		case len(ttftEntries) >= len(tpotEntries) && len(ttftEntries) >= len(otherEntries):
 			ttftSampleSize += remaining
-		case len(itlEntries) >= len(otherEntries):
-			itlSampleSize += remaining
+		case len(tpotEntries) >= len(otherEntries):
+			tpotSampleSize += remaining
 		default:
 			otherSampleSize += remaining
 		}
@@ -92,10 +92,10 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 
 		// Reduce from the largest *sampled* group
 		switch {
-		case ttftSampleSize >= itlSampleSize && ttftSampleSize >= otherSampleSize:
+		case ttftSampleSize >= tpotSampleSize && ttftSampleSize >= otherSampleSize:
 			ttftSampleSize -= excess
-		case itlSampleSize >= otherSampleSize:
-			itlSampleSize -= excess
+		case tpotSampleSize >= otherSampleSize:
+			tpotSampleSize -= excess
 		default:
 			otherSampleSize -= excess
 		}
@@ -109,9 +109,9 @@ func (p *Predictor) randomSample(entries []TrainingEntry, maxSize int) []Trainin
 		result = append(result, ttftSample...)
 	}
 
-	if itlSampleSize > 0 && len(itlEntries) > 0 {
-		itlSample := p.sampleFromSlice(itlEntries, min(itlSampleSize, len(itlEntries)))
-		result = append(result, itlSample...)
+	if tpotSampleSize > 0 && len(tpotEntries) > 0 {
+		tpotSample := p.sampleFromSlice(tpotEntries, min(tpotSampleSize, len(tpotEntries)))
+		result = append(result, tpotSample...)
 	}
 
 	if otherSampleSize > 0 && len(otherEntries) > 0 {
@@ -214,8 +214,8 @@ func (p *Predictor) ValidateTrainingEntry(entry TrainingEntry) error {
 	if entry.ActualTTFT < 0.0 {
 		return fmt.Errorf("actual_ttft_ms must be non-negative, got %f", entry.ActualTTFT)
 	}
-	if entry.ActualITL < 0.0 {
-		return fmt.Errorf("actual_itl_ms must be non-negative, got %f", entry.ActualITL)
+	if entry.ActualTPOT < 0.0 {
+		return fmt.Errorf("actual_tpot_ms must be non-negative, got %f", entry.ActualTPOT)
 	}
 	if entry.PrefixCacheScore < 0.0 || entry.PrefixCacheScore > 1.0 {
 		return fmt.Errorf("prefix_cache_score must be between 0.0 and 1.0, got %f", entry.PrefixCacheScore)
@@ -231,7 +231,7 @@ func NewTrainingEntry(
 	numRequestRunning int,
 	numTokensGenerated int,
 	actualTTFT float64,
-	actualITL float64,
+	actualTPOT float64,
 	prefixCacheScore float64,
 ) (TrainingEntry, error) {
 	entry := TrainingEntry{
@@ -241,7 +241,7 @@ func NewTrainingEntry(
 		NumRequestRunning:  numRequestRunning,
 		NumTokensGenerated: numTokensGenerated,
 		ActualTTFT:         actualTTFT,
-		ActualITL:          actualITL,
+		ActualTPOT:         actualTPOT,
 		PrefixCacheScore:   prefixCacheScore,
 		Timestamp:          time.Now(),
 	}
@@ -386,26 +386,26 @@ func (p *Predictor) getXGBoostTrees(ctx context.Context) (*XGBoostTrees, error) 
 		return nil, fmt.Errorf("failed to decode TTFT trees: %w", err)
 	}
 
-	// Fetch ITL trees from training server
-	itlURL := p.config.TrainingURL + "/model/itl/xgb/json"
-	itlReq, err := http.NewRequestWithContext(ctx, http.MethodGet, itlURL, nil)
+	// Fetch TPOT trees from training server
+	tpotURL := p.config.TrainingURL + "/model/tpot/xgb/json"
+	tpotReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tpotURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ITL trees request: %w", err)
+		return nil, fmt.Errorf("failed to create TPOT trees request: %w", err)
 	}
 
-	itlResp, err := p.httpClient.Do(itlReq)
+	tpotResp, err := p.httpClient.Do(tpotReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch ITL trees: %w", err)
+		return nil, fmt.Errorf("failed to fetch TPOT trees: %w", err)
 	}
-	defer itlResp.Body.Close()
+	defer tpotResp.Body.Close()
 
-	if itlResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(itlResp.Body)
-		return nil, fmt.Errorf("ITL trees request failed: %d %s, body: %s", itlResp.StatusCode, itlResp.Status, string(body))
+	if tpotResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(tpotResp.Body)
+		return nil, fmt.Errorf("TPOT trees request failed: %d %s, body: %s", tpotResp.StatusCode, tpotResp.Status, string(body))
 	}
 
-	if err := json.NewDecoder(itlResp.Body).Decode(&trees.ITLTrees); err != nil {
-		return nil, fmt.Errorf("failed to decode ITL trees: %w", err)
+	if err := json.NewDecoder(tpotResp.Body).Decode(&trees.TPOTTrees); err != nil {
+		return nil, fmt.Errorf("failed to decode TPOT trees: %w", err)
 	}
 
 	return trees, nil

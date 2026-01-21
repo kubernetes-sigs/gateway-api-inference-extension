@@ -38,8 +38,8 @@ const (
 
 	// TTFT header string
 	ttftSLOHeaderKey = "x-slo-ttft-ms"
-	// ITL header string
-	itlSLOHeaderKey = "x-slo-itl-ms"
+	// TPOT header string
+	tpotSLOHeaderKey = "x-slo-tpot-ms"
 
 	// Sheddable header string
 	sheddableHeaderKey = "x-request-sheddable"
