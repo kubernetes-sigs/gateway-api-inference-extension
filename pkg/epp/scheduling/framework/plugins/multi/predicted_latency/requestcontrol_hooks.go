@@ -63,9 +63,6 @@ type predictedLatencyCtx struct {
 	// TPOTSLO is the target time per output token SLO for the request.
 	avgTPOTSLO float64
 
-	// sheddable indicates if the request can be shed if no valid endpoint is available.
-	sheddable bool
-
 	// predictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
 	predictionsForScheduling []endpointPredictionResult
 
@@ -80,7 +77,6 @@ func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedL
 		prefixCacheScoresForEndpoints: make(map[string]float64),
 		predictionsForScheduling:      make([]endpointPredictionResult, 0),
 		hasValidEndpoint:              true,
-		sheddable:                     false,
 	}
 }
 
