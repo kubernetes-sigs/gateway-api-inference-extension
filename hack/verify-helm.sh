@@ -28,10 +28,10 @@ test_cases_inference_pool["latency-predictor"]="--set inferenceExtension.latency
 # source (such as in the verify-all script)
 make helm-install
 
-echo "Building dependencies for inferencePool chart..."
-${SCRIPT_ROOT}/bin/helm dependency build ${SCRIPT_ROOT}/config/charts/inferencepool
+echo "Updating dependencies for inferencePool chart..."
+${SCRIPT_ROOT}/bin/helm dependency update ${SCRIPT_ROOT}/config/charts/inferencepool
 if [ $? -ne 0 ]; then
-  echo "Helm dependency build failed."
+  echo "Helm dependency update failed."
   exit 1
 fi
 
@@ -55,10 +55,10 @@ test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferen
 test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
 
 
-echo "Building dependencies for epp-standalone chart..."
-${SCRIPT_ROOT}/bin/helm dependency build ${SCRIPT_ROOT}/config/charts/epp-standalone
+echo "Updating dependencies for epp-standalone chart..."
+${SCRIPT_ROOT}/bin/helm dependency update ${SCRIPT_ROOT}/config/charts/epp-standalone
 if [ $? -ne 0 ]; then
-  echo "Helm dependency build failed."
+  echo "Helm dependency update failed."
   exit 1
 fi
 
