@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 var _ PrepareDataPlugin = &mockPrepareRequestDataPlugin{}
@@ -37,8 +37,8 @@ type mockPrepareRequestDataPlugin struct {
 	executed  bool
 }
 
-func (m *mockPrepareRequestDataPlugin) TypedName() plugins.TypedName {
-	return plugins.TypedName{Type: "mock", Name: m.name}
+func (m *mockPrepareRequestDataPlugin) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Type: "mock", Name: m.name}
 }
 
 func (m *mockPrepareRequestDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {

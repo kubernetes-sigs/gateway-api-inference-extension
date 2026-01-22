@@ -24,8 +24,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -36,7 +36,7 @@ const (
 var _ framework.Picker = &RandomPicker{}
 
 // RandomPickerFactory defines the factory function for RandomPicker.
-func RandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func RandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -54,14 +54,14 @@ func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
 	}
 
 	return &RandomPicker{
-		typedName:         plugins.TypedName{Type: RandomPickerType, Name: RandomPickerType},
+		typedName:         fwkplugin.TypedName{Type: RandomPickerType, Name: RandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
 	}
 }
 
 // RandomPicker picks random endpoint(s) from the list of candidates.
 type RandomPicker struct {
-	typedName         plugins.TypedName
+	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int
 }
 
@@ -72,7 +72,7 @@ func (p *RandomPicker) WithName(name string) *RandomPicker {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *RandomPicker) TypedName() plugins.TypedName {
+func (p *RandomPicker) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 

@@ -21,9 +21,9 @@ import (
 	"encoding/json"
 	"math"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -34,25 +34,25 @@ const (
 var _ framework.Scorer = &QueueScorer{}
 
 // QueueScorerFactory defines the factory function for QueueScorer.
-func QueueScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func QueueScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewQueueScorer().WithName(name), nil
 }
 
 // NewQueueScorer initializes a new QueueScorer and returns its pointer.
 func NewQueueScorer() *QueueScorer {
 	return &QueueScorer{
-		typedName: plugins.TypedName{Type: QueueScorerType, Name: QueueScorerType},
+		typedName: fwkplugin.TypedName{Type: QueueScorerType, Name: QueueScorerType},
 	}
 }
 
 // QueueScorer scores list of candidate pods based on the pod's waiting queue size.
 // the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).
 type QueueScorer struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *QueueScorer) TypedName() plugins.TypedName {
+func (s *QueueScorer) TypedName() fwkplugin.TypedName {
 	return s.typedName
 }
 

@@ -21,9 +21,9 @@ import (
 	"encoding/json"
 	"math"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -34,25 +34,25 @@ const (
 var _ framework.Scorer = &RunningRequestsSizeScorer{}
 
 // RunningRequestsSizeScorerFactory defines the factory function for RunningRequestsSizeScorer.
-func RunningRequestsSizeScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func RunningRequestsSizeScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewRunningRequestsSizeScorer().WithName(name), nil
 }
 
 // NewRunningRequestsSizeScorer initializes a new RunningRequestsSizeScorer and returns its pointer.
 func NewRunningRequestsSizeScorer() *RunningRequestsSizeScorer {
 	return &RunningRequestsSizeScorer{
-		typedName: plugins.TypedName{Type: RunningRequestsSizeScorerType, Name: RunningRequestsSizeScorerType},
+		typedName: fwkplugin.TypedName{Type: RunningRequestsSizeScorerType, Name: RunningRequestsSizeScorerType},
 	}
 }
 
 // RunningRequestsSizeScorer scores list of candidate pods based on the pod's running request size.
 // the less running request size the pod has, the higher score it will get (since it's more available to serve new request).
 type RunningRequestsSizeScorer struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *RunningRequestsSizeScorer) TypedName() plugins.TypedName {
+func (s *RunningRequestsSizeScorer) TypedName() fwkplugin.TypedName {
 	return s.typedName
 }
 

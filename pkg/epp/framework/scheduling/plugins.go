@@ -19,7 +19,7 @@ package scheduling
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 const (
@@ -49,7 +49,7 @@ const (
 // ProfileHandler defines the extension points for handling multi SchedulerProfile instances.
 // More specifically, this interface defines the 'Pick' and 'ProcessResults' extension points.
 type ProfileHandler interface {
-	plugins.Plugin
+	plugin.Plugin
 	// Pick selects the SchedulingProfiles to run from a list of candidate profiles, while taking into consideration the request properties
 	// and the previously executed SchedluderProfile cycles along with their results.
 	Pick(ctx context.Context, cycleState *CycleState, request *LLMRequest, profiles map[string]*SchedulerProfile,
@@ -65,7 +65,7 @@ type ProfileHandler interface {
 
 // Filter defines the interface for filtering a list of pods based on context.
 type Filter interface {
-	plugins.Plugin
+	plugin.Plugin
 	Filter(ctx context.Context, cycleState *CycleState, request *LLMRequest, pods []Endpoint) []Endpoint
 }
 
@@ -74,13 +74,13 @@ type Filter interface {
 // If a scorer returns value greater than 1, it will be treated as score 1.
 // If a scorer returns value lower than 0, it will be treated as score 0.
 type Scorer interface {
-	plugins.Plugin
+	plugin.Plugin
 	Category() ScorerCategory
 	Score(ctx context.Context, cycleState *CycleState, request *LLMRequest, pods []Endpoint) map[Endpoint]float64
 }
 
 // Picker picks the final pod(s) to send the request to.
 type Picker interface {
-	plugins.Plugin
+	plugin.Plugin
 	Pick(ctx context.Context, cycleState *CycleState, scoredPods []*ScoredEndpoint) *ProfileRunResult
 }

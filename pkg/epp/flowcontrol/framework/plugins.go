@@ -19,7 +19,7 @@ package framework
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 const (
@@ -45,7 +45,7 @@ const (
 //
 // Conformance: Implementations MUST ensure all methods are goroutine-safe.
 type FairnessPolicy interface {
-	plugins.Plugin
+	plugin.Plugin
 
 	// NewState creates the scoped, mutable storage required by this policy for a single Priority Band.
 	//

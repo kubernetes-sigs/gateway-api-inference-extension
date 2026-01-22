@@ -22,8 +22,8 @@ import (
 	"net"
 	"strings"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
 
@@ -36,7 +36,7 @@ const (
 var _ framework.Filter = &HeaderBasedTestingFilter{}
 
 // HeaderBasedTestingFilterFactory defines the factory function for HeaderBasedTestingFilter.
-func HeaderBasedTestingFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func HeaderBasedTestingFilterFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewHeaderBasedTestingFilter().WithName(name), nil
 }
 
@@ -44,17 +44,17 @@ func HeaderBasedTestingFilterFactory(name string, _ json.RawMessage, _ plugins.H
 // This should only be used for testing purposes.
 func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 	return &HeaderBasedTestingFilter{
-		typedName: plugins.TypedName{Type: HeaderBasedTestingFilterType, Name: HeaderBasedTestingFilterType},
+		typedName: fwkplugin.TypedName{Type: HeaderBasedTestingFilterType, Name: HeaderBasedTestingFilterType},
 	}
 }
 
 // HeaderBasedTestingFilter filters Endpoints based on an address specified in the "test-epp-endpoint-selection" request header.
 type HeaderBasedTestingFilter struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (f *HeaderBasedTestingFilter) TypedName() plugins.TypedName {
+func (f *HeaderBasedTestingFilter) TypedName() fwkplugin.TypedName {
 	return f.typedName
 }
 

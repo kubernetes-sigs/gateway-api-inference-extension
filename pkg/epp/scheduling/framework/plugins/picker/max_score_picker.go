@@ -25,8 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -37,7 +37,7 @@ const (
 var _ framework.Picker = &MaxScorePicker{}
 
 // MaxScorePickerFactory defines the factory function for MaxScorePicker.
-func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -55,14 +55,14 @@ func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	}
 
 	return &MaxScorePicker{
-		typedName:         plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
+		typedName:         fwkplugin.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
 	}
 }
 
 // MaxScorePicker picks pod(s) with the maximum score from the list of candidates.
 type MaxScorePicker struct {
-	typedName         plugins.TypedName
+	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int // maximum number of endpoints to pick
 }
 
@@ -73,7 +73,7 @@ func (p *MaxScorePicker) WithName(name string) *MaxScorePicker {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *MaxScorePicker) TypedName() plugins.TypedName {
+func (p *MaxScorePicker) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 

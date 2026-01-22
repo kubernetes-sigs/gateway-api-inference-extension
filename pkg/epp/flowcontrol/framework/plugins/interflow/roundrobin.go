@@ -25,7 +25,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 // RoundRobinFairnessPolicyType represents a fairness policy that selects a queue from a priority band using a simple
@@ -33,9 +33,9 @@ import (
 const RoundRobinFairnessPolicyType = "round-robin-fairness-policy"
 
 func init() {
-	plugins.Register(
+	fwkplugin.Register(
 		RoundRobinFairnessPolicyType,
-		func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+		func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 			return newRoundRobin(name), nil
 		},
 	)
@@ -54,8 +54,8 @@ func newRoundRobin(name string) *roundRobin {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *roundRobin) TypedName() plugins.TypedName {
-	return plugins.TypedName{
+func (p *roundRobin) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{
 		Type: RoundRobinFairnessPolicyType,
 		Name: p.name,
 	}

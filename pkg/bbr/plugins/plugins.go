@@ -17,11 +17,11 @@ limitations under the License.
 package plugins
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 type BBRPlugin interface {
-	plugins.Plugin
+	plugin.Plugin
 
 	// Execute runs the plugin logic on the request body and a map of headers.
 	// A plugin's imnplementation logic CAN mutate the body of the message.

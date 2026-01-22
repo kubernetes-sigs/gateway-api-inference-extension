@@ -30,8 +30,8 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -47,7 +47,7 @@ const (
 // Extractor implements the metrics extraction based on the model
 // server protocol standard.
 type Extractor struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 	mapping   *Mapping
 }
 
@@ -75,7 +75,7 @@ func NewModelServerExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cach
 		return nil, fmt.Errorf("failed to create extractor metrics Mapping - %w", err)
 	}
 	return &Extractor{
-		typedName: plugins.TypedName{
+		typedName: fwkplugin.TypedName{
 			Type: MetricsExtractorType,
 			Name: MetricsExtractorType,
 		},
@@ -84,7 +84,7 @@ func NewModelServerExtractor(queueSpec, runningSpec, kvusageSpec, loraSpec, cach
 }
 
 // TypedName returns the type and name of the metrics.Extractor.
-func (ext *Extractor) TypedName() plugins.TypedName {
+func (ext *Extractor) TypedName() fwkplugin.TypedName {
 	return ext.typedName
 }
 

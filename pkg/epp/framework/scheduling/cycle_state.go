@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 // NewCycleState initializes a new CycleState and returns its pointer.
@@ -43,30 +43,30 @@ type CycleState struct {
 // present, ErrNotFound is returned.
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Read(key plugins.StateKey) (plugins.StateData, error) {
+func (c *CycleState) Read(key plugin.StateKey) (plugin.StateData, error) {
 	if v, ok := c.storage.Load(key); ok {
-		return v.(plugins.StateData), nil
+		return v.(plugin.StateData), nil
 	}
-	return nil, plugins.ErrNotFound
+	return nil, plugin.ErrNotFound
 }
 
 // Write stores the given "val" in CycleState with the given "key".
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Write(key plugins.StateKey, val plugins.StateData) {
+func (c *CycleState) Write(key plugin.StateKey, val plugin.StateData) {
 	c.storage.Store(key, val)
 }
 
 // Delete deletes data with the given key from CycleState.
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Delete(key plugins.StateKey) {
+func (c *CycleState) Delete(key plugin.StateKey) {
 	c.storage.Delete(key)
 }
 
 // ReadCycleStateKey  retrieves data with the given key from CycleState and asserts it to type T.
 // Returns an error if the key is not found or the type assertion fails.
-func ReadCycleStateKey[T plugins.StateData](c *CycleState, key plugins.StateKey) (T, error) {
+func ReadCycleStateKey[T plugin.StateData](c *CycleState, key plugin.StateKey) (T, error) {
 	var zero T
 
 	raw, err := c.Read(key)

@@ -30,14 +30,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
 type PredictedLatency struct {
-	typedName           plugins.TypedName
+	typedName           plugin.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
 	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
 	sloContextStore     sync.Map // map[string]*SLORequestContext
@@ -87,7 +87,7 @@ var DefaultConfig = Config{
 	StreamingMode:             true,
 }
 
-func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
 	parameters := DefaultConfig
 	if len(rawParameters) > 0 {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -158,7 +158,7 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	}
 
 	return &PredictedLatency{
-		typedName:           plugins.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
+		typedName:           plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
 		latencypredictor:    predictor,
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		sloContextStore:     sync.Map{},
@@ -167,7 +167,7 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	}
 }
 
-func startPredictor(handle plugins.Handle) (latencypredictor.PredictorInterface, error) {
+func startPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
 	// Initialize the latency predictor
 	predictor := latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
 	if err := predictor.Start(handle.Context()); err != nil {
@@ -181,7 +181,7 @@ func startPredictor(handle plugins.Handle) (latencypredictor.PredictorInterface,
 	return predictor, nil
 }
 
-func (s *PredictedLatency) TypedName() plugins.TypedName {
+func (s *PredictedLatency) TypedName() plugin.TypedName {
 	return s.typedName
 }
 
@@ -355,8 +355,8 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String())
 	plugintype := prefix.PrefixCachePluginType
 	pluginname := prefix.PrefixCachePluginType
-	cycleStateKey := (plugins.TypedName{Type: plugintype, Name: pluginname}).String()
-	stateData, err := cycleState.Read(plugins.StateKey(cycleStateKey))
+	cycleStateKey := (plugin.TypedName{Type: plugintype, Name: pluginname}).String()
+	stateData, err := cycleState.Read(plugin.StateKey(cycleStateKey))
 
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Reading prefix cache state from cycle state", "stateKey", cycleStateKey)
 

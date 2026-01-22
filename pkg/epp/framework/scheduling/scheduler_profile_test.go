@@ -25,7 +25,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 func TestSchedulePlugins(t *testing.T) {
@@ -183,7 +183,7 @@ var _ Picker = &testPlugin{}
 
 // testPlugin is an implementation useful in unit tests.
 type testPlugin struct {
-	typedName             plugins.TypedName
+	typedName             fwkplugin.TypedName
 	TypeRes               string
 	ScoreCallCount        int
 	NumOfScoredEndpoints  int
@@ -196,7 +196,7 @@ type testPlugin struct {
 	WinnerEndpointScore   float64
 }
 
-func (tp *testPlugin) TypedName() plugins.TypedName {
+func (tp *testPlugin) TypedName() fwkplugin.TypedName {
 	return tp.typedName
 }
 

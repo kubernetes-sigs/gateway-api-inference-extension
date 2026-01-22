@@ -21,7 +21,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 // MockItemComparator is a simple stub mock for the `framework.ItemComparator` interface.
@@ -192,12 +192,12 @@ var _ framework.IntraFlowDispatchPolicy = &MockIntraFlowDispatchPolicy{}
 // Simple accessors are configured with public value fields (e.g., NameV).
 // Complex methods with logic are configured with function fields (e.g., PickFunc).
 type MockFairnessPolicy struct {
-	TypedNameV   plugins.TypedName
+	TypedNameV   fwkplugin.TypedName
 	NewStateFunc func(ctx context.Context) any
 	PickFunc     func(ctx context.Context, flowGroup framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
 }
 
-func (m *MockFairnessPolicy) TypedName() plugins.TypedName { return m.TypedNameV }
+func (m *MockFairnessPolicy) TypedName() fwkplugin.TypedName { return m.TypedNameV }
 
 func (m *MockFairnessPolicy) NewState(ctx context.Context) any {
 	if m.NewStateFunc != nil {

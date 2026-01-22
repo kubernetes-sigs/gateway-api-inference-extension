@@ -22,8 +22,8 @@ import (
 	"errors"
 	"fmt"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -34,24 +34,24 @@ const (
 var _ framework.ProfileHandler = &SingleProfileHandler{}
 
 // SingleProfileHandlerFactory defines the factory function for SingleProfileHandler.
-func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewSingleProfileHandler().WithName(name), nil
 }
 
 // NewSingleProfileHandler initializes a new SingleProfileHandler and returns its pointer.
 func NewSingleProfileHandler() *SingleProfileHandler {
 	return &SingleProfileHandler{
-		typedName: plugins.TypedName{Type: SingleProfileHandlerType, Name: SingleProfileHandlerType},
+		typedName: fwkplugin.TypedName{Type: SingleProfileHandlerType, Name: SingleProfileHandlerType},
 	}
 }
 
 // SingleProfileHandler handles a single profile which is always the primary profile.
 type SingleProfileHandler struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (h *SingleProfileHandler) TypedName() plugins.TypedName {
+func (h *SingleProfileHandler) TypedName() fwkplugin.TypedName {
 	return h.typedName
 }
 

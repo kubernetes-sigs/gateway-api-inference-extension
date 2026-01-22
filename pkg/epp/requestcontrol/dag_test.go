@@ -23,8 +23,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 type mockPrepareRequestDataP struct {
@@ -33,8 +33,8 @@ type mockPrepareRequestDataP struct {
 	consumes map[string]any
 }
 
-func (m *mockPrepareRequestDataP) TypedName() plugins.TypedName {
-	return plugins.TypedName{Name: m.name, Type: "mock"}
+func (m *mockPrepareRequestDataP) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Name: m.name, Type: "mock"}
 }
 
 func (m *mockPrepareRequestDataP) Produces() map[string]any {

@@ -20,8 +20,8 @@ import (
 	"context"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -34,7 +34,7 @@ const (
 // PreRequest is called by the director after a getting result from scheduling layer and
 // before a request is sent to the selected model server.
 type PreRequest interface {
-	plugins.Plugin
+	plugin.Plugin
 	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult)
 }
 
@@ -42,13 +42,13 @@ type PreRequest interface {
 // which indicates the beginning of the response handling by the model server.
 // The given pod argument is the pod that served the request.
 type ResponseReceived interface {
-	plugins.Plugin
+	plugin.Plugin
 	ResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // ResponseStreaming is called by the director after each chunk of streaming response is sent.
 type ResponseStreaming interface {
-	plugins.Plugin
+	plugin.Plugin
 	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
@@ -61,15 +61,15 @@ type ResponseStreaming interface {
 // Update signature to pass error/termination state. This is a breaking change required for plugins to distinguish
 // between success, errors, and disconnects.
 type ResponseComplete interface {
-	plugins.Plugin
+	plugin.Plugin
 	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // PrepareRequestData is called by the director before scheduling requests.
 // PrepareDataPlugin plugin is implemented by data producers which produce data from different sources.
 type PrepareDataPlugin interface {
-	plugins.ProducerPlugin
-	plugins.ConsumerPlugin
+	plugin.ProducerPlugin
+	plugin.ConsumerPlugin
 	PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
 }
 
@@ -77,7 +77,7 @@ type PrepareDataPlugin interface {
 // When a request has to go through multiple AdmissionPlugin,
 // the request is admitted only if all plugins say that the request should be admitted.
 type AdmissionPlugin interface {
-	plugins.Plugin
+	plugin.Plugin
 	// AdmitRequest returns the denial reason, wrapped as error if the request is denied.
 	// If the request is allowed, it returns nil.
 	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error

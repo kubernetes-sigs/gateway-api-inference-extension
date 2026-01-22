@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 const (
@@ -29,17 +29,17 @@ const (
 )
 
 type FakeDataSource struct {
-	typedName *plugins.TypedName
+	typedName *plugin.TypedName
 	callCount int64
 	Metrics   map[types.NamespacedName]*Metrics
 	Errors    map[types.NamespacedName]error
 }
 
-func (fds *FakeDataSource) TypedName() plugins.TypedName {
+func (fds *FakeDataSource) TypedName() plugin.TypedName {
 	if fds.typedName != nil {
 		return *fds.typedName
 	}
-	return plugins.TypedName{
+	return plugin.TypedName{
 		Type: fakeSource,
 		Name: fakeSource,
 	}

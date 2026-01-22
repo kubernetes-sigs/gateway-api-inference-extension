@@ -29,8 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -47,7 +47,7 @@ type weightedScoredEndpoint struct {
 var _ framework.Picker = &WeightedRandomPicker{}
 
 // WeightedRandomPickerFactory defines the factory function for WeightedRandomPicker.
-func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -65,7 +65,7 @@ func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 	}
 
 	return &WeightedRandomPicker{
-		typedName:         plugins.TypedName{Type: WeightedRandomPickerType, Name: WeightedRandomPickerType},
+		typedName:         fwkplugin.TypedName{Type: WeightedRandomPickerType, Name: WeightedRandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
 		randomPicker:      NewRandomPicker(maxNumOfEndpoints),
 	}
@@ -85,7 +85,7 @@ func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 // - Mathematically correct weighted random sampling
 // - Single pass algorithm with O(n + k log k) complexity
 type WeightedRandomPicker struct {
-	typedName         plugins.TypedName
+	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int
 	randomPicker      *RandomPicker // fallback for zero weights
 }
@@ -97,7 +97,7 @@ func (p *WeightedRandomPicker) WithName(name string) *WeightedRandomPicker {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *WeightedRandomPicker) TypedName() plugins.TypedName {
+func (p *WeightedRandomPicker) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 

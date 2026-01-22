@@ -60,9 +60,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
@@ -369,24 +369,24 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 
 // registerInTreePlugins registers the factory functions of all known plugins
 func (r *Runner) registerInTreePlugins() {
-	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
-	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
-	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
-	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
-	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
-	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
-	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
-	plugins.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
-	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	fwkplugin.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
+	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
+	fwkplugin.Register(picker.RandomPickerType, picker.RandomPickerFactory)
+	fwkplugin.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
+	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
+	fwkplugin.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
+	fwkplugin.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
+	fwkplugin.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
+	fwkplugin.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
 	// Latency predictor plugins
-	plugins.Register(predicted_latency.PredictedLatencyPluginType, predicted_latency.PredictedLatencyFactory)
+	fwkplugin.Register(predicted_latency.PredictedLatencyPluginType, predicted_latency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
-	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
+	fwkplugin.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)
-	plugins.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
+	fwkplugin.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
 	// register datalayer metrics collection plugins
-	plugins.Register(dlmetrics.MetricsDataSourceType, dlmetrics.MetricsDataSourceFactory)
-	plugins.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
+	fwkplugin.Register(dlmetrics.MetricsDataSourceType, dlmetrics.MetricsDataSourceFactory)
+	fwkplugin.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver.Options) (*configapi.EndpointPickerConfig, error) {
@@ -438,7 +438,7 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
-	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
+	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds))
 	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
 	if err != nil {

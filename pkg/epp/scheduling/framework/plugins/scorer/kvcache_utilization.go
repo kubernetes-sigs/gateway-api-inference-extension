@@ -20,9 +20,9 @@ import (
 	"context"
 	"encoding/json"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 )
 
 const (
@@ -33,24 +33,24 @@ const (
 var _ framework.Scorer = &KVCacheUtilizationScorer{}
 
 // KvCacheUtilizationScorerFactory defines the factory function for KVCacheUtilizationScorer.
-func KvCacheUtilizationScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func KvCacheUtilizationScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewKVCacheUtilizationScorer().WithName(name), nil
 }
 
 // NewKVCacheUtilizationScorer initializes a new KVCacheUtilizationScorer and returns its pointer.
 func NewKVCacheUtilizationScorer() *KVCacheUtilizationScorer {
 	return &KVCacheUtilizationScorer{
-		typedName: plugins.TypedName{Type: KvCacheUtilizationScorerType, Name: KvCacheUtilizationScorerType},
+		typedName: fwkplugin.TypedName{Type: KvCacheUtilizationScorerType, Name: KvCacheUtilizationScorerType},
 	}
 }
 
 // KVCacheUtilizationScorer scores list of candidate endpoints based on KV cache utilization.
 type KVCacheUtilizationScorer struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *KVCacheUtilizationScorer) TypedName() plugins.TypedName {
+func (s *KVCacheUtilizationScorer) TypedName() fwkplugin.TypedName {
 	return s.typedName
 }
 

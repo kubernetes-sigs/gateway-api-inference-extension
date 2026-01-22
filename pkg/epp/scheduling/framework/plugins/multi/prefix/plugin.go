@@ -30,9 +30,9 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
@@ -93,9 +93,9 @@ type Config struct {
 }
 
 type Plugin struct {
-	typedName   plugins.TypedName
+	typedName   plugin.TypedName
 	config      Config
-	pluginState *plugins.PluginState
+	pluginState *plugin.PluginState
 	indexer     Indexer
 	wg          sync.WaitGroup
 }
@@ -125,7 +125,7 @@ func (s ServerID) String() string {
 }
 
 // compile-time type validation
-var _ plugins.StateData = &SchedulingContextState{}
+var _ plugin.StateData = &SchedulingContextState{}
 
 // SchedulingContextState is the state of this plugin to be used during a scheduling cycle.
 type SchedulingContextState struct {
@@ -135,7 +135,7 @@ type SchedulingContextState struct {
 	PrefixCacheServers map[ServerID]int
 }
 
-func (s *SchedulingContextState) Clone() plugins.StateData {
+func (s *SchedulingContextState) Clone() plugin.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
 	copy(prefixHashes, s.PrefixHashes)
 	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
@@ -156,7 +156,7 @@ var (
 )
 
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
-func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
 	parameters := DefaultConfig
 
 	if rawParameters != nil {
@@ -194,15 +194,15 @@ func New(ctx context.Context, config Config) *Plugin {
 
 	log.FromContext(ctx).V(logutil.DEFAULT).Info("PrefixCachePlugin initialized", "config", config)
 	return &Plugin{
-		typedName:   plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
+		typedName:   plugin.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
 		config:      config,
-		pluginState: plugins.NewPluginState(ctx),
+		pluginState: plugin.NewPluginState(ctx),
 		indexer:     newIndexer(ctx, config.LRUCapacityPerServer),
 	}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *Plugin) TypedName() plugins.TypedName {
+func (p *Plugin) TypedName() plugin.TypedName {
 	return p.typedName
 }
 
@@ -239,7 +239,7 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMR
 		endpoint.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total))
 	}
 	// Store the state in plugin state for later use.
-	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
 	return nil
 }
 
@@ -252,10 +252,10 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
+	cycleState.Write(plugin.StateKey(p.TypedName().String()), state)
 
 	// store the state in plugin state for later use in PreRequest. This may go away once we default to prepare request data plugin hook.
-	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
 	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of pods
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
@@ -285,7 +285,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 		servers = append(servers, p.makeServer(pr.TargetEndpoints[0]))
 	}
 
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
+	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(p.TypedName().String()))
 	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
@@ -345,7 +345,7 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 }
 
 // CleanUpInactivePods starts a goroutine that watches for inactive pods.
-func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle) {
+func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) {
 	logger := log.FromContext(ctx).V(logutil.VERBOSE)
 	ticker := time.NewTicker(PodActiveCheckInterval)
 	defer ticker.Stop()

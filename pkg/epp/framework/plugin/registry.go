@@ -14,22 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package plugins
+package plugin
 
 import (
-	"errors"
+	"encoding/json"
 )
 
-var (
-	// ErrNotFound is the not found error message.
-	ErrNotFound = errors.New("not found")
-)
+// Factory is the definition of the factory functions that are used to instantiate plugins
+// specified in a configuration.
+type FactoryFunc func(name string, parameters json.RawMessage, handle Handle) (Plugin, error)
 
-// StateKey is the type of keys stored in PluginState.
-type StateKey string
-
-// StateData is a generic type for arbitrary data stored in PluginState.
-type StateData interface {
-	// Clone is an interface to make a copy of StateData.
-	Clone() StateData
+// Register is a static function that can be called to register plugin factory functions.
+func Register(pluginType string, factory FactoryFunc) {
+	Registry[pluginType] = factory
 }
+
+// Registry is a mapping from plugin name to Factory function
+var Registry map[string]FactoryFunc = map[string]FactoryFunc{}

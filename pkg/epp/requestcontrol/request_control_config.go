@@ -17,7 +17,7 @@ limitations under the License.
 package requestcontrol
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 // NewConfig creates a new Config object and returns its pointer.
@@ -85,7 +85,7 @@ func (c *Config) WithAdmissionPlugins(plugins ...AdmissionPlugin) *Config {
 // AddPlugins adds the given plugins to the Config.
 // The type of each plugin is checked and added to the corresponding list of plugins in the Config.
 // If a plugin implements multiple plugin interfaces, it will be added to each corresponding list.
-func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
+func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 	for _, plugin := range pluginObjects {
 		if preRequestPlugin, ok := plugin.(PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)

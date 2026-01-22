@@ -29,8 +29,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
@@ -61,7 +61,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -94,7 +94,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -125,7 +125,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -156,7 +156,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req4, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -186,7 +186,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req5, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
@@ -231,7 +231,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 		},
 	}
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Chat completions - Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Should have some hashes for the JSON-encoded messages
@@ -266,7 +266,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		},
 	}
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Initial conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	initialHashCount := len(state.PrefixHashes)
@@ -301,7 +301,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Extended conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	extendedHashCount := len(state.PrefixHashes)
@@ -336,7 +336,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	longHashCount := len(state.PrefixHashes)
@@ -512,7 +512,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
 		// Block size from pod is 16 tokens * 4 = 64 chars.
 		// Prompt is 128 chars.
@@ -547,7 +547,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
 		// Block size from config is 32 chars.
 		// Prompt is 128 chars.

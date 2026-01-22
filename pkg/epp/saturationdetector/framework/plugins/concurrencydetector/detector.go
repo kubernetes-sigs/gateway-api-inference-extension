@@ -56,15 +56,15 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
 const ConcurrencyDetectorType = "concurrency-detector"
 
 func init() {
-	plugins.Register(ConcurrencyDetectorType, func(_ string, params json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+	fwkplugin.Register(ConcurrencyDetectorType, func(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		var cfg Config
 		if len(params) > 0 {
 			if err := json.Unmarshal(params, &cfg); err != nil {
@@ -105,8 +105,8 @@ func NewDetector(config Config) *Detector {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (d *Detector) TypedName() plugins.TypedName {
-	return plugins.TypedName{
+func (d *Detector) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{
 		Type: ConcurrencyDetectorType,
 		Name: ConcurrencyDetectorType,
 	}

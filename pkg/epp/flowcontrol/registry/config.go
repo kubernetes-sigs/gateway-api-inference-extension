@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 // --- Defaults ---
@@ -273,7 +273,7 @@ func WithIntraFlowPolicy(name intraflow.RegisteredPolicyName) PriorityBandConfig
 // WithFairnessPolicy sets the name/reference of the inter-flow fairness policy (e.g., "RoundRobin").
 // TODO(kubernetes-sigs/gateway-api-inference-extension#1794): This option is primarily used by the configuration
 // loader to wire up policies instantiated from the plugin registry.
-func WithFairnessPolicy(ref string, handle plugins.Handle) PriorityBandConfigOption {
+func WithFairnessPolicy(ref string, handle fwkplugin.Handle) PriorityBandConfigOption {
 	return func(p *PriorityBandConfig) error {
 		policy, err := fairnessPolicy(ref, handle)
 		if err != nil {
@@ -284,7 +284,7 @@ func WithFairnessPolicy(ref string, handle plugins.Handle) PriorityBandConfigOpt
 	}
 }
 
-func fairnessPolicy(ref string, handle plugins.Handle) (framework.FairnessPolicy, error) {
+func fairnessPolicy(ref string, handle fwkplugin.Handle) (framework.FairnessPolicy, error) {
 	v := handle.Plugin(ref)
 	if v == nil {
 		return nil, fmt.Errorf("no fairness policy registered for name %q", ref)
@@ -321,9 +321,9 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 // validation.
 //
 // Arguments:
-//   - handle: A plugins.Handle required to resolve the default policies.
+//   - handle: A fwkplugin.Handle required to resolve the default policies.
 //   - opts: Optional configuration overrides.
-func NewConfig(handle plugins.Handle, opts ...ConfigOption) (*Config, error) {
+func NewConfig(handle fwkplugin.Handle, opts ...ConfigOption) (*Config, error) {
 	builder := &configBuilder{
 		config: &Config{
 			MaxBytes:               0, // no limit enforced
@@ -371,7 +371,7 @@ func NewConfig(handle plugins.Handle, opts ...ConfigOption) (*Config, error) {
 // NewPriorityBandConfig creates a new band configuration with the required fields.
 // It applies system defaults first, then applies any provided options to override those defaults.
 func NewPriorityBandConfig(
-	handle plugins.Handle,
+	handle fwkplugin.Handle,
 	priority int,
 	name string,
 	opts ...PriorityBandConfigOption,
@@ -396,7 +396,7 @@ func NewPriorityBandConfig(
 
 // --- Validation, Defaults & Hydration ---
 
-func (p *PriorityBandConfig) applyDefaults(handle plugins.Handle) error {
+func (p *PriorityBandConfig) applyDefaults(handle fwkplugin.Handle) error {
 	if p.IntraFlowDispatchPolicy == "" {
 		p.IntraFlowDispatchPolicy = defaultIntraFlowDispatchPolicy
 	}

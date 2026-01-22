@@ -28,21 +28,21 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
-func newTestPluginsHandle(t *testing.T) plugins.Handle {
+func newTestPluginsHandle(t *testing.T) fwkplugin.Handle {
 	t.Helper()
 	handle := utils.NewTestHandle(t.Context())
 	handle.AddPlugin(interflow.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
-		TypedNameV: plugins.TypedName{
+		TypedNameV: fwkplugin.TypedName{
 			Type: interflow.GlobalStrictFairnessPolicyType,
 			Name: interflow.GlobalStrictFairnessPolicyType,
 		},
 	})
 	handle.AddPlugin(interflow.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
-		TypedNameV: plugins.TypedName{
+		TypedNameV: fwkplugin.TypedName{
 			Type: interflow.RoundRobinFairnessPolicyType,
 			Name: interflow.RoundRobinFairnessPolicyType,
 		},
@@ -77,7 +77,7 @@ func TestNewConfig(t *testing.T) {
 	testCases := []struct {
 		name          string
 		opts          []ConfigOption
-		handle        plugins.Handle
+		handle        fwkplugin.Handle
 		expectErr     bool
 		expectedErrIs error // Optional: check for specific wrapped error
 		assertion     func(*testing.T, *Config)

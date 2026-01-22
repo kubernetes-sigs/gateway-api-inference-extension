@@ -23,7 +23,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
 )
 
 // GlobalStrictFairnessPolicyType represents a fairness policy that enforces a strict global ordering across all flows.
@@ -33,10 +33,10 @@ import (
 const GlobalStrictFairnessPolicyType = "global-strict-fairness-policy"
 
 func init() {
-	plugins.Register(GlobalStrictFairnessPolicyType, GlobalStrictFairnessPolicyFactory)
+	fwkplugin.Register(GlobalStrictFairnessPolicyType, GlobalStrictFairnessPolicyFactory)
 }
 
-func GlobalStrictFairnessPolicyFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func GlobalStrictFairnessPolicyFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return newGlobalStrict(name), nil
 }
 
@@ -54,8 +54,8 @@ func newGlobalStrict(name string) *globalStrict {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *globalStrict) TypedName() plugins.TypedName {
-	return plugins.TypedName{
+func (p *globalStrict) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{
 		Type: GlobalStrictFairnessPolicyType,
 		Name: p.name,
 	}

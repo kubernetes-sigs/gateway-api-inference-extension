@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package plugins
+package plugin
 
 // Plugin defines the interface for a plugin.
 // This interface should be embedded in all plugins across the code.
