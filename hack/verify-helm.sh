@@ -15,6 +15,18 @@
 # limitations under the License.
 
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE}")/..
+# Read the first argument, default to "ci" if not provided
+MODE=${1:-ci}
+
+if [ "$MODE" == "local" ]; then
+  # Local Mode: Permissive. Updates lock file automatically.
+  DEP_CMD="update"
+  echo "🔸 MODE: Local (Dev) - Using 'helm dependency update'"
+else
+  # CI/CD Mode (Default): Strict. Fails if lock file is out of sync.
+  DEP_CMD="build"
+  echo "🔹 MODE: CI/CD (Strict) - Using 'helm dependency build'"
+fi
 
 declare -A test_cases_inference_pool
 
@@ -28,10 +40,10 @@ test_cases_inference_pool["latency-predictor"]="--set inferenceExtension.latency
 # source (such as in the verify-all script)
 make helm-install
 
-echo "Updating dependencies for inferencePool chart..."
-${SCRIPT_ROOT}/bin/helm dependency update ${SCRIPT_ROOT}/config/charts/inferencepool
+echo "Processing dependencies for inferencePool chart..."
+${SCRIPT_ROOT}/bin/helm dependency ${DEP_CMD} ${SCRIPT_ROOT}/config/charts/inferencepool
 if [ $? -ne 0 ]; then
-  echo "Helm dependency update failed."
+  echo "Helm dependency ${DEP_CMD} failed."
   exit 1
 fi
 
@@ -55,10 +67,10 @@ test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferen
 test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
 
 
-echo "Updating dependencies for epp-standalone chart..."
-${SCRIPT_ROOT}/bin/helm dependency update ${SCRIPT_ROOT}/config/charts/epp-standalone
+echo "Processing dependencies for epp-standalone chart..."
+${SCRIPT_ROOT}/bin/helm dependency ${DEP_CMD} ${SCRIPT_ROOT}/config/charts/epp-standalone
 if [ $? -ne 0 ]; then
-  echo "Helm dependency update failed."
+  echo "Helm dependency ${DEP_CMD} failed."
   exit 1
 fi
 

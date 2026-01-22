@@ -135,7 +135,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: generate fmt vet envtest image-build verify-crds verify-helm-charts ## Run tests.
+test: generate fmt vet envtest verify-crds verify-helm-charts ## Run tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
 
 .PHONY: test-unit
@@ -182,7 +182,7 @@ verify-crds: kubectl-validate
 
 .PHONY: verify-helm-charts
 verify-helm-charts: helm-install
-	hack/verify-helm.sh
+	hack/verify-helm.sh $(MODE)
 
 # Run static analysis.
 .PHONY: verify-all
