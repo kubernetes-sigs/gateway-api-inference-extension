@@ -27,7 +27,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
-	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 const (

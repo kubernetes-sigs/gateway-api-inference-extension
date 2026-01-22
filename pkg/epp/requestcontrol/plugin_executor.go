@@ -21,7 +21,7 @@ import (
 	"errors"
 	"time"
 
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // executePluginsAsDAG executes PrepareData plugins as a DAG based on their dependencies asynchronously.

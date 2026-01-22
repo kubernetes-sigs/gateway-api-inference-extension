@@ -17,7 +17,7 @@ limitations under the License.
 package plugins
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 type BBRPlugin interface {

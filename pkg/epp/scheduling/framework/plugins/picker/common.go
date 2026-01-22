@@ -20,7 +20,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (

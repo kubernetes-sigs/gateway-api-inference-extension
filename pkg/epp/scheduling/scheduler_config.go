@@ -19,7 +19,7 @@ package scheduling
 import (
 	"fmt"
 
-	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // NewSchedulerConfig creates a new SchedulerConfig object and returns its pointer.
