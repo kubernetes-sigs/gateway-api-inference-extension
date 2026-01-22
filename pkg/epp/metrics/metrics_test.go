@@ -694,15 +694,15 @@ func TestFlowControlDispatchCycleLengthMetric(t *testing.T) {
 		{
 			name: "multiple scheduling latencies",
 			durations: []time.Duration{
-				200 * time.Nanosecond,  // 0.0000002s
-				800 * time.Nanosecond,  // 0.0000008s
-				1500 * time.Nanosecond, // 0.0000015s
-				3 * time.Nanosecond,    // 0.000000003s
-				8 * time.Nanosecond,    // 0.000000008s
-				15 * time.Nanosecond,   // 0.000000015s
-				30 * time.Nanosecond,   // 0.000000030s
-				75 * time.Nanosecond,   // 0.000000075s
-				150 * time.Nanosecond,  // 0.00000015s
+				200 * time.Nanosecond,
+				800 * time.Nanosecond,
+				1500 * time.Nanosecond,
+				3 * time.Nanosecond,
+				8 * time.Nanosecond,
+				15 * time.Nanosecond,
+				30 * time.Nanosecond,
+				75 * time.Nanosecond,
+				150 * time.Nanosecond,
 			},
 		},
 	}
