@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1371,4 +1372,80 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		h.fr.mu.RUnlock()
 		assert.True(t, exists, "Band must not be collected if leaseCount > 0, even if empty and idle timer expired")
 	})
+}
+
+// TestFlowRegistry_JITErrorScoping ensures that JIT provisioning errors are correctly propagated to all concurrent
+// requests waiting on the same flow initialization.
+func TestFlowRegistry_JITErrorScoping(t *testing.T) {
+	t.Parallel()
+	handle := newTestPluginsHandle(t)
+
+	// Create a registry with a capability checker that passes validation but using a queue name that doesn't exist.
+	// This ensures NewConfig succeeds, but JIT (ensureFlowInfrastructure) fails when trying to instantiate the queue.
+	failQueueName := queue.RegisteredQueueName("NonExistentQueue")
+	mockChecker := &mockCapabilityChecker{
+		checkCompatibilityFunc: func(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+			return nil // Bypass validation.
+		},
+	}
+
+	// We create a custom band config that uses this failing queue.
+	// We set it as the default band so that dynamic provisioning is used.
+	failingBand, err := NewPriorityBandConfig(handle, 0, "FailingBand", WithQueue(failQueueName))
+	require.NoError(t, err)
+
+	cfg, err := NewConfig(handle, withCapabilityChecker(mockChecker), WithDefaultPriorityBand(failingBand))
+	require.NoError(t, err)
+
+	registry, err := NewFlowRegistry(cfg, logr.Discard())
+	require.NoError(t, err)
+
+	key := types.FlowKey{
+		Priority: 100, // Dynamic, will trigger ensurePriorityBand
+		ID:       "flow-should-fail",
+	}
+
+	// Simulate contention:
+	// We acquire the registry RLock.
+	// JIT provisioning (dynamic band) requires registry Lock (Write Lock).
+	// So the first thread to reach ensurePriorityBand will block until we release this lock.
+	// All other threads will pile up behind it on sync.Once.
+	registry.mu.RLock()
+
+	const concurrency = 10
+	var successCount atomic.Int32
+	var errorCount atomic.Int32
+	wg := sync.WaitGroup{}
+	wg.Add(concurrency)
+
+	start := make(chan struct{})
+
+	for range concurrency {
+		go func() {
+			defer wg.Done()
+			<-start
+			err := registry.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+				return nil
+			})
+			if err == nil {
+				successCount.Add(1)
+			} else {
+				errorCount.Add(1)
+			}
+		}()
+	}
+
+	close(start)
+
+	// Wait a bit to ensure everyone is stuck.
+	time.Sleep(100 * time.Millisecond)
+
+	// Release the lock, letting the winner proceed (and fail).
+	registry.mu.RUnlock()
+
+	wg.Wait()
+
+	// Assertion: all requests should fail.
+	assert.Equal(t, int32(concurrency), errorCount.Load(), "All requests should fail JIT provisioning")
+	assert.Equal(t, int32(0), successCount.Load(), "No request should succeed if JIT failed")
 }

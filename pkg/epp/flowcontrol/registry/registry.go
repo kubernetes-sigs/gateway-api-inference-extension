@@ -76,6 +76,9 @@ type flowState struct {
 	// This prevents race conditions where multiple concurrent requests might attempt to provision the same flow
 	// simultaneously.
 	initialized sync.Once
+	// initErr stores the result of the strictly-once initialization.
+	// This allows concurrent waiters to see if the initialization failed.
+	initErr error
 }
 
 // priorityBandState tracks the lifecycle state for a dynamically provisioned priority band.
@@ -249,12 +252,11 @@ func (fr *FlowRegistry) WithConnection(key types.FlowKey, fn func(conn contracts
 	// 2. JIT provisioning: Ensure physical resources exist on shards.
 	// We use sync.Once to ensure we only pay the initialization cost (building components, locking shards) exactly once
 	// per flowState object.
-	var jitErr error
 	state.initialized.Do(func() {
-		jitErr = fr.ensureFlowInfrastructure(key)
+		state.initErr = fr.ensureFlowInfrastructure(key)
 	})
 
-	if jitErr != nil {
+	if state.initErr != nil {
 		// If provisioning failed, this state object is invalid.
 		// We remove it from the map so that subsequent requests will attempt to create a fresh state object.
 		fr.flowStates.Delete(key)
@@ -268,7 +270,7 @@ func (fr *FlowRegistry) WithConnection(key types.FlowKey, fn func(conn contracts
 			}
 		}
 
-		return fmt.Errorf("failed to provision JIT flow resources: %w", jitErr)
+		return fmt.Errorf("failed to provision JIT flow resources: %w", state.initErr)
 	}
 
 	// 3. Execute callback.
