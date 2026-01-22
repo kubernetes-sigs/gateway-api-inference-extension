@@ -87,6 +87,7 @@ type RequestContext struct {
 	Usage                     handlerstypes.Usage
 	ResponseSize              int
 	ResponseComplete          bool
+	FirstTokenReceived        bool
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request

@@ -298,10 +298,17 @@ func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.
 func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
+
+	isFirstToken := !reqCtx.FirstTokenReceived
+	if isFirstToken {
+		reqCtx.FirstTokenReceived = true
+	}
+
 	response := &Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:     reqCtx.Response.Headers,
-		EndOfStream: reqCtx.ResponseComplete,
+		RequestId:    reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		Headers:      reqCtx.Response.Headers,
+		IsFirstToken: isFirstToken,
+		EndOfStream:  reqCtx.ResponseComplete,
 	}
 
 	d.runResponseStreamingPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
