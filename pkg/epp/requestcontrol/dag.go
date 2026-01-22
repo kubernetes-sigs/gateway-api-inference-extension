@@ -19,11 +19,13 @@ package requestcontrol
 import (
 	"errors"
 	"slices"
+
+	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 )
 
 // buildDAG builds a dependency graph among data preparation plugins based on their
 // produced and consumed data keys.
-func buildDAG(plugins []PrepareDataPlugin) (map[string][]string, error) {
+func buildDAG(plugins []fwk.PrepareDataPlugin) (map[string][]string, error) {
 	dag := make(map[string][]string)
 	for _, plugin := range plugins {
 		dag[plugin.TypedName().String()] = []string{}
@@ -58,8 +60,8 @@ func buildDAG(plugins []PrepareDataPlugin) (map[string][]string, error) {
 
 // sortPlugins builds the dependency graph and returns the plugins ordered in topological order.
 // If there is a cycle, it returns an error.
-func sortPlugins(dag map[string][]string, plugins []PrepareDataPlugin) ([]PrepareDataPlugin, error) {
-	nameToPlugin := map[string]PrepareDataPlugin{}
+func sortPlugins(dag map[string][]string, plugins []fwk.PrepareDataPlugin) ([]fwk.PrepareDataPlugin, error) {
+	nameToPlugin := map[string]fwk.PrepareDataPlugin{}
 	for _, plugin := range plugins {
 		nameToPlugin[plugin.TypedName().String()] = plugin
 	}
@@ -67,7 +69,7 @@ func sortPlugins(dag map[string][]string, plugins []PrepareDataPlugin) ([]Prepar
 	if err != nil {
 		return nil, err
 	}
-	orderedPlugins := []PrepareDataPlugin{}
+	orderedPlugins := []fwk.PrepareDataPlugin{}
 	for _, pluginName := range sortedPlugins {
 		orderedPlugins = append(orderedPlugins, nameToPlugin[pluginName])
 	}

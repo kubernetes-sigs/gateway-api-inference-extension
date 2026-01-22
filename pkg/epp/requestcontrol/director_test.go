@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -1176,19 +1177,19 @@ const (
 
 type testResponseReceived struct {
 	typedName               fwkplugin.TypedName
-	lastRespOnResponse      *Response
+	lastRespOnResponse      *fwk.Response
 	lastTargetPodOnResponse string
 }
 
 type testResponseStreaming struct {
 	typedName                fwkplugin.TypedName
-	lastRespOnStreaming      *Response
+	lastRespOnStreaming      *fwk.Response
 	lastTargetPodOnStreaming string
 }
 
 type testResponseComplete struct {
 	typedName               fwkplugin.TypedName
-	lastRespOnComplete      *Response
+	lastRespOnComplete      *fwk.Response
 	lastTargetPodOnComplete string
 }
 
@@ -1222,17 +1223,17 @@ func (p *testResponseComplete) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnComplete = response
 	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }

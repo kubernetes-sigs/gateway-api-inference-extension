@@ -25,10 +25,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
-var _ PrepareDataPlugin = &mockPrepareRequestDataPlugin{}
+var _ fwk.PrepareDataPlugin = &mockPrepareRequestDataPlugin{}
 
 type mockPrepareRequestDataPlugin struct {
 	name      string
@@ -65,30 +66,30 @@ func TestPrepareDataPluginsWithTimeout(t *testing.T) {
 	testCases := []struct {
 		name          string
 		timeout       time.Duration
-		plugins       []PrepareDataPlugin
+		plugins       []fwk.PrepareDataPlugin
 		ctxFn         func() (context.Context, context.CancelFunc)
 		expectErrStr  string
-		checkPlugins  func(t *testing.T, plugins []PrepareDataPlugin)
+		checkPlugins  func(t *testing.T, plugins []fwk.PrepareDataPlugin)
 		expectSuccess bool
 	}{
 		{
 			name:    "success with one plugin",
 			timeout: 100 * time.Millisecond,
-			plugins: []PrepareDataPlugin{
+			plugins: []fwk.PrepareDataPlugin{
 				&mockPrepareRequestDataPlugin{name: "p1"},
 			},
 			ctxFn: func() (context.Context, context.CancelFunc) {
 				return context.Background(), func() {}
 			},
 			expectSuccess: true,
-			checkPlugins: func(t *testing.T, plugins []PrepareDataPlugin) {
+			checkPlugins: func(t *testing.T, plugins []fwk.PrepareDataPlugin) {
 				assert.True(t, plugins[0].(*mockPrepareRequestDataPlugin).executed)
 			},
 		},
 		{
 			name:    "plugin returns error",
 			timeout: 100 * time.Millisecond,
-			plugins: []PrepareDataPlugin{
+			plugins: []fwk.PrepareDataPlugin{
 				&mockPrepareRequestDataPlugin{name: "p1", returnErr: errors.New("plugin failed")},
 			},
 			ctxFn: func() (context.Context, context.CancelFunc) {
@@ -99,7 +100,7 @@ func TestPrepareDataPluginsWithTimeout(t *testing.T) {
 		{
 			name:    "plugins time out",
 			timeout: 50 * time.Millisecond,
-			plugins: []PrepareDataPlugin{
+			plugins: []fwk.PrepareDataPlugin{
 				&mockPrepareRequestDataPlugin{name: "p1", delay: 100 * time.Millisecond},
 			},
 			ctxFn: func() (context.Context, context.CancelFunc) {
@@ -110,7 +111,7 @@ func TestPrepareDataPluginsWithTimeout(t *testing.T) {
 		{
 			name:    "context cancelled",
 			timeout: 200 * time.Millisecond,
-			plugins: []PrepareDataPlugin{
+			plugins: []fwk.PrepareDataPlugin{
 				&mockPrepareRequestDataPlugin{name: "p1", delay: 100 * time.Millisecond},
 			},
 			ctxFn: func() (context.Context, context.CancelFunc) {
@@ -123,7 +124,7 @@ func TestPrepareDataPluginsWithTimeout(t *testing.T) {
 		{
 			name:    "multiple plugins success",
 			timeout: 100 * time.Millisecond,
-			plugins: []PrepareDataPlugin{
+			plugins: []fwk.PrepareDataPlugin{
 				&mockPrepareRequestDataPlugin{name: "p1"},
 				&mockPrepareRequestDataPlugin{name: "p2"},
 			},
@@ -131,7 +132,7 @@ func TestPrepareDataPluginsWithTimeout(t *testing.T) {
 				return context.Background(), func() {}
 			},
 			expectSuccess: true,
-			checkPlugins: func(t *testing.T, plugins []PrepareDataPlugin) {
+			checkPlugins: func(t *testing.T, plugins []fwk.PrepareDataPlugin) {
 				assert.True(t, plugins[0].(*mockPrepareRequestDataPlugin).executed)
 				assert.True(t, plugins[1].(*mockPrepareRequestDataPlugin).executed)
 			},
@@ -214,18 +215,18 @@ func TestExecutePluginsAsDAG(t *testing.T) {
 
 	testCases := []struct {
 		name      string
-		plugins   []PrepareDataPlugin
+		plugins   []fwk.PrepareDataPlugin
 		expectErr bool
-		checkFunc func(t *testing.T, plugins []PrepareDataPlugin)
+		checkFunc func(t *testing.T, plugins []fwk.PrepareDataPlugin)
 	}{
 		{
 			name:    "no plugins",
-			plugins: []PrepareDataPlugin{},
+			plugins: []fwk.PrepareDataPlugin{},
 		},
 		{
 			name:    "simple linear dependency (A -> B -> C)",
-			plugins: []PrepareDataPlugin{pluginA, pluginB, pluginC},
-			checkFunc: func(t *testing.T, plugins []PrepareDataPlugin) {
+			plugins: []fwk.PrepareDataPlugin{pluginA, pluginB, pluginC},
+			checkFunc: func(t *testing.T, plugins []fwk.PrepareDataPlugin) {
 				pA := plugins[0].(*dagTestPlugin)
 				pB := plugins[1].(*dagTestPlugin)
 				pC := plugins[2].(*dagTestPlugin)
@@ -240,8 +241,8 @@ func TestExecutePluginsAsDAG(t *testing.T) {
 		},
 		{
 			name:    "DAG with multiple dependencies (A -> B, A -> D) and one independent (E)",
-			plugins: []PrepareDataPlugin{pluginA, pluginB, pluginD, pluginE},
-			checkFunc: func(t *testing.T, plugins []PrepareDataPlugin) {
+			plugins: []fwk.PrepareDataPlugin{pluginA, pluginB, pluginD, pluginE},
+			checkFunc: func(t *testing.T, plugins []fwk.PrepareDataPlugin) {
 				pA := plugins[0].(*dagTestPlugin)
 				pB := plugins[1].(*dagTestPlugin)
 				pD := plugins[2].(*dagTestPlugin)
@@ -258,9 +259,9 @@ func TestExecutePluginsAsDAG(t *testing.T) {
 		},
 		{
 			name:      "dependency fails",
-			plugins:   []PrepareDataPlugin{pluginFail, pluginDependsOnFail},
+			plugins:   []fwk.PrepareDataPlugin{pluginFail, pluginDependsOnFail},
 			expectErr: true,
-			checkFunc: func(t *testing.T, plugins []PrepareDataPlugin) {
+			checkFunc: func(t *testing.T, plugins []fwk.PrepareDataPlugin) {
 				pF := plugins[0].(*dagTestPlugin)
 				pDOF := plugins[1].(*dagTestPlugin)
 
