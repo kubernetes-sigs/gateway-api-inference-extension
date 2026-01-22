@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestExtractRequestData(t *testing.T) {

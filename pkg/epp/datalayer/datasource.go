@@ -23,7 +23,7 @@ import (
 	"reflect"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // DataSource provides raw data to registered Extractors.

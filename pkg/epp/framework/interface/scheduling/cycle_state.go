@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // NewCycleState initializes a new CycleState and returns its pointer.
