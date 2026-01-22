@@ -193,6 +193,7 @@ func TestNewConfig(t *testing.T) {
 		{
 			name:      "ShouldError_WhenPriorityBandGCTimeoutIsNegative",
 			opts:      []ConfigOption{WithPriorityBandGCTimeout(-1 * time.Second)},
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
 		},
 		{
@@ -201,6 +202,7 @@ func TestNewConfig(t *testing.T) {
 				WithFlowGCTimeout(10 * time.Minute),
 				WithPriorityBandGCTimeout(5 * time.Minute), // Less than flow timeout
 			},
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
 		},
 		{
@@ -209,6 +211,7 @@ func TestNewConfig(t *testing.T) {
 				WithFlowGCTimeout(10 * time.Minute),
 				WithPriorityBandGCTimeout(10 * time.Minute), // Equal is OK
 			},
+			handle: newTestPluginsHandle(t),
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, 10*time.Minute, cfg.PriorityBandGCTimeout)
 			},
@@ -219,6 +222,7 @@ func TestNewConfig(t *testing.T) {
 				WithFlowGCTimeout(5 * time.Minute),
 				WithPriorityBandGCTimeout(15 * time.Minute),
 			},
+			handle: newTestPluginsHandle(t),
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, 15*time.Minute, cfg.PriorityBandGCTimeout)
 			},
