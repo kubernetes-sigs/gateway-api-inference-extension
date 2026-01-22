@@ -134,8 +134,9 @@ fmt-verify:
 vet: ## Run go vet against code.
 	go vet ./...
 
+#If you are running in local and your helm dependency is outdated, you can run `make test MODE=local`
 .PHONY: test
-test: generate fmt vet envtest verify-crds verify-helm-charts ## Run tests.
+test: generate fmt vet envtest image-build verify-crds verify-helm-charts ## Run tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
 
 .PHONY: test-unit
@@ -180,6 +181,7 @@ verify: vet fmt-verify generate ci-lint api-lint verify-all
 verify-crds: kubectl-validate
 	hack/verify-manifests.sh
 
+#If you are running in local and your helm dependency is outdated, you can run `make test MODE=local`
 .PHONY: verify-helm-charts
 verify-helm-charts: helm-install
 	hack/verify-helm.sh $(MODE)
