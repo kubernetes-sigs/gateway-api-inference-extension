@@ -199,14 +199,6 @@ func (s *registryShard) deletePriorityBand(priority int) {
 	s.logger.V(logging.DEBUG).Info("Removed priority band from shard", "priority", priority)
 }
 
-// sortPriorityLevels sorts the orderedPriorityLevels slice in descending order (highest priority first).
-// Expects the shard lock to be held.
-func (s *registryShard) sortPriorityLevels() {
-	sort.Slice(s.orderedPriorityLevels, func(i, j int) bool {
-		return s.orderedPriorityLevels[i] > s.orderedPriorityLevels[j]
-	})
-}
-
 // ID returns the unique identifier for this shard.
 func (s *registryShard) ID() string { return s.id }
 
