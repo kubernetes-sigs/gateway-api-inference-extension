@@ -27,9 +27,9 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
 // Test interface satisfaction at compile time.
