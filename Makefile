@@ -181,7 +181,7 @@ verify: vet fmt-verify generate ci-lint api-lint verify-all
 verify-crds: kubectl-validate
 	hack/verify-manifests.sh
 
-#If you are running in local and your helm dependency is outdated, you can run `make test MODE=local`
+#If you are running in local and your helm dependency is outdated, you can run `make verify-helm-charts MODE=local`
 .PHONY: verify-helm-charts
 verify-helm-charts: helm-install
 	hack/verify-helm.sh $(MODE)
