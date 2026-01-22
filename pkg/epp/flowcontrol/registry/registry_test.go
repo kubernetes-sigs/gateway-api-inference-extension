@@ -811,8 +811,15 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 			}()
 		}
 
-		// Let workers create some bands before GC starts collecting
-		time.Sleep(50 * time.Millisecond)
+		// Wait for at least one band to be created.
+		require.Eventually(t, func() bool {
+			count := 0
+			h.fr.priorityBandStates.Range(func(_, _ any) bool {
+				count++
+				return true
+			})
+			return count > 0
+		}, 5*time.Second, 10*time.Millisecond, "Dynamic bands should be created")
 
 		// Check bands were created before GC collects them all
 		bandCount := 0
