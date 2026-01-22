@@ -49,6 +49,7 @@ type registryTestHarness struct {
 type harnessOptions struct {
 	config            *Config
 	initialShardCount int
+	manualGC          bool
 }
 
 // newRegistryTestHarness creates and starts a new `FlowRegistry` for testing.
@@ -84,18 +85,20 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 	fr, err := NewFlowRegistry(cfg, logr.Discard(), registryOpts...)
 	require.NoError(t, err, "Test setup: NewFlowRegistry should not fail")
 
-	// Start the GC loop in the background.
-	ctx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		fr.Run(ctx)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		wg.Wait()
-	})
+	if !opts.manualGC {
+		// Start the GC loop in the background.
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fr.Run(ctx)
+		}()
+		t.Cleanup(func() {
+			cancel()
+			wg.Wait()
+		})
+	}
 
 	return &registryTestHarness{
 		t:         t,
@@ -954,7 +957,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldCollectIdleDynamicBand", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
 		// Create dynamic band via JIT provisioning
@@ -990,7 +993,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldNotCollectStaticBands", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		// Advance time well past any GC timeout
 		h.fakeClock.Step(h.config.FlowGCTimeout + h.config.PriorityBandGCTimeout + time.Hour)
@@ -1008,7 +1011,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldCollectMultipleBands_InOneCycle", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		// Create 3 dynamic bands
 		prio1, prio2, prio3 := 101, 102, 103
@@ -1092,7 +1095,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldHandleConcurrentFlowCreation_DuringBandGC", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
 		// Create and collect flow (band becomes empty)
@@ -1139,7 +1142,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldReleaseBandLease_OnJITFailure", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		key := types.FlowKey{ID: "jit-fail-flow", Priority: dynamicPrio}
 
@@ -1179,7 +1182,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldMaintainBandLeaseCount_MatchingActiveFlowCount", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		// Create 3 flows at the same priority
 		key1 := types.FlowKey{ID: "flow-1", Priority: dynamicPrio}
@@ -1236,7 +1239,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldNotCollectBand_WhileAnyFlowExists", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		// Create 3 flows at the same priority
 		key1 := types.FlowKey{ID: "flow-1", Priority: dynamicPrio}
@@ -1320,7 +1323,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 	t.Run("ShouldNotCollectBand_WhenLeaseCount_NonZero_DespiteEmpty", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 		h.openConnectionOnFlow(key)

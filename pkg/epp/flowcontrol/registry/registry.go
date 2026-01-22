@@ -587,17 +587,21 @@ func (fr *FlowRegistry) gcFlows() {
 		state.mu.Unlock()
 
 		// 4. Logical Delete.
-		// Remove from the map. Concurrent WithConnection calls will now create a fresh instance.
-		fr.flowStates.Delete(key)
-		flowsToClean = append(flowsToClean, key.(types.FlowKey))
-		fr.logger.V(logging.VERBOSE).Info("Garbage collecting flow", "flowKey", key, "becameIdleAt", idleTime)
+		// Normally we may assume that only one GC loop is running globally: the following check is defensive.
+		// Concurrent GC might happen in test cases if a GC cycle is triggered concurrently with a background GC loop.
+		// In the case of concurrent GC execution, both GC cycles might see the same flow in their Range() snapshots.
+		// Only the first one to delete it should release the band lease. This prevents double-release bugs.
+		if _, existed := fr.flowStates.LoadAndDelete(key); existed {
+			flowsToClean = append(flowsToClean, key.(types.FlowKey))
+			fr.logger.V(logging.VERBOSE).Info("Garbage collecting flow", "flowKey", key, "becameIdleAt", idleTime)
 
-		// 5. Release the band lease.
-		// Every flow in the map holds exactly one band lease. This flow is being destroyed,
-		// so decrement the band's flow count.
-		if bandVal, ok := fr.priorityBandStates.Load(priority); ok {
-			bandState := bandVal.(*priorityBandState)
-			fr.releasePriorityBand(bandState)
+			// 5. Release the band lease.
+			// Every flow in the map holds exactly one band lease. This flow is being destroyed,
+			// so decrement the band's flow count.
+			if bandVal, ok := fr.priorityBandStates.Load(priority); ok {
+				bandState := bandVal.(*priorityBandState)
+				fr.releasePriorityBand(bandState)
+			}
 		}
 
 		return true
