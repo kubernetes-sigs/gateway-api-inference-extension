@@ -76,6 +76,7 @@ for key in "${!test_cases_inference_pool[@]}"; do
   output_dir="${SCRIPT_ROOT}/bin/inferencepool-${key}"
   command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/inferencepool ${test_cases_inference_pool[$key]} --output-dir=${output_dir}"
   echo "Executing: ${command}"
+  ${command}
   if [ $? -ne 0 ]; then
     echo "Helm template command failed for test: ${key}"
     exit 1
@@ -112,6 +113,7 @@ for key in "${!test_cases_epp_standalone[@]}"; do
   output_dir="${SCRIPT_ROOT}/bin/epp-standalone-${key}"
   command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --output-dir=${output_dir}"
   echo "Executing: ${command}"
+  ${command}
   if [ $? -ne 0 ]; then
     echo "Helm template command failed for test: ${key}"
     exit 1
