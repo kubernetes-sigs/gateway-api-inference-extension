@@ -52,7 +52,7 @@ echo "Running helm install command for inferencePool chart..."
 # Loop through the keys of the associative array
 for key in "${!test_cases_inference_pool[@]}"; do
   echo "Running test: $key"
-  ${SCRIPT_ROOT}/bin/helm install ${SCRIPT_ROOT}/config/charts/inferencepool ${test_cases_inference_pool[$key]} --output-dir="${SCRIPT_ROOT}/bin" --dry-run --debug
+  ${SCRIPT_ROOT}/bin/helm install ${SCRIPT_ROOT}/config/charts/inferencepool ${test_cases_inference_pool[$key]} --dry-run --debug
   if [ $? -ne 0 ]; then
     echo "Helm install command failed for test: $key"
     exit 1
@@ -79,7 +79,7 @@ echo "Running helm install command for epp-standalone chart..."
 # Loop through the keys of the associative array
 for key in "${!test_cases_epp_standalone[@]}"; do
   echo "Running test: $key"
-  ${SCRIPT_ROOT}/bin/helm install ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --output-dir="${SCRIPT_ROOT}/bin" --dry-run --debug
+  ${SCRIPT_ROOT}/bin/helm install ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --dry-run --debug
   if [ $? -ne 0 ]; then
     echo "Helm install command failed for test: $key"
     exit 1
