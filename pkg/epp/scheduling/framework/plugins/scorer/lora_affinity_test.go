@@ -23,9 +23,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestLoraAffinityScorer(t *testing.T) {
@@ -41,7 +40,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-1": 1},
 						WaitingModels:   map[string]int{},
 						MaxActiveModels: 5,
@@ -58,7 +57,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 2},
 						WaitingModels:   map[string]int{"active-model-1": 1},
 						MaxActiveModels: 2,
@@ -75,7 +74,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 2},
 						WaitingModels:   map[string]int{"active-model-3": 1},
 						MaxActiveModels: 2,
@@ -83,7 +82,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 				},
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{},
 						WaitingModels:   map[string]int{},
 						MaxActiveModels: 0,
@@ -101,7 +100,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-1": 1},
 						WaitingModels:   map[string]int{},
 						MaxActiveModels: 5,
@@ -109,7 +108,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 				},
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 4},
 						WaitingModels:   map[string]int{"active-model-1": 1},
 						MaxActiveModels: 5,
@@ -117,7 +116,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 				},
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 1},
 						WaitingModels:   map[string]int{},
 						MaxActiveModels: 2,
@@ -125,7 +124,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 				},
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-3": 1},
 						WaitingModels:   map[string]int{"active-model-1": 1},
 						MaxActiveModels: 2,
@@ -133,7 +132,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 				},
 				&types.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-4": 1, "active-model-5": 1},
 						WaitingModels:   map[string]int{},
 						MaxActiveModels: 2,

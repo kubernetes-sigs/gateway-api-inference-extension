@@ -23,8 +23,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 type mockPrepareRequestDataP struct {
@@ -33,8 +34,8 @@ type mockPrepareRequestDataP struct {
 	consumes map[string]any
 }
 
-func (m *mockPrepareRequestDataP) TypedName() plugins.TypedName {
-	return plugins.TypedName{Name: m.name, Type: "mock"}
+func (m *mockPrepareRequestDataP) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Name: m.name, Type: "mock"}
 }
 
 func (m *mockPrepareRequestDataP) Produces() map[string]any {
@@ -67,19 +68,19 @@ func TestPrepareDataGraph(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		plugins     []PrepareDataPlugin
+		plugins     []fwk.PrepareDataPlugin
 		expectedDAG map[string][]string
 		expectError bool
 	}{
 		{
 			name:        "No plugins",
-			plugins:     []PrepareDataPlugin{},
+			plugins:     []fwk.PrepareDataPlugin{},
 			expectedDAG: map[string][]string{},
 			expectError: false,
 		},
 		{
 			name:    "Plugins with no dependencies",
-			plugins: []PrepareDataPlugin{pluginA, pluginE},
+			plugins: []fwk.PrepareDataPlugin{pluginA, pluginE},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"E/mock": {},
@@ -88,7 +89,7 @@ func TestPrepareDataGraph(t *testing.T) {
 		},
 		{
 			name:    "Simple linear dependency (C -> B -> A)",
-			plugins: []PrepareDataPlugin{pluginA, pluginB, pluginC},
+			plugins: []fwk.PrepareDataPlugin{pluginA, pluginB, pluginC},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"B/mock": {"A/mock"},
@@ -98,7 +99,7 @@ func TestPrepareDataGraph(t *testing.T) {
 		},
 		{
 			name:    "DAG with multiple dependencies (B -> A, D -> A, E independent)",
-			plugins: []PrepareDataPlugin{pluginA, pluginB, pluginD, pluginE},
+			plugins: []fwk.PrepareDataPlugin{pluginA, pluginB, pluginD, pluginE},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"B/mock": {"A/mock"},
@@ -109,13 +110,13 @@ func TestPrepareDataGraph(t *testing.T) {
 		},
 		{
 			name:        "Graph with a cycle (X -> Y, Y -> X)",
-			plugins:     []PrepareDataPlugin{pluginX, pluginY},
+			plugins:     []fwk.PrepareDataPlugin{pluginX, pluginY},
 			expectedDAG: nil,
 			expectError: true,
 		},
 		{
 			name:        "Data type mismatch between produced and consumed data",
-			plugins:     []PrepareDataPlugin{pluginZ1, pluginZ2},
+			plugins:     []fwk.PrepareDataPlugin{pluginZ1, pluginZ2},
 			expectedDAG: nil,
 			expectError: true,
 		},
@@ -160,7 +161,7 @@ func TestPrepareDataGraph(t *testing.T) {
 	}
 }
 
-func assertTopologicalOrder(t *testing.T, dag map[string][]string, ordered []PrepareDataPlugin) {
+func assertTopologicalOrder(t *testing.T, dag map[string][]string, ordered []fwk.PrepareDataPlugin) {
 	t.Helper()
 	positions := make(map[string]int)
 	for i, p := range ordered {

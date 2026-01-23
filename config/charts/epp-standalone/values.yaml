@@ -299,6 +299,7 @@ inferenceExtension:
       samplerArg: "0.1"
 
   latencyPredictor:
+    # common latencyPredictor setting exists in config/charts/inference-extension/values.yaml
     enabled: false
 
 jaeger:
@@ -308,3 +309,13 @@ jaeger:
   provisionDataStore:
     cassandra: false
     elasticsearch: false
+# Options: ["gke"]
+provider:
+  name: none
+
+  # GKE-specific configuration.
+  # This block is only used if name is "gke".
+  gke:
+    # Set to true if the cluster is an Autopilot cluster.
+    autopilot: false
+

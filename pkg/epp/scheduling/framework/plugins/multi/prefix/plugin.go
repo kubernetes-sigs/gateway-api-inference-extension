@@ -28,13 +28,12 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -94,9 +93,9 @@ type Config struct {
 }
 
 type Plugin struct {
-	typedName   plugins.TypedName
+	typedName   plugin.TypedName
 	config      Config
-	pluginState *plugins.PluginState
+	pluginState *plugin.PluginState
 	indexer     Indexer
 	wg          sync.WaitGroup
 }
@@ -126,7 +125,7 @@ func (s ServerID) String() string {
 }
 
 // compile-time type validation
-var _ plugins.StateData = &SchedulingContextState{}
+var _ plugin.StateData = &SchedulingContextState{}
 
 // SchedulingContextState is the state of this plugin to be used during a scheduling cycle.
 type SchedulingContextState struct {
@@ -136,7 +135,7 @@ type SchedulingContextState struct {
 	PrefixCacheServers map[ServerID]int
 }
 
-func (s *SchedulingContextState) Clone() plugins.StateData {
+func (s *SchedulingContextState) Clone() plugin.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
 	copy(prefixHashes, s.PrefixHashes)
 	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
@@ -157,7 +156,7 @@ var (
 )
 
 // PrefixCachePluginFactory defines the factory function for Prefix plugin.
-func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
 	parameters := DefaultConfig
 
 	if rawParameters != nil {
@@ -195,15 +194,15 @@ func New(ctx context.Context, config Config) *Plugin {
 
 	log.FromContext(ctx).V(logutil.DEFAULT).Info("PrefixCachePlugin initialized", "config", config)
 	return &Plugin{
-		typedName:   plugins.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
+		typedName:   plugin.TypedName{Type: PrefixCachePluginType, Name: PrefixCachePluginType},
 		config:      config,
-		pluginState: plugins.NewPluginState(ctx),
+		pluginState: plugin.NewPluginState(ctx),
 		indexer:     newIndexer(ctx, config.LRUCapacityPerServer),
 	}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *Plugin) TypedName() plugins.TypedName {
+func (p *Plugin) TypedName() plugin.TypedName {
 	return p.typedName
 }
 
@@ -227,7 +226,7 @@ func (p *Plugin) Consumes() map[string]any {
 }
 
 // PrepareRequestData hashes prompt, finds longest prefix match and stores it in endpoint as attribute.
-func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMRequest, endpoints []types.Endpoint) error {
+func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMRequest, endpoints []framework.Endpoint) error {
 	hashes := hashPrompt(ctx, request, getBlockSize(endpoints, p.config), p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
@@ -240,12 +239,12 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *types.LLMReque
 		endpoint.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total))
 	}
 	// Store the state in plugin state for later use.
-	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
 	return nil
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, request *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
+func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
 	hashes := hashPrompt(ctx, request, getBlockSize(endpoints, p.config), p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
@@ -253,16 +252,16 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
 	}
 
-	cycleState.Write(plugins.StateKey(p.TypedName().String()), state)
+	cycleState.Write(plugin.StateKey(p.TypedName().String()), state)
 
 	// store the state in plugin state for later use in PreRequest. This may go away once we default to prepare request data plugin hook.
-	p.pluginState.Write(request.RequestId, plugins.StateKey(p.TypedName().String()), state)
+	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
 	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of pods
-	scores := make(map[types.Endpoint]float64, len(endpoints))
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 
 	total := len(state.PrefixHashes)
-	podScoreFunc := func(endpoint types.Endpoint) float64 {
+	podScoreFunc := func(endpoint framework.Endpoint) float64 {
 		if total == 0 {
 			return 0
 		}
@@ -277,7 +276,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *types.CycleState, reques
 }
 
 // PreRequest records in the plugin cache the result of the scheduling selection.
-func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult) {
+func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, schedulingResult *framework.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
 	targetEndpoint := primaryProfileResult.TargetEndpoints[0] // get the first endpoint of the primary profile
 	servers := []Server{p.makeServer(targetEndpoint)}
@@ -286,7 +285,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 		servers = append(servers, p.makeServer(pr.TargetEndpoints[0]))
 	}
 
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugins.StateKey(p.TypedName().String()))
+	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(p.TypedName().String()))
 	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
@@ -312,7 +311,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *types.LLMRequest, sche
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize, total*blockSize)
 }
 
-func (p *Plugin) makeServer(targetEndpoint types.Endpoint) Server {
+func (p *Plugin) makeServer(targetEndpoint framework.Endpoint) Server {
 	gpuBlocks := p.config.LRUCapacityPerServer
 	if p.config.AutoTune && targetEndpoint.GetMetrics().CacheNumGPUBlocks > 0 {
 		gpuBlocks = targetEndpoint.GetMetrics().CacheNumGPUBlocks
@@ -346,7 +345,7 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 }
 
 // CleanUpInactivePods starts a goroutine that watches for inactive pods.
-func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle) {
+func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) {
 	logger := log.FromContext(ctx).V(logutil.VERBOSE)
 	ticker := time.NewTicker(PodActiveCheckInterval)
 	defer ticker.Stop()
@@ -375,7 +374,7 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugins.Handle)
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *types.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
+func hashPrompt(ctx context.Context, request *framework.LLMRequest, cacheBlockSize int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
@@ -424,7 +423,7 @@ func toBytes(i BlockHash) []byte {
 	return bytes
 }
 
-func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
+func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
 	if request.Body.Completions != nil { // assumed to be valid if not nil
 		return []byte(request.Body.Completions.Prompt), nil
 	}
@@ -433,7 +432,7 @@ func getUserInputBytes(request *types.LLMRequest) ([]byte, error) {
 	return json.Marshal(request.Body.ChatCompletions.Messages)
 }
 
-func getBlockSize(endpoints []types.Endpoint, config Config) int {
+func getBlockSize(endpoints []framework.Endpoint, config Config) int {
 	if !config.AutoTune {
 		return config.BlockSize
 	}

@@ -23,12 +23,12 @@ import (
 	"reflect"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // DataSource provides raw data to registered Extractors.
 type DataSource interface {
-	plugins.Plugin
+	plugin.Plugin
 	// Extractors returns a list of registered Extractor names.
 	Extractors() []string
 	// AddExtractor adds an extractor to the data source. Multiple
@@ -46,7 +46,7 @@ type DataSource interface {
 
 // Extractor transforms raw data into structured attributes.
 type Extractor interface {
-	plugins.Plugin
+	plugin.Plugin
 	// ExpectedType defines the type expected by the extractor.
 	ExpectedInputType() reflect.Type
 	// Extract transforms the raw data source output into a concrete structured

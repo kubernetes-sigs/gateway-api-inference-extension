@@ -30,14 +30,14 @@ import (
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -59,6 +59,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 
 	// Register known feature gates for validation.
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	tests := []struct {
 		name       string
@@ -90,7 +91,10 @@ func TestLoadRawConfiguration(t *testing.T) {
 						},
 					},
 				},
-				FeatureGates: configapi.FeatureGates{datalayer.ExperimentalDatalayerFeatureGate},
+				FeatureGates: configapi.FeatureGates{
+					datalayer.ExperimentalDatalayerFeatureGate,
+					flowcontrol.FeatureGate,
+				},
 				SaturationDetector: &configapi.SaturationDetector{
 					QueueDepthThreshold:       10,
 					KVCacheUtilThreshold:      0.8,
@@ -151,19 +155,20 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	registerTestPlugins(t)
 
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	tests := []struct {
 		name       string
 		configText string
 		wantErr    bool
-		validate   func(t *testing.T, handle plugins.Handle, cfg *configapi.EndpointPickerConfig)
+		validate   func(t *testing.T, handle fwkplugin.Handle, cfg *configapi.EndpointPickerConfig)
 	}{
 		// --- Success Scenarios ---
 		{
 			name:       "Success - Complex Scheduler",
 			configText: successSchedulerConfigText,
 			wantErr:    false,
-			validate: func(t *testing.T, handle plugins.Handle, cfg *configapi.EndpointPickerConfig) {
+			validate: func(t *testing.T, handle fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
 				// 1. Verify all explicit plugins exist in the registry
 				require.NotNil(t, handle.Plugin("testScorer"), "Explicit scorer should be instantiated")
 				require.NotNil(t, handle.Plugin("maxScorePicker"), "Explicit picker should be instantiated")
@@ -187,7 +192,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			name:       "Success - Default Scorer Weight",
 			configText: successWithNoWeightText,
 			wantErr:    false,
-			validate: func(t *testing.T, _ plugins.Handle, cfg *configapi.EndpointPickerConfig) {
+			validate: func(t *testing.T, _ fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
 				require.Len(t, cfg.SchedulingProfiles, 1, "Unexpected profile structure")
 				require.Len(t, cfg.SchedulingProfiles[0].Plugins, 2, "Expected Scorer + Default Picker")
 				w := cfg.SchedulingProfiles[0].Plugins[0].Weight
@@ -199,7 +204,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			name:       "Success - Default Profile Handler Injection",
 			configText: successWithNoProfileHandlersText,
 			wantErr:    false,
-			validate: func(t *testing.T, handle plugins.Handle, cfg *configapi.EndpointPickerConfig) {
+			validate: func(t *testing.T, handle fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
 				require.True(t, hasPluginType(handle, profile.SingleProfileHandlerType),
 					"Defaults: SingleProfileHandler was not injected")
 			},
@@ -208,7 +213,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			name:       "Success - Picker Before Scorer",
 			configText: successPickerBeforeScorerText,
 			wantErr:    false,
-			validate: func(t *testing.T, _ plugins.Handle, cfg *configapi.EndpointPickerConfig) {
+			validate: func(t *testing.T, _ fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
 				require.Len(t, cfg.SchedulingProfiles, 1)
 				prof := cfg.SchedulingProfiles[0]
 				require.Equal(t, "test-picker", prof.Plugins[0].PluginRef, "Picker should be the first plugin")
@@ -390,7 +395,7 @@ func TestBuildSaturationConfig(t *testing.T) {
 
 // --- Helpers & Mocks ---
 
-func hasPluginType(handle plugins.Handle, typeName string) bool {
+func hasPluginType(handle fwkplugin.Handle, typeName string) bool {
 	for _, p := range handle.GetAllPlugins() {
 		if p.TypedName().Type == typeName {
 			return true
@@ -400,10 +405,10 @@ func hasPluginType(handle plugins.Handle, typeName string) bool {
 }
 
 type mockPlugin struct {
-	t plugins.TypedName
+	t fwkplugin.TypedName
 }
 
-func (m *mockPlugin) TypedName() plugins.TypedName { return m.t }
+func (m *mockPlugin) TypedName() fwkplugin.TypedName { return m.t }
 
 // Mock Scorer
 type mockScorer struct{ mockPlugin }
@@ -415,7 +420,7 @@ func (m *mockScorer) Category() framework.ScorerCategory {
 	return framework.Distribution
 }
 
-func (m *mockScorer) Score(context.Context, *types.CycleState, *types.LLMRequest, []types.Endpoint) map[types.Endpoint]float64 {
+func (m *mockScorer) Score(context.Context, *framework.CycleState, *framework.LLMRequest, []framework.Endpoint) map[framework.Endpoint]float64 {
 	return nil
 }
 
@@ -425,7 +430,7 @@ type mockPicker struct{ mockPlugin }
 // compile-time type assertion
 var _ framework.Picker = &mockPicker{}
 
-func (m *mockPicker) Pick(context.Context, *types.CycleState, []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (m *mockPicker) Pick(context.Context, *framework.CycleState, []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	return nil
 }
 
@@ -435,12 +440,12 @@ type mockHandler struct{ mockPlugin }
 // compile-time type assertion
 var _ framework.ProfileHandler = &mockHandler{}
 
-func (m *mockHandler) Pick(context.Context, *types.CycleState, *types.LLMRequest, map[string]*framework.SchedulerProfile,
-	map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
+func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.LLMRequest, map[string]*framework.SchedulerProfile,
+	map[string]*framework.ProfileRunResult) map[string]*framework.SchedulerProfile {
 	return nil
 }
-func (m *mockHandler) ProcessResults(context.Context, *types.CycleState, *types.LLMRequest,
-	map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
+func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *framework.LLMRequest,
+	map[string]*framework.ProfileRunResult) (*framework.SchedulingResult, error) {
 	return nil, nil
 }
 
@@ -474,20 +479,20 @@ func registerTestPlugins(t *testing.T) {
 	t.Helper()
 
 	// Helper to generate simple factories.
-	register := func(name string, factory plugins.FactoryFunc) {
-		plugins.Register(name, factory)
+	register := func(name string, factory fwkplugin.FactoryFunc) {
+		fwkplugin.Register(name, factory)
 	}
 
-	mockFactory := func(tType string) plugins.FactoryFunc {
-		return func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-			return &mockPlugin{t: plugins.TypedName{Name: name, Type: tType}}, nil
+	mockFactory := func(tType string) fwkplugin.FactoryFunc {
+		return func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+			return &mockPlugin{t: fwkplugin.TypedName{Name: name, Type: tType}}, nil
 		}
 	}
 
 	// Register standard test mocks.
 	register(testPluginType, mockFactory(testPluginType))
 
-	plugins.Register(testScorerType, func(name string, params json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+	fwkplugin.Register(testScorerType, func(name string, params json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		// Attempt to unmarshal to trigger errors for invalid JSON in tests.
 		if len(params) > 0 {
 			var p struct {
@@ -497,26 +502,26 @@ func registerTestPlugins(t *testing.T) {
 				return nil, err
 			}
 		}
-		return &mockScorer{mockPlugin{t: plugins.TypedName{Name: name, Type: testScorerType}}}, nil
+		return &mockScorer{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testScorerType}}}, nil
 	})
 
-	plugins.Register(testPickerType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return &mockPicker{mockPlugin{t: plugins.TypedName{Name: name, Type: testPickerType}}}, nil
+	fwkplugin.Register(testPickerType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &mockPicker{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testPickerType}}}, nil
 	})
 
-	plugins.Register(testProfileHandler, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return &mockHandler{mockPlugin{t: plugins.TypedName{Name: name, Type: testProfileHandler}}}, nil
+	fwkplugin.Register(testProfileHandler, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &mockHandler{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testProfileHandler}}}, nil
 	})
 
-	plugins.Register(testSourceType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return &mockSource{mockPlugin{t: plugins.TypedName{Name: name, Type: testSourceType}}}, nil
+	fwkplugin.Register(testSourceType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &mockSource{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testSourceType}}}, nil
 	})
 
-	plugins.Register(testExtractorType, func(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
-		return &mockExtractor{mockPlugin{t: plugins.TypedName{Name: name, Type: testExtractorType}}}, nil
+	fwkplugin.Register(testExtractorType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &mockExtractor{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testExtractorType}}}, nil
 	})
 
 	// Ensure system defaults are registered too.
-	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
-	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
+	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
+	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 }

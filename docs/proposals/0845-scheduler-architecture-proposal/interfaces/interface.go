@@ -19,7 +19,7 @@ package framework
 import (
 	"context"
 
-	scheduling "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 type Endpoint struct {

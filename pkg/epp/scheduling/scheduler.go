@@ -24,10 +24,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
@@ -44,7 +43,7 @@ type Scheduler struct {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, candidateEndpoints []types.Endpoint) (result *types.SchedulingResult, err error) {
+func (s *Scheduler) Schedule(ctx context.Context, request *framework.LLMRequest, candidateEndpoints []framework.Endpoint) (result *framework.SchedulingResult, err error) {
 	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
 
 	scheduleStart := time.Now()
@@ -53,8 +52,8 @@ func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest, can
 		metrics.RecordSchedulerAttempt(err)
 	}()
 
-	profileRunResults := map[string]*types.ProfileRunResult{}
-	cycleState := types.NewCycleState()
+	profileRunResults := map[string]*framework.ProfileRunResult{}
+	cycleState := framework.NewCycleState()
 
 	for { // get the next set of profiles to run iteratively based on the request and the previous execution results
 		loggerVerbose.Info("Running profile handler, Pick profiles", "plugin", s.profileHandler.TypedName())

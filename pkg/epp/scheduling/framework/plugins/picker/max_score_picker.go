@@ -24,10 +24,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -38,7 +37,7 @@ const (
 var _ framework.Picker = &MaxScorePicker{}
 
 // MaxScorePickerFactory defines the factory function for MaxScorePicker.
-func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -56,14 +55,14 @@ func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	}
 
 	return &MaxScorePicker{
-		typedName:         plugins.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
+		typedName:         fwkplugin.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
 	}
 }
 
 // MaxScorePicker picks pod(s) with the maximum score from the list of candidates.
 type MaxScorePicker struct {
-	typedName         plugins.TypedName
+	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int // maximum number of endpoints to pick
 }
 
@@ -74,19 +73,19 @@ func (p *MaxScorePicker) WithName(name string) *MaxScorePicker {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *MaxScorePicker) TypedName() plugins.TypedName {
+func (p *MaxScorePicker) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
 // Pick selects the endpoint with the maximum score from the list of candidates.
-func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
 	// Shuffle in-place - needed for random tie break when scores are equal
 	shuffleScoredEndpoints(scoredEndpoints)
 
-	slices.SortStableFunc(scoredEndpoints, func(i, j *types.ScoredEndpoint) int { // highest score first
+	slices.SortStableFunc(scoredEndpoints, func(i, j *framework.ScoredEndpoint) int { // highest score first
 		if i.Score > j.Score {
 			return -1
 		}
@@ -101,10 +100,10 @@ func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *types.CycleState,
 		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
 	}
 
-	targetEndpoints := make([]types.Endpoint, len(scoredEndpoints))
+	targetEndpoints := make([]framework.Endpoint, len(scoredEndpoints))
 	for i, scoredEndpoint := range scoredEndpoints {
 		targetEndpoints[i] = scoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
+	return &framework.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

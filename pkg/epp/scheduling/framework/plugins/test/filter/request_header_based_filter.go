@@ -22,10 +22,9 @@ import (
 	"net"
 	"strings"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
@@ -37,7 +36,7 @@ const (
 var _ framework.Filter = &HeaderBasedTestingFilter{}
 
 // HeaderBasedTestingFilterFactory defines the factory function for HeaderBasedTestingFilter.
-func HeaderBasedTestingFilterFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func HeaderBasedTestingFilterFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewHeaderBasedTestingFilter().WithName(name), nil
 }
 
@@ -45,17 +44,17 @@ func HeaderBasedTestingFilterFactory(name string, _ json.RawMessage, _ plugins.H
 // This should only be used for testing purposes.
 func NewHeaderBasedTestingFilter() *HeaderBasedTestingFilter {
 	return &HeaderBasedTestingFilter{
-		typedName: plugins.TypedName{Type: HeaderBasedTestingFilterType, Name: HeaderBasedTestingFilterType},
+		typedName: fwkplugin.TypedName{Type: HeaderBasedTestingFilterType, Name: HeaderBasedTestingFilterType},
 	}
 }
 
 // HeaderBasedTestingFilter filters Endpoints based on an address specified in the "test-epp-endpoint-selection" request header.
 type HeaderBasedTestingFilter struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (f *HeaderBasedTestingFilter) TypedName() plugins.TypedName {
+func (f *HeaderBasedTestingFilter) TypedName() fwkplugin.TypedName {
 	return f.typedName
 }
 
@@ -68,10 +67,10 @@ func (f *HeaderBasedTestingFilter) WithName(name string) *HeaderBasedTestingFilt
 // Filter selects endpoints whose IP or IP:port matches any value in the
 // "test-epp-endpoint-selection" header. Values may be "IP" or "IP:port".
 // If a port is provided, only an exact IP:port match is accepted.
-func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState, request *types.LLMRequest, endpoints []types.Endpoint) []types.Endpoint {
+func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) []framework.Endpoint {
 	hv, ok := request.Headers[test.HeaderTestEppEndPointSelectionKey]
 	if !ok || strings.TrimSpace(hv) == "" {
-		return []types.Endpoint{}
+		return []framework.Endpoint{}
 	}
 
 	normalizeIP := func(s string) string { return strings.Trim(s, "[]") }
@@ -79,8 +78,8 @@ func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState
 	// Build lookup maps:
 	//   ip -> endpoint
 	//   ip:port -> endpoint (only when endpoint GetPort() is non-empty)
-	ipToEndpoint := make(map[string]types.Endpoint, len(endpoints))
-	hpToPod := make(map[string]types.Endpoint, len(endpoints))
+	ipToEndpoint := make(map[string]framework.Endpoint, len(endpoints))
+	hpToPod := make(map[string]framework.Endpoint, len(endpoints))
 	for _, e := range endpoints {
 		if e == nil || e.GetMetadata() == nil {
 			continue
@@ -96,7 +95,7 @@ func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState
 	}
 
 	headerVals := strings.Split(hv, ",")
-	filteredEndpoints := make([]types.Endpoint, 0, len(headerVals))
+	filteredEndpoints := make([]framework.Endpoint, 0, len(headerVals))
 	seen := make(map[string]struct{}, len(headerVals)) // de-dupe by endpoint IP
 
 	for _, raw := range headerVals {
@@ -114,7 +113,7 @@ func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *types.CycleState
 		}
 		host = normalizeIP(host)
 
-		var endpoint types.Endpoint
+		var endpoint framework.Endpoint
 		if port != "" {
 			// Require an exact ip:port match
 			if p, ok := hpToPod[host+":"+port]; ok {

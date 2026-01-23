@@ -20,8 +20,9 @@ import (
 	"fmt"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 )
@@ -49,10 +50,13 @@ func applyStaticDefaults(cfg *configapi.EndpointPickerConfig) {
 // applySystemDefaults injects required components that were omitted from the config.
 // It handles "System" defaults: logic that requires inspecting instantiated plugins (via the handle) to ensure the
 // system graph is complete.
-func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle plugins.Handle) error {
+func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle) error {
 	allPlugins := handle.GetAllPluginsWithNames()
 	if err := ensureSchedulingLayer(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply scheduling system defaults: %w", err)
+	}
+	if err := ensureFlowControlLayer(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply flow control system defaults: %w", err)
 	}
 	return nil
 }
@@ -62,8 +66,8 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle plugins.Han
 // they are not explicitly configured.
 func ensureSchedulingLayer(
 	cfg *configapi.EndpointPickerConfig,
-	handle plugins.Handle,
-	allPlugins map[string]plugins.Plugin,
+	handle fwkplugin.Handle,
+	allPlugins map[string]fwkplugin.Plugin,
 ) error {
 	if len(cfg.SchedulingProfiles) == 0 {
 		defaultProfile := configapi.SchedulingProfile{Name: "default"}
@@ -134,15 +138,24 @@ func ensureSchedulingLayer(
 	return nil
 }
 
+// ensureFlowControlLayer guarantees that the flow control subsystem is structurally complete.
+func ensureFlowControlLayer(
+	cfg *configapi.EndpointPickerConfig,
+	handle fwkplugin.Handle,
+	_ map[string]fwkplugin.Plugin,
+) error {
+	return registerDefaultPlugin(cfg, handle, interflow.GlobalStrictFairnessPolicyType)
+}
+
 // registerDefaultPlugin instantiates a plugin with empty configuration (defaults) and adds it to both the handle and
 // the config spec.
 func registerDefaultPlugin(
 	cfg *configapi.EndpointPickerConfig,
-	handle plugins.Handle,
+	handle fwkplugin.Handle,
 	pluginType string,
 ) error {
 	name := pluginType
-	factory, ok := plugins.Registry[pluginType]
+	factory, ok := fwkplugin.Registry[pluginType]
 	if !ok {
 		return fmt.Errorf("plugin type '%s' not found in registry", pluginType)
 	}

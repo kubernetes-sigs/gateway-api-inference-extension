@@ -60,15 +60,15 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/predicted_latency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/slo_aware_router"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
@@ -93,24 +93,6 @@ const (
 	EnvSdKVCacheUtilThreshold      = "SD_KV_CACHE_UTIL_THRESHOLD"
 	EnvSdMetricsStalenessThreshold = "SD_METRICS_STALENESS_THRESHOLD"
 )
-
-// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
-// Remove this static initialization helper once Flow Control is integrated
-// into the EPP YAML-based plugin configuration path.
-func must[T any](t T, err error) T {
-	if err != nil {
-		panic(fmt.Sprintf("static initialization failed: %v", err))
-	}
-	return t
-}
-
-// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1794):
-// Remove hardcoded configuration. Priorities, fairness policies, and limits should be loaded from the standard EPP
-// configuration system.
-var flowControlConfig = flowcontrol.Config{
-	Controller: fccontroller.Config{},        // Use all defaults.
-	Registry:   must(fcregistry.NewConfig()), // Use all defaults.
-}
 
 var (
 	setupLog = ctrl.Log.WithName("setup")
@@ -286,21 +268,10 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] { // initialize the data layer from configuration
-		if err := datalayer.WithConfig(eppConfig.DataConfig); err != nil {
-			setupLog.Error(err, "failed to initialize data layer")
-			return err
-		}
-		sources := datalayer.GetSources()
-		if len(sources) == 0 {
-			err := errors.New("data layer enabled but no data sources configured")
-			setupLog.Error(err, "failed to initialize data layer")
-			return err
-		}
-		epf.SetSources(sources)
-		for _, src := range sources {
-			setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
-		}
+	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
+	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, setupLog); err != nil {
+		setupLog.Error(err, "failed to initialize data layer")
+		return err
 	}
 
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
@@ -312,19 +283,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.featureGates[flowcontrol.FeatureGate] {
 		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
-		fcCfg, err := flowControlConfig.ValidateAndApplyDefaults()
-		if err != nil {
-			setupLog.Error(err, "failed to initialize Flow Control layer")
-			return fmt.Errorf("invalid Flow Control config: %w", err)
-		}
-
-		registry, err := fcregistry.NewFlowRegistry(fcCfg.Registry, setupLog)
+		registry, err := fcregistry.NewFlowRegistry(eppConfig.FlowControlConfig.Registry, setupLog)
 		if err != nil {
 			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
 		fc, err := fccontroller.NewFlowController(
 			ctx,
-			fcCfg.Controller,
+			eppConfig.FlowControlConfig.Controller,
 			registry, saturationDetector,
 			locator,
 		)
@@ -404,24 +369,24 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 
 // registerInTreePlugins registers the factory functions of all known plugins
 func (r *Runner) registerInTreePlugins() {
-	plugins.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
-	plugins.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
-	plugins.Register(picker.RandomPickerType, picker.RandomPickerFactory)
-	plugins.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
-	plugins.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
-	plugins.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
-	plugins.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
-	plugins.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
-	plugins.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	fwkplugin.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
+	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
+	fwkplugin.Register(picker.RandomPickerType, picker.RandomPickerFactory)
+	fwkplugin.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
+	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
+	fwkplugin.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
+	fwkplugin.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
+	fwkplugin.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
+	fwkplugin.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
 	// Latency predictor plugins
-	plugins.Register(slo_aware_router.SLOAwareRouterPluginType, slo_aware_router.SLOAwareRouterFactory)
+	fwkplugin.Register(predicted_latency.PredictedLatencyPluginType, predicted_latency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
-	plugins.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
+	fwkplugin.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)
-	plugins.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
+	fwkplugin.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
 	// register datalayer metrics collection plugins
-	plugins.Register(dlmetrics.MetricsDataSourceType, dlmetrics.MetricsDataSourceFactory)
-	plugins.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
+	fwkplugin.Register(dlmetrics.MetricsDataSourceType, dlmetrics.MetricsDataSourceFactory)
+	fwkplugin.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver.Options) (*configapi.EndpointPickerConfig, error) {
@@ -473,7 +438,7 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
-	handle := plugins.NewEppHandle(ctx, makePodListFunc(ds))
+	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds))
 	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
 	if err != nil {
@@ -540,13 +505,33 @@ func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.L
 	}
 }
 
-func (r *Runner) setupMetricsCollection(useExperimentalDatalayer bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
-	if useExperimentalDatalayer {
-		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval), nil
+func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, epf datalayer.EndpointFactory,
+	setupLog logr.Logger) error {
+	disallowedMetricsExtractor := ""
+	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
+		disallowedMetricsExtractor = dlmetrics.MetricsExtractorType
 	}
 
-	if len(datalayer.GetSources()) != 0 {
-		setupLog.Info("data sources registered but pluggable datalayer is disabled")
+	if err := datalayer.WithConfig(cfg, disallowedMetricsExtractor); err != nil {
+		return err
+	}
+
+	sources := datalayer.GetSources()
+	if enableNewMetrics && len(sources) == 0 {
+		err := errors.New("data layer enabled but no data sources configured")
+		return err
+	}
+
+	epf.SetSources(sources)
+	for _, src := range sources {
+		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
+	}
+	return nil
+}
+
+func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
+	if enableNewMetrics {
+		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval), nil
 	}
 	return setupMetricsV1(opts)
 }

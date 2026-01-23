@@ -28,7 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
+	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -109,14 +109,15 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 			secondaryPodIPs = append(secondaryPodIPs, p.Status.PodIP)
 		}
 
+		rt := &RoundTripper
 		// Send one targeted request per backend Pod to ensure EPP readiness.
 		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		allNames := append(append([]string{}, primaryPodNames...), secondaryPodNames...)
 		for i := 0; i < len(allIPs); i++ {
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				s.RoundTripper,
-				s.TimeoutConfig,
+				rt,
+				rt.TimeoutConfig,
 				gwAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
@@ -173,7 +174,7 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 
 		for range totalRequests {
 			g.Go(func() error {
-				cReq, cRes, err := s.RoundTripper.CaptureRoundTrip(req)
+				cReq, cRes, err := RoundTripper.CaptureRoundTrip(req)
 				if err != nil {
 					return fmt.Errorf("failed to roundtrip request: %w", err)
 				}

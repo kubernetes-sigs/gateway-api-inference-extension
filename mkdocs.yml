@@ -18,6 +18,7 @@ theme:
     - navigation.tabs
     - navigation.top
     - navigation.expand
+    - content.tabs.link
   palette:
     primary: custom
   custom_dir: site-src/overrides
@@ -67,7 +68,8 @@ nav:
       - Getting started (Released): guides/index.md
       - Getting started (Latest/Main): guides/getting-started-latest.md
       - Use Cases:
-        - Serve Multiple GenAI models: guides/serve-multiple-genai-models.md
+        - Serving Multiple Inference Pools (Latest/Main): guides/serving-multiple-inference-pools-latest.md
+        - Deploy As a Standalone Request Scheduler: guides/epp-standalone.md
       - Rollout:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md

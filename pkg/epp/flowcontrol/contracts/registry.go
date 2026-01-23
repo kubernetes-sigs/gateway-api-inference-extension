@@ -81,16 +81,21 @@ type FlowRegistryDataPlane interface {
 	WithConnection(key types.FlowKey, fn func(conn ActiveFlowConnection) error) error
 }
 
-// ActiveFlowConnection represents a handle to a temporary, leased session on a flow.
-// It provides a safe, scoped entry point to the registry's sharded data plane.
+// ActiveFlowConnection represents a handle to a scoped, leased session on a flow.
+// It provides a safe entry point to the registry's sharded data plane.
 //
 // An `ActiveFlowConnection` instance is only valid for the duration of the `WithConnection` callback from which it was
 // received. Callers MUST NOT store a reference to this object or use it after the callback returns.
-// Its purpose is to ensure that any interaction with the flow's state (e.g., accessing its shards and queues) occurs
-// safely while the flow is guaranteed to be protected from garbage collection.
+//
+// Lifecycle & Pinning:
+// This interface represents an active "Lease" on the flow. As long as this object is valid (within the callback), the
+// Flow Registry guarantees that the underlying Flow State is "Pinned" and protected from Garbage Collection.
 type ActiveFlowConnection interface {
-	// ActiveShards returns a stable snapshot of accessors for all Active internal state shards.
+	// ActiveShards returns a current snapshot of accessors for all Active internal state shards.
 	ActiveShards() []RegistryShard
+
+	// FlowKey returns the immutable identity of the flow this connection is pinned to.
+	FlowKey() types.FlowKey
 }
 
 // RegistryShard defines the interface for a single slice (shard) of the `FlowRegistry`'s state.
@@ -119,15 +124,20 @@ type RegistryShard interface {
 	// Returns an error wrapping `ErrFlowInstanceNotFound` if the flow instance does not exist.
 	IntraFlowDispatchPolicy(key types.FlowKey) (framework.IntraFlowDispatchPolicy, error)
 
-	// InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy` for this shard.
-	// The registry guarantees that a non-nil default policy is returned if none is configured for the band.
-	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
-	InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error)
+	// FairnessPolicy retrieves the FairnessPolicy singleton configured for the specified priority band on this shard.
+	// This method provides access to the immutable logic component that governs inter-flow contention.
+	// The registry guarantees that a non-nil policy is returned for any active priority band.
+	//
+	// Returns:
+	//   - FairnessPolicy: The active policy instance.
+	//   - error: A wrapped ErrPriorityBandNotFound if the priority level is not configured on this shard.
+	FairnessPolicy(priority int) (framework.FairnessPolicy, error)
 
-	// PriorityBandAccessor retrieves a read-only accessor for a given priority level, providing a view of the band's
-	// state as seen by this specific shard. This is the primary entry point for inter-flow dispatch policies that need to
-	// inspect and compare multiple flow queues within the same priority band.
-	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority level is not configured.
+	// PriorityBandAccessor retrieves the read-only view of the "Flow Group" for a specific priority level.
+	// This accessor provides the state of all contending flows within the band (as seen by this shard) and serves as the
+	// primary input for FairnessPolicy execution.
+	//
+	// Returns an error wrapping ErrPriorityBandNotFound if the priority level is not configured.
 	PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error)
 
 	// AllOrderedPriorityLevels returns all configured priority levels that this shard is aware of, sorted in descending

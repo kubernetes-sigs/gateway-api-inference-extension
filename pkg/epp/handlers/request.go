@@ -17,11 +17,15 @@ limitations under the License.
 package handlers
 
 import (
+	"context"
+	"maps"
 	"strconv"
 	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -37,7 +41,7 @@ const (
 	defaultFairnessID = "default-flow"
 )
 
-func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
+func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
 	// an EoS in the request headers means this request has no body or trailers.
@@ -52,7 +56,7 @@ func (s *StreamingServer) HandleRequestHeaders(reqCtx *RequestContext, req *extP
 		}
 		reqCtx.TargetEndpoint = endpoint.GetIPAddress() + ":" + endpoint.GetPort()
 		reqCtx.RequestSize = 0
-		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(reqCtx)
+		reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
 		return nil
 	}
 
@@ -91,26 +95,34 @@ func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) 
 	return responses
 }
 
-func (s *StreamingServer) generateRequestHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+func (s *StreamingServer) generateRequestHeaderResponse(ctx context.Context, reqCtx *RequestContext) *extProcPb.ProcessingResponse {
 	// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
 	// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
 	// options for gateway providers.
+	dynamicMetadata := s.generateMetadata(reqCtx.TargetEndpoint)
+	if reqCtx.Response.DynamicMetadata != nil {
+		if dynamicMetadata.Fields == nil {
+			dynamicMetadata.Fields = make(map[string]*structpb.Value)
+		}
+		maps.Copy(dynamicMetadata.Fields, reqCtx.Response.DynamicMetadata.Fields)
+	}
+
 	return &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &extProcPb.HeadersResponse{
 				Response: &extProcPb.CommonResponse{
 					ClearRouteCache: true,
 					HeaderMutation: &extProcPb.HeaderMutation{
-						SetHeaders: s.generateHeaders(reqCtx),
+						SetHeaders: s.generateHeaders(ctx, reqCtx),
 					},
 				},
 			},
 		},
-		DynamicMetadata: s.generateMetadata(reqCtx.TargetEndpoint),
+		DynamicMetadata: dynamicMetadata,
 	}
 }
 
-func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
+func (s *StreamingServer) generateHeaders(ctx context.Context, reqCtx *RequestContext) []*configPb.HeaderValueOption {
 	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
 	headers := []*configPb.HeaderValueOption{
 		{
@@ -127,6 +139,19 @@ func (s *StreamingServer) generateHeaders(reqCtx *RequestContext) []*configPb.He
 			Header: &configPb.HeaderValue{
 				Key:      "Content-Length",
 				RawValue: []byte(strconv.Itoa(reqCtx.RequestSize)),
+			},
+		})
+	}
+
+	// Inject trace context headers for propagation to downstream services
+	traceHeaders := make(map[string]string)
+	propagator := otel.GetTextMapPropagator()
+	propagator.Inject(ctx, propagation.MapCarrier(traceHeaders))
+	for key, value := range traceHeaders {
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      key,
+				RawValue: []byte(value),
 			},
 		})
 	}

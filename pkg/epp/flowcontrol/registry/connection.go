@@ -21,8 +21,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 )
 
-// connection is the concrete, un-exported implementation of the `contracts.ActiveFlowConnection` interface.
-// It is a temporary handle created for the duration of a single `WithConnection` call.
+// connection is the concrete, un-exported implementation of the contracts.ActiveFlowConnection interface.
+// It represents a scoped lease that pins the flow state in memory, preventing garbage collection for the duration of
+// the session.
 type connection struct {
 	registry *FlowRegistry
 	key      types.FlowKey
@@ -41,4 +42,9 @@ func (c *connection) ActiveShards() []contracts.RegistryShard {
 		shardsCopy[i] = s
 	}
 	return shardsCopy
+}
+
+// FlowKey returns the immutable identity of the flow this connection is pinned to.
+func (c *connection) FlowKey() types.FlowKey {
+	return c.key
 }

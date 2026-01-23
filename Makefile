@@ -98,7 +98,7 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: generate
-generate: controller-gen code-generator ## Generate WebhookConfiguration, ClusterRole, CustomResourceDefinition objects, code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen code-generator tidy ## Generate WebhookConfiguration, ClusterRole, CustomResourceDefinition objects, code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate/boilerplate.generatego.txt" paths="./..."
 	$(CONTROLLER_GEN) crd output:dir="./config/crd/bases" paths="./..."
 	./hack/update-codegen.sh
@@ -134,6 +134,7 @@ fmt-verify:
 vet: ## Run go vet against code.
 	go vet ./...
 
+#If you are running in local and your helm dependency is outdated, you can run `make test MODE=local`
 .PHONY: test
 test: generate fmt vet envtest image-build verify-crds verify-helm-charts ## Run tests.
 	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
@@ -180,9 +181,10 @@ verify: vet fmt-verify generate ci-lint api-lint verify-all
 verify-crds: kubectl-validate
 	hack/verify-manifests.sh
 
+#If you are running in local and your helm dependency is outdated, you can run `make verify-helm-charts MODE=local`
 .PHONY: verify-helm-charts
 verify-helm-charts: helm-install
-	hack/verify-helm.sh
+	hack/verify-helm.sh $(MODE)
 
 # Run static analysis.
 .PHONY: verify-all
@@ -363,6 +365,9 @@ inferencepool-helm-chart-push: yq helm-install
 bbr-helm-chart-push: yq helm-install
 	CHART=body-based-routing EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
+.PHONY: epp-standalone-helm-chart-push
+epp-standalone-helm-chart-push: yq helm-install
+	CHART=epp-standalone EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 ##@ Release
 
 .PHONY: release-quickstart
@@ -445,6 +450,11 @@ $(GOLANGCI_API_LINT):
 .PHONY: yq
 yq: ## Download yq locally if necessary.
 	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
+
+.PHONY: tidy
+tidy:
+	go work sync
+	find . -name go.mod -execdir sh -c 'go mod tidy' \;
 
 .PHONY: helm-install
 helm-install: $(HELM) ## Download helm locally if necessary.

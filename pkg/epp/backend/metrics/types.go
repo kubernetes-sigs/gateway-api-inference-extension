@@ -63,7 +63,7 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *dat
 		logger:    log.FromContext(parentCtx).WithValues("endpoint", metadata.NamespacedName),
 	}
 	pm.metadata.Store(metadata)
-	pm.metrics.Store(NewMetricsState())
+	pm.metrics.Store(datalayer.NewMetrics())
 
 	pm.startRefreshLoop(parentCtx)
 	return pm

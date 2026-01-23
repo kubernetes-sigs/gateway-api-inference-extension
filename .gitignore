@@ -16,7 +16,6 @@ latencypredictor/__pycache__
 *.out
 
 # Go workspace file
-go.work
 go.work.sum
 
 # Kubernetes Generated files - skip generated files, except for vendored files

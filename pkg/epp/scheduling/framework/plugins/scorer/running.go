@@ -21,10 +21,9 @@ import (
 	"encoding/json"
 	"math"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
@@ -35,25 +34,25 @@ const (
 var _ framework.Scorer = &RunningRequestsSizeScorer{}
 
 // RunningRequestsSizeScorerFactory defines the factory function for RunningRequestsSizeScorer.
-func RunningRequestsSizeScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func RunningRequestsSizeScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewRunningRequestsSizeScorer().WithName(name), nil
 }
 
 // NewRunningRequestsSizeScorer initializes a new RunningRequestsSizeScorer and returns its pointer.
 func NewRunningRequestsSizeScorer() *RunningRequestsSizeScorer {
 	return &RunningRequestsSizeScorer{
-		typedName: plugins.TypedName{Type: RunningRequestsSizeScorerType, Name: RunningRequestsSizeScorerType},
+		typedName: fwkplugin.TypedName{Type: RunningRequestsSizeScorerType, Name: RunningRequestsSizeScorerType},
 	}
 }
 
 // RunningRequestsSizeScorer scores list of candidate pods based on the pod's running request size.
 // the less running request size the pod has, the higher score it will get (since it's more available to serve new request).
 type RunningRequestsSizeScorer struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *RunningRequestsSizeScorer) TypedName() plugins.TypedName {
+func (s *RunningRequestsSizeScorer) TypedName() fwkplugin.TypedName {
 	return s.typedName
 }
 
@@ -76,7 +75,7 @@ func (s *RunningRequestsSizeScorer) WithName(name string) *RunningRequestsSizeSc
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
+func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 
@@ -92,7 +91,7 @@ func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *types.CycleState
 	}
 
 	// endpointScoreFunc calculates the score based on the queue size of each endpoint. Longer queue gets a lower score.
-	endpointScoreFunc := func(endpoint types.Endpoint) float64 {
+	endpointScoreFunc := func(endpoint framework.Endpoint) float64 {
 		if maxQueueSize == minQueueSize {
 			// If all endpoints have the same queue size, return a neutral score
 			return 1.0
@@ -101,7 +100,7 @@ func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *types.CycleState
 	}
 
 	// Create a map to hold the scores for each endpoint
-	scores := make(map[types.Endpoint]float64, len(endpoints))
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = endpointScoreFunc(endpoint)
 	}

@@ -27,12 +27,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // static check to ensure Plugin implements the PrepareDataPlugin interface.
@@ -46,9 +45,9 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState()}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState()}
-	endpoint3 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, MetricsState: backendmetrics.NewMetricsState()}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics()}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics()}
+	endpoint3 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, Metrics: datalayer.NewMetrics()}
 	endpoints := []types.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
@@ -62,7 +61,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -95,7 +94,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -126,7 +125,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -157,7 +156,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req4, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -187,7 +186,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req5, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
@@ -215,7 +214,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
 	endpoints := []types.Endpoint{endpoint1}
 
 	// Test with chat completions request
@@ -232,7 +231,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 		},
 	}
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Chat completions - Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Should have some hashes for the JSON-encoded messages
@@ -249,8 +248,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: &backendmetrics.MetricsState{}}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: &backendmetrics.MetricsState{}}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: &datalayer.Metrics{}}
 	endpoints := []types.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
@@ -267,7 +266,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		},
 	}
 	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Initial conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	initialHashCount := len(state.PrefixHashes)
@@ -302,7 +301,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Extended conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	extendedHashCount := len(state.PrefixHashes)
@@ -337,7 +336,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 		},
 	}
 	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	longHashCount := len(state.PrefixHashes)
@@ -479,7 +478,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	podName := "pod-autotune"
 	endpoint := &types.PodMetrics{
 		EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
-		MetricsState: &backendmetrics.MetricsState{
+		Metrics: &datalayer.Metrics{
 			CacheBlockSize:    16,   // 16 tokens * 4 chars/token = 64 chars per block
 			CacheNumGPUBlocks: 1000, // 1000 blocks capacity
 		},
@@ -513,7 +512,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
 		// Block size from pod is 16 tokens * 4 = 64 chars.
 		// Prompt is 128 chars.
@@ -548,7 +547,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
 		// Block size from config is 32 chars.
 		// Prompt is 128 chars.
@@ -587,8 +586,8 @@ func TestPrepareRequestData(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, MetricsState: backendmetrics.NewMetricsState(), AttributeMap: datalayer.NewAttributes()}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
 	endpoints := []types.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.

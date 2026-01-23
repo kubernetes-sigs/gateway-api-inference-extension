@@ -20,10 +20,5 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
-// NewMetricsState initializes a new MetricsState and returns its pointer.
-func NewMetricsState() *MetricsState {
-	return datalayer.NewMetrics()
-}
-
 // MetricsState holds the latest state of the metrics that were scraped from a pod.
 type MetricsState = datalayer.Metrics

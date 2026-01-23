@@ -17,6 +17,7 @@ limitations under the License.
 package registry
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -24,26 +25,32 @@ import (
 
 	"github.com/go-logr/logr"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
-// priorityBand holds all `managedQueues` and configuration for a single priority level within a shard.
+// priorityBand holds all managedQueues and configuration for a single priority level within a shard.
 type priorityBand struct {
 	// --- Immutable (set at construction) ---
 
+	// fairnessPolicy is the singleton plugin instance governing this band.
+	// It is duplicated here from the config to allow lock-free access on the hot path.
+	fairnessPolicy framework.FairnessPolicy
+
+	// policyState holds the opaque, mutable state for the fairness policy.
+	// It is initialized once at creation via fairnessPolicy.NewState() and exposed via GetPolicyState().
+	policyState any
+
+	// --- State Protected by the parent shard's mu ---
+
 	// config is the local copy of the band's definition.
 	// It is updated during dynamic scaling events (updateConfig), protected by the parent shard's mutex.
-	config                  PriorityBandConfig
-	interFlowDispatchPolicy framework.InterFlowDispatchPolicy
+	config PriorityBandConfig
 
-	// --- State Protected by the parent shard's `mu` ---
-
-	// queues holds all `managedQueue` instances within this band, keyed by their logical `ID` string.
-	// The priority is implicit from the parent `priorityBand`.
+	// queues holds all managedQueue instances within this band, keyed by their logical ID string.
+	// The priority is implicit from the parent priorityBand.
 	queues map[string]*managedQueue
 
 	// --- Concurrent-Safe State (Atomics) ---
@@ -114,7 +121,7 @@ func newShard(
 	config *ShardConfig,
 	logger logr.Logger,
 	onStatsDelta propagateStatsDeltaFunc,
-) (*registryShard, error) {
+) *registryShard {
 	shardLogger := logger.WithName("registry-shard").WithValues("shardID", id)
 	s := &registryShard{
 		id:           id,
@@ -124,25 +131,30 @@ func newShard(
 	}
 
 	for _, bandConfig := range config.PriorityBands {
-		interPolicy, err := interflow.NewPolicyFromName(bandConfig.InterFlowDispatchPolicy)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create inter-flow policy %q for priority band %d: %w",
-				bandConfig.InterFlowDispatchPolicy, bandConfig.Priority, err)
-		}
-
-		band := &priorityBand{
-			config:                  *bandConfig,
-			queues:                  make(map[string]*managedQueue),
-			interFlowDispatchPolicy: interPolicy,
-		}
-		s.priorityBands.Store(bandConfig.Priority, band)
-		s.orderedPriorityLevels = append(s.orderedPriorityLevels, bandConfig.Priority)
+		s.initPriorityBand(bandConfig)
 	}
 
-	s.sortPriorityLevels()
 	s.logger.V(logging.DEFAULT).Info("Registry shard initialized successfully",
 		"orderedPriorities", s.orderedPriorityLevels)
-	return s, nil
+	return s
+}
+
+// initPriorityBand constructs the runtime state for a single priority level and registers it within the shard.
+// This is used by both newShard (initialization) and addPriorityBand (dynamic provisioning).
+// The caller MUST hold s.mu (Write Lock) as this method modifies the orderedPriorityLevels slice.
+func (s *registryShard) initPriorityBand(bandConfig *PriorityBandConfig) {
+	policyState := bandConfig.FairnessPolicy.NewState(context.Background())
+	band := &priorityBand{
+		config:         *bandConfig,
+		queues:         make(map[string]*managedQueue),
+		fairnessPolicy: bandConfig.FairnessPolicy,
+		policyState:    policyState,
+	}
+	s.priorityBands.Store(bandConfig.Priority, band)
+	s.orderedPriorityLevels = append(s.orderedPriorityLevels, bandConfig.Priority)
+	sort.Slice(s.orderedPriorityLevels, func(i, j int) bool {
+		return s.orderedPriorityLevels[i] > s.orderedPriorityLevels[j]
+	})
 }
 
 // addPriorityBand dynamically provisions a new priority band on this shard.
@@ -156,29 +168,35 @@ func (s *registryShard) addPriorityBand(priority int) {
 		return
 	}
 
-	// Lookup definition from local Config (populated by repartitionShardConfigsLocked)
 	bandConfig := s.config.PriorityBands[priority]
-
-	interPolicy, _ := interflow.NewPolicyFromName(bandConfig.InterFlowDispatchPolicy)
-	band := &priorityBand{
-		config:                  *bandConfig,
-		queues:                  make(map[string]*managedQueue),
-		interFlowDispatchPolicy: interPolicy,
-	}
-	s.priorityBands.Store(priority, band)
-
-	s.orderedPriorityLevels = append(s.orderedPriorityLevels, priority)
-	s.sortPriorityLevels()
-
+	s.initPriorityBand(bandConfig)
 	s.logger.Info("Dynamically added priority band", "priority", priority)
 }
 
-// sortPriorityLevels sorts the orderedPriorityLevels slice in descending order (highest priority first).
-// Expects the shard lock to be held.
-func (s *registryShard) sortPriorityLevels() {
-	sort.Slice(s.orderedPriorityLevels, func(i, j int) bool {
-		return s.orderedPriorityLevels[i] > s.orderedPriorityLevels[j]
-	})
+// deletePriorityBand removes a priority band from this shard.
+// This method should only be called by FlowRegistry.deletePriorityBand with FlowRegistry.mu held.
+func (s *registryShard) deletePriorityBand(priority int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Remove from sync.Map
+	s.priorityBands.Delete(priority)
+
+	// Remove from config
+	delete(s.config.PriorityBands, priority)
+
+	// Remove from ordered list
+	for i, p := range s.orderedPriorityLevels {
+		if p == priority {
+			s.orderedPriorityLevels = append(
+				s.orderedPriorityLevels[:i],
+				s.orderedPriorityLevels[i+1:]...,
+			)
+			break
+		}
+	}
+
+	s.logger.V(logging.DEBUG).Info("Removed priority band from shard", "priority", priority)
 }
 
 // ID returns the unique identifier for this shard.
@@ -227,16 +245,15 @@ func (s *registryShard) IntraFlowDispatchPolicy(key types.FlowKey) (framework.In
 	return mq.dispatchPolicy, nil
 }
 
-// InterFlowDispatchPolicy retrieves a priority band's configured `framework.InterFlowDispatchPolicy`.
+// FairnessPolicy retrieves a priority band's configured FairnessPolicy.
 // This read is lock-free as the policy instance is immutable after the shard is initialized.
-func (s *registryShard) InterFlowDispatchPolicy(priority int) (framework.InterFlowDispatchPolicy, error) {
+func (s *registryShard) FairnessPolicy(priority int) (framework.FairnessPolicy, error) {
 	val, ok := s.priorityBands.Load(priority)
 	if !ok {
-		return nil, fmt.Errorf("failed to get inter-flow policy for priority %d: %w",
+		return nil, fmt.Errorf("failed to get fairness policy for priority %d: %w",
 			priority, contracts.ErrPriorityBandNotFound)
 	}
-	band := val.(*priorityBand)
-	return band.interFlowDispatchPolicy, nil
+	return val.(*priorityBand).fairnessPolicy, nil
 }
 
 // PriorityBandAccessor retrieves a read-only view for a given priority level.
@@ -399,6 +416,12 @@ func (a *priorityBandAccessor) PriorityName() string {
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
 	return a.band.config.PriorityName
+}
+
+// PolicyState returns the opaque, mutable state for the fairness policy scoped to this band.
+// We don't need a lock because the pointer to the state object itself is immutable.
+func (a *priorityBandAccessor) PolicyState() any {
+	return a.band.policyState
 }
 
 // FlowKeys returns a slice of all flow keys within this priority band.

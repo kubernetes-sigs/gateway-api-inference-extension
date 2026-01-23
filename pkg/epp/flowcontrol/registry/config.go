@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // --- Defaults ---
@@ -38,8 +39,8 @@ const (
 	defaultPriorityBandMaxBytes uint64 = 1_000_000_000
 	// defaultIntraFlowDispatchPolicy is the default policy for selecting items within a single flow's queue.
 	defaultIntraFlowDispatchPolicy intraflow.RegisteredPolicyName = intraflow.FCFSPolicyName
-	// defaultInterFlowDispatchPolicy is the default policy for selecting which flow's queue to service next.
-	defaultInterFlowDispatchPolicy interflow.RegisteredPolicyName = interflow.BestHeadPolicyName
+	// defaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
+	defaultFairnessPolicyRef string = interflow.GlobalStrictFairnessPolicyType
 	// defaultQueue is the default queue implementation for flows.
 	defaultQueue queue.RegisteredQueueName = queue.ListQueueName
 	// defaultInitialShardCount is the default number of parallel shards to create when the registry is initialized.
@@ -47,6 +48,9 @@ const (
 	// defaultFlowGCTimeout is the default duration of inactivity after which an idle flow is garbage collected.
 	// This also serves as the interval for the periodic garbage collection scan.
 	defaultFlowGCTimeout time.Duration = 5 * time.Minute
+	// defaultPriorityBandGCTimeout is the default duration of inactivity after which a dynamically provisioned
+	// priority band is garbage collected. Set to 2x flow GC timeout to ensure flows are cleaned up first.
+	defaultPriorityBandGCTimeout time.Duration = 2 * defaultFlowGCTimeout
 	// defaultEventChannelBufferSize is the default size of the buffered channel for control plane events.
 	defaultEventChannelBufferSize int = 4096
 )
@@ -127,8 +131,14 @@ type Config struct {
 
 	// FlowGCTimeout defines the interval at which the registry scans for and garbage collects idle flows.
 	// A flow is collected if it has been observed to be Idle for at least one full scan interval.
-	// Optional: Defaults to `defaultFlowGCTimeout` (5 minutes).
+	// Optional: Defaults to `defaultFlowGCTimeout` (1 hour).
 	FlowGCTimeout time.Duration
+
+	// PriorityBandGCTimeout defines the duration of inactivity after which a dynamically provisioned priority band
+	// is garbage collected. A band is considered idle when it has no flows and no buffered requests across all shards.
+	// Must be >= FlowGCTimeout to ensure flows are collected before bands.
+	// Optional: Defaults to `defaultPriorityBandGCTimeout` (10 minutes).
+	PriorityBandGCTimeout time.Duration
 
 	// EventChannelBufferSize defines the size of the buffered channel used for internal control plane events.
 	// A larger buffer can absorb larger bursts of events (e.g., from many queues becoming non-empty simultaneously)
@@ -139,6 +149,7 @@ type Config struct {
 }
 
 // PriorityBandConfig defines the configuration template for a single priority band.
+// A "Band" is defined as the collection (or range) of all flows having the same priority level.
 // It establishes the default behaviors (such as queueing and dispatch policies) and total capacity limits for all flows
 // that operate at this priority level.
 type PriorityBandConfig struct {
@@ -157,10 +168,11 @@ type PriorityBandConfig struct {
 	// Optional: Defaults to defaultIntraFlowDispatchPolicy ("FCFS").
 	IntraFlowDispatchPolicy intraflow.RegisteredPolicyName
 
-	// InterFlowDispatchPolicy specifies the name of the policy used to select which flow's queue to service next from
-	// this band.
-	// Optional: Defaults to defaultInterFlowDispatchPolicy ("BestHead").
-	InterFlowDispatchPolicy interflow.RegisteredPolicyName
+	// FairnessPolicy is the hydrated singleton instance of the policy.
+	// This policy governs which Flow *within this band* to select next (e.g., "round-robin").
+	// This field is populated either via WithFairnessPolicy (using a handle lookup) or via applyDefaults.
+	// Optional: Defaults to defaultFairnessPolicyRef ("global-strict-fairness-policy").
+	FairnessPolicy framework.FairnessPolicy
 
 	// Queue specifies the default name of the `framework.SafeQueue` implementation for flow queues in this band.
 	// Optional: Defaults to defaultQueue ("ListQueue").
@@ -209,6 +221,20 @@ func WithFlowGCTimeout(d time.Duration) ConfigOption {
 			return errors.New("flowGCTimeout must be positive")
 		}
 		b.config.FlowGCTimeout = d
+		return nil
+	}
+}
+
+// WithPriorityBandGCTimeout sets the idle priority band garbage collection timeout.
+func WithPriorityBandGCTimeout(d time.Duration) ConfigOption {
+	return func(b *configBuilder) error {
+		if d <= 0 {
+			return errors.New("priorityBandGCTimeout must be positive")
+		}
+		if b.config.FlowGCTimeout > 0 && d < b.config.FlowGCTimeout {
+			return errors.New("priorityBandGCTimeout must be >= flowGCTimeout")
+		}
+		b.config.PriorityBandGCTimeout = d
 		return nil
 	}
 }
@@ -265,15 +291,30 @@ func WithIntraFlowPolicy(name intraflow.RegisteredPolicyName) PriorityBandConfig
 	}
 }
 
-// WithInterFlowPolicy sets the inter-flow dispatch policy (e.g., "RoundRobin").
-func WithInterFlowPolicy(name interflow.RegisteredPolicyName) PriorityBandConfigOption {
+// WithFairnessPolicy sets the name/reference of the inter-flow fairness policy (e.g., "RoundRobin").
+// TODO(kubernetes-sigs/gateway-api-inference-extension#1794): This option is primarily used by the configuration
+// loader to wire up policies instantiated from the plugin registry.
+func WithFairnessPolicy(ref string, handle fwkplugin.Handle) PriorityBandConfigOption {
 	return func(p *PriorityBandConfig) error {
-		if name == "" {
-			return errors.New("InterFlowDispatchPolicy cannot be empty")
+		policy, err := fairnessPolicy(ref, handle)
+		if err != nil {
+			return err
 		}
-		p.InterFlowDispatchPolicy = name
+		p.FairnessPolicy = policy
 		return nil
 	}
+}
+
+func fairnessPolicy(ref string, handle fwkplugin.Handle) (framework.FairnessPolicy, error) {
+	v := handle.Plugin(ref)
+	if v == nil {
+		return nil, fmt.Errorf("no fairness policy registered for name %q", ref)
+	}
+	policy, ok := v.(framework.FairnessPolicy)
+	if !ok {
+		return nil, fmt.Errorf("plugin %q is not a framework.FairnessPolicy (type: %T)", ref, v)
+	}
+	return policy, nil
 }
 
 // WithQueue sets the queue implementation (e.g., "ListQueue") for flows in this band.
@@ -299,12 +340,17 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 
 // NewConfig creates a new Config populated with system defaults, applies the provided options, and enforces strict
 // validation.
-func NewConfig(opts ...ConfigOption) (*Config, error) {
+//
+// Arguments:
+//   - handle: A fwkplugin.Handle required to resolve the default policies.
+//   - opts: Optional configuration overrides.
+func NewConfig(handle fwkplugin.Handle, opts ...ConfigOption) (*Config, error) {
 	builder := &configBuilder{
 		config: &Config{
 			MaxBytes:               0, // no limit enforced
 			InitialShardCount:      defaultInitialShardCount,
 			FlowGCTimeout:          defaultFlowGCTimeout,
+			PriorityBandGCTimeout:  defaultPriorityBandGCTimeout,
 			EventChannelBufferSize: defaultEventChannelBufferSize,
 			PriorityBands:          make(map[int]*PriorityBandConfig),
 		},
@@ -320,18 +366,22 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 	// Initialize DefaultPriorityBand if missing.
 	// This ensures we always have a template for dynamic provisioning.
 	if builder.config.DefaultPriorityBand == nil {
-		builder.config.DefaultPriorityBand = &PriorityBandConfig{}
-	}
-
-	// Apply defaults to the template.
-	builder.config.DefaultPriorityBand.applyDefaults()
-	if builder.config.DefaultPriorityBand.PriorityName == "" {
-		builder.config.DefaultPriorityBand.PriorityName = "Dynamic-Default"
+		template, err := NewPriorityBandConfig(handle, 0, "Dynamic-Default")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create default priority band: %w", err)
+		}
+		builder.config.DefaultPriorityBand = template
+	} else {
+		if err := builder.config.DefaultPriorityBand.applyDefaults(handle); err != nil {
+			return nil, fmt.Errorf("failed to apply defaults to DefaultPriorityBand: %w", err)
+		}
 	}
 
 	// Apply defaults to all explicitly configured bands.
 	for _, band := range builder.config.PriorityBands {
-		band.applyDefaults()
+		if err := band.applyDefaults(handle); err != nil {
+			return nil, fmt.Errorf("failed to apply defaults to priority band %d: %w", band.Priority, err)
+		}
 	}
 
 	if err := builder.config.validate(builder.checker); err != nil {
@@ -342,13 +392,20 @@ func NewConfig(opts ...ConfigOption) (*Config, error) {
 
 // NewPriorityBandConfig creates a new band configuration with the required fields.
 // It applies system defaults first, then applies any provided options to override those defaults.
-func NewPriorityBandConfig(priority int, name string, opts ...PriorityBandConfigOption) (*PriorityBandConfig, error) {
+func NewPriorityBandConfig(
+	handle fwkplugin.Handle,
+	priority int,
+	name string,
+	opts ...PriorityBandConfigOption,
+) (*PriorityBandConfig, error) {
 	pb := &PriorityBandConfig{
 		Priority:     priority,
 		PriorityName: name,
 	}
 
-	pb.applyDefaults()
+	if err := pb.applyDefaults(handle); err != nil {
+		return nil, err
+	}
 
 	for _, opt := range opts {
 		if err := opt(pb); err != nil {
@@ -359,14 +416,11 @@ func NewPriorityBandConfig(priority int, name string, opts ...PriorityBandConfig
 	return pb, nil
 }
 
-// --- Validation & Defaults ---
+// --- Validation, Defaults & Hydration ---
 
-func (p *PriorityBandConfig) applyDefaults() {
+func (p *PriorityBandConfig) applyDefaults(handle fwkplugin.Handle) error {
 	if p.IntraFlowDispatchPolicy == "" {
 		p.IntraFlowDispatchPolicy = defaultIntraFlowDispatchPolicy
-	}
-	if p.InterFlowDispatchPolicy == "" {
-		p.InterFlowDispatchPolicy = defaultInterFlowDispatchPolicy
 	}
 	if p.Queue == "" {
 		p.Queue = defaultQueue
@@ -374,6 +428,14 @@ func (p *PriorityBandConfig) applyDefaults() {
 	if p.MaxBytes == 0 {
 		p.MaxBytes = defaultPriorityBandMaxBytes
 	}
+	if p.FairnessPolicy == nil {
+		policy, err := fairnessPolicy(defaultFairnessPolicyRef, handle)
+		if err != nil {
+			return err
+		}
+		p.FairnessPolicy = policy
+	}
+	return nil
 }
 
 // validate checks the integrity of a single band's configuration.
@@ -384,8 +446,8 @@ func (p *PriorityBandConfig) validate(checker capabilityChecker) error {
 	if p.IntraFlowDispatchPolicy == "" {
 		return fmt.Errorf("IntraFlowDispatchPolicy required for priority band %d", p.Priority)
 	}
-	if p.InterFlowDispatchPolicy == "" {
-		return fmt.Errorf("InterFlowDispatchPolicy required for priority band %d", p.Priority)
+	if p.FairnessPolicy == nil {
+		return fmt.Errorf("FairnessPolicy instance is missing for priority band %d", p.Priority)
 	}
 	if p.Queue == "" {
 		return fmt.Errorf("Queue required for priority band %d", p.Priority)
@@ -406,6 +468,12 @@ func (c *Config) validate(checker capabilityChecker) error {
 	}
 	if c.FlowGCTimeout <= 0 {
 		return errors.New("flowGCTimeout must be positive")
+	}
+	if c.PriorityBandGCTimeout <= 0 {
+		return errors.New("priorityBandGCTimeout must be positive")
+	}
+	if c.PriorityBandGCTimeout < c.FlowGCTimeout {
+		return errors.New("priorityBandGCTimeout must be >= flowGCTimeout")
 	}
 	if c.EventChannelBufferSize <= 0 {
 		return errors.New("eventChannelBufferSize must be greater than 0")
@@ -456,7 +524,7 @@ func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 			Priority:                template.Priority,
 			PriorityName:            template.PriorityName,
 			IntraFlowDispatchPolicy: template.IntraFlowDispatchPolicy,
-			InterFlowDispatchPolicy: template.InterFlowDispatchPolicy,
+			FairnessPolicy:          template.FairnessPolicy,
 			Queue:                   template.Queue,
 			MaxBytes:                partitionUint64(template.MaxBytes, shardIndex, totalShards),
 		}

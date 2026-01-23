@@ -22,9 +22,8 @@ import (
 	"errors"
 	"fmt"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -35,24 +34,24 @@ const (
 var _ framework.ProfileHandler = &SingleProfileHandler{}
 
 // SingleProfileHandlerFactory defines the factory function for SingleProfileHandler.
-func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func SingleProfileHandlerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewSingleProfileHandler().WithName(name), nil
 }
 
 // NewSingleProfileHandler initializes a new SingleProfileHandler and returns its pointer.
 func NewSingleProfileHandler() *SingleProfileHandler {
 	return &SingleProfileHandler{
-		typedName: plugins.TypedName{Type: SingleProfileHandlerType, Name: SingleProfileHandlerType},
+		typedName: fwkplugin.TypedName{Type: SingleProfileHandlerType, Name: SingleProfileHandlerType},
 	}
 }
 
 // SingleProfileHandler handles a single profile which is always the primary profile.
 type SingleProfileHandler struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (h *SingleProfileHandler) TypedName() plugins.TypedName {
+func (h *SingleProfileHandler) TypedName() fwkplugin.TypedName {
 	return h.typedName
 }
 
@@ -64,8 +63,8 @@ func (h *SingleProfileHandler) WithName(name string) *SingleProfileHandler {
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
 // previously executed cycles along with their results.
-func (h *SingleProfileHandler) Pick(_ context.Context, _ *types.CycleState, request *types.LLMRequest, profiles map[string]*framework.SchedulerProfile,
-	profileResults map[string]*types.ProfileRunResult) map[string]*framework.SchedulerProfile {
+func (h *SingleProfileHandler) Pick(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, profiles map[string]*framework.SchedulerProfile,
+	profileResults map[string]*framework.ProfileRunResult) map[string]*framework.SchedulerProfile {
 	if len(profiles) == len(profileResults) { // all profiles have been executed already in previous call
 		return map[string]*framework.SchedulerProfile{}
 	}
@@ -77,8 +76,8 @@ func (h *SingleProfileHandler) Pick(_ context.Context, _ *types.CycleState, requ
 // It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the
 // key of the primary profile that should be used to get the request selected destination.
 // When a profile run fails, its result in the profileResults map is nil.
-func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.CycleState, _ *types.LLMRequest,
-	profileResults map[string]*types.ProfileRunResult) (*types.SchedulingResult, error) {
+func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest,
+	profileResults map[string]*framework.ProfileRunResult) (*framework.SchedulingResult, error) {
 	if len(profileResults) != 1 {
 		return nil, errors.New("single profile handler is intended to be used with a single profile, failed to process multiple profiles")
 	}
@@ -93,7 +92,7 @@ func (h *SingleProfileHandler) ProcessResults(_ context.Context, _ *types.CycleS
 		return nil, fmt.Errorf("failed to run scheduler profile '%s'", singleProfileName)
 	}
 
-	return &types.SchedulingResult{
+	return &framework.SchedulingResult{
 		ProfileResults:     profileResults,
 		PrimaryProfileName: singleProfileName,
 	}, nil

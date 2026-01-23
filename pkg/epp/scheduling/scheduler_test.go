@@ -24,14 +24,13 @@ import (
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics" // Import config for thresholds
+	// Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // Tests the default scheduler configuration and expected behavior.
@@ -55,33 +54,33 @@ func TestSchedule(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     *types.LLMRequest
-		input   []types.Endpoint
-		wantRes *types.SchedulingResult
+		req     *framework.LLMRequest
+		input   []framework.Endpoint
+		wantRes *framework.SchedulingResult
 		err     bool
 	}{
 		{
 			name: "no candidate endpoints",
-			req: &types.LLMRequest{
+			req: &framework.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "any-model",
 			},
-			input:   []types.Endpoint{},
+			input:   []framework.Endpoint{},
 			wantRes: nil,
 			err:     true,
 		},
 		{
 			name: "finds optimal endpoint",
-			req: &types.LLMRequest{
+			req: &framework.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "critical",
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []types.Endpoint{
-				&types.PodMetrics{
+			input: []framework.Endpoint{
+				&framework.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -91,9 +90,9 @@ func TestSchedule(t *testing.T) {
 						},
 					},
 				},
-				&types.PodMetrics{
+				&framework.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -103,9 +102,9 @@ func TestSchedule(t *testing.T) {
 						},
 					},
 				},
-				&types.PodMetrics{
+				&framework.PodMetrics{
 					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					MetricsState: &backendmetrics.MetricsState{
+					Metrics: &datalayer.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.8,
 						MaxActiveModels:     2,
@@ -115,14 +114,14 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 			},
-			wantRes: &types.SchedulingResult{
-				ProfileResults: map[string]*types.ProfileRunResult{
+			wantRes: &framework.SchedulingResult{
+				ProfileResults: map[string]*framework.ProfileRunResult{
 					"default": {
-						TargetEndpoints: []types.Endpoint{
-							&types.ScoredEndpoint{
-								Endpoint: &types.PodMetrics{
+						TargetEndpoints: []framework.Endpoint{
+							&framework.ScoredEndpoint{
+								Endpoint: &framework.PodMetrics{
 									EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-									MetricsState: &backendmetrics.MetricsState{
+									Metrics: &datalayer.Metrics{
 										WaitingQueueSize:    0,
 										KVCacheUsagePercent: 0.2,
 										MaxActiveModels:     2,

@@ -37,14 +37,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -108,8 +109,8 @@ type mockPrepareDataPlugin struct {
 	consumes map[string]any
 }
 
-func (m *mockPrepareDataPlugin) TypedName() plugins.TypedName {
-	return plugins.TypedName{Name: m.name, Type: "mock"}
+func (m *mockPrepareDataPlugin) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Name: m.name, Type: "mock"}
 }
 
 func (m *mockPrepareDataPlugin) Produces() map[string]any {
@@ -134,18 +135,18 @@ func newMockPrepareDataPlugin(name string) *mockPrepareDataPlugin {
 }
 
 type mockAdmissionPlugin struct {
-	typedName   plugins.TypedName
+	typedName   fwkplugin.TypedName
 	denialError error
 }
 
 func newMockAdmissionPlugin(name string, denialError error) *mockAdmissionPlugin {
 	return &mockAdmissionPlugin{
-		typedName:   plugins.TypedName{Type: "mock-admit-data", Name: name},
+		typedName:   fwkplugin.TypedName{Type: "mock-admit-data", Name: name},
 		denialError: denialError,
 	}
 }
 
-func (m *mockAdmissionPlugin) TypedName() plugins.TypedName {
+func (m *mockAdmissionPlugin) TypedName() fwkplugin.TypedName {
 	return m.typedName
 }
 
@@ -1175,64 +1176,64 @@ const (
 )
 
 type testResponseReceived struct {
-	typedName               plugins.TypedName
-	lastRespOnResponse      *Response
+	typedName               fwkplugin.TypedName
+	lastRespOnResponse      *fwk.Response
 	lastTargetPodOnResponse string
 }
 
 type testResponseStreaming struct {
-	typedName                plugins.TypedName
-	lastRespOnStreaming      *Response
+	typedName                fwkplugin.TypedName
+	lastRespOnStreaming      *fwk.Response
 	lastTargetPodOnStreaming string
 }
 
 type testResponseComplete struct {
-	typedName               plugins.TypedName
-	lastRespOnComplete      *Response
+	typedName               fwkplugin.TypedName
+	lastRespOnComplete      *fwk.Response
 	lastTargetPodOnComplete string
 }
 
 func newTestResponseReceived(name string) *testResponseReceived {
 	return &testResponseReceived{
-		typedName: plugins.TypedName{Type: testResponseReceivedType, Name: name},
+		typedName: fwkplugin.TypedName{Type: testResponseReceivedType, Name: name},
 	}
 }
 
 func newTestResponseStreaming(name string) *testResponseStreaming {
 	return &testResponseStreaming{
-		typedName: plugins.TypedName{Type: testPostStreamingType, Name: name},
+		typedName: fwkplugin.TypedName{Type: testPostStreamingType, Name: name},
 	}
 }
 
 func newTestResponseComplete(name string) *testResponseComplete {
 	return &testResponseComplete{
-		typedName: plugins.TypedName{Type: testPostCompleteType, Name: name},
+		typedName: fwkplugin.TypedName{Type: testPostCompleteType, Name: name},
 	}
 }
 
-func (p *testResponseReceived) TypedName() plugins.TypedName {
+func (p *testResponseReceived) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseStreaming) TypedName() plugins.TypedName {
+func (p *testResponseStreaming) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseComplete) TypedName() plugins.TypedName {
+func (p *testResponseComplete) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
 	p.lastRespOnComplete = response
 	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }

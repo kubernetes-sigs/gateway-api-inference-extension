@@ -12,7 +12,7 @@ flow (e.g., for a specific model or tenant).
 
 This contrasts with the `framework.InterFlowDispatchPolicy`, which is responsible for deciding *which flow's queue*
 gets the next opportunity to dispatch a request. The `framework.IntraFlowDispatchPolicy` only operates *after* the
-inter-flow policy has selected a specific queue.
+FairnessPolicy has selected a specific queue.
 
 Key responsibilities and characteristics of a `framework.IntraFlowDispatchPolicy`:
 
