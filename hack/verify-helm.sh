@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright 2025 The Kubernetes Authors.
 #
@@ -48,15 +48,23 @@ if [ $? -ne 0 ]; then
 fi
 
 # Running tests cases
-echo "Running helm install command for inferencePool chart..."
+echo "Running helm template command for inferencePool chart..."
 # Loop through the keys of the associative array
 for key in "${!test_cases_inference_pool[@]}"; do
-  echo "Running test: $key"
-  ${SCRIPT_ROOT}/bin/helm install "inferencePool-${key}" ${SCRIPT_ROOT}/config/charts/inferencepool ${test_cases_inference_pool[$key]} --dry-run --debug
+  echo "Running test: ${key}"
+  output_dir="${SCRIPT_ROOT}/bin/inferencepool-${key}"
+  ${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/inferencepool ${test_cases_inference_pool[$key]} --output-dir=${output_dir}
   if [ $? -ne 0 ]; then
-    echo "Helm install command failed for test: $key"
+    echo "Helm template command failed for test: ${key}"
     exit 1
   fi
+
+  kubectl apply --dry-run=client --validate=strict --recursive -f "${output_dir}"
+  if [ $? -ne 0 ]; then
+    echo "Kubectl validation failed for test: ${key}"
+    exit 1
+  fi
+  echo "Test case ${key} passed validation."
 done
 
 declare -A test_cases_epp_standalone
@@ -75,14 +83,21 @@ if [ $? -ne 0 ]; then
 fi
 
 # Running tests cases
-echo "Running helm install command for epp-standalone chart..."
+echo "Running helm template command for epp-standalone chart..."
 # Loop through the keys of the associative array
 for key in "${!test_cases_epp_standalone[@]}"; do
-  echo "Running test: $key"
-  ${SCRIPT_ROOT}/bin/helm install "epp-standalone-${key}" ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --dry-run --debug
+  echo "Running test: ${key}"
+  output_dir="${SCRIPT_ROOT}/bin/epp-standalone-${key}"
+  ${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --output-dir=${output_dir}
   if [ $? -ne 0 ]; then
-    echo "Helm install command failed for test: $key"
+    echo "Helm template command failed for test: ${key}"
     exit 1
   fi
+  kubectl apply --dry-run=client --validate=strict --recursive -f "${output_dir}"
+  if [ $? -ne 0 ]; then
+    echo "Kubectl validation failed for test: ${key}"
+    exit 1
+  fi
+  echo "Test case ${key} passed validation."
 done
 
