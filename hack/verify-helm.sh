@@ -15,6 +15,29 @@
 # limitations under the License.
 
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE}")/..
+GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.3.0}"
+GKE_GATEWAY_API_VERSION="${GKE_GATEWAY_API_VERSION:-v1.4.0}"
+TEMP_DIR=$(mktemp -d)
+
+make kubectl-validate
+
+cleanup() {
+  rm -rf "${TEMP_DIR}" || true
+}
+trap cleanup EXIT
+
+fetch_crds() {
+  local url="$1"
+  curl -sL "${url}" -o "${TEMP_DIR}/$(basename "${url}")"
+}
+
+cp ${SCRIPT_ROOT}/config/crd/bases/* "${TEMP_DIR}/"
+fetch_crds "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/tags/${GATEWAY_API_VERSION}/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml"
+fetch_crds "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/tags/${GATEWAY_API_VERSION}/config/crd/standard/gateway.networking.k8s.io_gateways.yaml"
+fetch_crds "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/tags/${GATEWAY_API_VERSION}/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml"
+fetch_crds "https://raw.githubusercontent.com/GoogleCloudPlatform/gke-gateway-api/refs/tags/${GKE_GATEWAY_API_VERSION}/config/crd/networking.gke.io_gcpbackendpolicies.yaml"
+fetch_crds "https://raw.githubusercontent.com/GoogleCloudPlatform/gke-gateway-api/refs/tags/${GKE_GATEWAY_API_VERSION}/config/crd/networking.gke.io_healthcheckpolicies.yaml"
+
 # Read the first argument, default to "ci" if not provided
 MODE=${1:-ci}
 
@@ -60,7 +83,7 @@ for key in "${!test_cases_inference_pool[@]}"; do
     exit 1
   fi
 
-  kubectl-validate "${output_dir}"
+  ${SCRIPT_ROOT}/bin/kubectl-validate ${output_dir} --local-crds "${TEMP_DIR}"
   if [ $? -ne 0 ]; then
     echo "Kubectl validation failed for test: ${key}"
     exit 1
@@ -95,7 +118,7 @@ for key in "${!test_cases_epp_standalone[@]}"; do
     echo "Helm template command failed for test: ${key}"
     exit 1
   fi
-  kubectl-validate "${output_dir}"
+  ${SCRIPT_ROOT}/bin/kubectl-validate ${output_dir} --local-crds "${TEMP_DIR}"
   if [ $? -ne 0 ]; then
     echo "Kubectl validation failed for test: ${key}"
     exit 1
