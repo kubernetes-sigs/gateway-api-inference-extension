@@ -25,21 +25,21 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // TestOrderingPolicyConformance is the main conformance test suite for OrderingPolicy implementations.
-// It iterates over all policy implementations registered via plugins.Register and runs a series of sub-tests to
+// It iterates over all policy implementations registered via plugin.Register and runs a series of sub-tests to
 // ensure they adhere to the OrderingPolicy contract.
 func TestOrderingPolicyConformance(t *testing.T) {
 	t.Parallel()
 
-	if len(plugins.Registry) == 0 {
+	if len(plugin.Registry) == 0 {
 		t.Log("No plugins registered. Skipping conformance tests.")
 		return
 	}
 
-	for name, factory := range plugins.Registry {
+	for name, factory := range plugin.Registry {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

@@ -28,12 +28,12 @@ import (
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 func newTestOrderingPolicy() *frameworkmocks.MockOrderingPolicy {
 	return &frameworkmocks.MockOrderingPolicy{
-		TypedNameV: plugins.TypedName{Type: "enqueue_time_ns_asc"},
+		TypedNameV: plugin.TypedName{Type: "enqueue_time_ns_asc"},
 		LessFunc: func(a, b types.QueueItemAccessor) bool {
 			return a.EnqueueTime().Before(b.EnqueueTime())
 		},
@@ -132,7 +132,7 @@ func TestGlobalStrict_Pick(t *testing.T) {
 					PeekHeadV: itemBetter,
 					FlowKeyV:  flow1Key,
 					OrderingPolicyV: &frameworkmocks.MockOrderingPolicy{
-						TypedNameV: plugins.TypedName{Type: "typeA"},
+						TypedNameV: plugin.TypedName{Type: "typeA"},
 						LessFunc: func(a, b types.QueueItemAccessor) bool {
 							return a.EnqueueTime().Before(b.EnqueueTime())
 						},
@@ -143,7 +143,7 @@ func TestGlobalStrict_Pick(t *testing.T) {
 					PeekHeadV: itemWorse,
 					FlowKeyV:  flow2Key,
 					OrderingPolicyV: &frameworkmocks.MockOrderingPolicy{
-						TypedNameV: plugins.TypedName{Type: "typeB"},
+						TypedNameV: plugin.TypedName{Type: "typeB"},
 						LessFunc: func(a, b types.QueueItemAccessor) bool {
 							return a.EnqueueTime().Before(b.EnqueueTime())
 						},

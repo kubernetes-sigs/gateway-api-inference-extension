@@ -29,33 +29,33 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
-func newTestPluginsHandle(t *testing.T) fwkplugin.Handle {
+func newTestPluginsHandle(t *testing.T) plugin.Handle {
 	t.Helper()
 	handle := utils.NewTestHandle(t.Context())
 	handle.AddPlugin(interflow.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
-		TypedNameV: fwkplugin.TypedName{
+		TypedNameV: plugin.TypedName{
 			Type: interflow.GlobalStrictFairnessPolicyType,
 			Name: interflow.GlobalStrictFairnessPolicyType,
 		},
 	})
 	handle.AddPlugin(interflow.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
-		TypedNameV: fwkplugin.TypedName{
+		TypedNameV: plugin.TypedName{
 			Type: interflow.RoundRobinFairnessPolicyType,
 			Name: interflow.RoundRobinFairnessPolicyType,
 		},
 	})
 	handle.AddPlugin(intraflow.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
-		TypedNameV: plugins.TypedName{
+		TypedNameV: plugin.TypedName{
 			Type: intraflow.FCFSOrderingPolicyType,
 			Name: intraflow.FCFSOrderingPolicyType,
 		},
 	})
 	handle.AddPlugin(intraflow.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
-		TypedNameV: plugins.TypedName{
+		TypedNameV: plugin.TypedName{
 			Type: intraflow.EDFOrderingPolicyType,
 			Name: intraflow.EDFOrderingPolicyType,
 		},
@@ -90,7 +90,7 @@ func TestNewConfig(t *testing.T) {
 	testCases := []struct {
 		name          string
 		opts          []ConfigOption
-		handle        fwkplugin.Handle
+		handle        plugin.Handle
 		expectErr     bool
 		expectedErrIs error // Optional: check for specific wrapped error
 		assertion     func(*testing.T, *Config)
@@ -280,7 +280,7 @@ func TestNewConfig(t *testing.T) {
 		{
 			name:      "ShouldError_WhenDefaultPolicyMissingFromHandle",
 			opts:      []ConfigOption{WithPriorityBand(&PriorityBandConfig{Priority: 1, PriorityName: "A"})},
-			handle:    utils.NewTestHandle(t.Context()), // Handle has no plugins.
+			handle:    utils.NewTestHandle(t.Context()), // Handle has no plugin.
 			expectErr: true,
 		},
 

@@ -28,8 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // --- Defaults ---
@@ -280,7 +279,7 @@ type PriorityBandConfigOption func(*PriorityBandConfig) error
 // WithOrderingPolicy sets the name/reference of the inter-flow fairness policy (e.g., "fcfs-ordering-policy").
 // TODO(kubernetes-sigs/gateway-api-inference-extension#1794): This option is primarily used by the configuration
 // loader to wire up policies instantiated from the plugin registry.
-func WithOrderingPolicy(ref string, handle plugins.Handle) PriorityBandConfigOption {
+func WithOrderingPolicy(ref string, handle plugin.Handle) PriorityBandConfigOption {
 	return func(p *PriorityBandConfig) error {
 		policy, err := orderingPolicy(ref, handle)
 		if err != nil {
@@ -291,7 +290,7 @@ func WithOrderingPolicy(ref string, handle plugins.Handle) PriorityBandConfigOpt
 	}
 }
 
-func orderingPolicy(ref string, handle plugins.Handle) (framework.OrderingPolicy, error) {
+func orderingPolicy(ref string, handle plugin.Handle) (framework.OrderingPolicy, error) {
 	v := handle.Plugin(ref)
 	if v == nil {
 		return nil, fmt.Errorf("no ordering policy registered for name %q", ref)
@@ -306,7 +305,7 @@ func orderingPolicy(ref string, handle plugins.Handle) (framework.OrderingPolicy
 // WithFairnessPolicy sets the name/reference of the inter-flow fairness policy (e.g., "round-robin-fairness-policy").
 // TODO(kubernetes-sigs/gateway-api-inference-extension#1794): This option is primarily used by the configuration
 // loader to wire up policies instantiated from the plugin registry.
-func WithFairnessPolicy(ref string, handle fwkplugin.Handle) PriorityBandConfigOption {
+func WithFairnessPolicy(ref string, handle plugin.Handle) PriorityBandConfigOption {
 	return func(p *PriorityBandConfig) error {
 		policy, err := fairnessPolicy(ref, handle)
 		if err != nil {
@@ -317,7 +316,7 @@ func WithFairnessPolicy(ref string, handle fwkplugin.Handle) PriorityBandConfigO
 	}
 }
 
-func fairnessPolicy(ref string, handle fwkplugin.Handle) (framework.FairnessPolicy, error) {
+func fairnessPolicy(ref string, handle plugin.Handle) (framework.FairnessPolicy, error) {
 	v := handle.Plugin(ref)
 	if v == nil {
 		return nil, fmt.Errorf("no fairness policy registered for name %q", ref)
@@ -354,9 +353,9 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 // validation.
 //
 // Arguments:
-//   - handle: A fwkplugin.Handle required to resolve the default policies.
+//   - handle: A plugin.Handle required to resolve the default policies.
 //   - opts: Optional configuration overrides.
-func NewConfig(handle fwkplugin.Handle, opts ...ConfigOption) (*Config, error) {
+func NewConfig(handle plugin.Handle, opts ...ConfigOption) (*Config, error) {
 	builder := &configBuilder{
 		config: &Config{
 			MaxBytes:               0, // no limit enforced
@@ -405,7 +404,7 @@ func NewConfig(handle fwkplugin.Handle, opts ...ConfigOption) (*Config, error) {
 // NewPriorityBandConfig creates a new band configuration with the required fields.
 // It applies system defaults first, then applies any provided options to override those defaults.
 func NewPriorityBandConfig(
-	handle fwkplugin.Handle,
+	handle plugin.Handle,
 	priority int,
 	name string,
 	opts ...PriorityBandConfigOption,
@@ -430,7 +429,7 @@ func NewPriorityBandConfig(
 
 // --- Validation, Defaults & Hydration ---
 
-func (p *PriorityBandConfig) applyDefaults(handle fwkplugin.Handle) error {
+func (p *PriorityBandConfig) applyDefaults(handle plugin.Handle) error {
 	if p.OrderingPolicy == nil {
 		policy, err := orderingPolicy(defaultOrderingPolicyRef, handle)
 		if err != nil {

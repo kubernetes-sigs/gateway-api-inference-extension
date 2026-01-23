@@ -32,12 +32,12 @@ import (
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // enqueueTimePolicy orders items by their enqueue time (FIFO).
 var enqueueTimePolicy = &frameworkmocks.MockOrderingPolicy{
-	TypedNameV: plugins.TypedName{Name: "enqueue_time_asc"},
+	TypedNameV: plugin.TypedName{Name: "enqueue_time_asc"},
 	LessFunc: func(a, b types.QueueItemAccessor) bool {
 		return a.EnqueueTime().Before(b.EnqueueTime())
 	},
@@ -45,7 +45,7 @@ var enqueueTimePolicy = &frameworkmocks.MockOrderingPolicy{
 
 // byteSizePolicy orders items by their byte size (smaller first).
 var byteSizePolicy = &frameworkmocks.MockOrderingPolicy{
-	TypedNameV: plugins.TypedName{Name: "byte_size_asc"},
+	TypedNameV: plugin.TypedName{Name: "byte_size_asc"},
 	LessFunc: func(a, b types.QueueItemAccessor) bool {
 		return a.OriginalRequest().ByteSize() < b.OriginalRequest().ByteSize()
 	},
@@ -53,7 +53,7 @@ var byteSizePolicy = &frameworkmocks.MockOrderingPolicy{
 
 // reverseEnqueueTimePolicy orders items by their enqueue time (LIFO).
 var reverseEnqueueTimePolicy = &frameworkmocks.MockOrderingPolicy{
-	TypedNameV: plugins.TypedName{Name: "enqueue_time_ns_desc"},
+	TypedNameV: plugin.TypedName{Name: "enqueue_time_ns_desc"},
 	LessFunc: func(a, b types.QueueItemAccessor) bool {
 		return a.EnqueueTime().After(b.EnqueueTime())
 	},

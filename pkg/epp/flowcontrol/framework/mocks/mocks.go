@@ -21,7 +21,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // MockFlowQueueAccessor is a simple stub mock for the FlowQueueAccessor interface.
@@ -158,12 +158,12 @@ var _ framework.SafeQueue = &MockSafeQueue{}
 // Simple accessors are configured with public value fields (e.g., TypedNameV).
 // Complex methods with logic are configured with function fields (e.g., LessFunc).
 type MockOrderingPolicy struct {
-	TypedNameV                 plugins.TypedName
+	TypedNameV                 plugin.TypedName
 	LessFunc                   func(a, b types.QueueItemAccessor) bool
 	RequiredQueueCapabilitiesV []framework.QueueCapability
 }
 
-func (m *MockOrderingPolicy) TypedName() plugins.TypedName { return m.TypedNameV }
+func (m *MockOrderingPolicy) TypedName() plugin.TypedName { return m.TypedNameV }
 
 func (m *MockOrderingPolicy) Less(a, b types.QueueItemAccessor) bool {
 	if m.LessFunc != nil {
@@ -182,12 +182,12 @@ var _ framework.OrderingPolicy = &MockOrderingPolicy{}
 // Simple accessors are configured with public value fields (e.g., NameV).
 // Complex methods with logic are configured with function fields (e.g., PickFunc).
 type MockFairnessPolicy struct {
-	TypedNameV   fwkplugin.TypedName
+	TypedNameV   plugin.TypedName
 	NewStateFunc func(ctx context.Context) any
 	PickFunc     func(ctx context.Context, flowGroup framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
 }
 
-func (m *MockFairnessPolicy) TypedName() fwkplugin.TypedName { return m.TypedNameV }
+func (m *MockFairnessPolicy) TypedName() plugin.TypedName { return m.TypedNameV }
 
 func (m *MockFairnessPolicy) NewState(ctx context.Context) any {
 	if m.NewStateFunc != nil {
