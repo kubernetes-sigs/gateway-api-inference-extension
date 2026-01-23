@@ -53,13 +53,14 @@ echo "Running helm template command for inferencePool chart..."
 for key in "${!test_cases_inference_pool[@]}"; do
   echo "Running test: ${key}"
   output_dir="${SCRIPT_ROOT}/bin/inferencepool-${key}"
-  ${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/inferencepool ${test_cases_inference_pool[$key]} --output-dir=${output_dir}
+  command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/inferencepool ${test_cases_inference_pool[$key]} --output-dir=${output_dir}"
+  echo "Executing: ${command}"
   if [ $? -ne 0 ]; then
     echo "Helm template command failed for test: ${key}"
     exit 1
   fi
 
-  kubectl apply --dry-run=client --validate=strict --recursive -f "${output_dir}"
+  kubectl-validate "${output_dir}"
   if [ $? -ne 0 ]; then
     echo "Kubectl validation failed for test: ${key}"
     exit 1
@@ -88,12 +89,13 @@ echo "Running helm template command for epp-standalone chart..."
 for key in "${!test_cases_epp_standalone[@]}"; do
   echo "Running test: ${key}"
   output_dir="${SCRIPT_ROOT}/bin/epp-standalone-${key}"
-  ${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --output-dir=${output_dir}
+  command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --output-dir=${output_dir}"
+  echo "Executing: ${command}"
   if [ $? -ne 0 ]; then
     echo "Helm template command failed for test: ${key}"
     exit 1
   fi
-  kubectl apply --dry-run=client --validate=strict --recursive -f "${output_dir}"
+  kubectl-validate "${output_dir}"
   if [ $? -ne 0 ]; then
     echo "Kubectl validation failed for test: ${key}"
     exit 1
