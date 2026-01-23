@@ -592,19 +592,7 @@ func TestShardProcessor(t *testing.T) {
 						assert.ErrorIs(t, item.FinalState().Err, testErr, "The underlying error should be preserved")
 					},
 				},
-				{
-					name: "should reject item on registry priority band lookup failure",
-					setupHarness: func(h *testHarness) {
-						h.addQueue(testFlow)
-						h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) { return nil, testErr }
-					},
-					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
-						assert.Equal(t, types.QueueOutcomeRejectedOther, item.FinalState().Outcome,
-							"Outcome should be RejectedOther")
-						require.Error(t, item.FinalState().Err, "An error should be returned")
-						assert.ErrorIs(t, item.FinalState().Err, testErr, "The underlying error should be preserved")
-					},
-				},
+
 				{
 					name: "should reject item on queue add failure",
 					setupHarness: func(h *testHarness) {

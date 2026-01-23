@@ -429,7 +429,6 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 
 	newBand := *fr.config.DefaultPriorityBand
 	newBand.Priority = priority
-	newBand.PriorityName = fmt.Sprintf("Dynamic-%d", priority)
 	fr.config.PriorityBands[priority] = &newBand
 
 	fr.perPriorityBandStats.LoadOrStore(priority, &bandStats{})
@@ -524,7 +523,6 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 		bandCfg := fr.config.PriorityBands[priority]
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
 			Priority:      priority,
-			PriorityName:  bandCfg.PriorityName,
 			CapacityBytes: bandCfg.MaxBytes,
 			ByteSize:      uint64(bandStats.byteSize.Load()),
 			Len:           uint64(bandStats.len.Load()),

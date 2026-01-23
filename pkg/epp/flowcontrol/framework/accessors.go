@@ -55,9 +55,6 @@ type PriorityBandAccessor interface {
 	// Priority returns the numerical priority level of this group.
 	Priority() int
 
-	// PriorityName returns the human-readable name of this priority band.
-	PriorityName() string
-
 	// FlowKeys returns the list of identities for every flow currently active within this group.
 	// The caller can use the ID field from each key to look up a specific queue via the Queue(id) method.
 	// The order of keys is not guaranteed unless specified by the implementation.
