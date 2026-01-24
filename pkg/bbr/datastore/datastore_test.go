@@ -140,7 +140,7 @@ func TestConfigMapUpdateOrAddIfNotExist_InvalidConfig(t *testing.T) {
 
 func TestConfigMapDelete(t *testing.T) {
 	ds := NewDatastore()
-	cm := makeConfigMap(cmName, cmNS, baseModel, "- a1\n- a2\n")
+	cm := makeConfigMap(cmName, baseModel, "- a1\n- a2\n")
 	if err := ds.ConfigMapUpdateOrAddIfNotExist(cm); err != nil {
 		t.Fatalf("ConfigMapUpdateOrAddIfNotExist() error = %v", err)
 	}
@@ -164,7 +164,7 @@ func TestConfigMapDelete(t *testing.T) {
 
 func TestConfigMapDelete_NoExistingConfigMap(t *testing.T) {
 	ds := NewDatastore()
-	cm := makeConfigMap(cmName, cmNS, baseModel, "- a1\n")
+	cm := makeConfigMap(cmName, baseModel, "- a1\n")
 
 	ds.ConfigMapDelete(cm)
 
@@ -175,7 +175,7 @@ func TestConfigMapDelete_NoExistingConfigMap(t *testing.T) {
 
 func TestConfigMapDelete_MissingBaseModel(t *testing.T) {
 	ds := NewDatastore()
-	cm := makeConfigMap(cmName, cmNS, baseModel, "- a1\n")
+	cm := makeConfigMap(cmName, baseModel, "- a1\n")
 	if err := ds.ConfigMapUpdateOrAddIfNotExist(cm); err != nil {
 		t.Fatalf("ConfigMapUpdateOrAddIfNotExist() error = %v", err)
 	}
@@ -193,8 +193,8 @@ func TestConfigMapDelete_MissingBaseModel(t *testing.T) {
 
 func TestConfigMapDelete_BaseModelCount(t *testing.T) {
 	ds := NewDatastore()
-	cm1 := makeConfigMap(cmName, cmNS, baseModel, "- a1\n")
-	cm2 := makeConfigMap("cm-2", cmNS, baseModel, "- a2\n")
+	cm1 := makeConfigMap(cmName, baseModel, "- a1\n")
+	cm2 := makeConfigMap("cm-2", baseModel, "- a2\n")
 
 	if err := ds.ConfigMapUpdateOrAddIfNotExist(cm1); err != nil {
 		t.Fatalf("ConfigMapUpdateOrAddIfNotExist() error = %v", err)
