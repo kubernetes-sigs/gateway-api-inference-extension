@@ -185,7 +185,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 				scorerRef := cfg.SchedulingProfiles[0].Plugins[0]
 				require.Equal(t, "testScorer", scorerRef.PluginRef)
 				require.NotNil(t, scorerRef.Weight)
-				require.Equal(t, 50, *scorerRef.Weight, "Explicit weight of 50 should be preserved")
+				require.Equal(t, 50.0, *scorerRef.Weight, "Explicit weight of 50.0 should be preserved")
 			},
 		},
 		{
@@ -197,7 +197,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 				require.Len(t, cfg.SchedulingProfiles[0].Plugins, 2, "Expected Scorer + Default Picker")
 				w := cfg.SchedulingProfiles[0].Plugins[0].Weight
 				require.NotNil(t, w, "Weight should not be nil")
-				require.Equal(t, 1, *w, "Expected default scorer weight of 1")
+				require.Equal(t, 1.0, *w, "Expected default scorer weight of 1.0")
 			},
 		},
 		{
@@ -220,7 +220,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 				require.Equal(t, "test-scorer", prof.Plugins[1].PluginRef, "Scorer should be the second plugin")
 				scorerWeight := prof.Plugins[1].Weight
 				require.NotNil(t, scorerWeight, "Scorer weight should be set (defaulted)")
-				require.Equal(t, 1, *scorerWeight, "Scorer weight should default to 1")
+				require.Equal(t, 1.0, *scorerWeight, "Scorer weight should default to 1.0")
 			},
 		},
 
