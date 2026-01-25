@@ -17,7 +17,7 @@ limitations under the License.
 package scheduling
 
 // NewWeightedScorer initializes a new WeightedScorer and returns its pointer.
-func NewWeightedScorer(scorer Scorer, weight int) *WeightedScorer {
+func NewWeightedScorer(scorer Scorer, weight float64) *WeightedScorer {
 	return &WeightedScorer{
 		Scorer: scorer,
 		weight: weight,
@@ -27,10 +27,10 @@ func NewWeightedScorer(scorer Scorer, weight int) *WeightedScorer {
 // WeightedScorer is a struct that encapsulates a scorer with its weight.
 type WeightedScorer struct {
 	Scorer
-	weight int
+	weight float64
 }
 
 // Weight returns the weight of the scorer.
-func (s *WeightedScorer) Weight() int {
+func (s *WeightedScorer) Weight() float64 {
 	return s.weight
 }

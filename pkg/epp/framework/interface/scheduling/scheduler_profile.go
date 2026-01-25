@@ -100,7 +100,7 @@ func (p *SchedulerProfile) String() string {
 	}
 	scorerNames := make([]string, len(p.scorers))
 	for i, scorer := range p.scorers {
-		scorerNames[i] = fmt.Sprintf("%s: %d", scorer.TypedName(), scorer.Weight())
+		scorerNames[i] = fmt.Sprintf("%s: %f", scorer.TypedName(), scorer.Weight())
 	}
 
 	return fmt.Sprintf(
@@ -162,7 +162,7 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *LLMReq
 		metrics.RecordPluginProcessingLatency(ScorerExtensionPoint, scorer.TypedName().Type, scorer.TypedName().Name, time.Since(before))
 		for endpoint, score := range scores { // weight is relative to the sum of weights
 			logger.V(logutil.DEBUG).Info("Calculated score", "plugin", scorer.TypedName(), "endpoint", endpoint.GetMetadata().NamespacedName, "score", score)
-			weightedScorePerEndpoint[endpoint] += enforceScoreRange(score) * float64(scorer.Weight())
+			weightedScorePerEndpoint[endpoint] += enforceScoreRange(score) * scorer.Weight()
 		}
 		logger.V(logutil.DEBUG).Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())
 	}

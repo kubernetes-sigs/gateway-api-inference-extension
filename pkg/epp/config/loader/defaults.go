@@ -28,7 +28,7 @@ import (
 )
 
 // DefaultScorerWeight is the weight used for scorers referenced in the configuration without explicit weights.
-const DefaultScorerWeight = 1
+const DefaultScorerWeight = 1.0
 
 var defaultScorerWeight = DefaultScorerWeight
 

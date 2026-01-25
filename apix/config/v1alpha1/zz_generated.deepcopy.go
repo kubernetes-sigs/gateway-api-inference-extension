@@ -195,7 +195,7 @@ func (in *SchedulingPlugin) DeepCopyInto(out *SchedulingPlugin) {
 	*out = *in
 	if in.Weight != nil {
 		in, out := &in.Weight, &out.Weight
-		*out = new(int)
+		*out = new(float64)
 		**out = **in
 	}
 }

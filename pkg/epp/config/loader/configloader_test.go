@@ -86,7 +86,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 						Name: "default",
 						Plugins: []configapi.SchedulingPlugin{
 							{PluginRef: "test1"},
-							{PluginRef: testScorerType, Weight: ptr.To(50)},
+							{PluginRef: testScorerType, Weight: ptr.To(50.0)},
 							{PluginRef: "testPicker"},
 						},
 					},
