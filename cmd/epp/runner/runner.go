@@ -269,7 +269,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
-	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, setupLog); err != nil {
+	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return err
 	}
@@ -461,52 +461,51 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 	}
 
 	// Handler deprecated configuration options
-	r.deprecatedConfigurationHelper(cfg, logger)
+	r.deprecatedConfigurationHelper(cfg)
 
 	logger.Info("loaded configuration from file/text successfully")
 	return cfg, nil
 }
 
-func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config, logger logr.Logger) {
+func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config) {
 	// Handle deprecated environment variable based feature flags
 
 	if _, ok := os.LookupEnv(enableExperimentalDatalayerV2); ok {
-		logger.Info("Enabling the experimental Data Layer V2 using environment variables is deprecated and will be removed in next version")
-		r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, logger)
+		setupLog.Info("Enabling the experimental Data Layer V2 using environment variables is deprecated and will be removed in next version")
+		r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, setupLog)
 	}
 	if _, ok := os.LookupEnv(enableExperimentalFlowControlLayer); ok {
-		logger.Info("Enabling the experimental Flow Control layer using environment variables is deprecated and will be removed in next version")
+		setupLog.Info("Enabling the experimental Flow Control layer using environment variables is deprecated and will be removed in next version")
 		r.featureGates[flowcontrol.FeatureGate] = env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
 	}
 
 	// Handle deprecated environment variable base Saturation Detector configuration
 
 	if _, ok := os.LookupEnv(EnvSdQueueDepthThreshold); ok {
-		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
+		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
 		cfg.SaturationDetectorConfig.QueueDepthThreshold =
-			env.GetEnvInt(EnvSdQueueDepthThreshold, utilizationdetector.DefaultQueueDepthThreshold, logger)
+			env.GetEnvInt(EnvSdQueueDepthThreshold, utilizationdetector.DefaultQueueDepthThreshold, setupLog)
 		if cfg.SaturationDetectorConfig.QueueDepthThreshold <= 0 {
 			cfg.SaturationDetectorConfig.QueueDepthThreshold = utilizationdetector.DefaultQueueDepthThreshold
 		}
 	}
 	if _, ok := os.LookupEnv(EnvSdKVCacheUtilThreshold); ok {
-		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
-		cfg.SaturationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, utilizationdetector.DefaultKVCacheUtilThreshold, logger)
+		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
+		cfg.SaturationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, utilizationdetector.DefaultKVCacheUtilThreshold, setupLog)
 		if cfg.SaturationDetectorConfig.KVCacheUtilThreshold <= 0 || cfg.SaturationDetectorConfig.KVCacheUtilThreshold >= 1 {
 			cfg.SaturationDetectorConfig.KVCacheUtilThreshold = utilizationdetector.DefaultKVCacheUtilThreshold
 		}
 	}
 	if _, ok := os.LookupEnv(EnvSdMetricsStalenessThreshold); ok {
-		logger.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
-		cfg.SaturationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, utilizationdetector.DefaultMetricsStalenessThreshold, logger)
+		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
+		cfg.SaturationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, utilizationdetector.DefaultMetricsStalenessThreshold, setupLog)
 		if cfg.SaturationDetectorConfig.MetricsStalenessThreshold <= 0 {
 			cfg.SaturationDetectorConfig.MetricsStalenessThreshold = utilizationdetector.DefaultMetricsStalenessThreshold
 		}
 	}
 }
 
-func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, epf datalayer.EndpointFactory,
-	setupLog logr.Logger) error {
+func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, epf datalayer.EndpointFactory) error {
 	disallowedMetricsExtractor := ""
 	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
 		disallowedMetricsExtractor = dlmetrics.MetricsExtractorType
