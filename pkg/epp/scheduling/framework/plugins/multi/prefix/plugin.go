@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash/v2"
-	"github.com/mayabar/gateway-api-inference-extension/pkg/epp/scheduling/types"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -397,7 +396,7 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *types.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
+func hashPrompt(ctx context.Context, request *framework.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
