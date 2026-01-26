@@ -37,10 +37,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 const (
@@ -84,7 +84,7 @@ type testHarness struct {
 	priorityFlows map[int][]types.FlowKey // Key: `priority`
 
 	// Customizable policy logic for tests to override.
-	fairnessPolicyPick func(context.Context, framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
+	fairnessPolicyPick func(context.Context, flowcontrol.PriorityBandAccessor) (flowcontrol.FlowQueueAccessor, error)
 }
 
 // newTestHarness creates and wires up a complete testing harness.
@@ -223,7 +223,7 @@ func (h *testHarness) allOrderedPriorityLevels() []int {
 
 // priorityBandAccessor provides the mock implementation for the `RegistryShard` interface. It acts as a factory for a
 // fully-configured, stateless mock that is safe for concurrent use.
-func (h *testHarness) priorityBandAccessor(p int) (framework.PriorityBandAccessor, error) {
+func (h *testHarness) priorityBandAccessor(p int) (flowcontrol.PriorityBandAccessor, error) {
 	band := &frameworkmocks.MockPriorityBandAccessor{PriorityV: p}
 
 	// Safely get a snapshot of the flow IDs under a lock.
@@ -232,7 +232,7 @@ func (h *testHarness) priorityBandAccessor(p int) (framework.PriorityBandAccesso
 	h.mu.Unlock()
 
 	// Configure the mock's behavior with a closure that reads from the harness's centralized, thread-safe state.
-	band.IterateQueuesFunc = func(cb func(fqa framework.FlowQueueAccessor) bool) {
+	band.IterateQueuesFunc = func(cb func(fqa flowcontrol.FlowQueueAccessor) bool) {
 		// This closure safely iterates over the snapshot of flow IDs.
 		for _, key := range flowKeysForPriority {
 			// Get the queue using the thread-safe `managedQueue` method.
@@ -249,7 +249,7 @@ func (h *testHarness) priorityBandAccessor(p int) (framework.PriorityBandAccesso
 }
 
 // fairnessPolicy provides the mock implementation for the RegistryShard interface.
-func (h *testHarness) fairnessPolicy(p int) (framework.FairnessPolicy, error) {
+func (h *testHarness) fairnessPolicy(p int) (flowcontrol.FairnessPolicy, error) {
 	policy := &frameworkmocks.MockFairnessPolicy{}
 	// If the test provided a custom implementation, use it.
 	if h.fairnessPolicyPick != nil {
@@ -260,10 +260,10 @@ func (h *testHarness) fairnessPolicy(p int) (framework.FairnessPolicy, error) {
 	// Otherwise, use a default implementation that selects the first non-empty queue.
 	policy.PickFunc = func(
 		_ context.Context,
-		flowGroup framework.PriorityBandAccessor,
-	) (framework.FlowQueueAccessor, error) {
-		var selectedQueue framework.FlowQueueAccessor
-		flowGroup.IterateQueues(func(fqa framework.FlowQueueAccessor) bool {
+		flowGroup flowcontrol.PriorityBandAccessor,
+	) (flowcontrol.FlowQueueAccessor, error) {
+		var selectedQueue flowcontrol.FlowQueueAccessor
+		flowGroup.IterateQueues(func(fqa flowcontrol.FlowQueueAccessor) bool {
 			if fqa.Len() > 0 {
 				selectedQueue = fqa
 				return false // stop iterating
@@ -378,8 +378,8 @@ func TestShardProcessor(t *testing.T) {
 			// Prevent dispatch to ensure we test shutdown eviction, not a successful dispatch.
 			h.fairnessPolicyPick = func(
 				context.Context,
-				framework.PriorityBandAccessor,
-			) (framework.FlowQueueAccessor, error) {
+				flowcontrol.PriorityBandAccessor,
+			) (flowcontrol.FlowQueueAccessor, error) {
 				return nil, nil
 			}
 
@@ -578,7 +578,7 @@ func TestShardProcessor(t *testing.T) {
 					name: "should reject item on registry priority band lookup failure",
 					setupHarness: func(h *testHarness) {
 						h.addQueue(testFlow)
-						h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) { return nil, testErr }
+						h.PriorityBandAccessorFunc = func(int) (flowcontrol.PriorityBandAccessor, error) { return nil, testErr }
 					},
 					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
 						assert.Equal(t, types.QueueOutcomeRejectedOther, item.FinalState().Outcome,
@@ -748,7 +748,7 @@ func TestShardProcessor(t *testing.T) {
 					{
 						name: "should skip band on priority band accessor error",
 						setupHarness: func(h *testHarness) {
-							h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) {
+							h.PriorityBandAccessorFunc = func(int) (flowcontrol.PriorityBandAccessor, error) {
 								return nil, registryErr
 							}
 						},
@@ -760,8 +760,8 @@ func TestShardProcessor(t *testing.T) {
 							h.addQueue(testFlow)
 							h.fairnessPolicyPick = func(
 								context.Context,
-								framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
+								flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
 								return nil, policyErr
 							}
 						},
@@ -774,8 +774,8 @@ func TestShardProcessor(t *testing.T) {
 							require.NoError(t, q.Add(h.newTestItem("item", testFlow, testTTL)))
 							h.fairnessPolicyPick = func(
 								context.Context,
-								framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
+								flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
 								return nil, nil // Simulate band being empty or policy choosing to pause.
 							}
 						},
@@ -787,8 +787,8 @@ func TestShardProcessor(t *testing.T) {
 							q := h.addQueue(testFlow) // Empty queue
 							h.fairnessPolicyPick = func(
 								context.Context,
-								framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
+								flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
 								return q.FlowQueueAccessor(), nil
 							}
 						},
@@ -808,8 +808,8 @@ func TestShardProcessor(t *testing.T) {
 
 							h.fairnessPolicyPick = func(
 								_ context.Context,
-								flowGroup framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
+								flowGroup flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
 								if flowGroup.Priority() == testFlow.Priority {
 									return nil, errors.New("policy failure") // Fail high-priority.
 								}
@@ -1012,7 +1012,7 @@ func TestShardProcessor(t *testing.T) {
 				// --- ARRANGE ---
 				h := newTestHarness(t, testCleanupTick)
 				h.AllOrderedPriorityLevelsFunc = func() []int { return []int{testFlow.Priority} }
-				h.PriorityBandAccessorFunc = func(p int) (framework.PriorityBandAccessor, error) {
+				h.PriorityBandAccessorFunc = func(p int) (flowcontrol.PriorityBandAccessor, error) {
 					return nil, errors.New("registry error")
 				}
 

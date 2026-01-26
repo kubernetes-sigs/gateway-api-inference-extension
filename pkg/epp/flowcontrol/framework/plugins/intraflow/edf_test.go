@@ -23,9 +23,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 func TestEDFPolicy_Name(t *testing.T) {
@@ -39,7 +39,7 @@ func TestEDFPolicy_RequiredQueueCapabilities(t *testing.T) {
 	policy := newEDFPolicy()
 	caps := policy.RequiredQueueCapabilities()
 	require.Len(t, caps, 1)
-	assert.Equal(t, framework.CapabilityPriorityConfigurable, caps[0])
+	assert.Equal(t, flowcontrol.CapabilityPriorityConfigurable, caps[0])
 }
 
 func TestEDF_Less(t *testing.T) {

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package listqueue provides a high-performance, concurrent-safe FIFO (First-In, First-Out) implementation of
-// implementation of the `framework.SafeQueue` based on the standard library's `container/list`.
+// Package listqueue provides a high-performance, concurrent-safe FIFO (First-In, First-Out) implementation of the
+// SafeQueue based on the standard library's `container/list`.
 package queue
 
 import (
@@ -23,8 +23,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // ListQueueName is the name of the list-based queue implementation.
@@ -53,7 +53,7 @@ const ListQueueName = "ListQueue"
 
 func init() {
 	MustRegisterQueue(RegisteredQueueName(ListQueueName),
-		func(_ framework.OrderingPolicy) (framework.SafeQueue, error) {
+		func(_ flowcontrol.OrderingPolicy) (flowcontrol.SafeQueue, error) {
 			// The list queue is a simple FIFO queue and does not use an ordering policy.
 			return newListQueue(), nil
 		})
@@ -99,7 +99,7 @@ func newListQueue() *listQueue {
 	}
 }
 
-// --- `framework.SafeQueue` Interface Implementation ---
+// --- SafeQueue Interface Implementation ---
 
 // Add enqueues an item to the back of the list.
 func (lq *listQueue) Add(item types.QueueItemAccessor) {
@@ -117,16 +117,16 @@ func (lq *listQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccess
 	defer lq.mu.Unlock()
 
 	if handle == nil || handle.IsInvalidated() {
-		return nil, framework.ErrInvalidQueueItemHandle
+		return nil, flowcontrol.ErrInvalidQueueItemHandle
 	}
 
 	lh, ok := handle.(*listItemHandle)
 	if !ok {
-		return nil, framework.ErrInvalidQueueItemHandle
+		return nil, flowcontrol.ErrInvalidQueueItemHandle
 	}
 
 	if lh.owner != lq {
-		return nil, framework.ErrQueueItemNotFound
+		return nil, flowcontrol.ErrQueueItemNotFound
 	}
 
 	item := lh.element.Value.(types.QueueItemAccessor)
@@ -137,7 +137,7 @@ func (lq *listQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccess
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (lq *listQueue) Cleanup(predicate framework.PredicateFunc) (cleanedItems []types.QueueItemAccessor) {
+func (lq *listQueue) Cleanup(predicate flowcontrol.PredicateFunc) (cleanedItems []types.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
@@ -186,8 +186,8 @@ func (lq *listQueue) Name() string {
 }
 
 // Capabilities returns the capabilities of the queue.
-func (lq *listQueue) Capabilities() []framework.QueueCapability {
-	return []framework.QueueCapability{framework.CapabilityFIFO}
+func (lq *listQueue) Capabilities() []flowcontrol.QueueCapability {
+	return []flowcontrol.QueueCapability{flowcontrol.CapabilityFIFO}
 }
 
 // Len returns the number of items in the queue.

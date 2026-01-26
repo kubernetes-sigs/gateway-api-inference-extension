@@ -25,11 +25,11 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
-// managedQueue implements `contracts.ManagedQueue`. It acts as a stateful decorator around a `framework.SafeQueue`.
+// managedQueue implements `contracts.ManagedQueue`. It acts as a stateful decorator around a SafeQueue.
 //
 // # Role: The Stateful Statistics Decorator
 //
@@ -58,7 +58,7 @@ import (
 type managedQueue struct {
 	// --- Immutable Identity & Dependencies (set at construction) ---
 	key    types.FlowKey
-	policy framework.OrderingPolicy
+	policy flowcontrol.OrderingPolicy
 	logger logr.Logger
 
 	// onStatsDelta is the callback used to propagate statistics changes up to the parent shard.
@@ -74,7 +74,7 @@ type managedQueue struct {
 	mu sync.Mutex
 	// queue is the underlying, concurrency-safe queue implementation that this `managedQueue` decorates.
 	// Its state must only be modified while holding `mu`.
-	queue framework.SafeQueue
+	queue flowcontrol.SafeQueue
 
 	// --- Concurrent-Safe State (Atomics) ---
 
@@ -89,8 +89,8 @@ var _ contracts.ManagedQueue = &managedQueue{}
 
 // newManagedQueue creates a new instance of a `managedQueue`.
 func newManagedQueue(
-	queue framework.SafeQueue,
-	policy framework.OrderingPolicy,
+	queue flowcontrol.SafeQueue,
+	policy flowcontrol.OrderingPolicy,
 	key types.FlowKey,
 	logger logr.Logger,
 	onStatsDelta propagateStatsDeltaFunc,
@@ -111,7 +111,7 @@ func newManagedQueue(
 }
 
 // FlowQueueAccessor returns a read-only, flow-aware view of this queue.
-func (mq *managedQueue) FlowQueueAccessor() framework.FlowQueueAccessor {
+func (mq *managedQueue) FlowQueueAccessor() flowcontrol.FlowQueueAccessor {
 	return &flowQueueAccessor{mq: mq}
 }
 
@@ -131,7 +131,7 @@ func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
 	return nil
 }
 
-// Remove wraps the underlying framework.SafeQueue.Remove and updates statistics.
+// Remove wraps the underlying SafeQueue.Remove and updates statistics.
 func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
@@ -145,8 +145,8 @@ func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAcc
 	return removedItem, nil
 }
 
-// Cleanup wraps the underlying framework.SafeQueue.Cleanup and updates statistics.
-func (mq *managedQueue) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
+// Cleanup wraps the underlying SafeQueue.Cleanup and updates statistics.
+func (mq *managedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
@@ -159,7 +159,7 @@ func (mq *managedQueue) Cleanup(predicate framework.PredicateFunc) []types.Queue
 	return cleanedItems
 }
 
-// Drain wraps the underlying framework.SafeQueue.Drain and updates statistics.
+// Drain wraps the underlying SafeQueue.Drain and updates statistics.
 func (mq *managedQueue) Drain() []types.QueueItemAccessor {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
@@ -214,7 +214,7 @@ func (mq *managedQueue) propagateStatsDeltaForRemovedItemsLocked(items []types.Q
 
 // --- `flowQueueAccessor` ---
 
-// flowQueueAccessor implements `framework.FlowQueueAccessor`. It provides a read-only, policy-facing view.
+// flowQueueAccessor implements FlowQueueAccessor. It provides a read-only, policy-facing view.
 //
 // # Role: The Read-Only Proxy
 //
@@ -225,18 +225,18 @@ type flowQueueAccessor struct {
 	mq *managedQueue
 }
 
-var _ framework.FlowQueueAccessor = &flowQueueAccessor{}
+var _ flowcontrol.FlowQueueAccessor = &flowQueueAccessor{}
 
 // --- Read-only pass-through methods to the underlying SafeQueue ---
 func (a *flowQueueAccessor) Name() string { return a.mq.queue.Name() }
-func (a *flowQueueAccessor) Capabilities() []framework.QueueCapability {
+func (a *flowQueueAccessor) Capabilities() []flowcontrol.QueueCapability {
 	return a.mq.queue.Capabilities()
 }
 func (a *flowQueueAccessor) PeekHead() types.QueueItemAccessor { return a.mq.queue.PeekHead() }
 func (a *flowQueueAccessor) PeekTail() types.QueueItemAccessor { return a.mq.queue.PeekTail() }
 
 // --- Read-only methods from the managedQueue wrapper ---
-func (a *flowQueueAccessor) Len() int                                 { return a.mq.Len() }
-func (a *flowQueueAccessor) ByteSize() uint64                         { return a.mq.ByteSize() }
-func (a *flowQueueAccessor) OrderingPolicy() framework.OrderingPolicy { return a.mq.policy }
-func (a *flowQueueAccessor) FlowKey() types.FlowKey                   { return a.mq.key }
+func (a *flowQueueAccessor) Len() int                                   { return a.mq.Len() }
+func (a *flowQueueAccessor) ByteSize() uint64                           { return a.mq.ByteSize() }
+func (a *flowQueueAccessor) OrderingPolicy() flowcontrol.OrderingPolicy { return a.mq.policy }
+func (a *flowQueueAccessor) FlowKey() types.FlowKey                     { return a.mq.key }

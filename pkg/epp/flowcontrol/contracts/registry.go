@@ -17,8 +17,8 @@ limitations under the License.
 package contracts
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // FlowRegistry is the complete interface for the global flow control plane.
@@ -124,14 +124,14 @@ type RegistryShard interface {
 	// Returns:
 	//   - FairnessPolicy: The active policy instance.
 	//   - error: A wrapped ErrPriorityBandNotFound if the priority level is not configured on this shard.
-	FairnessPolicy(priority int) (framework.FairnessPolicy, error)
+	FairnessPolicy(priority int) (flowcontrol.FairnessPolicy, error)
 
 	// PriorityBandAccessor retrieves the read-only view of the "Flow Group" for a specific priority level.
 	// This accessor provides the state of all contending flows within the band (as seen by this shard) and serves as the
 	// primary input for FairnessPolicy execution.
 	//
 	// Returns an error wrapping ErrPriorityBandNotFound if the priority level is not configured.
-	PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error)
+	PriorityBandAccessor(priority int) (flowcontrol.PriorityBandAccessor, error)
 
 	// AllOrderedPriorityLevels returns all configured priority levels that this shard is aware of, sorted in descending
 	// numerical order. This order corresponds to highest priority (highest numeric value) to lowest priority (lowest
@@ -145,8 +145,8 @@ type RegistryShard interface {
 }
 
 // ManagedQueue defines the interface for a flow's queue on a specific shard.
-// It acts as a stateful decorator that *use an underlying framework.SafeQueue, augmenting it with statistics tracking
-// and lifecycle awareness (e.g., rejecting adds when a shard is draining).
+// It acts as a stateful decorator that *use an underlying SafeQueue, augmenting it with statistics tracking, and
+// lifecycle awareness (e.g., rejecting adds when a shard is draining).
 //
 // Conformance: Implementations MUST be goroutine-safe.
 type ManagedQueue interface {
@@ -159,14 +159,14 @@ type ManagedQueue interface {
 	Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
 
 	// Cleanup removes all items from the underlying queue that satisfy the predicate.
-	Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor
+	Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor
 
 	// Drain removes all items from the underlying queue.
 	Drain() []types.QueueItemAccessor
 
 	// FlowQueueAccessor returns a read-only, flow-aware accessor for this queue, used by policy plugins.
 	// Conformance: This method MUST NOT return nil.
-	FlowQueueAccessor() framework.FlowQueueAccessor
+	FlowQueueAccessor() flowcontrol.FlowQueueAccessor
 }
 
 // AggregateStats holds globally aggregated statistics for the entire `FlowRegistry`.

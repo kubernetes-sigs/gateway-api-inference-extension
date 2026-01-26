@@ -34,7 +34,7 @@ const (
 	// The associated error from `FlowController.EnqueueAndWait()` will be nil.
 	QueueOutcomeDispatched
 
-	// --- Pre-Enqueue Rejection Outcomes (request never entered a `framework.SafeQueue`) ---
+	// --- Pre-Enqueue Rejection Outcomes (request never entered a SafeQueue) ---
 	// For these outcomes, the error from `FlowController.EnqueueAndWait()` will wrap `ErrRejected`.
 
 	// QueueOutcomeRejectedCapacity indicates rejection because queue capacity limits were met.
@@ -47,7 +47,7 @@ const (
 	// flow ID, or controller shutdown), which will be wrapped by `ErrRejected`.
 	QueueOutcomeRejectedOther
 
-	// --- Post-Enqueue Eviction Outcomes (request was in a `framework.SafeQueue` but not dispatched) ---
+	// --- Post-Enqueue Eviction Outcomes (request was in a SafeQueue but not dispatched) ---
 	// For these outcomes, the error from `FlowController.EnqueueAndWait()` will wrap `ErrEvicted`.
 
 	// QueueOutcomeEvictedTTL indicates eviction from a queue because the request's effective Time-To-Live expired.

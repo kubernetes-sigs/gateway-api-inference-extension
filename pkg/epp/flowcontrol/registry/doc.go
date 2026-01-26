@@ -23,6 +23,6 @@ limitations under the License.
 //     handling registration, garbage collection, and scaling operations.
 //   - `registryShard`: A slice of the data plane. It holds a partition of the total state and provides a
 //     read-optimized, concurrent-safe view for a single `controller.FlowController` worker.
-//   - `managedQueue`: A stateful decorator around a `framework.SafeQueue`. It is the fundamental unit of state,
+//   - `managedQueue`: A stateful decorator around a SafeQueue. It is the fundamental unit of state,
 //     responsible for atomically tracking statistics (e.g., length and byte size) and ensuring data consistency.
 package registry

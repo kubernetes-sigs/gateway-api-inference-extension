@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package flowcontrol
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"

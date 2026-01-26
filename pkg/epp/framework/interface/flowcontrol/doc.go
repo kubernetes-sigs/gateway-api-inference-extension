@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package framework defines the core plugin interfaces for extending the Flow Control layer.
+// Package flowcontrol defines the core plugin interfaces for extending the Flow Control layer.
 //
 // It establishes the contracts that custom logic, such as queueing disciplines and dispatching policies, must adhere
 // to. By building on these interfaces, the Flow Control layer can be extended and customized without modifying the
@@ -29,4 +29,4 @@ limitations under the License.
 //
 // These components are linked by QueueCapability, which allows policies to declare their queue requirements (e.g.,
 // FIFO or priority-based ordering).
-package framework
+package flowcontrol

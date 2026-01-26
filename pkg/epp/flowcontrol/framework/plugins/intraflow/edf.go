@@ -20,8 +20,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -43,7 +43,7 @@ func init() {
 // See the documentation for the exported EDFOrderingPolicyType constant for detailed behavioral guarantees.
 type EDFPolicy struct{}
 
-var _ framework.OrderingPolicy = &EDFPolicy{}
+var _ flowcontrol.OrderingPolicy = &EDFPolicy{}
 
 func newEDFPolicy() *EDFPolicy {
 	return &EDFPolicy{}
@@ -55,8 +55,8 @@ func (p *EDFPolicy) Name() string {
 
 // RequiredQueueCapabilities returns the queue capabilities required by this policy.
 // It requires a priority-configurable queue (e.g., heap-based) to maintain items in deadline-sorted order.
-func (p *EDFPolicy) RequiredQueueCapabilities() []framework.QueueCapability {
-	return []framework.QueueCapability{framework.CapabilityPriorityConfigurable}
+func (p *EDFPolicy) RequiredQueueCapabilities() []flowcontrol.QueueCapability {
+	return []flowcontrol.QueueCapability{flowcontrol.CapabilityPriorityConfigurable}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.

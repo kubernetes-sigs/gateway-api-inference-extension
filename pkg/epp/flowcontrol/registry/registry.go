@@ -30,9 +30,9 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // propagateStatsDeltaFunc defines the callback function used to propagate statistics changes (deltas) up the hierarchy
@@ -842,8 +842,8 @@ func (fr *FlowRegistry) repartitionShardConfigsLocked() {
 
 // flowComponents holds the plugin instances created for a single flow on a single shard.
 type flowComponents struct {
-	policy framework.OrderingPolicy
-	queue  framework.SafeQueue
+	policy flowcontrol.OrderingPolicy
+	queue  flowcontrol.SafeQueue
 }
 
 // buildFlowComponents instantiates the necessary plugin components for a new flow instance.

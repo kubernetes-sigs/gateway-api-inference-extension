@@ -26,10 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 const (
@@ -273,7 +273,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			t.Run("ShouldVisitAllQueuesInBand", func(t *testing.T) {
 				t.Parallel()
 				var iteratedKeys []types.FlowKey
-				accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+				accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 					iteratedKeys = append(iteratedKeys, queue.FlowKey())
 					return true
 				})
@@ -285,7 +285,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			t.Run("ShouldExitEarly_WhenCallbackReturnsFalse", func(t *testing.T) {
 				t.Parallel()
 				var iterationCount int
-				accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+				accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 					iterationCount++
 					return false
 				})
@@ -305,7 +305,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for i := 0; i < 100; i++ {
-						accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+						accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 							// Accessing data should not panic or race.
 							_ = queue.FlowKey()
 							return true
@@ -341,7 +341,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			assert.Empty(t, keys, "FlowKeys() on an empty band must return an empty slice")
 
 			var callbackExecuted bool
-			accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+			accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 				callbackExecuted = true
 				return true
 			})
@@ -480,7 +480,7 @@ func TestShard_Concurrency_MixedWorkload(t *testing.T) {
 					for _, priority := range h.shard.AllOrderedPriorityLevels() {
 						accessor, err := h.shard.PriorityBandAccessor(priority)
 						if err == nil {
-							accessor.IterateQueues(func(q framework.FlowQueueAccessor) bool { return true })
+							accessor.IterateQueues(func(q flowcontrol.FlowQueueAccessor) bool { return true })
 						}
 					}
 				}

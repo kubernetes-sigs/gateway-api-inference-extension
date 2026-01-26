@@ -24,11 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -65,10 +65,10 @@ func newTestPluginsHandle(t *testing.T) plugin.Handle {
 
 // mockCapabilityChecker is a test double for verifying that NewConfig correctly delegates compatibility checks.
 type mockCapabilityChecker struct {
-	checkCompatibilityFunc func(p framework.OrderingPolicy, q queue.RegisteredQueueName) error
+	checkCompatibilityFunc func(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error
 }
 
-func (m *mockCapabilityChecker) CheckCompatibility(p framework.OrderingPolicy, q queue.RegisteredQueueName) error {
+func (m *mockCapabilityChecker) CheckCompatibility(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error {
 	if m.checkCompatibilityFunc != nil {
 		return m.checkCompatibilityFunc(p, q)
 	}
@@ -176,7 +176,7 @@ func TestNewConfig(t *testing.T) {
 					Queue:        "CustomQueue",
 				}),
 				withCapabilityChecker(&mockCapabilityChecker{
-					checkCompatibilityFunc: func(framework.OrderingPolicy, queue.RegisteredQueueName) error { return nil },
+					checkCompatibilityFunc: func(flowcontrol.OrderingPolicy, queue.RegisteredQueueName) error { return nil },
 				}),
 			},
 			handle: newTestPluginsHandle(t),
@@ -290,7 +290,7 @@ func TestNewConfig(t *testing.T) {
 			opts: []ConfigOption{
 				WithPriorityBand(mustBand(t, 1, "High")),
 				withCapabilityChecker(&mockCapabilityChecker{
-					checkCompatibilityFunc: func(framework.OrderingPolicy, queue.RegisteredQueueName) error {
+					checkCompatibilityFunc: func(flowcontrol.OrderingPolicy, queue.RegisteredQueueName) error {
 						return contracts.ErrPolicyQueueIncompatible
 					},
 				}),

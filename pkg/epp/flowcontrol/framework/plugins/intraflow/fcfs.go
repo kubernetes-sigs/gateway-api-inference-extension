@@ -19,8 +19,8 @@ package intraflow
 import (
 	"encoding/json"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -30,8 +30,8 @@ import (
 //
 // # Behavior and Queue Pairing
 //
-// The behavioral guarantees of this policy are critically dependent on the capabilities of the `framework.SafeQueue` it
-// is paired with. The system distinguishes between:
+// The behavioral guarantees of this policy are critically dependent on the capabilities of the SafeQueue it is paired
+// with. The system distinguishes between:
 //   - "Logical Enqueue Time": The timestamp when a request first arrives at the `controller.FlowController`.
 //   - "Physical Enqueue Time": The timestamp when a request is added to a specific shard's queue, which happens later.
 //
@@ -41,7 +41,7 @@ import (
 //     This configuration ensures that requests are processed in the order they arrived at the controller, providing the
 //     most intuitive behavior.
 //   - Paired with a `CapabilityFIFO` queue, it provides approximate FCFS ordering based on physical arrival order at
-//     the `framework.SafeQueue`.
+//     the SafeQueue.
 //     This configuration offers higher performance at the cost of strict logical-time ordering, as the
 //     `controller.FlowController`'s "bounce-and-retry" mechanic for Draining shards means a bounced request may be
 //     processed after a request that logically arrived later.
@@ -63,7 +63,7 @@ func init() {
 // behavior.
 type fcfs struct{}
 
-var _ framework.OrderingPolicy = &fcfs{}
+var _ flowcontrol.OrderingPolicy = &fcfs{}
 
 // newFCFS creates a new `fcfs` policy instance.
 func newFCFS() *fcfs {
@@ -77,8 +77,8 @@ func (p *fcfs) Name() string {
 
 // RequiredQueueCapabilities returns an empty slice, indicating that this policy can operate with any queue.
 // See the `FCFSPolicyName` constant's documentation for details on the behavioral trade-offs.
-func (p *fcfs) RequiredQueueCapabilities() []framework.QueueCapability {
-	return []framework.QueueCapability{}
+func (p *fcfs) RequiredQueueCapabilities() []flowcontrol.QueueCapability {
+	return []flowcontrol.QueueCapability{}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.

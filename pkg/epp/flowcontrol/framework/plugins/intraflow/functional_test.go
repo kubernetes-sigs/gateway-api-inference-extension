@@ -22,9 +22,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -46,7 +46,7 @@ func TestOrderingPolicyConformance(t *testing.T) {
 			plugin, err := factory(name, nil, nil)
 			require.NoError(t, err, "Factory failed for plugin %s", name)
 			require.NotNil(t, plugin, "Factory returned nil for plugin %s", name)
-			policy, ok := plugin.(framework.OrderingPolicy)
+			policy, ok := plugin.(flowcontrol.OrderingPolicy)
 			if !ok {
 				return
 			}

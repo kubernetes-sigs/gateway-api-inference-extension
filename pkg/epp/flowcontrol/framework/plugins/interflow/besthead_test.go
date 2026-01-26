@@ -24,10 +24,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -40,9 +40,9 @@ func newTestOrderingPolicy() *frameworkmocks.MockOrderingPolicy {
 	}
 }
 
-func newTestBand(queues ...framework.FlowQueueAccessor) *frameworkmocks.MockPriorityBandAccessor {
+func newTestBand(queues ...flowcontrol.FlowQueueAccessor) *frameworkmocks.MockPriorityBandAccessor {
 	flowKeys := make([]types.FlowKey, 0, len(queues))
-	queuesByID := make(map[string]framework.FlowQueueAccessor, len(queues))
+	queuesByID := make(map[string]flowcontrol.FlowQueueAccessor, len(queues))
 	for _, q := range queues {
 		key := q.FlowKey()
 		flowKeys = append(flowKeys, key)
@@ -50,10 +50,10 @@ func newTestBand(queues ...framework.FlowQueueAccessor) *frameworkmocks.MockPrio
 	}
 	return &frameworkmocks.MockPriorityBandAccessor{
 		FlowKeysFunc: func() []types.FlowKey { return flowKeys },
-		QueueFunc: func(id string) framework.FlowQueueAccessor {
+		QueueFunc: func(id string) flowcontrol.FlowQueueAccessor {
 			return queuesByID[id]
 		},
-		IterateQueuesFunc: func(iterator func(flow framework.FlowQueueAccessor) bool) {
+		IterateQueuesFunc: func(iterator func(flow flowcontrol.FlowQueueAccessor) bool) {
 			for _, key := range flowKeys {
 				if !iterator(queuesByID[key.ID]) {
 					break
@@ -104,7 +104,7 @@ func TestGlobalStrict_Pick(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		band            framework.PriorityBandAccessor
+		band            flowcontrol.PriorityBandAccessor
 		expectedQueueID string
 		expectedErr     error
 		shouldPanic     bool
@@ -150,7 +150,7 @@ func TestGlobalStrict_Pick(t *testing.T) {
 					},
 				},
 			),
-			expectedErr: framework.ErrIncompatiblePriorityType,
+			expectedErr: flowcontrol.ErrIncompatiblePriorityType,
 		},
 		{
 			name: "OrderingPolicyIsNil",

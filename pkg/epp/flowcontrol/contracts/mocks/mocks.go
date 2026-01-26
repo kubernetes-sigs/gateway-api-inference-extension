@@ -36,9 +36,9 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // --- RegistryShard Mocks ---
@@ -50,8 +50,8 @@ type MockRegistryShard struct {
 	IDFunc                       func() string
 	IsActiveFunc                 func() bool
 	ManagedQueueFunc             func(key types.FlowKey) (contracts.ManagedQueue, error)
-	FairnessPolicyFunc           func(priority int) (framework.FairnessPolicy, error)
-	PriorityBandAccessorFunc     func(priority int) (framework.PriorityBandAccessor, error)
+	FairnessPolicyFunc           func(priority int) (flowcontrol.FairnessPolicy, error)
+	PriorityBandAccessorFunc     func(priority int) (flowcontrol.PriorityBandAccessor, error)
 	AllOrderedPriorityLevelsFunc func() []int
 	StatsFunc                    func() contracts.ShardStats
 }
@@ -77,14 +77,14 @@ func (m *MockRegistryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQu
 	return nil, nil
 }
 
-func (m *MockRegistryShard) FairnessPolicy(priority int) (framework.FairnessPolicy, error) {
+func (m *MockRegistryShard) FairnessPolicy(priority int) (flowcontrol.FairnessPolicy, error) {
 	if m.FairnessPolicyFunc != nil {
 		return m.FairnessPolicyFunc(priority)
 	}
 	return nil, nil
 }
 
-func (m *MockRegistryShard) PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error) {
+func (m *MockRegistryShard) PriorityBandAccessor(priority int) (flowcontrol.PriorityBandAccessor, error) {
 	if m.PriorityBandAccessorFunc != nil {
 		return m.PriorityBandAccessorFunc(priority)
 	}
@@ -171,11 +171,11 @@ type MockManagedQueue struct {
 	// RemoveFunc allows a test to completely override the default Remove behavior.
 	RemoveFunc func(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
 	// CleanupFunc allows a test to completely override the default Cleanup behavior.
-	CleanupFunc func(predicate framework.PredicateFunc) []types.QueueItemAccessor
+	CleanupFunc func(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor
 	// DrainFunc allows a test to completely override the default Drain behavior.
 	DrainFunc func() []types.QueueItemAccessor
 	// OrderingPolicyFunc allows a test to override OrderingPolicy.
-	OrderingPolicyFunc func() framework.OrderingPolicy
+	OrderingPolicyFunc func() flowcontrol.OrderingPolicy
 
 	// mu protects access to the internal `items` map.
 	mu       sync.Mutex
@@ -189,8 +189,8 @@ func (m *MockManagedQueue) init() {
 	})
 }
 
-// FlowQueueAccessor returns the mock itself, as it fully implements the `framework.FlowQueueAccessor` interface.
-func (m *MockManagedQueue) FlowQueueAccessor() framework.FlowQueueAccessor {
+// FlowQueueAccessor returns the mock itself, as it fully implements the `flowcontrol.FlowQueueAccessor` interface.
+func (m *MockManagedQueue) FlowQueueAccessor() flowcontrol.FlowQueueAccessor {
 	return m
 }
 
@@ -233,7 +233,7 @@ func (m *MockManagedQueue) Remove(handle types.QueueItemHandle) (types.QueueItem
 }
 
 // Cleanup removes items matching a predicate. It checks for a test override before locking.
-func (m *MockManagedQueue) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
+func (m *MockManagedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
 	if m.CleanupFunc != nil {
 		return m.CleanupFunc(predicate)
 	}
@@ -266,10 +266,10 @@ func (m *MockManagedQueue) Drain() []types.QueueItemAccessor {
 	return drained
 }
 
-func (m *MockManagedQueue) FlowKey() types.FlowKey                    { return m.FlowKeyV }
-func (m *MockManagedQueue) Name() string                              { return "" }
-func (m *MockManagedQueue) Capabilities() []framework.QueueCapability { return nil }
-func (m *MockManagedQueue) OrderingPolicy() framework.OrderingPolicy {
+func (m *MockManagedQueue) FlowKey() types.FlowKey                      { return m.FlowKeyV }
+func (m *MockManagedQueue) Name() string                                { return "" }
+func (m *MockManagedQueue) Capabilities() []flowcontrol.QueueCapability { return nil }
+func (m *MockManagedQueue) OrderingPolicy() flowcontrol.OrderingPolicy {
 	if m.OrderingPolicyFunc != nil {
 		return m.OrderingPolicyFunc()
 	}

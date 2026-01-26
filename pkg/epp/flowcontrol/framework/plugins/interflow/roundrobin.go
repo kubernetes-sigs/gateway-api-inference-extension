@@ -23,8 +23,8 @@ import (
 	"slices"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -77,8 +77,8 @@ func (p *roundRobin) NewState(_ context.Context) any {
 // It retrieves the band-specific state, locks it, and advances the cursor.
 func (p *roundRobin) Pick(
 	_ context.Context,
-	flowGroup framework.PriorityBandAccessor,
-) (framework.FlowQueueAccessor, error) {
+	flowGroup flowcontrol.PriorityBandAccessor,
+) (flowcontrol.FlowQueueAccessor, error) {
 	if flowGroup == nil {
 		return nil, nil
 	}

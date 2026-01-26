@@ -40,10 +40,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller/internal"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 // --- Test Harness & Fixtures ---
@@ -277,7 +277,7 @@ type stubManagedQueue struct {
 
 func (s *stubManagedQueue) ByteSize() uint64 { return s.byteSizeV }
 
-func (s *stubManagedQueue) FlowQueueAccessor() framework.FlowQueueAccessor {
+func (s *stubManagedQueue) FlowQueueAccessor() flowcontrol.FlowQueueAccessor {
 	return &frameworkmocks.MockFlowQueueAccessor{ByteSizeV: s.byteSizeV}
 }
 
@@ -1227,20 +1227,20 @@ func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey types.Flow
 			},
 			// Configuration required for ShardProcessor initialization and dispatch logic.
 			AllOrderedPriorityLevelsFunc: func() []int { return []int{flowKey.Priority} },
-			PriorityBandAccessorFunc: func(priority int) (framework.PriorityBandAccessor, error) {
+			PriorityBandAccessorFunc: func(priority int) (flowcontrol.PriorityBandAccessor, error) {
 				if priority == flowKey.Priority {
 					return &frameworkmocks.MockPriorityBandAccessor{
 						PriorityV: priority,
-						IterateQueuesFunc: func(f func(framework.FlowQueueAccessor) bool) {
+						IterateQueuesFunc: func(f func(flowcontrol.FlowQueueAccessor) bool) {
 							f(currentQueue.FlowQueueAccessor())
 						},
 					}, nil
 				}
 				return nil, fmt.Errorf("unexpected priority %d", priority)
 			},
-			FairnessPolicyFunc: func(_ int) (framework.FairnessPolicy, error) {
+			FairnessPolicyFunc: func(_ int) (flowcontrol.FairnessPolicy, error) {
 				return &frameworkmocks.MockFairnessPolicy{
-					PickFunc: func(_ context.Context, _ framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
+					PickFunc: func(_ context.Context, _ flowcontrol.PriorityBandAccessor) (flowcontrol.FlowQueueAccessor, error) {
 						return currentQueue.FlowQueueAccessor(), nil
 					},
 				}, nil

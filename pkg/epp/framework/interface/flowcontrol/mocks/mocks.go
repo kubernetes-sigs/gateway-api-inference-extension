@@ -19,8 +19,8 @@ package mocks
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -34,16 +34,16 @@ type MockFlowQueueAccessor struct {
 	PeekHeadV       types.QueueItemAccessor
 	PeekTailV       types.QueueItemAccessor
 	FlowKeyV        types.FlowKey
-	OrderingPolicyV framework.OrderingPolicy
-	CapabilitiesV   []framework.QueueCapability
+	OrderingPolicyV flowcontrol.OrderingPolicy
+	CapabilitiesV   []flowcontrol.QueueCapability
 }
 
-func (m *MockFlowQueueAccessor) Name() string                              { return m.NameV }
-func (m *MockFlowQueueAccessor) Len() int                                  { return m.LenV }
-func (m *MockFlowQueueAccessor) ByteSize() uint64                          { return m.ByteSizeV }
-func (m *MockFlowQueueAccessor) OrderingPolicy() framework.OrderingPolicy  { return m.OrderingPolicyV }
-func (m *MockFlowQueueAccessor) FlowKey() types.FlowKey                    { return m.FlowKeyV }
-func (m *MockFlowQueueAccessor) Capabilities() []framework.QueueCapability { return m.CapabilitiesV }
+func (m *MockFlowQueueAccessor) Name() string                                { return m.NameV }
+func (m *MockFlowQueueAccessor) Len() int                                    { return m.LenV }
+func (m *MockFlowQueueAccessor) ByteSize() uint64                            { return m.ByteSizeV }
+func (m *MockFlowQueueAccessor) OrderingPolicy() flowcontrol.OrderingPolicy  { return m.OrderingPolicyV }
+func (m *MockFlowQueueAccessor) FlowKey() types.FlowKey                      { return m.FlowKeyV }
+func (m *MockFlowQueueAccessor) Capabilities() []flowcontrol.QueueCapability { return m.CapabilitiesV }
 
 func (m *MockFlowQueueAccessor) PeekHead() types.QueueItemAccessor {
 	return m.PeekHeadV
@@ -53,7 +53,7 @@ func (m *MockFlowQueueAccessor) PeekTail() types.QueueItemAccessor {
 	return m.PeekTailV
 }
 
-var _ framework.FlowQueueAccessor = &MockFlowQueueAccessor{}
+var _ flowcontrol.FlowQueueAccessor = &MockFlowQueueAccessor{}
 
 // MockPriorityBandAccessor is a behavioral mock for the PriorityBandAccessor interface.
 // Simple accessors are configured with public value fields (e.g., PriorityV).
@@ -66,8 +66,8 @@ type MockPriorityBandAccessor struct {
 	PriorityNameV     string
 	PolicyStateV      any
 	FlowKeysFunc      func() []types.FlowKey
-	QueueFunc         func(flowID string) framework.FlowQueueAccessor
-	IterateQueuesFunc func(callback func(flow framework.FlowQueueAccessor) (keepIterating bool))
+	QueueFunc         func(flowID string) flowcontrol.FlowQueueAccessor
+	IterateQueuesFunc func(callback func(flow flowcontrol.FlowQueueAccessor) (keepIterating bool))
 }
 
 func (m *MockPriorityBandAccessor) Priority() int        { return m.PriorityV }
@@ -81,41 +81,41 @@ func (m *MockPriorityBandAccessor) FlowKeys() []types.FlowKey {
 	return nil
 }
 
-func (m *MockPriorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
+func (m *MockPriorityBandAccessor) Queue(id string) flowcontrol.FlowQueueAccessor {
 	if m.QueueFunc != nil {
 		return m.QueueFunc(id)
 	}
 	return nil
 }
 
-func (m *MockPriorityBandAccessor) IterateQueues(callback func(flow framework.FlowQueueAccessor) bool) {
+func (m *MockPriorityBandAccessor) IterateQueues(callback func(flow flowcontrol.FlowQueueAccessor) bool) {
 	if m.IterateQueuesFunc != nil {
 		m.IterateQueuesFunc(callback)
 	}
 }
 
-var _ framework.PriorityBandAccessor = &MockPriorityBandAccessor{}
+var _ flowcontrol.PriorityBandAccessor = &MockPriorityBandAccessor{}
 
-// MockSafeQueue is a simple stub mock for the `framework.SafeQueue` interface.
+// MockSafeQueue is a simple stub mock for the SafeQueue interface.
 // It is used for tests that need to control the exact return values of a queue's methods without simulating the queue's
 // internal logic or state.
 type MockSafeQueue struct {
 	NameV         string
-	CapabilitiesV []framework.QueueCapability
+	CapabilitiesV []flowcontrol.QueueCapability
 	LenV          int
 	ByteSizeV     uint64
 	PeekHeadV     types.QueueItemAccessor
 	PeekTailV     types.QueueItemAccessor
 	AddFunc       func(item types.QueueItemAccessor)
 	RemoveFunc    func(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
-	CleanupFunc   func(predicate framework.PredicateFunc) []types.QueueItemAccessor
+	CleanupFunc   func(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor
 	DrainFunc     func() []types.QueueItemAccessor
 }
 
-func (m *MockSafeQueue) Name() string                              { return m.NameV }
-func (m *MockSafeQueue) Capabilities() []framework.QueueCapability { return m.CapabilitiesV }
-func (m *MockSafeQueue) Len() int                                  { return m.LenV }
-func (m *MockSafeQueue) ByteSize() uint64                          { return m.ByteSizeV }
+func (m *MockSafeQueue) Name() string                                { return m.NameV }
+func (m *MockSafeQueue) Capabilities() []flowcontrol.QueueCapability { return m.CapabilitiesV }
+func (m *MockSafeQueue) Len() int                                    { return m.LenV }
+func (m *MockSafeQueue) ByteSize() uint64                            { return m.ByteSizeV }
 
 func (m *MockSafeQueue) PeekHead() types.QueueItemAccessor {
 	return m.PeekHeadV
@@ -138,7 +138,7 @@ func (m *MockSafeQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAcc
 	return nil, nil
 }
 
-func (m *MockSafeQueue) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
+func (m *MockSafeQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
 	if m.CleanupFunc != nil {
 		return m.CleanupFunc(predicate)
 	}
@@ -152,7 +152,7 @@ func (m *MockSafeQueue) Drain() []types.QueueItemAccessor {
 	return nil
 }
 
-var _ framework.SafeQueue = &MockSafeQueue{}
+var _ flowcontrol.SafeQueue = &MockSafeQueue{}
 
 // MockOrderingPolicy is a behavioral mock for the OrderingPolicy interface.
 // Simple accessors are configured with public value fields (e.g., TypedNameV).
@@ -160,7 +160,7 @@ var _ framework.SafeQueue = &MockSafeQueue{}
 type MockOrderingPolicy struct {
 	TypedNameV                 plugin.TypedName
 	LessFunc                   func(a, b types.QueueItemAccessor) bool
-	RequiredQueueCapabilitiesV []framework.QueueCapability
+	RequiredQueueCapabilitiesV []flowcontrol.QueueCapability
 }
 
 func (m *MockOrderingPolicy) TypedName() plugin.TypedName { return m.TypedNameV }
@@ -172,11 +172,11 @@ func (m *MockOrderingPolicy) Less(a, b types.QueueItemAccessor) bool {
 	return false
 }
 
-func (m *MockOrderingPolicy) RequiredQueueCapabilities() []framework.QueueCapability {
+func (m *MockOrderingPolicy) RequiredQueueCapabilities() []flowcontrol.QueueCapability {
 	return m.RequiredQueueCapabilitiesV
 }
 
-var _ framework.OrderingPolicy = &MockOrderingPolicy{}
+var _ flowcontrol.OrderingPolicy = &MockOrderingPolicy{}
 
 // MockFairnessPolicy is a behavioral mock for the FairnessPolicy interface.
 // Simple accessors are configured with public value fields (e.g., NameV).
@@ -184,7 +184,7 @@ var _ framework.OrderingPolicy = &MockOrderingPolicy{}
 type MockFairnessPolicy struct {
 	TypedNameV   plugin.TypedName
 	NewStateFunc func(ctx context.Context) any
-	PickFunc     func(ctx context.Context, flowGroup framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
+	PickFunc     func(ctx context.Context, flowGroup flowcontrol.PriorityBandAccessor) (flowcontrol.FlowQueueAccessor, error)
 }
 
 func (m *MockFairnessPolicy) TypedName() plugin.TypedName { return m.TypedNameV }
@@ -196,11 +196,11 @@ func (m *MockFairnessPolicy) NewState(ctx context.Context) any {
 	return nil
 }
 
-func (m *MockFairnessPolicy) Pick(ctx context.Context, flowGroup framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
+func (m *MockFairnessPolicy) Pick(ctx context.Context, flowGroup flowcontrol.PriorityBandAccessor) (flowcontrol.FlowQueueAccessor, error) {
 	if m.PickFunc != nil {
 		return m.PickFunc(ctx, flowGroup)
 	}
 	return nil, nil
 }
 
-var _ framework.FairnessPolicy = &MockFairnessPolicy{}
+var _ flowcontrol.FairnessPolicy = &MockFairnessPolicy{}

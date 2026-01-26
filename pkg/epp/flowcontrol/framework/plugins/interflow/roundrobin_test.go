@@ -26,9 +26,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 var (
@@ -58,7 +58,7 @@ func TestRoundRobin_Pick_Logic(t *testing.T) {
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
 		PolicyStateV: state,
 		FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow3Key, flow1Key, flow2Key} }, // Unsorted to test sorting
-		QueueFunc: func(id string) framework.FlowQueueAccessor {
+		QueueFunc: func(id string) flowcontrol.FlowQueueAccessor {
 			switch id {
 			case "flow1":
 				return queue1
@@ -108,7 +108,7 @@ func TestRoundRobin_Pick_SkipsEmptyQueues(t *testing.T) {
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
 		PolicyStateV: state,
 		FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow1Key, flowEmptyKey, flow3Key} },
-		QueueFunc: func(id string) framework.FlowQueueAccessor {
+		QueueFunc: func(id string) flowcontrol.FlowQueueAccessor {
 			switch id {
 			case "flow1":
 				return queue1
@@ -150,7 +150,7 @@ func TestRoundRobin_Pick_HandlesDynamicFlows(t *testing.T) {
 	mockBand := &frameworkmocks.MockPriorityBandAccessor{
 		PolicyStateV: state,
 		FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow1Key, flow2Key} },
-		QueueFunc: func(id string) framework.FlowQueueAccessor {
+		QueueFunc: func(id string) flowcontrol.FlowQueueAccessor {
 			if id == "flow1" {
 				return queue1
 			}
@@ -167,7 +167,7 @@ func TestRoundRobin_Pick_HandlesDynamicFlows(t *testing.T) {
 	// --- Simulate adding a flow ---
 	queue3 := &frameworkmocks.MockFlowQueueAccessor{LenV: 1, FlowKeyV: flow3Key}
 	mockBand.FlowKeysFunc = func() []types.FlowKey { return []types.FlowKey{flow1Key, flow2Key, flow3Key} }
-	mockBand.QueueFunc = func(id string) framework.FlowQueueAccessor {
+	mockBand.QueueFunc = func(id string) flowcontrol.FlowQueueAccessor {
 		switch id {
 		case "flow1":
 			return queue1
@@ -222,7 +222,7 @@ func TestRoundRobin_Pick_Concurrency(t *testing.T) {
 			mockBand := &frameworkmocks.MockPriorityBandAccessor{
 				PolicyStateV: state,
 				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{flow1Key, flow2Key, flow3Key} },
-				QueueFunc: func(id string) framework.FlowQueueAccessor {
+				QueueFunc: func(id string) flowcontrol.FlowQueueAccessor {
 					for _, q := range queues {
 						if q.FlowKey().ID == id {
 							return q

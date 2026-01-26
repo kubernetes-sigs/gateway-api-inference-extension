@@ -30,8 +30,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // MaxMinHeapName is the name of the max-min heap queue implementation.
@@ -39,12 +39,12 @@ const MaxMinHeapName = "MaxMinHeap"
 
 func init() {
 	MustRegisterQueue(RegisteredQueueName(MaxMinHeapName),
-		func(policy framework.OrderingPolicy) (framework.SafeQueue, error) {
+		func(policy flowcontrol.OrderingPolicy) (flowcontrol.SafeQueue, error) {
 			return newMaxMinHeap(policy), nil
 		})
 }
 
-// maxMinHeap implements the `framework.SafeQueue` interface using a max-min heap.
+// maxMinHeap implements the SafeQueue interface using a max-min heap.
 // The heap is ordered by the provided comparator, with higher values considered higher priority.
 // This implementation is concurrent-safe.
 type maxMinHeap struct {
@@ -52,7 +52,7 @@ type maxMinHeap struct {
 	handles  map[types.QueueItemHandle]*heapItem
 	byteSize atomic.Uint64
 	mu       sync.RWMutex
-	policy   framework.OrderingPolicy
+	policy   flowcontrol.OrderingPolicy
 }
 
 // heapItem is an internal struct to hold an item and its index in the heap.
@@ -81,7 +81,7 @@ func (h *heapItem) IsInvalidated() bool {
 var _ types.QueueItemHandle = &heapItem{}
 
 // newMaxMinHeap creates a new max-min heap with the given policy.
-func newMaxMinHeap(policy framework.OrderingPolicy) *maxMinHeap {
+func newMaxMinHeap(policy flowcontrol.OrderingPolicy) *maxMinHeap {
 	return &maxMinHeap{
 		items:   make([]types.QueueItemAccessor, 0),
 		handles: make(map[types.QueueItemHandle]*heapItem),
@@ -89,7 +89,7 @@ func newMaxMinHeap(policy framework.OrderingPolicy) *maxMinHeap {
 	}
 }
 
-// --- `framework.SafeQueue` Interface Implementation ---
+// --- SafeQueue Interface Implementation ---
 
 // Name returns the name of the queue.
 func (h *maxMinHeap) Name() string {
@@ -97,8 +97,8 @@ func (h *maxMinHeap) Name() string {
 }
 
 // Capabilities returns the capabilities of the queue.
-func (h *maxMinHeap) Capabilities() []framework.QueueCapability {
-	return []framework.QueueCapability{framework.CapabilityPriorityConfigurable}
+func (h *maxMinHeap) Capabilities() []flowcontrol.QueueCapability {
+	return []flowcontrol.QueueCapability{flowcontrol.CapabilityPriorityConfigurable}
 }
 
 // Len returns the number of items in the queue.
@@ -255,22 +255,22 @@ func (h *maxMinHeap) Remove(handle types.QueueItemHandle) (types.QueueItemAccess
 	defer h.mu.Unlock()
 
 	if handle == nil {
-		return nil, framework.ErrInvalidQueueItemHandle
+		return nil, flowcontrol.ErrInvalidQueueItemHandle
 	}
 
 	if handle.IsInvalidated() {
-		return nil, framework.ErrInvalidQueueItemHandle
+		return nil, flowcontrol.ErrInvalidQueueItemHandle
 	}
 
 	heapItem, ok := handle.(*heapItem)
 	if !ok {
-		return nil, framework.ErrInvalidQueueItemHandle
+		return nil, flowcontrol.ErrInvalidQueueItemHandle
 	}
 
 	// Now we can check if the handle is in the map
 	_, ok = h.handles[handle]
 	if !ok {
-		return nil, framework.ErrQueueItemNotFound
+		return nil, flowcontrol.ErrQueueItemNotFound
 	}
 
 	i := heapItem.index
@@ -420,7 +420,7 @@ func isMinLevel(i int) bool {
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (h *maxMinHeap) Cleanup(predicate framework.PredicateFunc) []types.QueueItemAccessor {
+func (h *maxMinHeap) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

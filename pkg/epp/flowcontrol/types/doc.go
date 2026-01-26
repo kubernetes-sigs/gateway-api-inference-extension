@@ -31,9 +31,9 @@ limitations under the License.
 //     `QueueItemAccessor` interface. This is an enriched, read-only view used by policies and queues. It adds internal
 //     metadata like `EnqueueTime` and `EffectiveTTL`.
 //
-//  3. If the request is accepted and added to a `framework.SafeQueue`, the queue creates a `QueueItemHandle`. This is
-//     an opaque, queue-specific handle that the controller uses to perform targeted operations (like removal) without
-//     needing to know the queue's internal implementation details.
+//  3. If the request is accepted and added to a SafeQueue, the queue creates a `QueueItemHandle`. This is an opaque,
+//     queue-specific handle that the controller uses to perform targeted operations (like removal) without needing to
+//     know the queue's internal implementation details.
 //
 //  4. The `EnqueueAndWait` method blocks until the request reaches a terminal state. This final state is reported using
 //     a `QueueOutcome` enum and a corresponding `error`.

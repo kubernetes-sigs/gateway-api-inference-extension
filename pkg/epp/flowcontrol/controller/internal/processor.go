@@ -29,8 +29,8 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // maxCleanupWorkers caps the number of concurrent workers for background cleanup tasks. This prevents a single shard
@@ -333,7 +333,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 // selectItem applies the configured fairness and intra-flow dispatch policies to select a single item.
 func (sp *ShardProcessor) selectItem(
 	ctx context.Context,
-	flowGroup framework.PriorityBandAccessor,
+	flowGroup flowcontrol.PriorityBandAccessor,
 ) (types.QueueItemAccessor, error) {
 	fairnessP, err := sp.shard.FairnessPolicy(flowGroup.Priority())
 	if err != nil {
@@ -472,14 +472,14 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 
 	// Phase 1: Collect all queues to be processed into a single slice.
 	// This avoids holding locks on the shard while processing, and allows us to determine the optimal number of workers.
-	var queuesToProcess []framework.FlowQueueAccessor
+	var queuesToProcess []flowcontrol.FlowQueueAccessor
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		band, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
 			logger.Error(err, "Failed to get PriorityBandAccessor", "priority", priority)
 			continue
 		}
-		band.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+		band.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 			queuesToProcess = append(queuesToProcess, queue)
 			return true // Continue iterating.
 		})
@@ -495,7 +495,7 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 	numWorkers := min(maxCleanupWorkers, len(queuesToProcess))
 
 	// Phase 3: Create a worker pool to process the queues.
-	tasks := make(chan framework.FlowQueueAccessor)
+	tasks := make(chan flowcontrol.FlowQueueAccessor)
 
 	var wg sync.WaitGroup
 	for range numWorkers {

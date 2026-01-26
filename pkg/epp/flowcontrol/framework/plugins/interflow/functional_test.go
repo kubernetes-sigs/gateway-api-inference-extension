@@ -24,9 +24,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -50,7 +50,7 @@ func TestFairnessPolicyConformance(t *testing.T) {
 			require.NoError(t, err, "Factory failed for plugin %s", name)
 			require.NotNil(t, plugin, "Factory returned nil for plugin %s", name)
 
-			policy, ok := plugin.(framework.FairnessPolicy)
+			policy, ok := plugin.(flowcontrol.FairnessPolicy)
 			if !ok {
 				t.Skipf("Plugin %s is not a FairnessPolicy. Skipping.", name)
 			}
@@ -66,7 +66,7 @@ func TestFairnessPolicyConformance(t *testing.T) {
 	}
 }
 
-func runPickConformanceTests(t *testing.T, policy framework.FairnessPolicy) {
+func runPickConformanceTests(t *testing.T, policy flowcontrol.FairnessPolicy) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -82,10 +82,10 @@ func runPickConformanceTests(t *testing.T, policy framework.FairnessPolicy) {
 
 	testCases := []struct {
 		name          string
-		band          framework.PriorityBandAccessor
+		band          flowcontrol.PriorityBandAccessor
 		expectErr     bool
 		expectNil     bool
-		expectedQueue framework.FlowQueueAccessor
+		expectedQueue flowcontrol.FlowQueueAccessor
 	}{
 		{
 			name:      "With a nil priority band accessor",
@@ -98,7 +98,7 @@ func runPickConformanceTests(t *testing.T, policy framework.FairnessPolicy) {
 			band: &frameworkmocks.MockPriorityBandAccessor{
 				PolicyStateV:      state,
 				FlowKeysFunc:      func() []types.FlowKey { return []types.FlowKey{} },
-				IterateQueuesFunc: func(callback func(flow framework.FlowQueueAccessor) bool) { /* no-op */ },
+				IterateQueuesFunc: func(callback func(flow flowcontrol.FlowQueueAccessor) bool) { /* no-op */ },
 			},
 			expectErr: false,
 			expectNil: true,
@@ -108,13 +108,13 @@ func runPickConformanceTests(t *testing.T, policy framework.FairnessPolicy) {
 			band: &frameworkmocks.MockPriorityBandAccessor{
 				PolicyStateV: state,
 				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{{ID: flowIDEmpty}} },
-				QueueFunc: func(fID string) framework.FlowQueueAccessor {
+				QueueFunc: func(fID string) flowcontrol.FlowQueueAccessor {
 					if fID == flowIDEmpty {
 						return mockQueueEmpty
 					}
 					return nil
 				},
-				IterateQueuesFunc: func(callback func(flow framework.FlowQueueAccessor) bool) { callback(mockQueueEmpty) },
+				IterateQueuesFunc: func(callback func(flow flowcontrol.FlowQueueAccessor) bool) { callback(mockQueueEmpty) },
 			},
 			expectErr: false,
 			expectNil: true,
@@ -124,8 +124,8 @@ func runPickConformanceTests(t *testing.T, policy framework.FairnessPolicy) {
 			band: &frameworkmocks.MockPriorityBandAccessor{
 				PolicyStateV: state,
 				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{{ID: flowIDEmpty}, {ID: "flow-empty-2"}} },
-				QueueFunc:    func(fID string) framework.FlowQueueAccessor { return mockQueueEmpty },
-				IterateQueuesFunc: func(callback func(flow framework.FlowQueueAccessor) bool) {
+				QueueFunc:    func(fID string) flowcontrol.FlowQueueAccessor { return mockQueueEmpty },
+				IterateQueuesFunc: func(callback func(flow flowcontrol.FlowQueueAccessor) bool) {
 					// Iterate over two empty queues.
 					if !callback(mockQueueEmpty) {
 						return

@@ -30,10 +30,10 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // --- Test Harness ---
@@ -188,7 +188,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 			handle,
 			WithPriorityBand(badBand),
 			withCapabilityChecker(&mockCapabilityChecker{
-				checkCompatibilityFunc: func(framework.OrderingPolicy, queue.RegisteredQueueName) error {
+				checkCompatibilityFunc: func(flowcontrol.OrderingPolicy, queue.RegisteredQueueName) error {
 					return nil // Approve everything.
 				},
 			}),
@@ -204,7 +204,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		})
 
 		require.Error(t, err, "WithConnection must return an error for a failed flow JIT registration")
-		assert.ErrorContains(t, err, "no framework.SafeQueue registered", "The returned error must propagate the reason")
+		assert.ErrorContains(t, err, "no SafeQueue registered", "The returned error must propagate the reason")
 	})
 
 	t.Run("Handle_Shards_ShouldReturnAllActiveShardsAndBeACopy", func(t *testing.T) {
@@ -1384,7 +1384,7 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 	// This ensures NewConfig succeeds, but JIT (ensureFlowInfrastructure) fails when trying to instantiate the queue.
 	failQueueName := queue.RegisteredQueueName("NonExistentQueue")
 	mockChecker := &mockCapabilityChecker{
-		checkCompatibilityFunc: func(p framework.OrderingPolicy, q queue.RegisteredQueueName) error {
+		checkCompatibilityFunc: func(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error {
 			return nil // Bypass validation.
 		},
 	}

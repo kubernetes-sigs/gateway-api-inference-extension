@@ -28,10 +28,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -66,7 +66,7 @@ var reverseEnqueueTimePolicy = &frameworkmocks.MockOrderingPolicy{
 // This function is crucial for testing different ordering logic (FIFO, custom priority).
 func testLifecycleAndOrdering(
 	t *testing.T,
-	q framework.SafeQueue,
+	q flowcontrol.SafeQueue,
 	itemsInOrder []*typesmocks.MockQueueItemAccessor,
 	comparatorName string,
 ) {
@@ -161,9 +161,9 @@ func testLifecycleAndOrdering(
 	assert.Nil(t, peeked, "[%s] PeekHead on an empty queue should return a nil item again", comparatorName)
 }
 
-// TestQueueConformance is the main conformance test suite for `framework.SafeQueue` implementations.
+// TestQueueConformance is the main conformance test suite for SafeQueue implementations.
 // It iterates over all queue implementations registered via `queue.MustRegisterQueue` and runs a series of sub-tests to
-// ensure they adhere to the `framework.SafeQueue` contract.
+// ensure they adhere to the SafeQueue contract.
 func TestQueueConformance(t *testing.T) {
 	t.Parallel()
 
@@ -204,7 +204,7 @@ func TestQueueConformance(t *testing.T) {
 			})
 
 			qForCapCheck, err := constructor(enqueueTimePolicy)
-			if err == nil && slices.Contains(qForCapCheck.Capabilities(), framework.CapabilityPriorityConfigurable) {
+			if err == nil && slices.Contains(qForCapCheck.Capabilities(), flowcontrol.CapabilityPriorityConfigurable) {
 				t.Run("LifecycleAndOrdering_PriorityConfigurable_ByteSize", func(t *testing.T) {
 					t.Parallel()
 					q, err := constructor(byteSizePolicy)
@@ -261,10 +261,10 @@ func TestQueueConformance(t *testing.T) {
 					handle    types.QueueItemHandle
 					expectErr error
 				}{
-					{name: "nil handle", handle: nil, expectErr: framework.ErrInvalidQueueItemHandle},
-					{name: "invalidated handle", handle: invalidatedHandle, expectErr: framework.ErrInvalidQueueItemHandle},
-					{name: "alien handle from other queue", handle: alienHandle, expectErr: framework.ErrQueueItemNotFound},
-					{name: "foreign handle type", handle: foreignHandle, expectErr: framework.ErrInvalidQueueItemHandle},
+					{name: "nil handle", handle: nil, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
+					{name: "invalidated handle", handle: invalidatedHandle, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
+					{name: "alien handle from other queue", handle: alienHandle, expectErr: flowcontrol.ErrQueueItemNotFound},
+					{name: "foreign handle type", handle: foreignHandle, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
 				}
 
 				for _, tc := range testCases {
@@ -314,7 +314,7 @@ func TestQueueConformance(t *testing.T) {
 
 				// Attempt to remove again with the now-stale handle
 				_, errStaleNonHead := q.Remove(handleNonHead)
-				assert.ErrorIs(t, errStaleNonHead, framework.ErrInvalidQueueItemHandle,
+				assert.ErrorIs(t, errStaleNonHead, flowcontrol.ErrInvalidQueueItemHandle,
 					"Removing with a stale handle must fail with ErrInvalidQueueItemHandle")
 			})
 
@@ -508,7 +508,7 @@ func TestQueueConformance(t *testing.T) {
 											successfulRemoves.Add(1)
 										} else {
 											// It's okay if it's ErrInvalidQueueItemHandle or ErrQueueItemNotFound due to races
-											assert.ErrorIs(t, removeErr, framework.ErrInvalidQueueItemHandle,
+											assert.ErrorIs(t, removeErr, flowcontrol.ErrInvalidQueueItemHandle,
 												"Expected invalid handle or not found if raced")
 										}
 									}

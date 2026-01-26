@@ -24,10 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -59,14 +59,14 @@ const (
 
 // capabilityChecker abstracts the logic required to validate if a policy is compatible with a queue.
 type capabilityChecker interface {
-	CheckCompatibility(p framework.OrderingPolicy, q queue.RegisteredQueueName) error
+	CheckCompatibility(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error
 }
 
 // runtimeCapabilityChecker is the default implementation used in production.
 // It instantiates the actual plugins to inspect their required and provided capabilities.
 type runtimeCapabilityChecker struct{}
 
-func (r *runtimeCapabilityChecker) CheckCompatibility(p framework.OrderingPolicy, q queue.RegisteredQueueName) error {
+func (r *runtimeCapabilityChecker) CheckCompatibility(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error {
 	requiredCapabilities := p.RequiredQueueCapabilities()
 
 	// We pass nil for the comparator as we only need to inspect static capabilities here.
@@ -80,7 +80,7 @@ func (r *runtimeCapabilityChecker) CheckCompatibility(p framework.OrderingPolicy
 	}
 
 	queueCapabilities := tempQueue.Capabilities()
-	capabilitySet := make(map[framework.QueueCapability]struct{}, len(queueCapabilities))
+	capabilitySet := make(map[flowcontrol.QueueCapability]struct{}, len(queueCapabilities))
 	for _, cap := range queueCapabilities {
 		capabilitySet[cap] = struct{}{}
 	}
@@ -162,15 +162,15 @@ type PriorityBandConfig struct {
 	// This policy governs which request *within this flow's queue* to select next (e.g., "fcfs").
 	// This field is populated either via WithOrderingPolicy (using a handle lookup) or via applyDefaults.
 	// Optional: Defaults to defaultOrderingPolicyRef ("fcfs-ordering-policy").
-	OrderingPolicy framework.OrderingPolicy
+	OrderingPolicy flowcontrol.OrderingPolicy
 
 	// FairnessPolicy is the hydrated singleton instance of the policy.
 	// This policy governs which Flow *within this band* to select next (e.g., "round-robin").
 	// This field is populated either via WithFairnessPolicy (using a handle lookup) or via applyDefaults.
 	// Optional: Defaults to defaultFairnessPolicyRef ("global-strict-fairness-policy").
-	FairnessPolicy framework.FairnessPolicy
+	FairnessPolicy flowcontrol.FairnessPolicy
 
-	// Queue specifies the default name of the `framework.SafeQueue` implementation for flow queues in this band.
+	// Queue specifies the default name of the SafeQueue implementation for flow queues in this band.
 	// Optional: Defaults to defaultQueue ("ListQueue").
 	Queue queue.RegisteredQueueName
 
@@ -290,14 +290,14 @@ func WithOrderingPolicy(ref string, handle plugin.Handle) PriorityBandConfigOpti
 	}
 }
 
-func orderingPolicy(ref string, handle plugin.Handle) (framework.OrderingPolicy, error) {
+func orderingPolicy(ref string, handle plugin.Handle) (flowcontrol.OrderingPolicy, error) {
 	v := handle.Plugin(ref)
 	if v == nil {
 		return nil, fmt.Errorf("no ordering policy registered for name %q", ref)
 	}
-	policy, ok := v.(framework.OrderingPolicy)
+	policy, ok := v.(flowcontrol.OrderingPolicy)
 	if !ok {
-		return nil, fmt.Errorf("plugin %q is not a framework.OrderingPolicy (type: %T)", ref, v)
+		return nil, fmt.Errorf("plugin %q is not a flowcontrol.OrderingPolicy (type: %T)", ref, v)
 	}
 	return policy, nil
 }
@@ -316,14 +316,14 @@ func WithFairnessPolicy(ref string, handle plugin.Handle) PriorityBandConfigOpti
 	}
 }
 
-func fairnessPolicy(ref string, handle plugin.Handle) (framework.FairnessPolicy, error) {
+func fairnessPolicy(ref string, handle plugin.Handle) (flowcontrol.FairnessPolicy, error) {
 	v := handle.Plugin(ref)
 	if v == nil {
 		return nil, fmt.Errorf("no fairness policy registered for name %q", ref)
 	}
-	policy, ok := v.(framework.FairnessPolicy)
+	policy, ok := v.(flowcontrol.FairnessPolicy)
 	if !ok {
-		return nil, fmt.Errorf("plugin %q is not a framework.FairnessPolicy (type: %T)", ref, v)
+		return nil, fmt.Errorf("plugin %q is not a flowcontrol.FairnessPolicy (type: %T)", ref, v)
 	}
 	return policy, nil
 }

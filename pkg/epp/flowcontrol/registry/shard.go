@@ -27,8 +27,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // priorityBand holds all managedQueues and configuration for a single priority level within a shard.
@@ -37,7 +37,7 @@ type priorityBand struct {
 
 	// fairnessPolicy is the singleton plugin instance governing this band.
 	// It is duplicated here from the config to allow lock-free access on the hot path.
-	fairnessPolicy framework.FairnessPolicy
+	fairnessPolicy flowcontrol.FairnessPolicy
 
 	// policyState holds the opaque, mutable state for the fairness policy.
 	// It is initialized once at creation via fairnessPolicy.NewState() and exposed via GetPolicyState().
@@ -228,7 +228,7 @@ func (s *registryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue,
 
 // FairnessPolicy retrieves a priority band's configured FairnessPolicy.
 // This read is lock-free as the policy instance is immutable after the shard is initialized.
-func (s *registryShard) FairnessPolicy(priority int) (framework.FairnessPolicy, error) {
+func (s *registryShard) FairnessPolicy(priority int) (flowcontrol.FairnessPolicy, error) {
 	val, ok := s.priorityBands.Load(priority)
 	if !ok {
 		return nil, fmt.Errorf("failed to get fairness policy for priority %d: %w",
@@ -238,7 +238,7 @@ func (s *registryShard) FairnessPolicy(priority int) (framework.FairnessPolicy, 
 }
 
 // PriorityBandAccessor retrieves a read-only view for a given priority level.
-func (s *registryShard) PriorityBandAccessor(priority int) (framework.PriorityBandAccessor, error) {
+func (s *registryShard) PriorityBandAccessor(priority int) (flowcontrol.PriorityBandAccessor, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -297,8 +297,8 @@ func (s *registryShard) Stats() contracts.ShardStats {
 // It is an idempotent "create if not exists" operation.
 func (s *registryShard) synchronizeFlow(
 	key types.FlowKey,
-	policy framework.OrderingPolicy,
-	q framework.SafeQueue,
+	policy flowcontrol.OrderingPolicy,
+	q flowcontrol.SafeQueue,
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -376,14 +376,14 @@ func (s *registryShard) propagateStatsDelta(priority int, lenDelta, byteSizeDelt
 
 // --- `priorityBandAccessor` ---
 
-// priorityBandAccessor implements `framework.PriorityBandAccessor`. It provides a read-only, concurrent-safe view of a
-// single priority band within a shard.
+// priorityBandAccessor implements PriorityBandAccessor.
+// It provides a read-only, concurrent-safe view of a single priority band within a shard.
 type priorityBandAccessor struct {
 	shard *registryShard
 	band  *priorityBand
 }
 
-var _ framework.PriorityBandAccessor = &priorityBandAccessor{}
+var _ flowcontrol.PriorityBandAccessor = &priorityBandAccessor{}
 
 // Priority returns the numerical priority level of this band.
 func (a *priorityBandAccessor) Priority() int {
@@ -424,8 +424,8 @@ func (a *priorityBandAccessor) FlowKeys() []types.FlowKey {
 	return flowKeys
 }
 
-// Queue returns a `framework.FlowQueueAccessor` for the specified logical `ID` within this priority band.
-func (a *priorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
+// Queue returns a FlowQueueAccessor for the specified logical `ID` within this priority band.
+func (a *priorityBandAccessor) Queue(id string) flowcontrol.FlowQueueAccessor {
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
 
@@ -436,14 +436,14 @@ func (a *priorityBandAccessor) Queue(id string) framework.FlowQueueAccessor {
 	return mq.FlowQueueAccessor()
 }
 
-// IterateQueues executes the given `callback` for each `framework.FlowQueueAccessor` in this priority band.
+// IterateQueues executes the given `callback` for each FlowQueueAccessor in this priority band.
 //
 // To minimize lock contention, this implementation snapshots the queue accessors under a read lock and then executes
 // the callback on the snapshot, outside of the lock. This ensures that a potentially slow policy (the callback) does
 // not block other operations on the shard.
-func (a *priorityBandAccessor) IterateQueues(callback func(queue framework.FlowQueueAccessor) bool) {
+func (a *priorityBandAccessor) IterateQueues(callback func(queue flowcontrol.FlowQueueAccessor) bool) {
 	a.shard.mu.RLock()
-	accessors := make([]framework.FlowQueueAccessor, 0, len(a.band.queues))
+	accessors := make([]flowcontrol.FlowQueueAccessor, 0, len(a.band.queues))
 	for _, mq := range a.band.queues {
 		accessors = append(accessors, mq.FlowQueueAccessor())
 	}
