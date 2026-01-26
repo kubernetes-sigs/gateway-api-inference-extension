@@ -1384,7 +1384,7 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 	// This ensures NewConfig succeeds, but JIT (ensureFlowInfrastructure) fails when trying to instantiate the queue.
 	failQueueName := queue.RegisteredQueueName("NonExistentQueue")
 	mockChecker := &mockCapabilityChecker{
-		checkCompatibilityFunc: func(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+		checkCompatibilityFunc: func(p framework.OrderingPolicy, q queue.RegisteredQueueName) error {
 			return nil // Bypass validation.
 		},
 	}
