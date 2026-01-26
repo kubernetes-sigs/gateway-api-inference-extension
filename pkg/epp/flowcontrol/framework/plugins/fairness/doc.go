@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package interflow provides the standard implementations of the FairnessPolicy interface.
+// Package fairness provides the standard implementations of the FairnessPolicy interface.
 //
 // # Context: The 3-Tier Dispatch Hierarchy
 //
@@ -56,6 +56,4 @@ limitations under the License.
 //     It scans all queues in the band and picks the absolute "best" request (e.g., oldest timestamp) globally.
 //     This maximizes strict adherence to global ordering but offers no isolation; a noisy neighbor can starve other
 //     flows.
-//
-// TODO: Rename directory and package to "fairness".
-package interflow
+package fairness

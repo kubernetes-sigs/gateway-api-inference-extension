@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
@@ -40,7 +40,7 @@ const (
 	// defaultOrderingPolicyRef is the default policy for selecting items within a single flow's queue.
 	defaultOrderingPolicyRef string = intraflow.FCFSOrderingPolicyType
 	// defaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
-	defaultFairnessPolicyRef string = interflow.GlobalStrictFairnessPolicyType
+	defaultFairnessPolicyRef string = fairness.GlobalStrictFairnessPolicyType
 	// defaultQueue is the default queue implementation for flows.
 	defaultQueue queue.RegisteredQueueName = queue.ListQueueName
 	// defaultInitialShardCount is the default number of parallel shards to create when the registry is initialized.

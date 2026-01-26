@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -148,7 +148,7 @@ func ensureFlowControlLayer(
 	if err := registerDefaultPlugin(cfg, handle, intraflow.FCFSOrderingPolicyType); err != nil {
 		return err
 	}
-	return registerDefaultPlugin(cfg, handle, interflow.GlobalStrictFairnessPolicyType)
+	return registerDefaultPlugin(cfg, handle, fairness.GlobalStrictFairnessPolicyType)
 }
 
 // registerDefaultPlugin instantiates a plugin with empty configuration (defaults) and adds it to both the handle and

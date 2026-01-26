@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
@@ -36,16 +36,16 @@ import (
 func newTestPluginsHandle(t *testing.T) plugin.Handle {
 	t.Helper()
 	handle := utils.NewTestHandle(t.Context())
-	handle.AddPlugin(interflow.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+	handle.AddPlugin(fairness.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: interflow.GlobalStrictFairnessPolicyType,
-			Name: interflow.GlobalStrictFairnessPolicyType,
+			Type: fairness.GlobalStrictFairnessPolicyType,
+			Name: fairness.GlobalStrictFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(interflow.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+	handle.AddPlugin(fairness.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: interflow.RoundRobinFairnessPolicyType,
-			Name: interflow.RoundRobinFairnessPolicyType,
+			Type: fairness.RoundRobinFairnessPolicyType,
+			Name: fairness.RoundRobinFairnessPolicyType,
 		},
 	})
 	handle.AddPlugin(intraflow.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
@@ -342,7 +342,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
 			WithOrderingPolicy(intraflow.EDFOrderingPolicyType, handle),
-			WithFairnessPolicy(interflow.RoundRobinFairnessPolicyType, handle),
+			WithFairnessPolicy(fairness.RoundRobinFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
@@ -350,7 +350,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		require.NotNil(t, pb.OrderingPolicy)
 		assert.Equal(t, intraflow.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
 		require.NotNil(t, pb.FairnessPolicy)
-		assert.Equal(t, interflow.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
+		assert.Equal(t, fairness.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
 	})
 
 	t.Run("ShouldError_OnInvalidOptions", func(t *testing.T) {
