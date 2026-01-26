@@ -92,7 +92,13 @@ type RequestContext struct {
 	RequestRunning            bool
 	Request                   *Request
 
+	ReqContentType  string
+	ReqPath         string
+	RespContentType string
+
 	SchedulingRequest *schedulingtypes.LLMRequest
+	// SchedulingRequestBody is used only for GRPC, as the GRPC request can be parsed here.
+	SchedulingRequestBody *schedulingtypes.LLMRequestBody
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
@@ -224,43 +230,16 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 			// Message is buffered, we can read and decode.
 			if v.RequestBody.EndOfStream {
-				loggerTrace.Info("decoding")
-				if errUnmarshal := json.Unmarshal(body, &reqCtx.Request.Body); errUnmarshal != nil {
-					if logger.V(logutil.DEBUG).Enabled() {
-						logger.Info("Error unmarshaling request body", "body", string(body), "err", errUnmarshal)
-					}
-					err = errutil.Error{
-						Code: errutil.BadRequest,
-						Msg:  "Error unmarshaling request body",
-					}
-					break
-				}
-
-				// Body stream complete. Capture raw size for flow control.
 				reqCtx.RequestSize = len(body)
+				err = s.handleRequestBodyCompletion(ctx, reqCtx, body)
+				// Reset body buffer after processing
 				body = []byte{}
-
-				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error handling request")
+					logger.V(logutil.DEFAULT).Error(err, "handleRequestBodyCompletion errors out,")
 					break
 				}
-
-				// Marshal after HandleRequest to include modifications (e.g., model rewriting).
-				var requestBodyBytes []byte
-				requestBodyBytes, err = json.Marshal(reqCtx.Request.Body)
-				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
-					break
-				}
-				// Update RequestSize to match marshalled body for Content-Length header.
-				reqCtx.RequestSize = len(requestBodyBytes)
-				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
-				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
-
-				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
-				metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
 			}
+
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			// This is currently unused.
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
@@ -270,9 +249,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				loggerTrace.Info("header", "key", header.Key, "value", value)
 				if header.Key == "status" && value != "200" {
 					reqCtx.ResponseStatusCode = errutil.ModelServerError
-				} else if header.Key == "content-type" && strings.Contains(value, "text/event-stream") {
-					reqCtx.modelServerStreaming = true
-					loggerTrace.Info("model server is streaming response")
+				}
+
+				if header.Key == requtil.ContentTypeKey {
+					reqCtx.RespContentType = value
+					if strings.Contains(value, "text/event-stream") {
+						reqCtx.modelServerStreaming = true
+						loggerTrace.Info("model server is streaming response")
+					}
 				}
 			}
 			reqCtx.RequestState = ResponseReceived
@@ -351,7 +335,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
-			// This is currently unused.
+			if reqCtx.RespContentType == requtil.GRPCContentType {
+				s.handleGRPCResponseTrailers(reqCtx, body)
+			}
 		}
 
 		// Handle the err and fire an immediate response.
@@ -376,6 +362,67 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return err
 		}
 	}
+}
+
+// handleRequestBodyCompletion handles the completion of the request body stream.
+func (s *StreamingServer) handleRequestBodyCompletion(ctx context.Context, reqCtx *RequestContext, body []byte) error {
+	logger := log.FromContext(ctx)
+	logger.V(logutil.TRACE).Info("decoding request body")
+
+	var err error
+	if reqCtx.ReqContentType == requtil.GRPCContentType {
+		err = s.handleGRPCRequestBody(ctx, reqCtx, body)
+	} else {
+		err = s.handleJSONRequestBody(ctx, reqCtx, body)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
+	if err != nil {
+		logger.V(logutil.DEFAULT).Error(err, "Error handling request")
+		return err
+	}
+
+	// Marshal after HandleRequest to include modifications (e.g., model rewriting).
+	var requestBodyBytes []byte
+	if reqCtx.ReqContentType == requtil.GRPCContentType {
+		// Currently, for gRPC request, we don't modify anything inside the gRPC request.
+		// So just pass it as is.
+		requestBodyBytes = body
+	} else {
+		requestBodyBytes, err = json.Marshal(reqCtx.Request.Body)
+		if err != nil {
+			logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+			return err
+		}
+	}
+
+	// Update RequestSize to match marshalled body for Content-Length header.
+	reqCtx.RequestSize = len(requestBodyBytes)
+	reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
+	reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
+
+	metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
+	metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
+	return nil
+}
+
+// handleJSONRequestBody handles JSON request body unmarshaling.
+func (s *StreamingServer) handleJSONRequestBody(ctx context.Context, reqCtx *RequestContext, body []byte) error {
+	logger := log.FromContext(ctx)
+	if errUnmarshal := json.Unmarshal(body, &reqCtx.Request.Body); errUnmarshal != nil {
+		if logger.V(logutil.DEBUG).Enabled() {
+			logger.Info("Error unmarshaling request body", "body", string(body), "err", errUnmarshal)
+		}
+		return errutil.Error{
+			Code: errutil.BadRequest,
+			Msg:  "Error unmarshaling request body",
+		}
+	}
+	return nil
 }
 
 // updateStateAndSendIfNeeded checks state and can send mutiple responses in a single pass, but only if ordered properly.

@@ -69,6 +69,10 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 			reqCtx.ObjectiveKey = reqCtx.Request.Headers[header.Key]
 		case metadata.ModelNameRewriteKey:
 			reqCtx.TargetModelName = reqCtx.Request.Headers[header.Key]
+		case request.ContentTypeKey:
+			reqCtx.ReqContentType = reqCtx.Request.Headers[header.Key]
+		case request.PathKey:
+			reqCtx.ReqPath = reqCtx.Request.Headers[header.Key]
 		}
 	}
 
