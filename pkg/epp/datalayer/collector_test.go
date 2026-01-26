@@ -27,12 +27,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // --- Test Stubs ---
 
 func defaultEndpoint() Endpoint {
-	meta := &EndpointMetadata{
+	meta := &fwkdl.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod-name",
 			Namespace: "default",

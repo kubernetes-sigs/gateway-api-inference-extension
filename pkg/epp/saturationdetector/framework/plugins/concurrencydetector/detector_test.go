@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -303,7 +303,7 @@ func makeSchedulingResult(endpointName string) *schedulingtypes.SchedulingResult
 
 func newFakePodMetric(name string) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		Metadata: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
@@ -311,13 +311,13 @@ func newFakePodMetric(name string) *backendmetrics.FakePodMetrics {
 // It embeds the interface to satisfy the compiler but only implements GetMetadata.
 type stubSchedulingEndpoint struct {
 	schedulingtypes.Endpoint
-	metadata *datalayer.EndpointMetadata
+	metadata *fwkdl.EndpointMetadata
 }
 
 func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
 	return &stubSchedulingEndpoint{
-		metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		metadata: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
-func (f *stubSchedulingEndpoint) GetMetadata() *datalayer.EndpointMetadata { return f.metadata }
+func (f *stubSchedulingEndpoint) GetMetadata() *fwkdl.EndpointMetadata { return f.metadata }

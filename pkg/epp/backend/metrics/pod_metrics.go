@@ -27,6 +27,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 const (
@@ -34,7 +35,7 @@ const (
 )
 
 type podMetrics struct {
-	metadata atomic.Pointer[datalayer.EndpointMetadata]
+	metadata atomic.Pointer[fwkdl.EndpointMetadata]
 	metrics  atomic.Pointer[MetricsState]
 	pmc      PodMetricsClient
 	ds       datalayer.PoolInfo
@@ -48,14 +49,14 @@ type podMetrics struct {
 }
 
 type PodMetricsClient interface {
-	FetchMetrics(ctx context.Context, pod *datalayer.EndpointMetadata, existing *MetricsState) (*MetricsState, error)
+	FetchMetrics(ctx context.Context, pod *fwkdl.EndpointMetadata, existing *MetricsState) (*MetricsState, error)
 }
 
 func (pm *podMetrics) String() string {
 	return fmt.Sprintf("Metadata: %v; Metrics: %v", pm.GetMetadata(), pm.GetMetrics())
 }
 
-func (pm *podMetrics) GetMetadata() *datalayer.EndpointMetadata {
+func (pm *podMetrics) GetMetadata() *fwkdl.EndpointMetadata {
 	return pm.metadata.Load()
 }
 
@@ -63,7 +64,7 @@ func (pm *podMetrics) GetMetrics() *MetricsState {
 	return pm.metrics.Load()
 }
 
-func (pm *podMetrics) UpdateMetadata(pod *datalayer.EndpointMetadata) {
+func (pm *podMetrics) UpdateMetadata(pod *fwkdl.EndpointMetadata) {
 	pm.metadata.Store(pod)
 }
 

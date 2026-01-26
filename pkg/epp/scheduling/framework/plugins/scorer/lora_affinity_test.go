@@ -24,6 +24,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -39,7 +40,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-1": 1},
 						WaitingModels:   map[string]int{},
@@ -56,7 +57,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 2},
 						WaitingModels:   map[string]int{"active-model-1": 1},
@@ -73,7 +74,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 2},
 						WaitingModels:   map[string]int{"active-model-3": 1},
@@ -81,7 +82,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{},
 						WaitingModels:   map[string]int{},
@@ -99,7 +100,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 			request: &types.LLMRequest{TargetModel: "active-model-1"},
 			endpoints: []types.Endpoint{
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-1": 1},
 						WaitingModels:   map[string]int{},
@@ -107,7 +108,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 4},
 						WaitingModels:   map[string]int{"active-model-1": 1},
@@ -115,7 +116,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-2": 1},
 						WaitingModels:   map[string]int{},
@@ -123,7 +124,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-3": 1},
 						WaitingModels:   map[string]int{"active-model-1": 1},
@@ -131,7 +132,7 @@ func TestLoraAffinityScorer(t *testing.T) {
 					},
 				},
 				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}},
 					Metrics: &datalayer.Metrics{
 						ActiveModels:    map[string]int{"active-model-4": 1, "active-model-5": 1},
 						WaitingModels:   map[string]int{},

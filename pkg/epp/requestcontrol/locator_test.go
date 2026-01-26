@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -305,7 +305,7 @@ func (m *mockPodLocator) callCount() int {
 
 func makeMockPodMetrics(name, ip string) backendmetrics.PodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Metadata: &datalayer.EndpointMetadata{
+		Metadata: &fwkdl.EndpointMetadata{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: name},
 			Address:        ip,
 		},

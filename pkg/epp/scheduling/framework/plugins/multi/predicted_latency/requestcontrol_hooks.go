@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -41,7 +42,7 @@ var _ requestcontrol.ResponseComplete = &PredictedLatency{}
 
 type predictedLatencyCtx struct {
 	schedulingRequest         schedulingtypes.LLMRequest
-	targetMetadata            *datalayer.EndpointMetadata
+	targetMetadata            *fwkdl.EndpointMetadata
 	schedulingResult          *schedulingtypes.SchedulingResult
 	lastSeenMetrics           map[string]*datalayer.Metrics
 	lastTokenTimestamp        time.Time
@@ -159,7 +160,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	}
 }
 
-func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *datalayer.EndpointMetadata) {
+func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
@@ -168,7 +169,7 @@ func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedu
 }
 
 // --- Response Hooks when body chunks received---
-func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *datalayer.EndpointMetadata) {
+func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseStreaming: request is nil, skipping")
@@ -194,7 +195,7 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 
 }
 
-func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, metadata *datalayer.EndpointMetadata) {
+func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, metadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: request is nil, skipping")
@@ -254,7 +255,7 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	t.deletePredictedLatencyContextForRequest(request)
 }
 
-func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *datalayer.EndpointMetadata) bool {
+func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *fwkdl.EndpointMetadata) bool {
 	if metadata == nil {
 		logger.V(logutil.TRACE).Info("PredictedLatency: Skipping hook because no target metadata was provided.")
 		return false

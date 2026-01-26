@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -35,9 +36,9 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Different queue sizes",
 			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 10}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 10}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
@@ -48,8 +49,8 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Same queue sizes",
 			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
@@ -59,8 +60,8 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Zero queue sizes",
 			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 1.0,

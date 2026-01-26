@@ -18,7 +18,6 @@ package requestcontrol
 
 import (
 	"google.golang.org/protobuf/types/known/structpb"
-	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
 )
 
 // Response contains information from the response received to be passed to the Response requestcontrol plugins
@@ -38,8 +37,19 @@ type Response struct {
 	// Currently, this is only used by conformance test.
 	ReqMetadata map[string]any
 	// Token usage counts parsed from the response body.
-	Usage handlerstypes.Usage
+	Usage Usage
 	// DynamicMetadata is a map of metadata that can be passed to the Envoy. It is populated into the dynamic
 	// metadata when processing ProcessingResponse_RequestHeaders.
 	DynamicMetadata *structpb.Struct
+}
+
+type Usage struct {
+	PromptTokens       int                 `json:"prompt_tokens"`
+	CompletionTokens   int                 `json:"completion_tokens"`
+	TotalTokens        int                 `json:"total_tokens"`
+	PromptTokenDetails *PromptTokenDetails `json:"prompt_token_details,omitempty"`
+}
+
+type PromptTokenDetails struct {
+	CachedTokens int `json:"cached_tokens"`
 }

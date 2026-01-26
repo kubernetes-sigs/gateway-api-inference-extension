@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )
@@ -38,7 +38,7 @@ func TestFilter(t *testing.T) {
 			name: "header unset in request",
 			req:  &types.LLMRequest{}, // Deliberately unset
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
 			},
 			output: []types.Endpoint{},
 		},
@@ -46,7 +46,7 @@ func TestFilter(t *testing.T) {
 			name: "header set but no IP match",
 			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.99"}},
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
 			},
 			output: []types.Endpoint{},
 		},
@@ -54,29 +54,29 @@ func TestFilter(t *testing.T) {
 			name: "IP-only header matches pod (port-agnostic)",
 			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1"}},
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
 			},
 			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
 			},
 		},
 		{
 			name: "IP:port header matches exact port",
 			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:3002"}},
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
 			},
 			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
 			},
 		},
 		{
 			name: "IP:port header with non-matching port produces no match",
 			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:9999"}},
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
 			},
 			output: []types.Endpoint{},
 		},
@@ -84,35 +84,35 @@ func TestFilter(t *testing.T) {
 			name: "multiple header values (IP and IP:port) produce multiple matches in order and deduped",
 			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.3:3004, 10.0.0.2, 10.0.0.3"}},
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}},
 			},
 			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
 			},
 		},
 		{
 			name: "IPv6 with brackets and port",
 			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "[fd00::1]:3002"}},
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::2", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3002"}},
 			},
 			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
 			},
 		},
 		{
 			name: "IPv6 bare address (no port)",
 			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "fd00::2"}},
 			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::2", Port: "3004"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3004"}},
 			},
 			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::2", Port: "3004"}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3004"}},
 			},
 		},
 	}

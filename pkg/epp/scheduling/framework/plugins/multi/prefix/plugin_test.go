@@ -29,6 +29,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -45,9 +46,9 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics()}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics()}
-	endpoint3 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, Metrics: datalayer.NewMetrics()}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics()}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics()}
+	endpoint3 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, Metrics: datalayer.NewMetrics()}
 	endpoints := []types.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
@@ -214,7 +215,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
 	endpoints := []types.Endpoint{endpoint1}
 
 	// Test with chat completions request
@@ -248,8 +249,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: &datalayer.Metrics{}}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: &datalayer.Metrics{}}
 	endpoints := []types.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
@@ -375,7 +376,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			// Generate increasing-length random prompts
 			prompt := randomPrompt(4 + v)
 			endpoint := &types.PodMetrics{
-				EndpointMetadata: &datalayer.EndpointMetadata{
+				EndpointMetadata: &fwkdl.EndpointMetadata{
 					NamespacedName: k8stypes.NamespacedName{
 						Name: fmt.Sprintf("random-pod-%d", v),
 					},
@@ -477,7 +478,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	// Setup common test data
 	podName := "pod-autotune"
 	endpoint := &types.PodMetrics{
-		EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
+		EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
 		Metrics: &datalayer.Metrics{
 			CacheBlockSize:    16,   // 16 tokens * 4 chars/token = 64 chars per block
 			CacheNumGPUBlocks: 1000, // 1000 blocks capacity
@@ -586,8 +587,8 @@ func TestPrepareRequestData(t *testing.T) {
 	}
 	plugin := New(context.Background(), config)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
+	endpoint1 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
+	endpoint2 := &types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
 	endpoints := []types.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.
@@ -680,7 +681,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			}
 
 			endpoint := &types.PodMetrics{
-				EndpointMetadata: &datalayer.EndpointMetadata{
+				EndpointMetadata: &fwkdl.EndpointMetadata{
 					NamespacedName: k8stypes.NamespacedName{
 						Name: fmt.Sprintf("chat-pod-%d-%d", scenario.messageCount, scenario.messageLength),
 					},

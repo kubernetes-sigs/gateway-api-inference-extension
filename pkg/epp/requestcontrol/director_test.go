@@ -33,14 +33,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -263,7 +264,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					&schedulingtypes.ScoredEndpoint{
 						Endpoint: &schedulingtypes.PodMetrics{
 							AttributeMap: datalayer.NewAttributes(),
-							EndpointMetadata: &datalayer.EndpointMetadata{
+							EndpointMetadata: &fwkdl.EndpointMetadata{
 								Address:        "192.168.1.100",
 								Port:           "8000",
 								MetricsHost:    "192.168.1.100:8000",
@@ -274,7 +275,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					&schedulingtypes.ScoredEndpoint{
 						Endpoint: &schedulingtypes.PodMetrics{
 							AttributeMap: datalayer.NewAttributes(),
-							EndpointMetadata: &datalayer.EndpointMetadata{
+							EndpointMetadata: &fwkdl.EndpointMetadata{
 								Address:        "192.168.2.100",
 								Port:           "8000",
 								MetricsHost:    "192.168.2.100:8000",
@@ -285,7 +286,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					&schedulingtypes.ScoredEndpoint{
 						Endpoint: &schedulingtypes.PodMetrics{
 							AttributeMap: datalayer.NewAttributes(),
-							EndpointMetadata: &datalayer.EndpointMetadata{
+							EndpointMetadata: &fwkdl.EndpointMetadata{
 								Address:        "192.168.4.100",
 								Port:           "8000",
 								MetricsHost:    "192.168.4.100:8000",
@@ -327,7 +328,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -351,7 +352,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    model,
 				TargetModelName: modelRewritten,
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -379,7 +380,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			initialTargetModelName: model,
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -408,7 +409,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -437,7 +438,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName: model,
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -492,7 +493,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    objectiveName,
 				TargetModelName: model,
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -515,7 +516,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    objectiveNameResolve,
 				TargetModelName: "resolved-target-model-A",
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -535,7 +536,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:    "food-review-1",
 				TargetModelName: "food-review-1",
-				TargetPod: &datalayer.EndpointMetadata{
+				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
 					Port:           "8000",
@@ -1076,7 +1077,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 			Headers: map[string]string{"X-Test-Response-Header": "TestValue"},
 		},
 
-		TargetPod: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseReceived(ctx, reqCtx)
@@ -1113,7 +1114,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 		Response: &handlers.Response{
 			Headers: map[string]string{"X-Test-Streaming-Header": "StreamValue"},
 		},
-		TargetPod: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseBodyStreaming(ctx, reqCtx)
@@ -1150,7 +1151,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 		Response: &handlers.Response{
 			Headers: map[string]string{"X-Test-Complete-Header": "CompleteValue"},
 		},
-		TargetPod: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
+		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseBodyComplete(ctx, reqCtx)
@@ -1223,17 +1224,17 @@ func (p *testResponseComplete) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *datalayer.EndpointMetadata) {
+func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnComplete = response
 	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }

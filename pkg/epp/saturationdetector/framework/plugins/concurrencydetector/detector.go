@@ -55,7 +55,7 @@ import (
 	"sync/atomic"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -173,7 +173,7 @@ func (d *Detector) ResponseComplete(
 	_ context.Context,
 	_ *framework.LLMRequest,
 	_ *requestcontrol.Response,
-	targetEndpoint *datalayer.EndpointMetadata,
+	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
 	d.tracker.dec(targetEndpoint.NamespacedName.String())
 }

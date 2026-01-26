@@ -22,14 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Addressable supports getting an IP address and a namespaced name.
-type Addressable interface {
-	GetIPAddress() string
-	GetPort() string
-	GetMetricsHost() string
-	GetNamespacedName() types.NamespacedName
-}
-
 // EndpointMetadata represents the relevant Kubernetes Pod state of an inference server.
 type EndpointMetadata struct {
 	NamespacedName types.NamespacedName

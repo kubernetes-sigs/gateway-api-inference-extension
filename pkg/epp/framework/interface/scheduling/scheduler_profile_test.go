@@ -24,7 +24,7 @@ import (
 	"github.com/google/uuid"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -65,9 +65,9 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin),
 			input: []Endpoint{
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1"},
 			targetEndpointScore: 1.1,
@@ -81,9 +81,9 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 60), NewWeightedScorer(tp2, 40)).
 				WithPicker(pickerPlugin),
 			input: []Endpoint{
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1"},
 			targetEndpointScore: 50,
@@ -97,9 +97,9 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin),
 			input: []Endpoint{
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
-				&PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}},
+				&PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}},
 			},
 			numEndpointsToScore: 0,
 			err:                 true, // no available endpoints to server after filter all
@@ -138,7 +138,7 @@ func TestSchedulePlugins(t *testing.T) {
 			wantRes := &ProfileRunResult{
 				TargetEndpoints: []Endpoint{
 					&PodMetrics{
-						EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: test.wantTargetEndpoint},
+						EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: test.wantTargetEndpoint},
 					},
 				},
 			}

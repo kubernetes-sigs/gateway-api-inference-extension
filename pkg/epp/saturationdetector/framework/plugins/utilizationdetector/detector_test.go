@@ -25,12 +25,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 func newMockPodMetrics(name string, metrics *backendmetrics.MetricsState) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Metadata: &datalayer.EndpointMetadata{
+		Metadata: &fwkdl.EndpointMetadata{
 			NamespacedName: types.NamespacedName{Name: name, Namespace: "ns1"},
 		},
 		Metrics: metrics,

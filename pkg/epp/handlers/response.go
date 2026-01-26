@@ -28,7 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
+	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
@@ -47,7 +47,7 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	}
 	if response["usage"] != nil {
 		usg := response["usage"].(map[string]any)
-		usage := handlerstypes.Usage{
+		usage := fwkrq.Usage{
 			PromptTokens:     int(usg["prompt_tokens"].(float64)),
 			CompletionTokens: int(usg["completion_tokens"].(float64)),
 			TotalTokens:      int(usg["total_tokens"].(float64)),
@@ -55,7 +55,7 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		if usg["prompt_token_details"] != nil {
 			detailsMap := usg["prompt_token_details"].(map[string]any)
 			if cachedTokens, ok := detailsMap["cached_tokens"]; ok {
-				usage.PromptTokenDetails = &handlerstypes.PromptTokenDetails{
+				usage.PromptTokenDetails = &fwkrq.PromptTokenDetails{
 					CachedTokens: int(cachedTokens.(float64)),
 				}
 			}
@@ -204,7 +204,7 @@ func parseRespForUsage(ctx context.Context, responseText string) ResponseBody {
 }
 
 type ResponseBody struct {
-	Usage handlerstypes.Usage `json:"usage"`
+	Usage fwkrq.Usage `json:"usage"`
 }
 
 type PromptTokenDetails struct {

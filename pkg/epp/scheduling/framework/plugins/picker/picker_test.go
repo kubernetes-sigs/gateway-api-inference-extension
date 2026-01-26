@@ -25,14 +25,14 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestPickMaxScorePicker(t *testing.T) {
-	endpoint1 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
-	endpoint2 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
-	endpoint3 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
+	endpoint1 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
+	endpoint2 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
+	endpoint3 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
 
 	tests := []struct {
 		name               string
@@ -142,11 +142,11 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 		tolerance      = 0.05 // Verify within tolerance ±5%
 	)
 
-	endpoint1 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
-	endpoint2 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
-	endpoint3 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
-	endpoint4 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}}}
-	endpoint5 := &framework.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}}}
+	endpoint1 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
+	endpoint2 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
+	endpoint3 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
+	endpoint4 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}}}
+	endpoint5 := &framework.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}}}
 
 	// A-Res algorithm uses U^(1/w) transformation which introduces statistical variance
 	// beyond simple proportional sampling. Generous tolerance is required to prevent

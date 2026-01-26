@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 const nilString = "<nil>"
@@ -198,7 +199,7 @@ func (mc Content) PlainText() string {
 }
 
 type Endpoint interface {
-	GetMetadata() *datalayer.EndpointMetadata
+	GetMetadata() *fwkdl.EndpointMetadata
 	GetMetrics() *datalayer.Metrics
 	String() string
 	Get(string) (datalayer.Cloneable, bool)
@@ -219,7 +220,7 @@ func (pm *PodMetrics) String() string {
 	return fmt.Sprintf("%+v", *pm)
 }
 
-func (pm *PodMetrics) GetMetadata() *datalayer.EndpointMetadata {
+func (pm *PodMetrics) GetMetadata() *fwkdl.EndpointMetadata {
 	return pm.EndpointMetadata
 }
 
@@ -228,7 +229,7 @@ func (pm *PodMetrics) GetMetrics() *datalayer.Metrics {
 }
 
 type PodMetrics struct {
-	*datalayer.EndpointMetadata
+	*fwkdl.EndpointMetadata
 	*datalayer.Metrics
 	datalayer.AttributeMap
 }

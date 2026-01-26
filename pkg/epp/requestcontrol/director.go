@@ -27,12 +27,14 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -247,7 +249,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
-	targetMetadatas := []*datalayer.EndpointMetadata{}
+	targetMetadatas := []*fwkdl.EndpointMetadata{}
 	targetEndpoints := []string{}
 
 	for _, pod := range result.ProfileResults[result.PrimaryProfileName].TargetEndpoints {
@@ -327,7 +329,7 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 	return reqCtx, nil
 }
 
-func (d *Director) GetRandomEndpoint() *datalayer.EndpointMetadata {
+func (d *Director) GetRandomEndpoint() *fwkdl.EndpointMetadata {
 	pods := d.datastore.PodList(datastore.AllPodsPredicate)
 	if len(pods) == 0 {
 		return nil
@@ -371,7 +373,7 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 	return true
 }
 
-func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *datalayer.EndpointMetadata) {
+func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running ResponseReceived plugin", "plugin", plugin.TypedName())
@@ -382,7 +384,7 @@ func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *sche
 	}
 }
 
-func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *datalayer.EndpointMetadata) {
+func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
 		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())
@@ -393,7 +395,7 @@ func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *sch
 	}
 }
 
-func (d *Director) runResponseCompletePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *datalayer.EndpointMetadata) {
+func (d *Director) runResponseCompletePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseCompletePlugins {
 		loggerDebug.Info("Running ResponseComplete plugin", "plugin", plugin.TypedName())

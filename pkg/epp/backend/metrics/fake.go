@@ -27,11 +27,12 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // FakePodMetrics is an implementation of PodMetrics that doesn't run the async refresh loop.
 type FakePodMetrics struct {
-	Metadata   *datalayer.EndpointMetadata
+	Metadata   *fwkdl.EndpointMetadata
 	Metrics    *MetricsState
 	Attributes *datalayer.Attributes
 }
@@ -40,7 +41,7 @@ func (fpm *FakePodMetrics) String() string {
 	return fmt.Sprintf("Metadata: %v; Metrics: %v", fpm.GetMetadata(), fpm.GetMetrics())
 }
 
-func (fpm *FakePodMetrics) GetMetadata() *datalayer.EndpointMetadata {
+func (fpm *FakePodMetrics) GetMetadata() *fwkdl.EndpointMetadata {
 	return fpm.Metadata
 }
 
@@ -48,7 +49,7 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 	return fpm.Metrics
 }
 
-func (fpm *FakePodMetrics) UpdateMetadata(metadata *datalayer.EndpointMetadata) {
+func (fpm *FakePodMetrics) UpdateMetadata(metadata *fwkdl.EndpointMetadata) {
 	fpm.Metadata = metadata
 }
 func (fpm *FakePodMetrics) GetAttributes() *datalayer.Attributes {
@@ -71,7 +72,7 @@ type FakePodMetricsClient struct {
 	Res   map[types.NamespacedName]*MetricsState
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *datalayer.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *fwkdl.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
 	f.errMu.RLock()
 	err, ok := f.Err[pod.NamespacedName]
 	f.errMu.RUnlock()

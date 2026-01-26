@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -35,9 +36,9 @@ func TestKvCacheUtilizationScorer(t *testing.T) {
 		{
 			name: "Different KV cache utilization",
 			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.8}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.5}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.0}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.8}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.5}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.0}},
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 0.2, // Highest KV cache usage (0.8) gets lowest score (1-0.8=0.2)
@@ -48,8 +49,8 @@ func TestKvCacheUtilizationScorer(t *testing.T) {
 		{
 			name: "Same KV cache utilization",
 			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.6}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.6}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.6}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.6}},
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 0.4, // Both get same score (1-0.6=0.4)
@@ -59,8 +60,8 @@ func TestKvCacheUtilizationScorer(t *testing.T) {
 		{
 			name: "Zero KV cache utilization",
 			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.0}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.0}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.0}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.0}},
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 1.0, // No KV cache usage gets highest score
@@ -70,8 +71,8 @@ func TestKvCacheUtilizationScorer(t *testing.T) {
 		{
 			name: "Full KV cache utilization",
 			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 1.0}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.5}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 1.0}},
+				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{KVCacheUsagePercent: 0.5}},
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 0.0, // Full KV cache (1.0) gets lowest score (1-1=0)

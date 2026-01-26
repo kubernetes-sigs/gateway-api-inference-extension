@@ -32,12 +32,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -55,7 +56,7 @@ type Director interface {
 	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
 	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	GetRandomEndpoint() *datalayer.EndpointMetadata
+	GetRandomEndpoint() *fwkdl.EndpointMetadata
 }
 
 type Datastore interface {
@@ -75,7 +76,7 @@ type StreamingServer struct {
 // Refactor this monolithic struct. Fields related to the Envoy ext-proc protocol should be decoupled from the internal
 // request lifecycle state.
 type RequestContext struct {
-	TargetPod                 *datalayer.EndpointMetadata
+	TargetPod                 *fwkdl.EndpointMetadata
 	TargetEndpoint            string
 	IncomingModelName         string
 	TargetModelName           string
@@ -84,7 +85,7 @@ type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
-	Usage                     handlerstypes.Usage
+	Usage                     fwkrq.Usage
 	ResponseSize              int
 	ResponseComplete          bool
 	ResponseStatusCode        string

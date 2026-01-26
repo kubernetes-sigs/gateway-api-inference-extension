@@ -26,6 +26,7 @@ import (
 
 	// Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -79,7 +80,7 @@ func TestSchedule(t *testing.T) {
 			// model being active, and has low KV cache.
 			input: []framework.Endpoint{
 				&framework.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					Metrics: &datalayer.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -91,7 +92,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				&framework.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 					Metrics: &datalayer.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
@@ -103,7 +104,7 @@ func TestSchedule(t *testing.T) {
 					},
 				},
 				&framework.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
 					Metrics: &datalayer.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.8,
@@ -120,7 +121,7 @@ func TestSchedule(t *testing.T) {
 						TargetEndpoints: []framework.Endpoint{
 							&framework.ScoredEndpoint{
 								Endpoint: &framework.PodMetrics{
-									EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+									EndpointMetadata: &fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 									Metrics: &datalayer.Metrics{
 										WaitingQueueSize:    0,
 										KVCacheUsagePercent: 0.2,

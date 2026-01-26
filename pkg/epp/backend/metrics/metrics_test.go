@@ -32,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // --- Test Helpers ---
@@ -577,7 +577,7 @@ func TestPromToPodMetrics(t *testing.T) {
 // there's no server running on the specified port.
 func TestFetchMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	metadata := &datalayer.EndpointMetadata{
+	metadata := &fwkdl.EndpointMetadata{
 		Address:     "127.0.0.1",
 		Port:        "9999",
 		MetricsHost: "127.0.0.1:9999",

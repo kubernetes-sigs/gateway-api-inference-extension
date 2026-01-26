@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
@@ -104,7 +105,7 @@ func (m *mockPredictor) GetServerStatus(ctx context.Context) (*latencypredictor.
 
 func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, waitingQueueSize int) schedulingtypes.Endpoint {
 	return &schedulingtypes.PodMetrics{
-		EndpointMetadata: &datalayer.EndpointMetadata{
+		EndpointMetadata: &fwkdl.EndpointMetadata{
 			NamespacedName: types.NamespacedName{
 				Name:      name,
 				Namespace: "default",
