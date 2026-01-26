@@ -330,14 +330,14 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	return false
 }
 
-// selectItem applies the configured fairness and intra-flow dispatch policies to select a single item.
+// selectItem applies the configured fairness and ordering policies to select a single item.
 func (sp *ShardProcessor) selectItem(
 	ctx context.Context,
 	flowGroup flowcontrol.PriorityBandAccessor,
 ) (types.QueueItemAccessor, error) {
 	fairnessP, err := sp.shard.FairnessPolicy(flowGroup.Priority())
 	if err != nil {
-		return nil, fmt.Errorf("could not get InterFlowDispatchPolicy: %w", err)
+		return nil, fmt.Errorf("could not get FairnessPolicy: %w", err)
 	}
 	queue, err := fairnessP.Pick(ctx, flowGroup)
 	if err != nil {

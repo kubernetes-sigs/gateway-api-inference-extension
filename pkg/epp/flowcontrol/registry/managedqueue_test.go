@@ -357,7 +357,7 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 			"Accessor ByteSize() must reflect the managed queue's current byte size")
 		assert.Equal(t, flowKey, accessor.FlowKey(), "Accessor FlowKey() must return the correct identifier for the flow")
 		assert.Equal(t, harness.mockPolicy, accessor.OrderingPolicy(),
-			"Accessor OrderingPolicy() must return the policy provided by the configured intra-flow policy")
+			"Accessor OrderingPolicy() must return the policy provided by the configured ordering policy")
 
 		peekedHead := accessor.PeekHead()
 		assert.Same(t, item, peekedHead, "Accessor PeekHead() must return the exact item instance at the head")

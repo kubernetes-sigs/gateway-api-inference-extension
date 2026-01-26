@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package intraflow provides the standard implementations of the OrderingPolicy interface.
+// Package ordering provides the standard implementations of the OrderingPolicy interface.
 //
 // # Context: The 3-Tier Dispatch Hierarchy
 //
@@ -51,6 +51,4 @@ limitations under the License.
 //   - EDF ("Earliest Deadline First") ("edf-ordering-policy"): Orders requests by their absolute deadline
 //     (EnqueueTime + TTL).
 //     This maximizes the number of requests served before their deadlines expire.
-//
-// TODO: Rename directory and package to "ordering".
-package intraflow
+package ordering

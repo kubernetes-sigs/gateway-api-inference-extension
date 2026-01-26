@@ -25,7 +25,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
@@ -48,16 +48,16 @@ func newTestPluginsHandle(t *testing.T) plugin.Handle {
 			Name: fairness.RoundRobinFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(intraflow.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: intraflow.FCFSOrderingPolicyType,
-			Name: intraflow.FCFSOrderingPolicyType,
+			Type: ordering.FCFSOrderingPolicyType,
+			Name: ordering.FCFSOrderingPolicyType,
 		},
 	})
-	handle.AddPlugin(intraflow.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(ordering.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: intraflow.EDFOrderingPolicyType,
-			Name: intraflow.EDFOrderingPolicyType,
+			Type: ordering.EDFOrderingPolicyType,
+			Name: ordering.EDFOrderingPolicyType,
 		},
 	})
 	return handle
@@ -341,14 +341,14 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		pb, err := NewPriorityBandConfig(handle, 1, "Custom",
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
-			WithOrderingPolicy(intraflow.EDFOrderingPolicyType, handle),
+			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
 			WithFairnessPolicy(fairness.RoundRobinFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
 		assert.Equal(t, uint64(999), pb.MaxBytes)
 		require.NotNil(t, pb.OrderingPolicy)
-		assert.Equal(t, intraflow.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
+		assert.Equal(t, ordering.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
 		require.NotNil(t, pb.FairnessPolicy)
 		assert.Equal(t, fairness.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
 	})
