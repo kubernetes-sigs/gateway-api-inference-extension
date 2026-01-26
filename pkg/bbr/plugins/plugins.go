@@ -23,9 +23,10 @@ import (
 type BBRPlugin interface {
 	plugin.Plugin
 
-	// Execute runs the plugin logic on the request body and a map of headers.
-	// A plugin's imnplementation logic CAN mutate the body of the message.
+	// Execute runs the plugin's logic on the request body.
+	// A plugin's implementation logic CAN mutate the body of the message.
 	// A plugin's implementation MUST return a map of headers.
 	// If no headers are set by the implementation, the return headers map is nil.
-	Execute(requestBodyBytes []byte, requestHeaders map[string][]string) (mutatedBodyBytes []byte, headers map[string][]string, err error)
+	// In the future, a headers map can be added to the plugin interface to allow different plugins on a chain to share information on the headers.
+	Execute(requestBodyBytes []byte) (mutatedBodyBytes []byte, headers map[string][]string, err error)
 }

@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -43,11 +44,30 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
 
+	// Executing BBR plugins in the order they were registered.
+	// This change is a transitional development step to test the BBR plugins.
+	// At the moment, the loop runs a no-op plugin.
+	// Once the Default BBR plugin is fully implemented and integrated, the loop will run actual pluggable logic.
+	for _, plugin := range s.pluginInstances {
+		var headers map[string][]string
+		var err error
+		logger.Info("Executing plugin", "plugin", plugin.TypedName())
+
+		requestBodyBytes, headers, err = plugin.Execute(requestBodyBytes)
+		if err != nil {
+			logger.Error(err, "Plugin execution failed", "plugin", plugin.TypedName())
+			return nil, fmt.Errorf("plugin %s failed: %w", plugin.TypedName(), err)
+		}
+		_ = headers // TODO: Handle headers returned by plugins
+	}
+
 	var requestBody RequestBody
 	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
 		metrics.RecordModelNotParsedCounter()
 		return nil, err
 	}
+
+	logger.Info("Parsed model name", "model", requestBody.Model)
 
 	if requestBody.Model == "" {
 		metrics.RecordModelNotInBodyCounter()
@@ -72,6 +92,8 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 
 	metrics.RecordSuccessCounter()
 	baseModel := s.ds.GetBaseModel(requestBody.Model)
+
+	logger.Info("Base model from datastore", "baseModel", baseModel)
 
 	if s.streaming {
 		ret = append(ret, &eppb.ProcessingResponse{
