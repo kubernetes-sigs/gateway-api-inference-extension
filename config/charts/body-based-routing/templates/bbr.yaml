@@ -13,7 +13,7 @@ spec:
       labels:
         app: {{ .Values.bbr.name }}
     spec:
-      serviceAccountName: {{ .Values.bbr.name}}-{{ .Release.Name }}
+      serviceAccountName: {{ .Values.bbr.name }}-{{ .Release.Name }}
       containers:
       - name: bbr
         image: {{ .Values.bbr.image.hub }}/{{ .Values.bbr.image.name }}:{{ .Values.bbr.image.tag }}
@@ -24,6 +24,14 @@ spec:
         {{- range $key, $value := .Values.bbr.flags }}
         - --{{ $key }}
         - "{{ $value }}"
+        {{- end }}      
+        {{- range .Values.bbr.plugins }}
+        - --plugin
+        {{- if .json }}
+        - {{ printf "%s:%s:%s" .type .name (toJson .json) | quote }}
+        {{- else }}
+        - {{ printf "%s:%s" .type .name | quote }}
+        {{- end }}
         {{- end }}
         {{- if not .Values.bbr.multiNamespace }}
         env:

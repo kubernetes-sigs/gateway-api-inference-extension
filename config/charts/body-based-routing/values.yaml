@@ -14,6 +14,12 @@ bbr:
     # Log verbosity
     v: 3
 
+  # Plugin configuration (transitional - currently runs no-op default plugin)
+  plugins:
+    - type: default-bbr
+      name: default-bbr
+      json: {"v":0, "no-op":true}
+
 provider:
   name: none
 
