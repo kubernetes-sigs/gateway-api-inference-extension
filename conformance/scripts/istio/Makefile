@@ -91,6 +91,18 @@ spec:
       tls:
         mode: SIMPLE
         insecureSkipVerify: true
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: dp-endpoint-picker-tls
+  namespace: inference-conformance-app-backend
+spec:
+  host: dp-endpoint-picker-svc
+  trafficPolicy:
+      tls:
+        mode: SIMPLE
+        insecureSkipVerify: true
 endef
 
 # README template for implementation conformance reports
