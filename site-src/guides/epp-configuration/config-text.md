@@ -7,7 +7,9 @@ At this time the YAML file based configuration allows for:
 1. The set of the lifecycle hooks (plugins) that are used by the IGW.
 2. The set of scheduling profiles that define how requests are scheduled to pods.
 3. The configuration of the saturation detector.
-4. A set of feature gates that are used to enable experimental features.
+4. The configuration of the flow control system (experimental).
+5. The configuration of the data layer (experimental).
+6. A set of feature gates that are used to enable experimental features.
 
 The YAML file can either be specified as a path to a file or in-line as a parameter.
 
@@ -29,22 +31,29 @@ saturationDetector:
   ...
 data:
   ...
+flowControl:
+  ...
 featureGates:
   ...
 ```
 
 The first two lines of the configuration are constant and must appear as is.
 
-The `featureGates` section allows the enablement of experimental features of the IGW. This section is
-described in more detail in the section [Feature Gates](#feature-gates)
+The `featureGates` section allows the enablement of experimental features of the IGW. This section is described in more
+detail in the section [Feature Gates](#feature-gates).
 
 The `plugins` section defines the set of plugins that will be instantiated and their parameters. This section is described in more detail in the section [Plugin Configuration](#plugin-configuration).
 
 The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
 requests to pods. This section is described in more detail in the section [Scheduling Profiles](#scheduling-profiles).
 
-The `saturationDetector` section configures the saturation detector, which is used to determine if special
-action needs to eb taken due to the system being overloaded or saturated. This section is described in more detail in the section [Saturation Detector configuration](#saturation-detector-configuration).
+The `saturationDetector` section configures the saturation detector, which is used to determine if special action needs
+to be taken due to the system being overloaded or saturated. This section is described in more detail in the section
+[Saturation Detector configuration](#saturation-detector-configuration).
+
+The `flowControl` section configures the experimental Flow Control layer, which manages request concurrency and
+fairness. This section is described in more detail in the section
+[Flow Control configuration](#flow-control-configuration).
 
 The `data` section configures the data layer, which is used to gather information (such as metrics) used in making scheduling
 decisions. This section is described in more detail in the section [Data Layer configuration](#data-layer-configuration).
@@ -297,7 +306,7 @@ the cluster is saturated special actions will be taken depending what has been e
 
 The Saturation Detector determines that the cluster is saturated by looking at the following metrics provided by the inference servers:
 
-- Backed waiting queue size
+- Backend waiting queue size
 - KV cache utilization
 - Metrics staleness
 
@@ -322,6 +331,63 @@ a value of `0.8` will be used.
 - The `metricsStalenessThreshold` field which defines how old a pod's metrics can be. If a pod's
 metrics are older than this, it might be excluded from "good capacity" considerations or treated
 as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
+
+## Flow Control Configuration
+
+The Flow Control layer acts as a pool defense mechanism, shielding inference engines from overload to ensure stable,
+predictable performance. By shifting Head-of-Line blocking left, it buffers requests before they reach the backends,
+enabling the Scheduler to dispatch work only when capacity is available.
+
+It manages traffic through a **3-Tier Dispatch Hierarchy**:
+1.  **Priority (Band Selection)**: High-priority traffic is served first.
+2.  **Fairness (Flow Selection)**: Requests are distributed fairly between tenants/models within a priority level
+    (e.g., Round Robin).
+3.  **Ordering (Request Selection)**: Requests within a flow are ordered (e.g., FCFS).
+
+This ensures effective multi-tenancy, minimizes scheduling regret, and prevents resource exhaustion. This configuration
+is only respected if the `flowControl` feature gate is enabled.
+
+The Flow Control layer is configured via the `flowControl` section of the overall configuration. It has the following
+form:
+
+```yaml
+flowControl:
+  maxBytes: 10737418240 # 10 GB
+  defaultRequestTTL: 60s
+  flowGCTimeout: 5m
+  priorityBandGCTimeout: 10m
+  expiryCleanupInterval: 1s
+  defaultPriorityBand:
+    maxBytes: 1073741824
+  priorityBands:
+  - priority: 100
+    maxBytes: 5368709120
+```
+
+The fields in the `flowControl` section are:
+
+- `maxBytes`: Defines the global capacity limit (in bytes) for all active requests across all priority levels.
+    - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
+- `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
+    - If `0` or omitted, no default TTL is applied (requests may wait indefinitely unless cancelled).
+- `defaultPriorityBand`: A template used to dynamically provision priority bands for requests arriving with priority
+  levels not explicitly configured in `priorityBands`.
+- `flowGCTimeout`: The duration of inactivity after which an idle flow is cleaned up.
+    - If `0` or omitted, the default is used.
+- `priorityBandGCTimeout`: The duration of inactivity after which a dynamically provisioned priority band is cleaned up.
+    - **Note**: This value must be greater than or equal to `flowGCTimeout`.
+- `expiryCleanupInterval`: The frequency at which the system scans for and removes expired requests.
+    - **Note**: Requests are unblocked immediately upon cancellation or TTL expiration; this setting only affects when
+      the internal state is purged for memory reclamation.
+- `priorityBands`: A list of explicit configurations for specific priority levels.
+
+### Priority Band Configuration
+
+Both the `defaultPriorityBand` template and the entries in `priorityBands` use the following fields:
+
+- `priority`: (Required for `priorityBands` entries) The integer priority level. Higher values indicate higher priority.
+- `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
+    - If `0` or omitted, the system default (1 GB) is used.
 
 ## Data Layer configuration
 
@@ -358,7 +424,7 @@ of the configuration.
 The Feature Gates section allows for the enabling of experimental features of the IGW. These experimental
 features are all disabled unless you explicitly enable them one by one.
 
-The Feature Gates section has the follwoing form:
+The Feature Gates section has the following form:
 
 ```yaml
 featureGates:

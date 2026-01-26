@@ -17,60 +17,81 @@ limitations under the License.
 package flowcontrol
 
 import (
+	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	"k8s.io/utils/ptr"
+
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
-func TestConfig_ValidateAndApplyDefaults(t *testing.T) {
+func TestNewConfigFromAPI(t *testing.T) {
 	t.Parallel()
 
-	validRegistryConfig := &registry.Config{}
+	handle := utils.NewTestHandle(context.Background())
+	handle.AddPlugin(interflow.GlobalStrictFairnessPolicyType, &mocks.MockFairnessPolicy{
+		TypedNameV: fwkplugin.TypedName{
+			Name: interflow.GlobalStrictFairnessPolicyType,
+			Type: interflow.GlobalStrictFairnessPolicyType,
+		},
+	})
+	handle.AddPlugin(intraflow.FCFSOrderingPolicyType, &mocks.MockOrderingPolicy{
+		TypedNameV: fwkplugin.TypedName{
+			Name: intraflow.FCFSOrderingPolicyType,
+			Type: intraflow.FCFSOrderingPolicyType,
+		},
+	})
 
 	testCases := []struct {
-		name          string
-		input         Config
-		expectErr     bool
-		expectedErrIs error
+		name        string
+		apiConfig   *configapi.FlowControlConfig
+		assertion   func(*testing.T, *Config)
+		expectedErr string
 	}{
 		{
-			name: "ShouldSucceed_WhenSubConfigsAreValid",
-			input: Config{
-				Controller: controller.Config{},
-				Registry:   validRegistryConfig,
+			name:      "Success - Nil Config defaults",
+			apiConfig: nil,
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.NotNil(t, cfg.Registry, "Registry config sub-struct should be initialized even when API config is nil")
+				assert.NotNil(t, cfg.Controller,
+					"Controller config sub-struct should be initialized even when API config is nil")
+				assert.NotZero(t, cfg.Registry.InitialShardCount,
+					"Registry should contain default values (InitialShardCount) when API config is nil")
+				assert.NotZero(t, cfg.Controller.EnqueueChannelBufferSize,
+					"Controller should contain default values (EnqueueChannelBufferSize) when API config is nil")
 			},
-			expectErr: false,
 		},
 		{
-			name: "ShouldFail_WhenControllerConfigIsInvalid",
-			input: Config{
-				Controller: controller.Config{
-					DefaultRequestTTL: -1 * time.Second,
-				},
-				Registry: validRegistryConfig,
+			name: "Success - Explicit Values",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxBytes: ptr.To(int64(2048)),
 			},
-			expectErr: true,
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(2048), cfg.Registry.MaxBytes,
+					"MaxBytes should be correctly translated from int64 in API to uint64 in internal config")
+			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			originalInput := tc.input
-			validatedCfg, err := tc.input.ValidateAndApplyDefaults()
 
-			if tc.expectErr {
-				require.Error(t, err, "expected an error but got nil")
-			} else {
-				require.NoError(t, err, "expected no error but got: %v", err)
-				require.NotNil(t, validatedCfg, "validatedCfg should not be nil on success")
+			cfg, err := NewConfigFromAPI(tc.apiConfig, handle)
+
+			require.NoError(t, err, "NewConfigFromAPI should not return an error for valid configuration")
+			require.NotNil(t, cfg, "NewConfigFromAPI should return a non-nil Config object on success")
+
+			if tc.assertion != nil {
+				tc.assertion(t, cfg)
 			}
-
-			assert.Equal(t, originalInput, tc.input, "input config should not be mutated")
 		})
 	}
 }

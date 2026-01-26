@@ -30,8 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
-	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -108,17 +106,10 @@ func InstantiateAndConfigure(
 
 	var flowControlConfig *flowcontrol.Config
 	if featureGates[flowcontrol.FeatureGate] {
-		registryConfig, err := registry.NewConfig(handle)
+		var err error
+		flowControlConfig, err = flowcontrol.NewConfigFromAPI(rawConfig.FlowControl, handle)
 		if err != nil {
-			return nil, fmt.Errorf("flow registgry config build failed: %w", err)
-		}
-		cfg := &flowcontrol.Config{
-			Controller: fccontroller.Config{},
-			Registry:   registryConfig,
-		}
-		flowControlConfig, err = cfg.ValidateAndApplyDefaults()
-		if err != nil {
-			return nil, fmt.Errorf("flow control config build failed: %w", err)
+			return nil, fmt.Errorf("failed to load flow control config: %w", err)
 		}
 	}
 

@@ -438,6 +438,10 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
+
+	applyDeprecatedEnvFeatureGate(enableExperimentalDatalayerV2, "Data Layer V2", datalayer.ExperimentalDatalayerFeatureGate, rawConfig)
+	applyDeprecatedEnvFeatureGate(enableExperimentalFlowControlLayer, "Flow Control layer", flowcontrol.FeatureGate, rawConfig)
+
 	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds))
 	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
@@ -460,27 +464,25 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 		r.requestControlConfig.WithPrepareDataPlugins()
 	}
 
-	// Handler deprecated configuration options
-	r.deprecatedConfigurationHelper(cfg)
+	r.applyDeprecatedSaturationConfig(cfg)
 
 	logger.Info("loaded configuration from file/text successfully")
 	return cfg, nil
 }
 
-func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config) {
-	// Handle deprecated environment variable based feature flags
-
-	if _, ok := os.LookupEnv(enableExperimentalDatalayerV2); ok {
-		setupLog.Info("Enabling the experimental Data Layer V2 using environment variables is deprecated and will be removed in next version")
-		r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, setupLog)
+func applyDeprecatedEnvFeatureGate(envVar, featureName, featureGate string, rawConfig *configapi.EndpointPickerConfig) {
+	if _, ok := os.LookupEnv(envVar); ok {
+		setupLog.Info(fmt.Sprintf("Enabling the experimental %s using environment variables is deprecated and will be removed in next version", featureName))
+		if env.GetEnvBool(envVar, false, setupLog) {
+			if rawConfig.FeatureGates == nil {
+				rawConfig.FeatureGates = make(configapi.FeatureGates, 0)
+			}
+			rawConfig.FeatureGates = append(rawConfig.FeatureGates, featureGate)
+		}
 	}
-	if _, ok := os.LookupEnv(enableExperimentalFlowControlLayer); ok {
-		setupLog.Info("Enabling the experimental Flow Control layer using environment variables is deprecated and will be removed in next version")
-		r.featureGates[flowcontrol.FeatureGate] = env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
-	}
+}
 
-	// Handle deprecated environment variable base Saturation Detector configuration
-
+func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	if _, ok := os.LookupEnv(EnvSdQueueDepthThreshold); ok {
 		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
 		cfg.SaturationDetectorConfig.QueueDepthThreshold =

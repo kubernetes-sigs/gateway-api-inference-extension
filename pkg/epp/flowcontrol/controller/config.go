@@ -19,6 +19,8 @@ package controller
 import (
 	"fmt"
 	"time"
+
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 )
 
 const (
@@ -53,50 +55,82 @@ type Config struct {
 	EnqueueChannelBufferSize int
 }
 
-// ValidateAndApplyDefaults checks the global configuration for validity and then creates a new `Config` object,
-// populating any empty fields with system defaults.
-// It does not mutate the receiver.
-func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
-	cfg := c.deepCopy()
+// ConfigOption is a functional option for configuring the FlowController.
+type ConfigOption func(*Config)
 
-	// --- Validation ---
-	if cfg.DefaultRequestTTL < 0 {
-		return nil, fmt.Errorf("DefaultRequestTTL cannot be negative, but got %v", cfg.DefaultRequestTTL)
+// NewConfigFromAPI creates a new Config from the API configuration.
+func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig) (*Config, error) {
+	opts := make([]ConfigOption, 0, 2)
+	if apiConfig != nil {
+		if apiConfig.DefaultRequestTTL != nil {
+			opts = append(opts, WithDefaultRequestTTL(apiConfig.DefaultRequestTTL.Duration))
+		}
+		if apiConfig.ExpiryCleanupInterval != nil {
+			opts = append(opts, WithExpiryCleanupInterval(apiConfig.ExpiryCleanupInterval.Duration))
+		}
 	}
-	if cfg.ExpiryCleanupInterval < 0 {
-		return nil, fmt.Errorf("ExpiryCleanupInterval cannot be negative, but got %v", cfg.ExpiryCleanupInterval)
-	}
-	if cfg.ProcessorReconciliationInterval < 0 {
-		return nil, fmt.Errorf("ProcessorReconciliationInterval cannot be negative, but got %v",
-			cfg.ProcessorReconciliationInterval)
-	}
-	if cfg.EnqueueChannelBufferSize < 0 {
-		return nil, fmt.Errorf("EnqueueChannelBufferSize cannot be negative, but got %d", cfg.EnqueueChannelBufferSize)
-	}
-
-	// --- Defaulting ---
-	if cfg.ExpiryCleanupInterval == 0 {
-		cfg.ExpiryCleanupInterval = defaultExpiryCleanupInterval
-	}
-	if cfg.ProcessorReconciliationInterval == 0 {
-		cfg.ProcessorReconciliationInterval = defaultProcessorReconciliationInterval
-	}
-	if cfg.EnqueueChannelBufferSize == 0 {
-		cfg.EnqueueChannelBufferSize = defaultEnqueueChannelBufferSize
-	}
-	return cfg, nil
+	return NewConfig(opts...)
 }
 
-// deepCopy creates a deep copy of the `Config` object.
-func (c *Config) deepCopy() *Config {
-	if c == nil {
-		return nil
+// NewConfig creates a new Config with the given options, applying defaults and validation.
+func NewConfig(opts ...ConfigOption) (*Config, error) {
+	c := &Config{
+		ExpiryCleanupInterval:           defaultExpiryCleanupInterval,
+		ProcessorReconciliationInterval: defaultProcessorReconciliationInterval,
+		EnqueueChannelBufferSize:        defaultEnqueueChannelBufferSize,
 	}
-	newCfg := &Config{
-		DefaultRequestTTL:               c.DefaultRequestTTL,
-		ExpiryCleanupInterval:           c.ExpiryCleanupInterval,
-		ProcessorReconciliationInterval: c.ProcessorReconciliationInterval,
-		EnqueueChannelBufferSize:        c.EnqueueChannelBufferSize,
+
+	for _, opt := range opts {
+		opt(c)
 	}
-	return newCfg
+
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// WithDefaultRequestTTL sets the default request TTL.
+func WithDefaultRequestTTL(d time.Duration) ConfigOption {
+	return func(c *Config) {
+		c.DefaultRequestTTL = d
+	}
+}
+
+// WithExpiryCleanupInterval sets the expiry cleanup interval.
+func WithExpiryCleanupInterval(d time.Duration) ConfigOption {
+	return func(c *Config) {
+		c.ExpiryCleanupInterval = d
+	}
+}
+
+// WithProcessorReconciliationInterval sets the processor reconciliation interval.
+func WithProcessorReconciliationInterval(d time.Duration) ConfigOption {
+	return func(c *Config) {
+		c.ProcessorReconciliationInterval = d
+	}
+}
+
+// WithEnqueueChannelBufferSize sets the size of the enqueue channel buffer.
+func WithEnqueueChannelBufferSize(size int) ConfigOption {
+	return func(c *Config) {
+		c.EnqueueChannelBufferSize = size
+	}
+}
+
+// validate checks the configuration for validity.
+func (c *Config) validate() error {
+	if c.DefaultRequestTTL < 0 {
+		return fmt.Errorf("DefaultRequestTTL cannot be negative, but got %v", c.DefaultRequestTTL)
+	}
+	if c.ExpiryCleanupInterval <= 0 {
+		return fmt.Errorf("ExpiryCleanupInterval must be positive, but got %v", c.ExpiryCleanupInterval)
+	}
+	if c.ProcessorReconciliationInterval <= 0 {
+		return fmt.Errorf("ProcessorReconciliationInterval must be positive, but got %v", c.ProcessorReconciliationInterval)
+	}
+	if c.EnqueueChannelBufferSize < 0 {
+		return fmt.Errorf("EnqueueChannelBufferSize cannot be negative, but got %d", c.EnqueueChannelBufferSize)
+	}
+	return nil
 }

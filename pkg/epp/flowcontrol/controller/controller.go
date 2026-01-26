@@ -95,7 +95,7 @@ type managedWorker struct {
 type FlowController struct {
 	// --- Immutable dependencies (set at construction) ---
 
-	config                Config
+	config                *Config
 	registry              registryClient
 	saturationDetector    contracts.SaturationDetector
 	podLocator            contracts.PodLocator
@@ -127,7 +127,7 @@ type flowControllerOption func(*FlowController)
 // The provided context governs the lifecycle of the controller and all its workers.
 func NewFlowController(
 	ctx context.Context,
-	config Config,
+	config *Config,
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
 	podLocator contracts.PodLocator,
