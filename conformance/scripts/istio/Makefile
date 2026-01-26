@@ -1,10 +1,10 @@
 # Version variables - can be overridden via environment or command line
 # Example: make all ISTIO_VERSION=1.28.0
-GATEWAY_API_VERSION ?= v1.3.0
-INFERENCE_EXTENSION_VERSION ?= v0.4.0
-ISTIO_VERSION ?= 1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7
+GATEWAY_API_VERSION ?= v1.4.0
+INFERENCE_EXTENSION_VERSION ?= v1.3.0
+ISTIO_VERSION ?= 1.28.3
 ISTIO_HUB ?=
-ISTIO_PROFILE ?= minimal
+ISTIO_PROFILE ?= ambient
 
 # Conformance test variables
 IMPLEMENTATION_VERSION ?= $(ISTIO_VERSION)
@@ -23,7 +23,7 @@ TEST_BASE_DIR ?= ../../..
 REPORT_BASE_DIR ?= ../../reports/$(INFERENCE_EXTENSION_VERSION)/$(PROFILE)/$(PROJECT)
 
 # Kubernetes version (shared between kind and minikube)
-KUBERNETES_VERSION ?= v1.30.13
+KUBERNETES_VERSION ?= v1.34.3
 
 # Internal variables (derived from KUBERNETES_VERSION)
 KIND_NODE_IMAGE ?= kindest/node:$(KUBERNETES_VERSION)
@@ -272,7 +272,11 @@ setup-minikube:
 	@MINIKUBE_IP=$$(minikube ip); \
 	NETWORK_PREFIX=$${MINIKUBE_IP%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.100-$${NETWORK_PREFIX}.200"; \
-	sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-config.yaml
+	if [ "$$(uname -s)" = "Darwin" ]; then \
+		sed -i '' "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-config.yaml; \
+	else \
+		sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-config.yaml; \
+	fi; \
 	kubectl apply -f /tmp/metallb-config.yaml
 	@rm -f /tmp/metallb-config.yaml
 
@@ -293,10 +297,14 @@ setup-kind:
 	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=speaker --timeout=90s
 	@echo "Configuring metallb address pool..."
 	$(file >/tmp/metallb-kind-config.yaml,$(METALLB_KIND_CONFIG))
-	@DOCKER_NETWORK=$$(docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' kind); \
+	@DOCKER_NETWORK=$$(docker network inspect -f '{{(index .IPAM.Config 1).Gateway}}' kind); \
 	NETWORK_PREFIX=$${DOCKER_NETWORK%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.200-$${NETWORK_PREFIX}.250"; \
-	sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml
+	if [ "$$(uname -s)" = "Darwin" ]; then \
+		sed -i '' "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml; \
+	else \
+		sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml; \
+	fi; \
 	kubectl apply -f /tmp/metallb-kind-config.yaml
 	@rm -f /tmp/metallb-kind-config.yaml
 
@@ -314,6 +322,9 @@ $(ISTIOCTL_BIN):
 	@mkdir -p $(ISTIOCTL_DIR)
 	@OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
 	ARCH=$$(uname -m); \
+	case "$$OS" in \
+		darwin) OS=osx;; \
+	esac; \
 	case "$$ARCH" in \
 		x86_64) ARCH=amd64 ;; \
 		aarch64) ARCH=arm64 ;; \
@@ -405,11 +416,11 @@ setup-istio: $(ISTIOCTL_BIN)
 
 # Install Istio for minikube environment
 setup-istio-minikube:
-	$(MAKE) setup-istio ISTIO_PROFILE=minimal
+	$(MAKE) setup-istio ISTIO_PROFILE=$(ISTIO_PROFILE)
 
 # Install Istio for kind environment
 setup-istio-kind:
-	$(MAKE) setup-istio ISTIO_PROFILE=minimal
+	$(MAKE) setup-istio ISTIO_PROFILE=$(ISTIO_PROFILE)
 
 # Install Istio for OpenShift environment
 setup-istio-openshift:
@@ -423,7 +434,7 @@ setup-gateway-api-crds:
 # Apply Inference Extension CRDs
 setup-inference-extension-crds:
 	@echo "Applying Inference Extension CRDs version $(INFERENCE_EXTENSION_VERSION)..."
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.k8s.io_inferencepools.yaml
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml
 
 # Apply all CRDs (convenience target)
