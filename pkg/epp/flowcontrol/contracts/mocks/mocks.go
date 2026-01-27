@@ -111,14 +111,14 @@ var _ contracts.RegistryShard = &MockRegistryShard{}
 
 // MockSaturationDetector is a simple "stub-style" mock for testing.
 type MockSaturationDetector struct {
-	IsSaturatedFunc func(ctx context.Context, candidatePods []metrics.PodMetrics) bool
+	SaturationFunc func(ctx context.Context, candidatePods []metrics.PodMetrics) float64
 }
 
-func (m *MockSaturationDetector) IsSaturated(ctx context.Context, candidatePods []metrics.PodMetrics) bool {
-	if m.IsSaturatedFunc != nil {
-		return m.IsSaturatedFunc(ctx, candidatePods)
+func (m *MockSaturationDetector) Saturation(ctx context.Context, candidatePods []metrics.PodMetrics) float64 {
+	if m.SaturationFunc != nil {
+		return m.SaturationFunc(ctx, candidatePods)
 	}
-	return false
+	return 0.0
 }
 
 // MockPodLocator provides a mock implementation of the contracts.PodLocator interface.

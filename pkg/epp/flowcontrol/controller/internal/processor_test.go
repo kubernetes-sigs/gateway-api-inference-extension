@@ -739,8 +739,8 @@ func TestShardProcessor(t *testing.T) {
 							qLow := h.addQueue(keyLow)
 							require.NoError(t, qLow.Add(h.newTestItem("item-low", keyLow, testTTL)))
 
-							h.saturationDetector.IsSaturatedFunc = func(_ context.Context, _ []metrics.PodMetrics) bool {
-								return true
+							h.saturationDetector.SaturationFunc = func(_ context.Context, _ []metrics.PodMetrics) float64 {
+								return 1.0 // Saturated
 							}
 						},
 						expectDidDispatch: false,

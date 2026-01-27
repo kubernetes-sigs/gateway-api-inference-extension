@@ -311,7 +311,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		// --- Viability Check (Saturation/HoL Blocking) ---
 		req := item.OriginalRequest()
 		candidates := sp.podLocator.Locate(ctx, req.GetMetadata())
-		if sp.saturationDetector.IsSaturated(ctx, candidates) {
+		if sp.saturationDetector.Saturation(ctx, candidates) >= 1.0 {
 			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
 				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
 			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where

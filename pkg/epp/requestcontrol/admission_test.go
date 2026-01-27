@@ -109,11 +109,16 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			saturationDetector := &mocks.MockSaturationDetector{
-				IsSaturatedFunc: func(context.Context, []backendmetrics.PodMetrics) bool { return tc.isSaturated },
+			mockDetector := &mocks.MockSaturationDetector{
+				SaturationFunc: func(context.Context, []backendmetrics.PodMetrics) float64 {
+					if tc.isSaturated {
+						return 1.0
+					}
+					return 0.0
+				},
 			}
 			locator := &mocks.MockPodLocator{Pods: tc.locatorPods}
-			ac := NewLegacyAdmissionController(saturationDetector, locator)
+			ac := NewLegacyAdmissionController(mockDetector, locator)
 
 			err := ac.Admit(ctx, reqCtx, tc.priority)
 
