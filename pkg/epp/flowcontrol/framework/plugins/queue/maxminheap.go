@@ -30,7 +30,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -48,8 +47,8 @@ func init() {
 // The heap is ordered by the provided comparator, with higher values considered higher priority.
 // This implementation is concurrent-safe.
 type maxMinHeap struct {
-	items    []types.QueueItemAccessor
-	handles  map[types.QueueItemHandle]*heapItem
+	items    []flowcontrol.QueueItemAccessor
+	handles  map[flowcontrol.QueueItemHandle]*heapItem
 	byteSize atomic.Uint64
 	mu       sync.RWMutex
 	policy   flowcontrol.OrderingPolicy
@@ -58,7 +57,7 @@ type maxMinHeap struct {
 // heapItem is an internal struct to hold an item and its index in the heap.
 // This allows for O(log n) removal of items from the queue.
 type heapItem struct {
-	item          types.QueueItemAccessor
+	item          flowcontrol.QueueItemAccessor
 	index         int
 	isInvalidated bool
 }
@@ -78,13 +77,13 @@ func (h *heapItem) IsInvalidated() bool {
 	return h.isInvalidated
 }
 
-var _ types.QueueItemHandle = &heapItem{}
+var _ flowcontrol.QueueItemHandle = &heapItem{}
 
 // newMaxMinHeap creates a new max-min heap with the given policy.
 func newMaxMinHeap(policy flowcontrol.OrderingPolicy) *maxMinHeap {
 	return &maxMinHeap{
-		items:   make([]types.QueueItemAccessor, 0),
-		handles: make(map[types.QueueItemHandle]*heapItem),
+		items:   make([]flowcontrol.QueueItemAccessor, 0),
+		handles: make(map[flowcontrol.QueueItemHandle]*heapItem),
 		policy:  policy,
 	}
 }
@@ -115,7 +114,7 @@ func (h *maxMinHeap) ByteSize() uint64 {
 
 // PeekHead returns the item with the highest priority (max value) without removing it.
 // Time complexity: O(1).
-func (h *maxMinHeap) PeekHead() types.QueueItemAccessor {
+func (h *maxMinHeap) PeekHead() flowcontrol.QueueItemAccessor {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -128,7 +127,7 @@ func (h *maxMinHeap) PeekHead() types.QueueItemAccessor {
 
 // PeekTail returns the item with the lowest priority (min value) without removing it.
 // Time complexity: O(1).
-func (h *maxMinHeap) PeekTail() types.QueueItemAccessor {
+func (h *maxMinHeap) PeekTail() flowcontrol.QueueItemAccessor {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -154,7 +153,7 @@ func (h *maxMinHeap) PeekTail() types.QueueItemAccessor {
 
 // Add adds an item to the queue.
 // Time complexity: O(log n).
-func (h *maxMinHeap) Add(item types.QueueItemAccessor) {
+func (h *maxMinHeap) Add(item flowcontrol.QueueItemAccessor) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -163,7 +162,7 @@ func (h *maxMinHeap) Add(item types.QueueItemAccessor) {
 }
 
 // push adds an item to the heap and restores the heap property.
-func (h *maxMinHeap) push(item types.QueueItemAccessor) {
+func (h *maxMinHeap) push(item flowcontrol.QueueItemAccessor) {
 	heapItem := &heapItem{item: item, index: len(h.items)}
 	h.items = append(h.items, item)
 	item.SetHandle(heapItem)
@@ -250,7 +249,7 @@ func (h *maxMinHeap) swap(i, j int) {
 
 // Remove removes an item from the queue.
 // Time complexity: O(log n).
-func (h *maxMinHeap) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
+func (h *maxMinHeap) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -420,12 +419,12 @@ func isMinLevel(i int) bool {
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (h *maxMinHeap) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
+func (h *maxMinHeap) Cleanup(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	var removedItems []types.QueueItemAccessor
-	var itemsToKeep []types.QueueItemAccessor
+	var removedItems []flowcontrol.QueueItemAccessor
+	var itemsToKeep []flowcontrol.QueueItemAccessor
 
 	for _, item := range h.items {
 		if predicate(item) {
@@ -458,11 +457,11 @@ func (h *maxMinHeap) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueI
 }
 
 // Drain removes all items from the queue.
-func (h *maxMinHeap) Drain() []types.QueueItemAccessor {
+func (h *maxMinHeap) Drain() []flowcontrol.QueueItemAccessor {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	drainedItems := make([]types.QueueItemAccessor, len(h.items))
+	drainedItems := make([]flowcontrol.QueueItemAccessor, len(h.items))
 	copy(drainedItems, h.items)
 
 	// Invalidate all handles.
@@ -473,8 +472,8 @@ func (h *maxMinHeap) Drain() []types.QueueItemAccessor {
 	}
 
 	// Clear the internal state.
-	h.items = make([]types.QueueItemAccessor, 0)
-	h.handles = make(map[types.QueueItemHandle]*heapItem)
+	h.items = make([]flowcontrol.QueueItemAccessor, 0)
+	h.handles = make(map[flowcontrol.QueueItemHandle]*heapItem)
 	h.byteSize.Store(0)
 
 	return drainedItems

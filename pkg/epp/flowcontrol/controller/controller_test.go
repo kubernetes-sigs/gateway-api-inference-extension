@@ -41,7 +41,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller/internal"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
@@ -161,7 +160,7 @@ func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, regis
 type mockActiveFlowConnection struct {
 	ActiveShardsV    []contracts.RegistryShard
 	ActiveShardsFunc func() []contracts.RegistryShard
-	FlowKeyV         types.FlowKey
+	FlowKeyV         flowcontrol.FlowKey
 }
 
 func (m *mockActiveFlowConnection) ActiveShards() []contracts.RegistryShard {
@@ -171,7 +170,7 @@ func (m *mockActiveFlowConnection) ActiveShards() []contracts.RegistryShard {
 	return m.ActiveShardsV
 }
 
-func (m *mockActiveFlowConnection) FlowKey() types.FlowKey {
+func (m *mockActiveFlowConnection) FlowKey() flowcontrol.FlowKey {
 	return m.FlowKeyV
 }
 
@@ -179,12 +178,12 @@ func (m *mockActiveFlowConnection) FlowKey() types.FlowKey {
 type mockRegistryClient struct {
 	contracts.FlowRegistryObserver
 	contracts.FlowRegistryDataPlane
-	WithConnectionFunc func(key types.FlowKey, fn func(conn contracts.ActiveFlowConnection) error) error
+	WithConnectionFunc func(key flowcontrol.FlowKey, fn func(conn contracts.ActiveFlowConnection) error) error
 	ShardStatsFunc     func() []contracts.ShardStats
 }
 
 func (m *mockRegistryClient) WithConnection(
-	key types.FlowKey,
+	key flowcontrol.FlowKey,
 	fn func(conn contracts.ActiveFlowConnection) error,
 ) error {
 	if m.WithConnectionFunc != nil {
@@ -299,16 +298,16 @@ func (b *mockShardBuilder) withByteSize(size uint64) *mockShardBuilder {
 func (b *mockShardBuilder) build() contracts.RegistryShard {
 	return &mocks.MockRegistryShard{
 		IDFunc: func() string { return b.id },
-		ManagedQueueFunc: func(_ types.FlowKey) (contracts.ManagedQueue, error) {
+		ManagedQueueFunc: func(_ flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 			return &stubManagedQueue{byteSizeV: b.byteSize}, nil
 		},
 	}
 }
 
-var defaultFlowKey = types.FlowKey{ID: "test-flow", Priority: 100}
+var defaultFlowKey = flowcontrol.FlowKey{ID: "test-flow", Priority: 100}
 
-func newTestRequest(key types.FlowKey) *typesmocks.MockFlowControlRequest {
-	return &typesmocks.MockFlowControlRequest{
+func newTestRequest(key flowcontrol.FlowKey) *frameworkmocks.MockFlowControlRequest {
+	return &frameworkmocks.MockFlowControlRequest{
 		FlowKeyV:  key,
 		ByteSizeV: 100,
 		IDV:       "req-" + key.ID,
@@ -332,7 +331,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 
 			// Configure registry to return a shard.
 			shardA := newMockShard("shard-A").build()
-			h.mockRegistry.WithConnectionFunc = func(key types.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
+			h.mockRegistry.WithConnectionFunc = func(key flowcontrol.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
 				return fn(&mockActiveFlowConnection{
 					ActiveShardsV: []contracts.RegistryShard{shardA},
 					FlowKeyV:      key,
@@ -403,7 +402,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			expectedErr := errors.New("simulated connection failure")
 			// Configure the registry to fail when attempting to retrieve ActiveFlowConnection.
 			mockRegistry.WithConnectionFunc = func(
-				_ types.FlowKey,
+				_ flowcontrol.FlowKey,
 				_ func(conn contracts.ActiveFlowConnection) error,
 			) error {
 				return expectedErr
@@ -427,12 +426,12 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			// ManagedQueue. This shard should be considered as unavailable.
 			faultyShard := &mocks.MockRegistryShard{
 				IDFunc: func() string { return "faulty-shard" },
-				ManagedQueueFunc: func(_ types.FlowKey) (contracts.ManagedQueue, error) {
+				ManagedQueueFunc: func(_ flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 					return nil, errors.New("invariant violation: queue retrieval failed")
 				},
 			}
 			mockRegistry.WithConnectionFunc = func(
-				key types.FlowKey,
+				key flowcontrol.FlowKey,
 				fn func(conn contracts.ActiveFlowConnection) error,
 			) error {
 				return fn(&mockActiveFlowConnection{
@@ -497,7 +496,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 					}
 					h.mockProcessorFactory.processors["shard-B"] = &mockShardProcessor{
 						SubmitFunc: func(item *internal.FlowItem) error {
-							item.SetHandle(&typesmocks.MockQueueItemHandle{})
+							item.SetHandle(&frameworkmocks.MockQueueItemHandle{})
 							go item.FinalizeWithOutcome(types.QueueOutcomeDispatched, nil)
 							return nil
 						},
@@ -602,7 +601,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 
 				// Configure the registry to return the specified shards.
 				mockRegistry.WithConnectionFunc = func(
-					key types.FlowKey,
+					key flowcontrol.FlowKey,
 					fn func(conn contracts.ActiveFlowConnection) error,
 				) error {
 					return fn(&mockActiveFlowConnection{
@@ -653,7 +652,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			t.Parallel()
 			mockRegistry := &mockRegistryClient{
 				WithConnectionFunc: func(
-					key types.FlowKey,
+					key flowcontrol.FlowKey,
 					fn func(conn contracts.ActiveFlowConnection,
 					) error) error {
 					return fn(&mockActiveFlowConnection{
@@ -695,7 +694,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			var callCount atomic.Int32
 			mockRegistry := &mockRegistryClient{
 				WithConnectionFunc: func(
-					key types.FlowKey,
+					key flowcontrol.FlowKey,
 					fn func(conn contracts.ActiveFlowConnection) error,
 				) error {
 					shardA := newMockShard("shard-A").withByteSize(100).build()
@@ -724,7 +723,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			h.mockProcessorFactory.processors["shard-A"] = &mockShardProcessor{
 				SubmitFunc: func(item *internal.FlowItem) error {
 					// The processor accepts the item but then asynchronously finalizes it with ErrShardDraining.
-					item.SetHandle(&typesmocks.MockQueueItemHandle{})
+					item.SetHandle(&frameworkmocks.MockQueueItemHandle{})
 					go item.FinalizeWithOutcome(types.QueueOutcomeRejectedOther, contracts.ErrShardDraining)
 					return nil
 				},
@@ -760,7 +759,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			h := newUnitHarness(t, t.Context(), &Config{DefaultRequestTTL: 10 * time.Second}, nil)
 
 			shardA := newMockShard("shard-A").build()
-			h.mockRegistry.WithConnectionFunc = func(key types.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
+			h.mockRegistry.WithConnectionFunc = func(key flowcontrol.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
 				return fn(&mockActiveFlowConnection{
 					ActiveShardsV: []contracts.RegistryShard{shardA},
 					FlowKeyV:      key,
@@ -773,7 +772,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			// Configure the processor to accept the item but never finalize it, simulating a queued request.
 			h.mockProcessorFactory.processors["shard-A"] = &mockShardProcessor{
 				SubmitFunc: func(item *internal.FlowItem) error {
-					item.SetHandle(&typesmocks.MockQueueItemHandle{})
+					item.SetHandle(&frameworkmocks.MockQueueItemHandle{})
 					itemSubmitted <- item
 					return nil
 				},
@@ -834,7 +833,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			h := newUnitHarness(t, t.Context(), &Config{DefaultRequestTTL: requestTTL}, nil)
 
 			shardA := newMockShard("shard-A").build()
-			h.mockRegistry.WithConnectionFunc = func(key types.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
+			h.mockRegistry.WithConnectionFunc = func(key flowcontrol.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
 				return fn(&mockActiveFlowConnection{
 					ActiveShardsV: []contracts.RegistryShard{shardA},
 					FlowKeyV:      key,
@@ -846,7 +845,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			// Configure the processor to accept the item but never finalize it.
 			h.mockProcessorFactory.processors["shard-A"] = &mockShardProcessor{
 				SubmitFunc: func(item *internal.FlowItem) error {
-					item.SetHandle(&typesmocks.MockQueueItemHandle{})
+					item.SetHandle(&frameworkmocks.MockQueueItemHandle{})
 					itemSubmitted <- item
 					return nil
 				},
@@ -914,7 +913,7 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			// 1. Setup Registry: Trace when the lease is released.
 			mockRegistry := &mockRegistryClient{
 				WithConnectionFunc: func(
-					key types.FlowKey,
+					key flowcontrol.FlowKey,
 					fn func(conn contracts.ActiveFlowConnection) error,
 				) error {
 					// Execute the controller's logic.
@@ -1208,7 +1207,7 @@ func TestFlowController_WorkerManagement(t *testing.T) {
 }
 
 // Helper function to create a realistic mock registry environment for integration/concurrency tests.
-func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey types.FlowKey) *mockRegistryClient {
+func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey flowcontrol.FlowKey) *mockRegistryClient {
 	t.Helper()
 	mockRegistry := &mockRegistryClient{}
 	shards := make([]contracts.RegistryShard, numShards)
@@ -1222,7 +1221,7 @@ func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey types.Flow
 
 		shards[i] = &mocks.MockRegistryShard{
 			IDFunc: func() string { return shardID },
-			ManagedQueueFunc: func(_ types.FlowKey) (contracts.ManagedQueue, error) {
+			ManagedQueueFunc: func(_ flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 				return currentQueue, nil
 			},
 			// Configuration required for ShardProcessor initialization and dispatch logic.
@@ -1264,7 +1263,7 @@ func setupRegistryForConcurrency(t *testing.T, numShards int, flowKey types.Flow
 	}
 
 	// Configure the registry connection.
-	mockRegistry.WithConnectionFunc = func(key types.FlowKey, fn func(conn contracts.ActiveFlowConnection) error) error {
+	mockRegistry.WithConnectionFunc = func(key flowcontrol.FlowKey, fn func(conn contracts.ActiveFlowConnection) error) error {
 		return fn(&mockActiveFlowConnection{
 			ActiveShardsV: shards,
 			FlowKeyV:      key,

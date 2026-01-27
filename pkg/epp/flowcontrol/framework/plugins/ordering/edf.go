@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -73,7 +72,7 @@ var maxDeadlineTime = time.Unix(0, 1<<63-1)
 // The deadline is defined as the logical enqueue time plus the effective time-to-live (TTL).
 // If EffectiveTTL is zero or negative, the request is considered non-time-sensitive and assigned a
 // far-future deadline so it sorts after all SLO-bound requests.
-func calculateDeadline(item types.QueueItemAccessor) time.Time {
+func calculateDeadline(item flowcontrol.QueueItemAccessor) time.Time {
 	ttl := item.EffectiveTTL()
 	if ttl <= 0 {
 		// No TTL: treat as "never expire", but still respect enqueue time for fairness.
@@ -84,7 +83,7 @@ func calculateDeadline(item types.QueueItemAccessor) time.Time {
 
 // Less returns true if item 'a' should be dispatched before item 'b'.
 // EDF orders by deadline (earliest first), using FCFS as a tie-breaker.
-func (p *EDFPolicy) Less(a, b types.QueueItemAccessor) bool {
+func (p *EDFPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
 	if a == nil && b == nil {
 		return false
 	}

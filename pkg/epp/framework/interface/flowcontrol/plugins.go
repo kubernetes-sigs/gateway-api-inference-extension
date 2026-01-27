@@ -19,7 +19,6 @@ package flowcontrol
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -106,7 +105,7 @@ type OrderingPolicy interface {
 	// Invariants:
 	//   - Returning true means 'a' has higher priority than 'b'.
 	//   - If the queue supports CapabilityPriorityConfigurable, this function determines the heap order.
-	Less(a, b types.QueueItemAccessor) bool
+	Less(a, b QueueItemAccessor) bool
 
 	// RequiredQueueCapabilities returns the set of capabilities that a SafeQueue MUST support to effectively apply this
 	// policy.

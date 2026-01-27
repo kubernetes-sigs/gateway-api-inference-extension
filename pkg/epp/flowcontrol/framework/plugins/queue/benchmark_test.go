@@ -21,12 +21,11 @@ import (
 	"sync"
 	"testing"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
-var benchmarkFlowKey = types.FlowKey{ID: "benchmark-flow"}
+var benchmarkFlowKey = flowcontrol.FlowKey{ID: "benchmark-flow"}
 
 // BenchmarkQueues runs a series of benchmarks against all registered queue implementations.
 func BenchmarkQueues(b *testing.B) {
@@ -112,7 +111,7 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q flowcontrol.SafeQueue) {
 
 	for i := 0; b.Loop(); i++ {
 		// Add a batch of items
-		items := make([]types.QueueItemAccessor, 100)
+		items := make([]flowcontrol.QueueItemAccessor, 100)
 		for j := range items {
 			item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("bulk-%d-%d", i, j), benchmarkFlowKey)
 			items[j] = item

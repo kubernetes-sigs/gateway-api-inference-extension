@@ -23,11 +23,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
-var testFlowKey = types.FlowKey{ID: "test-flow", Priority: 0}
+var testFlowKey = flowcontrol.FlowKey{ID: "test-flow", Priority: 0}
 
 func TestFCFS_Name(t *testing.T) {
 	t.Parallel()
@@ -47,19 +47,19 @@ func TestFCFS_Less(t *testing.T) {
 	policy := newFCFS()
 
 	now := time.Now()
-	itemA := typesmocks.NewMockQueueItemAccessor(10, "itemA", testFlowKey)
+	itemA := mocks.NewMockQueueItemAccessor(10, "itemA", testFlowKey)
 	itemA.EnqueueTimeV = now
 
-	itemB := typesmocks.NewMockQueueItemAccessor(20, "itemB", testFlowKey)
+	itemB := mocks.NewMockQueueItemAccessor(20, "itemB", testFlowKey)
 	itemB.EnqueueTimeV = now.Add(time.Second) // B is later than A
 
-	itemC := typesmocks.NewMockQueueItemAccessor(30, "itemC", testFlowKey)
+	itemC := mocks.NewMockQueueItemAccessor(30, "itemC", testFlowKey)
 	itemC.EnqueueTimeV = now // C is same time as A
 
 	testCases := []struct {
 		name     string
-		item1    types.QueueItemAccessor
-		item2    types.QueueItemAccessor
+		item1    flowcontrol.QueueItemAccessor
+		item2    flowcontrol.QueueItemAccessor
 		expected bool // true if item1 is less (higher priority) than item2
 	}{
 		{"A before B", itemA, itemB, true},

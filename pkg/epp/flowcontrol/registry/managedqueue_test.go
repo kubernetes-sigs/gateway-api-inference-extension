@@ -28,8 +28,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
@@ -46,14 +44,14 @@ type mqTestHarness struct {
 
 // newMockedMqHarness creates a harness that uses a mocked underlying queue.
 // This is ideal for isolating and unit testing the decorator logic of `managedQueue`.
-func newMockedMqHarness(t *testing.T, queue *frameworkmocks.MockSafeQueue, key types.FlowKey) *mqTestHarness {
+func newMockedMqHarness(t *testing.T, queue *frameworkmocks.MockSafeQueue, key flowcontrol.FlowKey) *mqTestHarness {
 	t.Helper()
 	return newMqHarness(t, queue, key, false)
 }
 
 // newRealMqHarness creates a harness that uses a real "ListQueue" implementation.
 // This is essential for integration and concurrency tests.
-func newRealMqHarness(t *testing.T, key types.FlowKey) *mqTestHarness {
+func newRealMqHarness(t *testing.T, key flowcontrol.FlowKey) *mqTestHarness {
 	t.Helper()
 	q, err := queue.NewQueueFromName(queue.ListQueueName, nil)
 	require.NoError(t, err, "Test setup: creating a real ListQueue implementation should not fail")
@@ -61,7 +59,7 @@ func newRealMqHarness(t *testing.T, key types.FlowKey) *mqTestHarness {
 }
 
 // newMqHarness is the base constructor for the test harness.
-func newMqHarness(t *testing.T, queue flowcontrol.SafeQueue, key types.FlowKey, isDraining bool) *mqTestHarness {
+func newMqHarness(t *testing.T, queue flowcontrol.SafeQueue, key flowcontrol.FlowKey, isDraining bool) *mqTestHarness {
 	t.Helper()
 
 	propagator := &mockStatsPropagator{}
@@ -80,7 +78,7 @@ func newMqHarness(t *testing.T, queue flowcontrol.SafeQueue, key types.FlowKey, 
 }
 
 // setupWithItems pre-populates the queue and resets the mock propagator for focused testing.
-func (h *mqTestHarness) setupWithItems(items ...types.QueueItemAccessor) {
+func (h *mqTestHarness) setupWithItems(items ...flowcontrol.QueueItemAccessor) {
 	h.t.Helper()
 	for _, item := range items {
 		err := h.mq.Add(item)
@@ -109,14 +107,14 @@ func (p *mockStatsPropagator) reset() {
 
 func TestManagedQueue_InitialState(t *testing.T) {
 	t.Parallel()
-	h := newMockedMqHarness(t, &frameworkmocks.MockSafeQueue{}, types.FlowKey{ID: "flow", Priority: 1})
+	h := newMockedMqHarness(t, &frameworkmocks.MockSafeQueue{}, flowcontrol.FlowKey{ID: "flow", Priority: 1})
 	assert.Zero(t, h.mq.Len(), "A newly initialized queue must have a length of 0")
 	assert.Zero(t, h.mq.ByteSize(), "A newly initialized queue must have a byte size of 0")
 }
 
 func TestManagedQueue_Add(t *testing.T) {
 	t.Parallel()
-	flowKey := types.FlowKey{ID: "flow", Priority: 1}
+	flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
 
 	testCases := []struct {
 		name                  string
@@ -130,7 +128,7 @@ func TestManagedQueue_Add(t *testing.T) {
 		{
 			name: "ShouldSucceed_AndIncrementStats",
 			setupMock: func(q *frameworkmocks.MockSafeQueue) {
-				q.AddFunc = func(types.QueueItemAccessor) {}
+				q.AddFunc = func(flowcontrol.QueueItemAccessor) {}
 			},
 			isDraining:            false,
 			expectErr:             false,
@@ -153,7 +151,7 @@ func TestManagedQueue_Add(t *testing.T) {
 			t.Parallel()
 			q := &frameworkmocks.MockSafeQueue{}
 			h := newMqHarness(t, q, flowKey, tc.isDraining)
-			item := typesmocks.NewMockQueueItemAccessor(100, "req", flowKey)
+			item := frameworkmocks.NewMockQueueItemAccessor(100, "req", flowKey)
 			if tc.setupMock != nil {
 				tc.setupMock(q)
 			}
@@ -178,19 +176,19 @@ func TestManagedQueue_Add(t *testing.T) {
 
 func TestManagedQueue_Remove(t *testing.T) {
 	t.Parallel()
-	flowKey := types.FlowKey{ID: "flow", Priority: 1}
+	flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
 
 	testCases := []struct {
 		name                  string
-		setupMock             func(q *frameworkmocks.MockSafeQueue, item types.QueueItemAccessor)
+		setupMock             func(q *frameworkmocks.MockSafeQueue, item flowcontrol.QueueItemAccessor)
 		expectErr             bool
 		expectedLenDelta      int64
 		expectedByteSizeDelta int64
 	}{
 		{
 			name: "ShouldSucceed_AndDecrementStats",
-			setupMock: func(q *frameworkmocks.MockSafeQueue, item types.QueueItemAccessor) {
-				q.RemoveFunc = func(_ types.QueueItemHandle) (types.QueueItemAccessor, error) {
+			setupMock: func(q *frameworkmocks.MockSafeQueue, item flowcontrol.QueueItemAccessor) {
+				q.RemoveFunc = func(_ flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 					return item, nil
 				}
 			},
@@ -200,8 +198,8 @@ func TestManagedQueue_Remove(t *testing.T) {
 		},
 		{
 			name: "ShouldFail_AndNotChangeStats_WhenUnderlyingQueueFails",
-			setupMock: func(q *frameworkmocks.MockSafeQueue, item types.QueueItemAccessor) {
-				q.RemoveFunc = func(_ types.QueueItemHandle) (types.QueueItemAccessor, error) {
+			setupMock: func(q *frameworkmocks.MockSafeQueue, item flowcontrol.QueueItemAccessor) {
+				q.RemoveFunc = func(_ flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 					return nil, errors.New("remove failed")
 				}
 			},
@@ -216,7 +214,7 @@ func TestManagedQueue_Remove(t *testing.T) {
 			t.Parallel()
 			q := &frameworkmocks.MockSafeQueue{}
 			h := newMockedMqHarness(t, q, flowKey)
-			item := typesmocks.NewMockQueueItemAccessor(100, "req", flowKey)
+			item := frameworkmocks.NewMockQueueItemAccessor(100, "req", flowKey)
 			h.setupWithItems(item)
 			tc.setupMock(q, item)
 
@@ -238,18 +236,18 @@ func TestManagedQueue_Remove(t *testing.T) {
 
 func TestManagedQueue_Cleanup(t *testing.T) {
 	t.Parallel()
-	flowKey := types.FlowKey{ID: "flow", Priority: 1}
+	flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
 
 	testCases := []struct {
 		name                  string
-		setupMock             func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor)
+		setupMock             func(q *frameworkmocks.MockSafeQueue, items []flowcontrol.QueueItemAccessor)
 		expectedLenDelta      int64
 		expectedByteSizeDelta int64
 	}{
 		{
 			name: "ShouldSucceed_AndDecrementStats_WhenItemsRemoved",
-			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.CleanupFunc = func(_ flowcontrol.PredicateFunc) []types.QueueItemAccessor {
+			setupMock: func(q *frameworkmocks.MockSafeQueue, items []flowcontrol.QueueItemAccessor) {
+				q.CleanupFunc = func(_ flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
 					return items
 				}
 			},
@@ -258,8 +256,8 @@ func TestManagedQueue_Cleanup(t *testing.T) {
 		},
 		{
 			name: "ShouldSucceed_AndNotChangeStats_WhenNoItemsRemoved",
-			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.CleanupFunc = func(_ flowcontrol.PredicateFunc) []types.QueueItemAccessor {
+			setupMock: func(q *frameworkmocks.MockSafeQueue, items []flowcontrol.QueueItemAccessor) {
+				q.CleanupFunc = func(_ flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
 					return nil // Simulate no items matching predicate.
 				}
 			},
@@ -273,13 +271,13 @@ func TestManagedQueue_Cleanup(t *testing.T) {
 			t.Parallel()
 			q := &frameworkmocks.MockSafeQueue{}
 			h := newMockedMqHarness(t, q, flowKey)
-			items := []types.QueueItemAccessor{
-				typesmocks.NewMockQueueItemAccessor(50, "req", flowKey),
-				typesmocks.NewMockQueueItemAccessor(75, "req", flowKey),
+			items := []flowcontrol.QueueItemAccessor{
+				frameworkmocks.NewMockQueueItemAccessor(50, "req", flowKey),
+				frameworkmocks.NewMockQueueItemAccessor(75, "req", flowKey),
 			}
 			h.setupWithItems(items...)
 			tc.setupMock(q, items)
-			h.mq.Cleanup(func(_ types.QueueItemAccessor) bool { return true })
+			h.mq.Cleanup(func(_ flowcontrol.QueueItemAccessor) bool { return true })
 			assert.Equal(t, tc.expectedLenDelta, h.propagator.lenDelta.Load(),
 				"The propagated length delta must exactly match the total number of items removed during cleanup")
 			assert.Equal(t, tc.expectedByteSizeDelta, h.propagator.byteSizeDelta.Load(),
@@ -290,18 +288,18 @@ func TestManagedQueue_Cleanup(t *testing.T) {
 
 func TestManagedQueue_Drain(t *testing.T) {
 	t.Parallel()
-	flowKey := types.FlowKey{ID: "flow", Priority: 1}
+	flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
 
 	testCases := []struct {
 		name                  string
-		setupMock             func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor)
+		setupMock             func(q *frameworkmocks.MockSafeQueue, items []flowcontrol.QueueItemAccessor)
 		expectedLenDelta      int64
 		expectedByteSizeDelta int64
 	}{
 		{
 			name: "ShouldSucceed_AndDecrementStats",
-			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.DrainFunc = func() []types.QueueItemAccessor {
+			setupMock: func(q *frameworkmocks.MockSafeQueue, items []flowcontrol.QueueItemAccessor) {
+				q.DrainFunc = func() []flowcontrol.QueueItemAccessor {
 					return items
 				}
 			},
@@ -315,9 +313,9 @@ func TestManagedQueue_Drain(t *testing.T) {
 			t.Parallel()
 			q := &frameworkmocks.MockSafeQueue{}
 			h := newMockedMqHarness(t, q, flowKey)
-			items := []types.QueueItemAccessor{
-				typesmocks.NewMockQueueItemAccessor(50, "req", flowKey),
-				typesmocks.NewMockQueueItemAccessor(75, "req", flowKey),
+			items := []flowcontrol.QueueItemAccessor{
+				frameworkmocks.NewMockQueueItemAccessor(50, "req", flowKey),
+				frameworkmocks.NewMockQueueItemAccessor(75, "req", flowKey),
 			}
 			h.setupWithItems(items...)
 			tc.setupMock(q, items)
@@ -336,10 +334,10 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 
 	t.Run("ProxiesCalls", func(t *testing.T) {
 		t.Parallel()
-		flowKey := types.FlowKey{ID: "flow", Priority: 1}
+		flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
 		q := &frameworkmocks.MockSafeQueue{}
 		harness := newMockedMqHarness(t, q, flowKey)
-		item := typesmocks.NewMockQueueItemAccessor(100, "req-1", flowKey)
+		item := frameworkmocks.NewMockQueueItemAccessor(100, "req-1", flowKey)
 		q.PeekHeadV = item
 		q.PeekTailV = item
 		q.NameV = "MockQueue"
@@ -368,7 +366,7 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 
 	t.Run("EmptyQueue", func(t *testing.T) {
 		t.Parallel()
-		flowKey := types.FlowKey{ID: "flow", Priority: 1}
+		flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
 		q := &frameworkmocks.MockSafeQueue{}
 		q.PeekHeadV = nil
 		harness := newMockedMqHarness(t, q, flowKey)
@@ -390,7 +388,7 @@ func TestManagedQueue_Concurrency_StatsIntegrity(t *testing.T) {
 		itemByteSize = 10
 	)
 
-	flowKey := types.FlowKey{ID: "flow", Priority: 1}
+	flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
 	h := newRealMqHarness(t, flowKey)
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
@@ -399,7 +397,7 @@ func TestManagedQueue_Concurrency_StatsIntegrity(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range opsPerWorker {
-				item := typesmocks.NewMockQueueItemAccessor(uint64(itemByteSize), "req", flowKey)
+				item := frameworkmocks.NewMockQueueItemAccessor(uint64(itemByteSize), "req", flowKey)
 				require.NoError(t, h.mq.Add(item), "Concurrent Add operation must succeed without errors or races")
 				// In this chaos test, `Remove` may fail if another goroutine removes the item first. This is expected.
 				_, _ = h.mq.Remove(item.Handle())
@@ -423,11 +421,11 @@ func TestManagedQueue_Concurrency_StatsIntegrity(t *testing.T) {
 
 func TestManagedQueue_InvariantPanics_OnUnderflow(t *testing.T) {
 	t.Parallel()
-	flowKey := types.FlowKey{ID: "flow", Priority: 1}
-	item := typesmocks.NewMockQueueItemAccessor(100, "req", flowKey)
+	flowKey := flowcontrol.FlowKey{ID: "flow", Priority: 1}
+	item := frameworkmocks.NewMockQueueItemAccessor(100, "req", flowKey)
 	q := &frameworkmocks.MockSafeQueue{}
-	q.AddFunc = func(types.QueueItemAccessor) {}
-	q.RemoveFunc = func(types.QueueItemHandle) (types.QueueItemAccessor, error) {
+	q.AddFunc = func(flowcontrol.QueueItemAccessor) {}
+	q.RemoveFunc = func(flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 		return item, nil
 	}
 	h := newMockedMqHarness(t, q, flowKey)

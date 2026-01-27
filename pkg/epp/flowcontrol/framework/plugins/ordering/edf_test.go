@@ -23,9 +23,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 func TestEDFPolicy_Name(t *testing.T) {
@@ -49,34 +48,34 @@ func TestEDF_Less(t *testing.T) {
 	now := time.Now()
 
 	// Item A: TTL=10s → deadline = now + 10s
-	itemA := typesmocks.NewMockQueueItemAccessor(10, "itemA", testFlowKey)
+	itemA := mocks.NewMockQueueItemAccessor(10, "itemA", testFlowKey)
 	itemA.EnqueueTimeV = now
 	itemA.EffectiveTTLV = 10 * time.Second
 
 	// Item B: TTL=5s → deadline = now + 5s (earlier than A)
-	itemB := typesmocks.NewMockQueueItemAccessor(20, "itemB", testFlowKey)
+	itemB := mocks.NewMockQueueItemAccessor(20, "itemB", testFlowKey)
 	itemB.EnqueueTimeV = now.Add(1 * time.Second) // enqueued later, but tighter deadline
 	itemB.EffectiveTTLV = 5 * time.Second
 
 	// Item C: TTL <= 0 → treated as far-future deadline
-	itemC := typesmocks.NewMockQueueItemAccessor(30, "itemC", testFlowKey)
+	itemC := mocks.NewMockQueueItemAccessor(30, "itemC", testFlowKey)
 	itemC.EnqueueTimeV = now.Add(-5 * time.Second) // enqueued earlier, but no deadline
 	itemC.EffectiveTTLV = -1 * time.Second
 
 	// Item D: same deadline as B, but enqueued earlier → should win tie-breaker
-	itemD := typesmocks.NewMockQueueItemAccessor(40, "itemD", testFlowKey)
+	itemD := mocks.NewMockQueueItemAccessor(40, "itemD", testFlowKey)
 	itemD.EnqueueTimeV = now.Add(-1 * time.Second)
 	itemD.EffectiveTTLV = 6 * time.Second // deadline = now + 5s (same as B)
 
 	// Item E: another non-deadline item
-	itemE := typesmocks.NewMockQueueItemAccessor(40, "itemD", testFlowKey)
+	itemE := mocks.NewMockQueueItemAccessor(40, "itemD", testFlowKey)
 	itemE.EnqueueTimeV = now.Add(-10 * time.Second) // earlier than C
 	itemE.EffectiveTTLV = 0
 
 	testCases := []struct {
 		name     string
-		a        types.QueueItemAccessor
-		b        types.QueueItemAccessor
+		a        flowcontrol.QueueItemAccessor
+		b        flowcontrol.QueueItemAccessor
 		expected bool // true if a should be dispatched before b
 	}{
 		{"B before A (earlier deadline)", itemB, itemA, true},
@@ -110,7 +109,7 @@ func TestCalculateDeadline(t *testing.T) {
 	now := time.Now()
 
 	// Valid TTL
-	itemWithTTL := typesmocks.NewMockQueueItemAccessor(1, "test", testFlowKey)
+	itemWithTTL := mocks.NewMockQueueItemAccessor(1, "test", testFlowKey)
 	itemWithTTL.EnqueueTimeV = now
 	itemWithTTL.EffectiveTTLV = 5 * time.Second
 
@@ -118,7 +117,7 @@ func TestCalculateDeadline(t *testing.T) {
 	assert.Equal(t, now.Add(5*time.Second), deadline)
 
 	// Zero TTL → far future
-	itemZeroTTL := typesmocks.NewMockQueueItemAccessor(2, "test2", testFlowKey)
+	itemZeroTTL := mocks.NewMockQueueItemAccessor(2, "test2", testFlowKey)
 	itemZeroTTL.EnqueueTimeV = now
 	itemZeroTTL.EffectiveTTLV = 0
 
@@ -126,7 +125,7 @@ func TestCalculateDeadline(t *testing.T) {
 	assert.Equal(t, maxDeadlineTime, deadlineZero)
 
 	// Negative TTL → far future
-	itemNegTTL := typesmocks.NewMockQueueItemAccessor(3, "test3", testFlowKey)
+	itemNegTTL := mocks.NewMockQueueItemAccessor(3, "test3", testFlowKey)
 	itemNegTTL.EnqueueTimeV = now
 	itemNegTTL.EffectiveTTLV = -10 * time.Second
 

@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -77,7 +76,7 @@ func runPickConformanceTests(t *testing.T, policy flowcontrol.FairnessPolicy) {
 	mockQueueEmpty := &frameworkmocks.MockFlowQueueAccessor{
 		LenV:      0,
 		PeekHeadV: nil,
-		FlowKeyV:  types.FlowKey{ID: flowIDEmpty},
+		FlowKeyV:  flowcontrol.FlowKey{ID: flowIDEmpty},
 	}
 
 	testCases := []struct {
@@ -97,7 +96,7 @@ func runPickConformanceTests(t *testing.T, policy flowcontrol.FairnessPolicy) {
 			name: "With an empty priority band accessor",
 			band: &frameworkmocks.MockPriorityBandAccessor{
 				PolicyStateV:      state,
-				FlowKeysFunc:      func() []types.FlowKey { return []types.FlowKey{} },
+				FlowKeysFunc:      func() []flowcontrol.FlowKey { return []flowcontrol.FlowKey{} },
 				IterateQueuesFunc: func(callback func(flow flowcontrol.FlowQueueAccessor) bool) { /* no-op */ },
 			},
 			expectErr: false,
@@ -107,7 +106,7 @@ func runPickConformanceTests(t *testing.T, policy flowcontrol.FairnessPolicy) {
 			name: "With a band that has one empty queue",
 			band: &frameworkmocks.MockPriorityBandAccessor{
 				PolicyStateV: state,
-				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{{ID: flowIDEmpty}} },
+				FlowKeysFunc: func() []flowcontrol.FlowKey { return []flowcontrol.FlowKey{{ID: flowIDEmpty}} },
 				QueueFunc: func(fID string) flowcontrol.FlowQueueAccessor {
 					if fID == flowIDEmpty {
 						return mockQueueEmpty
@@ -123,7 +122,7 @@ func runPickConformanceTests(t *testing.T, policy flowcontrol.FairnessPolicy) {
 			name: "With a band that has multiple empty queues",
 			band: &frameworkmocks.MockPriorityBandAccessor{
 				PolicyStateV: state,
-				FlowKeysFunc: func() []types.FlowKey { return []types.FlowKey{{ID: flowIDEmpty}, {ID: "flow-empty-2"}} },
+				FlowKeysFunc: func() []flowcontrol.FlowKey { return []flowcontrol.FlowKey{{ID: flowIDEmpty}, {ID: "flow-empty-2"}} },
 				QueueFunc:    func(fID string) flowcontrol.FlowQueueAccessor { return mockQueueEmpty },
 				IterateQueuesFunc: func(callback func(flow flowcontrol.FlowQueueAccessor) bool) {
 					// Iterate over two empty queues.

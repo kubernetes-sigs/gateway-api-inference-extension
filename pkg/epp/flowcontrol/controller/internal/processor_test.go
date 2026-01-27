@@ -38,9 +38,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
+	fwmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 const (
@@ -50,7 +49,7 @@ const (
 	testWaitTimeout = 1 * time.Second
 )
 
-var testFlow = types.FlowKey{ID: "flow-a", Priority: 10}
+var testFlow = flowcontrol.FlowKey{ID: "flow-a", Priority: 10}
 
 // TestMain sets up the logger for all tests in the package.
 func TestMain(m *testing.M) {
@@ -80,8 +79,8 @@ type testHarness struct {
 	// --- Centralized Mock State ---
 	// The harness's mutex protects the single source of truth for all mock state.
 	mu            sync.Mutex
-	queues        map[types.FlowKey]*mocks.MockManagedQueue
-	priorityFlows map[int][]types.FlowKey // Key: `priority`
+	queues        map[flowcontrol.FlowKey]*mocks.MockManagedQueue
+	priorityFlows map[int][]flowcontrol.FlowKey // Key: `priority`
 
 	// Customizable policy logic for tests to override.
 	fairnessPolicyPick func(context.Context, flowcontrol.PriorityBandAccessor) (flowcontrol.FlowQueueAccessor, error)
@@ -98,8 +97,8 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		saturationDetector: &mocks.MockSaturationDetector{},
 		podLocator:         &mocks.MockPodLocator{Pods: []metrics.PodMetrics{&metrics.FakePodMetrics{}}},
 		startSignal:        make(chan struct{}),
-		queues:             make(map[types.FlowKey]*mocks.MockManagedQueue),
-		priorityFlows:      make(map[int][]types.FlowKey),
+		queues:             make(map[flowcontrol.FlowKey]*mocks.MockManagedQueue),
+		priorityFlows:      make(map[int][]flowcontrol.FlowKey),
 	}
 	h.ctx, h.cancel = context.WithCancel(context.Background())
 
@@ -177,14 +176,14 @@ func (h *testHarness) waitForFinalization(item *FlowItem) (types.QueueOutcome, e
 }
 
 // newTestItem creates a new FlowItem for testing purposes.
-func (h *testHarness) newTestItem(id string, key types.FlowKey, ttl time.Duration) *FlowItem {
+func (h *testHarness) newTestItem(id string, key flowcontrol.FlowKey, ttl time.Duration) *FlowItem {
 	h.t.Helper()
-	req := typesmocks.NewMockFlowControlRequest(100, id, key)
+	req := fwmocks.NewMockFlowControlRequest(100, id, key)
 	return NewItem(req, ttl, h.clock.Now())
 }
 
 // addQueue centrally registers a new mock queue for a given flow, ensuring all harness components are aware of it.
-func (h *testHarness) addQueue(key types.FlowKey) *mocks.MockManagedQueue {
+func (h *testHarness) addQueue(key flowcontrol.FlowKey) *mocks.MockManagedQueue {
 	h.t.Helper()
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -197,7 +196,7 @@ func (h *testHarness) addQueue(key types.FlowKey) *mocks.MockManagedQueue {
 // --- Mock Interface Implementations ---
 
 // managedQueue provides the mock implementation for the `RegistryShard` interface.
-func (h *testHarness) managedQueue(key types.FlowKey) (contracts.ManagedQueue, error) {
+func (h *testHarness) managedQueue(key flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if q, ok := h.queues[key]; ok {
@@ -224,7 +223,7 @@ func (h *testHarness) allOrderedPriorityLevels() []int {
 // priorityBandAccessor provides the mock implementation for the `RegistryShard` interface. It acts as a factory for a
 // fully-configured, stateless mock that is safe for concurrent use.
 func (h *testHarness) priorityBandAccessor(p int) (flowcontrol.PriorityBandAccessor, error) {
-	band := &frameworkmocks.MockPriorityBandAccessor{PriorityV: p}
+	band := &fwmocks.MockPriorityBandAccessor{PriorityV: p}
 
 	// Safely get a snapshot of the flow IDs under a lock.
 	h.mu.Lock()
@@ -250,7 +249,7 @@ func (h *testHarness) priorityBandAccessor(p int) (flowcontrol.PriorityBandAcces
 
 // fairnessPolicy provides the mock implementation for the RegistryShard interface.
 func (h *testHarness) fairnessPolicy(p int) (flowcontrol.FairnessPolicy, error) {
-	policy := &frameworkmocks.MockFairnessPolicy{}
+	policy := &fwmocks.MockFairnessPolicy{}
 	// If the test provided a custom implementation, use it.
 	if h.fairnessPolicyPick != nil {
 		policy.PickFunc = h.fairnessPolicyPick
@@ -332,7 +331,7 @@ func TestShardProcessor(t *testing.T) {
 			h := newTestHarness(t, testCleanupTick)
 			item := h.newTestItem("req-lookup-fail-reject", testFlow, testTTL)
 			registryErr := errors.New("test registry lookup error")
-			h.ManagedQueueFunc = func(types.FlowKey) (contracts.ManagedQueue, error) {
+			h.ManagedQueueFunc = func(flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 				return nil, registryErr
 			}
 
@@ -445,12 +444,12 @@ func TestShardProcessor(t *testing.T) {
 			policyCanProceed := make(chan struct{})
 			itemIsBeingDispatched := make(chan struct{})
 			var signalOnce sync.Once
-			var removedItem types.QueueItemAccessor
+			var removedItem flowcontrol.QueueItemAccessor
 
 			require.NoError(t, q.Add(item)) // Add the item directly to the queue.
 
 			// Override the queue's `RemoveFunc` to pause the dispatch goroutine at a critical moment.
-			q.RemoveFunc = func(h types.QueueItemHandle) (types.QueueItemAccessor, error) {
+			q.RemoveFunc = func(h flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 				var err error
 				signalOnce.Do(func() {
 					removedItem = item
@@ -565,7 +564,7 @@ func TestShardProcessor(t *testing.T) {
 				{
 					name: "should reject item on registry queue lookup failure",
 					setupHarness: func(h *testHarness) {
-						h.ManagedQueueFunc = func(types.FlowKey) (contracts.ManagedQueue, error) { return nil, testErr }
+						h.ManagedQueueFunc = func(flowcontrol.FlowKey) (contracts.ManagedQueue, error) { return nil, testErr }
 					},
 					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
 						assert.Equal(t, types.QueueOutcomeRejectedOther, item.FinalState().Outcome,
@@ -591,7 +590,7 @@ func TestShardProcessor(t *testing.T) {
 					name: "should reject item on queue add failure",
 					setupHarness: func(h *testHarness) {
 						mockQueue := h.addQueue(testFlow)
-						mockQueue.AddFunc = func(types.QueueItemAccessor) error { return testErr }
+						mockQueue.AddFunc = func(flowcontrol.QueueItemAccessor) error { return testErr }
 					},
 					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
 						assert.Equal(t, types.QueueOutcomeRejectedOther, item.FinalState().Outcome,
@@ -605,7 +604,7 @@ func TestShardProcessor(t *testing.T) {
 					setupHarness: func(h *testHarness) {
 						mockQueue := h.addQueue(testFlow)
 						var addCallCount int
-						mockQueue.AddFunc = func(item types.QueueItemAccessor) error {
+						mockQueue.AddFunc = func(item flowcontrol.QueueItemAccessor) error {
 							addCallCount++
 							return nil
 						}
@@ -735,7 +734,7 @@ func TestShardProcessor(t *testing.T) {
 							require.NoError(t, qHigh.Add(h.newTestItem("item-high", testFlow, testTTL)))
 
 							// Add a low-priority, viable item.
-							keyLow := types.FlowKey{ID: "flow-low", Priority: 5}
+							keyLow := flowcontrol.FlowKey{ID: "flow-low", Priority: 5}
 							qLow := h.addQueue(keyLow)
 							require.NoError(t, qLow.Add(h.newTestItem("item-low", keyLow, testTTL)))
 
@@ -798,8 +797,8 @@ func TestShardProcessor(t *testing.T) {
 						name: "should continue to lower priority band on FairnessPolicy policy error",
 						setupHarness: func(h *testHarness) {
 							// Create a failing high-priority queue and a working low-priority queue.
-							keyHigh := types.FlowKey{ID: "flow-high", Priority: testFlow.Priority}
-							keyLow := types.FlowKey{ID: "flow-low", Priority: 20}
+							keyHigh := flowcontrol.FlowKey{ID: "flow-high", Priority: testFlow.Priority}
+							keyLow := flowcontrol.FlowKey{ID: "flow-low", Priority: 20}
 							h.addQueue(keyHigh)
 							qLow := h.addQueue(keyLow)
 
@@ -837,8 +836,8 @@ func TestShardProcessor(t *testing.T) {
 				t.Parallel()
 				// --- ARRANGE ---
 				h := newTestHarness(t, testCleanupTick)
-				keyHigh := types.FlowKey{ID: "flow-high", Priority: 20}
-				keyLow := types.FlowKey{ID: "flow-low", Priority: 10}
+				keyHigh := flowcontrol.FlowKey{ID: "flow-high", Priority: 20}
+				keyLow := flowcontrol.FlowKey{ID: "flow-low", Priority: 10}
 				qHigh := h.addQueue(keyHigh)
 				qLow := h.addQueue(keyLow)
 
@@ -896,7 +895,7 @@ func TestShardProcessor(t *testing.T) {
 					{
 						name: "on ManagedQueue lookup failure",
 						setupMocks: func(h *testHarness) {
-							h.ManagedQueueFunc = func(types.FlowKey) (contracts.ManagedQueue, error) { return nil, registryErr }
+							h.ManagedQueueFunc = func(flowcontrol.FlowKey) (contracts.ManagedQueue, error) { return nil, registryErr }
 						},
 						expectedErr: registryErr,
 					},
@@ -922,9 +921,9 @@ func TestShardProcessor(t *testing.T) {
 				item := h.newTestItem("req-already-finalized", testFlow, testTTL)
 				item.FinalizeWithOutcome(types.QueueOutcomeRejectedOther, errors.New("already done"))
 
-				h.ManagedQueueFunc = func(types.FlowKey) (contracts.ManagedQueue, error) {
+				h.ManagedQueueFunc = func(flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 					return &mocks.MockManagedQueue{
-						RemoveFunc: func(types.QueueItemHandle) (types.QueueItemAccessor, error) {
+						RemoveFunc: func(flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 							return item, nil
 						},
 					}, nil
@@ -1033,7 +1032,7 @@ func TestShardProcessor(t *testing.T) {
 				var processedCount atomic.Int32
 
 				for i := range numQueues {
-					key := types.FlowKey{
+					key := flowcontrol.FlowKey{
 						ID:       fmt.Sprintf("flow-%d", i),
 						Priority: testFlow.Priority,
 					}

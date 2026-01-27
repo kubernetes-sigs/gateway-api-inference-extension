@@ -25,7 +25,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -57,7 +56,7 @@ import (
 //  2. Non-Autonomous State: The underlying queue must not change state autonomously (e.g., no internal TTL eviction).
 type managedQueue struct {
 	// --- Immutable Identity & Dependencies (set at construction) ---
-	key    types.FlowKey
+	key    flowcontrol.FlowKey
 	policy flowcontrol.OrderingPolicy
 	logger logr.Logger
 
@@ -91,7 +90,7 @@ var _ contracts.ManagedQueue = &managedQueue{}
 func newManagedQueue(
 	queue flowcontrol.SafeQueue,
 	policy flowcontrol.OrderingPolicy,
-	key types.FlowKey,
+	key flowcontrol.FlowKey,
 	logger logr.Logger,
 	onStatsDelta propagateStatsDeltaFunc,
 	isDraining func() bool,
@@ -117,7 +116,7 @@ func (mq *managedQueue) FlowQueueAccessor() flowcontrol.FlowQueueAccessor {
 
 // Add performs an atomic check on the parent shard's lifecycle state before adding the item to the underlying queue.
 // This is the critical enforcement point that prevents new requests from entering a draining shard.
-func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
+func (mq *managedQueue) Add(item flowcontrol.QueueItemAccessor) error {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
@@ -132,7 +131,7 @@ func (mq *managedQueue) Add(item types.QueueItemAccessor) error {
 }
 
 // Remove wraps the underlying SafeQueue.Remove and updates statistics.
-func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
+func (mq *managedQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
@@ -146,7 +145,7 @@ func (mq *managedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAcc
 }
 
 // Cleanup wraps the underlying SafeQueue.Cleanup and updates statistics.
-func (mq *managedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
+func (mq *managedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
@@ -160,7 +159,7 @@ func (mq *managedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.Que
 }
 
 // Drain wraps the underlying SafeQueue.Drain and updates statistics.
-func (mq *managedQueue) Drain() []types.QueueItemAccessor {
+func (mq *managedQueue) Drain() []flowcontrol.QueueItemAccessor {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
@@ -202,7 +201,7 @@ func (mq *managedQueue) propagateStatsDeltaLocked(lenDelta, byteSizeDelta int64)
 
 // propagateStatsDeltaForRemovedItemsLocked calculates the total stat changes for a slice of removed items and applies
 // them. It must be called while holding the `managedQueue.mu` lock.
-func (mq *managedQueue) propagateStatsDeltaForRemovedItemsLocked(items []types.QueueItemAccessor) {
+func (mq *managedQueue) propagateStatsDeltaForRemovedItemsLocked(items []flowcontrol.QueueItemAccessor) {
 	var lenDelta int64
 	var byteSizeDelta int64
 	for _, item := range items {
@@ -232,11 +231,11 @@ func (a *flowQueueAccessor) Name() string { return a.mq.queue.Name() }
 func (a *flowQueueAccessor) Capabilities() []flowcontrol.QueueCapability {
 	return a.mq.queue.Capabilities()
 }
-func (a *flowQueueAccessor) PeekHead() types.QueueItemAccessor { return a.mq.queue.PeekHead() }
-func (a *flowQueueAccessor) PeekTail() types.QueueItemAccessor { return a.mq.queue.PeekTail() }
+func (a *flowQueueAccessor) PeekHead() flowcontrol.QueueItemAccessor { return a.mq.queue.PeekHead() }
+func (a *flowQueueAccessor) PeekTail() flowcontrol.QueueItemAccessor { return a.mq.queue.PeekTail() }
 
 // --- Read-only methods from the managedQueue wrapper ---
 func (a *flowQueueAccessor) Len() int                                   { return a.mq.Len() }
 func (a *flowQueueAccessor) ByteSize() uint64                           { return a.mq.ByteSize() }
 func (a *flowQueueAccessor) OrderingPolicy() flowcontrol.OrderingPolicy { return a.mq.policy }
-func (a *flowQueueAccessor) FlowKey() types.FlowKey                     { return a.mq.key }
+func (a *flowQueueAccessor) FlowKey() flowcontrol.FlowKey               { return a.mq.key }

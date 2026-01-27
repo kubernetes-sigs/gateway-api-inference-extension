@@ -334,7 +334,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 func (sp *ShardProcessor) selectItem(
 	ctx context.Context,
 	flowGroup flowcontrol.PriorityBandAccessor,
-) (types.QueueItemAccessor, error) {
+) (flowcontrol.QueueItemAccessor, error) {
 	fairnessP, err := sp.shard.FairnessPolicy(flowGroup.Priority())
 	if err != nil {
 		return nil, fmt.Errorf("could not get FairnessPolicy: %w", err)
@@ -352,7 +352,7 @@ func (sp *ShardProcessor) selectItem(
 }
 
 // dispatchItem handles the final steps of dispatching an item: removing it from the queue and finalizing its outcome.
-func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor) error {
+func (sp *ShardProcessor) dispatchItem(itemAcc flowcontrol.QueueItemAccessor) error {
 	req := itemAcc.OriginalRequest()
 	key := req.FlowKey()
 	managedQ, err := sp.shard.ManagedQueue(key)
@@ -400,7 +400,7 @@ func (sp *ShardProcessor) runCleanupSweep(ctx context.Context) {
 // memory.
 func (sp *ShardProcessor) sweepFinalizedItems() {
 	processFn := func(managedQ contracts.ManagedQueue, logger logr.Logger) {
-		predicate := func(itemAcc types.QueueItemAccessor) bool {
+		predicate := func(itemAcc flowcontrol.QueueItemAccessor) bool {
 			return itemAcc.(*FlowItem).FinalState() != nil
 		}
 		removedItems := managedQ.Cleanup(predicate)

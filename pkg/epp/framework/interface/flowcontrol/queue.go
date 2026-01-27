@@ -16,10 +16,6 @@ limitations under the License.
 
 package flowcontrol
 
-import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-)
-
 // QueueCapability defines a functional capability that a SafeQueue implementation can provide.
 // These capabilities allow policies to declare their operational requirements, ensuring that a policy is always paired
 // with a compatible queue.
@@ -53,17 +49,17 @@ type QueueInspectionMethods interface {
 	// PeekHead returns the item at the "head" of the queue (the item with the highest priority according to the queue's
 	// ordering) without removing it.
 	// Returns nil if the queue is empty.
-	PeekHead() types.QueueItemAccessor
+	PeekHead() QueueItemAccessor
 
 	// PeekTail returns the item at the "tail" of the queue (the item with the lowest priority according to the queue's
 	// ordering) without removing it.
 	// Returns nil if the queue is empty.
-	PeekTail() types.QueueItemAccessor
+	PeekTail() QueueItemAccessor
 }
 
 // PredicateFunc defines a function that returns true if a given item matches a certain condition.
 // It is used by SafeQueue.Cleanup to filter items.
-type PredicateFunc func(item types.QueueItemAccessor) bool
+type PredicateFunc func(item QueueItemAccessor) bool
 
 // SafeQueue defines the contract for a single, concurrent-safe queue implementation.
 // This interface is designed for in-memory, synchronous flow control. Implementations are expected to be unbounded;
@@ -72,24 +68,24 @@ type PredicateFunc func(item types.QueueItemAccessor) bool
 type SafeQueue interface {
 	QueueInspectionMethods
 
-	// Add enqueues an item. It must associate a new, unique types.QueueItemHandle with the item by calling
+	// Add enqueues an item. It must associate a new, unique QueueItemHandle with the item by calling
 	// item.SetHandle().
 	// Contract: The caller MUST NOT provide a nil item.
-	Add(item types.QueueItemAccessor)
+	Add(item QueueItemAccessor)
 
 	// Remove atomically finds and removes the item identified by the given handle.
 	// On success, implementations MUST invalidate the provided handle by calling handle.Invalidate().
 	// Returns the removed item.
 	// Returns ErrInvalidQueueItemHandle if the handle is invalid.
 	// Returns ErrQueueItemNotFound if the handle is valid but the item is not in the queue.
-	Remove(handle types.QueueItemHandle) (removedItem types.QueueItemAccessor, err error)
+	Remove(handle QueueItemHandle) (removedItem QueueItemAccessor, err error)
 
 	// Cleanup iterates through the queue and atomically removes all items for which the predicate returns true, returning
 	// them in a slice.
 	// The handle for each removed item MUST be invalidated.
-	Cleanup(predicate PredicateFunc) (cleanedItems []types.QueueItemAccessor)
+	Cleanup(predicate PredicateFunc) (cleanedItems []QueueItemAccessor)
 
 	// Drain atomically removes all items from the queue and returns them in a slice.
 	// The handle for all removed items MUST be invalidated. The queue MUST be empty after this operation.
-	Drain() (drainedItems []types.QueueItemAccessor)
+	Drain() (drainedItems []QueueItemAccessor)
 }

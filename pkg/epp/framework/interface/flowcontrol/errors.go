@@ -20,19 +20,18 @@ import (
 	"errors"
 )
 
-// `SafeQueue` Errors
+// SafeQueue Errors
 //
-// These errors relate to operations directly on a `SafeQueue` implementation. They are returned by `SafeQueue` methods
-// and might be handled or wrapped by the `contracts.FlowRegistry`'s `contracts.ManagedQueue` or the
-// `controller.FlowController`.
+// These errors relate to operations directly on a SafeQueue implementation. They are returned by SafeQueue methods and
+// might be handled or wrapped by the FlowRegistry's ManagedQueue or the FlowController.
 var (
-	// ErrInvalidQueueItemHandle indicates that a `types.QueueItemHandle` provided to a `SafeQueue` operation (e.g.,
-	// `SafeQueue.Remove()`) is not valid for that queue, has been invalidated, or does not correspond to an actual item
-	// in the queue.
+	// ErrInvalidQueueItemHandle indicates that a QueueItemHandle provided to a SafeQueue operation (e.g.,
+	// SafeQueue.Remove()) is not valid for that queue, has been invalidated, or does not correspond to an actual item in
+	// the queue.
 	ErrInvalidQueueItemHandle = errors.New("invalid queue item handle")
 
-	// ErrQueueItemNotFound indicates that a `SafeQueue.Remove(handle)` operation did not find an item matching the
-	// provided, valid `types.QueueItemHandle`. This can occur if the item was removed by a concurrent operation.
+	// ErrQueueItemNotFound indicates that a SafeQueue.Remove(handle) operation did not find an item matching the
+	// provided, valid QueueItemHandle. This can occur if the item was removed by a concurrent operation.
 	ErrQueueItemNotFound = errors.New("queue item not found for the given handle")
 )
 

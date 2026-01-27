@@ -28,6 +28,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	fctypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -43,7 +44,7 @@ type mockFlowController struct {
 
 func (m *mockFlowController) EnqueueAndWait(
 	_ context.Context,
-	_ fctypes.FlowControlRequest,
+	_ flowcontrol.FlowControlRequest,
 ) (fctypes.QueueOutcome, error) {
 	m.called = true
 	return m.outcome, m.err
@@ -147,7 +148,7 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 		fairnessID      string
 		priority        int
 		requestByteSize uint64
-		expectFlowKey   fctypes.FlowKey
+		expectFlowKey   flowcontrol.FlowKey
 	}{
 		{
 			name:            "simple",
@@ -155,7 +156,7 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 			fairnessID:      "flow-1",
 			priority:        10,
 			requestByteSize: 1024,
-			expectFlowKey:   fctypes.FlowKey{ID: "flow-1", Priority: 10},
+			expectFlowKey:   flowcontrol.FlowKey{ID: "flow-1", Priority: 10},
 		},
 	}
 
