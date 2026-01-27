@@ -19,6 +19,7 @@ package scorer
 import (
 	"context"
 	"encoding/json"
+	"math"
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -27,26 +28,45 @@ import (
 
 const (
 	KvCacheUtilizationScorerType = "kv-cache-utilization-scorer"
+	// normalizedKVCacheUtilizationTolerance is the epsilon used for floating point comparisons
+	// Only NormalizeScore is enabled, checking if max and min KV cache utilization(0.0 to 1.0) are effectively equal.
+	normalizedKVCacheUtilizationTolerance = 1e-5
 )
+
+// Config defines the configuration arguments for KVCacheUtilizationScorer.
+type Config struct {
+	// NormalizeScore indicates whether to normalize scores against other candidates.
+	// If true, the score will be calculated as (max - current) / (max - min).
+	// If false, the score will be calculated as (1 - current).
+	NormalizeScore bool `json:"normalizeScore,omitempty"`
+}
 
 // compile-time type assertion
 var _ framework.Scorer = &KVCacheUtilizationScorer{}
 
 // KvCacheUtilizationScorerFactory defines the factory function for KVCacheUtilizationScorer.
-func KvCacheUtilizationScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	return NewKVCacheUtilizationScorer().WithName(name), nil
+func KvCacheUtilizationScorerFactory(name string, args json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	config := &Config{NormalizeScore: false}
+	if args != nil {
+		if err := json.Unmarshal(args, config); err != nil {
+			return nil, err
+		}
+	}
+	return NewKVCacheUtilizationScorer(config.NormalizeScore).WithName(name), nil
 }
 
 // NewKVCacheUtilizationScorer initializes a new KVCacheUtilizationScorer and returns its pointer.
-func NewKVCacheUtilizationScorer() *KVCacheUtilizationScorer {
+func NewKVCacheUtilizationScorer(normalizeScore bool) *KVCacheUtilizationScorer {
 	return &KVCacheUtilizationScorer{
-		typedName: fwkplugin.TypedName{Type: KvCacheUtilizationScorerType, Name: KvCacheUtilizationScorerType},
+		typedName:      fwkplugin.TypedName{Type: KvCacheUtilizationScorerType, Name: KvCacheUtilizationScorerType},
+		normalizeScore: normalizeScore,
 	}
 }
 
 // KVCacheUtilizationScorer scores list of candidate endpoints based on KV cache utilization.
 type KVCacheUtilizationScorer struct {
-	typedName fwkplugin.TypedName
+	typedName      fwkplugin.TypedName
+	normalizeScore bool
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
@@ -75,8 +95,38 @@ func (s *KVCacheUtilizationScorer) WithName(name string) *KVCacheUtilizationScor
 // Score returns the scoring result for the given list of endpoints based on context.
 func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
-	for _, endpoint := range endpoints {
-		scores[endpoint] = 1 - endpoint.GetMetrics().KVCacheUsagePercent
+
+	if s.normalizeScore {
+		minKVCacheUsage := 1.0
+		maxKVCacheUsage := 0.0
+
+		for _, endpoint := range endpoints {
+			kvCacheUsage := endpoint.GetMetrics().KVCacheUsagePercent
+			if kvCacheUsage < minKVCacheUsage {
+				minKVCacheUsage = kvCacheUsage
+			}
+			if kvCacheUsage > maxKVCacheUsage {
+				maxKVCacheUsage = kvCacheUsage
+			}
+		}
+
+		// endpointScoreFunc calculates the score based on the KV cache usage of each endpoint.
+		// Higher KV cache usage gets a lower score.
+		endpointScoreFunc := func(endpoint framework.Endpoint) float64 {
+			if math.Abs(maxKVCacheUsage-minKVCacheUsage) < normalizedKVCacheUtilizationTolerance {
+				// If all endpoints have roughly the same KV cache usage, return a neutral score
+				return 1.0
+			}
+			return (maxKVCacheUsage - endpoint.GetMetrics().KVCacheUsagePercent) / (maxKVCacheUsage - minKVCacheUsage)
+		}
+
+		for _, endpoint := range endpoints {
+			scores[endpoint] = endpointScoreFunc(endpoint)
+		}
+	} else {
+		for _, endpoint := range endpoints {
+			scores[endpoint] = 1 - endpoint.GetMetrics().KVCacheUsagePercent
+		}
 	}
 	return scores
 }

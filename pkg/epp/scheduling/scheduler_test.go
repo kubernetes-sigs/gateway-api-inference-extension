@@ -37,7 +37,7 @@ import (
 
 // Tests the default scheduler configuration and expected behavior.
 func TestSchedule(t *testing.T) {
-	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
+	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer(false)
 	queueingScorer := scorer.NewQueueScorer()
 	prefixCacheScorer, err := prefix.New(context.Background(), prefix.DefaultConfig)
 	assert.NoError(t, err)

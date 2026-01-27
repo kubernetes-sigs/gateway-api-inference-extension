@@ -197,7 +197,7 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 
 	defaultProfile := framework.NewSchedulerProfile().
 		WithScorers(
-			framework.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(), 1),
+			framework.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(false), 1),
 			framework.NewWeightedScorer(scorer.NewQueueScorer(), 1),
 			framework.NewWeightedScorer(prefixPlugin, 1),
 			framework.NewWeightedScorer(scorer.NewLoraAffinityScorer(), 1),
