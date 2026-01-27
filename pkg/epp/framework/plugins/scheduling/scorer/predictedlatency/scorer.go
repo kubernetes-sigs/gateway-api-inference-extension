@@ -39,6 +39,7 @@ import (
 type PredictedLatency struct {
 	typedName           plugin.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
+	requestBuilder      PredictionRequestBuilder
 	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
 	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx]
 	headroomStrategy    headroomStrategy
@@ -66,6 +67,11 @@ type Config struct {
 	ContextTTL                time.Duration `json:"contextTTL,omitempty"`
 	SelectionMode             string        `json:"selectionMode,omitempty"`
 	StreamingMode             bool          `json:"streamingMode,omitempty"`
+
+	// RequestBuilder allows customization of prediction and training request construction.
+	// This field is not serialized and must be set programmatically.
+	// If nil, defaults to DefaultPredictionRequestBuilder.
+	RequestBuilder PredictionRequestBuilder `json:"-"`
 }
 
 var DefaultConfig = Config{
@@ -95,6 +101,11 @@ func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle 
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal config for PredictedLatency: %w", err)
 		}
+	}
+
+	// Use provided builder or default to DefaultPredictionRequestBuilder
+	if parameters.RequestBuilder == nil {
+		parameters.RequestBuilder = &DefaultPredictionRequestBuilder{}
 	}
 
 	if err := parameters.validate(); err != nil {
@@ -159,9 +170,16 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		strategy = headroomStrategyLeast
 	}
 
+	// Ensure requestBuilder is set
+	requestBuilder := config.RequestBuilder
+	if requestBuilder == nil {
+		requestBuilder = &DefaultPredictionRequestBuilder{}
+	}
+
 	predictedLatency := &PredictedLatency{
 		typedName:           plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
 		latencypredictor:    predictor,
+		requestBuilder:      requestBuilder,
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		headroomStrategy:    strategy,
 		config:              config,
