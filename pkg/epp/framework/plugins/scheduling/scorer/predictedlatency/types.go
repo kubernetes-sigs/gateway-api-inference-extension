@@ -17,7 +17,15 @@ limitations under the License.
 // Package requestcontrol contains helpers to decouple latency-predictor logic.
 package predictedlatency
 
-import schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+import (
+	"context"
+	"strings"
+	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
+)
 
 type headroomStrategy string
 
@@ -55,3 +63,81 @@ const (
 	podSelectionLinear podSelectionMode = "linear" // weighted-random (current behavior)
 	podSelectionMax    podSelectionMode = "max"    // pick argmax weight
 )
+
+// PredictionRequestBuilder constructs prediction and training requests with optional customization.
+// This interface allows different implementations to customize how prediction requests are built,
+// for example to add pod type information for disaggregated serving scenarios.
+type PredictionRequestBuilder interface {
+	// BuildPredictionRequest constructs a prediction request for a pod
+	BuildPredictionRequest(
+		ctx context.Context,
+		pod schedulingtypes.Endpoint,
+		metrics *datalayer.Metrics,
+		prompt string,
+		generatedTokens int,
+		prefixCacheScore float64,
+	) latencypredictor.PredictionRequest
+
+	// BuildTrainingEntry constructs a training entry for a pod
+	BuildTrainingEntry(
+		ctx context.Context,
+		pod schedulingtypes.Endpoint,
+		metrics *datalayer.Metrics,
+		prompt string,
+		actualTTFT float64,
+		actualTPOT float64,
+		timestamp time.Time,
+		generatedTokens int,
+		prefixCacheScore float64,
+	) latencypredictor.TrainingEntry
+}
+
+// DefaultPredictionRequestBuilder provides the default monolithic behavior for building prediction requests.
+// This implementation leaves PodType empty, suitable for monolithic (non-disaggregated) deployments.
+type DefaultPredictionRequestBuilder struct{}
+
+// BuildPredictionRequest constructs a standard prediction request without pod type information
+func (b *DefaultPredictionRequestBuilder) BuildPredictionRequest(
+	ctx context.Context,
+	pod schedulingtypes.Endpoint,
+	metrics *datalayer.Metrics,
+	prompt string,
+	generatedTokens int,
+	prefixCacheScore float64,
+) latencypredictor.PredictionRequest {
+	return latencypredictor.PredictionRequest{
+		KVCachePercentage:  metrics.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(prompt)), // Simple word-based tokenization
+		NumRequestWaiting:  metrics.WaitingQueueSize,
+		NumRequestRunning:  metrics.RunningRequestsSize,
+		NumTokensGenerated: generatedTokens,
+		PrefixCacheScore:   prefixCacheScore,
+		PodType:            "", // Empty for monolithic deployments
+	}
+}
+
+// BuildTrainingEntry constructs a standard training entry without pod type information
+func (b *DefaultPredictionRequestBuilder) BuildTrainingEntry(
+	ctx context.Context,
+	pod schedulingtypes.Endpoint,
+	metrics *datalayer.Metrics,
+	prompt string,
+	actualTTFT float64,
+	actualTPOT float64,
+	timestamp time.Time,
+	generatedTokens int,
+	prefixCacheScore float64,
+) latencypredictor.TrainingEntry {
+	return latencypredictor.TrainingEntry{
+		KVCachePercentage:  metrics.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(prompt)), // Simple word-based tokenization
+		ActualTTFT:         actualTTFT,
+		ActualTPOT:         actualTPOT,
+		Timestamp:          timestamp,
+		NumRequestWaiting:  metrics.WaitingQueueSize,
+		NumRequestRunning:  metrics.RunningRequestsSize,
+		NumTokensGenerated: generatedTokens,
+		PrefixCacheScore:   prefixCacheScore,
+		PodType:            "", // Empty for monolithic deployments
+	}
+}

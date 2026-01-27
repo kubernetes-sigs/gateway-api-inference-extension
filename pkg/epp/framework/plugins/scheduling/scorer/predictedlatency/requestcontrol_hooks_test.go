@@ -65,6 +65,7 @@ func createTestRouter() *PredictedLatency {
 		),
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		latencypredictor:    nil,
+		requestBuilder:      &DefaultPredictionRequestBuilder{},
 		config:              DefaultConfig,
 	}
 }

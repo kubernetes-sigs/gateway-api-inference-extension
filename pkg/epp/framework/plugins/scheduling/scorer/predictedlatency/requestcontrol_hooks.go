@@ -99,6 +99,57 @@ func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *sche
 	s.sloContextStore.Delete(id)
 }
 
+// GetSchedulingResultForRequest returns the scheduling result for a request.
+// This is exposed to allow wrapper implementations (e.g., P/D-aware routers)
+// to access scheduling information for custom hook logic.
+func (s *PredictedLatency) GetSchedulingResultForRequest(request *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
+	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return predictedLatencyCtx.schedulingResult, nil
+}
+
+// GetLastSeenMetricsForRequest returns the last seen metrics for all profiles in a request.
+// This is exposed to allow wrapper implementations to access metrics for custom training logic.
+func (s *PredictedLatency) GetLastSeenMetricsForRequest(request *schedulingtypes.LLMRequest) (map[string]*fwkdl.Metrics, error) {
+	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return predictedLatencyCtx.lastSeenMetrics, nil
+}
+
+// GetPrefixCacheScoresForRequest returns the prefix cache scores for all pods in a request.
+func (s *PredictedLatency) GetPrefixCacheScoresForRequest(request *schedulingtypes.LLMRequest) (map[string]float64, error) {
+	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return predictedLatencyCtx.prefixCacheScoresForEndpoints, nil
+}
+
+// GetRequestPrompt returns the prompt for a request.
+func (s *PredictedLatency) GetRequestPrompt(request *schedulingtypes.LLMRequest) (string, error) {
+	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		return "", err
+	}
+	return predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt, nil
+}
+
+// GetRequestBuilder returns the PredictionRequestBuilder used by this router.
+// This allows wrappers to use the same builder for consistency.
+func (s *PredictedLatency) GetRequestBuilder() PredictionRequestBuilder {
+	return s.requestBuilder
+}
+
+// GetLatencyPredictor returns the latency predictor client.
+// This allows wrappers to record training data using the same predictor.
+func (s *PredictedLatency) GetLatencyPredictor() interface{} {
+	return s.latencypredictor
+}
+
 // --- RequestControl Hooks ---
 
 func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult) {
@@ -187,10 +238,16 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 		return
 	}
 
+	// Create a schedulingtypes.Endpoint wrapper for the metadata
+	podWrapper := fwkdl.NewEndpoint(
+		targetMetadata,
+		predictedLatencyCtx.lastSeenMetrics[predictedLatencyCtx.schedulingResult.PrimaryProfileName],
+	)
+
 	if predictedLatencyCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
@@ -214,7 +271,12 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	}
 	now := time.Now()
 	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		// Create a schedulingtypes.Endpoint wrapper for non-streaming responses
+		podWrapper := fwkdl.NewEndpoint(
+			targetMetadata,
+			predictedLatencyCtx.lastSeenMetrics[predictedLatencyCtx.schedulingResult.PrimaryProfileName],
+		)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if predictedLatencyCtx.ttft > 0 {
