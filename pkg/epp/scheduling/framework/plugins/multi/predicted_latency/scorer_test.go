@@ -28,7 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -103,23 +103,22 @@ func (m *mockPredictor) GetServerStatus(ctx context.Context) (*latencypredictor.
 	return &latencypredictor.ServerStatusResponse{}, nil
 }
 
-func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, waitingQueueSize int) schedulingtypes.Endpoint {
-	return &schedulingtypes.PodMetrics{
-		EndpointMetadata: &fwkdl.EndpointMetadata{
-			NamespacedName: types.NamespacedName{
-				Name:      name,
-				Namespace: "default",
-			},
-		},
-		Metrics: &datalayer.Metrics{
+func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, waitingQueueSize int) fwksched.Endpoint {
+	return fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
+		NamespacedName: types.NamespacedName{
+			Name:      name,
+			Namespace: "default",
+		}},
+		&datalayer.Metrics{
 			KVCacheUsagePercent: kvCacheUsage,
 			RunningRequestsSize: runningRequestsSize,
 			WaitingQueueSize:    waitingQueueSize,
 		},
-	}
+		nil,
+	)
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *schedulingtypes.LLMRequest {
+func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
 	headers := make(map[string]string)
 	headers[requtil.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -129,10 +128,10 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *schedulingtyp
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
 
-	return &schedulingtypes.LLMRequest{
+	return &fwksched.LLMRequest{
 		Headers: headers,
-		Body: &schedulingtypes.LLMRequestBody{
-			Completions: &schedulingtypes.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "test prompt",
 			},
 		},
@@ -141,7 +140,7 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *schedulingtyp
 
 // Add this helper function after the createTestLLMRequest function
 
-func setupPredictionContext(t *testing.T, router *PredictedLatency, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint, predictor *mockPredictor) {
+func setupPredictionContext(t *testing.T, router *PredictedLatency, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
 	ctx := context.Background()
 
 	// Create prediction context
@@ -156,13 +155,8 @@ func setupPredictionContext(t *testing.T, router *PredictedLatency, request *sch
 	if predictor != nil && predictor.err == nil {
 		predictions := make([]endpointPredictionResult, 0, len(endpoints))
 		for _, endpoint := range endpoints {
-			pm, ok := endpoint.(*schedulingtypes.PodMetrics)
-			if !ok {
-				t.Fatalf("Expected PodMetrics endpoint")
-			}
-
 			predReq := latencypredictor.PredictionRequest{
-				KVCachePercentage: pm.KVCacheUsagePercent,
+				KVCachePercentage: endpoint.GetMetrics().KVCacheUsagePercent,
 			}
 
 			predResp, err := predictor.Predict(ctx, predReq)
@@ -189,8 +183,8 @@ func TestPredictedLatency_Score(t *testing.T) {
 		name           string
 		predictor      *mockPredictor
 		strategy       headroomStrategy
-		request        *schedulingtypes.LLMRequest
-		endpoints      []schedulingtypes.Endpoint
+		request        *fwksched.LLMRequest
+		endpoints      []fwksched.Endpoint
 		expectedScores map[string]float64 // Map of pod name to expected score
 		expectNil      bool
 	}{
@@ -199,7 +193,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			predictor: nil,
 			strategy:  headroomStrategyLeast,
 			request:   createTestLLMRequest("test", 1.0, 0.05),
-			endpoints: []schedulingtypes.Endpoint{
+			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 			},
 			expectNil: true,
@@ -215,7 +209,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			endpoints: []schedulingtypes.Endpoint{
+			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1), // 50% KV cache
 				createTestEndpoint("pod2", 0.6, 3, 2), // 60% KV cache
 				createTestEndpoint("pod3", 0.3, 1, 0), // 30% KV cache
@@ -235,7 +229,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			endpoints: []schedulingtypes.Endpoint{
+			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.8, 5, 3), // 80% KV cache, high load
 				createTestEndpoint("pod2", 0.9, 6, 4), // 90% KV cache, very high load
 			},
@@ -252,7 +246,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			endpoints: []schedulingtypes.Endpoint{
+			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod-positive", 0.3, 1, 0), // Low KV cache, positive headroom
 				createTestEndpoint("pod-negative", 0.9, 6, 4), // High KV cache, negative headroom
 			},
@@ -266,7 +260,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			},
 			strategy: headroomStrategyLeast,
 			request:  createTestLLMRequest("test", 1.0, 0.05),
-			endpoints: []schedulingtypes.Endpoint{
+			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 				createTestEndpoint("pod2", 0.6, 3, 2),
 			},
@@ -280,7 +274,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			predictor: &mockPredictor{},
 			strategy:  headroomStrategyLeast,
 			request:   createTestLLMRequest("test", 1.0, 0.05),
-			endpoints: []schedulingtypes.Endpoint{},
+			endpoints: []fwksched.Endpoint{},
 			// Should return empty scores map
 			expectedScores: map[string]float64{},
 		},
@@ -306,7 +300,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 				setupPredictionContext(t, router, tt.request, tt.endpoints, tt.predictor)
 			}
 
-			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), tt.request, tt.endpoints)
+			scores := router.Score(context.Background(), fwksched.NewCycleState(), tt.request, tt.endpoints)
 
 			if tt.expectNil {
 				assert.Nil(t, scores, "Expected nil scores")
@@ -383,7 +377,7 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 			router := NewPredictedLatency(cfg, predictor)
 
 			request := createTestLLMRequest("test", 1.0, 0.05)
-			endpoints := []schedulingtypes.Endpoint{
+			endpoints := []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 				createTestEndpoint("pod2", 0.6, 3, 2),
 				createTestEndpoint("pod3", 0.3, 1, 0),
@@ -392,7 +386,7 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 			// ADD THIS: Setup prediction context before scoring
 			setupPredictionContext(t, router, request, endpoints, predictor)
 
-			scores := router.Score(context.Background(), schedulingtypes.NewCycleState(), request, endpoints)
+			scores := router.Score(context.Background(), fwksched.NewCycleState(), request, endpoints)
 
 			assert.NotNil(t, scores, "Expected non-nil scores for strategy %s", tt.strategy)
 
@@ -435,17 +429,17 @@ func TestPredictedLatency_WithName(t *testing.T) {
 func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupRequests func(*PredictedLatency, schedulingtypes.Endpoint)
+		setupRequests func(*PredictedLatency, fwksched.Endpoint)
 		expectedCount int
 	}{
 		{
 			name:          "No running requests",
-			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {},
+			setupRequests: func(r *PredictedLatency, p fwksched.Endpoint) {},
 			expectedCount: 0,
 		},
 		{
 			name: "One running request",
-			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, p fwksched.Endpoint) {
 				podName := types.NamespacedName{
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
@@ -457,7 +451,7 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 		},
 		{
 			name: "Multiple running requests",
-			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, p fwksched.Endpoint) {
 				endpointName := types.NamespacedName{
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
@@ -490,17 +484,17 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupRequests func(*PredictedLatency, schedulingtypes.Endpoint)
+		setupRequests func(*PredictedLatency, fwksched.Endpoint)
 		expectedSLO   float64
 	}{
 		{
 			name:          "No running requests",
-			setupRequests: func(r *PredictedLatency, p schedulingtypes.Endpoint) {},
+			setupRequests: func(r *PredictedLatency, p fwksched.Endpoint) {},
 			expectedSLO:   0.0,
 		},
 		{
 			name: "One running request",
-			setupRequests: func(r *PredictedLatency, e schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, e fwksched.Endpoint) {
 				endpointName := types.NamespacedName{
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
@@ -512,7 +506,7 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 		},
 		{
 			name: "Multiple running requests - should return minimum",
-			setupRequests: func(r *PredictedLatency, e schedulingtypes.Endpoint) {
+			setupRequests: func(r *PredictedLatency, e fwksched.Endpoint) {
 				endpointName := types.NamespacedName{
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
@@ -546,12 +540,12 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 func TestPredictedLatency_GetPrefixCacheScoreForPod(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupState    func(*schedulingtypes.CycleState)
+		setupState    func(*fwksched.CycleState)
 		expectedScore float64
 	}{
 		{
 			name:          "No prefix cache state",
-			setupState:    func(s *schedulingtypes.CycleState) {},
+			setupState:    func(s *fwksched.CycleState) {},
 			expectedScore: 0.0,
 		},
 	}
@@ -563,7 +557,7 @@ func TestPredictedLatency_GetPrefixCacheScoreForPod(t *testing.T) {
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
 			router := NewPredictedLatency(cfg, predictor)
 
-			state := schedulingtypes.NewCycleState()
+			state := fwksched.NewCycleState()
 			tt.setupState(state)
 
 			pod := createTestEndpoint("test-pod", 0.5, 2, 1)

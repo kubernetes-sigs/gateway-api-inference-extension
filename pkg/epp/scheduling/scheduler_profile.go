@@ -26,6 +26,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
@@ -33,7 +34,7 @@ import (
 // NewSchedulerProfile creates a new SchedulerProfile object and returns its pointer.
 func NewSchedulerProfile() *SchedulerProfile {
 	return &SchedulerProfile{
-		filters: []Filter{},
+		filters: []fwksched.Filter{},
 		scorers: []*WeightedScorer{},
 		// picker remains nil since profile doesn't support multiple pickers
 	}
@@ -41,14 +42,14 @@ func NewSchedulerProfile() *SchedulerProfile {
 
 // SchedulerProfile provides a profile configuration for the scheduler which influence routing decisions.
 type SchedulerProfile struct {
-	filters []Filter
+	filters []fwksched.Filter
 	scorers []*WeightedScorer
-	picker  Picker
+	picker  fwksched.Picker
 }
 
 // WithFilters sets the given filter plugins as the Filter plugins.
 // if the SchedulerProfile has Filter plugins, this call replaces the existing plugins with the given ones.
-func (p *SchedulerProfile) WithFilters(filters ...Filter) *SchedulerProfile {
+func (p *SchedulerProfile) WithFilters(filters ...fwksched.Filter) *SchedulerProfile {
 	p.filters = filters
 	return p
 }
@@ -62,7 +63,7 @@ func (p *SchedulerProfile) WithScorers(scorers ...*WeightedScorer) *SchedulerPro
 
 // WithPicker sets the given picker plugins as the Picker plugin.
 // if the SchedulerProfile has Picker plugin, this call replaces the existing plugin with the given one.
-func (p *SchedulerProfile) WithPicker(picker Picker) *SchedulerProfile {
+func (p *SchedulerProfile) WithPicker(picker fwksched.Picker) *SchedulerProfile {
 	p.picker = picker
 	return p
 }
@@ -77,13 +78,13 @@ func (p *SchedulerProfile) AddPlugins(pluginObjects ...plugin.Plugin) error {
 		if weightedScorer, ok := plugin.(*WeightedScorer); ok {
 			p.scorers = append(p.scorers, weightedScorer)
 			plugin = weightedScorer.Scorer // if we got WeightedScorer, unwrap the plugin
-		} else if scorer, ok := plugin.(Scorer); ok { // if we got a Scorer instead of WeightedScorer that's an error.
+		} else if scorer, ok := plugin.(fwksched.Scorer); ok { // if we got a Scorer instead of WeightedScorer that's an error.
 			return fmt.Errorf("failed to register scorer '%s' without a weight. follow function documentation to register a scorer", scorer.TypedName())
 		}
-		if filter, ok := plugin.(Filter); ok {
+		if filter, ok := plugin.(fwksched.Filter); ok {
 			p.filters = append(p.filters, filter)
 		}
-		if picker, ok := plugin.(Picker); ok {
+		if picker, ok := plugin.(fwksched.Picker); ok {
 			if p.picker != nil {
 				return fmt.Errorf("failed to set '%s' as picker, already have a registered picker plugin '%s'", picker.TypedName(), p.picker.TypedName())
 			}
@@ -113,7 +114,7 @@ func (p *SchedulerProfile) String() string {
 
 // Run runs a SchedulerProfile. It invokes all the SchedulerProfile plugins for the given request in this
 // order - Filters, Scorers, Picker. After completing all, it returns the result.
-func (p *SchedulerProfile) Run(ctx context.Context, request *LLMRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error) {
+func (p *SchedulerProfile) Run(ctx context.Context, request *fwksched.LLMRequest, cycleState *fwksched.CycleState, candidateEndpoints []fwksched.Endpoint) (*fwksched.ProfileRunResult, error) {
 	endpoints := p.runFilterPlugins(ctx, request, cycleState, candidateEndpoints)
 	if len(endpoints) == 0 {
 		return nil, errutil.Error{Code: errutil.Internal, Msg: "no endpoints available for the given request"}
@@ -126,7 +127,7 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *LLMRequest, cycleSt
 	return result, nil
 }
 
-func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *LLMRequest, cycleState *CycleState, endpoints []Endpoint) []Endpoint {
+func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *fwksched.LLMRequest, cycleState *fwksched.CycleState, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
 	logger := log.FromContext(ctx)
 	filteredEndpoints := endpoints
 	logger.V(logutil.DEBUG).Info("Before running filter plugins", "endpoints", filteredEndpoints)
@@ -146,11 +147,11 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *LLMReq
 	return filteredEndpoints
 }
 
-func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *LLMRequest, cycleState *CycleState, endpoints []Endpoint) map[Endpoint]float64 {
+func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *fwksched.LLMRequest, cycleState *fwksched.CycleState, endpoints []fwksched.Endpoint) map[fwksched.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.DEBUG).Info("Before running scorer plugins", "endpoints", endpoints)
 
-	weightedScorePerEndpoint := make(map[Endpoint]float64, len(endpoints))
+	weightedScorePerEndpoint := make(map[fwksched.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		weightedScorePerEndpoint[endpoint] = float64(0) // initialize weighted score per endpoint with 0 value
 	}
@@ -171,12 +172,12 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *LLMReq
 	return weightedScorePerEndpoint
 }
 
-func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *CycleState, weightedScorePerEndpoint map[Endpoint]float64) *ProfileRunResult {
+func (p *SchedulerProfile) runPickerPlugin(ctx context.Context, cycleState *fwksched.CycleState, weightedScorePerEndpoint map[fwksched.Endpoint]float64) *fwksched.ProfileRunResult {
 	logger := log.FromContext(ctx)
-	scoredEndpoints := make([]*ScoredEndpoint, len(weightedScorePerEndpoint))
+	scoredEndpoints := make([]*fwksched.ScoredEndpoint, len(weightedScorePerEndpoint))
 	i := 0
 	for endpoint, score := range weightedScorePerEndpoint {
-		scoredEndpoints[i] = &ScoredEndpoint{Endpoint: endpoint, Score: score}
+		scoredEndpoints[i] = &fwksched.ScoredEndpoint{Endpoint: endpoint, Score: score}
 		i++
 	}
 	logger.V(logutil.VERBOSE).Info("Running picker plugin", "plugin", p.picker.TypedName())

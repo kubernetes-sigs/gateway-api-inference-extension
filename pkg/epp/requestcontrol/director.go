@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -61,7 +61,7 @@ type Datastore interface {
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *schedulingtypes.LLMRequest, candidatePods []schedulingtypes.Endpoint) (result *schedulingtypes.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidatePods []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
 }
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
@@ -151,7 +151,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
-	reqCtx.SchedulingRequest = &schedulingtypes.LLMRequest{
+	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		TargetModel: reqCtx.TargetModelName,
 		Body:        requestBody,
@@ -243,7 +243,7 @@ func (d *Director) selectWeightedModel(models []v1alpha2.TargetModel) string {
 
 // prepareRequest populates the RequestContext and calls the registered PreRequest plugins
 // for allowing plugging customized logic based on the scheduling result.
-func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *schedulingtypes.SchedulingResult) (*handlers.RequestContext, error) {
+func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *fwksched.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	if result == nil || len(result.ProfileResults) == 0 {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
@@ -270,14 +270,10 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	return reqCtx, nil
 }
 
-func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []schedulingtypes.Endpoint {
-	pm := make([]schedulingtypes.Endpoint, len(pods))
+func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []fwksched.Endpoint {
+	pm := make([]fwksched.Endpoint, len(pods))
 	for i, pod := range pods {
-		if pod.GetAttributes() != nil {
-			pm[i] = &schedulingtypes.PodMetrics{EndpointMetadata: pod.GetMetadata().Clone(), Metrics: pod.GetMetrics().Clone(), AttributeMap: pod.GetAttributes().Clone()}
-		} else {
-			pm[i] = &schedulingtypes.PodMetrics{EndpointMetadata: pod.GetMetadata().Clone(), Metrics: pod.GetMetrics().Clone(), AttributeMap: datalayer.NewAttributes()}
-		}
+		pm[i] = fwksched.NewEndpoint(pod.GetMetadata(), pod.GetMetrics(), pod.GetAttributes())
 	}
 
 	return pm
@@ -339,8 +335,8 @@ func (d *Director) GetRandomEndpoint() *fwkdl.EndpointMetadata {
 	return pod.GetMetadata()
 }
 
-func (d *Director) runPreRequestPlugins(ctx context.Context, request *schedulingtypes.LLMRequest,
-	schedulingResult *schedulingtypes.SchedulingResult) {
+func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.LLMRequest,
+	schedulingResult *fwksched.SchedulingResult) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
 		loggerDebug.Info("Running PreRequest plugin", "plugin", plugin.TypedName())
@@ -352,7 +348,7 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *scheduling
 }
 
 func (d *Director) runPrepareDataPlugins(ctx context.Context,
-	request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) error {
 	if len(d.requestControlPlugins.prepareDataPlugins) == 0 {
 		return nil
 	}
@@ -360,7 +356,7 @@ func (d *Director) runPrepareDataPlugins(ctx context.Context,
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
-	request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) bool {
+	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) bool {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.admissionPlugins {
 		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
@@ -373,7 +369,7 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 	return true
 }
 
-func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running ResponseReceived plugin", "plugin", plugin.TypedName())
@@ -384,7 +380,7 @@ func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *sche
 	}
 }
 
-func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
 		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())
@@ -395,7 +391,7 @@ func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *sch
 	}
 }
 
-func (d *Director) runResponseCompletePlugins(ctx context.Context, request *schedulingtypes.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseCompletePlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseCompletePlugins {
 		loggerDebug.Info("Running ResponseComplete plugin", "plugin", plugin.TypedName())

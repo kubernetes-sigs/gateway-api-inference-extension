@@ -51,7 +51,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
@@ -195,17 +195,19 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 	prefixPlugin, err := prefix.New(ctx, prefix.DefaultConfig)
 	require.NoError(t, err)
 
-	defaultProfile := framework.NewSchedulerProfile().
+	defaultProfile := scheduling.NewSchedulerProfile().
 		WithScorers(
-			framework.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(), 1),
-			framework.NewWeightedScorer(scorer.NewQueueScorer(), 1),
-			framework.NewWeightedScorer(prefixPlugin, 1),
-			framework.NewWeightedScorer(scorer.NewLoraAffinityScorer(), 1),
+			scheduling.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(), 1),
+			scheduling.NewWeightedScorer(scorer.NewQueueScorer(), 1),
+			scheduling.NewWeightedScorer(prefixPlugin, 1),
+			scheduling.NewWeightedScorer(scorer.NewLoraAffinityScorer(), 1),
 		).
 		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
 
 	profileHandler := profile.NewSingleProfileHandler()
-	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
+	profiles := make(map[string]fwksched.SchedulerProfile)
+	profiles["default"] = defaultProfile
+	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, profiles)
 
 	sdConfig := &utilizationdetector.Config{
 		QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,

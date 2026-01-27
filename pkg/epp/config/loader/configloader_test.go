@@ -440,8 +440,8 @@ type mockHandler struct{ mockPlugin }
 // compile-time type assertion
 var _ framework.ProfileHandler = &mockHandler{}
 
-func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.LLMRequest, map[string]*framework.SchedulerProfile,
-	map[string]*framework.ProfileRunResult) map[string]*framework.SchedulerProfile {
+func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.LLMRequest, map[string]framework.SchedulerProfile,
+	map[string]*framework.ProfileRunResult) map[string]framework.SchedulerProfile {
 	return nil
 }
 func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *framework.LLMRequest,

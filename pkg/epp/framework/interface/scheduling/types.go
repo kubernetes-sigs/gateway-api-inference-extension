@@ -17,9 +17,11 @@ limitations under the License.
 package scheduling
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
@@ -207,31 +209,53 @@ type Endpoint interface {
 	Keys() []string
 }
 
-type ScoredEndpoint struct {
-	Endpoint
-	Score float64
-}
-
-func (pm *PodMetrics) String() string {
-	if pm == nil {
+func (ep *endpoint) String() string {
+	if ep == nil {
 		return nilString
 	}
 
-	return fmt.Sprintf("%+v", *pm)
+	return fmt.Sprintf("%+v", *ep)
 }
 
-func (pm *PodMetrics) GetMetadata() *fwkdl.EndpointMetadata {
-	return pm.EndpointMetadata
+func (ep *endpoint) GetMetadata() *fwkdl.EndpointMetadata {
+	return ep.EndpointMetadata
 }
 
-func (pm *PodMetrics) GetMetrics() *datalayer.Metrics {
-	return pm.Metrics
+func (ep *endpoint) GetMetrics() *datalayer.Metrics {
+	return ep.Metrics
 }
 
-type PodMetrics struct {
+type endpoint struct {
 	*fwkdl.EndpointMetadata
 	*datalayer.Metrics
 	datalayer.AttributeMap
+}
+
+func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *datalayer.Metrics, attr datalayer.AttributeMap) Endpoint {
+	if attr == nil {
+		attr = datalayer.NewAttributes()
+	}
+
+	return &endpoint{
+		EndpointMetadata: meta.Clone(),
+		Metrics:          metrics.Clone(),
+		AttributeMap:     attr.Clone(),
+	}
+}
+
+func EndpointComparer(a, b Endpoint) bool {
+	a_ep := a.(*endpoint)
+	b_ep := b.(*endpoint)
+	return reflect.DeepEqual(a_ep, b_ep)
+}
+
+func ScoredEndpointComparer(a, b ScoredEndpoint) bool {
+	return a.Score == b.Score && EndpointComparer(a.Endpoint, b.Endpoint)
+}
+
+type ScoredEndpoint struct {
+	Endpoint
+	Score float64
 }
 
 // ProfileRunResult captures the profile run result.
@@ -245,7 +269,6 @@ type SchedulingResult struct {
 	PrimaryProfileName string
 }
 
-// Cloneable types support cloning of the value.
-type Cloneable interface {
-	Clone() Cloneable
+type SchedulerProfile interface {
+	Run(ctx context.Context, request *LLMRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error)
 }

@@ -52,7 +52,7 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 func (fpm *FakePodMetrics) UpdateMetadata(metadata *fwkdl.EndpointMetadata) {
 	fpm.Metadata = metadata
 }
-func (fpm *FakePodMetrics) GetAttributes() *datalayer.Attributes {
+func (fpm *FakePodMetrics) GetAttributes() datalayer.AttributeMap {
 	return fpm.Attributes
 }
 

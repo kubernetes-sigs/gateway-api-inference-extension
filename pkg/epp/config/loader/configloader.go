@@ -169,10 +169,10 @@ func buildSchedulerConfig(
 	handle fwkplugin.Handle,
 ) (*scheduling.SchedulerConfig, error) {
 
-	profiles := make(map[string]*framework.SchedulerProfile)
+	profiles := make(map[string]framework.SchedulerProfile)
 
 	for _, cfgProfile := range configProfiles {
-		fwProfile := framework.NewSchedulerProfile()
+		fwProfile := scheduling.NewSchedulerProfile()
 
 		for _, pluginRef := range cfgProfile.Plugins {
 			plugin := handle.Plugin(pluginRef.PluginRef)
@@ -188,7 +188,7 @@ func buildSchedulerConfig(
 				if pluginRef.Weight != nil {
 					weight = *pluginRef.Weight
 				}
-				plugin = framework.NewWeightedScorer(scorer, weight)
+				plugin = scheduling.NewWeightedScorer(scorer, weight)
 			}
 
 			if err := fwProfile.AddPlugins(plugin); err != nil {

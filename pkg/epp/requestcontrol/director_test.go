@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +45,7 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
@@ -262,37 +264,28 @@ func TestDirector_HandleRequest(t *testing.T) {
 			"testProfile": {
 				TargetEndpoints: []schedulingtypes.Endpoint{
 					&schedulingtypes.ScoredEndpoint{
-						Endpoint: &schedulingtypes.PodMetrics{
-							AttributeMap: datalayer.NewAttributes(),
-							EndpointMetadata: &fwkdl.EndpointMetadata{
-								Address:        "192.168.1.100",
-								Port:           "8000",
-								MetricsHost:    "192.168.1.100:8000",
-								NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
-							},
-						},
+						Endpoint: fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
+							Address:        "192.168.1.100",
+							Port:           "8000",
+							MetricsHost:    "192.168.1.100:8000",
+							NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
+						}, nil, nil),
 					},
 					&schedulingtypes.ScoredEndpoint{
-						Endpoint: &schedulingtypes.PodMetrics{
-							AttributeMap: datalayer.NewAttributes(),
-							EndpointMetadata: &fwkdl.EndpointMetadata{
-								Address:        "192.168.2.100",
-								Port:           "8000",
-								MetricsHost:    "192.168.2.100:8000",
-								NamespacedName: types.NamespacedName{Name: "pod2", Namespace: "default"},
-							},
-						},
+						Endpoint: fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
+							Address:        "192.168.2.100",
+							Port:           "8000",
+							MetricsHost:    "192.168.2.100:8000",
+							NamespacedName: types.NamespacedName{Name: "pod2", Namespace: "default"},
+						}, nil, nil),
 					},
 					&schedulingtypes.ScoredEndpoint{
-						Endpoint: &schedulingtypes.PodMetrics{
-							AttributeMap: datalayer.NewAttributes(),
-							EndpointMetadata: &fwkdl.EndpointMetadata{
-								Address:        "192.168.4.100",
-								Port:           "8000",
-								MetricsHost:    "192.168.4.100:8000",
-								NamespacedName: types.NamespacedName{Name: "pod4", Namespace: "default"},
-							},
-						},
+						Endpoint: fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
+							Address:        "192.168.4.100",
+							Port:           "8000",
+							MetricsHost:    "192.168.4.100:8000",
+							NamespacedName: types.NamespacedName{Name: "pod4", Namespace: "default"},
+						}, nil, nil),
 					},
 				},
 			},
@@ -702,7 +695,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 					assert.Equal(t, test.wantReqCtx.ObjectiveKey, returnedReqCtx.ObjectiveKey, "reqCtx.Model mismatch")
 					assert.Equal(t, test.wantReqCtx.TargetModelName, returnedReqCtx.TargetModelName,
 						"reqCtx.ResolvedTargetModel mismatch")
-					assert.Equal(t, test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, "reqCtx.TargetPod mismatch")
+					if diff := cmp.Diff(test.wantReqCtx.TargetPod, returnedReqCtx.TargetPod, cmpopts.EquateEmpty()); diff != "" {
+						t.Errorf("reqCtx.TargetPod mismatch (-want +got):\n%s", diff)
+					}
 					assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
 				}
 

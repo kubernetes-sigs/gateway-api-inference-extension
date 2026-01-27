@@ -24,21 +24,21 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestQueueScorer(t *testing.T) {
 	tests := []struct {
 		name                   string
-		endpoints              []types.Endpoint
+		endpoints              []fwksched.Endpoint
 		expectedScoresEndpoint map[int]float64 // Map of endpoint index to expected score
 	}{
 		{
 			name: "Different queue sizes",
-			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 10}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
+			endpoints: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 10}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 0}, nil),
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
@@ -48,9 +48,9 @@ func TestQueueScorer(t *testing.T) {
 		},
 		{
 			name: "Same queue sizes",
-			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 5}},
+			endpoints: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 5}, nil),
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
@@ -59,9 +59,9 @@ func TestQueueScorer(t *testing.T) {
 		},
 		{
 			name: "Zero queue sizes",
-			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{WaitingQueueSize: 0}},
+			endpoints: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 0}, nil),
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 1.0,
@@ -74,7 +74,7 @@ func TestQueueScorer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scores := scorer.Score(context.Background(), types.NewCycleState(), &types.LLMRequest{}, test.endpoints)
+			scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.LLMRequest{}, test.endpoints)
 
 			for i, endpoint := range test.endpoints {
 				expectedScore := test.expectedScoresEndpoint[i]

@@ -37,7 +37,7 @@ type Addressable interface {
 type EndpointMetaState interface {
 	GetMetadata() *fwkdl.EndpointMetadata
 	UpdateMetadata(*fwkdl.EndpointMetadata)
-	GetAttributes() *Attributes
+	GetAttributes() AttributeMap
 }
 
 // EndpointMetricsState allows management of the Metrics related attributes.
@@ -51,14 +51,13 @@ type Endpoint interface {
 	fmt.Stringer
 	EndpointMetaState
 	EndpointMetricsState
-	AttributeMap
 }
 
 // ModelServer is an implementation of the Endpoint interface.
 type ModelServer struct {
 	pod        atomic.Pointer[fwkdl.EndpointMetadata]
 	metrics    atomic.Pointer[Metrics]
-	attributes *Attributes
+	attributes AttributeMap
 }
 
 // NewEndpoint returns a new ModelServer with the given EndpointMetadata and Metrics.
@@ -80,7 +79,7 @@ func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *Metrics) *ModelServer {
 // String returns a representation of the ModelServer. For brevity, only names of
 // extended attributes are returned and not their values.
 func (srv *ModelServer) String() string {
-	return fmt.Sprintf("Metadata: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.Keys())
+	return fmt.Sprintf("Metadata: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.GetAttributes().Keys())
 }
 
 func (srv *ModelServer) GetMetadata() *fwkdl.EndpointMetadata {
@@ -99,19 +98,7 @@ func (srv *ModelServer) UpdateMetrics(metrics *Metrics) {
 	srv.metrics.Store(metrics)
 }
 
-func (srv *ModelServer) Put(key string, value Cloneable) {
-	srv.attributes.Put(key, value)
-}
-
-func (srv *ModelServer) Get(key string) (Cloneable, bool) {
-	return srv.attributes.Get(key)
-}
-
-func (srv *ModelServer) Keys() []string {
-	return srv.attributes.Keys()
-}
-
-func (srv *ModelServer) GetAttributes() *Attributes {
+func (srv *ModelServer) GetAttributes() AttributeMap {
 	return srv.attributes
 }
 

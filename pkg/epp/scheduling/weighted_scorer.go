@@ -16,8 +16,12 @@ limitations under the License.
 
 package scheduling
 
+import (
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+)
+
 // NewWeightedScorer initializes a new WeightedScorer and returns its pointer.
-func NewWeightedScorer(scorer Scorer, weight float64) *WeightedScorer {
+func NewWeightedScorer(scorer fwksched.Scorer, weight float64) *WeightedScorer {
 	return &WeightedScorer{
 		Scorer: scorer,
 		weight: weight,
@@ -26,7 +30,7 @@ func NewWeightedScorer(scorer Scorer, weight float64) *WeightedScorer {
 
 // WeightedScorer is a struct that encapsulates a scorer with its weight.
 type WeightedScorer struct {
-	Scorer
+	fwksched.Scorer
 	weight float64
 }
 

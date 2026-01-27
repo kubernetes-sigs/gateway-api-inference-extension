@@ -24,21 +24,21 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestRunningRequestsSizeScorer(t *testing.T) {
 	tests := []struct {
 		name              string
-		endpoints         []types.Endpoint
+		endpoints         []fwksched.Endpoint
 		expectedScoresPod map[int]float64 // Map of pod index to expected score
 	}{
 		{
 			name: "Different running queue sizes",
-			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{RunningRequestsSize: 10}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{RunningRequestsSize: 5}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{RunningRequestsSize: 0}},
+			endpoints: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{RunningRequestsSize: 10}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{RunningRequestsSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{RunningRequestsSize: 0}, nil),
 			},
 			expectedScoresPod: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
@@ -48,9 +48,9 @@ func TestRunningRequestsSizeScorer(t *testing.T) {
 		},
 		{
 			name: "Same running queue sizes",
-			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{RunningRequestsSize: 5}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{RunningRequestsSize: 5}},
+			endpoints: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{RunningRequestsSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{RunningRequestsSize: 5}, nil),
 			},
 			expectedScoresPod: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
@@ -59,9 +59,9 @@ func TestRunningRequestsSizeScorer(t *testing.T) {
 		},
 		{
 			name: "Zero running queue sizes",
-			endpoints: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{RunningRequestsSize: 0}},
-				&types.PodMetrics{EndpointMetadata: &fwkdl.EndpointMetadata{}, Metrics: &datalayer.Metrics{RunningRequestsSize: 0}},
+			endpoints: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{RunningRequestsSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{RunningRequestsSize: 0}, nil),
 			},
 			expectedScoresPod: map[int]float64{
 				0: 1.0,
@@ -74,7 +74,7 @@ func TestRunningRequestsSizeScorer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scores := scorer.Score(context.Background(), types.NewCycleState(), &types.LLMRequest{}, test.endpoints)
+			scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.LLMRequest{}, test.endpoints)
 
 			for i, endpoint := range test.endpoints {
 				expectedScore := test.expectedScoresPod[i]

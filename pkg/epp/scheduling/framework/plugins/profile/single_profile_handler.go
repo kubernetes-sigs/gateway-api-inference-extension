@@ -63,10 +63,10 @@ func (h *SingleProfileHandler) WithName(name string) *SingleProfileHandler {
 
 // Pick selects the SchedulingProfiles to run from the list of candidate profiles, while taking into consideration the request properties and the
 // previously executed cycles along with their results.
-func (h *SingleProfileHandler) Pick(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, profiles map[string]*framework.SchedulerProfile,
-	profileResults map[string]*framework.ProfileRunResult) map[string]*framework.SchedulerProfile {
+func (h *SingleProfileHandler) Pick(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, profiles map[string]framework.SchedulerProfile,
+	profileResults map[string]*framework.ProfileRunResult) map[string]framework.SchedulerProfile {
 	if len(profiles) == len(profileResults) { // all profiles have been executed already in previous call
-		return map[string]*framework.SchedulerProfile{}
+		return map[string]framework.SchedulerProfile{}
 	}
 	// return all profiles
 	return profiles
