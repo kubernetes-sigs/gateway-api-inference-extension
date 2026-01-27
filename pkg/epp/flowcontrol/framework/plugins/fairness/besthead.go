@@ -31,10 +31,6 @@ import (
 // TODO: rename files to `global_strict.go` and `global_strict_test.go`.
 const GlobalStrictFairnessPolicyType = "global-strict-fairness-policy"
 
-func init() {
-	fwkplugin.Register(GlobalStrictFairnessPolicyType, GlobalStrictFairnessPolicyFactory)
-}
-
 func GlobalStrictFairnessPolicyFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return newGlobalStrict(name), nil
 }

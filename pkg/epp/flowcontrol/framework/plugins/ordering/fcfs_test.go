@@ -29,12 +29,6 @@ import (
 
 var testFlowKey = flowcontrol.FlowKey{ID: "test-flow", Priority: 0}
 
-func TestFCFS_Name(t *testing.T) {
-	t.Parallel()
-	policy := newFCFS()
-	assert.Equal(t, FCFSOrderingPolicyType, policy.Name())
-}
-
 func TestFCFS_RequiredQueueCapabilities(t *testing.T) {
 	t.Parallel()
 	policy := newFCFS()

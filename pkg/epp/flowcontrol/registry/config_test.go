@@ -61,6 +61,7 @@ func newTestPluginsHandle(t *testing.T) plugin.Handle {
 			Type: ordering.EDFOrderingPolicyType,
 			Name: ordering.EDFOrderingPolicyType,
 		},
+		RequiredQueueCapabilitiesV: []flowcontrol.QueueCapability{flowcontrol.CapabilityPriorityConfigurable},
 	})
 	return handle
 }
@@ -112,9 +113,9 @@ func TestNewConfig(t *testing.T) {
 				// Verify Band Defaults
 				require.Contains(t, cfg.PriorityBands, 1)
 				band := cfg.PriorityBands[1]
-				assert.Equal(t, defaultOrderingPolicyRef, band.OrderingPolicy.TypedName().Name)
+				assert.Equal(t, DefaultOrderingPolicyRef, band.OrderingPolicy.TypedName().Name)
 				require.NotNil(t, band.FairnessPolicy)
-				assert.Equal(t, defaultFairnessPolicyRef, band.FairnessPolicy.TypedName().Name)
+				assert.Equal(t, DefaultFairnessPolicyRef, band.FairnessPolicy.TypedName().Name)
 				assert.Equal(t, defaultQueue, band.Queue)
 				assert.Equal(t, defaultPriorityBandMaxBytes, band.MaxBytes)
 			},
@@ -148,8 +149,8 @@ func TestNewConfig(t *testing.T) {
 				band := cfg.PriorityBands[1]
 				assert.Equal(t, defaultQueue, band.Queue, "Queue should be defaulted even for raw struct inputs")
 				assert.NotNil(t, band.FairnessPolicy)
-				assert.Equal(t, defaultFairnessPolicyRef, band.FairnessPolicy.TypedName().Name)
-				assert.Equal(t, defaultOrderingPolicyRef, band.OrderingPolicy.TypedName().Name)
+				assert.Equal(t, DefaultFairnessPolicyRef, band.FairnessPolicy.TypedName().Name)
+				assert.Equal(t, DefaultOrderingPolicyRef, band.OrderingPolicy.TypedName().Name)
 			},
 		},
 		{
@@ -165,7 +166,7 @@ func TestNewConfig(t *testing.T) {
 				assert.Equal(t, "Dynamic-Default", cfg.DefaultPriorityBand.PriorityName)
 				assert.Equal(t, defaultQueue, cfg.DefaultPriorityBand.Queue)
 				assert.NotNil(t, cfg.DefaultPriorityBand.FairnessPolicy)
-				assert.Equal(t, defaultFairnessPolicyRef, cfg.DefaultPriorityBand.FairnessPolicy.TypedName().Name)
+				assert.Equal(t, DefaultFairnessPolicyRef, cfg.DefaultPriorityBand.FairnessPolicy.TypedName().Name)
 			},
 		},
 		{
@@ -185,8 +186,8 @@ func TestNewConfig(t *testing.T) {
 				assert.Equal(t, "My-Custom-Template", cfg.DefaultPriorityBand.PriorityName)
 				assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), cfg.DefaultPriorityBand.Queue)
 				assert.NotNil(t, cfg.DefaultPriorityBand.FairnessPolicy)
-				assert.Equal(t, defaultFairnessPolicyRef, cfg.DefaultPriorityBand.FairnessPolicy.TypedName().Name)
-				assert.Equal(t, defaultOrderingPolicyRef, cfg.DefaultPriorityBand.OrderingPolicy.TypedName().Name)
+				assert.Equal(t, DefaultFairnessPolicyRef, cfg.DefaultPriorityBand.FairnessPolicy.TypedName().Name)
+				assert.Equal(t, DefaultOrderingPolicyRef, cfg.DefaultPriorityBand.OrderingPolicy.TypedName().Name)
 			},
 		},
 
@@ -373,6 +374,28 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		assert.Contains(t, err.Error(), "no fairness policy registered for name")
 		assert.Nil(t, pb)
 	})
+
+	t.Run("ShouldDefaultToHeap_WhenPolicyRequiresIt", func(t *testing.T) {
+		t.Parallel()
+		pb, err := NewPriorityBandConfig(handle, 10, "EDF-Band",
+			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
+			WithFairnessPolicy(fairness.GlobalStrictFairnessPolicyType, handle),
+		)
+		require.NoError(t, err)
+		assert.Equal(t, queue.RegisteredQueueName(queue.MaxMinHeapName), pb.Queue,
+			"EDF requires PriorityConfigurable, so should default to MaxMinHeap")
+	})
+
+	t.Run("ShouldDefaultToList_WhenPolicyDoesNotRequirePriority", func(t *testing.T) {
+		t.Parallel()
+		pb, err := NewPriorityBandConfig(handle, 20, "FCFS-Band",
+			WithOrderingPolicy(ordering.FCFSOrderingPolicyType, handle),
+			WithFairnessPolicy(fairness.GlobalStrictFairnessPolicyType, handle),
+		)
+		require.NoError(t, err)
+		assert.Equal(t, queue.RegisteredQueueName(queue.ListQueueName), pb.Queue,
+			"FCFS does not require PriorityConfigurable, so should default to ListQueue")
+	})
 }
 
 func TestConfig_Partition(t *testing.T) {
@@ -530,6 +553,26 @@ func TestNewConfigFromAPI(t *testing.T) {
 				require.NotNil(t, cfg.DefaultPriorityBand, "DefaultPriorityBand should be configured")
 				assert.Equal(t, uint64(10), cfg.DefaultPriorityBand.MaxBytes,
 					"DefaultPriorityBand template MaxBytes should be translated")
+			},
+		},
+		{
+			name: "ShouldSucceed_WithPolicyReferences",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:          1,
+						OrderingPolicyRef: ordering.EDFOrderingPolicyType,
+						FairnessPolicyRef: fairness.RoundRobinFairnessPolicyType,
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1, "Configured priority band should be present")
+				band := cfg.PriorityBands[1]
+				assert.Equal(t, ordering.EDFOrderingPolicyType, band.OrderingPolicy.TypedName().Name,
+					"OrderingPolicy should be correctly translated")
+				assert.Equal(t, fairness.RoundRobinFairnessPolicyType, band.FairnessPolicy.TypedName().Name,
+					"FairnessPolicy should be correctly translated")
 			},
 		},
 		{

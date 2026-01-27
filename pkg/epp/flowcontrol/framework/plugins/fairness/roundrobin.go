@@ -31,13 +31,8 @@ import (
 // round-robin strategy.
 const RoundRobinFairnessPolicyType = "round-robin-fairness-policy"
 
-func init() {
-	fwkplugin.Register(
-		RoundRobinFairnessPolicyType,
-		func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
-			return newRoundRobin(name), nil
-		},
-	)
+func RoundRobinFairnessPolicyFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	return newRoundRobin(name), nil
 }
 
 // roundRobin implements FairnessPolicy.

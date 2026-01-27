@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -240,6 +241,37 @@ func TestInstantiateAndConfigure(t *testing.T) {
 				require.NotNil(t, cfg.FlowControlConfig.Controller, "Controller config should be present")
 				require.Equal(t, 1*time.Minute, cfg.FlowControlConfig.Controller.DefaultRequestTTL, "DefaultRequestTTL should match yaml")
 				require.Equal(t, 1*time.Second, cfg.FlowControlConfig.Controller.ExpiryCleanupInterval, "ExpiryCleanupInterval should use default")
+
+				// Verify plugins were injected into the Raw Config.
+				foundFairness := false
+				foundOrdering := false
+				for _, p := range rawCfg.Plugins {
+					if p.Name == "global-strict-fairness-policy" {
+						foundFairness = true
+					}
+					if p.Name == "fcfs-ordering-policy" {
+						foundOrdering = true
+					}
+				}
+				require.True(t, foundFairness, "Loader should inject global-strict-fairness-policy")
+				require.True(t, foundOrdering, "Loader should inject fcfs-ordering-policy")
+
+				// Verify plugins exist in the Handle (Runtime).
+				require.NotNil(t, handle.Plugin("global-strict-fairness-policy"),
+					"Fairness policy should be instantiated in handle")
+				require.NotNil(t, handle.Plugin("fcfs-ordering-policy"), "Ordering policy should be instantiated in handle")
+
+				// Verify Registry Config wired them up.
+				require.NotNil(t, cfg.FlowControlConfig.Registry.DefaultPriorityBand.OrderingPolicy,
+					"DefaultPriorityBand should have a hydrated OrderingPolicy instance (plugin resolution failed)")
+				require.NotNil(t, cfg.FlowControlConfig.Registry.DefaultPriorityBand.FairnessPolicy,
+					"DefaultPriorityBand should have a hydrated FairnessPolicy instance (plugin resolution failed)")
+				require.Equal(t, registry.DefaultOrderingPolicyRef,
+					cfg.FlowControlConfig.Registry.DefaultPriorityBand.OrderingPolicy.TypedName().Name,
+					"DefaultPriorityBand should automatically be configured with the system default Ordering Policy")
+				require.Equal(t, registry.DefaultFairnessPolicyRef,
+					cfg.FlowControlConfig.Registry.DefaultPriorityBand.FairnessPolicy.TypedName().Name,
+					"DefaultPriorityBand should automatically be configured with the system default Fairness Policy")
 			},
 		},
 		{
@@ -249,6 +281,26 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
 				require.NotNil(t, rawCfg.FlowControl, "Raw config should parse the struct")
 				require.Nil(t, cfg.FlowControlConfig, "Internal config should be nil when FeatureGate is disabled")
+			},
+		},
+		{
+			name:       "Success - Complex Flow Control Config",
+			configText: successComplexFlowControlConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, cfg.FlowControlConfig, "FlowControl config should be loaded")
+				require.Contains(t, cfg.FlowControlConfig.Registry.PriorityBands, 100, "Should contain priority band 100")
+				band := cfg.FlowControlConfig.Registry.PriorityBands[100]
+
+				// Verify custom policies.
+				require.Equal(t, "customFCFS", band.OrderingPolicy.TypedName().Name,
+					"Should use custom ordering policy name")
+				require.Equal(t, ordering.FCFSOrderingPolicyType, band.OrderingPolicy.TypedName().Type,
+					"Should be FCFS type")
+				require.Equal(t, "customFairness", band.FairnessPolicy.TypedName().Name,
+					"Should use custom fairness policy name")
+				require.Equal(t, fairness.GlobalStrictFairnessPolicyType, band.FairnessPolicy.TypedName().Type,
+					"Should be GlobalStrict type")
 			},
 		},
 
@@ -296,40 +348,54 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			wantErr:    true,
 		},
 
-		// --- Architectural Errors ---
+		// --- Feature Validation: Scheduling ---
 		{
-			name:       "Error (Architectural) - Two Pickers in One Profile",
+			name:       "Error (Scheduling) - Two Pickers in One Profile",
 			configText: errorTwoPickersText,
 			wantErr:    true,
 		},
 		{
-			name:       "Error (Deep Architectural) - Multiple Profile Handlers",
+			name:       "Error (Scheduling) - Multiple Profile Handlers",
 			configText: errorTwoProfileHandlersText,
 			wantErr:    true,
 		},
 		{
-			name:       "Error (Deep Architectural) - Missing Profile Handler",
+			name:       "Error (Scheduling) - Missing Profile Handler",
 			configText: errorNoProfileHandlersText,
 			wantErr:    true,
 		},
 		{
-			name:       "Error (Deep Architectural) - Multi-Profile with Single Handler",
+			name:       "Error (Scheduling) - Multi-Profile with Single Handler",
 			configText: errorMultiProfilesUseSingleProfileHandlerText,
 			wantErr:    true,
 		},
+
+		// --- Feature Validation: Data Layer ---
 		{
-			name:       "Error - Missing Data Config",
+			name:       "Error (DataLayer) - Missing Data Config",
 			configText: errorMissingDataConfigText,
 			wantErr:    true,
 		},
 		{
-			name:       "Error - Bad Source Reference",
+			name:       "Error (DataLayer) - Bad Source Reference",
 			configText: errorBadSourceReferenceText,
 			wantErr:    true,
 		},
 		{
-			name:       "Error - Bad Extractor Reference",
+			name:       "Error (DataLayer) - Bad Extractor Reference",
 			configText: errorBadExtractorReferenceText,
+			wantErr:    true,
+		},
+
+		// --- Feature Validation: Flow Control ---
+		{
+			name:       "Error (FlowControl) - Missing Policy Plugin",
+			configText: errorFlowControlMissingPluginText,
+			wantErr:    true,
+		},
+		{
+			name:       "Error (FlowControl) - Wrong Plugin Type",
+			configText: errorFlowControlWrongPluginTypeText,
 			wantErr:    true,
 		},
 	}

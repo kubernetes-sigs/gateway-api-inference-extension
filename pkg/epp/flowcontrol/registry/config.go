@@ -19,6 +19,7 @@ package registry
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -35,13 +36,16 @@ import (
 // --- Defaults ---
 
 const (
+	// DefaultOrderingPolicyRef is the default policy for selecting items within a single flow's queue.
+	DefaultOrderingPolicyRef string = ordering.FCFSOrderingPolicyType
+	// DefaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
+	DefaultFairnessPolicyRef string = fairness.GlobalStrictFairnessPolicyType
+)
+
+const (
 	// defaultPriorityBandMaxBytes is the default global capacity for a priority band if not explicitly configured.
 	// It is set to 1 GB.
 	defaultPriorityBandMaxBytes uint64 = 1_000_000_000
-	// defaultOrderingPolicyRef is the default policy for selecting items within a single flow's queue.
-	defaultOrderingPolicyRef string = ordering.FCFSOrderingPolicyType
-	// defaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
-	defaultFairnessPolicyRef string = fairness.GlobalStrictFairnessPolicyType
 	// defaultQueue is the default queue implementation for flows.
 	defaultQueue queue.RegisteredQueueName = queue.ListQueueName
 	// defaultInitialShardCount is the default number of parallel shards to create when the registry is initialized.
@@ -381,12 +385,18 @@ func buildDefaultPriorityBandTemplate(
 	handle plugin.Handle,
 	apiBand *configapi.PriorityBandConfig,
 ) (*PriorityBandConfig, error) {
-	bandOpts := make([]PriorityBandConfigOption, 0, 1)
+	bandOpts := make([]PriorityBandConfigOption, 0, 3)
 	if apiBand.MaxBytes != nil {
 		if *apiBand.MaxBytes < 0 {
 			return nil, fmt.Errorf("DefaultPriorityBand MaxBytes must be non-negative, got %d", *apiBand.MaxBytes)
 		}
 		bandOpts = append(bandOpts, WithBandMaxBytes(uint64(*apiBand.MaxBytes)))
+	}
+	if apiBand.OrderingPolicyRef != "" {
+		bandOpts = append(bandOpts, WithOrderingPolicy(apiBand.OrderingPolicyRef, handle))
+	}
+	if apiBand.FairnessPolicyRef != "" {
+		bandOpts = append(bandOpts, WithFairnessPolicy(apiBand.FairnessPolicyRef, handle))
 	}
 
 	// We pass priority 0 as placeholder since it's a template.
@@ -398,12 +408,18 @@ func buildDefaultPriorityBandTemplate(
 }
 
 func buildPriorityBand(handle plugin.Handle, band configapi.PriorityBandConfig) (*PriorityBandConfig, error) {
-	bandOpts := make([]PriorityBandConfigOption, 0, 1)
+	bandOpts := make([]PriorityBandConfigOption, 0, 3)
 	if band.MaxBytes != nil {
 		if *band.MaxBytes < 0 {
 			return nil, fmt.Errorf("priority band %d MaxBytes must be non-negative, got %d", band.Priority, *band.MaxBytes)
 		}
 		bandOpts = append(bandOpts, WithBandMaxBytes(uint64(*band.MaxBytes)))
+	}
+	if band.OrderingPolicyRef != "" {
+		bandOpts = append(bandOpts, WithOrderingPolicy(band.OrderingPolicyRef, handle))
+	}
+	if band.FairnessPolicyRef != "" {
+		bandOpts = append(bandOpts, WithFairnessPolicy(band.FairnessPolicyRef, handle))
 	}
 
 	pb, err := NewPriorityBandConfig(handle, band.Priority, "", bandOpts...)
@@ -477,14 +493,14 @@ func NewPriorityBandConfig(
 		PriorityName: name,
 	}
 
-	if err := pb.applyDefaults(handle); err != nil {
-		return nil, err
-	}
-
 	for _, opt := range opts {
 		if err := opt(pb); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := pb.applyDefaults(handle); err != nil {
+		return nil, err
 	}
 
 	return pb, nil
@@ -497,7 +513,7 @@ func (p *PriorityBandConfig) applyDefaults(handle plugin.Handle) error {
 		p.PriorityName = fmt.Sprintf("priority-%d", p.Priority)
 	}
 	if p.OrderingPolicy == nil {
-		policy, err := orderingPolicy(defaultOrderingPolicyRef, handle)
+		policy, err := orderingPolicy(DefaultOrderingPolicyRef, handle)
 		if err != nil {
 			return err
 		}
@@ -505,12 +521,17 @@ func (p *PriorityBandConfig) applyDefaults(handle plugin.Handle) error {
 	}
 	if p.Queue == "" {
 		p.Queue = defaultQueue
+		// If the policy requires priority configurability (like EDF), we must use a heap.
+		// Otherwise, we prefer the ListQueue for performance (O(1) vs O(log n)).
+		if slices.Contains(p.OrderingPolicy.RequiredQueueCapabilities(), flowcontrol.CapabilityPriorityConfigurable) {
+			p.Queue = queue.MaxMinHeapName
+		}
 	}
 	if p.MaxBytes == 0 {
 		p.MaxBytes = defaultPriorityBandMaxBytes
 	}
 	if p.FairnessPolicy == nil {
-		policy, err := fairnessPolicy(defaultFairnessPolicyRef, handle)
+		policy, err := fairnessPolicy(DefaultFairnessPolicyRef, handle)
 		if err != nil {
 			return err
 		}

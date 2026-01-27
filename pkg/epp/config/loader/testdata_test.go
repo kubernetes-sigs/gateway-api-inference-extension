@@ -175,6 +175,30 @@ flowControl:
   maxBytes: 1024
 `
 
+// successComplexFlowControlConfigText tests that Flow Control configuration with custom plugins is correctly loaded.
+const successComplexFlowControlConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: customFCFS
+  type: fcfs-ordering-policy
+- name: customFairness
+  type: global-strict-fairness-policy
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- flowControl
+flowControl:
+  priorityBands:
+  - priority: 100
+    orderingPolicyRef: customFCFS
+    fairnessPolicyRef: customFairness
+`
+
 // --- Invalid Configurations (Syntax/Structure) ---
 
 // errorBadYamlText contains invalid YAML syntax.
@@ -454,4 +478,46 @@ data:
 featureGates:
 - dataLayer
 - flowControl
+`
+
+// errorFlowControlMissingPluginText references a policy that does not exist.
+const errorFlowControlMissingPluginText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- flowControl
+flowControl:
+  priorityBands:
+  - priority: 100
+    orderingPolicyRef: non-existent-policy
+`
+
+// errorFlowControlWrongPluginTypeText references a plugin of the wrong type (Scorer instead of Policy).
+const errorFlowControlWrongPluginTypeText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: testScorer
+  type: test-scorer
+  parameters:
+    blockSize: 32
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- flowControl
+flowControl:
+  priorityBands:
+  - priority: 100
+    orderingPolicyRef: testScorer # Wrong type
 `
