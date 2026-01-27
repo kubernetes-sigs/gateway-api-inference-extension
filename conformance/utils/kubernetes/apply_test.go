@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	_ "sigs.k8s.io/gateway-api/conformance/utils/flags"
+	_ "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/flags"
 )
 
 func TestPrepareResources(t *testing.T) {

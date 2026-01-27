@@ -41,8 +41,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
-	"sigs.k8s.io/gateway-api/conformance/utils/config"
-	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
 )
 
 // GatewayExcludedFromReadinessChecks is an annotation that can be placed on a
@@ -349,76 +349,6 @@ func GatewayMustHaveCondition(
 	)
 
 	require.NoErrorf(t, waitErr, "error waiting for Gateway status to have a Condition matching expectations")
-}
-
-// GatewayMustHaveAttachedListeners validates that the gateway has the specified number of attachedListeners.
-func GatewayMustHaveAttachedListeners(t *testing.T, client client.Client, timeoutConfig config.TimeoutConfig, gwName types.NamespacedName, count int32) {
-	var gotStatus *gatewayv1.GatewayStatus
-
-	waitErr := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, timeoutConfig.GatewayStatusMustHaveListeners, true, func(ctx context.Context) (bool, error) {
-		gw := &gatewayv1.Gateway{}
-
-		err := client.Get(ctx, gwName, gw)
-		require.NoError(t, err, "error fetching Gateway")
-
-		if err := ConditionsHaveLatestObservedGeneration(gw, gw.Status.Conditions); err != nil {
-			tlog.Log(t, "Gateway ", err)
-			return false, nil
-		}
-
-		if gw.Status.AttachedListenerSets == nil && count == 0 {
-			return true, nil
-		}
-
-		gotStatus = &gw.Status
-		return *gw.Status.AttachedListenerSets == count, nil
-	})
-	if waitErr != nil {
-		tlog.Errorf(t, "Error waiting for gateway, got Gateway Status %v, want zero listeners or exactly 1 listener with zero routes", gotStatus)
-	}
-}
-
-// ListenerSetMustHaveCondition checks that the supplied ListenerSet has the supplied Condition,
-// halting after the specified timeout is exceeded.
-func ListenerSetMustHaveCondition(
-	t *testing.T,
-	client client.Client,
-	timeoutConfig config.TimeoutConfig,
-	lsNN types.NamespacedName,
-	expectedCondition metav1.Condition,
-) {
-	t.Helper()
-
-	waitErr := wait.PollUntilContextTimeout(
-		context.Background(),
-		1*time.Second,
-		timeoutConfig.ListenerSetMustHaveCondition,
-		true,
-		func(ctx context.Context) (bool, error) {
-			ls := &gatewayxv1a1.XListenerSet{}
-			err := client.Get(ctx, lsNN, ls)
-			if err != nil {
-				return false, fmt.Errorf("error fetching ListenerSet: %w", err)
-			}
-
-			if err := ConditionsHaveLatestObservedGeneration(ls, ls.Status.Conditions); err != nil {
-				return false, err
-			}
-
-			if findConditionInList(t,
-				ls.Status.Conditions,
-				expectedCondition.Type,
-				string(expectedCondition.Status),
-				expectedCondition.Reason,
-			) {
-				return true, nil
-			}
-
-			return false, nil
-		},
-	)
-
-	require.NoErrorf(t, waitErr, "error waiting for ListenerSet %s status to have a Condition matching expectations", lsNN.String())
 }
 
 // MeshNamespacesMustBeReady waits until all Pods are marked Ready. This is

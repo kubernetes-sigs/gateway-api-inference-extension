@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
-	"sigs.k8s.io/gateway-api/conformance/utils/config"
-	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api/conformance/utils/weight"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/weight"
 )
 
 // ExpectedResponse defines the response expected for a given request.

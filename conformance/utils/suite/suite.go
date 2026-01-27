@@ -43,14 +43,14 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1beta1"
 	xmeshv1alpha1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 	confv1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
-	"sigs.k8s.io/gateway-api/conformance/utils/config"
-	"sigs.k8s.io/gateway-api/conformance/utils/flags"
-	"sigs.k8s.io/gateway-api/conformance/utils/grpc"
-	"sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api/conformance/utils/roundtripper"
-	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api/pkg/consts"
-	"sigs.k8s.io/gateway-api/pkg/features"
+
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/flags"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/consts"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 )
 
 // -----------------------------------------------------------------------------
@@ -66,7 +66,6 @@ type ConformanceTestSuite struct {
 	RESTClient               *rest.RESTClient
 	RestConfig               *rest.Config
 	RoundTripper             roundtripper.RoundTripper
-	GRPCClient               grpc.Client
 	GatewayClassName         string
 	MeshName                 string
 	ControllerName           string
@@ -144,7 +143,6 @@ type ConformanceOptions struct {
 	AddressType          string
 	Debug                bool
 	RoundTripper         roundtripper.RoundTripper
-	GRPCClient           grpc.Client
 	BaseManifests        string
 	MeshManifests        string
 	NamespaceLabels      map[string]string
@@ -258,8 +256,6 @@ func NewConformanceTestSuite(options ConformanceOptions) (*ConformanceTestSuite,
 		roundTripper = &roundtripper.DefaultRoundTripper{Debug: options.Debug, TimeoutConfig: options.TimeoutConfig}
 	}
 
-	grpcClient := options.GRPCClient
-
 	installedCRDs := &apiextensionsv1.CustomResourceDefinitionList{}
 	err := options.Client.List(context.TODO(), installedCRDs)
 	if err != nil {
@@ -288,7 +284,6 @@ func NewConformanceTestSuite(options ConformanceOptions) (*ConformanceTestSuite,
 		Clientset:        options.Clientset,
 		RestConfig:       options.RestConfig,
 		RoundTripper:     roundTripper,
-		GRPCClient:       grpcClient,
 		GatewayClassName: options.GatewayClassName,
 		Debug:            options.Debug,
 		Cleanup:          options.CleanupBaseResources,
@@ -707,7 +702,7 @@ func getAPIVersionAndChannel(crds []apiextensionsv1.CustomResourceDefinition) (v
 		return "", "", errors.New("no Gateway API CRDs with the proper annotations found in the cluster")
 	}
 	if version != consts.BundleVersion {
-		return "", "", errors.New("the installed CRDs version is different from the suite version")
+		return "", "", errors.New(fmt.Sprintf("the installed CRDs version is different from the suite version, installed: %s, suite: %s", version, consts.BundleVersion))
 	}
 
 	return version, channel, nil

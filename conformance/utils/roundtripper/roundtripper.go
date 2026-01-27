@@ -36,8 +36,8 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"sigs.k8s.io/gateway-api/conformance/utils/config"
-	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
 )
 
 const (

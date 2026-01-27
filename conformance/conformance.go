@@ -40,10 +40,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api/pkg/features"
 
+	apikubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
@@ -51,6 +50,7 @@ import (
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	confsuite "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/suite"
 	confflags "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/flags"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )

@@ -18,15 +18,13 @@ package config
 
 import (
 	"time"
-
-	gatewayconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 )
 
 // InferenceExtensionTimeoutConfig embeds the upstream TimeoutConfig and adds
 // extension-specific timeout values.
 type InferenceExtensionTimeoutConfig struct {
-	// All fields from gatewayconfig.TimeoutConfig will be available directly.
-	gatewayconfig.TimeoutConfig
+	// All fields from TimeoutConfig will be available directly.
+	TimeoutConfig
 
 	// GeneralMustHaveConditionTimeout represents the maximum time to wait for an InferencePool, HttpRoute or other assets to have a specific condition.
 	GeneralMustHaveConditionTimeout time.Duration
@@ -46,7 +44,7 @@ type InferenceExtensionTimeoutConfig struct {
 
 // DefaultInferenceExtensionTimeoutConfig returns a new InferenceExtensionTimeoutConfig with default values.
 func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
-	config := gatewayconfig.DefaultTimeoutConfig()
+	config := DefaultTimeoutConfig()
 	config.HTTPRouteMustHaveCondition = 300 * time.Second
 	config.RouteMustHaveParents = 200 * time.Second
 	config.MaxTimeToConsistency = 200 * time.Second

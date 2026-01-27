@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Copy of https://github.com/kubernetes-sigs/gateway-api/blob/28de270b3139a8e172d93d23cb41faa0bf5e4ec8/conformance/utils/http/http.go from the Gateway API.
+
 // flags contains command-line flag definitions for the conformance
 // tests. They're in this package so they can be shared among the
 // various suites that are all run by the same Makefile invocation.
@@ -30,8 +32,6 @@ const (
 
 var (
 	GatewayClassName           = flag.String("gateway-class", "gateway-conformance", "Name of GatewayClass to use for tests")
-	UsableAddress              = flag.String("usable-address", "", "Usable address for GatewayStaticAddresses test")
-	UnusableAddress            = flag.String("unusable-address", "", "Unusable address for GatewayStaticAddresses test")
 	MeshName                   = flag.String("mesh-name", "", "Name of Mesh to use for tests")
 	ShowDebug                  = flag.Bool("debug", false, "Whether to print debug logs")
 	CleanupBaseResources       = flag.Bool("cleanup-base-resources", true, "Whether to cleanup base test resources after the run")
@@ -53,4 +53,3 @@ var (
 	ReportOutput               = flag.String("report-output", "", "The file where to write the conformance report")
 	SkipProvisionalTests       = flag.Bool("skip-provisional-tests", false, "Whether to skip provisional tests")
 )
-

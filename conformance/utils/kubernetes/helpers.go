@@ -35,8 +35,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
-	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
@@ -227,7 +225,7 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Reader, poolNN types.
 // HTTPRouteMustBeAcceptedAndResolved waits for the specified HTTPRoute
 // to be Accepted and have its references resolved by the specified Gateway.
 // It uses the upstream Gateway API's HTTPRouteMustHaveCondition helper.
-func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, routeNN, gatewayNN types.NamespacedName) {
+func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutConfig config.TimeoutConfig, routeNN, gatewayNN types.NamespacedName) {
 	t.Helper()
 
 	acceptedCondition := metav1.Condition{
@@ -243,10 +241,10 @@ func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutCo
 	}
 
 	t.Logf("Waiting for HTTPRoute %s to be Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
-	gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, acceptedCondition)
+	HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, acceptedCondition)
 
 	t.Logf("Waiting for HTTPRoute %s to have ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
-	gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, resolvedRefsCondition)
+	HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, resolvedRefsCondition)
 
 	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
 }
@@ -290,11 +288,11 @@ func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
 // GetGatewayEndpoint waits for the specified Gateway to have at least one address
 // and returns the address in "host:port" format.
 // It leverages the upstream Gateway API's WaitForGatewayAddress.
-func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, gatewayNN types.NamespacedName) string {
+func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig config.TimeoutConfig, gatewayNN types.NamespacedName) string {
 	t.Helper()
 
 	t.Logf("Waiting for Gateway %s/%s to get an address...", gatewayNN.Namespace, gatewayNN.Name)
-	gwAddr, err := gatewayk8sutils.WaitForGatewayAddress(t, k8sClient, timeoutConfig, gatewayk8sutils.NewGatewayRef(gatewayNN))
+	gwAddr, err := WaitForGatewayAddress(t, k8sClient, timeoutConfig, NewGatewayRef(gatewayNN))
 	require.NoError(t, err, "failed to get Gateway address for %s", gatewayNN.String())
 	require.NotEmpty(t, gwAddr, "Gateway %s has no address", gatewayNN.String())
 
@@ -304,7 +302,7 @@ func GetGatewayEndpoint(t *testing.T, k8sClient client.Client, timeoutConfig gat
 
 // GetPodsWithLabel retrieves a list of Pods.
 // It finds pods matching the given labels in a specific namespace.
-func GetPodsWithLabel(t *testing.T, c client.Reader, namespace string, labels map[string]string, timeConfig gatewayapiconfig.TimeoutConfig) ([]corev1.Pod, error) {
+func GetPodsWithLabel(t *testing.T, c client.Reader, namespace string, labels map[string]string, timeConfig config.TimeoutConfig) ([]corev1.Pod, error) {
 	t.Helper()
 
 	pods := &corev1.PodList{}
