@@ -14,3 +14,7 @@ dependencies:
     repository: "file://../inference-extension"
     # This is needed to make use of the common values.yaml in ./config/charts/inference-extension/values.yaml
     alias: inferenceExtension
+  - name: jaeger
+    version: "4.3.0"
+    repository: "https://jaegertracing.github.io/helm-charts"
+    condition: jaeger.enabled
