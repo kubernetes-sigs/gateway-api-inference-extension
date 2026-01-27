@@ -15,7 +15,7 @@ This capability is essential for managing model/adapter lifecycles without disru
 
 Follow [getting-started](https://gateway-api-inference-extension.sigs.k8s.io/guides/getting-started-latest/#getting-started-with-an-inference-gateway) to set up the IGW stack.
 
-In this guide, we modify the LoRA adapters ConfigMap to have two food-review models to better illustrate the gradual rollout scenario.
+In this guide, we modify the LoRA adapters ConfigMap to have two qwen-uncensored models to better illustrate the gradual rollout scenario.
 
 The ConfigMap used in this guide is as follows:
 
@@ -23,19 +23,19 @@ The ConfigMap used in this guide is as follows:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama3-8b-instruct-adapters
+  name: vllm-qwen3-32b-adapters
 data:
   configmap.yaml: |
     vLLMLoRAConfig:
-      name: vllm-llama3-8b-instruct-adapters
+      name: vllm-qwen3-32b-adapters
       port: 8000
-      defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
+      defaultBaseModel: Qwen/Qwen3-32B
       ensureExist:
         models:
-        - id: food-review-v1
-          source: Kawon/llama3.1-food-finetune_v14_r8
-        - id: food-review-v2
-          source: Kawon/llama3.1-food-finetune_v14_r8
+        - id: qwen-uncensored-v1
+          source: nicoboss/Qwen3-32B-Uncensored
+        - id: qwen-uncensored-v2
+          source: nicoboss/Qwen3-32B-Uncensored
 ```
 
 **Verify Available Models**: You can query the `/v1/models` endpoint to confirm the adapters are loaded:
@@ -46,40 +46,40 @@ curl http://${IP}/v1/models | jq .
 
 ## Step 1: Establishing A Baseline (Alias v1)
 
-First, we establish a stable baseline where all requests for `food-review` are served by the existing version, `food-review-v1`. This decouples the client's request (for "food-review") from the specific version running on the backend.
+First, we establish a stable baseline where all requests for `qwen-uncensored` are served by the existing version, `qwen-uncensored-v1`. This decouples the client's request (for "qwen-uncensored") from the specific version running on the backend.
 
-A client requests the model `food-review`. We want to ensure this maps strictly to `food-review-v1`.
+A client requests the model `qwen-uncensored`. We want to ensure this maps strictly to `qwen-uncensored-v1`.
 
 ### InferenceModelRewrite
 
-Apply the following `InferenceModelRewrite` CR to map `food-review` → `food-review-v1`:
+Apply the following `InferenceModelRewrite` CR to map `qwen-uncensored` → `qwen-uncensored-v1`:
 
 ```yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModelRewrite
 metadata:
-  name: food-review-rewrite
+  name: qwen-uncensored-rewrite
 spec:
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
   rules:
     - matches:
         - model:
             type: Exact
-            value: food-review
+            value: qwen-uncensored
       targets:
-        - modelRewrite: "food-review-v1"
+        - modelRewrite: "qwen-uncensored-v1"
 ```
 
-When a client requests `"model": "food-review"`, the system serves the request using `food-review-v1`.
+When a client requests `"model": "qwen-uncensored"`, the system serves the request using `qwen-uncensored-v1`.
 
 ```bash
 curl http://${IP}/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d 
 '{ 
-"model": "food-review",
+"model": "qwen-uncensored",
 "messages": [
   {
     "role": "user",
@@ -109,7 +109,7 @@ Response:
   ],
   "created": 1764786158,
   "id": "chatcmpl-b10d939f-39bc-41ba-85c0-fe9b9d1ed3d9",
-  "model": "food-review-v1",
+  "model": "qwen-uncensored-v1",
   "object": "chat.completion",
   "prompt_logprobs": null,
   "usage": {
@@ -123,8 +123,8 @@ Response:
 
 ## Step 2: Gradual Rollout
 
-Now that `food-review-v2` is loaded (from the Prerequisites step), we can begin splitting traffic. Traffic splitting allows you to divide incoming traffic for a single model name across different adapters. This is critical for A/B testing or gradual updates.
-You want to direct 90% of `food-review` traffic to the stable `food-review-v1` and 10% to the new `food-review-v2`.
+Now that `qwen-uncensored-v2` is loaded (from the Prerequisites step), we can begin splitting traffic. Traffic splitting allows you to divide incoming traffic for a single model name across different adapters. This is critical for A/B testing or gradual updates.
+You want to direct 90% of `qwen-uncensored` traffic to the stable `qwen-uncensored-v1` and 10% to the new `qwen-uncensored-v2`.
 
 ### InferenceModelRewrites (90 / 10 split)
 
@@ -134,20 +134,20 @@ Update the existing `InferenceModelRewrite`:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModelRewrite
 metadata:
-  name: food-review-rewrite
+  name: qwen-uncensored-rewrite
 spec:
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
   rules:
     - matches:
         - model:
             type: Exact
-            value: food-review
+            value: qwen-uncensored
       targets:
-        - modelRewrite: "food-review-v1"
+        - modelRewrite: "qwen-uncensored-v1"
           weight: 90
-        - modelRewrite: "food-review-v2"
+        - modelRewrite: "qwen-uncensored-v2"
           weight: 10
 ```
 
@@ -157,8 +157,8 @@ Run the [test traffic script](#test-traffic-script) as follows:
 ❯ ./test-traffic-splitting.sh
 ---
 Traffic Split Results, total requests: 20
-food-review-v1: 17 requests
-food-review-v2: 3 requests
+qwen-uncensored-v1: 17 requests
+qwen-uncensored-v2: 3 requests
 ```
 
 ### InferenceModelRewrites (50 / 50 split)
@@ -167,9 +167,9 @@ To increase traffic to the new model, simply adjust the weights.
 
 ```yaml
       targets:
-        - modelRewrite: "food-review-v1"
+        - modelRewrite: "qwen-uncensored-v1"
           weight: 50
-        - modelRewrite: "food-review-v2"
+        - modelRewrite: "qwen-uncensored-v2"
           weight: 50
 ```
 
@@ -179,8 +179,8 @@ Run the [test traffic script](#test-traffic-script) again:
 ❯ ./test-traffic-splitting.sh
 ___
 Traffic Split Results, total requests: 20
-food-review-v1: 10 requests
-food-review-v2: 10 requests
+qwen-uncensored-v1: 10 requests
+qwen-uncensored-v2: 10 requests
 ```
 
 ### InferenceModelRewrites (0 / 100 split)
@@ -189,7 +189,7 @@ Once the new model is verified, shift all traffic to it.
 
 ```yaml
       targets:
-        - modelRewrite: "food-review-v2"
+        - modelRewrite: "qwen-uncensored-v2"
           weight: 100
 ```
 
@@ -199,13 +199,13 @@ Run the [test traffic script](#test-traffic-script) one last time:
 ❯ ./test-traffic-splitting.sh
 ------------------------------------------------
 Traffic Split Results, total requests: 20
-food-review-v1: 0 requests
-food-review-v2: 20 requests
+qwen-uncensored-v1: 0 requests
+qwen-uncensored-v2: 20 requests
 ```
 
 ## Step 3: Cleanup
 
-Now that 100% of traffic is routed to `food-review-v2`, you can safely unload the older version from the servers.
+Now that 100% of traffic is routed to `qwen-uncensored-v2`, you can safely unload the older version from the servers.
 
 Update the LoRA syncer ConfigMap to list the older version under the `ensureNotExist` list:
 
@@ -213,20 +213,20 @@ Update the LoRA syncer ConfigMap to list the older version under the `ensureNotE
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vllm-llama3-8b-instruct-adapters
+  name: vllm-qwen3-32b-adapters
 data:
   configmap.yaml: |
     vLLMLoRAConfig:
-      name: vllm-llama3-8b-instruct-adapters
+      name: vllm-qwen3-32b-adapters
       port: 8000
-      defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
+      defaultBaseModel: Qwen/Qwen3-32B
       ensureExist:
         models:
-        - id: food-review-v2
+        - id: qwen-uncensored-v2
           source: Kawon/llama3.1-food-finetune_v14_r8
       ensureNotExist:
         models:
-        - id: food-review-v1
+        - id: qwen-uncensored-v1
           source: Kawon/llama3.1-food-finetune_v14_r8
 ```
 
@@ -259,18 +259,18 @@ for ((i=1; i<=total_requests; i++)); do
     -H "Content-Type: application/json" \
     -d 
 '{ 
-      "model": "food-review",
+      "model": "qwen-uncensored",
       "messages": [{"role": "user", "content": "test"}],
       "max_completion_tokens": 1
     }' | jq -r '.model')
 
   # 2. Check the response and update counters
-  if [[ "$model_name" == "food-review-v1" ]]; then
+  if [[ "$model_name" == "qwen-uncensored-v1" ]]; then
     ((count_v1++))
-    echo "Request $i: Hit food-review-v1"
-  elif [[ "$model_name" == "food-review-v2" ]]; then
+    echo "Request $i: Hit qwen-uncensored-v1"
+  elif [[ "$model_name" == "qwen-uncensored-v2" ]]; then
     ((count_v2++))
-    echo "Request $i: Hit food-review-v2"
+    echo "Request $i: Hit qwen-uncensored-v2"
   else
     echo "Request $i: Received unexpected model: $model_name"
   fi
@@ -279,6 +279,6 @@ done
 # 3. Print the final report
 echo "------------------------------------------------"
 echo "Traffic Split Results:"
-echo "food-review-v1: $count_v1 requests"
-echo "food-review-v2: $count_v2 requests"
+echo "qwen-uncensored-v1: $count_v1 requests"
+echo "qwen-uncensored-v2: $count_v2 requests"
 ```

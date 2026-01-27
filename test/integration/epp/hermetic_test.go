@@ -48,15 +48,15 @@ import (
 )
 
 const (
-	modelMyModel         = "my-model"
-	modelMyModelTarget   = "my-model-12345"
-	modelSQLLora         = "sql-lora"
-	modelSQLLoraTarget   = "sql-lora-1fdg2"
-	modelSheddable       = "sql-lora-sheddable"
-	modelSheddableTarget = "sql-lora-1fdg3"
-	modelDirect          = "direct-model"
-	modelToBeWritten     = "model-to-be-rewritten"
-	modelAfterRewrite    = "rewritten-model"
+	modelMyModel              = "my-model"
+	modelMyModelTarget        = "my-model-12345"
+	modelUncensoredLora       = "qwen-uncensored"
+	modelUncensoredLoraTarget = "qwen-uncensored-1fdg2"
+	modelSheddable            = "qwen-uncensored-sheddable"
+	modelSheddableTarget      = "qwen-uncensored-sheddable-target"
+	modelDirect               = "direct-model"
+	modelToBeWritten          = "model-to-be-rewritten"
+	modelAfterRewrite         = "rewritten-model"
 )
 
 func TestMain(m *testing.M) {
@@ -133,41 +133,41 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		},
 		{
 			name:     "select active lora, low queue",
-			requests: integration.ReqLLM(logger, "test2", modelSQLLora, modelSQLLoraTarget),
+			requests: integration.ReqLLM(logger, "test2", modelUncensoredLora, modelUncensoredLoraTarget),
 			pods: []podState{
 				P(0, 0, 0.2, "foo", "bar"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget), // Winner (Has LoRA)
+				P(1, 0, 0.1, "foo", modelUncensoredLoraTarget), // Winner (Has LoRA)
 				P(2, 10, 0.2, "foo", "bar"),
 			},
-			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
+			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelUncensoredLoraTarget, "test2"),
 			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget)),
+				"inference_objective_request_total": cleanMetric(metricReqTotal(modelUncensoredLora, modelUncensoredLoraTarget)),
 			},
 		},
 		{
 			name:     "select lora despite higher kv cache (affinity)",
-			requests: integration.ReqLLM(logger, "test3", modelSQLLora, modelSQLLoraTarget),
+			requests: integration.ReqLLM(logger, "test3", modelUncensoredLora, modelUncensoredLoraTarget),
 			pods: []podState{
 				P(0, 10, 0.2, "foo", "bar"),
-				P(1, 10, 0.4, "foo", modelSQLLoraTarget), // Winner (Affinity overrides KV)
+				P(1, 10, 0.4, "foo", modelUncensoredLoraTarget), // Winner (Affinity overrides KV)
 				P(2, 10, 0.3, "foo"),
 			},
-			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test3"),
+			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelUncensoredLoraTarget, "test3"),
 			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget)),
+				"inference_objective_request_total": cleanMetric(metricReqTotal(modelUncensoredLora, modelUncensoredLoraTarget)),
 			},
 		},
 		{
 			name:     "do not shed requests by default",
-			requests: integration.ReqLLM(logger, "test4", modelSQLLora, modelSQLLoraTarget),
+			requests: integration.ReqLLM(logger, "test4", modelUncensoredLora, modelUncensoredLoraTarget),
 			pods: []podState{
-				P(0, 6, 0.2, "foo", "bar", modelSQLLoraTarget), // Winner (Lowest saturated)
+				P(0, 6, 0.2, "foo", "bar", modelUncensoredLoraTarget), // Winner (Lowest saturated)
 				P(1, 0, 0.85, "foo"),
 				P(2, 10, 0.9, "foo"),
 			},
-			wantResponses: ExpectRouteTo("192.168.1.1:8000", modelSQLLoraTarget, "test4"),
+			wantResponses: ExpectRouteTo("192.168.1.1:8000", modelUncensoredLoraTarget, "test4"),
 			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget)),
+				"inference_objective_request_total": cleanMetric(metricReqTotal(modelUncensoredLora, modelUncensoredLoraTarget)),
 			},
 		},
 
@@ -195,8 +195,8 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					metadata.ModelNameRewriteKey: modelSheddableTarget,
 					requtil.RequestIdHeaderKey:   "test-request-id",
 				},
-				`{"max_tokens":100,"model":"sql-lo`,
-				`ra-sheddable","prompt":"test6","temperature":0}`,
+				`{"max_tokens":100,"model":"qwen-uncen`,
+				`sored-sheddable","prompt":"test6","temperature":0}`,
 			),
 			pods: []podState{
 				P(0, 4, 0.2, "foo", "bar", modelSheddableTarget),
@@ -228,31 +228,31 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{
 			name: "subsetting: select best from subset",
 			// Only pods in the subset list are eligible.
-			requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget,
+			requests: ReqSubset("test2", modelUncensoredLora, modelUncensoredLoraTarget,
 				"192.168.1.1:8000", "192.168.1.2:8000", "192.168.1.3:8000"),
 			pods: []podState{
 				P(0, 0, 0.2, "foo"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget), // Winner (Low Queue + Matches Subset)
+				P(1, 0, 0.1, "foo", modelUncensoredLoraTarget), // Winner (Low Queue + Matches Subset)
 				P(2, 10, 0.2, "foo"),
 			},
-			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
+			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelUncensoredLoraTarget, "test2"),
 		},
 		{
 			name:     "subsetting: partial match",
-			requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget, "192.168.1.3:8000"),
+			requests: ReqSubset("test2", modelUncensoredLora, modelUncensoredLoraTarget, "192.168.1.3:8000"),
 			pods: []podState{
 				P(0, 0, 0.2, "foo"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget),
+				P(1, 0, 0.1, "foo", modelUncensoredLoraTarget),
 				P(2, 10, 0.2, "foo"), // Winner (Matches Subset, despite load)
 			},
-			wantResponses: ExpectRouteTo("192.168.1.3:8000", modelSQLLoraTarget, "test2"),
+			wantResponses: ExpectRouteTo("192.168.1.3:8000", modelUncensoredLoraTarget, "test2"),
 		},
 		{
 			name:     "subsetting: no pods match",
-			requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget, "192.168.1.99:8000"),
+			requests: ReqSubset("test2", modelUncensoredLora, modelUncensoredLoraTarget, "192.168.1.99:8000"),
 			pods: []podState{
 				P(0, 0, 0.2, "foo"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget),
+				P(1, 0, 0.1, "foo", modelUncensoredLoraTarget),
 			},
 			wantResponses: ExpectReject(envoyTypePb.StatusCode_ServiceUnavailable,
 				"inference gateway: ServiceUnavailable - failed to find candidate pods for serving the request"),
@@ -306,8 +306,8 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			name: "response buffering: multi-chunk JSON",
 			requests: ReqResponseOnly(
 				map[string]string{"content-type": "application/json"},
-				`{"max_tokens":100,"model":"sql-lo`,
-				`ra-sheddable","prompt":"test6","temperature":0}`,
+				`{"max_tokens":100,"model":"qwen-uncen`,
+				`sored-sheddable","prompt":"test6","temperature":0}`,
 			),
 			pods: []podState{P(0, 4, 0.2, modelSheddableTarget)},
 			wantResponses: ExpectBufferResp(
@@ -327,7 +327,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			name: "response buffering: empty EOS chunk (JSON)",
 			requests: ReqResponseOnly(
 				map[string]string{"content-type": "application/json"},
-				`{"max_tokens":100,"model":"sql-lora-sheddable","prompt":"test6","temperature":0}`,
+				`{"max_tokens":100,"model":"qwen-uncensored-sheddable","prompt":"test6","temperature":0}`,
 				"",
 			),
 			pods: []podState{P(0, 4, 0.2, modelSheddableTarget)},

@@ -3,7 +3,7 @@
       Check that the HTTPRoute was successfully configured and references were resolved:
 
       ```bash
-      kubectl get httproute vllm-llama3-8b-instruct -o yaml
+      kubectl get httproute vllm-qwen3-32b -o yaml
       ```
 
       The `HttpRoute` status should include `Accepted=True` and `ResolvedRefs=True`.
@@ -13,7 +13,7 @@
       Make sure the `InferencePool` is active before sending traffic.
 
       ```bash
-      kubectl get inferencepool vllm-llama3-8b-instruct -o yaml
+      kubectl get inferencepool vllm-qwen3-32b -o yaml
       ```
 
       The `InferencePool` status should include `Accepted=True` and `ResolvedRefs=True`.

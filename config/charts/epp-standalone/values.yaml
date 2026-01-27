@@ -17,7 +17,7 @@ inferenceExtension:
   endpointsServer:
     standalone: true
     # Required when standalone is true
-    #    endpointSelector: app=vllm-llama3-8b-instruct
+    #    endpointSelector: app=vllm-qwen3-32b
     targetPorts: 8000
     modelServerType: vllm # vllm, triton-tensorrt-llm
 

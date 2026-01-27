@@ -74,7 +74,7 @@ var (
 	baseResources []*unstructured.Unstructured
 )
 
-const testPoolName = "vllm-llama3-8b-instruct-pool"
+const testPoolName = "vllm-qwen3-32b-pool"
 
 // HarnessConfig holds configuration options for the TestHarness.
 type HarnessConfig struct {

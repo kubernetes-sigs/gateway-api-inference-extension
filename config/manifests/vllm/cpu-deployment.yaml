@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama3-8b-instruct
+  name: vllm-qwen3-32b
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: vllm-llama3-8b-instruct
+      app: vllm-qwen3-32b
   template:
     metadata:
       labels:
-        app: vllm-llama3-8b-instruct
+        app: vllm-qwen3-32b
     spec:
       containers:
         - name: lora
@@ -26,8 +26,8 @@ spec:
           - "--max-loras"
           - "4"
           - "--lora-modules"
-          - '{"name": "food-review-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
-          - '{"name": "food-review-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          - '{"name": "qwen-uncensored-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          - '{"name": "qwen-uncensored-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
           env:
             - name: PORT
               value: "8000"
@@ -108,12 +108,12 @@ metadata:
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: vllm-llama3-8b-instruct
+        name: vllm-qwen3-32b
         port: 8000
         ensureExist:
           models:
           - base-model: Qwen/Qwen2.5-1.5B
-            id: food-review
+            id: qwen-uncensored
             source: SriSanth2345/Qwen-1.5B-Tweet-Generations
           - base-model: Qwen/Qwen2.5-1.5B
             id: cad-fabricator

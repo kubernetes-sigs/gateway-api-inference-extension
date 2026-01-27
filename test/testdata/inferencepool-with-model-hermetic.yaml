@@ -1,14 +1,14 @@
 apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
-  name: vllm-llama3-8b-instruct-pool
+  name: vllm-qwen3-32b-pool
   namespace: default
 spec:
   targetPorts:
     - number: 8000
   selector:
     matchLabels:
-      app: vllm-llama3-8b-instruct-pool
+      app: vllm-qwen3-32b-pool
   endpointPickerRef:
     name: epp
     kind: Service
@@ -18,26 +18,26 @@ spec:
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: sql-lora
+  name: qwen-uncensored
   namespace: default
 spec:
   priority: 2
   poolRef:
-    name: vllm-llama3-8b-instruct-pool
+    name: vllm-qwen3-32b-pool
   targetModels:
-  - name: sql-lora-1fdg2
+  - name: qwen-uncensored-1fdg2
     weight: 100
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: sql-lora-sheddable
+  name: qwen-uncensored-sheddable
   namespace: default
 spec:
   poolRef:
-    name: vllm-llama3-8b-instruct-pool
+    name: vllm-qwen3-32b-pool
   targetModels:
-  - name: sql-lora-1fdg3
+  - name: qwen-uncensored-sheddable-target
     weight: 100
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
@@ -48,7 +48,7 @@ metadata:
 spec:
   priority: 2
   poolRef:
-    name: vllm-llama3-8b-instruct-pool
+    name: vllm-qwen3-32b-pool
   targetModels:
   - name: my-model-12345
     weight: 100    
@@ -61,7 +61,7 @@ metadata:
 spec:
   priority: 2
   poolRef:
-    name: vllm-llama3-8b-instruct-pool
+    name: vllm-qwen3-32b-pool
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceModelRewrite
@@ -70,7 +70,7 @@ metadata:
   namespace: default
 spec:
   poolRef:
-    name: vllm-llama3-8b-instruct-pool
+    name: vllm-qwen3-32b-pool
   rules:
   - matches:
     - model:

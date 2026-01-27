@@ -212,10 +212,10 @@ const (
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: InferenceModelRewrite
 metadata:
-  name: food-review-canary-rollout
+  name: qwen-uncensored-canary-rollout
 spec:
   poolRef:
-    name: main-food-review-pool
+    name: main-qwen-uncensored-pool
   rules:
   - matches:
     - model:
