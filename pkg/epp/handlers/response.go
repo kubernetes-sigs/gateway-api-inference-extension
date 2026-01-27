@@ -18,6 +18,7 @@ package handlers
 
 import (
 	"context"
+	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -47,6 +48,9 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 
 	reqCtx.ResponseSize += len(responseBytes)
 
+	// Capture current timestamp for metrics calculation
+	now := time.Now()
+
 	parsedResp, err := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, endOfStream)
 	if err != nil {
 		logger.Error(err, "parsing response")
@@ -58,7 +62,61 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 			metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokenDetails.CachedTokens)
 		}
 	}
+
+	// Track token generation timing for streaming responses
+	// Skip tracking for [DONE] markers which don't contain actual tokens
+	isDoneMarker := len(responseBytes) > 0 && string(responseBytes) == "data: [DONE]"
+	if len(responseBytes) > 0 && !isDoneMarker {
+		// Calculate TTFT (Time to First Token) - only on first chunk with content
+		if reqCtx.TTFT == 0 {
+			// TTFT from client perspective (request received to first token)
+			reqCtx.TTFT = now.Sub(reqCtx.RequestReceivedTimestamp).Seconds()
+			// TTFT from EPP perspective (scheduling complete to first token)
+			reqCtx.TTFTEPP = now.Sub(reqCtx.SchedulingCompleteTimestamp).Seconds()
+
+			logger.V(logutil.DEBUG).Info("First token received", "TTFT", reqCtx.TTFT, "TTFTEPP", reqCtx.TTFTEPP)
+		}
+
+		// Track inter-token timing for subsequent chunks
+		if !reqCtx.LastTokenTimestamp.IsZero() {
+			// Inter-Token Latency (ITL) - time between this chunk and previous chunk
+			itl := now.Sub(reqCtx.LastTokenTimestamp).Seconds()
+			logger.V(logutil.TRACE).Info("Inter-token latency", "ITL", itl)
+
+			// Increment token count for TPOT calculation
+			reqCtx.GeneratedTokenCount++
+		}
+
+		reqCtx.LastTokenTimestamp = now
+	}
+
 	if endOfStream {
+		// Record TTFT metrics
+		if reqCtx.TTFT > 0 {
+			metrics.RecordRequestTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.TTFT)
+			logger.V(logutil.DEBUG).Info("Recorded TTFT", "TTFT", reqCtx.TTFT)
+		}
+
+		// Calculate and record TPOT (Time Per Output Token)
+		// TPOT = (Total decode time) / (number of token intervals)
+		if reqCtx.GeneratedTokenCount > 0 && reqCtx.TTFT > 0 {
+			// Calculate time from first token to last token (decode phase)
+			firstTokenTime := reqCtx.RequestReceivedTimestamp.Add(time.Duration(reqCtx.TTFT * float64(time.Second)))
+			decodeDuration := now.Sub(firstTokenTime).Seconds()
+
+			// Calculate average TPOT (time per output token during decode phase)
+			reqCtx.TPOT = decodeDuration / float64(reqCtx.GeneratedTokenCount)
+
+			// TPOT from EPP perspective
+			firstTokenTimeEPP := reqCtx.SchedulingCompleteTimestamp.Add(time.Duration(reqCtx.TTFTEPP * float64(time.Second)))
+			decodeDurationEPP := now.Sub(firstTokenTimeEPP).Seconds()
+			reqCtx.TPOTEPP = decodeDurationEPP / float64(reqCtx.GeneratedTokenCount)
+
+			metrics.RecordRequestTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.TPOT)
+			logger.V(logutil.DEBUG).Info("Recorded TPOT", "TPOT", reqCtx.TPOT, "tokenCount", reqCtx.GeneratedTokenCount, "decodeDuration", decodeDuration)
+		}
+
+		// Record existing metrics
 		metrics.RecordNormalizedTimePerOutputToken(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp, reqCtx.Usage.CompletionTokens)
 		metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 		metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)

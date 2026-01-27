@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
@@ -409,6 +410,92 @@ func TestResponseSizeAccumulation(t *testing.T) {
 				server.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
 			}
 			assert.Equal(t, tt.wantResponseSize, reqCtx.ResponseSize)
+		})
+	}
+}
+
+func TestTTFTTPOTMetricsTracking(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	tests := []struct {
+		name                    string
+		chunks                  [][]byte
+		wantTTFTGreaterThanZero bool
+		wantTPOTGreaterThanZero bool
+		wantGeneratedTokenCount int
+	}{
+		{
+			name: "streaming response with multiple chunks",
+			chunks: [][]byte{
+				[]byte("data: {\"choices\":[{\"text\":\"Hello\"}]}\n"),
+				[]byte("data: {\"choices\":[{\"text\":\" world\"}]}\n"),
+				[]byte("data: {\"choices\":[{\"text\":\"!\"}]}\n"),
+				[]byte("data: [DONE]"),
+			},
+			wantTTFTGreaterThanZero: true,
+			wantTPOTGreaterThanZero: true,
+			wantGeneratedTokenCount: 2, // First chunk doesn't count, then 2 more chunks
+		},
+		{
+			name: "single chunk non-streaming response",
+			chunks: [][]byte{
+				[]byte(body),
+			},
+			wantTTFTGreaterThanZero: true,
+			wantTPOTGreaterThanZero: false, // No TPOT for single chunk
+			wantGeneratedTokenCount: 0,
+		},
+		{
+			name: "empty response",
+			chunks: [][]byte{
+				[]byte(""),
+			},
+			wantTTFTGreaterThanZero: false,
+			wantTPOTGreaterThanZero: false,
+			wantGeneratedTokenCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &StreamingServer{
+				parser:   openai.NewOpenAIParser(),
+				director: &mockDirector{},
+			}
+			reqCtx := &RequestContext{
+				RequestReceivedTimestamp:    time.Now().Add(-100 * time.Millisecond),
+				SchedulingCompleteTimestamp: time.Now().Add(-90 * time.Millisecond),
+				Response: &Response{
+					Headers: map[string]string{
+						"content-type": "text/event-stream",
+					},
+				},
+			}
+
+			for i, chunk := range tt.chunks {
+				endOfStream := i == len(tt.chunks)-1
+				// Add small delay between chunks to simulate real streaming
+				if i > 0 {
+					time.Sleep(1 * time.Millisecond)
+				}
+				server.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
+			}
+
+			if tt.wantTTFTGreaterThanZero {
+				assert.Greater(t, reqCtx.TTFT, 0.0, "TTFT should be greater than zero")
+				assert.Greater(t, reqCtx.TTFTEPP, 0.0, "TTFTEPP should be greater than zero")
+			} else {
+				assert.Equal(t, 0.0, reqCtx.TTFT, "TTFT should be zero")
+			}
+
+			if tt.wantTPOTGreaterThanZero {
+				assert.Greater(t, reqCtx.TPOT, 0.0, "TPOT should be greater than zero")
+				assert.Greater(t, reqCtx.TPOTEPP, 0.0, "TPOTEPP should be greater than zero")
+			} else {
+				assert.Equal(t, 0.0, reqCtx.TPOT, "TPOT should be zero")
+			}
+
+			assert.Equal(t, tt.wantGeneratedTokenCount, reqCtx.GeneratedTokenCount, "Generated token count should match")
 		})
 	}
 }

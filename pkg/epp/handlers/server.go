@@ -79,22 +79,22 @@ type StreamingServer struct {
 // Refactor this monolithic struct. Fields related to the Envoy ext-proc protocol should be decoupled from the internal
 // request lifecycle state.
 type RequestContext struct {
-	TargetPod                 *fwkdl.EndpointMetadata
-	TargetEndpoint            string
-	IncomingModelName         string
-	TargetModelName           string
-	FairnessID                string
-	ObjectiveKey              string
-	Priority                  int
-	RequestReceivedTimestamp  time.Time
-	ResponseCompleteTimestamp time.Time
-	RequestSize               int
-	Usage                     fwkrq.Usage
-	ResponseSize              int
-	ResponseComplete          bool
-	ResponseStatusCode        string
-	RequestRunning            bool
-	Request                   *Request
+	TargetPod                   *fwkdl.EndpointMetadata
+	TargetEndpoint              string
+	IncomingModelName           string
+	TargetModelName             string
+	FairnessID                  string
+	ObjectiveKey                string
+	RequestReceivedTimestamp    time.Time
+	SchedulingCompleteTimestamp time.Time
+	ResponseCompleteTimestamp   time.Time
+	RequestSize                 int
+	Usage                       fwkrq.Usage
+	ResponseSize                int
+	ResponseComplete            bool
+	ResponseStatusCode          string
+	RequestRunning              bool
+	Request                     *Request
 
 	SchedulingRequest *schedulingtypes.LLMRequest
 
@@ -102,6 +102,16 @@ type RequestContext struct {
 	modelServerStreaming bool
 
 	Response *Response
+
+	// Metrics - Client POV (from RequestReceivedTimestamp)
+	TTFT                float64
+	TPOT                float64
+	LastTokenTimestamp  time.Time
+	GeneratedTokenCount int
+
+	// Metrics - EPP POV (from SchedulingCompleteTimestamp)
+	TTFTEPP float64
+	TPOTEPP float64
 
 	reqHeaderResp  *extProcPb.ProcessingResponse
 	reqBodyResp    []*extProcPb.ProcessingResponse
@@ -155,7 +165,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{
-		RequestState: RequestReceived,
+		RequestState:             RequestReceived,
+		RequestReceivedTimestamp: time.Now(),
 		Request: &Request{
 			Headers:  make(map[string]string),
 			Metadata: make(map[string]any),
@@ -244,13 +255,16 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
+				// Set SchedulingCompleteTimestamp after scheduling is complete
+				reqCtx.SchedulingCompleteTimestamp = time.Now()
+
 				if reqCtx.SchedulingRequest != nil && reqCtx.SchedulingRequest.Body != nil {
 					reqCtx.modelServerStreaming = reqCtx.SchedulingRequest.Body.Stream
 				}
 
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
 				reqCtx.reqBodyResp = envoy.GenerateRequestBodyResponses(reqCtx.Request.RawBody)
-				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Priority)
+				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.SchedulingRequest.Objectives.Priority)
 				metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
 			}
 		case *extProcPb.ProcessingRequest_RequestTrailers:

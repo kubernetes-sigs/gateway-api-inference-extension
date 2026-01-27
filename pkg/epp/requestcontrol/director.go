@@ -143,7 +143,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
-	reqCtx.Priority = *infObjective.Spec.Priority
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
 	span.SetAttributes(
