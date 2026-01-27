@@ -28,7 +28,6 @@ import (
 	// Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
@@ -54,34 +53,34 @@ func TestSchedule(t *testing.T) {
 
 	profileHandler := profile.NewSingleProfileHandler()
 
-	schedulerConfig := NewSchedulerConfig(profileHandler, map[string]framework.SchedulerProfile{"default": defaultProfile})
+	schedulerConfig := NewSchedulerConfig(profileHandler, map[string]fwksched.SchedulerProfile{"default": defaultProfile})
 
 	tests := []struct {
 		name    string
-		req     *framework.LLMRequest
-		input   []framework.Endpoint
-		wantRes *framework.SchedulingResult
+		req     *fwksched.LLMRequest
+		input   []fwksched.Endpoint
+		wantRes *fwksched.SchedulingResult
 		err     bool
 	}{
 		{
 			name: "no candidate endpoints",
-			req: &framework.LLMRequest{
+			req: &fwksched.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "any-model",
 			},
-			input:   []framework.Endpoint{},
+			input:   []fwksched.Endpoint{},
 			wantRes: nil,
 			err:     true,
 		},
 		{
 			name: "finds optimal endpoint",
-			req: &framework.LLMRequest{
+			req: &fwksched.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "critical",
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []framework.Endpoint{
+			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
 					&datalayer.Metrics{
@@ -115,11 +114,11 @@ func TestSchedule(t *testing.T) {
 						},
 					}, nil),
 			},
-			wantRes: &framework.SchedulingResult{
-				ProfileResults: map[string]*framework.ProfileRunResult{
+			wantRes: &fwksched.SchedulingResult{
+				ProfileResults: map[string]*fwksched.ProfileRunResult{
 					"default": {
-						TargetEndpoints: []framework.Endpoint{
-							&framework.ScoredEndpoint{
+						TargetEndpoints: []fwksched.Endpoint{
+							&fwksched.ScoredEndpoint{
 								Endpoint: fwksched.NewEndpoint(
 									&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
 									&datalayer.Metrics{

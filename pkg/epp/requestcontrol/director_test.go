@@ -46,7 +46,6 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
@@ -69,12 +68,12 @@ func (m *mockAdmissionController) Admit(context.Context, *handlers.RequestContex
 }
 
 type mockScheduler struct {
-	scheduleResults *schedulingtypes.SchedulingResult
+	scheduleResults *fwksched.SchedulingResult
 	scheduleErr     error
 	dataProduced    bool // denotes whether data production is expected.
 }
 
-func (m *mockScheduler) Schedule(_ context.Context, _ *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) (*schedulingtypes.SchedulingResult, error) {
+func (m *mockScheduler) Schedule(_ context.Context, _ *fwksched.LLMRequest, endpoints []fwksched.Endpoint) (*fwksched.SchedulingResult, error) {
 	if endpoints != nil && m.dataProduced {
 		data, ok := endpoints[0].Get(mockProducedDataKey)
 		if !ok || data.(mockProducedDataType).value != 42 {
@@ -124,7 +123,7 @@ func (m *mockPrepareDataPlugin) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) error {
 	endpoints[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
 	return nil
 }
@@ -153,7 +152,7 @@ func (m *mockAdmissionPlugin) TypedName() fwkplugin.TypedName {
 	return m.typedName
 }
 
-func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) error {
 	return m.denialError
 }
 
@@ -259,11 +258,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 		},
 	}
 
-	defaultSuccessfulScheduleResults := &schedulingtypes.SchedulingResult{
-		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
+	defaultSuccessfulScheduleResults := &fwksched.SchedulingResult{
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
 			"testProfile": {
-				TargetEndpoints: []schedulingtypes.Endpoint{
-					&schedulingtypes.ScoredEndpoint{
+				TargetEndpoints: []fwksched.Endpoint{
+					&fwksched.ScoredEndpoint{
 						Endpoint: fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
 							Address:        "192.168.1.100",
 							Port:           "8000",
@@ -271,7 +270,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 							NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
 						}, nil, nil),
 					},
-					&schedulingtypes.ScoredEndpoint{
+					&fwksched.ScoredEndpoint{
 						Endpoint: fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
 							Address:        "192.168.2.100",
 							Port:           "8000",
@@ -279,7 +278,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 							NamespacedName: types.NamespacedName{Name: "pod2", Namespace: "default"},
 						}, nil, nil),
 					},
-					&schedulingtypes.ScoredEndpoint{
+					&fwksched.ScoredEndpoint{
 						Endpoint: fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
 							Address:        "192.168.4.100",
 							Port:           "8000",
@@ -1219,17 +1218,17 @@ func (p *testResponseComplete) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *schedulingtypes.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnComplete = response
 	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }

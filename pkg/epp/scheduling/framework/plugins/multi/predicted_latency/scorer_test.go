@@ -140,7 +140,7 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMR
 
 // Add this helper function after the createTestLLMRequest function
 
-func setupPredictionContext(t *testing.T, router *PredictedLatency, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
+func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
 	ctx := context.Background()
 
 	// Create prediction context
@@ -297,7 +297,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 
 			// ADD THIS: Setup prediction context before scoring
 			if tt.predictor != nil {
-				setupPredictionContext(t, router, tt.request, tt.endpoints, tt.predictor)
+				setupPredictionContext(router, tt.request, tt.endpoints, tt.predictor)
 			}
 
 			scores := router.Score(context.Background(), fwksched.NewCycleState(), tt.request, tt.endpoints)
@@ -384,7 +384,7 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 			}
 
 			// ADD THIS: Setup prediction context before scoring
-			setupPredictionContext(t, router, request, endpoints, predictor)
+			setupPredictionContext(router, request, endpoints, predictor)
 
 			scores := router.Score(context.Background(), fwksched.NewCycleState(), request, endpoints)
 

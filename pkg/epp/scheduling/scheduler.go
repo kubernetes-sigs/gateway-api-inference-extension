@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	ProfilePickerExtensionPoint          = "ProfilePicker"
-	FilterExtensionPoint                 = "Filter"
-	ScorerExtensionPoint                 = "Scorer"
-	PickerExtensionPoint                 = "Picker"
-	ProcessProfilesResultsExtensionPoint = "ProcessProfilesResults"
+	profilePickerExtensionPoint          = "ProfilePicker"
+	filterExtensionPoint                 = "Filter"
+	scorerExtensionPoint                 = "Scorer"
+	pickerExtensionPoint                 = "Picker"
+	processProfilesResultsExtensionPoint = "ProcessProfilesResults"
 )
 
 // NewSchedulerWithConfig returns a new scheduler with the given scheduler plugins configuration.
@@ -67,7 +67,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *framework.LLMRequest,
 		loggerVerbose.Info("Running profile handler, Pick profiles", "plugin", s.profileHandler.TypedName())
 		before := time.Now()
 		profiles := s.profileHandler.Pick(ctx, cycleState, request, s.profiles, profileRunResults)
-		metrics.RecordPluginProcessingLatency(ProfilePickerExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
+		metrics.RecordPluginProcessingLatency(profilePickerExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
 		loggerVerbose.Info("Completed running profile handler Pick profiles successfully", "plugin", s.profileHandler.TypedName(), "result", profiles)
 		if len(profiles) == 0 { // profile picker didn't pick any profile to run
 			break
@@ -95,7 +95,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *framework.LLMRequest,
 	loggerVerbose.Info("Running profile handler, ProcessResults", "plugin", s.profileHandler.TypedName())
 	before := time.Now()
 	result, err = s.profileHandler.ProcessResults(ctx, cycleState, request, profileRunResults)
-	metrics.RecordPluginProcessingLatency(ProcessProfilesResultsExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
+	metrics.RecordPluginProcessingLatency(processProfilesResultsExtensionPoint, s.profileHandler.TypedName().Type, s.profileHandler.TypedName().Name, time.Since(before))
 	loggerVerbose.Info("Completed running profile handler ProcessResults successfully", "plugin", s.profileHandler.TypedName())
 
 	return result, err
