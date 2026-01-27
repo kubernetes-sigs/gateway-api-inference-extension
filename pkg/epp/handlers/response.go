@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -133,6 +134,22 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
 
+	// Record TTFT on the first token chunk.
+	// We check for "data: " prefix to ensure it's a data chunk, and exclude "[DONE]" message.
+	if reqCtx.GeneratedTokenCount == 0 && strings.Contains(responseText, streamingRespPrefix) && !strings.Contains(responseText, streamingEndMsg) {
+		ttft := time.Since(reqCtx.RequestReceivedTimestamp).Seconds()
+		reqCtx.TTFT = ttft
+		metrics.RecordRequestTTFT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, ttft)
+		reqCtx.GeneratedTokenCount = 1
+		reqCtx.LastTokenTimestamp = time.Now()
+	} else if reqCtx.GeneratedTokenCount > 0 && strings.Contains(responseText, streamingRespPrefix) && !strings.Contains(responseText, streamingEndMsg) {
+		// Record ITL for subsequent tokens
+		itl := time.Since(reqCtx.LastTokenTimestamp).Seconds()
+		metrics.RecordRequestITL(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, itl)
+		reqCtx.LastTokenTimestamp = time.Now()
+		reqCtx.GeneratedTokenCount++
+	}
+
 	// Parse usage on EVERY chunk to catch split streams (where usage and [DONE] are in different chunks).
 	if resp := parseRespForUsage(ctx, responseText); resp.Usage.TotalTokens > 0 {
 		reqCtx.Usage = resp.Usage
@@ -147,6 +164,22 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 			cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
 		}
 		metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
+
+		// Record Time Per Output Token
+		// TPOT = (Total Duration - TTFT) / (OutputTokens - 1)
+		if reqCtx.Usage.CompletionTokens > 1 && reqCtx.TTFT > 0 {
+			totalDuration := time.Since(reqCtx.RequestReceivedTimestamp).Seconds()
+			generationDuration := totalDuration - reqCtx.TTFT
+			metrics.RecordRequestDecodeDuration(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, generationDuration)
+			metrics.RecordRequestE2ELatency(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, totalDuration)
+
+			// Avoid division by zero just in case
+			if count := float64(reqCtx.Usage.CompletionTokens - 1); count > 0 {
+				avgTPOT := generationDuration / count
+				reqCtx.TPOT = avgTPOT
+				metrics.RecordRequestTPOT(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, avgTPOT)
+			}
+		}
 	}
 }
 

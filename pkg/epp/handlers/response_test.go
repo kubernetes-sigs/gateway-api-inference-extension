@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
@@ -326,4 +327,69 @@ func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
 	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
 	assert.NotContains(t, gotHeaders, metadata.DestinationEndpointKey)
 	assert.NotContains(t, gotHeaders, "content-length")
+}
+
+func TestHandleResponseBodyModelStreaming_Metrics(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("TTFT Recording", func(t *testing.T) {
+		server := &StreamingServer{director: &mockDirector{}}
+		reqCtx := &RequestContext{
+			RequestReceivedTimestamp: time.Now().Add(-100 * time.Millisecond),
+			IncomingModelName:        "model-a",
+			TargetModelName:          "model-b",
+		}
+
+		chunk := `data: {"choices":[{"text":"First token"}]}`
+		server.HandleResponseBodyModelStreaming(ctx, reqCtx, chunk)
+
+		assert.Greater(t, reqCtx.TTFT, 0.0, "TTFT should be recorded and greater than 0")
+		assert.Equal(t, 1, reqCtx.GeneratedTokenCount, "GeneratedTokenCount should be 1")
+		assert.False(t, reqCtx.LastTokenTimestamp.IsZero(), "LastTokenTimestamp should be set")
+	})
+
+	t.Run("ITL Recording", func(t *testing.T) {
+		server := &StreamingServer{director: &mockDirector{}}
+		reqCtx := &RequestContext{
+			RequestReceivedTimestamp: time.Now().Add(-1 * time.Second),
+			IncomingModelName:        "model-a",
+			TargetModelName:          "model-b",
+			// Simulate first token already received
+			GeneratedTokenCount: 1,
+			LastTokenTimestamp:  time.Now().Add(-50 * time.Millisecond),
+			TTFT:                0.1,
+		}
+
+		chunk := `data: {"choices":[{"text":"Second token"}]}`
+		server.HandleResponseBodyModelStreaming(ctx, reqCtx, chunk)
+
+		// ITL is not stored in ReqCtx, but we can verify state updates
+		assert.Equal(t, 2, reqCtx.GeneratedTokenCount, "GeneratedTokenCount should increment")
+		assert.True(t, time.Since(reqCtx.LastTokenTimestamp) < 10*time.Millisecond, "LastTokenTimestamp should be updated to Now")
+	})
+
+	t.Run("TPOT and E2E Recording", func(t *testing.T) {
+		server := &StreamingServer{director: &mockDirector{}}
+		reqCtx := &RequestContext{
+			RequestReceivedTimestamp: time.Now().Add(-1 * time.Second),
+			IncomingModelName:        "model-a",
+			TargetModelName:          "model-b",
+			TTFT:                     0.1,
+			GeneratedTokenCount:      10,
+		}
+
+		// Usage that triggers TPOT calc
+		chunk := `data: {"usage":{"prompt_tokens":5,"completion_tokens":11,"total_tokens":16}}` + "\n" + `data: [DONE]`
+		server.HandleResponseBodyModelStreaming(ctx, reqCtx, chunk)
+
+		assert.True(t, reqCtx.ResponseComplete, "Response should be complete")
+		assert.Greater(t, reqCtx.TPOT, 0.0, "TPOT should be calculated")
+
+		// Expected TPOT calc: (TotalDuration - TTFT) / (CompletionTokens - 1)
+		// TotalDuration ~ 1.0s, TTFT = 0.1s -> GenDuration ~ 0.9s
+		// Tokens - 1 = 10
+		// TPOT ~ 0.09
+		assert.InDelta(t, 0.09, reqCtx.TPOT, 0.05, "TPOT should be approximately correct")
+	})
 }

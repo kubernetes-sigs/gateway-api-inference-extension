@@ -99,6 +99,12 @@ type RequestContext struct {
 
 	Response *Response
 
+	// Metrics
+	TTFT                float64
+	TPOT                float64
+	LastTokenTimestamp  time.Time
+	GeneratedTokenCount int
+
 	reqHeaderResp  *extProcPb.ProcessingResponse
 	reqBodyResp    []*extProcPb.ProcessingResponse
 	reqTrailerResp *extProcPb.ProcessingResponse
@@ -145,7 +151,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{
-		RequestState: RequestReceived,
+		RequestState:             RequestReceived,
+		RequestReceivedTimestamp: time.Now(),
 		Request: &Request{
 			Headers:  make(map[string]string),
 			Body:     make(map[string]any),
