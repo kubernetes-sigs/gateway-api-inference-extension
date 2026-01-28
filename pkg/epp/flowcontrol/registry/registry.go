@@ -376,7 +376,7 @@ func (fr *FlowRegistry) gcFlows() {
 	)
 
 	if len(deletedFlows) > 0 {
-		var keysToClean []types.FlowKey
+		var keysToClean []flowcontrol.FlowKey
 		for _, v := range deletedFlows {
 			fr.logger.V(logging.VERBOSE).Info("Garbage collecting flow", "flowKey", v.key, "becameIdleAt", v.becameIdleAt)
 			// Release the band lease.
