@@ -349,7 +349,7 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 		return NewConfig(handle)
 	}
 
-	opts := make([]ConfigOption, 0, len(apiConfig.PriorityBands)+5)
+	opts := make([]ConfigOption, 0, len(apiConfig.PriorityBands)+3)
 
 	if apiConfig.MaxBytes != nil {
 		if *apiConfig.MaxBytes < 0 {
@@ -364,13 +364,6 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 			return nil, err
 		}
 		opts = append(opts, WithDefaultPriorityBand(templateBand))
-	}
-
-	if apiConfig.FlowGCTimeout != nil {
-		opts = append(opts, WithFlowGCTimeout(apiConfig.FlowGCTimeout.Duration))
-	}
-	if apiConfig.PriorityBandGCTimeout != nil {
-		opts = append(opts, WithPriorityBandGCTimeout(apiConfig.PriorityBandGCTimeout.Duration))
 	}
 
 	for _, band := range apiConfig.PriorityBands {

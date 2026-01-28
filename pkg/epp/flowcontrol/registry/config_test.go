@@ -22,7 +22,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
@@ -507,9 +506,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "ShouldSucceed_WithFullConfiguration",
 			apiConfig: &configapi.FlowControlConfig{
-				MaxBytes:              ptr.To(int64(100)),
-				FlowGCTimeout:         &metav1.Duration{Duration: 30 * time.Minute},
-				PriorityBandGCTimeout: &metav1.Duration{Duration: 60 * time.Minute},
+				MaxBytes: ptr.To(int64(100)),
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
@@ -522,8 +519,6 @@ func TestNewConfigFromAPI(t *testing.T) {
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, uint64(100), cfg.MaxBytes, "Global MaxBytes should be correctly translated")
-				assert.Equal(t, 30*time.Minute, cfg.FlowGCTimeout, "FlowGCTimeout should be translated from metav1.Duration")
-				assert.Equal(t, 60*time.Minute, cfg.PriorityBandGCTimeout, "PriorityBandGCTimeout should be translated")
 
 				// Verify Explicit Band
 				require.Contains(t, cfg.PriorityBands, 1, "Configured priority band should be present")

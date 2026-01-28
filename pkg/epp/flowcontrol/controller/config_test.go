@@ -166,12 +166,10 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "ValidConfig_ShouldTranslateAllExposedFields",
 			apiConfig: &configapi.FlowControlConfig{
-				DefaultRequestTTL:     &metav1.Duration{Duration: 1 * time.Minute},
-				ExpiryCleanupInterval: &metav1.Duration{Duration: 500 * time.Millisecond},
+				DefaultRequestTTL: &metav1.Duration{Duration: 1 * time.Minute},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, 1*time.Minute, cfg.DefaultRequestTTL)
-				assert.Equal(t, 500*time.Millisecond, cfg.ExpiryCleanupInterval)
 				// ProcessorReconciliationInterval is not exposed, so it should stay default.
 				assert.Equal(t, defaultProcessorReconciliationInterval, cfg.ProcessorReconciliationInterval)
 			},
@@ -191,13 +189,6 @@ func TestNewConfigFromAPI(t *testing.T) {
 				DefaultRequestTTL: &metav1.Duration{Duration: -1 * time.Minute},
 			},
 			expectedErr: "DefaultRequestTTL cannot be negative",
-		},
-		{
-			name: "InvalidConfig_NegativeExpiryInterval_ShouldError",
-			apiConfig: &configapi.FlowControlConfig{
-				ExpiryCleanupInterval: &metav1.Duration{Duration: -1 * time.Second},
-			},
-			expectedErr: "ExpiryCleanupInterval must be positive",
 		},
 	}
 

@@ -158,7 +158,6 @@ featureGates:
 flowControl:
   maxBytes: 1024
   defaultRequestTTL: 1m
-  expiryCleanupInterval: 5s
 `
 
 const successflowControlConfigDisabledText = `

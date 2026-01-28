@@ -354,9 +354,6 @@ form:
 flowControl:
   maxBytes: 10737418240 # 10 GB
   defaultRequestTTL: 60s
-  flowGCTimeout: 5m
-  priorityBandGCTimeout: 10m
-  expiryCleanupInterval: 1s
   defaultPriorityBand:
     maxBytes: 1073741824
   priorityBands:
@@ -369,16 +366,9 @@ The fields in the `flowControl` section are:
 - `maxBytes`: Defines the global capacity limit (in bytes) for all active requests across all priority levels.
     - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
 - `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
-    - If `0` or omitted, no default TTL is applied (requests may wait indefinitely unless cancelled).
+    - If `0` or omitted, it defaults to the client context deadline, meaning requests may wait indefinitely unless cancelled by the client.
 - `defaultPriorityBand`: A template used to dynamically provision priority bands for requests arriving with priority
   levels not explicitly configured in `priorityBands`.
-- `flowGCTimeout`: The duration of inactivity after which an idle flow is cleaned up.
-    - If `0` or omitted, the default is used.
-- `priorityBandGCTimeout`: The duration of inactivity after which a dynamically provisioned priority band is cleaned up.
-    - **Note**: This value must be greater than or equal to `flowGCTimeout`.
-- `expiryCleanupInterval`: The frequency at which the system scans for and removes expired requests.
-    - **Note**: Requests are unblocked immediately upon cancellation or TTL expiration; this setting only affects when
-      the internal state is purged for memory reclamation.
 - `priorityBands`: A list of explicit configurations for specific priority levels.
 
 ### Priority Band Configuration

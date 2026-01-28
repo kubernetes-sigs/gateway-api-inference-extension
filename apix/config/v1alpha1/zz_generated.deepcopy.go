@@ -178,21 +178,6 @@ func (in *FlowControlConfig) DeepCopyInto(out *FlowControlConfig) {
 		*out = new(PriorityBandConfig)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.FlowGCTimeout != nil {
-		in, out := &in.FlowGCTimeout, &out.FlowGCTimeout
-		*out = new(v1.Duration)
-		**out = **in
-	}
-	if in.PriorityBandGCTimeout != nil {
-		in, out := &in.PriorityBandGCTimeout, &out.PriorityBandGCTimeout
-		*out = new(v1.Duration)
-		**out = **in
-	}
-	if in.ExpiryCleanupInterval != nil {
-		in, out := &in.ExpiryCleanupInterval, &out.ExpiryCleanupInterval
-		*out = new(v1.Duration)
-		**out = **in
-	}
 	if in.PriorityBands != nil {
 		in, out := &in.PriorityBands, &out.PriorityBands
 		*out = make([]PriorityBandConfig, len(*in))

@@ -260,13 +260,15 @@ type FlowControlConfig struct {
 	// levels. If this limit is exceeded, new requests will be rejected even if their specific
 	// priority band has capacity.
 	// If 0 or omitted, no global limit is enforced (unlimited).
+	// Default: 0 (unlimited).
 	MaxBytes *int64 `json:"maxBytes,omitempty"`
 
 	// +optional
 	// DefaultRequestTTL serves as a fallback timeout for requests that do not specify their own
 	// deadline.
 	// It ensures that requests do not hang indefinitely in the queue.
-	// If 0 or omitted, no default TTL is applied (requests may wait indefinitely unless cancelled).
+	// If 0 or omitted, it defaults to the client context deadline, meaning requests may wait
+	// indefinitely unless cancelled by the client.
 	DefaultRequestTTL *metav1.Duration `json:"defaultRequestTTL,omitempty"`
 
 	// +optional
@@ -274,31 +276,9 @@ type FlowControlConfig struct {
 	// that are not explicitly configured in `PriorityBands`.
 	// This ensures that unforeseen traffic classes are still managed (e.g., given a default capacity
 	// limit) rather than being rejected or treated arbitrarily.
-	// If not specified, system defaults are used.
+	// If not specified, a system-default template is used to dynamically provision bands for new
+	// priority levels. This template cascades to the standard `PriorityBandConfig` defaults.
 	DefaultPriorityBand *PriorityBandConfig `json:"defaultPriorityBand,omitempty"`
-
-	// +optional
-	// FlowGCTimeout controls how long the system retains state for an idle flow (a stream of
-	// requests with the same flow ID) before cleaning it up. A flow is considered idle if it has no
-	// active requests.
-	// If 0 or omitted, the default is used.
-	FlowGCTimeout *metav1.Duration `json:"flowGCTimeout,omitempty"`
-
-	// +optional
-	// PriorityBandGCTimeout controls how long dynamically provisioned priority bands remain active
-	// when empty.
-	// This value must be greater than or equal to `FlowGCTimeout` to ensure flows are cleaned up
-	// before their parent band is removed.
-	// If 0 or omitted, the default is used.
-	PriorityBandGCTimeout *metav1.Duration `json:"priorityBandGCTimeout,omitempty"`
-
-	// +optional
-	// ExpiryCleanupInterval controls the frequency of the background task that purges references to
-	// expired (timed-out) requests from the pending queues.
-	// A shorter interval reclaims queue capacity faster but uses more CPU and increases contention.
-	// A longer interval reduces overhead but may leave "dead" requests taking up space for longer.
-	// If 0 or omitted, the default is used.
-	ExpiryCleanupInterval *metav1.Duration `json:"expiryCleanupInterval,omitempty"`
 
 	// PriorityBands allows you to explicitly define policies (like capacity limits) for specific
 	// priority levels. Traffic matching these priorities will be handled according to these rules.
@@ -320,6 +300,7 @@ type PriorityBandConfig struct {
 	// +optional
 	// MaxBytes is the maximum number of bytes allowed for this priority band.
 	// If 0 or omitted, the system default is used.
+	// Default: 1 GB.
 	MaxBytes *int64 `json:"maxBytes,omitempty"`
 }
 

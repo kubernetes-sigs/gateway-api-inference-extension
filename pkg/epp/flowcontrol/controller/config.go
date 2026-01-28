@@ -60,13 +60,10 @@ type ConfigOption func(*Config)
 
 // NewConfigFromAPI creates a new Config from the API configuration.
 func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig) (*Config, error) {
-	opts := make([]ConfigOption, 0, 2)
+	opts := make([]ConfigOption, 0, 1)
 	if apiConfig != nil {
 		if apiConfig.DefaultRequestTTL != nil {
 			opts = append(opts, WithDefaultRequestTTL(apiConfig.DefaultRequestTTL.Duration))
-		}
-		if apiConfig.ExpiryCleanupInterval != nil {
-			opts = append(opts, WithExpiryCleanupInterval(apiConfig.ExpiryCleanupInterval.Duration))
 		}
 	}
 	return NewConfig(opts...)
