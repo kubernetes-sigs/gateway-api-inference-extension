@@ -19,14 +19,15 @@ package costreporting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/checker/decls"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -83,19 +84,17 @@ func CostReportingPluginFactory(name string, rawParameters json.RawMessage, hand
 func New(config Config, logger logr.Logger) (*Plugin, error) {
 	metric := &config.Metric
 	if metric.Name == "" {
-		return nil, fmt.Errorf("metric.name cannot be empty")
+		return nil, errors.New("metric.name cannot be empty")
 	}
 	if config.Expression == "" {
-		return nil, fmt.Errorf("config.expression cannot be empty")
+		return nil, errors.New("config.expression cannot be empty")
 	}
 	if metric.Namespace == "" {
 		metric.Namespace = DefaultNamespace
 	}
 
 	env, err := cel.NewEnv(
-		cel.Declarations(
-			decls.NewVar("usage", decls.NewObjectType("google.protobuf.Struct")),
-		),
+		cel.Variable("usage", cel.ObjectType("google.protobuf.Struct")),
 	)
 	if err != nil {
 		return nil, err
@@ -214,7 +213,7 @@ func (c *Plugin) shouldCalculateCost(celData any) (bool, error) {
 	if c.conditionProg != nil {
 		val, err := c.maybeExecuteProg(c.conditionProg, celData, "condition", c.config.Condition)
 		if err != nil {
-			return false, nil // Error already logged
+			return false, err // Error already logged in maybeExecuteProg
 		}
 		if bVal, ok := val.(bool); !ok || !bVal {
 			c.logger.V(1).Info("Condition not met", "condition", c.config.Condition)
@@ -235,7 +234,7 @@ func (c *Plugin) calculateCost(celData any) (int64, error) {
 		// Try int64 as well
 		int64Val, ok := val.(int64)
 		if !ok {
-			c.logger.Error(fmt.Errorf("type conversion error"), "Expression result could not be converted to float64 or int64", "expression", c.config.Expression, "result", val)
+			c.logger.Error(errors.New("type conversion error"), "Expression result could not be converted to float64 or int64", "expression", c.config.Expression, "result", val)
 			return -1, nil
 		}
 		doubleVal = float64(int64Val)
@@ -246,7 +245,7 @@ func (c *Plugin) calculateCost(celData any) (int64, error) {
 func (c *Plugin) maybeExecuteProg(prog cel.Program, celData any, exprType string, expression string) (any, error) {
 	val, _, err := prog.Eval(map[string]any{"usage": celData})
 	if err != nil {
-		c.logger.Error(err, fmt.Sprintf("Failed to evaluate %s", exprType), exprType, expression)
+		c.logger.Error(err, "Failed to evaluate "+exprType, exprType, expression)
 		return nil, err
 	}
 	return val.Value(), nil

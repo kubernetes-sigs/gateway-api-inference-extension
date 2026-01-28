@@ -23,13 +23,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	handlerstypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers/types"
 )
 
 // Test interface satisfaction at compile time.
@@ -109,18 +108,26 @@ func TestPluginCreation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plugin, err := New(tt.config, logger)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewCostReporting() error = %v, wantErr %v", err, tt.wantErr)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("New() error = nil, wantErr %v", tt.wantErr)
+				}
 				return
 			}
-			if !tt.wantErr {
-				if plugin == nil {
-					t.Errorf("Expected plugin to not be nil")
-				}
-				metric := plugin.config.Metric
-				if metric.Namespace != tt.wantNS {
-					t.Errorf("Expected namespace %s, got %s", tt.wantNS, metric.Namespace)
-				}
+
+			// If !tt.wantErr
+			if err != nil {
+				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if plugin == nil {
+				t.Fatalf("New() returned nil plugin without error")
+			}
+
+			metric := plugin.config.Metric
+			if metric.Namespace != tt.wantNS {
+				t.Errorf("Expected namespace %s, got %s", tt.wantNS, metric.Namespace)
 			}
 		})
 	}
@@ -143,7 +150,7 @@ func TestCostReporting(t *testing.T) {
 				Expression: "usage.prompt_tokens",
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{
+				Usage: requestcontrol.Usage{
 					PromptTokens: 15,
 				},
 			},
@@ -171,7 +178,7 @@ func TestCostReporting(t *testing.T) {
 				Condition:  "has(usage.prompt_tokens)",
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{
+				Usage: requestcontrol.Usage{
 					PromptTokens: 0,
 				},
 			},
@@ -199,7 +206,7 @@ func TestCostReporting(t *testing.T) {
 				Condition:  "usage.completion_tokens > 0",
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{
+				Usage: requestcontrol.Usage{
 					PromptTokens: 10,
 				},
 				DynamicMetadata: &structpb.Struct{
@@ -224,7 +231,7 @@ func TestCostReporting(t *testing.T) {
 				Condition:  "usage.prompt_tokens", // This is an int, not bool
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{
+				Usage: requestcontrol.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -239,7 +246,7 @@ func TestCostReporting(t *testing.T) {
 				Expression: "'not a number'",
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{
+				Usage: requestcontrol.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -254,7 +261,7 @@ func TestCostReporting(t *testing.T) {
 				Expression: "usage.non_existent_field", // No has() guard
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{
+				Usage: requestcontrol.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -269,7 +276,7 @@ func TestCostReporting(t *testing.T) {
 				Expression: "(has(usage.prompt_tokens) ? usage.prompt_tokens : 0) + (has(usage.completion_tokens) ? usage.completion_tokens : 0)",
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{}, // Empty usage
+				Usage: requestcontrol.Usage{}, // Empty usage
 			},
 			wantResult: &structpb.Struct{
 				Fields: map[string]*structpb.Value{
@@ -294,7 +301,7 @@ func TestCostReporting(t *testing.T) {
 				Expression: "(has(usage.prompt_tokens) ? usage.prompt_tokens : 0) + (has(usage.completion_tokens) ? usage.completion_tokens : 0)",
 			},
 			response: &requestcontrol.Response{
-				Usage: handlerstypes.Usage{
+				Usage: requestcontrol.Usage{
 					CompletionTokens: 25,
 				},
 			},
