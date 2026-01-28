@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Kubernetes Authors.
+Copyright 2026 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package metrics
 import (
 	"errors"
 	"fmt"
-	"sync"
 )
 
 const (
@@ -31,13 +30,16 @@ const (
 )
 
 // MappingRegistry holds multiple metric mappings for different inference engines.
+// It is not safe for concurrent writes; all registrations should be done during initialization.
 type MappingRegistry struct {
-	mappings sync.Map // key: engine type string, value: *Mapping
+	mappings map[string]*Mapping
 }
 
 // NewMappingRegistry creates a new registry for metric mappings.
 func NewMappingRegistry() *MappingRegistry {
-	return &MappingRegistry{}
+	return &MappingRegistry{
+		mappings: make(map[string]*Mapping),
+	}
 }
 
 // Register adds a mapping for a specific engine type.
@@ -50,9 +52,10 @@ func (r *MappingRegistry) Register(engineType string, mapping *Mapping) error {
 		return errors.New("mapping cannot be nil")
 	}
 
-	if _, loaded := r.mappings.LoadOrStore(engineType, mapping); loaded {
+	if _, exists := r.mappings[engineType]; exists {
 		return fmt.Errorf("mapping for engine type %q already exists", engineType)
 	}
+	r.mappings[engineType] = mapping
 	return nil
 }
 
@@ -63,14 +66,14 @@ func (r *MappingRegistry) Get(engineType string) (*Mapping, bool) {
 	}
 
 	// Direct lookup
-	if val, ok := r.mappings.Load(engineType); ok {
-		return val.(*Mapping), true
+	if mapping, ok := r.mappings[engineType]; ok {
+		return mapping, true
 	}
 
 	// Fallback to default
 	if engineType != DefaultEngineType {
-		if val, ok := r.mappings.Load(DefaultEngineType); ok {
-			return val.(*Mapping), true
+		if mapping, ok := r.mappings[DefaultEngineType]; ok {
+			return mapping, true
 		}
 	}
 
@@ -79,10 +82,9 @@ func (r *MappingRegistry) Get(engineType string) (*Mapping, bool) {
 
 // ListEngineTypes returns a list of all registered engine types.
 func (r *MappingRegistry) ListEngineTypes() []string {
-	var result []string
-	r.mappings.Range(func(key, _ any) bool {
-		result = append(result, key.(string))
-		return true
-	})
+	result := make([]string, 0, len(r.mappings))
+	for engineType := range r.mappings {
+		result = append(result, engineType)
+	}
 	return result
 }
