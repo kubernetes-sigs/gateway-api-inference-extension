@@ -22,8 +22,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test"
 )
 
 func TestDestinationEndpointServedVerifier_ResponseReceived(t *testing.T) {
