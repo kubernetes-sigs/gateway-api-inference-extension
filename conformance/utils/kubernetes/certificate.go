@@ -54,26 +54,6 @@ func MustCreateSelfSignedCertSecret(t *testing.T, namespace, secretName string, 
 	return formatSecret(serverCert, serverKey, namespace, secretName)
 }
 
-// MustCreateCASignedCertSecret creates a CA-signed SSL certificate and stores it in a secret
-func MustCreateCASignedCertSecret(t *testing.T, namespace, secretName string, hosts []string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey) *corev1.Secret {
-	require.NotEmpty(t, hosts, "require a non-empty hosts for Subject Alternate Name values")
-
-	var serverCert, serverKey bytes.Buffer
-
-	require.NoError(t, generateRSACert(hosts, &serverKey, &serverCert, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, ca, caPrivKey), "failed to generate CA signed RSA certificate")
-
-	return formatSecret(serverCert, serverKey, namespace, secretName)
-}
-
-// MustCreateCASignedClientCertSecret creates a CA-signed SSL client certificate and stores it in a secret
-func MustCreateCASignedClientCertSecret(t *testing.T, namespace, secretName string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey) *corev1.Secret {
-	var clientCert, clientKey bytes.Buffer
-
-	require.NoError(t, generateRSACert([]string{}, &clientKey, &clientCert, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, ca, caPrivKey), "failed to generate CA signed RSA client certificate")
-
-	return formatSecret(clientCert, clientKey, namespace, secretName)
-}
-
 // formatSecret formats the certificate, key, namespace, and secretName
 // and converts it to a Kubernetes Secret object.
 func formatSecret(cert bytes.Buffer, privateKey bytes.Buffer, namespace string, secretName string) *corev1.Secret {
@@ -156,82 +136,6 @@ func generateRSACert(hosts []string, keyOut, certOut io.Writer, extKeyUsage []x5
 	}
 
 	return nil
-}
-
-// MustCreateCACertConfigMap will create a ConfigMap containing a CA Certificate, given a TLS Secret
-// for that CA certificate.  Also returns the CA certificate.
-func MustCreateCACertConfigMap(t *testing.T, namespace, configMapName string) (*corev1.ConfigMap, *x509.Certificate, *rsa.PrivateKey) {
-	var certData, keyData bytes.Buffer
-
-	ca, caBytes, caPrivKey, err := generateCACert()
-	if err != nil {
-		t.Errorf("failed to generate CA certificate and key: %v", err)
-		return nil, nil, nil
-	}
-
-	if err := pem.Encode(&certData, &pem.Block{Type: "CERTIFICATE", Bytes: caBytes}); err != nil {
-		t.Errorf("failed creating cert: %v", err)
-		return nil, nil, nil
-	}
-
-	if err := pem.Encode(&keyData, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey)}); err != nil {
-		t.Errorf("failed creating key: %v", err)
-		return nil, nil, nil
-	}
-
-	// Store the certificate in a ConfigMap.
-	caConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      configMapName,
-		},
-		Data: map[string]string{
-			"ca.crt": certData.String(),
-			// Don't do this in production, this is just for conformance testing.
-			"key.crt": keyData.String(),
-		},
-	}
-	return caConfigMap, ca, caPrivKey
-}
-
-// generateCACert generates a CA certificate valid for a year.
-func generateCACert() (*x509.Certificate, []byte, *rsa.PrivateKey, error) {
-	var caBytes []byte
-
-	// Create the CA certificate template.
-	ca := &x509.Certificate{
-		SerialNumber: big.NewInt(2024),
-		Subject: pkix.Name{
-			Organization: []string{"Kubernetes Gateway API"},
-			Country:      []string{"US"},
-			CommonName:   "gatewayapi",
-		},
-		Issuer: pkix.Name{
-			Organization: []string{"Kubernetes Gateway API"},
-			Country:      []string{"US"},
-			CommonName:   "kubernetes",
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(1, 0, 0),
-		IsCA:                  true, // Indicates this is a CA Certificate.
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-	}
-
-	// Generate the private key to sign certificates.
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, rsaBits)
-	if err != nil {
-		return nil, caBytes, caPrivKey, fmt.Errorf("error generating key for CA: %v", err)
-	}
-
-	// Create the self-signed certificate using the CA certificate.
-	caBytes, err = x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, caBytes, caPrivKey, fmt.Errorf("error creating CA: %v", err)
-	}
-
-	return ca, caBytes, caPrivKey, nil
 }
 
 // validateHost ensures that the host name length is no more than 253 characters.

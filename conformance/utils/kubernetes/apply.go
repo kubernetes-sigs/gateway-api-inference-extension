@@ -219,32 +219,6 @@ func (a Applier) prepareResources(t *testing.T, decoder *yaml.YAMLOrJSONDecoder)
 	return resources, nil
 }
 
-func (a Applier) MustApplyObjectsWithCleanup(t *testing.T, c client.Client, timeoutConfig config.TimeoutConfig, resources []client.Object, cleanup bool) {
-	for _, resource := range resources {
-		ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout)
-		defer cancel()
-
-		tlog.Logf(t, "Creating %s %s", resource.GetName(), resource.GetObjectKind().GroupVersionKind().Kind)
-
-		err := c.Create(ctx, resource)
-		if err != nil {
-			if !apierrors.IsAlreadyExists(err) {
-				require.NoError(t, err, "error creating resource")
-			}
-		}
-
-		if cleanup {
-			t.Cleanup(func() {
-				ctx, cancel = context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
-				defer cancel()
-				tlog.Logf(t, "Deleting %s %s", resource.GetName(), resource.GetObjectKind().GroupVersionKind().Kind)
-				err = c.Delete(ctx, resource)
-				require.NoErrorf(t, err, "error deleting resource")
-			})
-		}
-	}
-}
-
 // MustApplyWithCleanup creates or updates Kubernetes resources defined with the
 // provided YAML file and registers a cleanup function for resources it created.
 // Note that this does not remove resources that already existed in the cluster.
