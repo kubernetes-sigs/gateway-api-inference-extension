@@ -18,6 +18,7 @@ package flowcontrol
 
 import (
 	"context"
+	"errors"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -28,6 +29,12 @@ const (
 
 	// OrderingPolicyExtensionPoint identifies the plugin type responsible for sorting requests within a Flow.
 	OrderingPolicyExtensionPoint = "OrderingPolicy"
+)
+
+var (
+	// ErrIncompatiblePriorityType indicates that a FairnessPolicy attempted to compare items from two different flow
+	// queues whose ItemComparators have different ScoreType values, making a meaningful comparison impossible.
+	ErrIncompatiblePriorityType = errors.New("incompatible priority score type for comparison")
 )
 
 // FairnessPolicy governs the distribution of dispatch opportunities among competing Flows within the same Priority

@@ -37,4 +37,13 @@ var (
 	// ErrShardDraining indicates that an operation could not be completed because the target shard is in the process of
 	// being gracefully drained. The caller should retry the operation on a different, Active shard.
 	ErrShardDraining = errors.New("shard is draining")
+
+	// ErrInvalidQueueItemHandle indicates that a QueueItemHandle provided to a SafeQueue operation (e.g.,
+	// SafeQueue.Remove()) is not valid for that queue, has been invalidated, or does not correspond to an actual item in
+	// the queue.
+	ErrInvalidQueueItemHandle = errors.New("invalid queue item handle")
+
+	// ErrQueueItemNotFound indicates that a SafeQueue.Remove(handle) operation did not find an item matching the
+	// provided, valid QueueItemHandle. This can occur if the item was removed by a concurrent operation.
+	ErrQueueItemNotFound = errors.New("queue item not found for the given handle")
 )

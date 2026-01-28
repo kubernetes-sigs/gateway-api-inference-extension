@@ -297,7 +297,7 @@ func (s *registryShard) Stats() contracts.ShardStats {
 func (s *registryShard) synchronizeFlow(
 	key flowcontrol.FlowKey,
 	policy flowcontrol.OrderingPolicy,
-	q flowcontrol.SafeQueue,
+	q contracts.SafeQueue,
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -142,6 +142,66 @@ func (m *MockPodLocator) Locate(ctx context.Context, requestMetadata map[string]
 	return result
 }
 
+// --- SafeQueue Mock ---
+
+// MockSafeQueue is a simple stub mock for the SafeQueue interface.
+// It is used for tests that need to control the exact return values of a queue's methods without simulating the queue's
+// internal logic or state.
+type MockSafeQueue struct {
+	NameV         string
+	CapabilitiesV []flowcontrol.QueueCapability
+	LenV          int
+	ByteSizeV     uint64
+	PeekHeadV     flowcontrol.QueueItemAccessor
+	PeekTailV     flowcontrol.QueueItemAccessor
+	AddFunc       func(item flowcontrol.QueueItemAccessor)
+	RemoveFunc    func(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error)
+	CleanupFunc   func(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor
+	DrainFunc     func() []flowcontrol.QueueItemAccessor
+}
+
+func (m *MockSafeQueue) Name() string                                { return m.NameV }
+func (m *MockSafeQueue) Capabilities() []flowcontrol.QueueCapability { return m.CapabilitiesV }
+func (m *MockSafeQueue) Len() int                                    { return m.LenV }
+func (m *MockSafeQueue) ByteSize() uint64                            { return m.ByteSizeV }
+
+func (m *MockSafeQueue) PeekHead() flowcontrol.QueueItemAccessor {
+	return m.PeekHeadV
+}
+
+func (m *MockSafeQueue) PeekTail() flowcontrol.QueueItemAccessor {
+	return m.PeekTailV
+}
+
+func (m *MockSafeQueue) Add(item flowcontrol.QueueItemAccessor) {
+	if m.AddFunc != nil {
+		m.AddFunc(item)
+	}
+}
+
+func (m *MockSafeQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
+	if m.RemoveFunc != nil {
+		return m.RemoveFunc(handle)
+	}
+	return nil, nil
+}
+
+func (m *MockSafeQueue) Cleanup(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor {
+	if m.CleanupFunc != nil {
+		return m.CleanupFunc(predicate)
+	}
+	return nil
+}
+
+func (m *MockSafeQueue) Drain() []flowcontrol.QueueItemAccessor {
+	if m.DrainFunc != nil {
+		return m.DrainFunc()
+	}
+	return nil
+}
+
+var _ contracts.SafeQueue = &MockSafeQueue{}
+
 // --- ManagedQueue Mock ---
 
 // MockManagedQueue is a high-fidelity, thread-safe mock of the `contracts.ManagedQueue` interface, designed
@@ -170,7 +230,7 @@ type MockManagedQueue struct {
 	// RemoveFunc allows a test to completely override the default Remove behavior.
 	RemoveFunc func(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error)
 	// CleanupFunc allows a test to completely override the default Cleanup behavior.
-	CleanupFunc func(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor
+	CleanupFunc func(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor
 	// DrainFunc allows a test to completely override the default Drain behavior.
 	DrainFunc func() []flowcontrol.QueueItemAccessor
 	// OrderingPolicyFunc allows a test to override OrderingPolicy.
@@ -232,7 +292,7 @@ func (m *MockManagedQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontr
 }
 
 // Cleanup removes items matching a predicate. It checks for a test override before locking.
-func (m *MockManagedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
+func (m *MockManagedQueue) Cleanup(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor {
 	if m.CleanupFunc != nil {
 		return m.CleanupFunc(predicate)
 	}

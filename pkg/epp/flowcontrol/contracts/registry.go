@@ -158,7 +158,7 @@ type ManagedQueue interface {
 	Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error)
 
 	// Cleanup removes all items from the underlying queue that satisfy the predicate.
-	Cleanup(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor
+	Cleanup(predicate PredicateFunc) []flowcontrol.QueueItemAccessor
 
 	// Drain removes all items from the underlying queue.
 	Drain() []flowcontrol.QueueItemAccessor

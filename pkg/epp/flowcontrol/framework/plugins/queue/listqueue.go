@@ -23,6 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -52,7 +53,7 @@ const ListQueueName = "ListQueue"
 
 func init() {
 	MustRegisterQueue(RegisteredQueueName(ListQueueName),
-		func(_ flowcontrol.OrderingPolicy) (flowcontrol.SafeQueue, error) {
+		func(_ flowcontrol.OrderingPolicy) (contracts.SafeQueue, error) {
 			// The list queue is a simple FIFO queue and does not use an ordering policy.
 			return newListQueue(), nil
 		})
@@ -116,16 +117,16 @@ func (lq *listQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.Que
 	defer lq.mu.Unlock()
 
 	if handle == nil || handle.IsInvalidated() {
-		return nil, flowcontrol.ErrInvalidQueueItemHandle
+		return nil, contracts.ErrInvalidQueueItemHandle
 	}
 
 	lh, ok := handle.(*listItemHandle)
 	if !ok {
-		return nil, flowcontrol.ErrInvalidQueueItemHandle
+		return nil, contracts.ErrInvalidQueueItemHandle
 	}
 
 	if lh.owner != lq {
-		return nil, flowcontrol.ErrQueueItemNotFound
+		return nil, contracts.ErrQueueItemNotFound
 	}
 
 	item := lh.element.Value.(flowcontrol.QueueItemAccessor)
@@ -136,7 +137,7 @@ func (lq *listQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.Que
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (lq *listQueue) Cleanup(predicate flowcontrol.PredicateFunc) (cleanedItems []flowcontrol.QueueItemAccessor) {
+func (lq *listQueue) Cleanup(predicate contracts.PredicateFunc) (cleanedItems []flowcontrol.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 

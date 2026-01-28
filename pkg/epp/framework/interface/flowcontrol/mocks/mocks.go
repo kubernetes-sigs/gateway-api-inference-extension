@@ -220,64 +220,6 @@ func (m *MockPriorityBandAccessor) IterateQueues(callback func(flow flowcontrol.
 
 var _ flowcontrol.PriorityBandAccessor = &MockPriorityBandAccessor{}
 
-// MockSafeQueue is a simple stub mock for the SafeQueue interface.
-// It is used for tests that need to control the exact return values of a queue's methods without simulating the queue's
-// internal logic or state.
-type MockSafeQueue struct {
-	NameV         string
-	CapabilitiesV []flowcontrol.QueueCapability
-	LenV          int
-	ByteSizeV     uint64
-	PeekHeadV     flowcontrol.QueueItemAccessor
-	PeekTailV     flowcontrol.QueueItemAccessor
-	AddFunc       func(item flowcontrol.QueueItemAccessor)
-	RemoveFunc    func(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error)
-	CleanupFunc   func(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor
-	DrainFunc     func() []flowcontrol.QueueItemAccessor
-}
-
-func (m *MockSafeQueue) Name() string                                { return m.NameV }
-func (m *MockSafeQueue) Capabilities() []flowcontrol.QueueCapability { return m.CapabilitiesV }
-func (m *MockSafeQueue) Len() int                                    { return m.LenV }
-func (m *MockSafeQueue) ByteSize() uint64                            { return m.ByteSizeV }
-
-func (m *MockSafeQueue) PeekHead() flowcontrol.QueueItemAccessor {
-	return m.PeekHeadV
-}
-
-func (m *MockSafeQueue) PeekTail() flowcontrol.QueueItemAccessor {
-	return m.PeekTailV
-}
-
-func (m *MockSafeQueue) Add(item flowcontrol.QueueItemAccessor) {
-	if m.AddFunc != nil {
-		m.AddFunc(item)
-	}
-}
-
-func (m *MockSafeQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
-	if m.RemoveFunc != nil {
-		return m.RemoveFunc(handle)
-	}
-	return nil, nil
-}
-
-func (m *MockSafeQueue) Cleanup(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
-	if m.CleanupFunc != nil {
-		return m.CleanupFunc(predicate)
-	}
-	return nil
-}
-
-func (m *MockSafeQueue) Drain() []flowcontrol.QueueItemAccessor {
-	if m.DrainFunc != nil {
-		return m.DrainFunc()
-	}
-	return nil
-}
-
-var _ flowcontrol.SafeQueue = &MockSafeQueue{}
-
 // MockOrderingPolicy is a behavioral mock for the OrderingPolicy interface.
 // Simple accessors are configured with public value fields (e.g., TypedNameV).
 // Complex methods with logic are configured with function fields (e.g., LessFunc).

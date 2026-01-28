@@ -30,6 +30,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -38,7 +39,7 @@ const MaxMinHeapName = "MaxMinHeap"
 
 func init() {
 	MustRegisterQueue(RegisteredQueueName(MaxMinHeapName),
-		func(policy flowcontrol.OrderingPolicy) (flowcontrol.SafeQueue, error) {
+		func(policy flowcontrol.OrderingPolicy) (contracts.SafeQueue, error) {
 			return newMaxMinHeap(policy), nil
 		})
 }
@@ -254,22 +255,22 @@ func (h *maxMinHeap) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.Que
 	defer h.mu.Unlock()
 
 	if handle == nil {
-		return nil, flowcontrol.ErrInvalidQueueItemHandle
+		return nil, contracts.ErrInvalidQueueItemHandle
 	}
 
 	if handle.IsInvalidated() {
-		return nil, flowcontrol.ErrInvalidQueueItemHandle
+		return nil, contracts.ErrInvalidQueueItemHandle
 	}
 
 	heapItem, ok := handle.(*heapItem)
 	if !ok {
-		return nil, flowcontrol.ErrInvalidQueueItemHandle
+		return nil, contracts.ErrInvalidQueueItemHandle
 	}
 
 	// Now we can check if the handle is in the map
 	_, ok = h.handles[handle]
 	if !ok {
-		return nil, flowcontrol.ErrQueueItemNotFound
+		return nil, contracts.ErrQueueItemNotFound
 	}
 
 	i := heapItem.index
@@ -419,7 +420,7 @@ func isMinLevel(i int) bool {
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (h *maxMinHeap) Cleanup(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
+func (h *maxMinHeap) Cleanup(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

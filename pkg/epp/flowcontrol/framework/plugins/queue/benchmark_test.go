@@ -21,6 +21,7 @@ import (
 	"sync"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
@@ -62,7 +63,7 @@ func BenchmarkQueues(b *testing.B) {
 
 // benchmarkAddRemove measures the throughput of tightly coupled Add and Remove operations in parallel. This is a good
 // measure of the base overhead of the queue's data structure and locking mechanism.
-func benchmarkAddRemove(b *testing.B, q flowcontrol.SafeQueue) {
+func benchmarkAddRemove(b *testing.B, q contracts.SafeQueue) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
@@ -80,7 +81,7 @@ func benchmarkAddRemove(b *testing.B, q flowcontrol.SafeQueue) {
 
 // benchmarkAddPeekRemove measures the throughput of a serial Add, PeekHead, and Remove sequence. This simulates a
 // common consumer pattern where a single worker peeks at an item before deciding to process and remove it.
-func benchmarkAddPeekRemove(b *testing.B, q flowcontrol.SafeQueue) {
+func benchmarkAddPeekRemove(b *testing.B, q contracts.SafeQueue) {
 	// Pre-add one item so PeekHead doesn't fail on the first iteration.
 	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", benchmarkFlowKey)
 	q.Add(initialItem)
@@ -106,7 +107,7 @@ func benchmarkAddPeekRemove(b *testing.B, q flowcontrol.SafeQueue) {
 
 // benchmarkBulkAddThenBulkRemove measures performance of filling the queue up with a batch of items and then draining
 // it. This can reveal performance characteristics related to how the data structure grows and shrinks.
-func benchmarkBulkAddThenBulkRemove(b *testing.B, q flowcontrol.SafeQueue) {
+func benchmarkBulkAddThenBulkRemove(b *testing.B, q contracts.SafeQueue) {
 	b.ReportAllocs()
 
 	for i := 0; b.Loop(); i++ {
@@ -133,7 +134,7 @@ func benchmarkBulkAddThenBulkRemove(b *testing.B, q flowcontrol.SafeQueue) {
 
 // benchmarkAddPeekTailRemove measures the throughput of a serial Add, PeekTail, and Remove sequence. This is useful for
 // understanding the performance of accessing the lowest-priority item.
-func benchmarkAddPeekTailRemove(b *testing.B, q flowcontrol.SafeQueue) {
+func benchmarkAddPeekTailRemove(b *testing.B, q contracts.SafeQueue) {
 	// Pre-add one item so PeekTail doesn't fail on the first iteration.
 	initialItem := mocks.NewMockQueueItemAccessor(1, "initial", benchmarkFlowKey)
 	q.Add(initialItem)
@@ -158,7 +159,7 @@ func benchmarkAddPeekTailRemove(b *testing.B, q flowcontrol.SafeQueue) {
 
 // benchmarkHighContention simulates a more realistic workload with multiple producers and consumers operating on the
 // queue concurrently.
-func benchmarkHighContention(b *testing.B, q flowcontrol.SafeQueue) {
+func benchmarkHighContention(b *testing.B, q contracts.SafeQueue) {
 	// Pre-fill the queue to ensure consumers have work to do immediately.
 	for i := range 1000 {
 		item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("prefill-%d", i), benchmarkFlowKey)

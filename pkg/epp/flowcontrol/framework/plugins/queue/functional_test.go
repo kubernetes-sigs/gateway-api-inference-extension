@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -64,7 +65,7 @@ var reverseEnqueueTimePolicy = &mocks.MockOrderingPolicy{
 // This function is crucial for testing different ordering logic (FIFO, custom priority).
 func testLifecycleAndOrdering(
 	t *testing.T,
-	q flowcontrol.SafeQueue,
+	q contracts.SafeQueue,
 	itemsInOrder []*mocks.MockQueueItemAccessor,
 	comparatorName string,
 ) {
@@ -259,10 +260,10 @@ func TestQueueConformance(t *testing.T) {
 					handle    flowcontrol.QueueItemHandle
 					expectErr error
 				}{
-					{name: "nil handle", handle: nil, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
-					{name: "invalidated handle", handle: invalidatedHandle, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
-					{name: "alien handle from other queue", handle: alienHandle, expectErr: flowcontrol.ErrQueueItemNotFound},
-					{name: "foreign handle type", handle: foreignHandle, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
+					{name: "nil handle", handle: nil, expectErr: contracts.ErrInvalidQueueItemHandle},
+					{name: "invalidated handle", handle: invalidatedHandle, expectErr: contracts.ErrInvalidQueueItemHandle},
+					{name: "alien handle from other queue", handle: alienHandle, expectErr: contracts.ErrQueueItemNotFound},
+					{name: "foreign handle type", handle: foreignHandle, expectErr: contracts.ErrInvalidQueueItemHandle},
 				}
 
 				for _, tc := range testCases {
@@ -312,7 +313,7 @@ func TestQueueConformance(t *testing.T) {
 
 				// Attempt to remove again with the now-stale handle
 				_, errStaleNonHead := q.Remove(handleNonHead)
-				assert.ErrorIs(t, errStaleNonHead, flowcontrol.ErrInvalidQueueItemHandle,
+				assert.ErrorIs(t, errStaleNonHead, contracts.ErrInvalidQueueItemHandle,
 					"Removing with a stale handle must fail with ErrInvalidQueueItemHandle")
 			})
 
@@ -506,7 +507,7 @@ func TestQueueConformance(t *testing.T) {
 											successfulRemoves.Add(1)
 										} else {
 											// It's okay if it's ErrInvalidQueueItemHandle or ErrQueueItemNotFound due to races
-											assert.ErrorIs(t, removeErr, flowcontrol.ErrInvalidQueueItemHandle,
+											assert.ErrorIs(t, removeErr, contracts.ErrInvalidQueueItemHandle,
 												"Expected invalid handle or not found if raced")
 										}
 									}

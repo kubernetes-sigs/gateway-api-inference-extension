@@ -580,7 +580,7 @@ func (fr *FlowRegistry) repartitionShardConfigsLocked() {
 // flowComponents holds the plugin instances created for a single flow on a single shard.
 type flowComponents struct {
 	policy flowcontrol.OrderingPolicy
-	queue  flowcontrol.SafeQueue
+	queue  contracts.SafeQueue
 }
 
 // buildFlowComponents instantiates the necessary plugin components for a new flow instance.

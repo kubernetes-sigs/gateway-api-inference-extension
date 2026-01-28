@@ -73,7 +73,7 @@ type managedQueue struct {
 	mu sync.Mutex
 	// queue is the underlying, concurrency-safe queue implementation that this `managedQueue` decorates.
 	// Its state must only be modified while holding `mu`.
-	queue flowcontrol.SafeQueue
+	queue contracts.SafeQueue
 
 	// --- Concurrent-Safe State (Atomics) ---
 
@@ -88,7 +88,7 @@ var _ contracts.ManagedQueue = &managedQueue{}
 
 // newManagedQueue creates a new instance of a `managedQueue`.
 func newManagedQueue(
-	queue flowcontrol.SafeQueue,
+	queue contracts.SafeQueue,
 	policy flowcontrol.OrderingPolicy,
 	key flowcontrol.FlowKey,
 	logger logr.Logger,
@@ -145,7 +145,7 @@ func (mq *managedQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.
 }
 
 // Cleanup wraps the underlying SafeQueue.Cleanup and updates statistics.
-func (mq *managedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []flowcontrol.QueueItemAccessor {
+func (mq *managedQueue) Cleanup(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor {
 	mq.mu.Lock()
 	defer mq.mu.Unlock()
 
