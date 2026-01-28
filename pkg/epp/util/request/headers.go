@@ -28,6 +28,10 @@ import (
 
 const (
 	RequestIdHeaderKey = "x-request-id"
+	ContentTypeKey     = "content-type"
+	PathKey            = ":path"
+	JSONContentType    = "application/json"
+	GRPCContentType    = "application/grpc"
 )
 
 var (
