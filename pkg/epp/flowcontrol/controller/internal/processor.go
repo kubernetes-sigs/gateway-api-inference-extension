@@ -211,16 +211,19 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 // It handles capacity checks, checks for external finalization, and either admits the item to a queue or rejects it.
 func (sp *ShardProcessor) enqueue(item *FlowItem) {
 
-	outcome := item.FinalState()
 	req := item.OriginalRequest()
 	key := req.FlowKey()
 	priorityStr := strconv.Itoa(key.Priority)
+	outcome := item.FinalState()
 
 	startTime := time.Now()
 
 	defer func() {
-		metrics.RecordFlowControlRequestEnqueueDuration(priorityStr, outcome.Outcome.String(), time.Since(startTime))
-
+		outcomeStr := "NotYetFinalized"
+		if fs := item.FinalState(); fs != nil {
+			outcomeStr = fs.Outcome.String()
+		}
+		metrics.RecordFlowControlRequestEnqueueDuration(priorityStr, outcomeStr, time.Since(startTime))
 	}()
 
 	// --- Optimistic External Finalization Check ---
