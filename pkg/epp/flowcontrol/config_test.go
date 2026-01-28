@@ -25,8 +25,8 @@ import (
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/interflow"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -36,16 +36,16 @@ func TestNewConfigFromAPI(t *testing.T) {
 	t.Parallel()
 
 	handle := utils.NewTestHandle(context.Background())
-	handle.AddPlugin(interflow.GlobalStrictFairnessPolicyType, &mocks.MockFairnessPolicy{
+	handle.AddPlugin(fairness.GlobalStrictFairnessPolicyType, &mocks.MockFairnessPolicy{
 		TypedNameV: fwkplugin.TypedName{
-			Name: interflow.GlobalStrictFairnessPolicyType,
-			Type: interflow.GlobalStrictFairnessPolicyType,
+			Name: fairness.GlobalStrictFairnessPolicyType,
+			Type: fairness.GlobalStrictFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(intraflow.FCFSOrderingPolicyType, &mocks.MockOrderingPolicy{
+	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &mocks.MockOrderingPolicy{
 		TypedNameV: fwkplugin.TypedName{
-			Name: intraflow.FCFSOrderingPolicyType,
-			Type: intraflow.FCFSOrderingPolicyType,
+			Name: ordering.FCFSOrderingPolicyType,
+			Type: ordering.FCFSOrderingPolicyType,
 		},
 	})
 
