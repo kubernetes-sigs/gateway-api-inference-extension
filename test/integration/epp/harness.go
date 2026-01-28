@@ -180,12 +180,13 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		// Disable CRD watching for Standalone mode.
 		runner.ControllerCfg = server.NewControllerConfig(false)
 
-		// Inject static Endpoint Pool.
-		// This replicates the manual pool construction that happens in runner.go CLI parsing.
-		// TODO(#2174): Refactor this to share logic with runner.go.
-		endpointPool := datalayer.NewEndpointPool(nsName, testPoolName)
-		endpointPool.Selector = map[string]string{"app": testPoolName}
-		endpointPool.TargetPorts = []int{epptestutil.DefaultTestPort}
+		endpointPool, err := server.NewEndpointPoolFromOptions(
+			nsName,
+			testPoolName,
+			"app="+testPoolName,
+			[]int{epptestutil.DefaultTestPort},
+		)
+		require.NoError(t, err)
 
 		runner.Datastore = datastore.NewDatastore(ctx, pmf, 0, datastore.WithEndpointPool(endpointPool))
 	} else {
