@@ -19,19 +19,19 @@ limitations under the License.
 package http
 
 import (
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
-	"crypto/rand"
-	"math/big"
-	"strconv"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
 )
 

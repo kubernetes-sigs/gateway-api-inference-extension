@@ -43,11 +43,11 @@ import (
 	confv1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/flags"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	versionconsts "sigs.k8s.io/gateway-api-inference-extension/version"
 )
 

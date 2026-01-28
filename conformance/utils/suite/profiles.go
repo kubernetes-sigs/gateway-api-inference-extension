@@ -55,10 +55,10 @@ const (
 
 var (
 	// GatewayLayerConformanceProfile is a ConformanceProfile that covers testing
-	// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, 
+	// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool,
 	// InferenceObjective CRDs).
 	GatewayLayerProfile = ConformanceProfile{
-		Name:         GatewayLayerConformanceProfileName,
+		Name: GatewayLayerConformanceProfileName,
 		CoreFeatures: sets.New(
 			features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
 			features.SupportHTTPRoute,

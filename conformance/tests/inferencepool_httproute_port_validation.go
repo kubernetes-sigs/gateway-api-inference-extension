@@ -23,10 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/suite"
 )
 
 func init() {

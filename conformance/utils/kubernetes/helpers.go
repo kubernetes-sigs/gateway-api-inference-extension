@@ -20,14 +20,14 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
-	"errors"
-	"strconv"
-	"net"
 
 	"github.com/stretchr/testify/require"
 
@@ -37,9 +37,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"k8s.io/utils/ptr"
 
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
@@ -676,7 +676,6 @@ func WaitForGatewayAddress(t *testing.T, client client.Client, timeoutConfig con
 	require.NoErrorf(t, waitErr, "error waiting for Gateway to have at least one IP address in status")
 	return net.JoinHostPort(ipAddr, port), waitErr
 }
-
 
 func parentRefToString(p gatewayv1.ParentReference) string {
 	if p.Namespace != nil && *p.Namespace != "" {

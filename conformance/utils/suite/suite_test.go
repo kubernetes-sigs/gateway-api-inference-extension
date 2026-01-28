@@ -32,8 +32,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	confv1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 
-	versionconsts "sigs.k8s.io/gateway-api-inference-extension/version"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	versionconsts "sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
 func TestGetAPIVersionAndChannel(t *testing.T) {

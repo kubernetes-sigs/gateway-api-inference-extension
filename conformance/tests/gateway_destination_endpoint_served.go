@@ -23,11 +23,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test"
 	testscheduling "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
 )

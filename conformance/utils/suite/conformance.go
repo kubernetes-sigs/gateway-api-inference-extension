@@ -23,8 +23,8 @@ import (
 	"strings"
 	"testing"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
 )
 
 // ConformanceTest is used to define each individual conformance test.
