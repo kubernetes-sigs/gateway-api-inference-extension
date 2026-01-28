@@ -30,6 +30,7 @@ import (
 	"net"
 
 	"github.com/stretchr/testify/require"
+
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -438,6 +439,138 @@ func NewGatewayRef(nn types.NamespacedName, listenerNames ...string) GatewayRef 
 	}
 }
 
+// GWCMustHaveAcceptedConditionTrue waits until the specified GatewayClass has an Accepted condition set with a status value equal to True.
+func GWCMustHaveAcceptedConditionTrue(t *testing.T, c client.Client, timeoutConfig config.TimeoutConfig, gwcName string) string {
+	return gwcMustBeAccepted(t, c, timeoutConfig, gwcName, string(metav1.ConditionTrue))
+}
+
+// gwcMustBeAccepted waits until the specified GatewayClass has an Accepted
+// condition set. Passing an empty status string means that any value
+// will be accepted. It also returns the ControllerName for the GatewayClass.
+// This will cause the test to halt if the specified timeout is exceeded.
+func gwcMustBeAccepted(t *testing.T, c client.Client, timeoutConfig config.TimeoutConfig, gwcName, expectedStatus string) string {
+	t.Helper()
+
+	var controllerName string
+	waitErr := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, timeoutConfig.GWCMustBeAccepted, true, func(ctx context.Context) (bool, error) {
+		gwc := &gatewayv1.GatewayClass{}
+		err := c.Get(ctx, types.NamespacedName{Name: gwcName}, gwc)
+		if err != nil {
+			return false, fmt.Errorf("error fetching GatewayClass: %w", err)
+		}
+
+		controllerName = string(gwc.Spec.ControllerName)
+
+		if err := ConditionsHaveLatestObservedGeneration(gwc, gwc.Status.Conditions); err != nil {
+			tlog.Log(t, "GatewayClass", err)
+			return false, nil
+		}
+
+		// Passing an empty string as the Reason means that any Reason will do.
+		return findConditionInList(t, gwc.Status.Conditions, "Accepted", expectedStatus, ""), nil
+	})
+	require.NoErrorf(t, waitErr, "error waiting for %s GatewayClass to have Accepted condition to be set: %v", gwcName, waitErr)
+
+	return controllerName
+}
+
+// NamespacesMustBeReady waits until all Pods are marked Ready and all Gateways
+// are marked Accepted and Programmed in the specified namespace(s). This will
+// cause the test to halt if the specified timeout is exceeded.
+func NamespacesMustBeReady(t *testing.T, c client.Client, timeoutConfig config.TimeoutConfig, namespaces []string) {
+	t.Helper()
+
+	waitErr := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, timeoutConfig.NamespacesMustBeReady, true, func(ctx context.Context) (bool, error) {
+		for _, ns := range namespaces {
+			gwList := &gatewayv1.GatewayList{}
+			err := c.List(ctx, gwList, client.InNamespace(ns))
+			if err != nil {
+				tlog.Errorf(t, "Error listing Gateways: %v", err)
+				return false, nil
+			}
+			for _, gw := range gwList.Items {
+				if err = ConditionsHaveLatestObservedGeneration(&gw, gw.Status.Conditions); err != nil {
+					tlog.Logf(t, "Gateway %s %v", client.ObjectKeyFromObject(&gw), err)
+					return false, nil
+				}
+
+				// Passing an empty string as the Reason means that any Reason will do.
+				if !findConditionInList(t, gw.Status.Conditions, string(gatewayv1.GatewayConditionAccepted), "True", "") {
+					tlog.Logf(t, "%s Gateway not Accepted yet", client.ObjectKeyFromObject(&gw))
+					return false, nil
+				}
+
+				// Passing an empty string as the Reason means that any Reason will do.
+				if !findConditionInList(t, gw.Status.Conditions, string(gatewayv1.GatewayConditionProgrammed), "True", "") {
+					tlog.Logf(t, "%s Gateway not Programmed yet", client.ObjectKeyFromObject(&gw))
+					return false, nil
+				}
+			}
+
+			podList := &corev1.PodList{}
+			err = c.List(ctx, podList, client.InNamespace(ns))
+			if err != nil {
+				tlog.Errorf(t, "Error listing Pods: %v", err)
+				return false, nil
+			}
+			for _, pod := range podList.Items {
+				if !findPodConditionInList(t, pod.Status.Conditions, "Ready", "True") &&
+					pod.Status.Phase != corev1.PodSucceeded &&
+					pod.DeletionTimestamp == nil {
+					tlog.Logf(t, "Pod %s not ready yet", client.ObjectKeyFromObject(&pod))
+					return false, nil
+				}
+			}
+		}
+		tlog.Logf(t, "Gateways and Pods in %s namespaces ready", strings.Join(namespaces, ", "))
+		return true, nil
+	})
+	require.NoErrorf(t, waitErr, "error waiting for %s namespaces to be ready", strings.Join(namespaces, ", "))
+}
+
+// GatewayMustHaveCondition checks that the supplied Gateway has the supplied Condition,
+// halting after the specified timeout is exceeded.
+func GatewayMustHaveCondition(
+	t *testing.T,
+	client client.Client,
+	timeoutConfig config.TimeoutConfig,
+	gwNN types.NamespacedName,
+	expectedCondition metav1.Condition,
+) {
+	t.Helper()
+
+	waitErr := wait.PollUntilContextTimeout(
+		context.Background(),
+		1*time.Second,
+		timeoutConfig.GatewayMustHaveCondition,
+		true,
+		func(ctx context.Context) (bool, error) {
+			gw := &gatewayv1.Gateway{}
+			err := client.Get(ctx, gwNN, gw)
+			if err != nil {
+				return false, fmt.Errorf("error fetching Gateway: %w", err)
+			}
+
+			if err := ConditionsHaveLatestObservedGeneration(gw, gw.Status.Conditions); err != nil {
+				return false, err
+			}
+
+			if findConditionInList(t,
+				gw.Status.Conditions,
+				expectedCondition.Type,
+				string(expectedCondition.Status),
+				expectedCondition.Reason,
+			) {
+				return true, nil
+			}
+
+			return false, nil
+		},
+	)
+
+	require.NoErrorf(t, waitErr, "error waiting for Gateway status to have a Condition matching expectations")
+}
+
 // HTTPRouteMustHaveCondition checks that the supplied HTTPRoute has the supplied Condition,
 // halting after the specified timeout is exceeded.
 func HTTPRouteMustHaveCondition(t *testing.T, client client.Client, timeoutConfig config.TimeoutConfig, routeNN types.NamespacedName, gwNN types.NamespacedName, condition metav1.Condition) {
@@ -593,3 +726,18 @@ func getGatewayStatus(ctx context.Context, t *testing.T, client client.Client, g
 	return gw, nil
 }
 
+func findPodConditionInList(t *testing.T, conditions []corev1.PodCondition, condName, condValue string) bool {
+	t.Helper()
+
+	for _, cond := range conditions {
+		if cond.Type == corev1.PodConditionType(condName) {
+			if cond.Status == corev1.ConditionStatus(condValue) {
+				return true
+			}
+			tlog.Logf(t, "%s condition set to %s, expected %s", condName, cond.Status, condValue)
+		}
+	}
+
+	tlog.Logf(t, "%s was not in conditions list", condName)
+	return false
+}

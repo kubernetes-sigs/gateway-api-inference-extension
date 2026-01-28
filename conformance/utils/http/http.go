@@ -26,11 +26,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"crypto/rand"
+	"math/big"
+	"strconv"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/weight"
 )
 
 // ExpectedResponse defines the response expected for a given request.
@@ -519,5 +521,52 @@ func AddEntropy(exp *ExpectedResponse) error {
 		return nil
 	}
 
-	return weight.AddRandomEntropy(addRandomHeader)
+	return AddRandomEntropy(addRandomHeader)
+}
+
+// AddRandomEntropy randomly chooses to add delay, random value, or both
+// The addRandomValue function should be provided by the caller to handle
+// protocol-specific ways of adding the random value (HTTP headers, gRPC metadata, etc.)
+func AddRandomEntropy(addRandomValue func(string) error) error {
+	n, err := rand.Int(rand.Reader, big.NewInt(3))
+	if err != nil {
+		// Fallback to case 0 if crypto/rand fails
+		addRandomDelay(1000)
+		return err
+	}
+	random := n.Int64()
+
+	switch random {
+	case 0:
+		addRandomDelay(1000)
+		return nil
+	case 1:
+		valueN, err := rand.Int(rand.Reader, big.NewInt(10000))
+		if err != nil {
+			return fmt.Errorf("failed to generate random value: %w", err)
+		}
+		randomValue := valueN.Int64()
+		return addRandomValue(strconv.FormatInt(randomValue, 10))
+	case 2:
+		addRandomDelay(1000)
+		valueN, err := rand.Int(rand.Reader, big.NewInt(10000))
+		if err != nil {
+			return fmt.Errorf("failed to generate random value: %w", err)
+		}
+		randomValue := valueN.Int64()
+		return addRandomValue(strconv.FormatInt(randomValue, 10))
+	default:
+		return fmt.Errorf("invalid random value: %d", random)
+	}
+}
+
+// addRandomDelay adds a random delay up to the specified limit in milliseconds
+func addRandomDelay(limit int) {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(limit)))
+	if err != nil {
+		// Fallback to no delay if crypto/rand fails
+		return
+	}
+	randomSleepDuration := n.Int64()
+	time.Sleep(time.Duration(randomSleepDuration) * time.Millisecond)
 }
