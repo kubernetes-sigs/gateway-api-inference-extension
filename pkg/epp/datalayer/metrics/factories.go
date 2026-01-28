@@ -121,10 +121,7 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fw
 // ModelServerExtractorFactory is a factory function used to instantiate data layer's metrics
 // Extractor plugins specified in a configuration.
 func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	cfg, err := defaultExtractorConfigParams()
-	if err != nil {
-		return nil, err
-	}
+	cfg := defaultExtractorConfigParams()
 
 	if parameters != nil { // overlay the defaults with configured values
 		if err := json.Unmarshal(parameters, cfg); err != nil {
@@ -226,11 +223,11 @@ func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 	return cfg, nil
 }
 
-func defaultExtractorConfigParams() (*modelServerExtractorParams, error) {
+func defaultExtractorConfigParams() *modelServerExtractorParams {
 	return &modelServerExtractorParams{
 		EngineLabelKey: EngineTypeLabelKey,
 		EngineConfigs:  defaultEngineConfigs,
-	}, nil
+	}
 }
 
 func fromStringFlag(name string) (string, error) {
