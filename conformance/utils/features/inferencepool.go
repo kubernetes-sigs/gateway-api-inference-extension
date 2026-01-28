@@ -36,7 +36,7 @@ var InferencePoolFeature = Feature{
 // InferencePoolCoreFeatures includes all SupportedFeatures needed to be
 // conformant with the InferencePool resource.
 var InferenceCoreFeatures = sets.New(
-	SupportHTTPRoute,
-	SupportGateway,
-	SupportInferencePool,
+	HTTPRouteFeature,
+	GatewayFeature,
+	InferencePoolFeature,
 )

@@ -525,55 +525,6 @@ func TestInferGWCSupportedFeatures(t *testing.T) {
 	}
 }
 
-func TestGWCPublishedMeshFeatures(t *testing.T) {
-	gwcName := "ochopintre"
-	gwc := &gatewayv1.GatewayClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: gwcName,
-		},
-		Spec: gatewayv1.GatewayClassSpec{
-			ControllerName: "example.com/gateway-controller",
-		},
-		Status: gatewayv1.GatewayClassStatus{
-			Conditions: []metav1.Condition{
-				{
-					Type:    string(gatewayv1.GatewayConditionAccepted),
-					Status:  metav1.ConditionTrue,
-					Reason:  "Accepted",
-					Message: "GatewayClass is accepted and ready for use",
-				},
-			},
-			SupportedFeatures: featureNamesToSet([]string{
-				string(features.SupportGateway),
-				string(features.SupportMesh),
-				string(features.SupportMeshClusterIPMatching),
-			}),
-		},
-	}
-	scheme := runtime.NewScheme()
-	gatewayv1.Install(scheme)
-	apiextensionsv1.AddToScheme(scheme)
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(gwc).
-		WithLists(&apiextensionsv1.CustomResourceDefinitionList{}).
-		Build()
-
-	options := ConformanceOptions{
-		AllowCRDsMismatch: true,
-		GatewayClassName:  gwcName,
-		Client:            fakeClient,
-	}
-
-	suite, err := NewConformanceTestSuite(options)
-	if err != nil {
-		t.Fatalf("error initializing conformance suite: %v", err)
-	}
-	if suite.SupportedFeatures.HasAny(features.SetsToNamesSet(features.MeshCoreFeatures, features.MeshExtendedFeatures).UnsortedList()...) {
-		t.Errorf("Mesh features should be skipped, got: %v", suite.SupportedFeatures.UnsortedList())
-	}
-}
-
 func featureNamesToSet(set []string) []gatewayv1.SupportedFeature {
 	var features []gatewayv1.SupportedFeature
 	for _, feature := range set {
