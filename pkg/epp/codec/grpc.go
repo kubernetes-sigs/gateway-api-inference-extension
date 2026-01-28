@@ -23,17 +23,18 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	pb "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/api/gen"
+	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
-// ConvertToLLMRequestBody converts gRPC payload to LLMRequestBody used in scheduling.
-func ConvertToLLMRequestBody(payload []byte) (*types.LLMRequestBody, error) {
+// ConvertToLLMRequestBody converts gRPC payload to LLMRequestBody used in scheduling and whether the request is streaming.
+func ConvertToLLMRequestBody(payload []byte) (*types.LLMRequestBody, bool, error) {
 	pbReq, err := toGenerateRequest(payload)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if pbReq == nil {
-		return nil, err
+		return nil, false, err
 	}
 	switch pbReq.Input.(type) {
 	case *pb.GenerateRequest_Text:
@@ -41,15 +42,15 @@ func ConvertToLLMRequestBody(payload []byte) (*types.LLMRequestBody, error) {
 			Completions: &types.CompletionsRequest{
 				Prompt: pbReq.GetText(),
 			},
-		}, nil
+		}, pbReq.Stream, nil
 	case *pb.GenerateRequest_Tokenized:
 		return &types.LLMRequestBody{
 			Completions: &types.CompletionsRequest{
 				Prompt: pbReq.GetTokenized().OriginalText,
 			},
-		}, nil
+		}, pbReq.Stream, nil
 	}
-	return nil, errors.New("not supported request inputType")
+	return nil, false, errors.New("not supported request inputType")
 }
 
 // parseGrpcPayload extracts the payload and the compression status.
@@ -94,4 +95,39 @@ func toGenerateRequest(payload []byte) (*pb.GenerateRequest, error) {
 		log.Printf("[Parser] Success: GenerateRequest originalText: %s\n", originalText)
 	}
 	return req, nil
+}
+
+func toGenerateResponse(payload []byte) (*pb.GenerateResponse, error) {
+	parsedPayload, compressed, ok := parseGrpcPayload(payload)
+	if !ok {
+		return nil, errors.New("not able to parse payload")
+	}
+	if compressed {
+		// TODO: handle compressed payload.
+		return nil, errors.New("not able to parse compressed payload")
+	}
+	resp := &pb.GenerateResponse{}
+	err := proto.Unmarshal(parsedPayload, resp)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func ParseUsage(payload []byte) (*fwkrq.Usage, error) {
+	resp, err := toGenerateResponse(payload)
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := resp.Response.(*pb.GenerateResponse_Complete); ok {
+		return &fwkrq.Usage{
+			PromptTokens:     int(v.Complete.PromptTokens),
+			CompletionTokens: int(v.Complete.CompletionTokens),
+			TotalTokens:      int(v.Complete.PromptTokens) + int(v.Complete.CompletionTokens),
+			PromptTokenDetails: &fwkrq.PromptTokenDetails{
+				CachedTokens: int(v.Complete.CachedTokens),
+			},
+		}, nil
+	}
+	return nil, nil
 }

@@ -275,9 +275,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			if reqCtx.modelServerStreaming {
 				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
-
-				responseText := string(v.ResponseBody.Body)
-				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
+				s.HandleResponseBodyModelStreaming(ctx, reqCtx, v.ResponseBody.Body)
 				if v.ResponseBody.EndOfStream {
 					loggerTrace.Info("stream completed")
 					reqCtx.ResponseComplete = true
@@ -471,11 +469,9 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			if err := srv.Send(response); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
-
-			body := response.Response.(*extProcPb.ProcessingResponse_ResponseBody)
-			if body.ResponseBody.Response.GetBodyMutation().GetStreamedResponse().GetEndOfStream() {
-				r.RequestState = BodyResponseResponsesComplete
-			}
+		}
+		if r.ResponseComplete {
+			r.RequestState = BodyResponseResponsesComplete
 		}
 		// Dump the response so a new stream message can begin
 		r.respBodyResp = nil

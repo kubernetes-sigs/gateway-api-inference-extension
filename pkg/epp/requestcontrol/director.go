@@ -125,7 +125,7 @@ func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.R
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 
-	var requestBody *schedulingtypes.LLMRequestBody
+	var requestBody *fwksched.LLMRequestBody
 	if reqCtx.SchedulingRequestBody != nil {
 		// Currently, only gRPC reqeust body will populate reqCtx.SchedulingRequestBody.
 		requestBody = reqCtx.SchedulingRequestBody

@@ -295,7 +295,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	tests := []struct {
 		name                    string
 		reqBodyMap              map[string]any
-		schedulingRequestBody   *schedulingtypes.LLMRequestBody
+		schedulingRequestBody   *fwksched.LLMRequestBody
 		mockAdmissionController *mockAdmissionController
 		inferenceObjectiveName  string
 		schedulerMockSetup      func(m *mockScheduler)
@@ -333,8 +333,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 			inferenceObjectiveName: objectiveName,
 		}, {
 			name: "successful gRPC request with SchedulingRequestBody",
-			schedulingRequestBody: &schedulingtypes.LLMRequestBody{
-				Completions: &schedulingtypes.CompletionsRequest{
+			schedulingRequestBody: &fwksched.LLMRequestBody{
+				Completions: &fwksched.CompletionsRequest{
 					Prompt: "critical prompt",
 				},
 			},

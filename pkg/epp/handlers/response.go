@@ -77,7 +77,15 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
+func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) {
+	if reqCtx.RespContentType == request.GRPCContentType {
+		s.handleGRPCResponseBodyModelStreaming(ctx, reqCtx, responseBytes)
+	} else {
+		s.handleResponseBodyModelStreamingInText(ctx, reqCtx, string(responseBytes))
+	}
+}
+
+func (s *StreamingServer) handleResponseBodyModelStreamingInText(ctx context.Context, reqCtx *RequestContext, responseText string) {
 	logger := log.FromContext(ctx)
 	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
 	if err != nil {

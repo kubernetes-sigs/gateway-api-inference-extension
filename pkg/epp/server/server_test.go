@@ -189,8 +189,12 @@ func TestServerGRPC(t *testing.T) {
 		t.Fatalf("Failed to encode gRPC payload: %v", err)
 	}
 
-	vllmResp := &vllm.GenerateComplete{
-		OutputIds: []uint32{0, 1, 2, 3, 4},
+	vllmResp := &vllm.GenerateResponse{
+		Response: &vllm.GenerateResponse_Complete{
+			Complete: &vllm.GenerateComplete{
+				OutputIds: []uint32{0, 1, 2, 3, 4},
+			},
+		},
 	}
 	grpcResponsePayload, err := toGrpcFrame(vllmResp)
 	if err != nil {
@@ -280,7 +284,7 @@ func TestServerGRPC(t *testing.T) {
 				body := responseReqBody.GetRequestBody().Response.BodyMutation.GetStreamedResponse().Body
 				// Verify the body is the same (since we didn't rewrite it in this test setup)
 				// Or check if it's a valid gRPC payload that decodes to the same content
-				decodedReq, err := codec.ConvertToLLMRequestBody(body)
+				decodedReq, _, err := codec.ConvertToLLMRequestBody(body)
 				if err != nil {
 					t.Errorf("Failed to decode response body: %v", err)
 				}
@@ -360,6 +364,200 @@ func TestServerGRPC(t *testing.T) {
 			if response.GetResponseTrailers() == nil {
 				t.Errorf("Expected ResponseTrailers, got %v", response.Response)
 			}
+		}
+
+		cancel()
+		<-errChan
+		testListener.Close()
+	})
+}
+
+// TestServerGRPC is test cases for gRPC-in-gRPC-out case.
+func TestServerGRPC_GenerateStreaming(t *testing.T) {
+	vllmReq := &vllm.GenerateRequest{
+		Input: &vllm.GenerateRequest_Tokenized{
+			Tokenized: &vllm.TokenizedInput{
+				OriginalText: "Hello gRPC",
+				InputIds:     []uint32{0, 1, 2, 3, 4}, // Fake tokens.
+			},
+		},
+		Stream: true,
+	}
+	grpcPayload, err := toGrpcFrame(vllmReq)
+	if err != nil {
+		t.Fatalf("Failed to encode gRPC payload: %v", err)
+	}
+
+	vllmResp := &vllm.GenerateResponse{
+		Response: &vllm.GenerateResponse_Complete{
+			Complete: &vllm.GenerateComplete{
+				OutputIds: []uint32{0, 1, 2, 3, 4},
+			},
+		},
+	}
+	grpcResponsePayload, err := toGrpcFrame(vllmResp)
+	if err != nil {
+		t.Fatalf("Failed to envode gRPC response paylaod: %v", err)
+	}
+
+	expectedRequestHeaders := map[string]string{
+		metadata.DestinationEndpointKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
+		":method":                       "POST",
+		"x-request-id":                  "test-request-id",
+		"content-type":                  "application/grpc",
+		":path":                         handlers.VllmGeneratePath,
+		"Content-Length":                strconv.Itoa(len(grpcPayload)),
+	}
+	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", "x-test": "body"}
+
+	t.Run("server-grpc", func(t *testing.T) {
+		model := testutil.MakeInferenceObjective("v1").
+			CreationTimestamp(metav1.Unix(1000, 0)).ObjRef()
+
+		director := &testDirector{}
+		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
+			[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
+		streamingServer := handlers.NewStreamingServer(ds, director)
+
+		testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
+		process, conn := utils.GetStreamingServerClient(ctx, t)
+		defer conn.Close()
+
+		t.Log("Sending request headers")
+
+		// Send request headers - no response expected
+		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
+			":method":                  "POST",
+			"content-type":             "application/grpc",
+			":path":                    handlers.VllmGeneratePath,
+			metadata.FlowFairnessIDKey: "a-very-interesting-fairness-id",
+			"x-request-id":             "test-request-id",
+		}, true)
+		request := &pb.ProcessingRequest{
+			Request: &pb.ProcessingRequest_RequestHeaders{
+				RequestHeaders: headers,
+			},
+		}
+		if err := process.Send(request); err != nil {
+			t.Error("Error sending request headers", err)
+		}
+
+		request = &pb.ProcessingRequest{
+			Request: &pb.ProcessingRequest_RequestBody{
+				RequestBody: &pb.HttpBody{
+					Body:        grpcPayload,
+					EndOfStream: true,
+				},
+			},
+		}
+		if err := process.Send(request); err != nil {
+			t.Error("Error sending request body", err)
+		}
+
+		// Receive response headers and check
+		responseReqHeaders, err := process.Recv()
+		if err != nil {
+			t.Error("Error receiving response", err)
+		} else {
+			if responseReqHeaders == nil || responseReqHeaders.GetRequestHeaders() == nil ||
+				responseReqHeaders.GetRequestHeaders().Response == nil ||
+				responseReqHeaders.GetRequestHeaders().Response.HeaderMutation == nil ||
+				responseReqHeaders.GetRequestHeaders().Response.HeaderMutation.SetHeaders == nil {
+				t.Error("Invalid request headers response")
+			} else if !utils.CheckEnvoyGRPCHeaders(t, responseReqHeaders.GetRequestHeaders().Response, expectedRequestHeaders) {
+				t.Error("Incorrect request headers")
+			}
+		}
+
+		// Receive request body and check
+		responseReqBody, err := process.Recv()
+		if err != nil {
+			t.Error("Error receiving response", err)
+		} else {
+			if responseReqBody == nil || responseReqBody.GetRequestBody() == nil ||
+				responseReqBody.GetRequestBody().Response == nil ||
+				responseReqBody.GetRequestBody().Response.BodyMutation == nil ||
+				responseReqBody.GetRequestBody().Response.BodyMutation.GetStreamedResponse() == nil {
+				t.Error("Invalid request body response")
+			} else {
+				body := responseReqBody.GetRequestBody().Response.BodyMutation.GetStreamedResponse().Body
+				// Verify the body is the same (since we didn't rewrite it in this test setup)
+				// Or check if it's a valid gRPC payload that decodes to the same content
+				decodedReq, _, err := codec.ConvertToLLMRequestBody(body)
+				if err != nil {
+					t.Errorf("Failed to decode response body: %v", err)
+				}
+				if decodedReq.Completions.Prompt != "Hello gRPC" {
+					t.Errorf("Expected prompt 'Hello gRPC', got '%s'", decodedReq.Completions.Prompt)
+				}
+			}
+		}
+
+		// Send response headers
+		headers = utils.BuildEnvoyGRPCHeaders(map[string]string{"x-test": "body", ":method": "POST", "content-type": "application/grpc"}, true)
+		request = &pb.ProcessingRequest{
+			Request: &pb.ProcessingRequest_ResponseHeaders{
+				ResponseHeaders: headers,
+			},
+		}
+		if err := process.Send(request); err != nil {
+			t.Error("Error sending response headers", err)
+		}
+
+		// Receive response headers and check
+		response, err := process.Recv()
+		if err != nil {
+			t.Error("Error receiving response headers", err)
+		} else if response == nil || response.GetResponseHeaders() == nil {
+			if response == nil || response.GetResponseHeaders() == nil || response.GetResponseHeaders().Response == nil ||
+				response.GetResponseHeaders().Response.HeaderMutation == nil ||
+				response.GetResponseHeaders().Response.HeaderMutation.SetHeaders == nil {
+				t.Error("Invalid response")
+			} else if !utils.CheckEnvoyGRPCHeaders(t, response.GetResponseHeaders().Response, expectedResponseHeaders) {
+				t.Error("Incorrect response headers")
+			}
+		}
+
+		request = &pb.ProcessingRequest{
+			Request: &pb.ProcessingRequest_ResponseBody{
+				ResponseBody: &pb.HttpBody{
+					Body:        grpcResponsePayload,
+					EndOfStream: false,
+				},
+			},
+		}
+		err = process.Send(request)
+		if err != nil {
+			t.Error("Error sending ressponse body", err)
+		}
+
+		// Receiving response
+		response, err = process.Recv()
+		if err != nil {
+			t.Error("Error receiving response body", err)
+		} else if response.GetResponseBody() == nil {
+			t.Error("Error receiving response body", err)
+		}
+
+		// Sending response trailers
+		trailers := utils.BuildEnvoyGRPCTrailers(map[string]string{
+			"grpc-status": "0",
+		}, true)
+		request = &pb.ProcessingRequest{
+			Request: &pb.ProcessingRequest_ResponseTrailers{
+				ResponseTrailers: trailers,
+			},
+		}
+		if err := process.Send(request); err != nil {
+			t.Error("Error sending response trailers", err)
+		}
+
+		// Receiving response trailers
+		response, err = process.Recv()
+		if err != nil {
+			t.Error("Error receiving response trailers/body", err)
+		} else if response.GetResponseTrailers() == nil {
+			t.Errorf("Expected ResponseTrailers, got %v", response.Response)
 		}
 
 		cancel()
