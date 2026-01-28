@@ -47,7 +47,7 @@ const (
 // Extractor implements the metrics extraction based on the model
 // server protocol standard.
 type Extractor struct {
-	typedName      plugins.TypedName
+	typedName      fwkplugin.TypedName
 	registry       *MappingRegistry
 	engineLabelKey string
 }

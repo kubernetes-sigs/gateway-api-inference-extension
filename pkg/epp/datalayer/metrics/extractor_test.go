@@ -26,6 +26,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 const (
@@ -247,7 +248,7 @@ func TestExtractorMultiEngine(t *testing.T) {
 	}
 
 	// Case 1: Engine = vllm (uses default)
-	epVllm := datalayer.NewEndpoint(&datalayer.EndpointMetadata{
+	epVllm := datalayer.NewEndpoint(&fwkdl.EndpointMetadata{
 		Labels: map[string]string{EngineTypeLabelKey: "vllm"},
 	}, nil)
 	_ = extractor.Extract(ctx, data, epVllm)
@@ -256,7 +257,7 @@ func TestExtractorMultiEngine(t *testing.T) {
 	}
 
 	// Case 2: Engine = sglang (uses specific)
-	epSgl := datalayer.NewEndpoint(&datalayer.EndpointMetadata{
+	epSgl := datalayer.NewEndpoint(&fwkdl.EndpointMetadata{
 		Labels: map[string]string{EngineTypeLabelKey: "sglang"},
 	}, nil)
 	_ = extractor.Extract(ctx, data, epSgl)
@@ -287,14 +288,14 @@ func TestBackwardCompatibility(t *testing.T) {
 	}
 
 	// Case 1: No labels at all
-	epNone := datalayer.NewEndpoint(&datalayer.EndpointMetadata{Labels: nil}, nil)
+	epNone := datalayer.NewEndpoint(&fwkdl.EndpointMetadata{Labels: nil}, nil)
 	_ = extractor.Extract(ctx, data, epNone)
 	if epNone.GetMetrics().WaitingQueueSize != 100 {
 		t.Errorf("no labels: expected 100, got %v", epNone.GetMetrics().WaitingQueueSize)
 	}
 
 	// Case 2: Different label key or unknown value
-	epUnknown := datalayer.NewEndpoint(&datalayer.EndpointMetadata{
+	epUnknown := datalayer.NewEndpoint(&fwkdl.EndpointMetadata{
 		Labels: map[string]string{EngineTypeLabelKey: "unknown-engine"},
 	}, nil)
 	_ = extractor.Extract(ctx, data, epUnknown)
