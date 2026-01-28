@@ -311,7 +311,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		// --- Viability Check (Saturation/HoL Blocking) ---
 		req := item.OriginalRequest()
 		candidates := sp.podLocator.Locate(ctx, req.GetMetadata())
-		if sp.saturationDetector.IsSaturated(ctx, candidates) {
+		if sp.saturationDetector.Saturation(ctx, candidates) >= 1.0 {
 			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
 				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
 			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
@@ -330,14 +330,14 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	return false
 }
 
-// selectItem applies the configured fairness and intra-flow dispatch policies to select a single item.
+// selectItem applies the configured fairness and ordering policies to select a single item.
 func (sp *ShardProcessor) selectItem(
 	ctx context.Context,
 	flowGroup flowcontrol.PriorityBandAccessor,
-) (types.QueueItemAccessor, error) {
+) (flowcontrol.QueueItemAccessor, error) {
 	fairnessP, err := sp.shard.FairnessPolicy(flowGroup.Priority())
 	if err != nil {
-		return nil, fmt.Errorf("could not get InterFlowDispatchPolicy: %w", err)
+		return nil, fmt.Errorf("could not get FairnessPolicy: %w", err)
 	}
 	queue, err := fairnessP.Pick(ctx, flowGroup)
 	if err != nil {
@@ -352,7 +352,7 @@ func (sp *ShardProcessor) selectItem(
 }
 
 // dispatchItem handles the final steps of dispatching an item: removing it from the queue and finalizing its outcome.
-func (sp *ShardProcessor) dispatchItem(itemAcc types.QueueItemAccessor) error {
+func (sp *ShardProcessor) dispatchItem(itemAcc flowcontrol.QueueItemAccessor) error {
 	req := itemAcc.OriginalRequest()
 	key := req.FlowKey()
 	managedQ, err := sp.shard.ManagedQueue(key)
@@ -400,7 +400,7 @@ func (sp *ShardProcessor) runCleanupSweep(ctx context.Context) {
 // memory.
 func (sp *ShardProcessor) sweepFinalizedItems() {
 	processFn := func(managedQ contracts.ManagedQueue, logger logr.Logger) {
-		predicate := func(itemAcc types.QueueItemAccessor) bool {
+		predicate := func(itemAcc flowcontrol.QueueItemAccessor) bool {
 			return itemAcc.(*FlowItem).FinalState() != nil
 		}
 		removedItems := managedQ.Cleanup(predicate)

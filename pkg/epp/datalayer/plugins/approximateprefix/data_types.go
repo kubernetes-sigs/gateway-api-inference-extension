@@ -17,7 +17,7 @@ limitations under the License.
 package approximateprefix
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 const (
@@ -53,7 +53,7 @@ func (p *PrefixCacheMatchInfo) BlockSizeTokens() int {
 	return p.blockSizeTokens
 }
 
-func (p *PrefixCacheMatchInfo) Clone() datalayer.Cloneable {
+func (p *PrefixCacheMatchInfo) Clone() fwkdl.Cloneable {
 	return &PrefixCacheMatchInfo{
 		matchBlocks:     p.matchBlocks,
 		totalBlocks:     p.totalBlocks,

@@ -22,10 +22,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/ptr"
 
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
@@ -48,16 +50,16 @@ func newTestPluginsHandle(t *testing.T) plugin.Handle {
 			Name: fairness.RoundRobinFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(intraflow.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: intraflow.FCFSOrderingPolicyType,
-			Name: intraflow.FCFSOrderingPolicyType,
+			Type: ordering.FCFSOrderingPolicyType,
+			Name: ordering.FCFSOrderingPolicyType,
 		},
 	})
-	handle.AddPlugin(intraflow.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(ordering.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: intraflow.EDFOrderingPolicyType,
-			Name: intraflow.EDFOrderingPolicyType,
+			Type: ordering.EDFOrderingPolicyType,
+			Name: ordering.EDFOrderingPolicyType,
 		},
 	})
 	return handle
@@ -106,8 +108,6 @@ func TestNewConfig(t *testing.T) {
 				assert.Equal(t, defaultInitialShardCount, cfg.InitialShardCount, "InitialShardCount should be defaulted")
 				assert.Equal(t, defaultFlowGCTimeout, cfg.FlowGCTimeout, "FlowGCTimeout should be defaulted")
 				assert.Equal(t, defaultPriorityBandGCTimeout, cfg.PriorityBandGCTimeout, "PriorityBandGCTimeout should be defaulted")
-				assert.Equal(t, defaultEventChannelBufferSize, cfg.EventChannelBufferSize,
-					"EventChannelBufferSize should be defaulted")
 
 				// Verify Band Defaults
 				require.Contains(t, cfg.PriorityBands, 1)
@@ -267,13 +267,17 @@ func TestNewConfig(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			name: "ShouldError_WhenBandNameMissing",
+			name: "ShouldSynthesizeName_WhenBandNameMissing",
 			opts: []ConfigOption{
-				// Use raw struct to bypass NewPriorityBandConfig validation.
+				// Use raw struct to bypass NewPriorityBandConfig validation which forces a name argument.
 				WithPriorityBand(&PriorityBandConfig{Priority: 1}),
 			},
-			handle:    newTestPluginsHandle(t),
-			expectErr: true,
+			handle: newTestPluginsHandle(t),
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1, "Priority bands should contain the configured band")
+				assert.Equal(t, "priority-1", cfg.PriorityBands[1].PriorityName,
+					"PriorityName should be synthesized from priority level")
+			},
 		},
 
 		// --- Hydration Failures ---
@@ -341,14 +345,14 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		pb, err := NewPriorityBandConfig(handle, 1, "Custom",
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
-			WithOrderingPolicy(intraflow.EDFOrderingPolicyType, handle),
+			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
 			WithFairnessPolicy(fairness.RoundRobinFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
 		assert.Equal(t, uint64(999), pb.MaxBytes)
 		require.NotNil(t, pb.OrderingPolicy)
-		assert.Equal(t, intraflow.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
+		assert.Equal(t, ordering.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
 		require.NotNil(t, pb.FairnessPolicy)
 		assert.Equal(t, fairness.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
 	})
@@ -486,4 +490,170 @@ func TestConfig_Clone(t *testing.T) {
 		assert.Equal(t, "Dynamic-Default", original.DefaultPriorityBand.PriorityName,
 			"Modifying clone template should not affect original")
 	})
+}
+
+func TestNewConfigFromAPI(t *testing.T) {
+	t.Parallel()
+	handle := newTestPluginsHandle(t)
+
+	testCases := []struct {
+		name        string
+		apiConfig   *configapi.FlowControlConfig
+		assertion   func(*testing.T, *Config)
+		expectedErr string
+	}{
+		// --- Happy Paths ---
+		{
+			name: "ShouldSucceed_WithFullConfiguration",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxBytes: ptr.To(int64(100)),
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+						MaxBytes: ptr.To(int64(50)),
+					},
+				},
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxBytes: ptr.To(int64(10)),
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(100), cfg.MaxBytes, "Global MaxBytes should be correctly translated")
+
+				// Verify Explicit Band
+				require.Contains(t, cfg.PriorityBands, 1, "Configured priority band should be present")
+				assert.Equal(t, uint64(50), cfg.PriorityBands[1].MaxBytes, "Band MaxBytes should be correctly translated")
+				assert.Equal(t, "priority-1", cfg.PriorityBands[1].PriorityName,
+					"PriorityName should be defaulted if not provided")
+
+				// Verify Default Template
+				require.NotNil(t, cfg.DefaultPriorityBand, "DefaultPriorityBand should be configured")
+				assert.Equal(t, uint64(10), cfg.DefaultPriorityBand.MaxBytes,
+					"DefaultPriorityBand template MaxBytes should be translated")
+			},
+		},
+		{
+			name:      "ShouldSucceed_WithNilConfig_AndApplySystemDefaults",
+			apiConfig: nil,
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(0), cfg.MaxBytes, "Default global limit should be 0 (unlimited)")
+				require.NotNil(t, cfg.DefaultPriorityBand,
+					"Default priority band template should be initialized automatically")
+				assert.Equal(t, defaultPriorityBandMaxBytes, cfg.DefaultPriorityBand.MaxBytes,
+					"Default template should use system default capacity")
+			},
+		},
+		{
+			name: "ShouldSynthesizePriorityName_WhenMissing",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+						// No PriorityName provided
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1, "Priority band should be present")
+				assert.Equal(t, "priority-1", cfg.PriorityBands[1].PriorityName,
+					"PriorityName should be synthesized from priority index")
+			},
+		},
+
+		// --- Defaulting Logic (Nil vs Zero) ---
+		{
+			name: "ShouldApplyDefault_WhenBandMaxBytesIsNil",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+						MaxBytes: nil, // Omitted
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, defaultPriorityBandMaxBytes, cfg.PriorityBands[1].MaxBytes,
+					"Omitted MaxBytes (nil) should result in system default capacity (1GB)")
+			},
+		},
+		{
+			name: "ShouldApplyDefault_WhenBandMaxBytesIsZero",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+						MaxBytes: ptr.To(int64(0)), // Explicitly zero
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, defaultPriorityBandMaxBytes, cfg.PriorityBands[1].MaxBytes,
+					"Explicit MaxBytes (0) should be treated as 'Use Default' (1GB)")
+			},
+		},
+		{
+			name: "ShouldApplyDefault_WhenDefaultPriorityBandMaxBytesIsZero",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxBytes: ptr.To(int64(0)), // Explicitly zero
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.DefaultPriorityBand)
+				assert.Equal(t, defaultPriorityBandMaxBytes, cfg.DefaultPriorityBand.MaxBytes,
+					"Explicit 0 in DefaultPriorityBand template should be treated as 'Use Default'")
+			},
+		},
+
+		// --- Validation Errors ---
+		{
+			name: "ShouldError_WithNegativeGlobalMaxBytes",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxBytes: ptr.To(int64(-1)),
+			},
+			expectedErr: "MaxBytes must be non-negative",
+		},
+		{
+			name: "ShouldError_WithNegativePriorityBandMaxBytes",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+						MaxBytes: ptr.To(int64(-100)),
+					},
+				},
+			},
+			expectedErr: "priority band 1 MaxBytes must be non-negative",
+		},
+		{
+			name: "ShouldError_WithNegativeDefaultPriorityBandMaxBytes",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxBytes: ptr.To(int64(-5)),
+				},
+			},
+			expectedErr: "DefaultPriorityBand MaxBytes must be non-negative",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := NewConfigFromAPI(tc.apiConfig, handle)
+
+			if tc.expectedErr != "" {
+				require.Error(t, err, "NewConfigFromAPI should return an error")
+				assert.Contains(t, err.Error(), tc.expectedErr, "Error message should contain expected text")
+				assert.Nil(t, cfg, "Config should be nil when error occurs")
+			} else {
+				require.NoError(t, err, "NewConfigFromAPI should not return an error for valid input")
+				require.NotNil(t, cfg, "Config should not be nil on success")
+				if tc.assertion != nil {
+					tc.assertion(t, cfg)
+				}
+			}
+		})
+	}
 }

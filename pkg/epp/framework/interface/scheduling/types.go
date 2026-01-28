@@ -17,12 +17,13 @@ limitations under the License.
 package scheduling
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -200,38 +201,60 @@ func (mc Content) PlainText() string {
 
 type Endpoint interface {
 	GetMetadata() *fwkdl.EndpointMetadata
-	GetMetrics() *datalayer.Metrics
+	GetMetrics() *fwkdl.Metrics
 	String() string
-	Get(string) (datalayer.Cloneable, bool)
-	Put(string, datalayer.Cloneable)
+	Get(string) (fwkdl.Cloneable, bool)
+	Put(string, fwkdl.Cloneable)
 	Keys() []string
+}
+
+func (ep *endpoint) String() string {
+	if ep == nil {
+		return nilString
+	}
+
+	return fmt.Sprintf("%+v", *ep)
+}
+
+func (ep *endpoint) GetMetadata() *fwkdl.EndpointMetadata {
+	return ep.EndpointMetadata
+}
+
+func (ep *endpoint) GetMetrics() *fwkdl.Metrics {
+	return ep.Metrics
+}
+
+type endpoint struct {
+	*fwkdl.EndpointMetadata
+	*fwkdl.Metrics
+	fwkdl.AttributeMap
+}
+
+func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *fwkdl.Metrics, attr fwkdl.AttributeMap) Endpoint {
+	if attr == nil {
+		attr = fwkdl.NewAttributes()
+	}
+
+	return &endpoint{
+		EndpointMetadata: meta.Clone(),
+		Metrics:          metrics.Clone(),
+		AttributeMap:     attr.Clone(),
+	}
+}
+
+func EndpointComparer(a, b Endpoint) bool {
+	a_ep := a.(*endpoint)
+	b_ep := b.(*endpoint)
+	return reflect.DeepEqual(a_ep, b_ep)
+}
+
+func ScoredEndpointComparer(a, b ScoredEndpoint) bool {
+	return a.Score == b.Score && EndpointComparer(a.Endpoint, b.Endpoint)
 }
 
 type ScoredEndpoint struct {
 	Endpoint
 	Score float64
-}
-
-func (pm *PodMetrics) String() string {
-	if pm == nil {
-		return nilString
-	}
-
-	return fmt.Sprintf("%+v", *pm)
-}
-
-func (pm *PodMetrics) GetMetadata() *fwkdl.EndpointMetadata {
-	return pm.EndpointMetadata
-}
-
-func (pm *PodMetrics) GetMetrics() *datalayer.Metrics {
-	return pm.Metrics
-}
-
-type PodMetrics struct {
-	*fwkdl.EndpointMetadata
-	*datalayer.Metrics
-	datalayer.AttributeMap
 }
 
 // ProfileRunResult captures the profile run result.
@@ -245,7 +268,6 @@ type SchedulingResult struct {
 	PrimaryProfileName string
 }
 
-// Cloneable types support cloning of the value.
-type Cloneable interface {
-	Clone() Cloneable
+type SchedulerProfile interface {
+	Run(ctx context.Context, request *LLMRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error)
 }

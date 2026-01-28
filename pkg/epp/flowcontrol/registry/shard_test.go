@@ -27,9 +27,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 const (
@@ -48,9 +47,9 @@ type shardTestHarness struct {
 	t                *testing.T
 	shard            *registryShard
 	statsPropagator  *mockStatsPropagator
-	highPriorityKey1 types.FlowKey
-	highPriorityKey2 types.FlowKey
-	lowPriorityKey   types.FlowKey
+	highPriorityKey1 flowcontrol.FlowKey
+	highPriorityKey2 flowcontrol.FlowKey
+	lowPriorityKey   flowcontrol.FlowKey
 }
 
 // newShardTestHarness initializes a `shardTestHarness` with a default configuration.
@@ -72,9 +71,9 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 		t:                t,
 		shard:            shard,
 		statsPropagator:  statsPropagator,
-		highPriorityKey1: types.FlowKey{ID: "hp-flow-1", Priority: highPriority},
-		highPriorityKey2: types.FlowKey{ID: "hp-flow-2", Priority: highPriority},
-		lowPriorityKey:   types.FlowKey{ID: "lp-flow-1", Priority: lowPriority},
+		highPriorityKey1: flowcontrol.FlowKey{ID: "hp-flow-1", Priority: highPriority},
+		highPriorityKey2: flowcontrol.FlowKey{ID: "hp-flow-2", Priority: highPriority},
+		lowPriorityKey:   flowcontrol.FlowKey{ID: "lp-flow-1", Priority: lowPriority},
 	}
 	// Automatically sync some default flows for convenience.
 	h.synchronizeFlow(h.highPriorityKey1)
@@ -84,7 +83,7 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 }
 
 // synchronizeFlow simulates the registry synchronizing a flow with a real queue.
-func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
+func (h *shardTestHarness) synchronizeFlow(key flowcontrol.FlowKey) {
 	h.t.Helper()
 	policy := h.shard.config.PriorityBands[key.Priority].OrderingPolicy
 	q, err := queue.NewQueueFromName(defaultQueue, policy)
@@ -93,7 +92,7 @@ func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 }
 
 // addItem adds an item to a specific flow's queue on the shard.
-func (h *shardTestHarness) addItem(key types.FlowKey, size uint64) types.QueueItemAccessor {
+func (h *shardTestHarness) addItem(key flowcontrol.FlowKey, size uint64) flowcontrol.QueueItemAccessor {
 	h.t.Helper()
 	mq, err := h.shard.ManagedQueue(key)
 	require.NoError(h.t, err, "Helper addItem: failed to get queue for flow %s; ensure flow is synchronized", key)
@@ -103,7 +102,7 @@ func (h *shardTestHarness) addItem(key types.FlowKey, size uint64) types.QueueIt
 }
 
 // removeItem removes an item from a specific flow's queue.
-func (h *shardTestHarness) removeItem(key types.FlowKey, item types.QueueItemAccessor) {
+func (h *shardTestHarness) removeItem(key flowcontrol.FlowKey, item flowcontrol.QueueItemAccessor) {
 	h.t.Helper()
 	mq, err := h.shard.ManagedQueue(key)
 	require.NoError(h.t, err, "Helper removeItem: failed to get queue for flow %s; ensure flow is synchronized", key)
@@ -191,7 +190,7 @@ func TestShard_Accessors(t *testing.T) {
 			{
 				name: "ManagedQueue_PriorityNotFound",
 				action: func(s *registryShard) error {
-					_, err := s.ManagedQueue(types.FlowKey{Priority: nonExistentPriority})
+					_, err := s.ManagedQueue(flowcontrol.FlowKey{Priority: nonExistentPriority})
 					return err
 				},
 				expectErr: contracts.ErrPriorityBandNotFound,
@@ -199,7 +198,7 @@ func TestShard_Accessors(t *testing.T) {
 			{
 				name: "ManagedQueue_FlowNotFound",
 				action: func(s *registryShard) error {
-					_, err := s.ManagedQueue(types.FlowKey{ID: "missing", Priority: highPriority})
+					_, err := s.ManagedQueue(flowcontrol.FlowKey{ID: "missing", Priority: highPriority})
 					return err
 				},
 				expectErr: contracts.ErrFlowInstanceNotFound,
@@ -254,7 +253,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 		t.Run("FlowKeys_ShouldReturnAllKeysInBand", func(t *testing.T) {
 			t.Parallel()
 			keys := accessor.FlowKeys()
-			expectedKeys := []types.FlowKey{h.highPriorityKey1, h.highPriorityKey2}
+			expectedKeys := []flowcontrol.FlowKey{h.highPriorityKey1, h.highPriorityKey2}
 			assert.ElementsMatch(t, expectedKeys, keys,
 				"FlowKeys() must return a complete snapshot of all flows registered in this band")
 		})
@@ -272,12 +271,12 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 
 			t.Run("ShouldVisitAllQueuesInBand", func(t *testing.T) {
 				t.Parallel()
-				var iteratedKeys []types.FlowKey
+				var iteratedKeys []flowcontrol.FlowKey
 				accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 					iteratedKeys = append(iteratedKeys, queue.FlowKey())
 					return true
 				})
-				expectedKeys := []types.FlowKey{h.highPriorityKey1, h.highPriorityKey2}
+				expectedKeys := []flowcontrol.FlowKey{h.highPriorityKey1, h.highPriorityKey2}
 				assert.ElementsMatch(t, expectedKeys, iteratedKeys,
 					"IterateQueues must visit every registered flow in the band exactly once")
 			})
@@ -317,7 +316,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for i := 0; i < 100; i++ {
-						key := types.FlowKey{ID: fmt.Sprintf("new-flow-%d", i), Priority: highPriority}
+						key := flowcontrol.FlowKey{ID: fmt.Sprintf("new-flow-%d", i), Priority: highPriority}
 						h.synchronizeFlow(key)
 						h.shard.deleteFlow(key)
 					}
@@ -355,7 +354,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 func TestShard_SynchronizeFlow(t *testing.T) {
 	t.Parallel()
 	h := newShardTestHarness(t)
-	flowKey := types.FlowKey{ID: "flow1", Priority: highPriority}
+	flowKey := flowcontrol.FlowKey{ID: "flow1", Priority: highPriority}
 
 	h.synchronizeFlow(flowKey)
 	mq1, err := h.shard.ManagedQueue(flowKey)

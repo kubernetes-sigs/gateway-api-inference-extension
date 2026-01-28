@@ -36,6 +36,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -185,7 +186,7 @@ func TestPodReconciler(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {

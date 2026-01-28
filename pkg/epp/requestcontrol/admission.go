@@ -24,9 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -54,28 +54,23 @@ type AdmissionController interface {
 	) error
 }
 
-// saturationDetector defines the minimal interface required for checking if the backend pool is saturated.
-type saturationDetector interface {
-	IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool
-}
-
 // flowController defines the minimal interface required by FlowControlAdmissionController for enqueuing requests and
 // waiting for an admission outcome.
 type flowController interface {
-	EnqueueAndWait(ctx context.Context, req types.FlowControlRequest) (types.QueueOutcome, error)
+	EnqueueAndWait(ctx context.Context, req flowcontrol.FlowControlRequest) (types.QueueOutcome, error)
 }
 
 // rejectIfSheddableAndSaturated checks if a request should be immediately rejected.
 func rejectIfSheddableAndSaturated(
 	ctx context.Context,
-	sd saturationDetector,
+	sd contracts.SaturationDetector,
 	locator contracts.PodLocator,
 	reqCtx *handlers.RequestContext,
 	priority int,
 	logger logr.Logger,
 ) error {
 	if requtil.IsSheddable(priority) {
-		if sd.IsSaturated(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) {
+		if sd.Saturation(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) >= 1.0 {
 			logger.V(logutil.TRACE).Info("Request rejected: system saturated and request is sheddable",
 				"requestID", reqCtx.SchedulingRequest.RequestId)
 			return errutil.Error{
@@ -93,13 +88,13 @@ func rejectIfSheddableAndSaturated(
 // It rejects sheddable requests (priority < 0) if the saturationDetector indicates that the system is currently
 // saturated. Non-sheddable requests always bypass the saturation check.
 type LegacyAdmissionController struct {
-	saturationDetector saturationDetector
+	saturationDetector contracts.SaturationDetector
 	podLocator         contracts.PodLocator
 }
 
 // NewLegacyAdmissionController creates a new LegacyAdmissionController.
 func NewLegacyAdmissionController(
-	sd saturationDetector,
+	sd contracts.SaturationDetector,
 	pl contracts.PodLocator,
 ) *LegacyAdmissionController {
 	return &LegacyAdmissionController{
@@ -176,7 +171,7 @@ func (fcac *FlowControlAdmissionController) Admit(
 	return translateFlowControlOutcome(outcome, err)
 }
 
-// flowControlRequest is an adapter that implements the types.FlowControlRequest interface.
+// flowControlRequest is an adapter that implements the FlowControlRequest interface.
 type flowControlRequest struct {
 	requestID         string
 	fairnessID        string
@@ -188,7 +183,7 @@ type flowControlRequest struct {
 	targetModelName   string
 }
 
-var _ types.FlowControlRequest = &flowControlRequest{}
+var _ flowcontrol.FlowControlRequest = &flowControlRequest{}
 
 func (r *flowControlRequest) ID() string                         { return r.requestID }
 func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
@@ -197,8 +192,8 @@ func (r *flowControlRequest) GetMetadata() map[string]any        { return r.reqM
 func (r *flowControlRequest) InferencePoolName() string          { return r.inferencePoolName }
 func (r *flowControlRequest) ModelName() string                  { return r.modelName }
 func (r *flowControlRequest) TargetModelName() string            { return r.targetModelName }
-func (r *flowControlRequest) FlowKey() types.FlowKey {
-	return types.FlowKey{ID: r.fairnessID, Priority: r.priority}
+func (r *flowControlRequest) FlowKey() flowcontrol.FlowKey {
+	return flowcontrol.FlowKey{ID: r.fairnessID, Priority: r.priority}
 }
 
 // translateFlowControlOutcome maps the context-rich outcome of the Flow Control layer to the public errutil.Error

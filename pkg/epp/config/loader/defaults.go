@@ -21,11 +21,11 @@ import (
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 )
 
 // DefaultScorerWeight is the weight used for scorers referenced in the configuration without explicit weights.
@@ -145,7 +145,7 @@ func ensureFlowControlLayer(
 	handle fwkplugin.Handle,
 	_ map[string]fwkplugin.Plugin,
 ) error {
-	if err := registerDefaultPlugin(cfg, handle, intraflow.FCFSOrderingPolicyType); err != nil {
+	if err := registerDefaultPlugin(cfg, handle, ordering.FCFSOrderingPolicyType); err != nil {
 		return err
 	}
 	return registerDefaultPlugin(cfg, handle, fairness.GlobalStrictFairnessPolicyType)

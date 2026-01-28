@@ -52,7 +52,7 @@ func TestDatasource(t *testing.T) {
 	assert.Nil(t, err, "failed to register")
 
 	ctx := context.Background()
-	factory := datalayer.NewEndpointFactory([]datalayer.DataSource{source}, 100*time.Millisecond)
+	factory := datalayer.NewEndpointFactory([]fwkdl.DataSource{source}, 100*time.Millisecond)
 	pod := &fwkdl.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod1",

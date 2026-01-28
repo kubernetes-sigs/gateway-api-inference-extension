@@ -41,7 +41,7 @@ import (
 
 var (
 	errPoolNotSynced = errors.New("InferencePool is not initialized in data store")
-	AllPodsPredicate = func(_ datalayer.Endpoint) bool { return true }
+	AllPodsPredicate = func(_ fwkdl.Endpoint) bool { return true }
 )
 
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
@@ -242,11 +242,11 @@ func (ds *datastore) ModelRewriteGetAll() []*v1alpha2.InferenceModelRewrite {
 // /// Pods/endpoints APIs ///
 // TODO: add a flag for callers to specify the staleness threshold for metrics.
 // ref: https://github.com/kubernetes-sigs/gateway-api-inference-extension/pull/1046#discussion_r2246351694
-func (ds *datastore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
-	res := []datalayer.Endpoint{}
+func (ds *datastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint {
+	res := []fwkdl.Endpoint{}
 
 	ds.pods.Range(func(k, v any) bool {
-		ep := v.(datalayer.Endpoint)
+		ep := v.(fwkdl.Endpoint)
 		if predicate(ep) {
 			res = append(res, ep)
 		}
@@ -292,7 +292,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 
 	result := true
 	for _, endpointMetadata := range pods {
-		var ep datalayer.Endpoint
+		var ep fwkdl.Endpoint
 		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
 		if !ok {
 			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
@@ -309,7 +309,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 
 func (ds *datastore) PodDelete(podName string) {
 	ds.pods.Range(func(k, v any) bool {
-		ep := v.(datalayer.Endpoint)
+		ep := v.(fwkdl.Endpoint)
 		if ep.GetMetadata().PodName == podName {
 			ds.pods.Delete(k)
 			ds.epf.ReleaseEndpoint(ep)
@@ -344,7 +344,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 
 	// Remove pods that don't belong to the pool or not ready any more.
 	ds.pods.Range(func(k, v any) bool {
-		ep := v.(datalayer.Endpoint)
+		ep := v.(fwkdl.Endpoint)
 		if !activePods.Has(ep.GetMetadata().PodName) {
 			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", ep.GetMetadata().PodName)
 			ds.PodDelete(ep.GetMetadata().PodName)

@@ -24,12 +24,20 @@ import (
 	"net/url"
 	"time"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // Client is an interface for retrieving the data from an endpoint URL.
 type Client interface {
-	Get(ctx context.Context, target *url.URL, ep datalayer.Addressable, parser func(io.Reader) (any, error)) (any, error)
+	Get(ctx context.Context, target *url.URL, ep Addressable, parser func(io.Reader) (any, error)) (any, error)
+}
+
+// Addressable supports getting an IP address and a namespaced name.
+type Addressable interface {
+	GetIPAddress() string
+	GetPort() string
+	GetMetricsHost() string
+	GetNamespacedName() types.NamespacedName
 }
 
 const (
@@ -65,7 +73,7 @@ type client struct {
 	http.Client
 }
 
-func (cl *client) Get(ctx context.Context, target *url.URL, ep datalayer.Addressable,
+func (cl *client) Get(ctx context.Context, target *url.URL, ep Addressable,
 	parser func(io.Reader) (any, error)) (any, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {

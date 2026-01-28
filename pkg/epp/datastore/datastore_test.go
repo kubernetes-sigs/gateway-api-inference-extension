@@ -84,7 +84,7 @@ func TestPool(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(tt.name, func(t *testing.T) {
@@ -204,7 +204,7 @@ func TestObjective(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -234,7 +234,7 @@ var (
 			Name: "pod1",
 		},
 	}
-	pod1Metrics = &datalayer.Metrics{
+	pod1Metrics = &fwkdl.Metrics{
 		WaitingQueueSize:    0,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -249,7 +249,7 @@ var (
 			Name: "pod2",
 		},
 	}
-	pod2Metrics = &datalayer.Metrics{
+	pod2Metrics = &fwkdl.Metrics{
 		WaitingQueueSize:    1,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -281,41 +281,41 @@ var (
 func TestMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
-		metrics   map[types.NamespacedName]*datalayer.Metrics
+		metrics   map[types.NamespacedName]*fwkdl.Metrics
 		err       map[types.NamespacedName]error
 		storePods []*corev1.Pod
-		want      []*datalayer.Metrics
+		want      []*fwkdl.Metrics
 		predict   func(backendmetrics.PodMetrics) bool
 	}{
 		{
 			name: "Probing metrics success",
-			metrics: map[types.NamespacedName]*datalayer.Metrics{
+			metrics: map[types.NamespacedName]*fwkdl.Metrics{
 				pod1NamespacedName: pod1Metrics,
 				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want:      []*datalayer.Metrics{pod1Metrics, pod2Metrics},
+			want:      []*fwkdl.Metrics{pod1Metrics, pod2Metrics},
 		},
 		{
 			name: "Only pods in are probed",
-			metrics: map[types.NamespacedName]*datalayer.Metrics{
+			metrics: map[types.NamespacedName]*fwkdl.Metrics{
 				pod1NamespacedName: pod1Metrics,
 				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1},
-			want:      []*datalayer.Metrics{pod1Metrics},
+			want:      []*fwkdl.Metrics{pod1Metrics},
 		},
 		{
 			name: "Probing metrics error",
 			err: map[types.NamespacedName]error{
 				pod2NamespacedName: errors.New("injected error"),
 			},
-			metrics: map[types.NamespacedName]*datalayer.Metrics{
+			metrics: map[types.NamespacedName]*fwkdl.Metrics{
 				pod1NamespacedName: pod1Metrics,
 				pod2NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
-			want: []*datalayer.Metrics{pod1Metrics,
+			want: []*fwkdl.Metrics{pod1Metrics,
 				// Failed to fetch pod2 metrics so it remains the default values.
 				{
 					ActiveModels:        map[string]int{},
@@ -332,7 +332,7 @@ func TestMetrics(t *testing.T) {
 		period := time.Millisecond
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: test.metrics, Err: test.err}, period),
-			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{Metrics: test.metrics, Errors: test.err}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{Metrics: test.metrics, Errors: test.err}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -355,11 +355,11 @@ func TestMetrics(t *testing.T) {
 				}
 				assert.EventuallyWithT(t, func(t *assert.CollectT) {
 					got := ds.PodList(test.predict)
-					metrics := []*datalayer.Metrics{}
+					metrics := []*fwkdl.Metrics{}
 					for _, one := range got {
 						metrics = append(metrics, one.GetMetrics())
 					}
-					diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(datalayer.Metrics{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *datalayer.Metrics) bool {
+					diff := cmp.Diff(test.want, metrics, cmpopts.IgnoreFields(fwkdl.Metrics{}, "UpdateTime"), cmpopts.SortSlices(func(a, b *fwkdl.Metrics) bool {
 						return a.String() < b.String()
 					}))
 					assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
@@ -413,7 +413,7 @@ func TestPods(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -603,7 +603,7 @@ func TestEndpointMetadata(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {

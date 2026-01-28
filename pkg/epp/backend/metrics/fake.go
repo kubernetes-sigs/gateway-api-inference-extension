@@ -26,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -34,7 +33,7 @@ import (
 type FakePodMetrics struct {
 	Metadata   *fwkdl.EndpointMetadata
 	Metrics    *MetricsState
-	Attributes *datalayer.Attributes
+	Attributes *fwkdl.Attributes
 }
 
 func (fpm *FakePodMetrics) String() string {
@@ -52,13 +51,13 @@ func (fpm *FakePodMetrics) GetMetrics() *MetricsState {
 func (fpm *FakePodMetrics) UpdateMetadata(metadata *fwkdl.EndpointMetadata) {
 	fpm.Metadata = metadata
 }
-func (fpm *FakePodMetrics) GetAttributes() *datalayer.Attributes {
+func (fpm *FakePodMetrics) GetAttributes() fwkdl.AttributeMap {
 	return fpm.Attributes
 }
 
-func (*FakePodMetrics) Put(string, datalayer.Cloneable)        {}
-func (*FakePodMetrics) Get(string) (datalayer.Cloneable, bool) { return nil, false }
-func (*FakePodMetrics) Keys() []string                         { return nil }
+func (*FakePodMetrics) Put(string, fwkdl.Cloneable)        {}
+func (*FakePodMetrics) Get(string) (fwkdl.Cloneable, bool) { return nil, false }
+func (*FakePodMetrics) Keys() []string                     { return nil }
 
 func (fpm *FakePodMetrics) UpdateMetrics(updated *MetricsState) {
 	updated.UpdateTime = time.Now()

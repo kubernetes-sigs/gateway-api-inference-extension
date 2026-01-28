@@ -32,22 +32,14 @@ type PodLocator interface {
 	Locate(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics
 }
 
-// SaturationDetector defines the contract for a component that provides real-time load signals to the
-// `controller.FlowController`.
-//
-// This interface abstracts away the complexity of determining system load. An implementation would consume various
-// backend metrics (e.g., queue depths, KV cache utilization, observed latencies) and translate them into a simple
-// boolean signal.
-//
-// This decoupling is important because it allows the saturation detection logic to evolve independently of the core
-// `controller.FlowController` engine, which is only concerned with the final true/false signal.
-//
-// # Conformance
-//
-// Implementations MUST be goroutine-safe.
+// SaturationDetector defines the contract for a component that provides real-time load signals to the FlowController.
 type SaturationDetector interface {
-	// IsSaturated returns true if the system's backend resources are considered saturated for a set of candidate pods.
-	// `controller.FlowController`'s dispatch workers call this method to decide whether to pause or throttle dispatch
-	// operations to prevent overwhelming the backends.
-	IsSaturated(ctx context.Context, candidatePods []metrics.PodMetrics) bool
+	// Saturation returns the saturation level of the pool
+	// - A value >= 1.0 indicates that the system is fully saturated.
+	// - A value < 1.0 indicates the ratio of used capacity to total capacity.
+	//
+	// FlowController consumes this signal to make dispatch decisions:
+	// - If Saturation() >= 1.0: Stop dispatching (enforce HoL blocking).
+	// - If Saturation() < 1.0: Continue dispatching.
+	Saturation(ctx context.Context, candidatePods []metrics.PodMetrics) float64
 }

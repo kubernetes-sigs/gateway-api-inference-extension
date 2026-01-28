@@ -19,10 +19,10 @@ limitations under the License.
 //
 // # Role in Flow Control (The Gatekeeper)
 //
-// The Detector implements the SaturationDetector interface to act as a "Circuit Breaker".
-// It signals saturation when every available candidate endpoint has reached the configured MaxConcurrency limit.
-// This indicates that the backend pool has no remaining capacity for new work, triggering the Flow Controller to queue
-// incoming requests.
+// The Detector implements the SaturationDetector interface to provide a utilization gradient, allowing the Flow
+// Controller to apply proportional backpressure.
+//
+//	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity
 //
 // # Role in Scheduling (The Traffic Shaper)
 //
@@ -112,31 +112,28 @@ func (d *Detector) TypedName() fwkplugin.TypedName {
 	}
 }
 
-// IsSaturated acts as the global circuit breaker.
+// Saturation calculates the saturation level of the pool.
 //
-// It iterates through the provided list of candidate endpoints. If it finds at least one endpoint where the current
-// in-flight requests are below the MaxConcurrency threshold, it returns false (not saturated), allowing the Flow
-// Controller to admit the request.
+// It returns an aggregate saturation signal where:
 //
-// If all candidate endpoints are at or above the MaxConcurrency limit, it returns true, signaling the Flow Controller
-// to halt dispatch and queue incoming requests.
-func (d *Detector) IsSaturated(ctx context.Context, candidateEndpoints []metrics.PodMetrics) bool {
-	if len(candidateEndpoints) == 0 {
-		return true
-	}
-
+//	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity.
+func (d *Detector) Saturation(_ context.Context, candidateEndpoints []metrics.PodMetrics) float64 {
+	var totalInflight, totalCapacity int64
 	for _, endpoint := range candidateEndpoints {
 		if endpoint.GetMetadata() == nil {
 			continue
 		}
-
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
 		inflight := d.tracker.get(endpointID)
-		if inflight < d.config.MaxConcurrency {
-			return false
-		}
+		totalInflight += inflight
+		totalCapacity += d.config.MaxConcurrency
 	}
-	return true
+
+	if totalCapacity == 0 {
+		return 1.0
+	}
+
+	return float64(totalInflight) / float64(totalCapacity)
 }
 
 // Filter blocks traffic to specific endpoints that are physically saturated or exceeding their safety limits.

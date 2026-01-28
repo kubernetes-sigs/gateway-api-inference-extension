@@ -17,42 +17,13 @@ limitations under the License.
 package datalayer
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
-
-// DataSource provides raw data to registered Extractors.
-type DataSource interface {
-	plugin.Plugin
-	// Extractors returns a list of registered Extractor names.
-	Extractors() []string
-	// AddExtractor adds an extractor to the data source. Multiple
-	// Extractors can be registered.
-	// The extractor will be called whenever the DataSource might
-	// have some new raw information regarding an endpoint.
-	// The Extractor's expected input type should be validated against
-	// the data source's output type upon registration.
-	AddExtractor(extractor Extractor) error
-	// Collect is triggered by the data layer framework to fetch potentially new
-	// data for an endpoint. Collect calls registered Extractors to convert the
-	// raw data into structured attributes.
-	Collect(ctx context.Context, ep Endpoint) error
-}
-
-// Extractor transforms raw data into structured attributes.
-type Extractor interface {
-	plugin.Plugin
-	// ExpectedType defines the type expected by the extractor.
-	ExpectedInputType() reflect.Type
-	// Extract transforms the raw data source output into a concrete structured
-	// attribute, stored on the given endpoint.
-	Extract(ctx context.Context, data any, ep Endpoint) error
-}
 
 var defaultDataSources = DataSourceRegistry{}
 
@@ -62,7 +33,7 @@ type DataSourceRegistry struct {
 }
 
 // Register adds a new DataSource to the registry.
-func (dsr *DataSourceRegistry) Register(src DataSource) error {
+func (dsr *DataSourceRegistry) Register(src fwkdl.DataSource) error {
 	if src == nil {
 		return errors.New("unable to register a nil data source")
 	}
@@ -73,10 +44,10 @@ func (dsr *DataSourceRegistry) Register(src DataSource) error {
 }
 
 // GetSources returns all registered sources.
-func (dsr *DataSourceRegistry) GetSources() []DataSource {
-	var result []DataSource
+func (dsr *DataSourceRegistry) GetSources() []fwkdl.DataSource {
+	var result []fwkdl.DataSource
 	dsr.sources.Range(func(_, val any) bool {
-		if ds, ok := val.(DataSource); ok {
+		if ds, ok := val.(fwkdl.DataSource); ok {
 			result = append(result, ds)
 		}
 		return true
@@ -87,12 +58,12 @@ func (dsr *DataSourceRegistry) GetSources() []DataSource {
 // --- default registry accessors ---
 
 // RegisterSource adds a new data source to the default registry.
-func RegisterSource(src DataSource) error {
+func RegisterSource(src fwkdl.DataSource) error {
 	return defaultDataSources.Register(src)
 }
 
 // GetSources returns the list of data sources registered in the default registry.
-func GetSources() []DataSource {
+func GetSources() []fwkdl.DataSource {
 	return defaultDataSources.GetSources()
 }
 

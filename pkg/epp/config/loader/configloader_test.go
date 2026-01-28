@@ -31,13 +31,18 @@ import (
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -161,14 +166,14 @@ func TestInstantiateAndConfigure(t *testing.T) {
 		name       string
 		configText string
 		wantErr    bool
-		validate   func(t *testing.T, handle fwkplugin.Handle, cfg *configapi.EndpointPickerConfig)
+		validate   func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config)
 	}{
 		// --- Success Scenarios ---
 		{
 			name:       "Success - Complex Scheduler",
 			configText: successSchedulerConfigText,
 			wantErr:    false,
-			validate: func(t *testing.T, handle fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
 				// 1. Verify all explicit plugins exist in the registry
 				require.NotNil(t, handle.Plugin("testScorer"), "Explicit scorer should be instantiated")
 				require.NotNil(t, handle.Plugin("maxScorePicker"), "Explicit picker should be instantiated")
@@ -176,13 +181,13 @@ func TestInstantiateAndConfigure(t *testing.T) {
 
 				// 2. Verify Profile Integrity
 				// We explicitly defined a picker, so the defaulter should NOT have added a second one.
-				require.Len(t, cfg.SchedulingProfiles, 1)
-				require.Len(t, cfg.SchedulingProfiles[0].Plugins, 2,
+				require.Len(t, rawCfg.SchedulingProfiles, 1)
+				require.Len(t, rawCfg.SchedulingProfiles[0].Plugins, 2,
 					"Profile should have exactly 2 plugins (Scorer + Explicit Picker)")
 
 				// 3. Verify Weight Propagation
 				// The YAML specified weight: 50. Ensure it wasn't overwritten by defaults.
-				scorerRef := cfg.SchedulingProfiles[0].Plugins[0]
+				scorerRef := rawCfg.SchedulingProfiles[0].Plugins[0]
 				require.Equal(t, "testScorer", scorerRef.PluginRef)
 				require.NotNil(t, scorerRef.Weight)
 				require.Equal(t, 50.0, *scorerRef.Weight, "Explicit weight of 50.0 should be preserved")
@@ -192,10 +197,10 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			name:       "Success - Default Scorer Weight",
 			configText: successWithNoWeightText,
 			wantErr:    false,
-			validate: func(t *testing.T, _ fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
-				require.Len(t, cfg.SchedulingProfiles, 1, "Unexpected profile structure")
-				require.Len(t, cfg.SchedulingProfiles[0].Plugins, 2, "Expected Scorer + Default Picker")
-				w := cfg.SchedulingProfiles[0].Plugins[0].Weight
+			validate: func(t *testing.T, _ fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.Len(t, rawCfg.SchedulingProfiles, 1, "Unexpected profile structure")
+				require.Len(t, rawCfg.SchedulingProfiles[0].Plugins, 2, "Expected Scorer + Default Picker")
+				w := rawCfg.SchedulingProfiles[0].Plugins[0].Weight
 				require.NotNil(t, w, "Weight should not be nil")
 				require.Equal(t, 1.0, *w, "Expected default scorer weight of 1.0")
 			},
@@ -204,7 +209,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			name:       "Success - Default Profile Handler Injection",
 			configText: successWithNoProfileHandlersText,
 			wantErr:    false,
-			validate: func(t *testing.T, handle fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
 				require.True(t, hasPluginType(handle, profile.SingleProfileHandlerType),
 					"Defaults: SingleProfileHandler was not injected")
 			},
@@ -213,14 +218,37 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			name:       "Success - Picker Before Scorer",
 			configText: successPickerBeforeScorerText,
 			wantErr:    false,
-			validate: func(t *testing.T, _ fwkplugin.Handle, cfg *configapi.EndpointPickerConfig) {
-				require.Len(t, cfg.SchedulingProfiles, 1)
-				prof := cfg.SchedulingProfiles[0]
+			validate: func(t *testing.T, _ fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.Len(t, rawCfg.SchedulingProfiles, 1)
+				prof := rawCfg.SchedulingProfiles[0]
 				require.Equal(t, "test-picker", prof.Plugins[0].PluginRef, "Picker should be the first plugin")
 				require.Equal(t, "test-scorer", prof.Plugins[1].PluginRef, "Scorer should be the second plugin")
 				scorerWeight := prof.Plugins[1].Weight
 				require.NotNil(t, scorerWeight, "Scorer weight should be set (defaulted)")
 				require.Equal(t, 1.0, *scorerWeight, "Scorer weight should default to 1.0")
+			},
+		},
+		{
+			name:       "Success - Flow Control Config",
+			configText: successFlowControlConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.FlowControl, "FlowControl config should be present in raw config")
+				require.NotNil(t, cfg.FlowControlConfig, "FlowControl config should have been loaded")
+				require.NotNil(t, cfg.FlowControlConfig.Registry, "Registry config should be present")
+				require.Equal(t, uint64(1024), cfg.FlowControlConfig.Registry.MaxBytes, "MaxBytes should match yaml")
+				require.NotNil(t, cfg.FlowControlConfig.Controller, "Controller config should be present")
+				require.Equal(t, 1*time.Minute, cfg.FlowControlConfig.Controller.DefaultRequestTTL, "DefaultRequestTTL should match yaml")
+				require.Equal(t, 1*time.Second, cfg.FlowControlConfig.Controller.ExpiryCleanupInterval, "ExpiryCleanupInterval should use default")
+			},
+		},
+		{
+			name:       "Ignored - Flow Control Config Present but FeatureGate Missing",
+			configText: successflowControlConfigDisabledText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.FlowControl, "Raw config should parse the struct")
+				require.Nil(t, cfg.FlowControlConfig, "Internal config should be nil when FeatureGate is disabled")
 			},
 		},
 
@@ -322,7 +350,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 
 			// 2. Instantiate & Configure
 			handle := utils.NewTestHandle(context.Background())
-			_, err = InstantiateAndConfigure(rawConfig, handle, logger)
+			cfg, err := InstantiateAndConfigure(rawConfig, handle, logger)
 
 			if tc.wantErr {
 				require.Error(t, err, "Expected InstantiateAndConfigure to fail")
@@ -331,7 +359,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			require.NoError(t, err, "Expected InstantiateAndConfigure to succeed")
 
 			if tc.validate != nil {
-				tc.validate(t, handle, rawConfig)
+				tc.validate(t, handle, rawConfig, cfg)
 			}
 		})
 	}
@@ -440,8 +468,8 @@ type mockHandler struct{ mockPlugin }
 // compile-time type assertion
 var _ framework.ProfileHandler = &mockHandler{}
 
-func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.LLMRequest, map[string]*framework.SchedulerProfile,
-	map[string]*framework.ProfileRunResult) map[string]*framework.SchedulerProfile {
+func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.LLMRequest, map[string]framework.SchedulerProfile,
+	map[string]*framework.ProfileRunResult) map[string]framework.SchedulerProfile {
 	return nil
 }
 func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *framework.LLMRequest,
@@ -452,11 +480,11 @@ func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *fr
 // Mock Source
 type mockSource struct{ mockPlugin }
 
-func (m *mockSource) AddExtractor(_ datalayer.Extractor) error {
+func (m *mockSource) AddExtractor(_ fwkdl.Extractor) error {
 	return nil
 }
 
-func (m *mockSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
+func (m *mockSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
 	return nil
 }
 
@@ -471,7 +499,7 @@ func (m *mockExtractor) ExpectedInputType() reflect.Type {
 	return reflect.TypeOf("")
 }
 
-func (m *mockExtractor) Extract(ctx context.Context, data any, ep datalayer.Endpoint) error {
+func (m *mockExtractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {
 	return nil
 }
 
@@ -519,6 +547,17 @@ func registerTestPlugins(t *testing.T) {
 
 	fwkplugin.Register(testExtractorType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		return &mockExtractor{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testExtractorType}}}, nil
+	})
+
+	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &flowcontrolmocks.MockFairnessPolicy{
+			TypedNameV: fwkplugin.TypedName{Name: name, Type: fairness.GlobalStrictFairnessPolicyType},
+		}, nil
+	})
+	fwkplugin.Register(ordering.FCFSOrderingPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &flowcontrolmocks.MockOrderingPolicy{
+			TypedNameV: fwkplugin.TypedName{Name: name, Type: ordering.FCFSOrderingPolicyType},
+		}, nil
 	})
 
 	// Ensure system defaults are registered too.

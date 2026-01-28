@@ -23,7 +23,6 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/utils/clock"
@@ -31,7 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -47,29 +45,9 @@ type bandStats struct {
 }
 
 // flowState tracks the lifecycle and usage of a specific flow instance.
-//
-// It uses a mutex-protected reference counter to arbitrate between active request processing and garbage collection.
-// This structure allows the registry to safely determine if a flow is currently in use or eligible for deletion.
 type flowState struct {
-	key types.FlowKey
-
-	// mu protects the lifecycle fields (leaseCount, becameIdleAt, closing).
-	// We use a mutex instead of independent atomics to ensure that state transitions (e.g., Active -> Idle) are atomic
-	// and consistent.
-	mu sync.Mutex
-
-	// leaseCount tracks the number of concurrent, in-flight connections using this flow.
-	// - count > 0: Active. The flow is pinned and cannot be garbage collected.
-	// - count == 0: Idle. The flow is eligible for garbage collection if the timeout is exceeded.
-	leaseCount int
-
-	// becameIdleAt tracks the timestamp when leaseCount last dropped to zero.
-	// A zero value (time.Time{}) indicates the flow is currently Active.
-	becameIdleAt time.Time
-
-	// markedForDeletion indicates that the Garbage Collector has selected this flow for deletion.
-	// If true, incoming requests must back off and allow the flow to be cleaned up.
-	markedForDeletion bool
+	leasedState
+	key flowcontrol.FlowKey
 
 	// initialized ensures that the heavy-weight infrastructure provisioning (creating queues on shards) happens exactly
 	// once per flowState instance.
@@ -82,36 +60,9 @@ type flowState struct {
 }
 
 // priorityBandState tracks the lifecycle state for a dynamically provisioned priority band.
-// Unlike flowState, which tracks individual flows, this tracks an entire priority level and persists
-// after all flows at that priority are garbage collected to enforce idle timeout before band deletion.
-//
-// It uses the same mutex-protected reference counter (leaseCount) pattern as flowState to arbitrate between
-// active flows and garbage collection. Leases represent active FLOWS, not individual requests, and are held
-// from flow creation until flow destruction.
 type priorityBandState struct {
+	leasedState
 	priority int
-
-	// mu protects the lifecycle fields (leaseCount, becameIdleAt, markedForDeletion).
-	// We use a mutex instead of independent atomics to ensure that state transitions (e.g., Active -> Idle) are atomic
-	// and consistent, following the same pattern as flowState.
-	mu sync.Mutex
-
-	// leaseCount tracks the number of active flows at this priority level.
-	// Each flow contributes exactly one lease, acquired when the flow is created (pinActiveFlow) and
-	// released when the flow is destroyed (gcFlows) or JIT provisioning fails.
-	// This is more efficient than per-request leasing as it avoids atomic updates on the hot path.
-	// - count > 0: Active. The band is pinned and cannot be garbage collected.
-	// - count == 0: May be eligible for GC if also empty (see markPriorityBands).
-	leaseCount int
-
-	// becameIdleAt tracks the timestamp when the band became truly idle (both empty and leaseCount == 0).
-	// A zero value (time.Time{}) indicates the band is currently Active (has flows).
-	// This field is managed by markPriorityBands, which verifies both conditions.
-	becameIdleAt time.Time
-
-	// markedForDeletion indicates that the Garbage Collector has selected this band for deletion.
-	// If true, incoming flow creation operations must back off and allow the band to be cleaned up.
-	markedForDeletion bool
 }
 
 // FlowRegistry is the concrete implementation of the contracts.FlowRegistry interface.
@@ -234,20 +185,30 @@ func (fr *FlowRegistry) Run(ctx context.Context) {
 //
 // When a NEW flow is created, this method also increments the corresponding priority band's lease count,
 // establishing the invariant: bandState.leaseCount = number of active flows at this priority.
-func (fr *FlowRegistry) WithConnection(key types.FlowKey, fn func(conn contracts.ActiveFlowConnection) error) error {
+func (fr *FlowRegistry) WithConnection(key flowcontrol.FlowKey, fn func(conn contracts.ActiveFlowConnection) error) error {
 	if key.ID == "" {
 		return contracts.ErrFlowIDEmpty
 	}
 
 	// 1. Acquire lease: Pin the flow state in memory.
-	state, isNewFlow := fr.pinActiveFlow(key)
+	state, isNewFlow := pinLeasedResource(
+		&fr.flowStates,
+		key,
+		func() *flowState { return &flowState{key: key} },
+		fr.clock,
+	)
 	if isNewFlow {
 		// If this is a newly created flow, increment the band's lease count.
 		// Band leases track the number of active *flows* (not requests).
 		// Every flow in the map holds exactly one band lease.
-		fr.pinActivePriorityBand(key.Priority)
+		pinLeasedResource(
+			&fr.priorityBandStates,
+			key.Priority,
+			func() *priorityBandState { return &priorityBandState{priority: key.Priority} },
+			fr.clock,
+		)
 	}
-	defer fr.releaseFlow(state)
+	defer state.unpin(fr.clock.Now())
 
 	// 2. JIT provisioning: Ensure physical resources exist on shards.
 	// We use sync.Once to ensure we only pay the initialization cost (building components, locking shards) exactly once
@@ -265,8 +226,7 @@ func (fr *FlowRegistry) WithConnection(key types.FlowKey, fn func(conn contracts
 		// If JIT provisioning fails for a new flow, we must release that lease to prevent leaking band leases.
 		if isNewFlow {
 			if bandVal, ok := fr.priorityBandStates.Load(key.Priority); ok {
-				bandState := bandVal.(*priorityBandState)
-				fr.releasePriorityBand(bandState)
+				bandVal.(*priorityBandState).unpin(fr.clock.Now())
 			}
 		}
 
@@ -278,113 +238,11 @@ func (fr *FlowRegistry) WithConnection(key types.FlowKey, fn func(conn contracts
 	return fn(&connection{registry: fr, key: key})
 }
 
-// pinActiveFlow locates or creates the flow state and increments its lease count.
-//
-// It uses an optimistic loop to handle race conditions where the Garbage Collector might delete the object from the map
-// concurrently. It ensures that the returned state object is both authoritative (present in the map) and leased
-// (count > 0).
-//
-// Returns the flow state and a boolean indicating whether this call created a new flow.
-func (fr *FlowRegistry) pinActiveFlow(key types.FlowKey) (*flowState, bool) {
-	for {
-		val, ok := fr.flowStates.Load(key) // Optimization: Check Load first to avoid allocation on the hot path.
-		if !ok {
-			val, ok = fr.flowStates.LoadOrStore(key, &flowState{key: key})
-		}
-		state := val.(*flowState)
-		isNewFlow := !ok
-
-		state.mu.Lock()
-		if state.markedForDeletion {
-			// The GC has marked this flow for deletion.
-			// We must back off and let it die. We will retry and create a fresh one.
-			state.mu.Unlock()
-			continue
-		}
-		state.leaseCount++
-		state.becameIdleAt = time.Time{} // Mark as Active
-		state.mu.Unlock()
-
-		// Did the GC delete this object while we were acquiring it?
-		currentVal, ok := fr.flowStates.Load(key)
-		if !ok || currentVal != state {
-			// We acquired a "stale" object. Back off and retry.
-			fr.releaseFlow(state)
-			continue
-		}
-
-		return state, isNewFlow
-	}
-}
-
-// releaseFlow decrements the lease count for a flow.
-// If the lease count reaches zero, the flow is marked as idle with the current timestamp.
-func (fr *FlowRegistry) releaseFlow(state *flowState) {
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	state.leaseCount--
-	if state.leaseCount == 0 {
-		state.becameIdleAt = fr.clock.Now()
-	}
-}
-
-// pinActivePriorityBand locates or creates the priority band state and increments its lease count.
-//
-// This is called from pinActiveFlow when creating a NEW flow to establish the invariant:
-// bandState.leaseCount = number of active flows at this priority.
-//
-// It uses an optimistic loop to handle race conditions where the Garbage Collector might delete the band
-// concurrently. It ensures that the returned state object is both authoritative (present in the map) and leased
-// (count > 0).
-func (fr *FlowRegistry) pinActivePriorityBand(priority int) *priorityBandState {
-	for {
-		val, ok := fr.priorityBandStates.Load(priority)
-		if !ok {
-			val, _ = fr.priorityBandStates.LoadOrStore(priority, &priorityBandState{priority: priority})
-		}
-		state := val.(*priorityBandState)
-
-		state.mu.Lock()
-		if state.markedForDeletion {
-			// The GC has marked this band for deletion.
-			// We must back off and let it die. We will retry and create a fresh one.
-			state.mu.Unlock()
-			continue
-		}
-		state.leaseCount++
-		state.becameIdleAt = time.Time{} // Mark as Active
-		state.mu.Unlock()
-
-		// Did the GC delete this object while we were acquiring it?
-		currentVal, ok := fr.priorityBandStates.Load(priority)
-		if !ok || currentVal != state {
-			// We acquired a "stale" object. Back off and retry.
-			fr.releasePriorityBand(state)
-			continue
-		}
-		return state
-	}
-}
-
-// releasePriorityBand decrements the lease count for a priority band.
-//
-// Unlike releaseFlow, we do NOT automatically set becameIdleAt when leaseCount reaches zero.
-// A band is idle only when BOTH conditions are met:
-//  1. leaseCount == 0 (no active flows)
-//  2. isBandEmpty() == true (no buffered items or queues)
-//
-// The becameIdleAt timestamp is managed by markPriorityBands, which checks both conditions.
-func (fr *FlowRegistry) releasePriorityBand(state *priorityBandState) {
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	state.leaseCount--
-}
-
 // ensureFlowInfrastructure guarantees that the Priority Band exists and that the flow's queues are synchronized across
 // all active shards.
 //
 // NOTE: The caller (WithConnection) must already hold a lease on the priority band to prevent GC during this operation.
-func (fr *FlowRegistry) ensureFlowInfrastructure(key types.FlowKey) error {
+func (fr *FlowRegistry) ensureFlowInfrastructure(key flowcontrol.FlowKey) error {
 	// 1. Ensure Priority Band exists.
 	fr.mu.RLock()
 	_, exists := fr.config.PriorityBands[key.Priority]
@@ -448,59 +306,10 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 	return nil
 }
 
-// isBandActive returns true if the priority band has any flows or buffered items across all shards.
-func (fr *FlowRegistry) isBandActive(priority int) bool {
-	// Get stable shard snapshot
-	fr.mu.RLock()
-	shards := fr.allShards
-	fr.mu.RUnlock()
-
-	for _, shard := range shards {
-		// If the band doesn't exist on this shard it is not partitioned here.
-		if val, ok := shard.priorityBands.Load(priority); ok {
-			band := val.(*priorityBand)
-
-			// Check queue count under lock
-			shard.mu.RLock()
-			queueCount := len(band.queues)
-			shard.mu.RUnlock()
-
-			if queueCount > 0 {
-				return true
-			}
-
-			// Check atomic statistics (lock-free)
-			if band.len.Load() > 0 || band.byteSize.Load() > 0 {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 // deletePriorityBand removes a priority band from the registry and all shards.
-// This method should only be called after verifying the band is safe to delete (empty across all shards).
-// Follows locking order: FlowRegistry.mu → registryShard.mu
 func (fr *FlowRegistry) deletePriorityBand(priority int) {
-	fr.mu.Lock()
-	defer fr.mu.Unlock()
-
-	// Delete from registry config
-	delete(fr.config.PriorityBands, priority)
-
-	// Delete from stats tracking
-	fr.perPriorityBandStats.Delete(priority)
-
-	// Delete from all shards (both active and draining)
-	for _, shard := range fr.allShards {
-		shard.deletePriorityBand(priority)
-	}
-
-	// Delete lifecycle state
-	fr.priorityBandStates.Delete(priority)
-
-	fr.logger.Info("Successfully deleted priority band", "priority", priority)
+	fr.priorityBandStates.Delete(priority)           // Logical delete
+	fr.cleanupPriorityBandResources([]int{priority}) // Physical cleanup
 }
 
 // --- `contracts.FlowRegistryObserver` Implementation ---
@@ -558,65 +367,32 @@ func (fr *FlowRegistry) executeGCCycle() {
 	fr.sweepDrainingShards()
 }
 
-// gcFlows performs the Mark-and-Sweep of Idle flows.
-//
-// It iterates through all tracked flows and identifies candidates that have zero active leases and have exceeded the
-// configured idle timeout. These flows are first removed from the internal map (Logical Delete), their corresponding
-// priority band leases are released, and then they are cleaned up from the shards (Physical Delete).
+// gcFlows removes idle flows.
 func (fr *FlowRegistry) gcFlows() {
-	var flowsToClean []types.FlowKey
-	fr.flowStates.Range(func(key, value interface{}) bool {
-		state := value.(*flowState)
-		state.mu.Lock()
+	deletedFlows := collectLeasedResources[flowcontrol.FlowKey, *flowState](
+		&fr.flowStates,
+		fr.config.FlowGCTimeout,
+		fr.clock,
+	)
 
-		// 1. Check Lease.
-		if state.leaseCount > 0 {
-			state.mu.Unlock()
-			return true
-		}
-
-		// 2. Check Idle Timeout.
-		if state.becameIdleAt.IsZero() || fr.clock.Since(state.becameIdleAt) < fr.config.FlowGCTimeout {
-			state.mu.Unlock()
-			return true // Not yet expired or active.
-		}
-
-		// 3. Mark for Deletion.
-		state.markedForDeletion = true
-		idleTime := state.becameIdleAt // Captured for logging
-		priority := state.key.Priority // Captured for band lease release
-		state.mu.Unlock()
-
-		// 4. Logical Delete.
-		// Normally we may assume that only one GC loop is running globally: the following check is defensive.
-		// Concurrent GC might happen in test cases if a GC cycle is triggered concurrently with a background GC loop.
-		// In the case of concurrent GC execution, both GC cycles might see the same flow in their Range() snapshots.
-		// Only the first one to delete it should release the band lease. This prevents double-release bugs.
-		if _, existed := fr.flowStates.LoadAndDelete(key); existed {
-			flowsToClean = append(flowsToClean, key.(types.FlowKey))
-			fr.logger.V(logging.VERBOSE).Info("Garbage collecting flow", "flowKey", key, "becameIdleAt", idleTime)
-
-			// 5. Release the band lease.
-			// Every flow in the map holds exactly one band lease. This flow is being destroyed,
-			// so decrement the band's flow count.
-			if bandVal, ok := fr.priorityBandStates.Load(priority); ok {
-				bandState := bandVal.(*priorityBandState)
-				fr.releasePriorityBand(bandState)
+	if len(deletedFlows) > 0 {
+		var keysToClean []flowcontrol.FlowKey
+		for _, v := range deletedFlows {
+			fr.logger.V(logging.VERBOSE).Info("Garbage collecting flow", "flowKey", v.key, "becameIdleAt", v.becameIdleAt)
+			// Release the band lease.
+			// Every flow in the map holds exactly one band lease.
+			if bandVal, ok := fr.priorityBandStates.Load(v.key.Priority); ok {
+				bandVal.(*priorityBandState).unpin(fr.clock.Now())
 			}
+			keysToClean = append(keysToClean, v.key)
 		}
 
-		return true
-	})
-
-	// 6. Physical Cleanup.
-	// Performed outside the map iteration to avoid blocking or complex lock interactions.
-	if len(flowsToClean) > 0 {
-		fr.cleanupFlowResources(flowsToClean)
+		fr.cleanupFlowResources(keysToClean)
 	}
 }
 
 // cleanupFlowResources removes queue resources from the shards for the specified flows.
-func (fr *FlowRegistry) cleanupFlowResources(keys []types.FlowKey) {
+func (fr *FlowRegistry) cleanupFlowResources(keys []flowcontrol.FlowKey) {
 	fr.mu.Lock() // Exclusive lock to prevent race with ensureFlowInfrastructure.
 	defer fr.mu.Unlock()
 
@@ -630,61 +406,22 @@ func (fr *FlowRegistry) cleanupFlowResources(keys []types.FlowKey) {
 	}
 }
 
-// gcPriorityBands performs garbage collection of idle priority bands.
-// It follows the same pattern as gcFlows: verify and mark inside Range, then physical cleanup outside.
+// gcPriorityBands removes idle priority bands.
 func (fr *FlowRegistry) gcPriorityBands() {
-	var bandsToClean []int
-	fr.priorityBandStates.Range(func(priority, value interface{}) bool {
-		prio := priority.(int)
-		state := value.(*priorityBandState)
+	deletedBands := collectLeasedResources[int, *priorityBandState](
+		&fr.priorityBandStates,
+		fr.config.PriorityBandGCTimeout,
+		fr.clock,
+	)
 
-		state.mu.Lock()
-
-		// 1. Check if band is active: has buffered items OR active flows (leaseCount > 0).
-		if fr.isBandActive(prio) || state.leaseCount > 0 {
-			// Band is active - reset idle timestamp if previously idle.
-			if !state.becameIdleAt.IsZero() {
-				state.becameIdleAt = time.Time{}
-				fr.logger.V(logging.DEBUG).Info("Priority band became active again", "priority", prio)
-			}
-			state.mu.Unlock()
-			return true
+	if len(deletedBands) > 0 {
+		var keysToClean []int
+		for _, v := range deletedBands {
+			fr.logger.V(logging.VERBOSE).Info("Garbage collecting priority band",
+				"priority", v.priority, "becameIdleAt", v.becameIdleAt)
+			keysToClean = append(keysToClean, v.priority)
 		}
-
-		// 2. Band is idle - mark idle timestamp on first detection.
-		// This requires at least TWO GC cycles before collection (grace period).
-		if state.becameIdleAt.IsZero() {
-			state.becameIdleAt = fr.clock.Now()
-			fr.logger.V(logging.DEBUG).Info("Priority band became idle",
-				"priority", prio, "becameIdleAt", state.becameIdleAt)
-			state.mu.Unlock()
-			return true // Come back next GC cycle to check timeout.
-		}
-
-		// 3. Band has been idle for a while - check if timeout expired.
-		if fr.clock.Since(state.becameIdleAt) < fr.config.PriorityBandGCTimeout {
-			state.mu.Unlock()
-			return true // Still within grace period.
-		}
-
-		// 4. Timeout expired - mark for deletion.
-		state.markedForDeletion = true
-		idleTime := state.becameIdleAt // Captured for logging
-		state.mu.Unlock()
-
-		// 5. Logical Delete.
-		// Remove from the map. Concurrent pinActivePriorityBand calls will now create a fresh instance.
-		fr.priorityBandStates.Delete(prio)
-		bandsToClean = append(bandsToClean, prio)
-		fr.logger.V(logging.VERBOSE).Info("Garbage collecting priority band", "priority", prio, "becameIdleAt", idleTime)
-
-		return true
-	})
-
-	// 6. Physical Cleanup.
-	// Performed outside the map iteration to avoid blocking or complex lock interactions.
-	if len(bandsToClean) > 0 {
-		fr.cleanupPriorityBandResources(bandsToClean)
+		fr.cleanupPriorityBandResources(keysToClean)
 	}
 }
 
@@ -782,10 +519,10 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	// Pre-build every component for every existing flow on every new shard.
 	// If any single component fails to build, the entire scale-up operation is aborted, and all prepared data is
 	// discarded, leaving the system state clean.
-	allComponents := make(map[types.FlowKey][]flowComponents)
+	allComponents := make(map[flowcontrol.FlowKey][]flowComponents)
 	var rangeErr error
 	fr.flowStates.Range(func(key, _ interface{}) bool {
-		flowKey := key.(types.FlowKey)
+		flowKey := key.(flowcontrol.FlowKey)
 		components, err := fr.buildFlowComponents(flowKey, len(newShards))
 		if err != nil {
 			rangeErr = fmt.Errorf("failed to prepare components for flow %s on new shards: %w", flowKey, err)
@@ -843,12 +580,12 @@ func (fr *FlowRegistry) repartitionShardConfigsLocked() {
 // flowComponents holds the plugin instances created for a single flow on a single shard.
 type flowComponents struct {
 	policy flowcontrol.OrderingPolicy
-	queue  flowcontrol.SafeQueue
+	queue  contracts.SafeQueue
 }
 
 // buildFlowComponents instantiates the necessary plugin components for a new flow instance.
 // It creates a distinct instance of each component for each shard to ensure state isolation.
-func (fr *FlowRegistry) buildFlowComponents(key types.FlowKey, numInstances int) ([]flowComponents, error) {
+func (fr *FlowRegistry) buildFlowComponents(key flowcontrol.FlowKey, numInstances int) ([]flowComponents, error) {
 	bandConfig, ok := fr.config.PriorityBands[key.Priority]
 	if !ok {
 		return nil, fmt.Errorf("priority band %d not found: %w", key.Priority, contracts.ErrPriorityBandNotFound)

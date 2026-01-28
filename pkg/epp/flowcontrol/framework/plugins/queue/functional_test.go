@@ -28,33 +28,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // enqueueTimePolicy orders items by their enqueue time (FIFO).
-var enqueueTimePolicy = &frameworkmocks.MockOrderingPolicy{
+var enqueueTimePolicy = &mocks.MockOrderingPolicy{
 	TypedNameV: plugin.TypedName{Name: "enqueue_time_asc"},
-	LessFunc: func(a, b types.QueueItemAccessor) bool {
+	LessFunc: func(a, b flowcontrol.QueueItemAccessor) bool {
 		return a.EnqueueTime().Before(b.EnqueueTime())
 	},
 }
 
 // byteSizePolicy orders items by their byte size (smaller first).
-var byteSizePolicy = &frameworkmocks.MockOrderingPolicy{
+var byteSizePolicy = &mocks.MockOrderingPolicy{
 	TypedNameV: plugin.TypedName{Name: "byte_size_asc"},
-	LessFunc: func(a, b types.QueueItemAccessor) bool {
+	LessFunc: func(a, b flowcontrol.QueueItemAccessor) bool {
 		return a.OriginalRequest().ByteSize() < b.OriginalRequest().ByteSize()
 	},
 }
 
 // reverseEnqueueTimePolicy orders items by their enqueue time (LIFO).
-var reverseEnqueueTimePolicy = &frameworkmocks.MockOrderingPolicy{
+var reverseEnqueueTimePolicy = &mocks.MockOrderingPolicy{
 	TypedNameV: plugin.TypedName{Name: "enqueue_time_ns_desc"},
-	LessFunc: func(a, b types.QueueItemAccessor) bool {
+	LessFunc: func(a, b flowcontrol.QueueItemAccessor) bool {
 		return a.EnqueueTime().After(b.EnqueueTime())
 	},
 }
@@ -66,8 +65,8 @@ var reverseEnqueueTimePolicy = &frameworkmocks.MockOrderingPolicy{
 // This function is crucial for testing different ordering logic (FIFO, custom priority).
 func testLifecycleAndOrdering(
 	t *testing.T,
-	q flowcontrol.SafeQueue,
-	itemsInOrder []*typesmocks.MockQueueItemAccessor,
+	q contracts.SafeQueue,
+	itemsInOrder []*mocks.MockQueueItemAccessor,
 	comparatorName string,
 ) {
 	t.Helper()
@@ -170,7 +169,7 @@ func TestQueueConformance(t *testing.T) {
 	for queueName, constructor := range RegisteredQueues {
 		t.Run(string(queueName), func(t *testing.T) {
 			t.Parallel()
-			flowKey := types.FlowKey{ID: "test-flow-1", Priority: 0}
+			flowKey := flowcontrol.FlowKey{ID: "test-flow-1", Priority: 0}
 
 			t.Run("Initialization", func(t *testing.T) {
 				t.Parallel()
@@ -192,14 +191,14 @@ func TestQueueConformance(t *testing.T) {
 
 				now := time.Now()
 
-				item1 := typesmocks.NewMockQueueItemAccessor(100, "item1_fifo", flowKey)
+				item1 := mocks.NewMockQueueItemAccessor(100, "item1_fifo", flowKey)
 				item1.EnqueueTimeV = now.Add(-2 * time.Second) // Earliest
-				item2 := typesmocks.NewMockQueueItemAccessor(50, "item2_fifo", flowKey)
+				item2 := mocks.NewMockQueueItemAccessor(50, "item2_fifo", flowKey)
 				item2.EnqueueTimeV = now.Add(-1 * time.Second) // Middle
-				item3 := typesmocks.NewMockQueueItemAccessor(20, "item3_fifo", flowKey)
+				item3 := mocks.NewMockQueueItemAccessor(20, "item3_fifo", flowKey)
 				item3.EnqueueTimeV = now // Latest
 
-				itemsInFIFOOrder := []*typesmocks.MockQueueItemAccessor{item1, item2, item3}
+				itemsInFIFOOrder := []*mocks.MockQueueItemAccessor{item1, item2, item3}
 				testLifecycleAndOrdering(t, q, itemsInFIFOOrder, "DefaultFIFO")
 			})
 
@@ -210,11 +209,11 @@ func TestQueueConformance(t *testing.T) {
 					q, err := constructor(byteSizePolicy)
 					require.NoError(t, err, "Setup: creating queue with byteSizePolicy should not fail")
 
-					itemLarge := typesmocks.NewMockQueueItemAccessor(100, "itemLarge_prio", flowKey)
-					itemSmall := typesmocks.NewMockQueueItemAccessor(20, "itemSmall_prio", flowKey)
-					itemMedium := typesmocks.NewMockQueueItemAccessor(50, "itemMedium_prio", flowKey)
+					itemLarge := mocks.NewMockQueueItemAccessor(100, "itemLarge_prio", flowKey)
+					itemSmall := mocks.NewMockQueueItemAccessor(20, "itemSmall_prio", flowKey)
+					itemMedium := mocks.NewMockQueueItemAccessor(50, "itemMedium_prio", flowKey)
 
-					itemsInByteSizeOrder := []*typesmocks.MockQueueItemAccessor{itemSmall, itemMedium, itemLarge}
+					itemsInByteSizeOrder := []*mocks.MockQueueItemAccessor{itemSmall, itemMedium, itemLarge}
 					testLifecycleAndOrdering(t, q, itemsInByteSizeOrder, "PriorityByteSize")
 				})
 
@@ -224,14 +223,14 @@ func TestQueueConformance(t *testing.T) {
 					require.NoError(t, err, "Setup: creating queue with reverseEnqueueTimePolicy should not fail")
 
 					now := time.Now()
-					item1 := typesmocks.NewMockQueueItemAccessor(100, "item1_lifo", flowKey)
+					item1 := mocks.NewMockQueueItemAccessor(100, "item1_lifo", flowKey)
 					item1.EnqueueTimeV = now.Add(-2 * time.Second) // Earliest
-					item2 := typesmocks.NewMockQueueItemAccessor(50, "item2_lifo", flowKey)
+					item2 := mocks.NewMockQueueItemAccessor(50, "item2_lifo", flowKey)
 					item2.EnqueueTimeV = now.Add(-1 * time.Second) // Middle
-					item3 := typesmocks.NewMockQueueItemAccessor(20, "item3_lifo", flowKey)
+					item3 := mocks.NewMockQueueItemAccessor(20, "item3_lifo", flowKey)
 					item3.EnqueueTimeV = now // Latest
 
-					itemsInLIFOOrder := []*typesmocks.MockQueueItemAccessor{item3, item2, item1}
+					itemsInLIFOOrder := []*mocks.MockQueueItemAccessor{item3, item2, item1}
 					testLifecycleAndOrdering(t, q, itemsInLIFOOrder, "PriorityLIFO")
 				})
 			}
@@ -241,30 +240,30 @@ func TestQueueConformance(t *testing.T) {
 				q, err := constructor(enqueueTimePolicy)
 				require.NoError(t, err, "Setup: creating queue for test should not fail")
 
-				item := typesmocks.NewMockQueueItemAccessor(100, "item", flowKey)
+				item := mocks.NewMockQueueItemAccessor(100, "item", flowKey)
 				q.Add(item)
 
 				otherQ, err := constructor(enqueueTimePolicy) // A different queue instance
 				require.NoError(t, err, "Setup: creating otherQ should succeed")
-				otherItem := typesmocks.NewMockQueueItemAccessor(10, "other_item", types.FlowKey{ID: "other-flow"})
+				otherItem := mocks.NewMockQueueItemAccessor(10, "other_item", flowcontrol.FlowKey{ID: "other-flow"})
 				otherQ.Add(otherItem)
 				alienHandle := otherItem.Handle()
 				require.NotNil(t, alienHandle, "Setup: alien handle should not be nil")
 
-				invalidatedHandle := &typesmocks.MockQueueItemHandle{}
+				invalidatedHandle := &mocks.MockQueueItemHandle{}
 				invalidatedHandle.Invalidate()
 
-				foreignHandle := &typesmocks.MockQueueItemHandle{} // Different type
+				foreignHandle := &mocks.MockQueueItemHandle{} // Different type
 
 				testCases := []struct {
 					name      string
-					handle    types.QueueItemHandle
+					handle    flowcontrol.QueueItemHandle
 					expectErr error
 				}{
-					{name: "nil handle", handle: nil, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
-					{name: "invalidated handle", handle: invalidatedHandle, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
-					{name: "alien handle from other queue", handle: alienHandle, expectErr: flowcontrol.ErrQueueItemNotFound},
-					{name: "foreign handle type", handle: foreignHandle, expectErr: flowcontrol.ErrInvalidQueueItemHandle},
+					{name: "nil handle", handle: nil, expectErr: contracts.ErrInvalidQueueItemHandle},
+					{name: "invalidated handle", handle: invalidatedHandle, expectErr: contracts.ErrInvalidQueueItemHandle},
+					{name: "alien handle from other queue", handle: alienHandle, expectErr: contracts.ErrQueueItemNotFound},
+					{name: "foreign handle type", handle: foreignHandle, expectErr: contracts.ErrInvalidQueueItemHandle},
 				}
 
 				for _, tc := range testCases {
@@ -289,11 +288,11 @@ func TestQueueConformance(t *testing.T) {
 				require.NoError(t, err, "Setup: creating queue for test should not fail")
 
 				now := time.Now()
-				item1 := typesmocks.NewMockQueueItemAccessor(10, "item1_nonhead", flowKey)
+				item1 := mocks.NewMockQueueItemAccessor(10, "item1_nonhead", flowKey)
 				item1.EnqueueTimeV = now.Add(-3 * time.Second)
-				item2 := typesmocks.NewMockQueueItemAccessor(20, "item2_nonhead_TARGET", flowKey)
+				item2 := mocks.NewMockQueueItemAccessor(20, "item2_nonhead_TARGET", flowKey)
 				item2.EnqueueTimeV = now.Add(-2 * time.Second)
-				item3 := typesmocks.NewMockQueueItemAccessor(30, "item3_nonhead", flowKey)
+				item3 := mocks.NewMockQueueItemAccessor(30, "item3_nonhead", flowKey)
 				item3.EnqueueTimeV = now.Add(-1 * time.Second)
 
 				q.Add(item1)
@@ -314,11 +313,11 @@ func TestQueueConformance(t *testing.T) {
 
 				// Attempt to remove again with the now-stale handle
 				_, errStaleNonHead := q.Remove(handleNonHead)
-				assert.ErrorIs(t, errStaleNonHead, flowcontrol.ErrInvalidQueueItemHandle,
+				assert.ErrorIs(t, errStaleNonHead, contracts.ErrInvalidQueueItemHandle,
 					"Removing with a stale handle must fail with ErrInvalidQueueItemHandle")
 			})
 
-			predicateRemoveOddSizes := func(item types.QueueItemAccessor) bool {
+			predicateRemoveOddSizes := func(item flowcontrol.QueueItemAccessor) bool {
 				return item.OriginalRequest().ByteSize()%2 != 0
 			}
 
@@ -334,14 +333,14 @@ func TestQueueConformance(t *testing.T) {
 			t.Run("Cleanup_PredicateMatchesNone", func(t *testing.T) {
 				t.Parallel()
 				q, _ := constructor(enqueueTimePolicy)
-				itemK1 := typesmocks.NewMockQueueItemAccessor(10, "k1_matchNone", flowKey)
-				itemK2 := typesmocks.NewMockQueueItemAccessor(12, "k2_matchNone", flowKey)
+				itemK1 := mocks.NewMockQueueItemAccessor(10, "k1_matchNone", flowKey)
+				itemK2 := mocks.NewMockQueueItemAccessor(12, "k2_matchNone", flowKey)
 				q.Add(itemK1)
 				q.Add(itemK2)
 				initialLen := q.Len()
 				initialBs := q.ByteSize()
 
-				cleanedItems := q.Cleanup(func(item types.QueueItemAccessor) bool { return false })
+				cleanedItems := q.Cleanup(func(item flowcontrol.QueueItemAccessor) bool { return false })
 				assert.Empty(t, cleanedItems, "Cleanup should return an empty slice when no items match the predicate")
 				assert.Equal(t, initialLen, q.Len(), "Len() should not change after Cleanup when no items match thepredicate")
 				assert.Equal(t, initialBs, q.ByteSize(),
@@ -353,12 +352,12 @@ func TestQueueConformance(t *testing.T) {
 			t.Run("Cleanup_PredicateMatchesAll", func(t *testing.T) {
 				t.Parallel()
 				q, _ := constructor(enqueueTimePolicy)
-				itemR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_matchAll", flowKey)
-				itemR2 := typesmocks.NewMockQueueItemAccessor(13, "r2_matchAll", flowKey)
+				itemR1 := mocks.NewMockQueueItemAccessor(11, "r1_matchAll", flowKey)
+				itemR2 := mocks.NewMockQueueItemAccessor(13, "r2_matchAll", flowKey)
 				q.Add(itemR1)
 				q.Add(itemR2)
 
-				cleanedItems := q.Cleanup(func(item types.QueueItemAccessor) bool { return true })
+				cleanedItems := q.Cleanup(func(item flowcontrol.QueueItemAccessor) bool { return true })
 				assert.Len(t, cleanedItems, 2, "Cleanup should return all items that matched the predicate")
 				assert.Zero(t, q.Len(), "Len() should be 0 after Cleanup")
 				assert.Zero(t, q.ByteSize(), "ByteSize() should be 0 after Cleanup")
@@ -369,10 +368,10 @@ func TestQueueConformance(t *testing.T) {
 			t.Run("Cleanup_PredicateMatchesSubset_VerifyHandles", func(t *testing.T) {
 				t.Parallel()
 				q, _ := constructor(enqueueTimePolicy)
-				iK1 := typesmocks.NewMockQueueItemAccessor(20, "k1_subset", flowKey)
-				iR1 := typesmocks.NewMockQueueItemAccessor(11, "r1_subset", flowKey)
-				iK2 := typesmocks.NewMockQueueItemAccessor(22, "k2_subset", flowKey)
-				iR2 := typesmocks.NewMockQueueItemAccessor(33, "r2_subset", flowKey)
+				iK1 := mocks.NewMockQueueItemAccessor(20, "k1_subset", flowKey)
+				iR1 := mocks.NewMockQueueItemAccessor(11, "r1_subset", flowKey)
+				iK2 := mocks.NewMockQueueItemAccessor(22, "k2_subset", flowKey)
+				iR2 := mocks.NewMockQueueItemAccessor(33, "r2_subset", flowKey)
 				q.Add(iK1)
 				q.Add(iR1)
 				q.Add(iK2)
@@ -420,8 +419,8 @@ func TestQueueConformance(t *testing.T) {
 				q, err := constructor(enqueueTimePolicy)
 				require.NoError(t, err, "Setup: creating queue for drain test should not fail")
 
-				itemD1 := typesmocks.NewMockQueueItemAccessor(10, "ditem1", flowKey)
-				itemD2 := typesmocks.NewMockQueueItemAccessor(20, "ditem2", flowKey)
+				itemD1 := mocks.NewMockQueueItemAccessor(10, "ditem1", flowKey)
+				itemD2 := mocks.NewMockQueueItemAccessor(20, "ditem2", flowKey)
 				q.Add(itemD1)
 				q.Add(itemD2)
 
@@ -472,11 +471,11 @@ func TestQueueConformance(t *testing.T) {
 				)
 
 				// handleChan acts as a concurrent-safe pool of handles that goroutines can pull from to test Remove.
-				handleChan := make(chan types.QueueItemHandle, initialItems+(numGoroutines*opsPerGoroutine))
+				handleChan := make(chan flowcontrol.QueueItemHandle, initialItems+(numGoroutines*opsPerGoroutine))
 
 				// Pre-populate the queue with an initial set of items.
 				for i := range initialItems {
-					item := typesmocks.NewMockQueueItemAccessor(1, fmt.Sprintf("%s_conc_init_%d", flowKey, i), flowKey)
+					item := mocks.NewMockQueueItemAccessor(1, fmt.Sprintf("%s_conc_init_%d", flowKey, i), flowKey)
 					q.Add(item)
 					require.NoError(t, err, "Setup: pre-populating the queue should not fail")
 					handleChan <- item.Handle()
@@ -494,7 +493,7 @@ func TestQueueConformance(t *testing.T) {
 							opType := (j + routineID) % 4 // Vary operations more across goroutines
 							switch opType {
 							case 0: // Add
-								item := typesmocks.NewMockQueueItemAccessor(1,
+								item := mocks.NewMockQueueItemAccessor(1,
 									fmt.Sprintf("%s_conc_init_%d_%d", flowKey, routineID, j), flowKey)
 								q.Add(item)
 								successfulAdds.Add(1)
@@ -508,7 +507,7 @@ func TestQueueConformance(t *testing.T) {
 											successfulRemoves.Add(1)
 										} else {
 											// It's okay if it's ErrInvalidQueueItemHandle or ErrQueueItemNotFound due to races
-											assert.ErrorIs(t, removeErr, flowcontrol.ErrInvalidQueueItemHandle,
+											assert.ErrorIs(t, removeErr, contracts.ErrInvalidQueueItemHandle,
 												"Expected invalid handle or not found if raced")
 										}
 									}
@@ -527,7 +526,7 @@ func TestQueueConformance(t *testing.T) {
 									assert.Nil(t, peeked, "PeekTail on empty queue expected nil")
 								}
 							case 3: // Cleanup
-								q.Cleanup(func(item types.QueueItemAccessor) bool { return false })
+								q.Cleanup(func(item flowcontrol.QueueItemAccessor) bool { return false })
 							}
 						}
 					}(i)

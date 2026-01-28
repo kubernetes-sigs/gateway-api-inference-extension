@@ -26,12 +26,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 func TestFlowItem_New(t *testing.T) {
 	t.Parallel()
-	req := typesmocks.NewMockFlowControlRequest(100, "req-1", types.FlowKey{})
+	req := mocks.NewMockFlowControlRequest(100, "req-1", flowcontrol.FlowKey{})
 
 	enqueueTime := time.Now()
 	item := NewItem(req, time.Minute, enqueueTime)
@@ -52,7 +53,7 @@ func TestFlowItem_New(t *testing.T) {
 func TestFlowItem_Handle(t *testing.T) {
 	t.Parallel()
 	item := &FlowItem{}
-	handle := &typesmocks.MockQueueItemHandle{}
+	handle := &mocks.MockQueueItemHandle{}
 	item.SetHandle(handle)
 	assert.Same(t, handle, item.Handle(), "Handle() must retrieve the identical handle instance set by SetHandle()")
 }
@@ -60,7 +61,7 @@ func TestFlowItem_Handle(t *testing.T) {
 func TestFlowItem_Finalize_Idempotency(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	req := typesmocks.NewMockFlowControlRequest(100, "req-1", types.FlowKey{})
+	req := mocks.NewMockFlowControlRequest(100, "req-1", flowcontrol.FlowKey{})
 
 	testCases := []struct {
 		name            string
@@ -218,10 +219,10 @@ func TestFlowItem_Finalize_InferOutcome(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			req := typesmocks.NewMockFlowControlRequest(100, "req-1", types.FlowKey{})
+			req := mocks.NewMockFlowControlRequest(100, "req-1", flowcontrol.FlowKey{})
 			item := NewItem(req, time.Minute, now)
 			if tc.isQueued {
-				item.SetHandle(&typesmocks.MockQueueItemHandle{})
+				item.SetHandle(&mocks.MockQueueItemHandle{})
 			}
 
 			item.Finalize(tc.cause)

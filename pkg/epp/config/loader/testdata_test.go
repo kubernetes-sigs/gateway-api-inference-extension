@@ -142,6 +142,39 @@ schedulingProfiles:
   - pluginRef: test-scorer
 `
 
+// successFlowControlConfigText tests that Flow Control configuration is correctly loaded.
+const successFlowControlConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- flowControl
+flowControl:
+  maxBytes: 1024
+  defaultRequestTTL: 1m
+`
+
+const successflowControlConfigDisabledText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates: [] # Explicitly empty
+flowControl:
+  maxBytes: 1024
+`
+
 // --- Invalid Configurations (Syntax/Structure) ---
 
 // errorBadYamlText contains invalid YAML syntax.

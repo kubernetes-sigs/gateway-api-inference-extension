@@ -22,14 +22,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-const (
-	ProfilePickerExtensionPoint          = "ProfilePicker"
-	FilterExtensionPoint                 = "Filter"
-	ScorerExtensionPoint                 = "Scorer"
-	PickerExtensionPoint                 = "Picker"
-	ProcessProfilesResultsExtensionPoint = "ProcessProfilesResults"
-)
-
 // ScorerCategory marks the preference a scorer applies when scoring candidate endpoints.
 type ScorerCategory string
 
@@ -52,8 +44,8 @@ type ProfileHandler interface {
 	plugin.Plugin
 	// Pick selects the SchedulingProfiles to run from a list of candidate profiles, while taking into consideration the request properties
 	// and the previously executed SchedluderProfile cycles along with their results.
-	Pick(ctx context.Context, cycleState *CycleState, request *LLMRequest, profiles map[string]*SchedulerProfile,
-		profileResults map[string]*ProfileRunResult) map[string]*SchedulerProfile
+	Pick(ctx context.Context, cycleState *CycleState, request *LLMRequest, profiles map[string]SchedulerProfile,
+		profileResults map[string]*ProfileRunResult) map[string]SchedulerProfile
 
 	// ProcessResults handles the outcome of the profile runs after all profiles ran.
 	// It may aggregate results, log test profile outputs, or apply custom logic. It specifies in the SchedulingResult the

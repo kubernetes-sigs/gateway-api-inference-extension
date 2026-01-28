@@ -18,17 +18,15 @@ package flowcontrol
 
 import (
 	"context"
+	"errors"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-const (
-	// FairnessPolicyExtensionPoint identifies the plugin type responsible for managing contention between Flows.
-	FairnessPolicyExtensionPoint = "FairnessPolicy"
-
-	// OrderingPolicyExtensionPoint identifies the plugin type responsible for sorting requests within a Flow.
-	OrderingPolicyExtensionPoint = "OrderingPolicy"
+var (
+	// ErrIncompatiblePriorityType indicates that a FairnessPolicy attempted to compare items from two different flow
+	// queues whose ItemComparators have different ScoreType values, making a meaningful comparison impossible.
+	ErrIncompatiblePriorityType = errors.New("incompatible priority score type for comparison")
 )
 
 // FairnessPolicy governs the distribution of dispatch opportunities among competing Flows within the same Priority
@@ -106,7 +104,7 @@ type OrderingPolicy interface {
 	// Invariants:
 	//   - Returning true means 'a' has higher priority than 'b'.
 	//   - If the queue supports CapabilityPriorityConfigurable, this function determines the heap order.
-	Less(a, b types.QueueItemAccessor) bool
+	Less(a, b QueueItemAccessor) bool
 
 	// RequiredQueueCapabilities returns the set of capabilities that a SafeQueue MUST support to effectively apply this
 	// policy.

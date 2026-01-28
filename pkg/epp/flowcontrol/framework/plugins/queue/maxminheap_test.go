@@ -23,8 +23,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 // TestMaxMinHeap_InternalProperty validates that the max-min heap property is maintained after a series of `Add` and
@@ -33,11 +33,11 @@ func TestMaxMinHeap_InternalProperty(t *testing.T) {
 	t.Parallel()
 	q := newMaxMinHeap(enqueueTimePolicy)
 
-	items := make([]*typesmocks.MockQueueItemAccessor, 20)
+	items := make([]*mocks.MockQueueItemAccessor, 20)
 	now := time.Now()
 	for i := range items {
 		// Add items in a somewhat random order of enqueue times
-		items[i] = typesmocks.NewMockQueueItemAccessor(10, "item", types.FlowKey{ID: "flow"})
+		items[i] = mocks.NewMockQueueItemAccessor(10, "item", flowcontrol.FlowKey{ID: "flow"})
 		items[i].EnqueueTimeV = now.Add(time.Duration((i%5-2)*10) * time.Second)
 		q.Add(items[i])
 		assertHeapProperty(t, q, "after adding item %d", i)

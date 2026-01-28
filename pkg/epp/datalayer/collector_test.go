@@ -32,7 +32,7 @@ import (
 
 // --- Test Stubs ---
 
-func defaultEndpoint() Endpoint {
+func defaultEndpoint() fwkdl.Endpoint {
 	meta := &fwkdl.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod-name",
@@ -40,7 +40,7 @@ func defaultEndpoint() Endpoint {
 		},
 		Address: "1.2.3.4:5678",
 	}
-	ms := NewEndpoint(meta, nil)
+	ms := fwkdl.NewEndpoint(meta, nil)
 	return ms
 }
 
@@ -48,7 +48,7 @@ func defaultEndpoint() Endpoint {
 
 var (
 	endpoint = defaultEndpoint()
-	sources  = []DataSource{&FakeDataSource{}}
+	sources  = []fwkdl.DataSource{&FakeDataSource{}}
 )
 
 func TestCollectorCanStartOnlyOnce(t *testing.T) {
@@ -85,7 +85,7 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
 
-	require.NoError(t, c.Start(ctx, ticker, endpoint, []DataSource{source}))
+	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.DataSource{source}))
 	ticker.Tick()
 	ticker.Tick()
 
@@ -103,7 +103,7 @@ func TestCollectorStopCancelsContext(t *testing.T) {
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
 
-	require.NoError(t, c.Start(ctx, ticker, endpoint, []DataSource{source}))
+	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.DataSource{source}))
 	ticker.Tick() // should be processed
 	time.Sleep(20 * time.Millisecond)
 

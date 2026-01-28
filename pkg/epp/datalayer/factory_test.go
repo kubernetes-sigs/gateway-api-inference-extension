@@ -31,7 +31,7 @@ import (
 
 func TestFactory(t *testing.T) {
 	source := &FakeDataSource{}
-	factory := NewEndpointFactory([]DataSource{source}, 100*time.Millisecond)
+	factory := NewEndpointFactory([]fwkdl.DataSource{source}, 100*time.Millisecond)
 
 	pod1 := &fwkdl.EndpointMetadata{
 		NamespacedName: types.NamespacedName{

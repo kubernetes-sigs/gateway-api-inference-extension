@@ -61,18 +61,18 @@ import (
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/predictedlatency"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/predicted_latency"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
-	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
@@ -379,7 +379,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
 	fwkplugin.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
 	// Latency predictor plugins
-	fwkplugin.Register(predicted_latency.PredictedLatencyPluginType, predicted_latency.PredictedLatencyFactory)
+	fwkplugin.Register(predictedlatency.PredictedLatencyPluginType, predictedlatency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
 	fwkplugin.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)
@@ -438,6 +438,10 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
+
+	applyDeprecatedEnvFeatureGate(enableExperimentalDatalayerV2, "Data Layer V2", datalayer.ExperimentalDatalayerFeatureGate, rawConfig)
+	applyDeprecatedEnvFeatureGate(enableExperimentalFlowControlLayer, "Flow Control layer", flowcontrol.FeatureGate, rawConfig)
+
 	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds))
 	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
@@ -460,27 +464,25 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 		r.requestControlConfig.WithPrepareDataPlugins()
 	}
 
-	// Handler deprecated configuration options
-	r.deprecatedConfigurationHelper(cfg)
+	r.applyDeprecatedSaturationConfig(cfg)
 
 	logger.Info("loaded configuration from file/text successfully")
 	return cfg, nil
 }
 
-func (r *Runner) deprecatedConfigurationHelper(cfg *config.Config) {
-	// Handle deprecated environment variable based feature flags
-
-	if _, ok := os.LookupEnv(enableExperimentalDatalayerV2); ok {
-		setupLog.Info("Enabling the experimental Data Layer V2 using environment variables is deprecated and will be removed in next version")
-		r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] = env.GetEnvBool(enableExperimentalDatalayerV2, false, setupLog)
+func applyDeprecatedEnvFeatureGate(envVar, featureName, featureGate string, rawConfig *configapi.EndpointPickerConfig) {
+	if _, ok := os.LookupEnv(envVar); ok {
+		setupLog.Info(fmt.Sprintf("Enabling the experimental %s using environment variables is deprecated and will be removed in next version", featureName))
+		if env.GetEnvBool(envVar, false, setupLog) {
+			if rawConfig.FeatureGates == nil {
+				rawConfig.FeatureGates = make(configapi.FeatureGates, 0)
+			}
+			rawConfig.FeatureGates = append(rawConfig.FeatureGates, featureGate)
+		}
 	}
-	if _, ok := os.LookupEnv(enableExperimentalFlowControlLayer); ok {
-		setupLog.Info("Enabling the experimental Flow Control layer using environment variables is deprecated and will be removed in next version")
-		r.featureGates[flowcontrol.FeatureGate] = env.GetEnvBool(enableExperimentalFlowControlLayer, false, setupLog)
-	}
+}
 
-	// Handle deprecated environment variable base Saturation Detector configuration
-
+func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	if _, ok := os.LookupEnv(EnvSdQueueDepthThreshold); ok {
 		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
 		cfg.SaturationDetectorConfig.QueueDepthThreshold =

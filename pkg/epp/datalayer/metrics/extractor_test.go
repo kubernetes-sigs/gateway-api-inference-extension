@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"k8s.io/utils/ptr"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 const (
@@ -62,7 +62,7 @@ func TestExtractorExtract(t *testing.T) {
 		t.Errorf("incorrect expected input type: %v", inputType)
 	}
 
-	ep := datalayer.NewEndpoint(nil, nil)
+	ep := fwkdl.NewEndpoint(nil, nil)
 	if ep == nil {
 		t.Fatal("expected non-nil endpoint")
 	}

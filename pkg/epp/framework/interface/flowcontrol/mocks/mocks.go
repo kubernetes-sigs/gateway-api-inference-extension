@@ -18,11 +18,135 @@ package mocks
 
 import (
 	"context"
+	"time"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
+
+// MockFlowControlRequest provides a mock implementation of the FlowControlRequest interface.
+type MockFlowControlRequest struct {
+	FlowKeyV             flowcontrol.FlowKey
+	ByteSizeV            uint64
+	InitialEffectiveTTLV time.Duration
+	IDV                  string
+	MetadataV            map[string]any
+	InferencePoolNameV   string
+	ModelNameV           string
+	TargetModelNameV     string
+}
+
+// MockRequestOption is a functional option for configuring a MockFlowControlRequest.
+type MockRequestOption func(*MockFlowControlRequest)
+
+// WithInferencePoolName sets the InferencePoolName for the mock request.
+func WithInferencePoolName(name string) MockRequestOption {
+	return func(m *MockFlowControlRequest) {
+		m.InferencePoolNameV = name
+	}
+}
+
+// WithModelName sets the ModelName for the mock request.
+func WithModelName(name string) MockRequestOption {
+	return func(m *MockFlowControlRequest) {
+		m.ModelNameV = name
+	}
+}
+
+// WithTargetModelName sets the TargetModelName for the mock request.
+func WithTargetModelName(name string) MockRequestOption {
+	return func(m *MockFlowControlRequest) {
+		m.TargetModelNameV = name
+	}
+}
+
+// NewMockFlowControlRequest creates a new MockFlowControlRequest instance with optional configuration.
+func NewMockFlowControlRequest(
+	byteSize uint64,
+	id string,
+	key flowcontrol.FlowKey,
+	opts ...MockRequestOption,
+) *MockFlowControlRequest {
+	m := &MockFlowControlRequest{
+		ByteSizeV: byteSize,
+		IDV:       id,
+		FlowKeyV:  key,
+		MetadataV: make(map[string]any),
+	}
+
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	return m
+}
+
+func (m *MockFlowControlRequest) FlowKey() flowcontrol.FlowKey       { return m.FlowKeyV }
+func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.ByteSizeV }
+func (m *MockFlowControlRequest) InitialEffectiveTTL() time.Duration { return m.InitialEffectiveTTLV }
+func (m *MockFlowControlRequest) ID() string                         { return m.IDV }
+func (m *MockFlowControlRequest) GetMetadata() map[string]any        { return m.MetadataV }
+func (m *MockFlowControlRequest) InferencePoolName() string          { return m.InferencePoolNameV }
+func (m *MockFlowControlRequest) ModelName() string                  { return m.ModelNameV }
+func (m *MockFlowControlRequest) TargetModelName() string            { return m.TargetModelNameV }
+
+var _ flowcontrol.FlowControlRequest = &MockFlowControlRequest{}
+
+// MockQueueItemHandle provides a mock implementation of the QueueItemHandle interface.
+type MockQueueItemHandle struct {
+	RawHandle      any
+	IsInvalidatedV bool
+}
+
+func (m *MockQueueItemHandle) Handle() any         { return m.RawHandle }
+func (m *MockQueueItemHandle) Invalidate()         { m.IsInvalidatedV = true }
+func (m *MockQueueItemHandle) IsInvalidated() bool { return m.IsInvalidatedV }
+
+var _ flowcontrol.QueueItemHandle = &MockQueueItemHandle{}
+
+// MockQueueItemAccessor provides a mock implementation of the QueueItemAccessor interface.
+type MockQueueItemAccessor struct {
+	EnqueueTimeV     time.Time
+	EffectiveTTLV    time.Duration
+	OriginalRequestV flowcontrol.FlowControlRequest
+	HandleV          flowcontrol.QueueItemHandle
+}
+
+func (m *MockQueueItemAccessor) EnqueueTime() time.Time      { return m.EnqueueTimeV }
+func (m *MockQueueItemAccessor) EffectiveTTL() time.Duration { return m.EffectiveTTLV }
+
+func (m *MockQueueItemAccessor) OriginalRequest() flowcontrol.FlowControlRequest {
+	if m.OriginalRequestV == nil {
+		return &MockFlowControlRequest{}
+	}
+	return m.OriginalRequestV
+}
+
+func (m *MockQueueItemAccessor) Handle() flowcontrol.QueueItemHandle          { return m.HandleV }
+func (m *MockQueueItemAccessor) SetHandle(handle flowcontrol.QueueItemHandle) { m.HandleV = handle }
+
+var _ flowcontrol.QueueItemAccessor = &MockQueueItemAccessor{}
+
+// NewMockQueueItemAccessor is a constructor for MockQueueItemAccessor that initializes the mock with a default
+// MockFlowControlRequest and MockQueueItemHandle to prevent nil pointer dereferences in tests.
+// It accepts MockRequestOptions to configure the underlying request.
+func NewMockQueueItemAccessor(
+	byteSize uint64,
+	reqID string,
+	key flowcontrol.FlowKey,
+	opts ...MockRequestOption,
+) *MockQueueItemAccessor {
+	return &MockQueueItemAccessor{
+		EnqueueTimeV: time.Now(),
+		OriginalRequestV: NewMockFlowControlRequest(
+			byteSize,
+			reqID,
+			key,
+			opts...,
+		),
+		HandleV: &MockQueueItemHandle{},
+	}
+}
 
 // MockFlowQueueAccessor is a simple stub mock for the FlowQueueAccessor interface.
 // It is used for tests that require static, predictable return values from a queue accessor.
@@ -31,9 +155,9 @@ type MockFlowQueueAccessor struct {
 	NameV           string
 	LenV            int
 	ByteSizeV       uint64
-	PeekHeadV       types.QueueItemAccessor
-	PeekTailV       types.QueueItemAccessor
-	FlowKeyV        types.FlowKey
+	PeekHeadV       flowcontrol.QueueItemAccessor
+	PeekTailV       flowcontrol.QueueItemAccessor
+	FlowKeyV        flowcontrol.FlowKey
 	OrderingPolicyV flowcontrol.OrderingPolicy
 	CapabilitiesV   []flowcontrol.QueueCapability
 }
@@ -42,14 +166,14 @@ func (m *MockFlowQueueAccessor) Name() string                                { r
 func (m *MockFlowQueueAccessor) Len() int                                    { return m.LenV }
 func (m *MockFlowQueueAccessor) ByteSize() uint64                            { return m.ByteSizeV }
 func (m *MockFlowQueueAccessor) OrderingPolicy() flowcontrol.OrderingPolicy  { return m.OrderingPolicyV }
-func (m *MockFlowQueueAccessor) FlowKey() types.FlowKey                      { return m.FlowKeyV }
+func (m *MockFlowQueueAccessor) FlowKey() flowcontrol.FlowKey                { return m.FlowKeyV }
 func (m *MockFlowQueueAccessor) Capabilities() []flowcontrol.QueueCapability { return m.CapabilitiesV }
 
-func (m *MockFlowQueueAccessor) PeekHead() types.QueueItemAccessor {
+func (m *MockFlowQueueAccessor) PeekHead() flowcontrol.QueueItemAccessor {
 	return m.PeekHeadV
 }
 
-func (m *MockFlowQueueAccessor) PeekTail() types.QueueItemAccessor {
+func (m *MockFlowQueueAccessor) PeekTail() flowcontrol.QueueItemAccessor {
 	return m.PeekTailV
 }
 
@@ -65,7 +189,7 @@ type MockPriorityBandAccessor struct {
 	PriorityV         int
 	PriorityNameV     string
 	PolicyStateV      any
-	FlowKeysFunc      func() []types.FlowKey
+	FlowKeysFunc      func() []flowcontrol.FlowKey
 	QueueFunc         func(flowID string) flowcontrol.FlowQueueAccessor
 	IterateQueuesFunc func(callback func(flow flowcontrol.FlowQueueAccessor) (keepIterating bool))
 }
@@ -74,7 +198,7 @@ func (m *MockPriorityBandAccessor) Priority() int        { return m.PriorityV }
 func (m *MockPriorityBandAccessor) PriorityName() string { return m.PriorityNameV }
 func (m *MockPriorityBandAccessor) PolicyState() any     { return m.PolicyStateV }
 
-func (m *MockPriorityBandAccessor) FlowKeys() []types.FlowKey {
+func (m *MockPriorityBandAccessor) FlowKeys() []flowcontrol.FlowKey {
 	if m.FlowKeysFunc != nil {
 		return m.FlowKeysFunc()
 	}
@@ -96,76 +220,18 @@ func (m *MockPriorityBandAccessor) IterateQueues(callback func(flow flowcontrol.
 
 var _ flowcontrol.PriorityBandAccessor = &MockPriorityBandAccessor{}
 
-// MockSafeQueue is a simple stub mock for the SafeQueue interface.
-// It is used for tests that need to control the exact return values of a queue's methods without simulating the queue's
-// internal logic or state.
-type MockSafeQueue struct {
-	NameV         string
-	CapabilitiesV []flowcontrol.QueueCapability
-	LenV          int
-	ByteSizeV     uint64
-	PeekHeadV     types.QueueItemAccessor
-	PeekTailV     types.QueueItemAccessor
-	AddFunc       func(item types.QueueItemAccessor)
-	RemoveFunc    func(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
-	CleanupFunc   func(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor
-	DrainFunc     func() []types.QueueItemAccessor
-}
-
-func (m *MockSafeQueue) Name() string                                { return m.NameV }
-func (m *MockSafeQueue) Capabilities() []flowcontrol.QueueCapability { return m.CapabilitiesV }
-func (m *MockSafeQueue) Len() int                                    { return m.LenV }
-func (m *MockSafeQueue) ByteSize() uint64                            { return m.ByteSizeV }
-
-func (m *MockSafeQueue) PeekHead() types.QueueItemAccessor {
-	return m.PeekHeadV
-}
-
-func (m *MockSafeQueue) PeekTail() types.QueueItemAccessor {
-	return m.PeekTailV
-}
-
-func (m *MockSafeQueue) Add(item types.QueueItemAccessor) {
-	if m.AddFunc != nil {
-		m.AddFunc(item)
-	}
-}
-
-func (m *MockSafeQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
-	if m.RemoveFunc != nil {
-		return m.RemoveFunc(handle)
-	}
-	return nil, nil
-}
-
-func (m *MockSafeQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
-	if m.CleanupFunc != nil {
-		return m.CleanupFunc(predicate)
-	}
-	return nil
-}
-
-func (m *MockSafeQueue) Drain() []types.QueueItemAccessor {
-	if m.DrainFunc != nil {
-		return m.DrainFunc()
-	}
-	return nil
-}
-
-var _ flowcontrol.SafeQueue = &MockSafeQueue{}
-
 // MockOrderingPolicy is a behavioral mock for the OrderingPolicy interface.
 // Simple accessors are configured with public value fields (e.g., TypedNameV).
 // Complex methods with logic are configured with function fields (e.g., LessFunc).
 type MockOrderingPolicy struct {
 	TypedNameV                 plugin.TypedName
-	LessFunc                   func(a, b types.QueueItemAccessor) bool
+	LessFunc                   func(a, b flowcontrol.QueueItemAccessor) bool
 	RequiredQueueCapabilitiesV []flowcontrol.QueueCapability
 }
 
 func (m *MockOrderingPolicy) TypedName() plugin.TypedName { return m.TypedNameV }
 
-func (m *MockOrderingPolicy) Less(a, b types.QueueItemAccessor) bool {
+func (m *MockOrderingPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
 	if m.LessFunc != nil {
 		return m.LessFunc(a, b)
 	}

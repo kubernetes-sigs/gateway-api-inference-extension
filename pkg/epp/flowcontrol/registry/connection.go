@@ -18,7 +18,7 @@ package registry
 
 import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // connection is the concrete, un-exported implementation of the contracts.ActiveFlowConnection interface.
@@ -26,7 +26,7 @@ import (
 // the session.
 type connection struct {
 	registry *FlowRegistry
-	key      types.FlowKey
+	key      flowcontrol.FlowKey
 }
 
 var _ contracts.ActiveFlowConnection = &connection{}
@@ -45,6 +45,6 @@ func (c *connection) ActiveShards() []contracts.RegistryShard {
 }
 
 // FlowKey returns the immutable identity of the flow this connection is pinned to.
-func (c *connection) FlowKey() types.FlowKey {
+func (c *connection) FlowKey() flowcontrol.FlowKey {
 	return c.key
 }
