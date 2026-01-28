@@ -23,14 +23,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-const (
-	// FairnessPolicyExtensionPoint identifies the plugin type responsible for managing contention between Flows.
-	FairnessPolicyExtensionPoint = "FairnessPolicy"
-
-	// OrderingPolicyExtensionPoint identifies the plugin type responsible for sorting requests within a Flow.
-	OrderingPolicyExtensionPoint = "OrderingPolicy"
-)
-
 var (
 	// ErrIncompatiblePriorityType indicates that a FairnessPolicy attempted to compare items from two different flow
 	// queues whose ItemComparators have different ScoreType values, making a meaningful comparison impossible.
