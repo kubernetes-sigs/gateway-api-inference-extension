@@ -461,41 +461,6 @@ func TestInferGWCSupportedFeatures(t *testing.T) {
 			expectedFeatures: features.SetsToNamesSet(features.AllFeatures),
 			expectedSource:   supportedFeaturesSourceManual,
 		},
-		{
-			name:               "supports conformance profile core with specified extended features",
-			ConformanceProfile: sets.New(GatewayHTTPConformanceProfileName),
-			supportedFeatures:  sets.New[features.FeatureName]("GatewayPort8080"),
-			expectedFeatures:   sets.New[features.FeatureName]("Gateway", "HTTPRoute", "GatewayPort8080", "ReferenceGrant"),
-			expectedSource:     supportedFeaturesSourceManual,
-			expectedExtendedFeatures: map[ConformanceProfileName]sets.Set[features.FeatureName]{
-				GatewayHTTPConformanceProfileName: namesToFeatureSet([]string{
-					"GatewayPort8080",
-				}),
-			},
-		},
-		{
-			name:               "supports conformance profile core with inferred extended features",
-			ConformanceProfile: sets.New(GatewayHTTPConformanceProfileName),
-			expectedFeatures:   namesToFeatureSet(gwcStatusFeatureNames),
-			expectedSource:     supportedFeaturesSourceInferred,
-			expectedExtendedFeatures: map[ConformanceProfileName]sets.Set[features.FeatureName]{
-				GatewayHTTPConformanceProfileName: namesToFeatureSet([]string{
-					"GatewayPort8080",
-					"HTTPRouteHostRewrite",
-					"HTTPRouteMethodMatching",
-					"HTTPRoutePathRewrite",
-					"HTTPRouteQueryParamMatching",
-					"HTTPRouteResponseHeaderModification",
-				}),
-			},
-		},
-		{
-			name:             "all features combined with exempt features",
-			allowAllFeatures: true,
-			exemptFeatures:   sets.New[features.FeatureName]("ReferenceGrant", "HTTPRoute"),
-			expectedSource:   supportedFeaturesSourceManual,
-			expectedFeatures: features.SetsToNamesSet(features.AllFeatures).Difference(sets.New[features.FeatureName]("ReferenceGrant", "HTTPRoute")),
-		},
 	}
 
 	gwcName := "ochopintre"

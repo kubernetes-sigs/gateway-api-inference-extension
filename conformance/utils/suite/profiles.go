@@ -44,9 +44,9 @@ type ConformanceProfile struct {
 type ConformanceProfileName string
 
 const (
-	// GatewayHTTPConformanceProfileName indicates the name of the conformance profile
-	// which covers HTTP functionality with Gateways.
-	GatewayHTTPConformanceProfileName ConformanceProfileName = "GATEWAY-HTTP"
+	// GatewayLayerConformanceProfileName indicates the name of the conformance profile
+	// which covers the Gateway API layer aspects of the Inference Extension.
+	GatewayLayerConformanceProfileName ConformanceProfileName = "Gateway"
 )
 
 // -----------------------------------------------------------------------------
@@ -54,24 +54,18 @@ const (
 // -----------------------------------------------------------------------------
 
 var (
-	// GatewayHTTPConformanceProfile is a ConformanceProfile that covers testing HTTP
-	// related functionality with Gateways.
-	GatewayHTTPConformanceProfile = ConformanceProfile{
-		Name: GatewayHTTPConformanceProfileName,
+	// GatewayLayerConformanceProfile is a ConformanceProfile that covers testing
+	// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, 
+	// InferenceObjective CRDs).
+	GatewayLayerProfile = ConformanceProfile{
+		Name:         GatewayLayerConformanceProfileName,
 		CoreFeatures: sets.New(
-			features.SupportGateway,
-			features.SupportReferenceGrant,
+			features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
 			features.SupportHTTPRoute,
+			features.SupportInferencePool,
 		),
-		ExtendedFeatures: sets.New[features.FeatureName]().
-			Insert(features.SetsToNamesSet(
-				features.GatewayExtendedFeatures,
-				features.HTTPRouteExtendedFeatures,
-				features.BackendTLSPolicyCoreFeatures,
-				features.BackendTLSPolicyExtendedFeatures,
-			).UnsortedList()...),
 	}
-
+	// Future profiles will cover EPP and ModelServer layers.
 )
 
 // RegisterConformanceProfile allows downstream tests to register unique profiles that
@@ -91,7 +85,9 @@ func RegisterConformanceProfile(p ConformanceProfile) {
 // conformanceProfileMap maps short human-readable names to their respective
 // ConformanceProfiles.
 var conformanceProfileMap = map[ConformanceProfileName]ConformanceProfile{
-	GatewayHTTPConformanceProfileName: GatewayHTTPConformanceProfile,
+	// In the future, other profiles (EPP, ModelServer) will also be registered here,
+	// and the suite runner will execute tests based on the selected profiles.
+	GatewayLayerConformanceProfileName: GatewayLayerProfile,
 }
 
 // getConformanceProfileForName retrieves a known ConformanceProfile by its simple
