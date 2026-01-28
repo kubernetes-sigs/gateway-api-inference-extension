@@ -30,10 +30,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	xmeshv1alpha1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 	confv1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/consts"
+	versionconsts "sigs.k8s.io/gateway-api-inference-extension/version"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 )
 
@@ -56,8 +55,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "gateways.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
@@ -65,13 +64,13 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "httproutes.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
 			},
-			expectedVersion: consts.BundleVersion,
+			expectedVersion: versionconsts.GatewayBundleVersion,
 			expectedChannel: "standard",
 		},
 		{
@@ -81,8 +80,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "gateways.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
@@ -90,8 +89,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "httproutes.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
@@ -101,7 +100,7 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					},
 				},
 			},
-			expectedVersion: consts.BundleVersion,
+			expectedVersion: versionconsts.GatewayBundleVersion,
 			expectedChannel: "standard",
 		},
 		{
@@ -111,8 +110,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "gateways.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
@@ -120,8 +119,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "httproutes.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: "v2.0.0",
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: "v2.0.0",
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
@@ -135,8 +134,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "gateways.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
@@ -144,8 +143,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "httproutes.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "experimental",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "experimental",
 						},
 					},
 				},
@@ -159,8 +158,8 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "gateways.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
-							consts.ChannelAnnotation:       "standard",
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
+							versionconsts.GatewayChannelAnnotation:       "standard",
 						},
 					},
 				},
@@ -168,7 +167,7 @@ func TestGetAPIVersionAndChannel(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "httproutes.gateway.networking.k8s.io",
 						Annotations: map[string]string{
-							consts.BundleVersionAnnotation: consts.BundleVersion,
+							versionconsts.GatewayBundleVersionAnnotation: versionconsts.GatewayBundleVersion,
 						},
 					},
 				},
@@ -557,111 +556,6 @@ func TestInferGWCSupportedFeatures(t *testing.T) {
 				tc.expectedExtendedFeatures = make(map[ConformanceProfileName]sets.Set[features.FeatureName])
 			}
 			assert.Equal(t, tc.expectedExtendedFeatures, cSuite.extendedSupportedFeatures, "expectedExtendedFeatures mismatch")
-		})
-	}
-}
-
-var meshStatusFeatureNames = []string{
-	"Mesh",
-	"MeshClusterIPMatching",
-	"MeshNamespaceSelector",
-	"MeshServiceAccountSelector",
-	"MeshTLS",
-	"MeshTLSClientCert",
-	"MeshTrafficSplit",
-	"MeshAccessControl",
-	"HTTPRoute",
-}
-
-func TestXMeshInferSupportedFeatures(t *testing.T) {
-	testCases := []struct {
-		name               string
-		allowAllFeatures   bool
-		supportedFeatures  FeaturesSet
-		exemptFeatures     FeaturesSet
-		ConformanceProfile sets.Set[ConformanceProfileName]
-		expectedFeatures   FeaturesSet
-		expectedSource     supportedFeaturesSource
-	}{
-		{
-			name:             "properly infer mesh supported features",
-			expectedFeatures: namesToFeatureSet(meshStatusFeatureNames),
-			expectedSource:   supportedFeaturesSourceInferred,
-		},
-		{
-			name:              "no features",
-			supportedFeatures: sets.New[features.FeatureName]("Mesh"),
-			expectedFeatures:  sets.New[features.FeatureName]("Mesh"),
-			expectedSource:    supportedFeaturesSourceManual,
-		},
-		{
-			name:              "remove exempt features",
-			supportedFeatures: sets.New[features.FeatureName]("MeshTLS", "MeshAccessControl"),
-			exemptFeatures:    sets.New[features.FeatureName]("MeshAccessControl"),
-			expectedFeatures:  sets.New[features.FeatureName]("MeshTLS"),
-			expectedSource:    supportedFeaturesSourceManual,
-		},
-		{
-			name:               "supports conformance profile - core",
-			ConformanceProfile: sets.New(MeshHTTPConformanceProfileName),
-			expectedFeatures:   namesToFeatureSet(meshStatusFeatureNames),
-			expectedSource:     supportedFeaturesSourceInferred,
-		},
-	}
-
-	meshName := "xochopintre"
-	xmesh := &xmeshv1alpha1.XMesh{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: meshName,
-		},
-		Spec: xmeshv1alpha1.MeshSpec{
-			ControllerName: "example.com/mesh-controller",
-		},
-		Status: xmeshv1alpha1.MeshStatus{
-			Conditions: []metav1.Condition{
-				{
-					Type:    string(xmeshv1alpha1.MeshConditionAccepted),
-					Status:  metav1.ConditionTrue,
-					Reason:  "Accepted",
-					Message: "XMesh is accepted and ready for use",
-				},
-			},
-			SupportedFeatures: featureNamesToSet(meshStatusFeatureNames),
-		},
-	}
-	scheme := runtime.NewScheme()
-	xmeshv1alpha1.Install(scheme)
-	apiextensionsv1.AddToScheme(scheme)
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(xmesh).
-		WithLists(&apiextensionsv1.CustomResourceDefinitionList{}).
-		Build()
-
-	for _, tc := range testCases {
-		options := ConformanceOptions{
-			AllowCRDsMismatch:          true,
-			MeshName:                   meshName,
-			EnableAllSupportedFeatures: tc.allowAllFeatures,
-			SupportedFeatures:          tc.supportedFeatures,
-			ExemptFeatures:             tc.exemptFeatures,
-			ConformanceProfiles:        tc.ConformanceProfile,
-			Client:                     fakeClient,
-		}
-
-		t.Run(tc.name, func(t *testing.T) {
-			cSuite, err := NewConformanceTestSuite(options)
-			if err != nil {
-				t.Fatalf("error initializing conformance suite: %v", err)
-			}
-
-			if cSuite.supportedFeaturesSource != tc.expectedSource {
-				t.Errorf("InferredSupportedFeatures mismatch: got %v, want %v", cSuite.supportedFeaturesSource, tc.expectedSource)
-			}
-
-			if equal := cSuite.SupportedFeatures.Equal(tc.expectedFeatures); !equal {
-				t.Errorf("SupportedFeatures mismatch: got %v, want %v", cSuite.SupportedFeatures.UnsortedList(), tc.expectedFeatures.UnsortedList())
-			}
 		})
 	}
 }

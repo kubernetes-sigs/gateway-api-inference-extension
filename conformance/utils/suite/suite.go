@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -333,98 +332,6 @@ const (
 	testSuiteUserAgentPrefix = "gateway-api-conformance.test"
 )
 
-// Setup ensures the base resources required for conformance tests are installed
-// in the cluster. It also ensures that all relevant resources are ready.
-func (suite *ConformanceTestSuite) Setup(t *testing.T, tests []ConformanceTest) {
-	suite.Applier.ManifestFS = suite.ManifestFS
-	suite.Applier.UsableNetworkAddresses = suite.UsableNetworkAddresses
-	suite.Applier.UnusableNetworkAddresses = suite.UnusableNetworkAddresses
-
-	supportsGateway := suite.SupportedFeatures.Has(features.SupportGateway)
-	supportsMesh := suite.SupportedFeatures.Has(features.SupportMesh)
-
-	if suite.RunTest != "" {
-		idx := slices.IndexFunc(tests, func(t ConformanceTest) bool {
-			return t.ShortName == suite.RunTest
-		})
-
-		if idx == -1 {
-			require.FailNow(t, fmt.Sprintf("Test %q does not exist", suite.RunTest))
-		}
-
-		test := tests[idx]
-		supportsGateway = supportsGateway || slices.Contains(test.Features, features.SupportGateway)
-		supportsMesh = supportsMesh || slices.Contains(test.Features, features.SupportMesh)
-	}
-
-	if supportsGateway {
-		tlog.Logf(t, "Test Setup: Ensuring GatewayClass has been accepted")
-		suite.ControllerName = kubernetes.GWCMustHaveAcceptedConditionTrue(t, suite.Client, suite.TimeoutConfig, suite.GatewayClassName)
-
-		suite.Applier.GatewayClass = suite.GatewayClassName
-		suite.Applier.ControllerName = suite.ControllerName
-
-		tlog.Logf(t, "Test Setup: Applying base manifests")
-		suite.Applier.MustApplyWithCleanup(t, suite.Client, suite.TimeoutConfig, suite.BaseManifests, suite.Cleanup)
-
-		tlog.Logf(t, "Test Setup: Applying programmatic resources")
-		secret := kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-web-backend", "certificate", []string{"*"})
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-		secret = kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-infra", "tls-validity-checks-certificate", []string{"*", "*.org"})
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-
-		// secrets for client certificates validation tests
-		caConfigMap, ca, caPrivKey := kubernetes.MustCreateCACertConfigMap(t, "gateway-conformance-infra", "tls-validity-checks-ca-certificate")
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{caConfigMap}, suite.Cleanup)
-		secret = kubernetes.MustCreateCASignedClientCertSecret(t, "gateway-conformance-infra", "tls-validity-checks-client-certificate", ca, caPrivKey)
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-		caConfigMap, ca, caPrivKey = kubernetes.MustCreateCACertConfigMap(t, "gateway-conformance-infra", "tls-validity-checks-per-port-ca-certificate")
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{caConfigMap}, suite.Cleanup)
-		secret = kubernetes.MustCreateCASignedClientCertSecret(t, "gateway-conformance-infra", "tls-validity-checks-per-port-client-certificate", ca, caPrivKey)
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-
-		secret = kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-infra", "tls-passthrough-checks-certificate", []string{"abc.example.com"})
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-		secret = kubernetes.MustCreateSelfSignedCertSecret(t, "gateway-conformance-app-backend", "tls-passthrough-checks-certificate", []string{"abc.example.com"})
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-		caConfigMap, ca, caPrivKey = kubernetes.MustCreateCACertConfigMap(t, "gateway-conformance-infra", "tls-checks-ca-certificate")
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{caConfigMap}, suite.Cleanup)
-		secret = kubernetes.MustCreateCASignedCertSecret(t, "gateway-conformance-infra", "tls-checks-certificate", []string{"abc.example.com", "spiffe://abc.example.com/test-identity", "other.example.com"}, ca, caPrivKey)
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-		secret = kubernetes.MustCreateCASignedClientCertSecret(t, "gateway-conformance-infra", "tls-checks-client-certificate", ca, caPrivKey)
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-
-		// The following secret is used for TLSRoute mode Terminate validation
-		secret = kubernetes.MustCreateCASignedCertSecret(t, "gateway-conformance-infra", "tls-terminate-checks-certificate", []string{"tls.example.com"}, ca, caPrivKey)
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{secret}, suite.Cleanup)
-
-		// The following CA certificate is used for BackendTLSPolicy testing to intentionally force TLS validation to fail.
-		caConfigMap, _, _ = kubernetes.MustCreateCACertConfigMap(t, "gateway-conformance-infra", "mismatch-ca-certificate")
-		suite.Applier.MustApplyObjectsWithCleanup(t, suite.Client, suite.TimeoutConfig, []client.Object{caConfigMap}, suite.Cleanup)
-
-		tlog.Logf(t, "Test Setup: Ensuring Gateways and Pods from base manifests are ready")
-		namespaces := []string{
-			"gateway-conformance-infra",
-			"gateway-conformance-app-backend",
-			"gateway-conformance-web-backend",
-		}
-		kubernetes.NamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
-	}
-
-	if supportsMesh {
-		tlog.Logf(t, "Test Setup: Applying base manifests")
-		suite.Applier.MustApplyWithCleanup(t, suite.Client, suite.TimeoutConfig, suite.MeshManifests, suite.Cleanup)
-		tlog.Logf(t, "Test Setup: Ensuring Gateways and Pods from mesh manifests are ready")
-		namespaces := []string{
-			"gateway-conformance-mesh",
-			"gateway-conformance-mesh-consumer",
-			"gateway-conformance-app-backend",
-			"gateway-conformance-web-backend",
-		}
-		kubernetes.MeshNamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
-	}
-}
-
 func (suite *ConformanceTestSuite) setClientsetForTest(test ConformanceTest) error {
 	featureNames := []string{}
 	for _, v := range test.Features {
@@ -595,20 +502,6 @@ func ParseImplementation(org, project, url, version, contact string) confv1.Impl
 		Version:      version,
 		Contact:      strings.Split(contact, ","),
 	}
-}
-
-// ParseConformanceProfiles parses flag arguments and converts the string to
-// sets.Set[ConformanceProfileName].
-func ParseConformanceProfiles(p string) sets.Set[ConformanceProfileName] {
-	res := sets.Set[ConformanceProfileName]{}
-	if p == "" {
-		return res
-	}
-
-	for _, value := range strings.Split(p, ",") {
-		res.Insert(ConformanceProfileName(value))
-	}
-	return res
 }
 
 func fetchGatewayClassSupportedFeatures(client client.Client, gatewayClassName string) (FeaturesSet, error) {
