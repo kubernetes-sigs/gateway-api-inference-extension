@@ -49,8 +49,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/consts"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	versionconsts "sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
 // -----------------------------------------------------------------------------
@@ -681,8 +681,8 @@ func shouldInferSupportedFeatures(opts *ConformanceOptions) bool {
 // In case the annotations are not found or there are crds with different versions or channels, an error is returned.
 func getAPIVersionAndChannel(crds []apiextensionsv1.CustomResourceDefinition) (version string, channel string, err error) {
 	for _, crd := range crds {
-		v, okv := crd.Annotations[consts.BundleVersionAnnotation]
-		c, okc := crd.Annotations[consts.ChannelAnnotation]
+		v, okv := crd.Annotations[versionconsts.GatewayBundleVersionAnnotation]
+		c, okc := crd.Annotations[versionconsts.GatewayChannelAnnotation]
 		if !okv && !okc {
 			continue
 		}
@@ -701,8 +701,8 @@ func getAPIVersionAndChannel(crds []apiextensionsv1.CustomResourceDefinition) (v
 	if version == "" || channel == "" {
 		return "", "", errors.New("no Gateway API CRDs with the proper annotations found in the cluster")
 	}
-	if version != consts.BundleVersion {
-		return "", "", errors.New(fmt.Sprintf("the installed CRDs version is different from the suite version, installed: %s, suite: %s", version, consts.BundleVersion))
+	if version != versionconsts.GatewayBundleVersion {
+		return "", "", errors.New(fmt.Sprintf("the installed CRDs version is different from the suite version, installed: %s, suite: %s", version, versionconsts.BundleVersion))
 	}
 
 	return version, channel, nil

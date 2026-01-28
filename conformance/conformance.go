@@ -217,7 +217,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 		if opts.AllowCRDsMismatch {
 			apiVersion = "UNDEFINED"
 		} else {
-			require.NoError(t, err, "error getting the gateway ineference extension version")
+			require.NoError(t, err, "error getting the gateway inference extension version")
 		}
 	}
 	SetupConformanceTestSuite(ctx, t, cSuite, opts, tests.ConformanceTests)
