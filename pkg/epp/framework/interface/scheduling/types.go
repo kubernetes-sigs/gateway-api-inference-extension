@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"strings"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -202,10 +201,10 @@ func (mc Content) PlainText() string {
 
 type Endpoint interface {
 	GetMetadata() *fwkdl.EndpointMetadata
-	GetMetrics() *datalayer.Metrics
+	GetMetrics() *fwkdl.Metrics
 	String() string
-	Get(string) (datalayer.Cloneable, bool)
-	Put(string, datalayer.Cloneable)
+	Get(string) (fwkdl.Cloneable, bool)
+	Put(string, fwkdl.Cloneable)
 	Keys() []string
 }
 
@@ -221,19 +220,19 @@ func (ep *endpoint) GetMetadata() *fwkdl.EndpointMetadata {
 	return ep.EndpointMetadata
 }
 
-func (ep *endpoint) GetMetrics() *datalayer.Metrics {
+func (ep *endpoint) GetMetrics() *fwkdl.Metrics {
 	return ep.Metrics
 }
 
 type endpoint struct {
 	*fwkdl.EndpointMetadata
-	*datalayer.Metrics
-	datalayer.AttributeMap
+	*fwkdl.Metrics
+	fwkdl.AttributeMap
 }
 
-func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *datalayer.Metrics, attr datalayer.AttributeMap) Endpoint {
+func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *fwkdl.Metrics, attr fwkdl.AttributeMap) Endpoint {
 	if attr == nil {
-		attr = datalayer.NewAttributes()
+		attr = fwkdl.NewAttributes()
 	}
 
 	return &endpoint{

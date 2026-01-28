@@ -25,10 +25,10 @@ import (
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -49,7 +49,7 @@ func refreshLastSeenMetrics(ctx context.Context, predictedLatencyCtx *predictedL
 }
 
 // getLatestMetricsForProfile retrieves the latest metrics for prediction from predictedLatencyCtx.LastSeenMetrics.
-func getLatestMetricsForProfile(predictedLatencyCtx *predictedLatencyCtx) (*datalayer.Metrics, error) {
+func getLatestMetricsForProfile(predictedLatencyCtx *predictedLatencyCtx) (*fwkdl.Metrics, error) {
 	if len(predictedLatencyCtx.lastSeenMetrics) == 0 {
 		return nil, errors.New("no last seen metrics available for prediction")
 	}
@@ -164,7 +164,7 @@ func recordTTFTTrainingData(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	predictedLatencyCtx *predictedLatencyCtx,
-	m *datalayer.Metrics,
+	m *fwkdl.Metrics,
 	now time.Time,
 	prefixCacheScore float64,
 ) {
@@ -311,7 +311,7 @@ func processTokenForLatencyPrediction(
 func bulkPredictWithMetrics(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	metricsStates []*datalayer.Metrics,
+	metricsStates []*fwkdl.Metrics,
 	prompts []string,
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,

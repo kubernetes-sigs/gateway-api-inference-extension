@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -31,7 +32,7 @@ const (
 type FakeDataSource struct {
 	typedName *plugin.TypedName
 	callCount int64
-	Metrics   map[types.NamespacedName]*Metrics
+	Metrics   map[types.NamespacedName]*fwkdl.Metrics
 	Errors    map[types.NamespacedName]error
 }
 
@@ -44,10 +45,10 @@ func (fds *FakeDataSource) TypedName() plugin.TypedName {
 		Name: fakeSource,
 	}
 }
-func (fds *FakeDataSource) Extractors() []string           { return []string{} }
-func (fds *FakeDataSource) AddExtractor(_ Extractor) error { return nil }
+func (fds *FakeDataSource) Extractors() []string                 { return []string{} }
+func (fds *FakeDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
 
-func (fds *FakeDataSource) Collect(ctx context.Context, ep Endpoint) error {
+func (fds *FakeDataSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
 	atomic.AddInt64(&fds.callCount, 1)
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
 		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {

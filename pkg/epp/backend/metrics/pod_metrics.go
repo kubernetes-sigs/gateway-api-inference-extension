@@ -123,10 +123,10 @@ func (pm *podMetrics) stopRefreshLoop() {
 
 // Allowing forward compatibility between PodMetrics and datalayer.Endpoint, by
 // implementing missing functions (e.g., extended attributes support) as no-op.
-func (*podMetrics) Put(string, datalayer.Cloneable)        {}
-func (*podMetrics) Get(string) (datalayer.Cloneable, bool) { return nil, false }
-func (*podMetrics) Keys() []string                         { return nil }
-func (*podMetrics) GetAttributes() datalayer.AttributeMap {
+func (*podMetrics) Put(string, fwkdl.Cloneable)        {}
+func (*podMetrics) Get(string) (fwkdl.Cloneable, bool) { return nil, false }
+func (*podMetrics) Keys() []string                     { return nil }
+func (*podMetrics) GetAttributes() fwkdl.AttributeMap {
 	return nil
 }
 

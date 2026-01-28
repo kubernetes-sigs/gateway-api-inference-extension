@@ -18,6 +18,8 @@ package datalayer
 
 import (
 	"fmt"
+
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // Config defines the configuration of EPP data layer, as the set of DataSources and
@@ -28,8 +30,8 @@ type Config struct {
 
 // DataSourceConfig defines the configuration of a specific DataSource
 type DataSourceConfig struct {
-	Plugin     DataSource  // the data source plugin instance
-	Extractors []Extractor // extractors defined for the data source
+	Plugin     fwkdl.DataSource  // the data source plugin instance
+	Extractors []fwkdl.Extractor // extractors defined for the data source
 }
 
 // WithConfig sets up the data layer based on the provided configuration.

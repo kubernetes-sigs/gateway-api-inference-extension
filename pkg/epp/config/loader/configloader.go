@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
@@ -267,21 +268,21 @@ func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEna
 	}
 
 	for _, source := range rawDataConfig.Sources {
-		if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
+		if sourcePlugin, ok := handle.Plugin(source.PluginRef).(fwkdl.DataSource); ok {
 			sourceConfig := datalayer.DataSourceConfig{
 				Plugin:     sourcePlugin,
-				Extractors: []datalayer.Extractor{},
+				Extractors: []fwkdl.Extractor{},
 			}
 			for _, extractor := range source.Extractors {
-				if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(datalayer.Extractor); ok {
+				if extractorPlugin, ok := handle.Plugin(extractor.PluginRef).(fwkdl.Extractor); ok {
 					sourceConfig.Extractors = append(sourceConfig.Extractors, extractorPlugin)
 				} else {
-					return nil, fmt.Errorf("the plugin %s is not a datalayer.Extractor", source.PluginRef)
+					return nil, fmt.Errorf("the plugin %s is not a fwkdl.Extractor", source.PluginRef)
 				}
 			}
 			cfg.Sources = append(cfg.Sources, sourceConfig)
 		} else {
-			return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
+			return nil, fmt.Errorf("the plugin %s is not a fwkdl.DataSource", source.PluginRef)
 		}
 	}
 	return &cfg, nil

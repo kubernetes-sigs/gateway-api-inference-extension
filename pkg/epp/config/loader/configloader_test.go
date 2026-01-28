@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
@@ -452,11 +453,11 @@ func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *fr
 // Mock Source
 type mockSource struct{ mockPlugin }
 
-func (m *mockSource) AddExtractor(_ datalayer.Extractor) error {
+func (m *mockSource) AddExtractor(_ fwkdl.Extractor) error {
 	return nil
 }
 
-func (m *mockSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
+func (m *mockSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
 	return nil
 }
 
@@ -471,7 +472,7 @@ func (m *mockExtractor) ExpectedInputType() reflect.Type {
 	return reflect.TypeOf("")
 }
 
-func (m *mockExtractor) Extract(ctx context.Context, data any, ep datalayer.Endpoint) error {
+func (m *mockExtractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {
 	return nil
 }
 

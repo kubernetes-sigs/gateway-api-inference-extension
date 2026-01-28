@@ -22,7 +22,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -46,7 +46,7 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, request *sch
 	predictions := make([]endpointPredictionResult, 0, len(candidateEndpoints))
 
 	// Prepare inputs for bulk prediction
-	metricsStates := make([]*datalayer.Metrics, len(candidateEndpoints))
+	metricsStates := make([]*fwkdl.Metrics, len(candidateEndpoints))
 	prompts := make([]string, len(candidateEndpoints))
 	generatedTokenCounts := make([]int, len(candidateEndpoints))
 	prefixCacheScores := make([]float64, len(candidateEndpoints))

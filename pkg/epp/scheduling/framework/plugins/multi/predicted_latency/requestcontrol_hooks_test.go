@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -340,12 +339,12 @@ func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 	predictedLatencyCtx.predictedTTFT = 80.0
 	predictedLatencyCtx.avgPredictedTPOT = 30.0
 
-	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["prefill"] = &fwkdl.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
 	}
-	predictedLatencyCtx.lastSeenMetrics["default"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["default"] = &fwkdl.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
@@ -393,12 +392,12 @@ func TestPredictedLatency_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	predictedLatencyCtx.predictedTTFT = 80.0
 	predictedLatencyCtx.avgPredictedTPOT = 30.0
 	// ADD THIS - populate metrics
-	predictedLatencyCtx.lastSeenMetrics["prefill"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["prefill"] = &fwkdl.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
 	}
-	predictedLatencyCtx.lastSeenMetrics["default"] = &datalayer.Metrics{
+	predictedLatencyCtx.lastSeenMetrics["default"] = &fwkdl.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    1,
 		RunningRequestsSize: 1,
@@ -671,7 +670,7 @@ func TestPredictedLatencyContext_UpdateMetrics(t *testing.T) {
 	ctx := newPredictedLatencyContext(request)
 
 	// Add some metrics
-	metricsState := &datalayer.Metrics{
+	metricsState := &fwkdl.Metrics{
 		KVCacheUsagePercent: 0.5,
 		WaitingQueueSize:    3,
 	}

@@ -103,8 +103,8 @@ func (f *FakeLoggerDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	return poolutil.InferencePoolToEndpointPool(pool), nil
 }
 
-func (f *FakeLoggerDataStore) PodList(predicate func(datalayer.Endpoint) bool) []datalayer.Endpoint {
-	var m = &datalayer.Metrics{
+func (f *FakeLoggerDataStore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint {
+	var m = &fwkdl.Metrics{
 		ActiveModels:            map[string]int{"modelA": 1},
 		WaitingModels:           map[string]int{"modelB": 2},
 		MaxActiveModels:         5,
@@ -114,10 +114,10 @@ func (f *FakeLoggerDataStore) PodList(predicate func(datalayer.Endpoint) bool) [
 		KvCacheMaxTokenCapacity: 2048,
 		UpdateTime:              time.Now(),
 	}
-	ep1 := datalayer.NewEndpoint(pod1, m)
-	ep2 := datalayer.NewEndpoint(pod2, m)
-	pods := []datalayer.Endpoint{ep1, ep2}
-	res := []datalayer.Endpoint{}
+	ep1 := fwkdl.NewEndpoint(pod1, m)
+	ep2 := fwkdl.NewEndpoint(pod2, m)
+	pods := []fwkdl.Endpoint{ep1, ep2}
+	res := []fwkdl.Endpoint{}
 
 	for _, pod := range pods {
 		if predicate(pod) {

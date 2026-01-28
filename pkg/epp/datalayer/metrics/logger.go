@@ -26,6 +26,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
@@ -74,8 +75,8 @@ func runDebugLogger(ctx context.Context, logger logr.Logger, datastore datalayer
 	}
 }
 
-func podsWithFreshMetrics(stalenessThreshold time.Duration) func(datalayer.Endpoint) bool {
-	return func(ep datalayer.Endpoint) bool {
+func podsWithFreshMetrics(stalenessThreshold time.Duration) func(fwkdl.Endpoint) bool {
+	return func(ep fwkdl.Endpoint) bool {
 		if ep == nil {
 			return false // Skip nil pods
 		}
@@ -83,8 +84,8 @@ func podsWithFreshMetrics(stalenessThreshold time.Duration) func(datalayer.Endpo
 	}
 }
 
-func podsWithStaleMetrics(stalenessThreshold time.Duration) func(datalayer.Endpoint) bool {
-	return func(ep datalayer.Endpoint) bool {
+func podsWithStaleMetrics(stalenessThreshold time.Duration) func(fwkdl.Endpoint) bool {
+	return func(ep fwkdl.Endpoint) bool {
 		if ep == nil {
 			return false // Skip nil pods
 		}
@@ -128,7 +129,7 @@ type totals struct {
 	queueSize int
 }
 
-func calculateTotals(endpoints []datalayer.Endpoint) totals {
+func calculateTotals(endpoints []fwkdl.Endpoint) totals {
 	var result totals
 	for _, pod := range endpoints {
 		metrics := pod.GetMetrics()

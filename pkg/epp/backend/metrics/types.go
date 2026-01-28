@@ -49,11 +49,11 @@ type PodMetricsFactory struct {
 	refreshMetricsInterval time.Duration
 }
 
-func (f *PodMetricsFactory) SetSources(_ []datalayer.DataSource) {
+func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
 	// no-op
 }
 
-func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) datalayer.Endpoint {
+func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) fwkdl.Endpoint {
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -64,7 +64,7 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 		logger:    log.FromContext(parentCtx).WithValues("endpoint", metadata.NamespacedName),
 	}
 	pm.metadata.Store(metadata)
-	pm.metrics.Store(datalayer.NewMetrics())
+	pm.metrics.Store(fwkdl.NewMetrics())
 
 	pm.startRefreshLoop(parentCtx)
 	return pm
@@ -76,4 +76,4 @@ func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
 	}
 }
 
-type PodMetrics = datalayer.Endpoint
+type PodMetrics = fwkdl.Endpoint

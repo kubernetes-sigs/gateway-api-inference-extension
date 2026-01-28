@@ -22,7 +22,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
@@ -36,9 +35,9 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Different queue sizes",
 			endpoints: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 10}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 5}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 10}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 0}, nil),
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
@@ -49,8 +48,8 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Same queue sizes",
 			endpoints: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 5}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 5}, nil),
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
@@ -60,8 +59,8 @@ func TestQueueScorer(t *testing.T) {
 		{
 			name: "Zero queue sizes",
 			endpoints: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 0}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &datalayer.Metrics{WaitingQueueSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 0}, nil),
 			},
 			expectedScoresEndpoint: map[int]float64{
 				0: 1.0,

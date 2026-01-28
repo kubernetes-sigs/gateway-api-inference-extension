@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -79,9 +78,9 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, datalayer.NewMetrics(), nil)
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, datalayer.NewMetrics(), nil)
-	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, datalayer.NewMetrics(), nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, fwkdl.NewMetrics(), nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, fwkdl.NewMetrics(), nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, fwkdl.NewMetrics(), nil)
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
@@ -249,7 +248,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &datalayer.Metrics{}, nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &fwkdl.Metrics{}, nil)
 	endpoints := []fwksched.Endpoint{endpoint1}
 
 	// Test with chat completions request
@@ -285,8 +284,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &datalayer.Metrics{}, nil)
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, &datalayer.Metrics{}, nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &fwkdl.Metrics{}, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, &fwkdl.Metrics{}, nil)
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
@@ -513,7 +512,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	// Setup common test data
 	podName := "pod-autotune"
 	endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
-		&datalayer.Metrics{
+		&fwkdl.Metrics{
 			CacheBlockSize:    16,   // 16 tokens * 4 chars/token = 64 chars per block
 			CacheNumGPUBlocks: 1000, // 1000 blocks capacity
 		}, nil)
@@ -623,8 +622,8 @@ func TestPrepareRequestData(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, datalayer.NewMetrics(), datalayer.NewAttributes())
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, datalayer.NewMetrics(), datalayer.NewAttributes())
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, fwkdl.NewMetrics(), fwkdl.NewAttributes())
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, fwkdl.NewMetrics(), fwkdl.NewAttributes())
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.

@@ -19,24 +19,12 @@ package datalayer
 import (
 	"fmt"
 	"sync/atomic"
-
-	"k8s.io/apimachinery/pkg/types"
-
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
-
-// Addressable supports getting an IP address and a namespaced name.
-type Addressable interface {
-	GetIPAddress() string
-	GetPort() string
-	GetMetricsHost() string
-	GetNamespacedName() types.NamespacedName
-}
 
 // EndpointMetaState allows management of the EndpointMetadata related attributes.
 type EndpointMetaState interface {
-	GetMetadata() *fwkdl.EndpointMetadata
-	UpdateMetadata(*fwkdl.EndpointMetadata)
+	GetMetadata() *EndpointMetadata
+	UpdateMetadata(*EndpointMetadata)
 	GetAttributes() AttributeMap
 }
 
@@ -55,15 +43,15 @@ type Endpoint interface {
 
 // ModelServer is an implementation of the Endpoint interface.
 type ModelServer struct {
-	pod        atomic.Pointer[fwkdl.EndpointMetadata]
+	pod        atomic.Pointer[EndpointMetadata]
 	metrics    atomic.Pointer[Metrics]
 	attributes AttributeMap
 }
 
 // NewEndpoint returns a new ModelServer with the given EndpointMetadata and Metrics.
-func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *Metrics) *ModelServer {
+func NewEndpoint(meta *EndpointMetadata, metrics *Metrics) *ModelServer {
 	if meta == nil {
-		meta = &fwkdl.EndpointMetadata{}
+		meta = &EndpointMetadata{}
 	}
 	if metrics == nil {
 		metrics = NewMetrics()
@@ -82,11 +70,11 @@ func (srv *ModelServer) String() string {
 	return fmt.Sprintf("Metadata: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.GetAttributes().Keys())
 }
 
-func (srv *ModelServer) GetMetadata() *fwkdl.EndpointMetadata {
+func (srv *ModelServer) GetMetadata() *EndpointMetadata {
 	return srv.pod.Load()
 }
 
-func (srv *ModelServer) UpdateMetadata(pod *fwkdl.EndpointMetadata) {
+func (srv *ModelServer) UpdateMetadata(pod *EndpointMetadata) {
 	srv.pod.Store(pod)
 }
 

@@ -27,6 +27,7 @@ import (
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -77,7 +78,7 @@ func (dataSrc *HTTPDataSource) TypedName() fwkplugin.TypedName {
 func (dataSrc *HTTPDataSource) Extractors() []string {
 	extractors := []string{}
 	dataSrc.extractors.Range(func(_, val any) bool {
-		if ex, ok := val.(datalayer.Extractor); ok {
+		if ex, ok := val.(fwkdl.Extractor); ok {
 			extractors = append(extractors, ex.TypedName().String())
 		}
 		return true // continue iteration
@@ -87,7 +88,7 @@ func (dataSrc *HTTPDataSource) Extractors() []string {
 
 // AddExtractor adds an extractor to the data source, validating it can process
 // the data source output type.
-func (dataSrc *HTTPDataSource) AddExtractor(extractor datalayer.Extractor) error {
+func (dataSrc *HTTPDataSource) AddExtractor(extractor fwkdl.Extractor) error {
 	if err := datalayer.ValidateExtractorType(dataSrc.outputType, extractor.ExpectedInputType()); err != nil {
 		return err
 	}
@@ -99,7 +100,7 @@ func (dataSrc *HTTPDataSource) AddExtractor(extractor datalayer.Extractor) error
 
 // Collect is triggered by the data layer framework to fetch potentially new
 // data for an endpoint.
-func (dataSrc *HTTPDataSource) Collect(ctx context.Context, ep datalayer.Endpoint) error {
+func (dataSrc *HTTPDataSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
 	target := dataSrc.getEndpoint(ep.GetMetadata())
 	data, err := dataSrc.client.Get(ctx, target, ep.GetMetadata(), dataSrc.parser)
 
@@ -109,7 +110,7 @@ func (dataSrc *HTTPDataSource) Collect(ctx context.Context, ep datalayer.Endpoin
 
 	var errs []error
 	dataSrc.extractors.Range(func(_, val any) bool {
-		if ex, ok := val.(datalayer.Extractor); ok {
+		if ex, ok := val.(fwkdl.Extractor); ok {
 			if err = ex.Extract(ctx, data, ep); err != nil {
 				errs = append(errs, err)
 			}
@@ -123,7 +124,7 @@ func (dataSrc *HTTPDataSource) Collect(ctx context.Context, ep datalayer.Endpoin
 	return nil
 }
 
-func (dataSrc *HTTPDataSource) getEndpoint(ep datalayer.Addressable) *url.URL {
+func (dataSrc *HTTPDataSource) getEndpoint(ep Addressable) *url.URL {
 	return &url.URL{
 		Scheme: dataSrc.scheme,
 		Host:   ep.GetMetricsHost(),
@@ -131,4 +132,4 @@ func (dataSrc *HTTPDataSource) getEndpoint(ep datalayer.Addressable) *url.URL {
 	}
 }
 
-var _ datalayer.DataSource = (*HTTPDataSource)(nil)
+var _ fwkdl.DataSource = (*HTTPDataSource)(nil)

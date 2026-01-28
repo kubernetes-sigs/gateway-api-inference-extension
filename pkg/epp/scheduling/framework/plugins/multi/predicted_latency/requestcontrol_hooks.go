@@ -27,7 +27,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -44,7 +43,7 @@ type predictedLatencyCtx struct {
 	schedulingRequest         schedulingtypes.LLMRequest
 	targetMetadata            *fwkdl.EndpointMetadata
 	schedulingResult          *schedulingtypes.SchedulingResult
-	lastSeenMetrics           map[string]*datalayer.Metrics
+	lastSeenMetrics           map[string]*fwkdl.Metrics
 	lastTokenTimestamp        time.Time
 	requestReceivedTimestamp  time.Time
 	generatedTokenCount       int
@@ -74,7 +73,7 @@ type predictedLatencyCtx struct {
 func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
 	return &predictedLatencyCtx{
 		schedulingRequest:             *request,
-		lastSeenMetrics:               make(map[string]*datalayer.Metrics),
+		lastSeenMetrics:               make(map[string]*fwkdl.Metrics),
 		prefixCacheScoresForEndpoints: make(map[string]float64),
 		predictionsForScheduling:      make([]endpointPredictionResult, 0),
 		hasValidEndpoint:              true,
