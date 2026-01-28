@@ -255,23 +255,6 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilization
 	return cfg
 }
 
-func buildConcurrencyConfig(apiConfig *configapi.SaturationDetector) *concurrencydetector.Config {
-	cfg := &concurrencydetector.Config{
-		MaxConcurrency: concurrencydetector.DefaultMaxConcurrency,
-		Headroom:       concurrencydetector.DefaultHeadroom,
-	}
-
-	if apiConfig != nil && apiConfig.Concurrency != nil {
-		if apiConfig.Concurrency.MaxConcurrency > 0 {
-			cfg.MaxConcurrency = int64(apiConfig.Concurrency.MaxConcurrency)
-		}
-		if apiConfig.Concurrency.Headroom >= 0.0 && apiConfig.Concurrency.Headroom <= 1.0 {
-			cfg.Headroom = apiConfig.Concurrency.Headroom
-		}
-	}
-	return cfg
-}
-
 func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle fwkplugin.Handle) (*datalayer.Config, error) {
 	if dataLayerEnabled && (rawDataConfig == nil || rawDataConfig.Sources == nil) { // enabled but no configuration
 		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
