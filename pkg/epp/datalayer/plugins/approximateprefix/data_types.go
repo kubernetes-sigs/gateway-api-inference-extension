@@ -25,28 +25,38 @@ const (
 )
 
 type PrefixCacheMatchInfo struct {
-	matchLength int
+	// matched prefix length in blocks
+	matchBlocks int
+	// total length in blocks
 	totalBlocks int
+	// block length in tokens
+	blockSizeTokens int
 }
 
-func NewPrefixCacheMatchInfo(matchLen int, blockHashLen int) *PrefixCacheMatchInfo {
+func NewPrefixCacheMatchInfo(matchBlocks int, totalBlocks int, blockSizeTokens int) *PrefixCacheMatchInfo {
 	return &PrefixCacheMatchInfo{
-		matchLength: matchLen,
-		totalBlocks: blockHashLen,
+		matchBlocks:     matchBlocks,
+		totalBlocks:     totalBlocks,
+		blockSizeTokens: blockSizeTokens,
 	}
 }
 
-func (p *PrefixCacheMatchInfo) MatchLength() int {
-	return p.matchLength
+func (p *PrefixCacheMatchInfo) MatchBlocks() int {
+	return p.matchBlocks
 }
 
-func (p *PrefixCacheMatchInfo) TotalLength() int {
+func (p *PrefixCacheMatchInfo) TotalBlocks() int {
 	return p.totalBlocks
+}
+
+func (p *PrefixCacheMatchInfo) BlockSizeTokens() int {
+	return p.blockSizeTokens
 }
 
 func (p *PrefixCacheMatchInfo) Clone() datalayer.Cloneable {
 	return &PrefixCacheMatchInfo{
-		matchLength: p.matchLength,
-		totalBlocks: p.totalBlocks,
+		matchBlocks:     p.matchBlocks,
+		totalBlocks:     p.totalBlocks,
+		blockSizeTokens: p.blockSizeTokens,
 	}
 }

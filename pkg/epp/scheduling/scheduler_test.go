@@ -22,66 +22,68 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	// Import config for thresholds
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 // Tests the default scheduler configuration and expected behavior.
 func TestSchedule(t *testing.T) {
 	kvCacheUtilizationScorer := scorer.NewKVCacheUtilizationScorer()
 	queueingScorer := scorer.NewQueueScorer()
-	prefixCacheScorer := prefix.New(context.Background(), prefix.DefaultConfig)
+	prefixCacheScorer, err := prefix.New(context.Background(), prefix.DefaultConfig)
+	assert.NoError(t, err)
 	loraAffinityScorer := scorer.NewLoraAffinityScorer()
 
-	defaultProfile := framework.NewSchedulerProfile().
-		WithScorers(framework.NewWeightedScorer(kvCacheUtilizationScorer, 1),
-			framework.NewWeightedScorer(queueingScorer, 1),
-			framework.NewWeightedScorer(prefixCacheScorer, 1),
-			framework.NewWeightedScorer(loraAffinityScorer, 1),
+	defaultProfile := NewSchedulerProfile().
+		WithScorers(NewWeightedScorer(kvCacheUtilizationScorer, 1),
+			NewWeightedScorer(queueingScorer, 1),
+			NewWeightedScorer(prefixCacheScorer, 1),
+			NewWeightedScorer(loraAffinityScorer, 1),
 		).
 		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
 
 	profileHandler := profile.NewSingleProfileHandler()
 
-	schedulerConfig := NewSchedulerConfig(profileHandler, map[string]*framework.SchedulerProfile{"default": defaultProfile})
+	schedulerConfig := NewSchedulerConfig(profileHandler, map[string]fwksched.SchedulerProfile{"default": defaultProfile})
 
 	tests := []struct {
 		name    string
-		req     *types.LLMRequest
-		input   []types.Endpoint
-		wantRes *types.SchedulingResult
+		req     *fwksched.LLMRequest
+		input   []fwksched.Endpoint
+		wantRes *fwksched.SchedulingResult
 		err     bool
 	}{
 		{
 			name: "no candidate endpoints",
-			req: &types.LLMRequest{
+			req: &fwksched.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "any-model",
 			},
-			input:   []types.Endpoint{},
+			input:   []fwksched.Endpoint{},
 			wantRes: nil,
 			err:     true,
 		},
 		{
 			name: "finds optimal endpoint",
-			req: &types.LLMRequest{
+			req: &fwksched.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "critical",
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.
-			input: []types.Endpoint{
-				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					Metrics: &datalayer.Metrics{
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(
+					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+					&datalayer.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -89,11 +91,10 @@ func TestSchedule(t *testing.T) {
 							"foo": 1,
 							"bar": 1,
 						},
-					},
-				},
-				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					Metrics: &datalayer.Metrics{
+					}, nil),
+				fwksched.NewEndpoint(
+					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+					&datalayer.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -101,28 +102,26 @@ func TestSchedule(t *testing.T) {
 							"foo":      1,
 							"critical": 1,
 						},
-					},
-				},
-				&types.PodMetrics{
-					EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					Metrics: &datalayer.Metrics{
+					}, nil),
+				fwksched.NewEndpoint(
+					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
+					&datalayer.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.8,
 						MaxActiveModels:     2,
 						ActiveModels: map[string]int{
 							"foo": 1,
 						},
-					},
-				},
+					}, nil),
 			},
-			wantRes: &types.SchedulingResult{
-				ProfileResults: map[string]*types.ProfileRunResult{
+			wantRes: &fwksched.SchedulingResult{
+				ProfileResults: map[string]*fwksched.ProfileRunResult{
 					"default": {
-						TargetEndpoints: []types.Endpoint{
-							&types.ScoredEndpoint{
-								Endpoint: &types.PodMetrics{
-									EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-									Metrics: &datalayer.Metrics{
+						TargetEndpoints: []fwksched.Endpoint{
+							&fwksched.ScoredEndpoint{
+								Endpoint: fwksched.NewEndpoint(
+									&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
+									&datalayer.Metrics{
 										WaitingQueueSize:    0,
 										KVCacheUsagePercent: 0.2,
 										MaxActiveModels:     2,
@@ -130,8 +129,7 @@ func TestSchedule(t *testing.T) {
 											"foo":      1,
 											"critical": 1,
 										},
-									},
-								},
+									}, nil),
 								Score: 2.8,
 							},
 						},
@@ -150,7 +148,7 @@ func TestSchedule(t *testing.T) {
 				t.Errorf("Unexpected error, got %v, want %v", err, test.err)
 			}
 
-			if diff := cmp.Diff(test.wantRes, got); diff != "" {
+			if diff := cmp.Diff(test.wantRes, got, cmp.Comparer(fwksched.ScoredEndpointComparer)); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})

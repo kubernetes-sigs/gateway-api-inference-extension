@@ -22,13 +22,13 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -47,11 +47,11 @@ var _ requestcontrol.ResponseReceived = &DestinationEndpointServedVerifier{}
 // The conformance test client can then validate this header to ensure the request
 // was routed correctly.
 type DestinationEndpointServedVerifier struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (f *DestinationEndpointServedVerifier) TypedName() plugins.TypedName {
+func (f *DestinationEndpointServedVerifier) TypedName() fwkplugin.TypedName {
 	return f.typedName
 }
 
@@ -62,7 +62,7 @@ func (f *DestinationEndpointServedVerifier) WithName(name string) *DestinationEn
 }
 
 // DestinationEndpointServedVerifierFactory defines the factory function for DestinationEndpointServedVerifier.
-func DestinationEndpointServedVerifierFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func DestinationEndpointServedVerifierFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewDestinationEndpointServedVerifier().WithName(name), nil
 }
 
@@ -71,7 +71,7 @@ func NewDestinationEndpointServedVerifier() *DestinationEndpointServedVerifier {
 }
 
 // ResponseReceived is the handler for the ResponseReceived extension point.
-func (p *DestinationEndpointServedVerifier) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *datalayer.EndpointMetadata) {
+func (p *DestinationEndpointServedVerifier) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx).WithName(p.TypedName().String())
 	logger.V(logging.DEBUG).Info("Verifying destination endpoint served")
 

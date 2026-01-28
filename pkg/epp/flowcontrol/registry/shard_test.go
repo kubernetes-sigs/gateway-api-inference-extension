@@ -26,11 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 const (
@@ -59,6 +58,7 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 	t.Helper()
 
 	globalConfig, err := NewConfig(
+		newTestPluginsHandle(t),
 		WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
 		WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
 	)
@@ -66,12 +66,7 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 
 	statsPropagator := &mockStatsPropagator{}
 	shardConfig := globalConfig.partition(0, 1)
-	shard, err := newShard(
-		"test-shard-1",
-		shardConfig, logr.Discard(),
-		statsPropagator.propagate,
-	)
-	require.NoError(t, err, "Test setup: newShard should not return an error with valid configuration")
+	shard := newShard("test-shard-1", shardConfig, logr.Discard(), statsPropagator.propagate)
 
 	h := &shardTestHarness{
 		t:                t,
@@ -91,9 +86,8 @@ func newShardTestHarness(t *testing.T) *shardTestHarness {
 // synchronizeFlow simulates the registry synchronizing a flow with a real queue.
 func (h *shardTestHarness) synchronizeFlow(key types.FlowKey) {
 	h.t.Helper()
-	policy, err := intraflow.NewPolicyFromName(defaultIntraFlowDispatchPolicy)
-	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real intra-flow policy for synchronization")
-	q, err := queue.NewQueueFromName(defaultQueue, policy.Comparator())
+	policy := h.shard.config.PriorityBands[key.Priority].OrderingPolicy
+	q, err := queue.NewQueueFromName(defaultQueue, policy)
 	assert.NoError(h.t, err, "Helper synchronizeFlow: failed to create real queue for synchronization")
 	h.shard.synchronizeFlow(key, policy, q)
 }
@@ -135,28 +129,9 @@ func TestShard_New(t *testing.T) {
 		bandHigh := val.(*priorityBand)
 		require.True(t, ok, "Priority band %d (High) must be initialized", highPriority)
 		assert.Equal(t, "High", bandHigh.config.PriorityName, "Priority band name must match the configuration")
-		require.NotNil(t, bandHigh.interFlowDispatchPolicy, "Inter-flow policy must be instantiated during construction")
-		assert.Equal(t, string(defaultInterFlowDispatchPolicy), bandHigh.interFlowDispatchPolicy.Name(),
-			"The default inter-flow policy implementation must be used when not overridden")
-	})
-
-	t.Run("ShouldFail_WhenInterFlowPolicyFactoryFails", func(t *testing.T) {
-		t.Parallel()
-
-		badConfig, err := NewConfig(
-			WithPriorityBand(&PriorityBandConfig{
-				Priority:                highPriority,
-				PriorityName:            "High",
-				InterFlowDispatchPolicy: "non-existent-policy",
-			}),
-		)
-		require.NoError(t, err, "Config validation currently validates IntraFlow policies, but not InterFlow policies")
-
-		_, err = newShard("test-shard-1", badConfig.partition(0, 1), logr.Discard(), nil)
-
-		require.Error(t, err, "newShard must fail if the inter-flow policy cannot be instantiated")
-		assert.Contains(t, err.Error(), "failed to create inter-flow policy",
-			"Error message should indicate policy creation failure")
+		require.NotNil(t, bandHigh.fairnessPolicy, "Fairness policy must be instantiated during construction")
+		assert.Equal(t, defaultFairnessPolicyRef, bandHigh.fairnessPolicy.TypedName().Name,
+			"Must match the configured fairness policy implementation")
 	})
 }
 
@@ -196,22 +171,13 @@ func TestShard_Accessors(t *testing.T) {
 				"The returned queue instance must correspond to the requested FlowKey")
 		})
 
-		t.Run("IntraFlowDispatchPolicy", func(t *testing.T) {
+		t.Run("FairnessPolicy", func(t *testing.T) {
 			t.Parallel()
-			policy, err := h.shard.IntraFlowDispatchPolicy(h.highPriorityKey1)
-			require.NoError(t, err, "IntraFlowDispatchPolicy accessor must succeed for a synchronized flow")
-			require.NotNil(t, policy, "Returned policy must not be nil (guaranteed by contract)")
-			assert.Equal(t, string(defaultIntraFlowDispatchPolicy), policy.Name(),
-				"Must return the default intra-flow policy implementation")
-		})
-
-		t.Run("InterFlowDispatchPolicy", func(t *testing.T) {
-			t.Parallel()
-			policy, err := h.shard.InterFlowDispatchPolicy(highPriority)
+			policy, err := h.shard.FairnessPolicy(highPriority)
 			require.NoError(t, err, "InterFlowDispatchPolicy accessor must succeed for a configured priority band")
 			require.NotNil(t, policy, "Returned policy must not be nil (guaranteed by contract)")
-			assert.Equal(t, string(defaultInterFlowDispatchPolicy), policy.Name(),
-				"Must return the default inter-flow policy implementation")
+			assert.Equal(t, defaultFairnessPolicyRef, policy.TypedName().Name,
+				"Must return the configured fairness policy implementation")
 		})
 	})
 
@@ -239,28 +205,12 @@ func TestShard_Accessors(t *testing.T) {
 				expectErr: contracts.ErrFlowInstanceNotFound,
 			},
 			{
-				name: "InterFlowDispatchPolicy_PriorityNotFound",
+				name: "FairnessPolicy_PriorityNotFound",
 				action: func(s *registryShard) error {
-					_, err := s.InterFlowDispatchPolicy(nonExistentPriority)
+					_, err := s.FairnessPolicy(nonExistentPriority)
 					return err
 				},
 				expectErr: contracts.ErrPriorityBandNotFound,
-			},
-			{
-				name: "IntraFlowDispatchPolicy_PriorityNotFound",
-				action: func(s *registryShard) error {
-					_, err := s.IntraFlowDispatchPolicy(types.FlowKey{Priority: nonExistentPriority})
-					return err
-				},
-				expectErr: contracts.ErrPriorityBandNotFound,
-			},
-			{
-				name: "IntraFlowDispatchPolicy_FlowNotFound",
-				action: func(s *registryShard) error {
-					_, err := s.IntraFlowDispatchPolicy(types.FlowKey{ID: "missing", Priority: highPriority})
-					return err
-				},
-				expectErr: contracts.ErrFlowInstanceNotFound,
 			},
 		}
 		for _, tc := range testCases {
@@ -323,7 +273,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			t.Run("ShouldVisitAllQueuesInBand", func(t *testing.T) {
 				t.Parallel()
 				var iteratedKeys []types.FlowKey
-				accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+				accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 					iteratedKeys = append(iteratedKeys, queue.FlowKey())
 					return true
 				})
@@ -335,7 +285,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			t.Run("ShouldExitEarly_WhenCallbackReturnsFalse", func(t *testing.T) {
 				t.Parallel()
 				var iterationCount int
-				accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+				accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 					iterationCount++
 					return false
 				})
@@ -355,7 +305,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for i := 0; i < 100; i++ {
-						accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+						accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 							// Accessing data should not panic or race.
 							_ = queue.FlowKey()
 							return true
@@ -391,7 +341,7 @@ func TestShard_PriorityBandAccessor(t *testing.T) {
 			assert.Empty(t, keys, "FlowKeys() on an empty band must return an empty slice")
 
 			var callbackExecuted bool
-			accessor.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+			accessor.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 				callbackExecuted = true
 				return true
 			})
@@ -452,8 +402,8 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		// Update the config definition first (simulating the Registry's job).
 		dynamicPrio := 15
-		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
-		newBandCfg.applyDefaults()
+		newBandCfg, err := NewPriorityBandConfig(newTestPluginsHandle(t), dynamicPrio, "Dynamic-15")
+		require.NoError(t, err)
 		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
 
 		h.shard.addPriorityBand(dynamicPrio)
@@ -473,8 +423,8 @@ func TestShard_DynamicProvisioning(t *testing.T) {
 
 		// Prepare config.
 		dynamicPrio := 15
-		newBandCfg := &PriorityBandConfig{Priority: dynamicPrio, PriorityName: "Dynamic-15"}
-		newBandCfg.applyDefaults()
+		newBandCfg, err := NewPriorityBandConfig(newTestPluginsHandle(t), dynamicPrio, "Dynamic-15")
+		require.NoError(t, err)
 		h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
 
 		// Call twice.
@@ -530,7 +480,7 @@ func TestShard_Concurrency_MixedWorkload(t *testing.T) {
 					for _, priority := range h.shard.AllOrderedPriorityLevels() {
 						accessor, err := h.shard.PriorityBandAccessor(priority)
 						if err == nil {
-							accessor.IterateQueues(func(q framework.FlowQueueAccessor) bool { return true })
+							accessor.IterateQueues(func(q flowcontrol.FlowQueueAccessor) bool { return true })
 						}
 					}
 				}

@@ -27,10 +27,10 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/utils/clock"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // maxCleanupWorkers caps the number of concurrent workers for background cleanup tasks. This prevents a single shard
@@ -298,7 +298,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			continue
 		}
 
-		item, err := sp.selectItem(originalBand)
+		item, err := sp.selectItem(ctx, originalBand)
 		if err != nil {
 			sp.logger.Error(err, "Failed to select item, skipping priority band for this cycle",
 				"priority", priority, "priorityName", originalBand.PriorityName())
@@ -311,7 +311,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		// --- Viability Check (Saturation/HoL Blocking) ---
 		req := item.OriginalRequest()
 		candidates := sp.podLocator.Locate(ctx, req.GetMetadata())
-		if sp.saturationDetector.IsSaturated(ctx, candidates) {
+		if sp.saturationDetector.Saturation(ctx, candidates) >= 1.0 {
 			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
 				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
 			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
@@ -330,29 +330,25 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	return false
 }
 
-// selectItem applies the configured inter- and intra-flow dispatch policies to select a single item.
-func (sp *ShardProcessor) selectItem(band framework.PriorityBandAccessor) (types.QueueItemAccessor, error) {
-	interP, err := sp.shard.InterFlowDispatchPolicy(band.Priority())
+// selectItem applies the configured fairness and ordering policies to select a single item.
+func (sp *ShardProcessor) selectItem(
+	ctx context.Context,
+	flowGroup flowcontrol.PriorityBandAccessor,
+) (types.QueueItemAccessor, error) {
+	fairnessP, err := sp.shard.FairnessPolicy(flowGroup.Priority())
 	if err != nil {
-		return nil, fmt.Errorf("could not get InterFlowDispatchPolicy: %w", err)
+		return nil, fmt.Errorf("could not get FairnessPolicy: %w", err)
 	}
-	queue, err := interP.SelectQueue(band)
+	queue, err := fairnessP.Pick(ctx, flowGroup)
 	if err != nil {
-		return nil, fmt.Errorf("InterFlowDispatchPolicy %q failed to select queue: %w", interP.Name(), err)
+		return nil, fmt.Errorf("FairnessPolicy %q failed to select queue: %w", fairnessP.TypedName(), err)
 	}
 	if queue == nil {
 		return nil, nil
 	}
-	key := queue.FlowKey()
-	intraP, err := sp.shard.IntraFlowDispatchPolicy(key)
-	if err != nil {
-		return nil, fmt.Errorf("could not get IntraFlowDispatchPolicy for flow %s: %w", key, err)
-	}
-	item, err := intraP.SelectItem(queue)
-	if err != nil {
-		return nil, fmt.Errorf("IntraFlowDispatchPolicy %q failed to select item for flow %s: %w", intraP.Name(), key, err)
-	}
-	return item, nil
+	// The queue itself is responsible for explicit ordering via its configured OrderingPolicy.
+	// We simply peek at the head.
+	return queue.PeekHead(), nil
 }
 
 // dispatchItem handles the final steps of dispatching an item: removing it from the queue and finalizing its outcome.
@@ -476,14 +472,14 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 
 	// Phase 1: Collect all queues to be processed into a single slice.
 	// This avoids holding locks on the shard while processing, and allows us to determine the optimal number of workers.
-	var queuesToProcess []framework.FlowQueueAccessor
+	var queuesToProcess []flowcontrol.FlowQueueAccessor
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		band, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
 			logger.Error(err, "Failed to get PriorityBandAccessor", "priority", priority)
 			continue
 		}
-		band.IterateQueues(func(queue framework.FlowQueueAccessor) bool {
+		band.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) bool {
 			queuesToProcess = append(queuesToProcess, queue)
 			return true // Continue iterating.
 		})
@@ -499,7 +495,7 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 	numWorkers := min(maxCleanupWorkers, len(queuesToProcess))
 
 	// Phase 3: Create a worker pool to process the queues.
-	tasks := make(chan framework.FlowQueueAccessor)
+	tasks := make(chan flowcontrol.FlowQueueAccessor)
 
 	var wg sync.WaitGroup
 	for range numWorkers {

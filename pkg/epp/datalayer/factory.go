@@ -23,6 +23,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 const (
@@ -48,7 +50,7 @@ type PoolInfo interface {
 // pooled memory or other management chores in the implementation.
 type EndpointFactory interface {
 	SetSources(sources []DataSource)
-	NewEndpoint(parent context.Context, inEnpointMetadata *EndpointMetadata, poolinfo PoolInfo) Endpoint
+	NewEndpoint(parent context.Context, inEnpointMetadata *fwkdl.EndpointMetadata, poolinfo PoolInfo) Endpoint
 	ReleaseEndpoint(ep Endpoint)
 }
 
@@ -81,7 +83,7 @@ func (lc *EndpointLifecycle) SetSources(sources []DataSource) {
 // NewEndpoint implements EndpointFactory.NewEndpoint.
 // Creates a new endpoint and starts its associated collector with its own ticker.
 // Guards against multiple concurrent calls for the same endpoint.
-func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *EndpointMetadata, _ PoolInfo) Endpoint {
+func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *fwkdl.EndpointMetadata, _ PoolInfo) Endpoint {
 	key := types.NamespacedName{Namespace: inEndpointMetadata.GetNamespacedName().Namespace, Name: inEndpointMetadata.GetNamespacedName().Name}
 	logger := log.FromContext(parent).WithValues("pod", key)
 

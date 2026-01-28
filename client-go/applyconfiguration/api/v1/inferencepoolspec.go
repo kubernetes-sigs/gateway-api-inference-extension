@@ -18,11 +18,16 @@ limitations under the License.
 
 package v1
 
+import (
+	apiv1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+)
+
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
 type InferencePoolSpecApplyConfiguration struct {
 	Selector          *LabelSelectorApplyConfiguration     `json:"selector,omitempty"`
 	TargetPorts       []PortApplyConfiguration             `json:"targetPorts,omitempty"`
+	AppProtocol       *apiv1.AppProtocol                   `json:"appProtocol,omitempty"`
 	EndpointPickerRef *EndpointPickerRefApplyConfiguration `json:"endpointPickerRef,omitempty"`
 }
 
@@ -50,6 +55,14 @@ func (b *InferencePoolSpecApplyConfiguration) WithTargetPorts(values ...*PortApp
 		}
 		b.TargetPorts = append(b.TargetPorts, *values[i])
 	}
+	return b
+}
+
+// WithAppProtocol sets the AppProtocol field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the AppProtocol field is set to the value of the last call.
+func (b *InferencePoolSpecApplyConfiguration) WithAppProtocol(value apiv1.AppProtocol) *InferencePoolSpecApplyConfiguration {
+	b.AppProtocol = &value
 	return b
 }
 

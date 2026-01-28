@@ -19,13 +19,25 @@ package datalayer
 import (
 	"fmt"
 	"sync/atomic"
+
+	"k8s.io/apimachinery/pkg/types"
+
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
+
+// Addressable supports getting an IP address and a namespaced name.
+type Addressable interface {
+	GetIPAddress() string
+	GetPort() string
+	GetMetricsHost() string
+	GetNamespacedName() types.NamespacedName
+}
 
 // EndpointMetaState allows management of the EndpointMetadata related attributes.
 type EndpointMetaState interface {
-	GetMetadata() *EndpointMetadata
-	UpdateMetadata(*EndpointMetadata)
-	GetAttributes() *Attributes
+	GetMetadata() *fwkdl.EndpointMetadata
+	UpdateMetadata(*fwkdl.EndpointMetadata)
+	GetAttributes() AttributeMap
 }
 
 // EndpointMetricsState allows management of the Metrics related attributes.
@@ -39,20 +51,19 @@ type Endpoint interface {
 	fmt.Stringer
 	EndpointMetaState
 	EndpointMetricsState
-	AttributeMap
 }
 
 // ModelServer is an implementation of the Endpoint interface.
 type ModelServer struct {
-	pod        atomic.Pointer[EndpointMetadata]
+	pod        atomic.Pointer[fwkdl.EndpointMetadata]
 	metrics    atomic.Pointer[Metrics]
-	attributes *Attributes
+	attributes AttributeMap
 }
 
 // NewEndpoint returns a new ModelServer with the given EndpointMetadata and Metrics.
-func NewEndpoint(meta *EndpointMetadata, metrics *Metrics) *ModelServer {
+func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *Metrics) *ModelServer {
 	if meta == nil {
-		meta = &EndpointMetadata{}
+		meta = &fwkdl.EndpointMetadata{}
 	}
 	if metrics == nil {
 		metrics = NewMetrics()
@@ -68,14 +79,14 @@ func NewEndpoint(meta *EndpointMetadata, metrics *Metrics) *ModelServer {
 // String returns a representation of the ModelServer. For brevity, only names of
 // extended attributes are returned and not their values.
 func (srv *ModelServer) String() string {
-	return fmt.Sprintf("Metadata: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.Keys())
+	return fmt.Sprintf("Metadata: %v; Metrics: %v; Attributes: %v", srv.GetMetadata(), srv.GetMetrics(), srv.GetAttributes().Keys())
 }
 
-func (srv *ModelServer) GetMetadata() *EndpointMetadata {
+func (srv *ModelServer) GetMetadata() *fwkdl.EndpointMetadata {
 	return srv.pod.Load()
 }
 
-func (srv *ModelServer) UpdateMetadata(pod *EndpointMetadata) {
+func (srv *ModelServer) UpdateMetadata(pod *fwkdl.EndpointMetadata) {
 	srv.pod.Store(pod)
 }
 
@@ -87,19 +98,7 @@ func (srv *ModelServer) UpdateMetrics(metrics *Metrics) {
 	srv.metrics.Store(metrics)
 }
 
-func (srv *ModelServer) Put(key string, value Cloneable) {
-	srv.attributes.Put(key, value)
-}
-
-func (srv *ModelServer) Get(key string) (Cloneable, bool) {
-	return srv.attributes.Get(key)
-}
-
-func (srv *ModelServer) Keys() []string {
-	return srv.attributes.Keys()
-}
-
-func (srv *ModelServer) GetAttributes() *Attributes {
+func (srv *ModelServer) GetAttributes() AttributeMap {
 	return srv.attributes
 }
 

@@ -80,6 +80,19 @@ type InferencePoolSpec struct {
 	// +required
 	TargetPorts []Port `json:"targetPorts,omitempty"`
 
+	// AppProtocol describes the application protocol for all the target ports.
+	//
+	// If unspecified, the protocol defaults to HTTP/1.1.
+	//
+	// Supported values include:
+	// * "http": HTTP/1.1. This is the default.
+	// * "kubernetes.io/h2c": HTTP/2 over cleartext.
+	//
+	// +kubebuilder:validation:Enum=http;"kubernetes.io/h2c"
+	// +kubebuilder:default="http"
+	// +optional
+	AppProtocol AppProtocol `json:"appProtocol,omitempty"`
+
 	// EndpointPickerRef is a reference to the Endpoint Picker extension and its
 	// associated configuration.
 	//
@@ -95,6 +108,20 @@ type Port struct {
 	// +required
 	Number PortNumber `json:"number,omitempty"`
 }
+
+// AppProtocol describes the application protocol for a port.
+type AppProtocol string
+
+const (
+	// AppProtocolHTTP represents the HTTP/1.1 protocol.
+	// This is the default protocol if AppProtocol is unspecified.
+	AppProtocolHTTP AppProtocol = "http"
+
+	// AppProtocolH2C represents HTTP/2 over cleartext (h2c).
+	// This protocol is typically used for gRPC workloads where TLS is terminated
+	// at the Gateway or not used within the cluster.
+	AppProtocolH2C AppProtocol = "kubernetes.io/h2c"
+)
 
 // EndpointPickerRef specifies a reference to an Endpoint Picker extension and its
 // associated configuration.

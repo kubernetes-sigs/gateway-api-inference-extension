@@ -19,10 +19,10 @@ limitations under the License.
 //
 // # Role in Flow Control (The Gatekeeper)
 //
-// The Detector implements the SaturationDetector interface to act as a "Circuit Breaker".
-// It signals saturation when every available candidate endpoint has reached the configured MaxConcurrency limit.
-// This indicates that the backend pool has no remaining capacity for new work, triggering the Flow Controller to queue
-// incoming requests.
+// The Detector implements the SaturationDetector interface to provide a utilization gradient, allowing the Flow
+// Controller to apply proportional backpressure.
+//
+//	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity
 //
 // # Role in Scheduling (The Traffic Shaper)
 //
@@ -55,17 +55,16 @@ import (
 	"sync/atomic"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const ConcurrencyDetectorType = "concurrency-detector"
 
 func init() {
-	plugins.Register(ConcurrencyDetectorType, func(_ string, params json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+	fwkplugin.Register(ConcurrencyDetectorType, func(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		var cfg Config
 		if len(params) > 0 {
 			if err := json.Unmarshal(params, &cfg); err != nil {
@@ -106,38 +105,35 @@ func NewDetector(config Config) *Detector {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (d *Detector) TypedName() plugins.TypedName {
-	return plugins.TypedName{
+func (d *Detector) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{
 		Type: ConcurrencyDetectorType,
 		Name: ConcurrencyDetectorType,
 	}
 }
 
-// IsSaturated acts as the global circuit breaker.
+// Saturation calculates the saturation level of the pool.
 //
-// It iterates through the provided list of candidate endpoints. If it finds at least one endpoint where the current
-// in-flight requests are below the MaxConcurrency threshold, it returns false (not saturated), allowing the Flow
-// Controller to admit the request.
+// It returns an aggregate saturation signal where:
 //
-// If all candidate endpoints are at or above the MaxConcurrency limit, it returns true, signaling the Flow Controller
-// to halt dispatch and queue incoming requests.
-func (d *Detector) IsSaturated(ctx context.Context, candidateEndpoints []metrics.PodMetrics) bool {
-	if len(candidateEndpoints) == 0 {
-		return true
-	}
-
+//	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity.
+func (d *Detector) Saturation(_ context.Context, candidateEndpoints []metrics.PodMetrics) float64 {
+	var totalInflight, totalCapacity int64
 	for _, endpoint := range candidateEndpoints {
 		if endpoint.GetMetadata() == nil {
 			continue
 		}
-
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
 		inflight := d.tracker.get(endpointID)
-		if inflight < d.config.MaxConcurrency {
-			return false
-		}
+		totalInflight += inflight
+		totalCapacity += d.config.MaxConcurrency
 	}
-	return true
+
+	if totalCapacity == 0 {
+		return 1.0
+	}
+
+	return float64(totalInflight) / float64(totalCapacity)
 }
 
 // Filter blocks traffic to specific endpoints that are physically saturated or exceeding their safety limits.
@@ -145,14 +141,14 @@ func (d *Detector) IsSaturated(ctx context.Context, candidateEndpoints []metrics
 // It applies a relaxed limit (MaxConcurrency * (1 + Headroom)) to allow for scheduling flexibility and burst tolerance.
 func (d *Detector) Filter(
 	_ context.Context,
-	_ *types.CycleState,
-	_ *types.LLMRequest,
-	endpoints []types.Endpoint,
-) []types.Endpoint {
+	_ *framework.CycleState,
+	_ *framework.LLMRequest,
+	endpoints []framework.Endpoint,
+) []framework.Endpoint {
 	limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
 
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
-	filtered := make([]types.Endpoint, 0, len(endpoints))
+	filtered := make([]framework.Endpoint, 0, len(endpoints))
 
 	for _, endpoint := range endpoints {
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
@@ -165,16 +161,16 @@ func (d *Detector) Filter(
 
 // PreRequest increments the atomic in-flight counter for the target endpoint.
 // We assume the scheduling result is valid based on the Director's contract.
-func (d *Detector) PreRequest(_ context.Context, _ *types.LLMRequest, result *types.SchedulingResult) {
+func (d *Detector) PreRequest(_ context.Context, _ *framework.LLMRequest, result *framework.SchedulingResult) {
 	d.tracker.inc(result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String())
 }
 
 // ResponseComplete decrements the atomic in-flight counter for the target endpoint.
 func (d *Detector) ResponseComplete(
 	_ context.Context,
-	_ *types.LLMRequest,
+	_ *framework.LLMRequest,
 	_ *requestcontrol.Response,
-	targetEndpoint *datalayer.EndpointMetadata,
+	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
 	d.tracker.dec(targetEndpoint.NamespacedName.String())
 }

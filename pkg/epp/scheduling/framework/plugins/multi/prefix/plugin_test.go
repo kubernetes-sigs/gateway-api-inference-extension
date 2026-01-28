@@ -29,39 +29,73 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // static check to ensure Plugin implements the PrepareDataPlugin interface.
 var _ requestcontrol.PrepareDataPlugin = &Plugin{}
 
+func TestPrefixPluginValidation(t *testing.T) {
+	validConfigs := []Config{{
+		AutoTune:               false,
+		BlockSizeTokens:        1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}, {
+		AutoTune:               false,
+		BlockSize:              1,
+		BlockSizeTokens:        1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}}
+	invalidConfigs := []Config{{
+		AutoTune:               false,
+		BlockSize:              1,
+		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
+		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
+	}}
+
+	for _, config := range validConfigs {
+		_, err := New(context.Background(), config)
+		assert.NoError(t, err)
+	}
+
+	for _, config := range invalidConfigs {
+		_, err := New(context.Background(), config)
+		assert.Error(t, err)
+	}
+}
+
 func TestPrefixPluginCompletion(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		AutoTune:               false,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics()}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics()}
-	endpoint3 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, Metrics: datalayer.NewMetrics()}
-	endpoints := []types.Endpoint{endpoint1, endpoint2, endpoint3}
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, datalayer.NewMetrics(), nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, datalayer.NewMetrics(), nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, datalayer.NewMetrics(), nil)
+	endpoints := []fwksched.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
-	req1 := &types.LLMRequest{
+	req1 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "aaaaaa",
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req1, endpoints)
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -72,11 +106,11 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	// Simulate pod1 was picked and pod3 was picked as a prefill node.
-	schedulingResult := &types.SchedulingResult{
+	schedulingResult := &fwksched.SchedulingResult{
 		PrimaryProfileName: "default",
-		ProfileResults: map[string]*types.ProfileRunResult{
-			"default":                          {TargetEndpoints: []types.Endpoint{endpoint1}},
-			Experimental_DefaultPrefillProfile: {TargetEndpoints: []types.Endpoint{endpoint3}},
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
+			"default":                          {TargetEndpoints: []fwksched.Endpoint{endpoint1}},
+			Experimental_DefaultPrefillProfile: {TargetEndpoints: []fwksched.Endpoint{endpoint3}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult)
@@ -84,17 +118,17 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
-	req2 := &types.LLMRequest{
+	req2 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model2",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "bbbbbb",
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req2, endpoints)
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -105,27 +139,27 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	// Simulate pod2 was picked.
-	schedulingResult = &types.SchedulingResult{
+	schedulingResult = &fwksched.SchedulingResult{
 		PrimaryProfileName: "default",
-		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetEndpoints: []types.Endpoint{endpoint2}},
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
+			"default": {TargetEndpoints: []fwksched.Endpoint{endpoint2}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req2, schedulingResult)
 	plugin.wg.Wait()
 
 	// Third request shares partial prefix with first one.
-	req3 := &types.LLMRequest{
+	req3 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "aaaabbbb",
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req3, endpoints)
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -136,27 +170,27 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	assert.Equal(t, 0.5, scores[endpoint3], "score should be 0.5 - the model and the first prefix block match on the prefill node")
 	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
-	schedulingResult = &types.SchedulingResult{
+	schedulingResult = &fwksched.SchedulingResult{
 		PrimaryProfileName: "default",
-		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
+			"default": {TargetEndpoints: []fwksched.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req3, schedulingResult)
 	plugin.wg.Wait()
 
 	// 4th request is same as req3 except the model is different, still no match.
-	req4 := &types.LLMRequest{
+	req4 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model-new",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "aaaabbbb",
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req4, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req4, endpoints)
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -166,27 +200,27 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	assert.Equal(t, float64(0), scores[endpoint1], "score for endpoint1")
 	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
-	schedulingResult = &types.SchedulingResult{
+	schedulingResult = &fwksched.SchedulingResult{
 		PrimaryProfileName: "default",
-		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
+			"default": {TargetEndpoints: []fwksched.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req4, schedulingResult)
 	plugin.wg.Wait()
 
 	// 5th request shares partial prefix with 3rd one.
-	req5 := &types.LLMRequest{
+	req5 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "aaaabbbbcccc",
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req5, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req5, endpoints)
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
@@ -196,10 +230,10 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	assert.Equal(t, 2./3, scores[endpoint1], "score should be 2./3 - the model and the first 2 prefix blocks match")
 	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
-	schedulingResult = &types.SchedulingResult{
+	schedulingResult = &fwksched.SchedulingResult{
 		PrimaryProfileName: "default",
-		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
+			"default": {TargetEndpoints: []fwksched.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req5, schedulingResult)
@@ -208,30 +242,31 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 func TestPrefixPluginChatCompletions(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
-	endpoints := []types.Endpoint{endpoint1}
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &datalayer.Metrics{}, nil)
+	endpoints := []fwksched.Endpoint{endpoint1}
 
 	// Test with chat completions request
-	req1 := &types.LLMRequest{
+	req1 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
-					{Role: "user", Content: types.Content{Raw: "hello world"}},
-					{Role: "assistant", Content: types.Content{Raw: "hi there"}},
+		Body: &fwksched.LLMRequestBody{
+			ChatCompletions: &fwksched.ChatCompletionsRequest{
+				Messages: []fwksched.Message{
+					{Role: "user", Content: fwksched.Content{Raw: "hello world"}},
+					{Role: "assistant", Content: fwksched.Content{Raw: "hi there"}},
 				},
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req1, endpoints)
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Chat completions - Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Should have some hashes for the JSON-encoded messages
@@ -242,31 +277,33 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 
 func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	config := Config{
-		BlockSize:              8, // Use larger block size for more predictable JSON marshaling
+		BlockSizeTokens:        2, // Use larger block size for more predictable JSON marshaling
+		AutoTune:               false,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: &datalayer.Metrics{}}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: &datalayer.Metrics{}}
-	endpoints := []types.Endpoint{endpoint1, endpoint2}
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &datalayer.Metrics{}, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, &datalayer.Metrics{}, nil)
+	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
-	req1 := &types.LLMRequest{
+	req1 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
-					{Role: "system", Content: types.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: types.Content{Raw: "Hello, how are you?"}},
+		Body: &fwksched.LLMRequestBody{
+			ChatCompletions: &fwksched.ChatCompletionsRequest{
+				Messages: []fwksched.Message{
+					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
 				},
 			},
 		},
 	}
-	scores := plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req1, endpoints)
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Initial conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	initialHashCount := len(state.PrefixHashes)
@@ -276,32 +313,32 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	assert.Equal(t, float64(0), scores[endpoint2], "score for endpoint2")
 
 	// Simulate pod1 was picked
-	schedulingResult := &types.SchedulingResult{
+	schedulingResult := &fwksched.SchedulingResult{
 		PrimaryProfileName: "default",
-		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
+			"default": {TargetEndpoints: []fwksched.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult)
 	plugin.wg.Wait()
 
 	// Second request adds assistant response and new user message (conversation grows)
-	req2 := &types.LLMRequest{
+	req2 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
-					{Role: "system", Content: types.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: types.Content{Raw: "Hello, how are you?"}},
-					{Role: "assistant", Content: types.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
-					{Role: "user", Content: types.Content{Raw: "Can you explain how prefix caching works?"}},
+		Body: &fwksched.LLMRequestBody{
+			ChatCompletions: &fwksched.ChatCompletionsRequest{
+				Messages: []fwksched.Message{
+					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
+					{Role: "assistant", Content: fwksched.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
+					{Role: "user", Content: fwksched.Content{Raw: "Can you explain how prefix caching works?"}},
 				},
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req2, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req2, endpoints)
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Extended conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	extendedHashCount := len(state.PrefixHashes)
@@ -319,31 +356,31 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Third request continues the conversation even further
-	req3 := &types.LLMRequest{
+	req3 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			ChatCompletions: &types.ChatCompletionsRequest{
-				Messages: []types.Message{
-					{Role: "system", Content: types.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: types.Content{Raw: "Hello, how are you?"}},
-					{Role: "assistant", Content: types.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
-					{Role: "user", Content: types.Content{Raw: "Can you explain how prefix caching works?"}},
-					{Role: "assistant", Content: types.Content{Raw: "Prefix caching is a technique where..."}},
-					{Role: "user", Content: types.Content{Raw: "That's very helpful, thank you!"}},
+		Body: &fwksched.LLMRequestBody{
+			ChatCompletions: &fwksched.ChatCompletionsRequest{
+				Messages: []fwksched.Message{
+					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
+					{Role: "assistant", Content: fwksched.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
+					{Role: "user", Content: fwksched.Content{Raw: "Can you explain how prefix caching works?"}},
+					{Role: "assistant", Content: fwksched.Content{Raw: "Prefix caching is a technique where..."}},
+					{Role: "user", Content: fwksched.Content{Raw: "That's very helpful, thank you!"}},
 				},
 			},
 		},
 	}
-	scores = plugin.Score(context.Background(), types.NewCycleState(), req3, endpoints)
-	state, err = plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, plugins.StateKey(plugin.TypedName().String()))
+	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req3, endpoints)
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	longHashCount := len(state.PrefixHashes)
 	assert.Greater(t, longHashCount, extendedHashCount, "long conversation should have even more hashes")
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
-	// pod1 should have an even higher cache hit rate now
+	// endpoint1 should have an even higher cache hit rate now
 	cachedBlocks = state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().NamespacedName)]
 	expectedScore = float64(cachedBlocks) / float64(longHashCount)
 	assert.Equal(t, expectedScore, scores[endpoint1], "endpoint1 should have higher prefix cache hit")
@@ -353,16 +390,16 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 
 // TestPrefixPluginStress is a stress test for the prefix scoring plugin, using prompts of increasing length.
 func BenchmarkPrefixPluginStress(b *testing.B) {
-	blockSize := 4
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
 
-	plugin := New(context.Background(), config)
-	types.NewCycleState()
+	plugin, err := New(context.Background(), config)
+	assert.NoError(b, err)
+	fwksched.NewCycleState()
 	var promptLen []int
 	for i := 1; i <= 1024; {
 		promptLen = append(promptLen, i)
@@ -374,20 +411,18 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 		b.Run(fmt.Sprintf("messages_%d_length_%d", i, v), func(b *testing.B) {
 			// Generate increasing-length random prompts
 			prompt := randomPrompt(4 + v)
-			endpoint := &types.PodMetrics{
-				EndpointMetadata: &datalayer.EndpointMetadata{
-					NamespacedName: k8stypes.NamespacedName{
-						Name: fmt.Sprintf("random-pod-%d", v),
-					},
+			endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
+				NamespacedName: k8stypes.NamespacedName{
+					Name: fmt.Sprintf("random-pod-%d", v),
 				},
-			}
+			}, nil, nil)
 
-			endpoints := []types.Endpoint{endpoint}
-			req := &types.LLMRequest{
+			endpoints := []fwksched.Endpoint{endpoint}
+			req := &fwksched.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "model-stress",
-				Body: &types.LLMRequestBody{
-					Completions: &types.CompletionsRequest{
+				Body: &fwksched.LLMRequestBody{
+					Completions: &fwksched.CompletionsRequest{
 						Prompt: prompt,
 					},
 				},
@@ -395,7 +430,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 
 			b.ResetTimer()
 			// Benchmark the scoring operation
-			scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
+			scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req, endpoints)
 			_ = scores // Use the result to prevent optimization
 
 			// Clean up state for next iteration
@@ -416,29 +451,29 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 		{
 			name: "all zero",
 			config: Config{
-				BlockSize:              0,
+				BlockSizeTokens:        0,
 				MaxPrefixBlocksToMatch: 0,
 				LRUCapacityPerServer:   0,
 			},
-			expectBlock:    DefaultBlockSize,
+			expectBlock:    DefaultBlockSizeTokens,
 			expectMaxMatch: DefaultMaxPrefixBlocks,
 			expectCapacity: DefaultLRUCapacityPerServer,
 		},
 		{
 			name: "negative values",
 			config: Config{
-				BlockSize:              -5,
+				BlockSizeTokens:        -5,
 				MaxPrefixBlocksToMatch: -10,
 				LRUCapacityPerServer:   -100,
 			},
-			expectBlock:    DefaultBlockSize,
+			expectBlock:    DefaultBlockSizeTokens,
 			expectMaxMatch: DefaultMaxPrefixBlocks,
 			expectCapacity: DefaultLRUCapacityPerServer,
 		},
 		{
 			name: "mixed valid and invalid",
 			config: Config{
-				BlockSize:              32,    // valid
+				BlockSizeTokens:        32,    // valid
 				MaxPrefixBlocksToMatch: -1,    // invalid
 				LRUCapacityPerServer:   50000, // valid
 			},
@@ -449,7 +484,7 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 		{
 			name: "all valid",
 			config: Config{
-				BlockSize:              64,
+				BlockSizeTokens:        64,
 				MaxPrefixBlocksToMatch: 200,
 				LRUCapacityPerServer:   30000,
 			},
@@ -462,11 +497,12 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			plugin := New(context.Background(), tt.config)
+			plugin, err := New(context.Background(), tt.config)
 
+			assert.NoError(t, err)
 			assert.NotEmpty(t, plugin)
 			assert.NotEmpty(t, plugin.indexer)
-			assert.Equal(t, tt.expectBlock, plugin.config.BlockSize)
+			assert.Equal(t, tt.expectBlock, plugin.config.BlockSizeTokens)
 			assert.Equal(t, tt.expectMaxMatch, plugin.config.MaxPrefixBlocksToMatch)
 			assert.Equal(t, tt.expectCapacity, plugin.config.LRUCapacityPerServer)
 		})
@@ -476,20 +512,18 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 func TestPrefixPluginAutoTune(t *testing.T) {
 	// Setup common test data
 	podName := "pod-autotune"
-	endpoint := &types.PodMetrics{
-		EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
-		Metrics: &datalayer.Metrics{
+	endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
+		&datalayer.Metrics{
 			CacheBlockSize:    16,   // 16 tokens * 4 chars/token = 64 chars per block
 			CacheNumGPUBlocks: 1000, // 1000 blocks capacity
-		},
-	}
-	endpoints := []types.Endpoint{endpoint}
+		}, nil)
+	endpoints := []fwksched.Endpoint{endpoint}
 
-	req := &types.LLMRequest{
+	req := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				// Length 128 chars.
 				// If AutoTune=true (block size 64): 2 blocks
 				// If AutoTune=false (block size 32): 4 blocks
@@ -501,18 +535,19 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Enabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               true,
-			BlockSize:              32, // Should be ignored in favor of pod metrics (64)
+			BlockSizeTokens:        32, // Should be ignored in favor of pod metrics (64)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			// Should be ignored in favor of pod metrics (1000)
 			LRUCapacityPerServer: 1,
 		}
-		plugin := New(context.Background(), config)
+		plugin, err := New(context.Background(), config)
+		assert.NoError(t, err)
 
 		// 1. Verify Score uses pod metrics for block size
-		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
+		scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
 		// Block size from pod is 16 tokens * 4 = 64 chars.
 		// Prompt is 128 chars.
@@ -520,10 +555,10 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		assert.Equal(t, 2, len(state.PrefixHashes), "Should use pod block size (64 chars) -> 2 body blocks")
 
 		// 2. Verify PreRequest uses pod metrics for capacity
-		schedulingResult := &types.SchedulingResult{
+		schedulingResult := &fwksched.SchedulingResult{
 			PrimaryProfileName: "default",
-			ProfileResults: map[string]*types.ProfileRunResult{
-				"default": {TargetEndpoints: []types.Endpoint{endpoint}},
+			ProfileResults: map[string]*fwksched.ProfileRunResult{
+				"default": {TargetEndpoints: []fwksched.Endpoint{endpoint}},
 			},
 		}
 		plugin.PreRequest(context.Background(), req, schedulingResult)
@@ -536,29 +571,30 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	t.Run("AutoTune Disabled", func(t *testing.T) {
 		config := Config{
 			AutoTune:               false,
-			BlockSize:              32, // Should be used (32 chars)
+			BlockSizeTokens:        8, // Should be used (32 chars, 8 tokens)
 			MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 			LRUCapacityPerServer:   1, // Should be used, and the first hash should be evicted due to the small
 		}
-		plugin := New(context.Background(), config)
+		plugin, err := New(context.Background(), config)
+		assert.NoError(t, err)
 
 		// 1. Verify Score uses config BlockSize
 		req.RequestId = uuid.NewString() // New request ID
-		scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
+		scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := plugins.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, plugins.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
-		// Block size from config is 32 chars.
+		// Block size from config is 8 tokens (32 chars).
 		// Prompt is 128 chars.
 		// 128 / 32 = 4 chunks.
-		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (32 chars) -> 4 body blocks")
+		assert.Equal(t, 4, len(state.PrefixHashes), "Should use config block size (8 tokens) -> 4 body blocks")
 
 		// 2. Verify PreRequest uses config LRUCapacityPerServer
-		schedulingResult := &types.SchedulingResult{
+		schedulingResult := &fwksched.SchedulingResult{
 			PrimaryProfileName: "default",
-			ProfileResults: map[string]*types.ProfileRunResult{
-				"default": {TargetEndpoints: []types.Endpoint{endpoint}},
+			ProfileResults: map[string]*fwksched.ProfileRunResult{
+				"default": {TargetEndpoints: []fwksched.Endpoint{endpoint}},
 			},
 		}
 		plugin.PreRequest(context.Background(), req, schedulingResult)
@@ -580,75 +616,76 @@ func randomPrompt(n int) string {
 
 func TestPrepareRequestData(t *testing.T) {
 	config := Config{
-		BlockSize:              4,
+		BlockSizeTokens:        1,
 		MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(t, err)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, Metrics: datalayer.NewMetrics(), AttributeMap: datalayer.NewAttributes()}
-	endpoints := []types.Endpoint{endpoint1, endpoint2}
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, datalayer.NewMetrics(), datalayer.NewAttributes())
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, datalayer.NewMetrics(), datalayer.NewAttributes())
+	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.
-	req1 := &types.LLMRequest{
+	req1 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "aaaabbbb",
 			},
 		},
 	}
-	_ = plugin.Score(context.Background(), types.NewCycleState(), req1, endpoints)
-	schedulingResult := &types.SchedulingResult{
+	_ = plugin.Score(context.Background(), fwksched.NewCycleState(), req1, endpoints)
+	schedulingResult := &fwksched.SchedulingResult{
 		PrimaryProfileName: "default",
-		ProfileResults: map[string]*types.ProfileRunResult{
-			"default": {TargetEndpoints: []types.Endpoint{endpoint1}},
+		ProfileResults: map[string]*fwksched.ProfileRunResult{
+			"default": {TargetEndpoints: []fwksched.Endpoint{endpoint1}},
 		},
 	}
 	plugin.PreRequest(context.Background(), req1, schedulingResult)
 	plugin.wg.Wait()
 
 	// Second request that shares a prefix.
-	req2 := &types.LLMRequest{
+	req2 := &fwksched.LLMRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &types.LLMRequestBody{
-			Completions: &types.CompletionsRequest{
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
 				Prompt: "aaaacccc",
 			},
 		},
 	}
 
-	err := plugin.PrepareRequestData(context.Background(), req2, endpoints)
+	err = plugin.PrepareRequestData(context.Background(), req2, endpoints)
 	assert.NoError(t, err)
 
 	// Verify pod1 has the correct prefix match info
 	info1, ok := endpoint1.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
-	assert.Equal(t, 1, prefixInfo1.MatchLength()) // "aaaa" matches
-	assert.Equal(t, 2, prefixInfo1.TotalLength()) // "aaaacccc" -> 2 blocks
+	assert.Equal(t, 1, prefixInfo1.MatchBlocks()) // one block ("aaaa") matches
+	assert.Equal(t, 2, prefixInfo1.TotalBlocks()) // "aaaacccc" -> 2 blocks
 
 	// Verify pod2 has no match info
 	info2, ok := endpoint2.Get(dplugins.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
 	prefixInfo2 := info2.(*dplugins.PrefixCacheMatchInfo)
-	assert.Equal(t, 0, prefixInfo2.MatchLength()) // No match for pod2
-	assert.Equal(t, 2, prefixInfo2.TotalLength())
+	assert.Equal(t, 0, prefixInfo2.MatchBlocks()) // No match for pod2
+	assert.Equal(t, 2, prefixInfo2.TotalBlocks())
 }
 
 // BenchmarkPrefixPluginChatCompletionsStress is a stress test for chat completions with varying message counts and lengths
 func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
-	blockSize := 8
 	maxPrefixBlocks := 50000
 	config := Config{
-		BlockSize:              blockSize,
+		BlockSizeTokens:        2,
 		MaxPrefixBlocksToMatch: maxPrefixBlocks,
 		LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 	}
-	plugin := New(context.Background(), config)
+	plugin, err := New(context.Background(), config)
+	assert.NoError(b, err)
 
 	// Test scenarios: varying number of messages and message lengths
 	scenarios := []struct {
@@ -667,8 +704,8 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 	for _, scenario := range scenarios {
 		b.Run(fmt.Sprintf("messages_%d_length_%d", scenario.messageCount, scenario.messageLength), func(b *testing.B) {
 			// Generate messages for this scenario
-			messages := make([]types.Message, scenario.messageCount)
-			messages[0] = types.Message{Role: "system", Content: types.Content{Raw: "You are a helpful assistant."}}
+			messages := make([]fwksched.Message, scenario.messageCount)
+			messages[0] = fwksched.Message{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}}
 
 			for i := 1; i < scenario.messageCount; i++ {
 				role := "user"
@@ -676,23 +713,21 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 					role = "assistant"
 				}
 				content := randomPrompt(scenario.messageLength)
-				messages[i] = types.Message{Role: role, Content: types.Content{Raw: content}}
+				messages[i] = fwksched.Message{Role: role, Content: fwksched.Content{Raw: content}}
 			}
 
-			endpoint := &types.PodMetrics{
-				EndpointMetadata: &datalayer.EndpointMetadata{
-					NamespacedName: k8stypes.NamespacedName{
-						Name: fmt.Sprintf("chat-pod-%d-%d", scenario.messageCount, scenario.messageLength),
-					},
+			endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
+				NamespacedName: k8stypes.NamespacedName{
+					Name: fmt.Sprintf("chat-pod-%d-%d", scenario.messageCount, scenario.messageLength),
 				},
-			}
-			endpoints := []types.Endpoint{endpoint}
+			}, nil, nil)
+			endpoints := []fwksched.Endpoint{endpoint}
 
-			req := &types.LLMRequest{
+			req := &fwksched.LLMRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "chat-model-stress",
-				Body: &types.LLMRequestBody{
-					ChatCompletions: &types.ChatCompletionsRequest{
+				Body: &fwksched.LLMRequestBody{
+					ChatCompletions: &fwksched.ChatCompletionsRequest{
 						Messages: messages,
 					},
 				},
@@ -701,7 +736,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// Benchmark the scoring operation
-				scores := plugin.Score(context.Background(), types.NewCycleState(), req, endpoints)
+				scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req, endpoints)
 				_ = scores // Use the result to prevent optimization
 
 				// Clean up state for next iteration

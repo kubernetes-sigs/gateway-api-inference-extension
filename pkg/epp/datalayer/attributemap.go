@@ -32,6 +32,7 @@ type AttributeMap interface {
 	Put(string, Cloneable)
 	Get(string) (Cloneable, bool)
 	Keys() []string
+	Clone() AttributeMap
 }
 
 // Attributes provides a goroutine-safe implementation of AttributeMap.
@@ -40,7 +41,7 @@ type Attributes struct {
 }
 
 // NewAttributes returns a new instance of Attributes.
-func NewAttributes() *Attributes {
+func NewAttributes() AttributeMap {
 	return &Attributes{}
 }
 
@@ -76,7 +77,7 @@ func (a *Attributes) Keys() []string {
 }
 
 // Clone creates a deep copy of the entire attribute map.
-func (a *Attributes) Clone() *Attributes {
+func (a *Attributes) Clone() AttributeMap {
 	clone := NewAttributes()
 	a.data.Range(func(key, value any) bool {
 		if sk, ok := key.(string); ok {

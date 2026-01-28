@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 func PodsWithFreshMetrics(stalenessThreshold time.Duration) func(PodMetrics) bool {
@@ -52,7 +53,7 @@ func (f *PodMetricsFactory) SetSources(_ []datalayer.DataSource) {
 	// no-op
 }
 
-func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *datalayer.EndpointMetadata, ds datalayer.PoolInfo) datalayer.Endpoint {
+func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) datalayer.Endpoint {
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,

@@ -22,105 +22,105 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 func TestFilter(t *testing.T) {
 	tests := []struct {
 		name   string
-		req    *types.LLMRequest
-		input  []types.Endpoint
-		output []types.Endpoint
+		req    *fwksched.LLMRequest
+		input  []fwksched.Endpoint
+		output []fwksched.Endpoint
 	}{
 		{
 			name: "header unset in request",
-			req:  &types.LLMRequest{}, // Deliberately unset
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
+			req:  &fwksched.LLMRequest{}, // Deliberately unset
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
 			},
-			output: []types.Endpoint{},
+			output: []fwksched.Endpoint{},
 		},
 		{
 			name: "header set but no IP match",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.99"}},
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
+			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.99"}},
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
 			},
-			output: []types.Endpoint{},
+			output: []fwksched.Endpoint{},
 		},
 		{
 			name: "IP-only header matches pod (port-agnostic)",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1"}},
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1"}},
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
 			},
-			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+			output: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
 			},
 		},
 		{
 			name: "IP:port header matches exact port",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:3002"}},
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
+			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:3002"}},
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}, nil, nil),
 			},
-			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+			output: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
 			},
 		},
 		{
 			name: "IP:port header with non-matching port produces no match",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:9999"}},
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}},
+			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:9999"}},
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
 			},
-			output: []types.Endpoint{},
+			output: []fwksched.Endpoint{},
 		},
 		{
 			name: "multiple header values (IP and IP:port) produce multiple matches in order and deduped",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.3:3004, 10.0.0.2, 10.0.0.3"}},
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}},
+			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.3:3004, 10.0.0.2, 10.0.0.3"}},
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}, nil, nil),
 			},
-			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}},
+			output: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.3", Port: "3004"}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}, nil, nil),
 			},
 		},
 		{
 			name: "IPv6 with brackets and port",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "[fd00::1]:3002"}},
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::2", Port: "3002"}},
+			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "[fd00::1]:3002"}},
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3002"}, nil, nil),
 			},
-			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
+			output: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}, nil, nil),
 			},
 		},
 		{
 			name: "IPv6 bare address (no port)",
-			req:  &types.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "fd00::2"}},
-			input: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::1", Port: "3002"}},
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::2", Port: "3004"}},
+			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "fd00::2"}},
+			input: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3004"}, nil, nil),
 			},
-			output: []types.Endpoint{
-				&types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{Address: "fd00::2", Port: "3004"}},
+			output: []fwksched.Endpoint{
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3004"}, nil, nil),
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := NewHeaderBasedTestingFilter().Filter(context.Background(), types.NewCycleState(), tc.req, tc.input)
-			if diff := cmp.Diff(tc.output, got); diff != "" {
+			got := NewHeaderBasedTestingFilter().Filter(context.Background(), fwksched.NewCycleState(), tc.req, tc.input)
+			if diff := cmp.Diff(tc.output, got, cmp.Comparer(fwksched.EndpointComparer)); diff != "" {
 				t.Fatalf("Unexpected output (-want +got): %s", diff)
 			}
 		})

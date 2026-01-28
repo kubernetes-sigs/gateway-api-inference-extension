@@ -29,8 +29,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
@@ -79,14 +81,14 @@ func TestLogger(t *testing.T) {
 	assert.Contains(t, logOutput, "\"Stale metrics\": \"[]\"")
 }
 
-var pod1 = &datalayer.EndpointMetadata{
+var pod1 = &fwkdl.EndpointMetadata{
 	NamespacedName: types.NamespacedName{
 		Name:      "pod1",
 		Namespace: "default",
 	},
 	Address: "1.2.3.4:5678",
 }
-var pod2 = &datalayer.EndpointMetadata{
+var pod2 = &fwkdl.EndpointMetadata{
 	NamespacedName: types.NamespacedName{
 		Name:      "pod2",
 		Namespace: "default",

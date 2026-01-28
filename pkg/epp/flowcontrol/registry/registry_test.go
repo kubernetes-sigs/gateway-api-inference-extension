@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,10 +30,10 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // --- Test Harness ---
@@ -49,6 +50,7 @@ type registryTestHarness struct {
 type harnessOptions struct {
 	config            *Config
 	initialShardCount int
+	manualGC          bool
 }
 
 // newRegistryTestHarness creates and starts a new `FlowRegistry` for testing.
@@ -69,16 +71,12 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 			shardCount = opts.initialShardCount
 		}
 
-		highBand, err := NewPriorityBandConfig(highPriority, "High")
-		require.NoError(t, err)
-		lowBand, err := NewPriorityBandConfig(lowPriority, "Low")
-		require.NoError(t, err)
-
 		cfg, err = NewConfig(
+			newTestPluginsHandle(t),
 			WithInitialShardCount(shardCount),
 			WithFlowGCTimeout(5*time.Minute),
-			WithPriorityBand(highBand),
-			WithPriorityBand(lowBand),
+			WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
+			WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
 		)
 		require.NoError(t, err, "Test setup: failed to create default config")
 	}
@@ -88,18 +86,20 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 	fr, err := NewFlowRegistry(cfg, logr.Discard(), registryOpts...)
 	require.NoError(t, err, "Test setup: NewFlowRegistry should not fail")
 
-	// Start the GC loop in the background.
-	ctx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		fr.Run(ctx)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		wg.Wait()
-	})
+	if !opts.manualGC {
+		// Start the GC loop in the background.
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fr.Run(ctx)
+		}()
+		t.Cleanup(func() {
+			cancel()
+			wg.Wait()
+		})
+	}
 
 	return &registryTestHarness{
 		t:         t,
@@ -135,28 +135,6 @@ func (h *registryTestHarness) openConnectionOnFlow(key types.FlowKey) {
 	err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error { return nil })
 	require.NoError(h.t, err, "Registering flow %s should not fail", key)
 	h.assertFlowExists(key, "Flow %s should exist after registration", key)
-}
-
-// --- Constructor and Lifecycle Tests ---
-
-func TestFlowRegistry_New(t *testing.T) {
-	t.Parallel()
-
-	t.Run("ShouldFail_WhenInitialShardCreationFails", func(t *testing.T) {
-		t.Parallel()
-
-		badBand, err := NewPriorityBandConfig(highPriority, "A", WithInterFlowPolicy("non-existent-policy"))
-		require.NoError(t, err)
-
-		config, err := NewConfig(WithPriorityBand(badBand))
-		require.NoError(t, err, "Test setup: creating the config object itself should not fail")
-
-		_, err = NewFlowRegistry(config, logr.Discard())
-
-		require.Error(t, err, "NewFlowRegistry should fail when initial shard setup fails")
-		assert.Contains(t, err.Error(), "failed to create inter-flow policy",
-			"Error message should reflect the root cause (policy creation failure)")
-	})
 }
 
 // --- `FlowRegistryClient` API Tests ---
@@ -198,17 +176,19 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 	t.Run("ShouldFail_WhenJITFails", func(t *testing.T) {
 		t.Parallel()
 
-		badPolicyName := intraflow.RegisteredPolicyName("non-existent-policy")
-		badBand, err := NewPriorityBandConfig(highPriority, "High", WithIntraFlowPolicy(badPolicyName))
+		handle := newTestPluginsHandle(t)
+		badQueueName := queue.RegisteredQueueName("non-existent-queue")
+		badBand, err := NewPriorityBandConfig(handle, highPriority, "High", WithQueue(badQueueName))
 		require.NoError(t, err)
 
 		// Create a Config that uses a mock checker to bypass the strict validation.
 		// The default checker would reject "non-existent-policy", but our mock says it's fine.
 		// This allows us to instantiate the Registry with a latent configuration bomb.
 		cfg, err := NewConfig(
+			handle,
 			WithPriorityBand(badBand),
 			withCapabilityChecker(&mockCapabilityChecker{
-				checkCompatibilityFunc: func(_ intraflow.RegisteredPolicyName, _ queue.RegisteredQueueName) error {
+				checkCompatibilityFunc: func(flowcontrol.OrderingPolicy, queue.RegisteredQueueName) error {
 					return nil // Approve everything.
 				},
 			}),
@@ -224,8 +204,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		})
 
 		require.Error(t, err, "WithConnection must return an error for a failed flow JIT registration")
-		assert.ErrorContains(t, err, "no IntraFlowDispatchPolicy registered",
-			"The returned error must propagate the reason")
+		assert.ErrorContains(t, err, "no SafeQueue registered", "The returned error must propagate the reason")
 	})
 
 	t.Run("Handle_Shards_ShouldReturnAllActiveShardsAndBeACopy", func(t *testing.T) {
@@ -486,10 +465,12 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			band, err := NewPriorityBandConfig(highPriority, "A", WithBandMaxBytes(bandCapacity))
+			handle := newTestPluginsHandle(t)
+			band, err := NewPriorityBandConfig(handle, highPriority, "A", WithBandMaxBytes(bandCapacity))
 			require.NoError(t, err)
 
 			config, err := NewConfig(
+				handle,
 				WithMaxBytes(globalCapacity),
 				WithInitialShardCount(tc.initialShardCount),
 				WithPriorityBand(band),
@@ -611,7 +592,7 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		newShard := h.fr.activeShards[1]
 		h.fr.mu.RUnlock()
 
-		_, policyErr := newShard.InterFlowDispatchPolicy(dynamicPrio)
+		_, policyErr := newShard.FairnessPolicy(dynamicPrio)
 		assert.NoError(t, policyErr, "New shard must have the dynamic priority band configured")
 
 		mq, err := newShard.ManagedQueue(key)
@@ -798,4 +779,673 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 		})
 		assert.Equal(t, numWorkers*opsPerWorker, flowCount, "All concurrently registered flows must be present")
 	})
+
+	t.Run("ConcurrentDynamicBandProvisioning_WithGC", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+
+		const (
+			numWorkers    = 10
+			numPriorities = 20 // Create 20 different dynamic bands
+			opsPerWorker  = 10
+		)
+
+		var wg sync.WaitGroup
+		wg.Add(numWorkers + 1) // +1 for GC goroutine
+
+		// Workers: Create flows at random priorities
+		for i := range numWorkers {
+			go func() {
+				defer wg.Done()
+				for j := range opsPerWorker {
+					priority := 100 + (j % numPriorities) // Rotate through priorities
+					key := types.FlowKey{
+						ID:       fmt.Sprintf("flow-%d-%d", i, j),
+						Priority: priority,
+					}
+					_ = h.fr.WithConnection(key, func(contracts.ActiveFlowConnection) error {
+						time.Sleep(1 * time.Millisecond)
+						return nil
+					})
+				}
+			}()
+		}
+
+		// Let workers create some bands before GC starts collecting
+		time.Sleep(50 * time.Millisecond)
+
+		// Check bands were created before GC collects them all
+		bandCount := 0
+		h.fr.priorityBandStates.Range(func(_, _ any) bool {
+			bandCount++
+			return true
+		})
+		require.True(t, bandCount > 0, "Dynamic bands should be created during concurrent workload")
+
+		// GC Worker: Constantly running GC cycles
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10; i++ {
+				h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+				h.fr.executeGCCycle()
+				time.Sleep(5 * time.Millisecond)
+			}
+		}()
+
+		wg.Wait()
+
+		// Primary assertion: no race detector failures
+		// Test completing without races proves concurrent band provisioning/GC is safe
+	})
+}
+
+func TestFlowRegistry_deletePriorityBand(t *testing.T) {
+	t.Parallel()
+
+	// highPriority (20) and lowPriority (10) come from package-level constants
+	const dynamicPrio = 120
+
+	t.Run("ShouldDeleteDynamicBandFromAllShards", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 3})
+
+		// Create a dynamic priority band via JIT provisioning
+		err := h.fr.ensurePriorityBand(dynamicPrio)
+		require.NoError(t, err)
+
+		// Verify band exists in registry config
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		require.True(t, exists, "Dynamic band should exist in registry config")
+
+		// Verify band exists in all shards
+		h.fr.mu.RLock()
+		shards := h.fr.allShards
+		h.fr.mu.RUnlock()
+
+		for i, shard := range shards {
+			_, ok := shard.priorityBands.Load(dynamicPrio)
+			require.True(t, ok, "Band should exist in shard %d", i)
+
+			shard.mu.RLock()
+			_, ok = shard.config.PriorityBands[dynamicPrio]
+			shard.mu.RUnlock()
+			require.True(t, ok, "Band should exist in shard %d config", i)
+		}
+
+		// Delete the band
+		h.fr.deletePriorityBand(dynamicPrio)
+
+		// Verify band removed from registry config
+		h.fr.mu.RLock()
+		_, exists = h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.False(t, exists, "Band should be removed from registry config")
+
+		// Verify band removed from stats
+		_, exists = h.fr.perPriorityBandStats.Load(dynamicPrio)
+		assert.False(t, exists, "Band should be removed from stats tracking")
+
+		// Verify band removed from all shards
+		for i, shard := range shards {
+			_, ok := shard.priorityBands.Load(dynamicPrio)
+			assert.False(t, ok, "Band should be removed from shard %d", i)
+
+			shard.mu.RLock()
+			_, ok = shard.config.PriorityBands[dynamicPrio]
+			shard.mu.RUnlock()
+			assert.False(t, ok, "Band should be removed from shard %d config", i)
+
+			// Verify removed from ordered list
+			shard.mu.RLock()
+			orderedList := shard.orderedPriorityLevels
+			shard.mu.RUnlock()
+			for _, p := range orderedList {
+				assert.NotEqual(t, dynamicPrio, p, "Band priority should be removed from ordered list in shard %d", i)
+			}
+		}
+	})
+
+	t.Run("ShouldNotAffectOtherBands", func(t *testing.T) {
+		t.Parallel()
+		// Note: this creates the highPriority, lowPriority bands
+		h := newRegistryTestHarness(t, harnessOptions{})
+
+		// Create a dynamic band
+		err := h.fr.ensurePriorityBand(dynamicPrio)
+		require.NoError(t, err)
+
+		// Verify both static and dynamic bands exist
+		h.fr.mu.RLock()
+		_, highExists := h.fr.config.PriorityBands[highPriority]
+		_, lowExists := h.fr.config.PriorityBands[lowPriority]
+		_, dynamicExists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		require.True(t, highExists && lowExists && dynamicExists, "All bands should exist")
+
+		// Delete the dynamic band
+		h.fr.deletePriorityBand(dynamicPrio)
+
+		// Verify static bands still exist
+		h.fr.mu.RLock()
+		_, highExists = h.fr.config.PriorityBands[highPriority]
+		_, lowExists = h.fr.config.PriorityBands[lowPriority]
+		_, dynamicExists = h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+
+		assert.True(t, highExists, "Static high priority band should still exist")
+		assert.True(t, lowExists, "Static low priority band should still exist")
+		assert.False(t, dynamicExists, "Dynamic band should be deleted")
+	})
+
+	t.Run("ShouldHandleNonExistentBand", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+
+		// Try to delete a band that doesn't exist - should not panic
+		require.NotPanics(t, func() {
+			h.fr.deletePriorityBand(999)
+		})
+	})
+}
+
+// --- Priority Band Garbage Collection Tests ---
+
+func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
+	const dynamicPrio = 99
+
+	t.Run("ShouldCollectIdleDynamicBand", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+
+		// Create dynamic band via JIT provisioning
+		h.openConnectionOnFlow(key)
+
+		// Verify band exists
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		require.True(t, exists, "Dynamic band should exist after flow creation")
+
+		// Step 1: Collect the flow (makes band empty)
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+		h.assertFlowDoesNotExist(key, "Flow should be collected")
+
+		// Band should still exist (in grace period)
+		h.fr.mu.RLock()
+		_, exists = h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, exists, "Band should still exist during grace period")
+
+		// Step 2: Wait for band GC timeout
+		h.fakeClock.Step(h.config.PriorityBandGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Band should be collected
+		h.fr.mu.RLock()
+		_, exists = h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.False(t, exists, "Dynamic band should be collected after timeout")
+	})
+
+	t.Run("ShouldNotCollectStaticBands", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+
+		// Advance time well past any GC timeout
+		h.fakeClock.Step(h.config.FlowGCTimeout + h.config.PriorityBandGCTimeout + time.Hour)
+		h.fr.executeGCCycle()
+
+		// Static bands should still exist
+		h.fr.mu.RLock()
+		_, highExists := h.fr.config.PriorityBands[highPriority]
+		_, lowExists := h.fr.config.PriorityBands[lowPriority]
+		h.fr.mu.RUnlock()
+
+		assert.True(t, highExists, "Static high priority band should never be collected")
+		assert.True(t, lowExists, "Static low priority band should never be collected")
+	})
+
+	t.Run("ShouldCollectMultipleBands_InOneCycle", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+
+		// Create 3 dynamic bands
+		prio1, prio2, prio3 := 101, 102, 103
+		h.openConnectionOnFlow(types.FlowKey{ID: "flow-1", Priority: prio1})
+		h.openConnectionOnFlow(types.FlowKey{ID: "flow-2", Priority: prio2})
+		h.openConnectionOnFlow(types.FlowKey{ID: "flow-3", Priority: prio3})
+
+		// Verify all bands exist
+		h.fr.mu.RLock()
+		_, exists1 := h.fr.config.PriorityBands[prio1]
+		_, exists2 := h.fr.config.PriorityBands[prio2]
+		_, exists3 := h.fr.config.PriorityBands[prio3]
+		h.fr.mu.RUnlock()
+		require.True(t, exists1 && exists2 && exists3, "All dynamic bands should exist")
+
+		// Collect all flows (all bands become empty)
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Wait for band GC timeout
+		h.fakeClock.Step(h.config.PriorityBandGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// All bands should be collected in a single GC cycle
+		h.fr.mu.RLock()
+		_, exists1 = h.fr.config.PriorityBands[prio1]
+		_, exists2 = h.fr.config.PriorityBands[prio2]
+		_, exists3 = h.fr.config.PriorityBands[prio3]
+		h.fr.mu.RUnlock()
+
+		assert.False(t, exists1, "Band 1 should be collected")
+		assert.False(t, exists2, "Band 2 should be collected")
+		assert.False(t, exists3, "Band 3 should be collected")
+	})
+
+	t.Run("ShouldCollectBand_AcrossMultipleShards", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 3})
+		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+
+		// Create flow on all shards
+		h.openConnectionOnFlow(key)
+
+		// Verify band exists on all shards
+		h.fr.mu.RLock()
+		shards := h.fr.allShards
+		h.fr.mu.RUnlock()
+		require.Len(t, shards, 3, "Should have 3 shards")
+
+		for i, shard := range shards {
+			_, ok := shard.priorityBands.Load(dynamicPrio)
+			require.True(t, ok, "Band should exist on shard %d", i)
+		}
+
+		// Collect the flow
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Collect the band
+		h.fakeClock.Step(h.config.PriorityBandGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Verify band is removed from registry
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.False(t, exists, "Band should be removed from registry config")
+
+		// Verify band is removed from all shards
+		for i, shard := range shards {
+			_, ok := shard.priorityBands.Load(dynamicPrio)
+			assert.False(t, ok, "Band should be removed from shard %d", i)
+
+			// Verify config also cleaned up
+			shard.mu.RLock()
+			_, configExists := shard.config.PriorityBands[dynamicPrio]
+			shard.mu.RUnlock()
+			assert.False(t, configExists, "Band should be removed from shard %d config", i)
+		}
+	})
+
+	t.Run("ShouldHandleConcurrentFlowCreation_DuringBandGC", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+
+		// Create and collect flow (band becomes empty)
+		h.openConnectionOnFlow(key)
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Advance past band timeout to make it a GC candidate
+		h.fakeClock.Step(h.config.PriorityBandGCTimeout + time.Second)
+
+		// Now band dynamicPrio still exists, but it is candidate for GC.
+		val, ok := h.fr.priorityBandStates.Load(dynamicPrio)
+		require.True(t, ok, "Band state should exist")
+		state := val.(*priorityBandState)
+
+		// Verify band is idle and eligible for GC
+		state.mu.Lock()
+		require.False(t, state.becameIdleAt.IsZero(), "Band should be idle")
+		require.Equal(t, 0, state.leaseCount, "Band should have no active leases")
+		state.mu.Unlock()
+
+		// Create a new flow _before_ running GC
+		// This will pin the band (increment leaseCount during provisioning)
+		newKey := types.FlowKey{ID: "new-flow", Priority: dynamicPrio}
+		h.openConnectionOnFlow(newKey)
+
+		// Run GC - it should NOT collect the band because:
+		// 1. The band now has an active flow (not empty)
+		// 2. updateIdleBands will reset becameIdleAt because the band is no longer empty
+		h.fr.executeGCCycle()
+
+		// Band should NOT be collected (new flow exists)
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, exists, "Band should not be collected when it has active flows")
+
+		// Verify band is no longer idle
+		state.mu.Lock()
+		isIdle := !state.becameIdleAt.IsZero()
+		state.mu.Unlock()
+		assert.False(t, isIdle, "Band should not be idle when it has flows")
+	})
+
+	t.Run("ShouldReleaseBandLease_OnJITFailure", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+
+		key := types.FlowKey{ID: "jit-fail-flow", Priority: dynamicPrio}
+
+		// Manually create the priority band
+		err := h.fr.ensurePriorityBand(dynamicPrio)
+		require.NoError(t, err)
+
+		// Corrupt the config to make buildFlowComponents fail
+		// We set an invalid queue name AFTER the band is created but BEFORE the first flow tries to use it
+		h.fr.mu.Lock()
+		h.fr.config.PriorityBands[dynamicPrio].Queue = "NonExistentQueue"
+		h.fr.mu.Unlock()
+
+		// Attempt to open connection - JIT should fail during buildFlowComponents
+		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			t.Fatal("Should not reach callback when JIT fails")
+			return nil
+		})
+
+		require.Error(t, err, "WithConnection should fail when buildFlowComponents fails")
+		require.Contains(t, err.Error(), "NonExistentQueue", "Error should mention the invalid queue")
+
+		// Verify the flow was cleaned up
+		h.assertFlowDoesNotExist(key, "Flow should not exist after JIT failure")
+
+		// Verify band lease was released - band should have zero leaseCount
+		val, ok := h.fr.priorityBandStates.Load(dynamicPrio)
+		require.True(t, ok, "Band state should still exist")
+		state := val.(*priorityBandState)
+
+		state.mu.Lock()
+		leaseCount := state.leaseCount
+		state.mu.Unlock()
+
+		assert.Equal(t, 0, leaseCount, "Band lease should be released after JIT failure")
+	})
+
+	t.Run("ShouldMaintainBandLeaseCount_MatchingActiveFlowCount", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+
+		// Create 3 flows at the same priority
+		key1 := types.FlowKey{ID: "flow-1", Priority: dynamicPrio}
+		key2 := types.FlowKey{ID: "flow-2", Priority: dynamicPrio}
+		key3 := types.FlowKey{ID: "flow-3", Priority: dynamicPrio}
+
+		h.openConnectionOnFlow(key1)
+		h.openConnectionOnFlow(key2)
+		h.openConnectionOnFlow(key3)
+
+		// Verify band leaseCount is 3
+		val, ok := h.fr.priorityBandStates.Load(dynamicPrio)
+		require.True(t, ok, "Band state should exist")
+		state := val.(*priorityBandState)
+
+		state.mu.Lock()
+		leaseCount := state.leaseCount
+		state.mu.Unlock()
+
+		assert.Equal(t, 3, leaseCount, "Band should have 3 leases (one per flow)")
+
+		// Create flow-1 earlier than the other two, so it expires first
+		// Manipulate becameIdleAt for flow-1 to make it older
+		val1, ok1 := h.fr.flowStates.Load(key1)
+		require.True(t, ok1)
+		flow1 := val1.(*flowState)
+
+		oldTime := h.fakeClock.Now().Add(-(h.config.FlowGCTimeout + time.Second))
+		flow1.mu.Lock()
+		flow1.becameIdleAt = oldTime
+		flow1.mu.Unlock()
+
+		// Collect only flow-1 (the old one)
+		h.fr.executeGCCycle()
+
+		// Verify band leaseCount is now 2
+		state.mu.Lock()
+		leaseCount = state.leaseCount
+		state.mu.Unlock()
+
+		assert.Equal(t, 2, leaseCount, "Band should have 2 leases after one flow is collected")
+
+		// Now age the remaining flows and collect them
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Verify band leaseCount is now 0
+		state.mu.Lock()
+		leaseCount = state.leaseCount
+		state.mu.Unlock()
+
+		assert.Equal(t, 0, leaseCount, "Band should have 0 leases after all flows are collected")
+	})
+
+	t.Run("ShouldNotCollectBand_WhileAnyFlowExists", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+
+		// Create 3 flows at the same priority
+		key1 := types.FlowKey{ID: "flow-1", Priority: dynamicPrio}
+		key2 := types.FlowKey{ID: "flow-2", Priority: dynamicPrio}
+		key3 := types.FlowKey{ID: "flow-3", Priority: dynamicPrio}
+
+		h.openConnectionOnFlow(key1)
+		h.openConnectionOnFlow(key2)
+		h.openConnectionOnFlow(key3)
+
+		// Manually age flow-1 and flow-2 to make them eligible for GC, but leave flow-3 young
+		oldTime := h.fakeClock.Now().Add(-(h.config.FlowGCTimeout + time.Second))
+
+		val1, _ := h.fr.flowStates.Load(key1)
+		flow1 := val1.(*flowState)
+		flow1.mu.Lock()
+		flow1.becameIdleAt = oldTime
+		flow1.mu.Unlock()
+
+		val2, _ := h.fr.flowStates.Load(key2)
+		flow2 := val2.(*flowState)
+		flow2.mu.Lock()
+		flow2.becameIdleAt = oldTime
+		flow2.mu.Unlock()
+
+		// Collect flow-1 and flow-2, leaving flow-3 active
+		h.fr.executeGCCycle()
+
+		// Verify flow-3 still exists
+		h.assertFlowExists(key3, "Flow-3 should still exist")
+
+		// Verify band still exists (has flow-3)
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, exists, "Band should not be collected while any flow exists")
+
+		// Advance time, but NOT enough to make flow-3 eligible for GC
+		// (We need to avoid advancing past FlowGCTimeout from flow-3's creation time)
+		h.fakeClock.Step(time.Second)
+		h.fr.executeGCCycle()
+
+		// Band should still NOT be collected (still has flow-3)
+		h.fr.mu.RLock()
+		_, exists = h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, exists, "Band should not be collected while any flow exists")
+
+		// Verify band leaseCount is 1
+		val, ok := h.fr.priorityBandStates.Load(dynamicPrio)
+		require.True(t, ok, "Band state should exist")
+		state := val.(*priorityBandState)
+
+		state.mu.Lock()
+		leaseCount := state.leaseCount
+		state.mu.Unlock()
+
+		assert.Equal(t, 1, leaseCount, "Band should still have 1 lease")
+
+		// Collect the last flow
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Verify band leaseCount is now 0
+		state.mu.Lock()
+		leaseCount = state.leaseCount
+		state.mu.Unlock()
+
+		assert.Equal(t, 0, leaseCount, "Band should have 0 leases after last flow is collected")
+
+		// Now advance past band timeout and collect
+		h.fakeClock.Step(h.config.PriorityBandGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Band should be collected now
+		h.fr.mu.RLock()
+		_, exists = h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.False(t, exists, "Band should be collected after all flows are gone")
+	})
+
+	t.Run("ShouldNotCollectBand_WhenLeaseCount_NonZero_DespiteEmpty", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
+
+		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+		h.openConnectionOnFlow(key)
+
+		// Manually manipulate the state to simulate a race condition.
+		// Verify band exists and has 1 flow lease
+		val, ok := h.fr.priorityBandStates.Load(dynamicPrio)
+		require.True(t, ok, "Band state should exist")
+		state := val.(*priorityBandState)
+
+		state.mu.Lock()
+		require.Equal(t, 1, state.leaseCount, "Band should have 1 flow lease")
+		state.mu.Unlock()
+
+		// Collect the flow so the band becomes empty
+		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
+		h.fr.executeGCCycle()
+
+		// Verify band leaseCount is now 0 and band is idle
+		state.mu.Lock()
+		require.Equal(t, 0, state.leaseCount, "Band should have 0 leases")
+		require.False(t, state.becameIdleAt.IsZero(), "Band should be idle")
+		state.mu.Unlock()
+
+		// Advance past band timeout
+		oldTime := h.fakeClock.Now().Add(-h.config.PriorityBandGCTimeout * 2)
+		h.fakeClock.Step(h.config.PriorityBandGCTimeout + time.Second)
+
+		// Manually force a race: band is "Technically Idle" (timeout expired and empty)...
+		state.mu.Lock()
+		state.becameIdleAt = oldTime
+
+		// ... BUT it has a lease (simulating a flow creation happening just now).
+		// Note: In real code, these updates happen atomically during flow creation,
+		// but we force this state to verify the GC's safety priority (Lease > Empty + Time).
+		state.leaseCount = 1
+		state.mu.Unlock()
+
+		// Trigger GC
+		h.fr.executeGCCycle()
+
+		// The GC should have seen leaseCount > 0 and skipped deletion, despite
+		// the band being empty and the idle timer being expired.
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, exists, "Band must not be collected if leaseCount > 0, even if empty and idle timer expired")
+	})
+}
+
+// TestFlowRegistry_JITErrorScoping ensures that JIT provisioning errors are correctly propagated to all concurrent
+// requests waiting on the same flow initialization.
+func TestFlowRegistry_JITErrorScoping(t *testing.T) {
+	t.Parallel()
+	handle := newTestPluginsHandle(t)
+
+	// Create a registry with a capability checker that passes validation but using a queue name that doesn't exist.
+	// This ensures NewConfig succeeds, but JIT (ensureFlowInfrastructure) fails when trying to instantiate the queue.
+	failQueueName := queue.RegisteredQueueName("NonExistentQueue")
+	mockChecker := &mockCapabilityChecker{
+		checkCompatibilityFunc: func(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error {
+			return nil // Bypass validation.
+		},
+	}
+
+	// We create a custom band config that uses this failing queue.
+	// We set it as the default band so that dynamic provisioning is used.
+	failingBand, err := NewPriorityBandConfig(handle, 0, "FailingBand", WithQueue(failQueueName))
+	require.NoError(t, err)
+
+	cfg, err := NewConfig(handle, withCapabilityChecker(mockChecker), WithDefaultPriorityBand(failingBand))
+	require.NoError(t, err)
+
+	registry, err := NewFlowRegistry(cfg, logr.Discard())
+	require.NoError(t, err)
+
+	key := types.FlowKey{
+		Priority: 100, // Dynamic, will trigger ensurePriorityBand
+		ID:       "flow-should-fail",
+	}
+
+	// Simulate contention:
+	// We acquire the registry RLock.
+	// JIT provisioning (dynamic band) requires registry Lock (Write Lock).
+	// So the first thread to reach ensurePriorityBand will block until we release this lock.
+	// All other threads will pile up behind it on sync.Once.
+	registry.mu.RLock()
+
+	const concurrency = 10
+	var successCount atomic.Int32
+	var errorCount atomic.Int32
+	wg := sync.WaitGroup{}
+	wg.Add(concurrency)
+
+	start := make(chan struct{})
+
+	for range concurrency {
+		go func() {
+			defer wg.Done()
+			<-start
+			err := registry.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+				return nil
+			})
+			if err == nil {
+				successCount.Add(1)
+			} else {
+				errorCount.Add(1)
+			}
+		}()
+	}
+
+	close(start)
+
+	// Wait a bit to ensure everyone is stuck.
+	time.Sleep(100 * time.Millisecond)
+
+	// Release the lock, letting the winner proceed (and fail).
+	registry.mu.RUnlock()
+
+	wg.Wait()
+
+	// Assertion: all requests should fail.
+	assert.Equal(t, int32(concurrency), errorCount.Load(), "All requests should fail JIT provisioning")
+	assert.Equal(t, int32(0), successCount.Load(), "No request should succeed if JIT failed")
 }

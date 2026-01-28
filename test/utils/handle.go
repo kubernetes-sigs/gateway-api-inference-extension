@@ -21,13 +21,13 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// testHandle is an implmentation of plugins.Handle for test purposes
+// testHandle is an implmentation of plugin.Handle for test purposes
 type testHandle struct {
 	ctx context.Context
-	plugins.HandlePlugins
+	plugin.HandlePlugins
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -40,34 +40,34 @@ func (h *testHandle) PodList() []types.NamespacedName {
 }
 
 type testHandlePlugins struct {
-	plugins map[string]plugins.Plugin
+	plugins map[string]plugin.Plugin
 }
 
-func (h *testHandlePlugins) Plugin(name string) plugins.Plugin {
+func (h *testHandlePlugins) Plugin(name string) plugin.Plugin {
 	return h.plugins[name]
 }
 
-func (h *testHandlePlugins) AddPlugin(name string, plugin plugins.Plugin) {
+func (h *testHandlePlugins) AddPlugin(name string, plugin plugin.Plugin) {
 	h.plugins[name] = plugin
 }
 
-func (h *testHandlePlugins) GetAllPlugins() []plugins.Plugin {
-	result := make([]plugins.Plugin, 0)
+func (h *testHandlePlugins) GetAllPlugins() []plugin.Plugin {
+	result := make([]plugin.Plugin, 0)
 	for _, plugin := range h.plugins {
 		result = append(result, plugin)
 	}
 	return result
 }
 
-func (h *testHandlePlugins) GetAllPluginsWithNames() map[string]plugins.Plugin {
+func (h *testHandlePlugins) GetAllPluginsWithNames() map[string]plugin.Plugin {
 	return h.plugins
 }
 
-func NewTestHandle(ctx context.Context) plugins.Handle {
+func NewTestHandle(ctx context.Context) plugin.Handle {
 	return &testHandle{
 		ctx: ctx,
 		HandlePlugins: &testHandlePlugins{
-			plugins: map[string]plugins.Plugin{},
+			plugins: map[string]plugin.Plugin{},
 		},
 	}
 }

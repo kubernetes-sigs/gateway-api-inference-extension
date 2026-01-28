@@ -24,16 +24,51 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/intraflow"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
+
+func newTestPluginsHandle(t *testing.T) plugin.Handle {
+	t.Helper()
+	handle := utils.NewTestHandle(t.Context())
+	handle.AddPlugin(fairness.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+		TypedNameV: plugin.TypedName{
+			Type: fairness.GlobalStrictFairnessPolicyType,
+			Name: fairness.GlobalStrictFairnessPolicyType,
+		},
+	})
+	handle.AddPlugin(fairness.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+		TypedNameV: plugin.TypedName{
+			Type: fairness.RoundRobinFairnessPolicyType,
+			Name: fairness.RoundRobinFairnessPolicyType,
+		},
+	})
+	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+		TypedNameV: plugin.TypedName{
+			Type: ordering.FCFSOrderingPolicyType,
+			Name: ordering.FCFSOrderingPolicyType,
+		},
+	})
+	handle.AddPlugin(ordering.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+		TypedNameV: plugin.TypedName{
+			Type: ordering.EDFOrderingPolicyType,
+			Name: ordering.EDFOrderingPolicyType,
+		},
+	})
+	return handle
+}
 
 // mockCapabilityChecker is a test double for verifying that NewConfig correctly delegates compatibility checks.
 type mockCapabilityChecker struct {
-	checkCompatibilityFunc func(intra intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error
+	checkCompatibilityFunc func(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error
 }
 
-func (m *mockCapabilityChecker) CheckCompatibility(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+func (m *mockCapabilityChecker) CheckCompatibility(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error {
 	if m.checkCompatibilityFunc != nil {
 		return m.checkCompatibilityFunc(p, q)
 	}
@@ -43,7 +78,8 @@ func (m *mockCapabilityChecker) CheckCompatibility(p intraflow.RegisteredPolicyN
 // mustBand is a helper to simplify test table setup.
 // It panics if the band config creation fails, which should not happen with valid static inputs.
 func mustBand(t *testing.T, priority int, name string, opts ...PriorityBandConfigOption) *PriorityBandConfig {
-	pb, err := NewPriorityBandConfig(priority, name, opts...)
+	handle := newTestPluginsHandle(t)
+	pb, err := NewPriorityBandConfig(handle, priority, name, opts...)
 	require.NoError(t, err, "failed to create test band")
 	return pb
 }
@@ -54,6 +90,7 @@ func TestNewConfig(t *testing.T) {
 	testCases := []struct {
 		name          string
 		opts          []ConfigOption
+		handle        plugin.Handle
 		expectErr     bool
 		expectedErrIs error // Optional: check for specific wrapped error
 		assertion     func(*testing.T, *Config)
@@ -64,17 +101,20 @@ func TestNewConfig(t *testing.T) {
 			opts: []ConfigOption{
 				WithPriorityBand(mustBand(t, 1, "Default")),
 			},
+			handle: newTestPluginsHandle(t),
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, defaultInitialShardCount, cfg.InitialShardCount, "InitialShardCount should be defaulted")
 				assert.Equal(t, defaultFlowGCTimeout, cfg.FlowGCTimeout, "FlowGCTimeout should be defaulted")
+				assert.Equal(t, defaultPriorityBandGCTimeout, cfg.PriorityBandGCTimeout, "PriorityBandGCTimeout should be defaulted")
 				assert.Equal(t, defaultEventChannelBufferSize, cfg.EventChannelBufferSize,
 					"EventChannelBufferSize should be defaulted")
 
 				// Verify Band Defaults
 				require.Contains(t, cfg.PriorityBands, 1)
 				band := cfg.PriorityBands[1]
-				assert.Equal(t, defaultIntraFlowDispatchPolicy, band.IntraFlowDispatchPolicy)
-				assert.Equal(t, defaultInterFlowDispatchPolicy, band.InterFlowDispatchPolicy)
+				assert.Equal(t, defaultOrderingPolicyRef, band.OrderingPolicy.TypedName().Name)
+				require.NotNil(t, band.FairnessPolicy)
+				assert.Equal(t, defaultFairnessPolicyRef, band.FairnessPolicy.TypedName().Name)
 				assert.Equal(t, defaultQueue, band.Queue)
 				assert.Equal(t, defaultPriorityBandMaxBytes, band.MaxBytes)
 			},
@@ -85,12 +125,15 @@ func TestNewConfig(t *testing.T) {
 				WithInitialShardCount(10),
 				WithMaxBytes(5000),
 				WithFlowGCTimeout(1 * time.Hour),
+				WithPriorityBandGCTimeout(2 * time.Hour),
 				WithPriorityBand(mustBand(t, 1, "High")),
 			},
+			handle: newTestPluginsHandle(t),
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, 10, cfg.InitialShardCount)
 				assert.Equal(t, uint64(5000), cfg.MaxBytes)
 				assert.Equal(t, 1*time.Hour, cfg.FlowGCTimeout)
+				assert.Equal(t, 2*time.Hour, cfg.PriorityBandGCTimeout)
 			},
 		},
 		{
@@ -99,11 +142,14 @@ func TestNewConfig(t *testing.T) {
 				// Simulate a user passing a manually constructed struct (bypassing NewPriorityBandConfig).
 				WithPriorityBand(&PriorityBandConfig{Priority: 1, PriorityName: "Raw"}),
 			},
+			handle: newTestPluginsHandle(t),
 			assertion: func(t *testing.T, cfg *Config) {
 				require.Contains(t, cfg.PriorityBands, 1)
 				band := cfg.PriorityBands[1]
 				assert.Equal(t, defaultQueue, band.Queue, "Queue should be defaulted even for raw struct inputs")
-				assert.Equal(t, defaultIntraFlowDispatchPolicy, band.IntraFlowDispatchPolicy)
+				assert.NotNil(t, band.FairnessPolicy)
+				assert.Equal(t, defaultFairnessPolicyRef, band.FairnessPolicy.TypedName().Name)
+				assert.Equal(t, defaultOrderingPolicyRef, band.OrderingPolicy.TypedName().Name)
 			},
 		},
 		{
@@ -112,11 +158,14 @@ func TestNewConfig(t *testing.T) {
 				// No WithPriorityBand options provided.
 				// This relies entirely on dynamic provisioning.
 			},
+			handle: newTestPluginsHandle(t),
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Empty(t, cfg.PriorityBands, "PriorityBands map should be empty")
 				require.NotNil(t, cfg.DefaultPriorityBand, "DefaultPriorityBand template must be initialized")
 				assert.Equal(t, "Dynamic-Default", cfg.DefaultPriorityBand.PriorityName)
 				assert.Equal(t, defaultQueue, cfg.DefaultPriorityBand.Queue)
+				assert.NotNil(t, cfg.DefaultPriorityBand.FairnessPolicy)
+				assert.Equal(t, defaultFairnessPolicyRef, cfg.DefaultPriorityBand.FairnessPolicy.TypedName().Name)
 			},
 		},
 		{
@@ -127,15 +176,17 @@ func TestNewConfig(t *testing.T) {
 					Queue:        "CustomQueue",
 				}),
 				withCapabilityChecker(&mockCapabilityChecker{
-					checkCompatibilityFunc: func(_ intraflow.RegisteredPolicyName, _ queue.RegisteredQueueName) error { return nil },
+					checkCompatibilityFunc: func(flowcontrol.OrderingPolicy, queue.RegisteredQueueName) error { return nil },
 				}),
 			},
+			handle: newTestPluginsHandle(t),
 			assertion: func(t *testing.T, cfg *Config) {
 				require.NotNil(t, cfg.DefaultPriorityBand)
 				assert.Equal(t, "My-Custom-Template", cfg.DefaultPriorityBand.PriorityName)
 				assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), cfg.DefaultPriorityBand.Queue)
-				// Assert other defaults were applied to the template.
-				assert.Equal(t, defaultIntraFlowDispatchPolicy, cfg.DefaultPriorityBand.IntraFlowDispatchPolicy)
+				assert.NotNil(t, cfg.DefaultPriorityBand.FairnessPolicy)
+				assert.Equal(t, defaultFairnessPolicyRef, cfg.DefaultPriorityBand.FairnessPolicy.TypedName().Name)
+				assert.Equal(t, defaultOrderingPolicyRef, cfg.DefaultPriorityBand.OrderingPolicy.TypedName().Name)
 			},
 		},
 
@@ -143,12 +194,51 @@ func TestNewConfig(t *testing.T) {
 		{
 			name:      "ShouldError_WhenInitialShardCountIsInvalid",
 			opts:      []ConfigOption{WithInitialShardCount(0)}, // Option itself should return error.
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
 		},
 		{
 			name:      "ShouldError_WhenFlowGCTimeoutIsInvalid",
 			opts:      []ConfigOption{WithFlowGCTimeout(-1 * time.Second)},
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
+		},
+		{
+			name:      "ShouldError_WhenPriorityBandGCTimeoutIsNegative",
+			opts:      []ConfigOption{WithPriorityBandGCTimeout(-1 * time.Second)},
+			handle:    newTestPluginsHandle(t),
+			expectErr: true,
+		},
+		{
+			name: "ShouldError_WhenPriorityBandGCTimeoutLessThanFlowGCTimeout",
+			opts: []ConfigOption{
+				WithFlowGCTimeout(10 * time.Minute),
+				WithPriorityBandGCTimeout(5 * time.Minute), // Less than flow timeout
+			},
+			handle:    newTestPluginsHandle(t),
+			expectErr: true,
+		},
+		{
+			name: "ShouldSucceed_WhenPriorityBandGCTimeoutEqualToFlowGCTimeout",
+			opts: []ConfigOption{
+				WithFlowGCTimeout(10 * time.Minute),
+				WithPriorityBandGCTimeout(10 * time.Minute), // Equal is OK
+			},
+			handle: newTestPluginsHandle(t),
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, 10*time.Minute, cfg.PriorityBandGCTimeout)
+			},
+		},
+		{
+			name: "ShouldSucceed_WhenPriorityBandGCTimeoutGreaterThanFlowGCTimeout",
+			opts: []ConfigOption{
+				WithFlowGCTimeout(5 * time.Minute),
+				WithPriorityBandGCTimeout(15 * time.Minute),
+			},
+			handle: newTestPluginsHandle(t),
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, 15*time.Minute, cfg.PriorityBandGCTimeout)
+			},
 		},
 
 		// --- Validation Errors (Bands) ---
@@ -158,6 +248,7 @@ func TestNewConfig(t *testing.T) {
 				WithPriorityBand(mustBand(t, 1, "A")),
 				WithPriorityBand(mustBand(t, 1, "B")), // Same priority level
 			},
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
 		},
 		{
@@ -166,13 +257,13 @@ func TestNewConfig(t *testing.T) {
 				WithPriorityBand(mustBand(t, 1, "High")),
 				WithPriorityBand(mustBand(t, 2, "High")), // Same name
 			},
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
 		},
 		{
-			name: "ShouldError_WhenBandIsNil",
-			opts: []ConfigOption{
-				WithPriorityBand(nil),
-			},
+			name:      "ShouldError_WhenBandIsNil",
+			opts:      []ConfigOption{WithPriorityBand(nil)},
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
 		},
 		{
@@ -181,6 +272,15 @@ func TestNewConfig(t *testing.T) {
 				// Use raw struct to bypass NewPriorityBandConfig validation.
 				WithPriorityBand(&PriorityBandConfig{Priority: 1}),
 			},
+			handle:    newTestPluginsHandle(t),
+			expectErr: true,
+		},
+
+		// --- Hydration Failures ---
+		{
+			name:      "ShouldError_WhenDefaultPolicyMissingFromHandle",
+			opts:      []ConfigOption{WithPriorityBand(&PriorityBandConfig{Priority: 1, PriorityName: "A"})},
+			handle:    utils.NewTestHandle(t.Context()), // Handle has no plugin.
 			expectErr: true,
 		},
 
@@ -190,29 +290,21 @@ func TestNewConfig(t *testing.T) {
 			opts: []ConfigOption{
 				WithPriorityBand(mustBand(t, 1, "High")),
 				withCapabilityChecker(&mockCapabilityChecker{
-					checkCompatibilityFunc: func(p intraflow.RegisteredPolicyName, q queue.RegisteredQueueName) error {
+					checkCompatibilityFunc: func(flowcontrol.OrderingPolicy, queue.RegisteredQueueName) error {
 						return contracts.ErrPolicyQueueIncompatible
 					},
 				}),
 			},
+			handle:        newTestPluginsHandle(t),
 			expectErr:     true,
 			expectedErrIs: contracts.ErrPolicyQueueIncompatible,
 		},
 		{
-			name: "ShouldError_WhenDefaultRuntimeCheckerDetectsUnknownPolicy",
-			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "BadBand", WithIntraFlowPolicy("non-existent-policy"))),
-			},
-			expectErr: true,
-		},
-		{
 			name: "ShouldError_WhenDefaultRuntimeCheckerDetectsUnknownQueue",
 			opts: []ConfigOption{
-				WithPriorityBand(mustBand(t, 1, "BadBand",
-					WithIntraFlowPolicy(intraflow.FCFSPolicyName),
-					WithQueue("non-existent-queue"),
-				)),
+				WithPriorityBand(mustBand(t, 1, "BadBand", WithQueue("non-existent-queue"))),
 			},
+			handle:    newTestPluginsHandle(t),
 			expectErr: true,
 		},
 	}
@@ -221,7 +313,7 @@ func TestNewConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := NewConfig(tc.opts...)
+			cfg, err := NewConfig(tc.handle, tc.opts...)
 
 			if tc.expectErr {
 				require.Error(t, err, "expected validation error")
@@ -242,31 +334,46 @@ func TestNewConfig(t *testing.T) {
 
 func TestNewPriorityBandConfig(t *testing.T) {
 	t.Parallel()
+	handle := newTestPluginsHandle(t)
 
 	t.Run("ShouldApplyUserOverrides", func(t *testing.T) {
 		t.Parallel()
-		pb, err := NewPriorityBandConfig(1, "Custom",
+		pb, err := NewPriorityBandConfig(handle, 1, "Custom",
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
-			WithIntraFlowPolicy("CustomPolicy"),
+			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
+			WithFairnessPolicy(fairness.RoundRobinFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
 		assert.Equal(t, uint64(999), pb.MaxBytes)
-		assert.Equal(t, intraflow.RegisteredPolicyName("CustomPolicy"), pb.IntraFlowDispatchPolicy)
-		assert.Equal(t, defaultInterFlowDispatchPolicy, pb.InterFlowDispatchPolicy) // Unchanged default
+		require.NotNil(t, pb.OrderingPolicy)
+		assert.Equal(t, ordering.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
+		require.NotNil(t, pb.FairnessPolicy)
+		assert.Equal(t, fairness.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
 	})
 
 	t.Run("ShouldError_OnInvalidOptions", func(t *testing.T) {
 		t.Parallel()
-		pb, err := NewPriorityBandConfig(1, "Bad", WithQueue(""))
+		pb, err := NewPriorityBandConfig(handle, 1, "Bad", WithQueue(""))
 		assert.Error(t, err, "Should error when setting empty queue")
+		assert.Nil(t, pb)
+	})
+
+	t.Run("ShouldError_WhenPolicyRefUnknown", func(t *testing.T) {
+		t.Parallel()
+		pb, err := NewPriorityBandConfig(handle, 1, "Bad",
+			WithFairnessPolicy("UnknownPolicy", handle),
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no fairness policy registered for name")
 		assert.Nil(t, pb)
 	})
 }
 
 func TestConfig_Partition(t *testing.T) {
 	t.Parallel()
+	handle := newTestPluginsHandle(t)
 
 	// Setup:
 	// Global: 103 MaxBytes.
@@ -274,6 +381,7 @@ func TestConfig_Partition(t *testing.T) {
 	// Band 2: 0 MaxBytes (will default to 1GB).
 	// Band 3: 20 MaxBytes.
 	cfg, err := NewConfig(
+		handle,
 		WithMaxBytes(103),
 		WithPriorityBand(mustBand(t, 1, "Band1", WithBandMaxBytes(55))),
 		WithPriorityBand(mustBand(t, 2, "Band2", WithBandMaxBytes(0))), // Explicit 0 implies default behavior via logic.
@@ -324,8 +432,10 @@ func TestConfig_Partition(t *testing.T) {
 
 func TestConfig_Clone(t *testing.T) {
 	t.Parallel()
+	handle := newTestPluginsHandle(t)
 
 	original, err := NewConfig(
+		handle,
 		WithMaxBytes(1000),
 		WithPriorityBand(mustBand(t, 1, "A")),
 		WithPriorityBand(mustBand(t, 2, "B")),
@@ -362,7 +472,7 @@ func TestConfig_Clone(t *testing.T) {
 
 	t.Run("ShouldDeepCopyDefaultPriorityBand", func(t *testing.T) {
 		t.Parallel()
-		original, err := NewConfig()
+		original, err := NewConfig(newTestPluginsHandle(t))
 		require.NoError(t, err)
 
 		clone := original.Clone()

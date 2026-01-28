@@ -23,10 +23,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -37,7 +36,7 @@ const (
 var _ framework.Picker = &RandomPicker{}
 
 // RandomPickerFactory defines the factory function for RandomPicker.
-func RandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func RandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -55,14 +54,14 @@ func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
 	}
 
 	return &RandomPicker{
-		typedName:         plugins.TypedName{Type: RandomPickerType, Name: RandomPickerType},
+		typedName:         fwkplugin.TypedName{Type: RandomPickerType, Name: RandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
 	}
 }
 
 // RandomPicker picks random endpoint(s) from the list of candidates.
 type RandomPicker struct {
-	typedName         plugins.TypedName
+	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int
 }
 
@@ -73,12 +72,12 @@ func (p *RandomPicker) WithName(name string) *RandomPicker {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *RandomPicker) TypedName() plugins.TypedName {
+func (p *RandomPicker) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
 // Pick selects random endpoint(s) from the list of candidates.
-func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (p *RandomPicker) Pick(ctx context.Context, _ *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
@@ -90,10 +89,10 @@ func (p *RandomPicker) Pick(ctx context.Context, _ *types.CycleState, scoredEndp
 		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
 	}
 
-	targetEndpoints := make([]types.Endpoint, len(scoredEndpoints))
+	targetEndpoints := make([]framework.Endpoint, len(scoredEndpoints))
 	for i, scoredEndpoint := range scoredEndpoints {
 		targetEndpoints[i] = scoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
+	return &framework.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

@@ -28,10 +28,10 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -76,7 +76,7 @@ func NewModelServerExtractor(registry *MappingRegistry, engineLabelKey string) (
 		engineLabelKey = EngineTypeLabelKey
 	}
 	return &Extractor{
-		typedName: plugins.TypedName{
+		typedName: fwkplugin.TypedName{
 			Type: MetricsExtractorType,
 			Name: MetricsExtractorType,
 		},
@@ -86,7 +86,7 @@ func NewModelServerExtractor(registry *MappingRegistry, engineLabelKey string) (
 }
 
 // TypedName returns the type and name of the metrics.Extractor.
-func (ext *Extractor) TypedName() plugins.TypedName {
+func (ext *Extractor) TypedName() fwkplugin.TypedName {
 	return ext.typedName
 }
 

@@ -95,6 +95,11 @@ spec:
               - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
           {{- end }}
           {{- end }}
+          # SGLang specific metrics.
+          {{- if eq $modelServerType "sglang" }}
+              - --total-queued-requests-metric="sglang:num_queue_reqs"
+              - --kv-cache-usage-percentage-metric="sglang:token_usage"
+          {{- end }}
           {{- if eq $modelServerType "triton-tensorrt-llm" }}
               - --total-queued-requests-metric
               - "nv_trt_llm_request_metrics{request_type=waiting}"

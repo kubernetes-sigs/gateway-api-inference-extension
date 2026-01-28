@@ -27,7 +27,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 const (
@@ -101,7 +101,7 @@ var defaultEngineConfigs = []engineConfigParams{
 
 // MetricsDataSourceFactory is a factory function used to instantiate data layer's
 // metrics data source plugins specified in a configuration.
-func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	cfg, err := defaultDataSourceConfigParams()
 	if err != nil {
 		return nil, err
@@ -120,8 +120,11 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle pl
 
 // ModelServerExtractorFactory is a factory function used to instantiate data layer's metrics
 // Extractor plugins specified in a configuration.
-func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
-	cfg := defaultExtractorConfigParams()
+func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	cfg, err := defaultExtractorConfigParams()
+	if err != nil {
+		return nil, err
+	}
 
 	if parameters != nil { // overlay the defaults with configured values
 		if err := json.Unmarshal(parameters, cfg); err != nil {
@@ -223,11 +226,11 @@ func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 	return cfg, nil
 }
 
-func defaultExtractorConfigParams() *modelServerExtractorParams {
+func defaultExtractorConfigParams() (*modelServerExtractorParams, error) {
 	return &modelServerExtractorParams{
 		EngineLabelKey: EngineTypeLabelKey,
 		EngineConfigs:  defaultEngineConfigs,
-	}
+	}, nil
 }
 
 func fromStringFlag(name string) (string, error) {

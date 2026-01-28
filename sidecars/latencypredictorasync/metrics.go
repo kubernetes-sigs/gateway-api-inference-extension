@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 )
 
 // GetMetrics fetches & parses metrics from the training server (for Bayesian Ridge).

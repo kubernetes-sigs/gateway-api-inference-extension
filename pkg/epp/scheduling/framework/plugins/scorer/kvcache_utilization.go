@@ -20,10 +20,9 @@ import (
 	"context"
 	"encoding/json"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
@@ -34,24 +33,24 @@ const (
 var _ framework.Scorer = &KVCacheUtilizationScorer{}
 
 // KvCacheUtilizationScorerFactory defines the factory function for KVCacheUtilizationScorer.
-func KvCacheUtilizationScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func KvCacheUtilizationScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewKVCacheUtilizationScorer().WithName(name), nil
 }
 
 // NewKVCacheUtilizationScorer initializes a new KVCacheUtilizationScorer and returns its pointer.
 func NewKVCacheUtilizationScorer() *KVCacheUtilizationScorer {
 	return &KVCacheUtilizationScorer{
-		typedName: plugins.TypedName{Type: KvCacheUtilizationScorerType, Name: KvCacheUtilizationScorerType},
+		typedName: fwkplugin.TypedName{Type: KvCacheUtilizationScorerType, Name: KvCacheUtilizationScorerType},
 	}
 }
 
 // KVCacheUtilizationScorer scores list of candidate endpoints based on KV cache utilization.
 type KVCacheUtilizationScorer struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *KVCacheUtilizationScorer) TypedName() plugins.TypedName {
+func (s *KVCacheUtilizationScorer) TypedName() fwkplugin.TypedName {
 	return s.typedName
 }
 
@@ -74,8 +73,8 @@ func (s *KVCacheUtilizationScorer) WithName(name string) *KVCacheUtilizationScor
 }
 
 // Score returns the scoring result for the given list of endpoints based on context.
-func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *types.CycleState, _ *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
-	scores := make(map[types.Endpoint]float64, len(endpoints))
+func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = 1 - endpoint.GetMetrics().KVCacheUsagePercent
 	}

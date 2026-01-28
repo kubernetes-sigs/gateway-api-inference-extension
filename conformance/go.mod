@@ -5,7 +5,8 @@ go 1.24.9
 replace sigs.k8s.io/gateway-api-inference-extension => ../
 
 require (
-	sigs.k8s.io/gateway-api v1.3.1-0.20251201225624-d2cd60152b8c // monthly-2025.12
+	golang.org/x/net v0.48.0
+	sigs.k8s.io/gateway-api v1.4.0
 	sigs.k8s.io/gateway-api-inference-extension v0.0.0-00010101000000-000000000000
 )
 
@@ -24,8 +25,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
 	sigs.k8s.io/yaml v1.6.0
 )
-
-require sigs.k8s.io/gateway-api/conformance v0.0.0-20251230180038-fc64fe627da4
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -60,7 +59,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.39.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.38.0 // indirect

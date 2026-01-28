@@ -7,7 +7,7 @@ defines core, self-contained queue data structures used by the `controller.FlowC
 
 The `controller.FlowController` manages requests by organizing them into queues. Each logical "flow" within a given
 priority band has its own `contracts.ManagedQueue` instance, which wraps a `framework.SafeQueue`. This design allows the
-`controller.FlowController` to apply policies at both the inter-flow (across different flows) and intra-flow (within a
+`controller.FlowController` to apply policies at both the fairness (across different flows) and ordering (within a
 single flow's queue) levels.
 
 The `framework.SafeQueue` interface abstracts the underlying data structure and its ordering logic. This pluggable

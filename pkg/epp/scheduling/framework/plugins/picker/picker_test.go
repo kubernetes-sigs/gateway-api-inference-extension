@@ -25,88 +25,87 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestPickMaxScorePicker(t *testing.T) {
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
-	endpoint3 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil)
 
 	tests := []struct {
 		name               string
-		picker             framework.Picker
-		input              []*types.ScoredEndpoint
-		output             []types.Endpoint
+		picker             fwksched.Picker
+		input              []*fwksched.ScoredEndpoint
+		output             []fwksched.Endpoint
 		tieBreakCandidates int // tie break is random, specify how many candidate with max score
 	}{
 		{
 			name:   "Single max score",
 			picker: NewMaxScorePicker(1),
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 10},
 				{Endpoint: endpoint2, Score: 25},
 				{Endpoint: endpoint3, Score: 15},
 			},
-			output: []types.Endpoint{
-				&types.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
+			output: []fwksched.Endpoint{
+				&fwksched.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
 			},
 		},
 		{
 			name:   "Multiple max scores, all are equally scored",
 			picker: NewMaxScorePicker(2),
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 50},
 				{Endpoint: endpoint2, Score: 50},
 				{Endpoint: endpoint3, Score: 30},
 			},
-			output: []types.Endpoint{
-				&types.ScoredEndpoint{Endpoint: endpoint1, Score: 50},
-				&types.ScoredEndpoint{Endpoint: endpoint2, Score: 50},
+			output: []fwksched.Endpoint{
+				&fwksched.ScoredEndpoint{Endpoint: endpoint1, Score: 50},
+				&fwksched.ScoredEndpoint{Endpoint: endpoint2, Score: 50},
 			},
 			tieBreakCandidates: 2,
 		},
 		{
 			name:   "Multiple results sorted by highest score, more pods than needed",
 			picker: NewMaxScorePicker(2),
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 20},
 				{Endpoint: endpoint2, Score: 25},
 				{Endpoint: endpoint3, Score: 30},
 			},
-			output: []types.Endpoint{
-				&types.ScoredEndpoint{Endpoint: endpoint3, Score: 30},
-				&types.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
+			output: []fwksched.Endpoint{
+				&fwksched.ScoredEndpoint{Endpoint: endpoint3, Score: 30},
+				&fwksched.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
 			},
 		},
 		{
 			name:   "Multiple results sorted by highest score, less pods than needed",
 			picker: NewMaxScorePicker(4), // picker is required to return 4 pods at most, but we have only 3.
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 20},
 				{Endpoint: endpoint2, Score: 25},
 				{Endpoint: endpoint3, Score: 30},
 			},
-			output: []types.Endpoint{
-				&types.ScoredEndpoint{Endpoint: endpoint3, Score: 30},
-				&types.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
-				&types.ScoredEndpoint{Endpoint: endpoint1, Score: 20},
+			output: []fwksched.Endpoint{
+				&fwksched.ScoredEndpoint{Endpoint: endpoint3, Score: 30},
+				&fwksched.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
+				&fwksched.ScoredEndpoint{Endpoint: endpoint1, Score: 20},
 			},
 		},
 		{
 			name:   "Multiple results sorted by highest score, num of pods exactly needed",
 			picker: NewMaxScorePicker(3), // picker is required to return 3 pods at most, we have only 3.
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 30},
 				{Endpoint: endpoint2, Score: 25},
 				{Endpoint: endpoint3, Score: 30},
 			},
-			output: []types.Endpoint{
-				&types.ScoredEndpoint{Endpoint: endpoint1, Score: 30},
-				&types.ScoredEndpoint{Endpoint: endpoint3, Score: 30},
-				&types.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
+			output: []fwksched.Endpoint{
+				&fwksched.ScoredEndpoint{Endpoint: endpoint1, Score: 30},
+				&fwksched.ScoredEndpoint{Endpoint: endpoint3, Score: 30},
+				&fwksched.ScoredEndpoint{Endpoint: endpoint2, Score: 25},
 			},
 			tieBreakCandidates: 2,
 		},
@@ -114,15 +113,15 @@ func TestPickMaxScorePicker(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result := test.picker.Pick(context.Background(), types.NewCycleState(), test.input)
+			result := test.picker.Pick(context.Background(), fwksched.NewCycleState(), test.input)
 			got := result.TargetEndpoints
 
 			if test.tieBreakCandidates > 0 {
 				testMaxScoredEndpoints := test.output[:test.tieBreakCandidates]
 				gotMaxScoredEndpoints := got[:test.tieBreakCandidates]
-				diff := cmp.Diff(testMaxScoredEndpoints, gotMaxScoredEndpoints, cmpopts.SortSlices(func(a, b types.Endpoint) bool {
+				diff := cmp.Diff(testMaxScoredEndpoints, gotMaxScoredEndpoints, cmpopts.SortSlices(func(a, b fwksched.Endpoint) bool {
 					return a.String() < b.String() // predictable order within the endpoints with equal scores
-				}))
+				}), cmp.Comparer(fwksched.ScoredEndpointComparer))
 				if diff != "" {
 					t.Errorf("Unexpected output (-want +got): %v", diff)
 				}
@@ -130,7 +129,7 @@ func TestPickMaxScorePicker(t *testing.T) {
 				got = got[test.tieBreakCandidates:]
 			}
 
-			if diff := cmp.Diff(test.output, got); diff != "" {
+			if diff := cmp.Diff(test.output, got, cmp.Comparer(fwksched.ScoredEndpointComparer)); diff != "" {
 				t.Errorf("Unexpected output (-want +got): %v", diff)
 			}
 		})
@@ -143,23 +142,23 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 		tolerance      = 0.05 // Verify within tolerance ±5%
 	)
 
-	endpoint1 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}}
-	endpoint2 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}}
-	endpoint3 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}}
-	endpoint4 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}}}
-	endpoint5 := &types.PodMetrics{EndpointMetadata: &datalayer.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}}}
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil)
+	endpoint4 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}}, nil, nil)
+	endpoint5 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}}, nil, nil)
 
 	// A-Res algorithm uses U^(1/w) transformation which introduces statistical variance
 	// beyond simple proportional sampling. Generous tolerance is required to prevent
 	// flaky tests in CI environments, especially for multi-tier weights.
 	tests := []struct {
 		name    string
-		input   []*types.ScoredEndpoint
+		input   []*fwksched.ScoredEndpoint
 		maxPods int // maxNumOfEndpoints for this test
 	}{
 		{
 			name: "High weight dominance test",
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 10}, // Lower weight
 				{Endpoint: endpoint2, Score: 90}, // Higher weight (should dominate)
 			},
@@ -167,7 +166,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 		},
 		{
 			name: "Equal weights test - A-Res uniform distribution",
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 100}, // Equal weights (higher values for better numerical precision)
 				{Endpoint: endpoint2, Score: 100}, // Equal weights should yield uniform distribution
 				{Endpoint: endpoint3, Score: 100}, // Equal weights in A-Res
@@ -176,7 +175,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 		},
 		{
 			name: "Zero weight exclusion test - A-Res edge case",
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 30}, // Normal weight, should be selected
 				{Endpoint: endpoint2, Score: 0},  // Zero weight, never selected in A-Res
 			},
@@ -184,7 +183,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 		},
 		{
 			name: "Multi-tier weighted test - A-Res complex distribution",
-			input: []*types.ScoredEndpoint{
+			input: []*fwksched.ScoredEndpoint{
 				{Endpoint: endpoint1, Score: 100}, // Highest weight
 				{Endpoint: endpoint2, Score: 90},  // High weight
 				{Endpoint: endpoint3, Score: 50},  // Medium weight
@@ -225,7 +224,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 
 			// Run multiple iterations to gather statistical data
 			for range testIterations {
-				result := picker.Pick(context.Background(), types.NewCycleState(), test.input)
+				result := picker.Pick(context.Background(), fwksched.NewCycleState(), test.input)
 
 				// Count selections for probability analysis
 				selectedEndpointName := result.TargetEndpoints[0].GetMetadata().NamespacedName.Name

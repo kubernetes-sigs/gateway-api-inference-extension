@@ -37,10 +37,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 const (
@@ -84,8 +84,7 @@ type testHarness struct {
 	priorityFlows map[int][]types.FlowKey // Key: `priority`
 
 	// Customizable policy logic for tests to override.
-	interFlowPolicySelectQueue func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error)
-	intraFlowPolicySelectItem  func(fqa framework.FlowQueueAccessor) (types.QueueItemAccessor, error)
+	fairnessPolicyPick func(context.Context, flowcontrol.PriorityBandAccessor) (flowcontrol.FlowQueueAccessor, error)
 }
 
 // newTestHarness creates and wires up a complete testing harness.
@@ -108,8 +107,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 	h.ManagedQueueFunc = h.managedQueue
 	h.AllOrderedPriorityLevelsFunc = h.allOrderedPriorityLevels
 	h.PriorityBandAccessorFunc = h.priorityBandAccessor
-	h.InterFlowDispatchPolicyFunc = h.interFlowDispatchPolicy
-	h.IntraFlowDispatchPolicyFunc = h.intraFlowDispatchPolicy
+	h.FairnessPolicyFunc = h.fairnessPolicy
 
 	// Provide a default stats implementation that is effectively infinite.
 	h.StatsFunc = func() contracts.ShardStats {
@@ -225,7 +223,7 @@ func (h *testHarness) allOrderedPriorityLevels() []int {
 
 // priorityBandAccessor provides the mock implementation for the `RegistryShard` interface. It acts as a factory for a
 // fully-configured, stateless mock that is safe for concurrent use.
-func (h *testHarness) priorityBandAccessor(p int) (framework.PriorityBandAccessor, error) {
+func (h *testHarness) priorityBandAccessor(p int) (flowcontrol.PriorityBandAccessor, error) {
 	band := &frameworkmocks.MockPriorityBandAccessor{PriorityV: p}
 
 	// Safely get a snapshot of the flow IDs under a lock.
@@ -234,7 +232,7 @@ func (h *testHarness) priorityBandAccessor(p int) (framework.PriorityBandAccesso
 	h.mu.Unlock()
 
 	// Configure the mock's behavior with a closure that reads from the harness's centralized, thread-safe state.
-	band.IterateQueuesFunc = func(cb func(fqa framework.FlowQueueAccessor) bool) {
+	band.IterateQueuesFunc = func(cb func(fqa flowcontrol.FlowQueueAccessor) bool) {
 		// This closure safely iterates over the snapshot of flow IDs.
 		for _, key := range flowKeysForPriority {
 			// Get the queue using the thread-safe `managedQueue` method.
@@ -250,19 +248,22 @@ func (h *testHarness) priorityBandAccessor(p int) (framework.PriorityBandAccesso
 	return band, nil
 }
 
-// interFlowDispatchPolicy provides the mock implementation for the `contracts.RegistryShard` interface.
-func (h *testHarness) interFlowDispatchPolicy(p int) (framework.InterFlowDispatchPolicy, error) {
-	policy := &frameworkmocks.MockInterFlowDispatchPolicy{}
+// fairnessPolicy provides the mock implementation for the RegistryShard interface.
+func (h *testHarness) fairnessPolicy(p int) (flowcontrol.FairnessPolicy, error) {
+	policy := &frameworkmocks.MockFairnessPolicy{}
 	// If the test provided a custom implementation, use it.
-	if h.interFlowPolicySelectQueue != nil {
-		policy.SelectQueueFunc = h.interFlowPolicySelectQueue
+	if h.fairnessPolicyPick != nil {
+		policy.PickFunc = h.fairnessPolicyPick
 		return policy, nil
 	}
 
 	// Otherwise, use a default implementation that selects the first non-empty queue.
-	policy.SelectQueueFunc = func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
-		var selectedQueue framework.FlowQueueAccessor
-		band.IterateQueues(func(fqa framework.FlowQueueAccessor) bool {
+	policy.PickFunc = func(
+		_ context.Context,
+		flowGroup flowcontrol.PriorityBandAccessor,
+	) (flowcontrol.FlowQueueAccessor, error) {
+		var selectedQueue flowcontrol.FlowQueueAccessor
+		flowGroup.IterateQueues(func(fqa flowcontrol.FlowQueueAccessor) bool {
 			if fqa.Len() > 0 {
 				selectedQueue = fqa
 				return false // stop iterating
@@ -270,22 +271,6 @@ func (h *testHarness) interFlowDispatchPolicy(p int) (framework.InterFlowDispatc
 			return true // continue
 		})
 		return selectedQueue, nil
-	}
-	return policy, nil
-}
-
-// intraFlowDispatchPolicy provides the mock implementation for the `contracts.RegistryShard` interface.
-func (h *testHarness) intraFlowDispatchPolicy(types.FlowKey) (framework.IntraFlowDispatchPolicy, error) {
-	policy := &frameworkmocks.MockIntraFlowDispatchPolicy{}
-	// If the test provided a custom implementation, use it.
-	if h.intraFlowPolicySelectItem != nil {
-		policy.SelectItemFunc = h.intraFlowPolicySelectItem
-		return policy, nil
-	}
-
-	// Otherwise, use a default implementation that selects the head of the queue.
-	policy.SelectItemFunc = func(fqa framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-		return fqa.PeekHead(), nil
 	}
 	return policy, nil
 }
@@ -391,7 +376,10 @@ func TestShardProcessor(t *testing.T) {
 			require.NoError(t, mockQueue.Add(item), "Adding item to mock queue should not fail")
 
 			// Prevent dispatch to ensure we test shutdown eviction, not a successful dispatch.
-			h.interFlowPolicySelectQueue = func(band framework.PriorityBandAccessor) (framework.FlowQueueAccessor, error) {
+			h.fairnessPolicyPick = func(
+				context.Context,
+				flowcontrol.PriorityBandAccessor,
+			) (flowcontrol.FlowQueueAccessor, error) {
 				return nil, nil
 			}
 
@@ -590,7 +578,7 @@ func TestShardProcessor(t *testing.T) {
 					name: "should reject item on registry priority band lookup failure",
 					setupHarness: func(h *testHarness) {
 						h.addQueue(testFlow)
-						h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) { return nil, testErr }
+						h.PriorityBandAccessorFunc = func(int) (flowcontrol.PriorityBandAccessor, error) { return nil, testErr }
 					},
 					assert: func(t *testing.T, h *testHarness, item *FlowItem) {
 						assert.Equal(t, types.QueueOutcomeRejectedOther, item.FinalState().Outcome,
@@ -751,8 +739,8 @@ func TestShardProcessor(t *testing.T) {
 							qLow := h.addQueue(keyLow)
 							require.NoError(t, qLow.Add(h.newTestItem("item-low", keyLow, testTTL)))
 
-							h.saturationDetector.IsSaturatedFunc = func(_ context.Context, _ []metrics.PodMetrics) bool {
-								return true
+							h.saturationDetector.SaturationFunc = func(_ context.Context, _ []metrics.PodMetrics) float64 {
+								return 1.0 // Saturated
 							}
 						},
 						expectDidDispatch: false,
@@ -760,71 +748,54 @@ func TestShardProcessor(t *testing.T) {
 					{
 						name: "should skip band on priority band accessor error",
 						setupHarness: func(h *testHarness) {
-							h.PriorityBandAccessorFunc = func(int) (framework.PriorityBandAccessor, error) {
+							h.PriorityBandAccessorFunc = func(int) (flowcontrol.PriorityBandAccessor, error) {
 								return nil, registryErr
 							}
 						},
 						expectDidDispatch: false,
 					},
 					{
-						name: "should skip band on inter-flow policy error",
+						name: "should skip band on FairnessPolicy error",
 						setupHarness: func(h *testHarness) {
 							h.addQueue(testFlow)
-							h.interFlowPolicySelectQueue = func(
-								_ framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
+							h.fairnessPolicyPick = func(
+								context.Context,
+								flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
 								return nil, policyErr
 							}
 						},
 						expectDidDispatch: false,
 					},
 					{
-						name: "should skip band if inter-flow policy returns no queue",
+						name: "should skip band if FairnessPolicy policy returns no queue",
 						setupHarness: func(h *testHarness) {
 							q := h.addQueue(testFlow)
 							require.NoError(t, q.Add(h.newTestItem("item", testFlow, testTTL)))
-							h.interFlowPolicySelectQueue = func(
-								_ framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
+							h.fairnessPolicyPick = func(
+								context.Context,
+								flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
 								return nil, nil // Simulate band being empty or policy choosing to pause.
 							}
 						},
 						expectDidDispatch: false,
 					},
 					{
-						name: "should skip band on intra-flow policy error",
+						name: "should skip band if selected queue is empty",
 						setupHarness: func(h *testHarness) {
-							q := h.addQueue(testFlow)
-							require.NoError(t, q.Add(h.newTestItem("item", testFlow, testTTL)))
-							h.interFlowPolicySelectQueue = func(
-								_ framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
+							q := h.addQueue(testFlow) // Empty queue
+							h.fairnessPolicyPick = func(
+								context.Context,
+								flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
 								return q.FlowQueueAccessor(), nil
-							}
-							h.intraFlowPolicySelectItem = func(_ framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-								return nil, policyErr
 							}
 						},
 						expectDidDispatch: false,
 					},
 					{
-						name: "should skip band if intra-flow policy returns no item",
-						setupHarness: func(h *testHarness) {
-							q := h.addQueue(testFlow)
-							require.NoError(t, q.Add(h.newTestItem("item", testFlow, testTTL)))
-							h.interFlowPolicySelectQueue = func(
-								_ framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
-								return q.FlowQueueAccessor(), nil
-							}
-							h.intraFlowPolicySelectItem = func(_ framework.FlowQueueAccessor) (types.QueueItemAccessor, error) {
-								return nil, nil // Simulate queue being empty or policy choosing to pause.
-							}
-						},
-						expectDidDispatch: false,
-					},
-					{
-						name: "should continue to lower priority band on inter-flow policy error",
+						name: "should continue to lower priority band on FairnessPolicy policy error",
 						setupHarness: func(h *testHarness) {
 							// Create a failing high-priority queue and a working low-priority queue.
 							keyHigh := types.FlowKey{ID: "flow-high", Priority: testFlow.Priority}
@@ -835,10 +806,11 @@ func TestShardProcessor(t *testing.T) {
 							itemLow := h.newTestItem("item-low", keyLow, testTTL)
 							require.NoError(t, qLow.Add(itemLow))
 
-							h.interFlowPolicySelectQueue = func(
-								band framework.PriorityBandAccessor,
-							) (framework.FlowQueueAccessor, error) {
-								if band.Priority() == testFlow.Priority {
+							h.fairnessPolicyPick = func(
+								_ context.Context,
+								flowGroup flowcontrol.PriorityBandAccessor,
+							) (flowcontrol.FlowQueueAccessor, error) {
+								if flowGroup.Priority() == testFlow.Priority {
 									return nil, errors.New("policy failure") // Fail high-priority.
 								}
 								// Succeed for low-priority.
@@ -1040,7 +1012,7 @@ func TestShardProcessor(t *testing.T) {
 				// --- ARRANGE ---
 				h := newTestHarness(t, testCleanupTick)
 				h.AllOrderedPriorityLevelsFunc = func() []int { return []int{testFlow.Priority} }
-				h.PriorityBandAccessorFunc = func(p int) (framework.PriorityBandAccessor, error) {
+				h.PriorityBandAccessorFunc = func(p int) (flowcontrol.PriorityBandAccessor, error) {
 					return nil, errors.New("registry error")
 				}
 

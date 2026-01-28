@@ -33,9 +33,23 @@ type DataSourceConfig struct {
 }
 
 // WithConfig sets up the data layer based on the provided configuration.
-func WithConfig(cfg *Config) error {
+//
+// To allow running new data sources with backend.PodMetrics collection,
+// the code validates that the new and the existing metrics collection are not both
+// configured. This is done by passing in the new metrics extractor as "disallowed"
+// when the new metrics collection is not enabled in the runner (otherwise it passes
+// an empty string).
+// Note that it is still possible to configure the new metrics data source with different
+// extractors beyond model-server-protocol.
+// Referring to the "type" directly here would create an import cycle.
+// @TODO: This should be removed once PodMetrics is deprecated.
+func WithConfig(cfg *Config, disallowedExtractorType string) error {
 	for _, srcCfg := range cfg.Sources {
 		for _, extractor := range srcCfg.Extractors {
+			if disallowedExtractorType != "" && extractor.TypedName().Type == disallowedExtractorType {
+				return fmt.Errorf("disallowed Extractor %s is configured for source %s",
+					extractor.TypedName().String(), srcCfg.Plugin.TypedName().String())
+			}
 			if err := srcCfg.Plugin.AddExtractor(extractor); err != nil {
 				return fmt.Errorf("failed to add Extractor %s to DataSource %s: %w", extractor.TypedName(),
 					srcCfg.Plugin.TypedName(), err)
