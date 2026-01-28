@@ -14,13 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package utilizationdetector implements a mechanism to determine if the
-// backend model servers are considered saturated based on observed metrics.
+// Package utilizationdetector implements a mechanism to determine the aggregate saturation level of backend model
+// servers based on observed metrics for compute and memory resources.
 //
-// The current implementation provides a saturation signal (IsSaturated)
-// primarily based on backend queue depths and KV cache utilization, reflecting
-// the saturation signals previously used by the Scheduler before the
-// introduction of the FlowController.
+// # Saturation Logic (The Roofline Model)
+//
+// The detector calculates a continuous saturation gradient where:
+//
+//	Saturation = Average(PodSaturationScore)
+//
+// For each pod, the score is determined by the most constrained resource (Compute vs. Memory), following a Roofline
+// performance model:
+//
+//	PodSaturationScore = Max(WaitingQueue / QueueThreshold, KVCacheUsage / KVCacheThreshold)
 package utilizationdetector
 
 import (
@@ -28,10 +34,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -72,56 +77,35 @@ func NewDetector(config *Config, logger logr.Logger) *Detector {
 	}
 }
 
-// IsSaturated checks if the system is currently considered saturated.
-// The system is saturated if NO pod currently has "good capacity".
-// "Good capacity" means:
-//  1. Metrics are fresh (not stale).
-//  2. WaitingQueueSize <= QueueDepthThreshold.
-//  3. KVCacheUsagePercent <= KVCacheUtilThreshold.
+// Saturation calculates the saturation level of the pool.
 //
-// This function is called with the relevant pods for the current request.
-func (d *Detector) IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool {
-	logger := log.FromContext(ctx)
-	for _, podMetric := range candidatePods {
-		metrics := podMetric.GetMetrics()
-		podNn := "unknown-pod"
-		if podMetric.GetMetadata() != nil {
-			podNn = podMetric.GetMetadata().NamespacedName.String()
-		}
-
-		if metrics == nil {
-			logger.V(logutil.TRACE).Info("Pod has nil metrics, skipping for saturation check",
-				"pod", podNn)
-			continue
-		}
-
-		// Check for metric staleness
-		if time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
-			logger.V(logutil.TRACE).Info("Pod metrics are stale, considered as not having good capacity",
-				"pod", podNn, "updateTime", metrics.UpdateTime, "stalenessThreshold", d.config.MetricsStalenessThreshold)
-			continue
-		}
-
-		// Check queue depth
-		if metrics.WaitingQueueSize > d.config.QueueDepthThreshold {
-			logger.V(logutil.TRACE).Info("Pod WaitingQueueSize is above threshold, considered as not having good capacity",
-				"pod", podNn, "waitingQueueSize", metrics.WaitingQueueSize, "threshold", d.config.QueueDepthThreshold)
-			continue // WaitingQueueSize is above threshold, considered saturated.
-		}
-
-		// Check KV cache utilization
-		if metrics.KVCacheUsagePercent > d.config.KVCacheUtilThreshold {
-			logger.V(logutil.TRACE).Info("Pod KVCacheUsagePercent is above threshold, considered as not having good capacity",
-				"pod", podNn, "kvCacheUsagePercent", metrics.KVCacheUsagePercent, "threshold", d.config.KVCacheUtilThreshold)
-			continue // KVCacheUsagePercent is above threshold, considered saturated.
-		}
-
-		logger.V(logutil.TRACE).Info("Found pod with good capacity", "pod", podNn, "waitingQueue", metrics.WaitingQueueSize,
-			"queueThreshold", d.config.QueueDepthThreshold, "kvCacheUtil", metrics.KVCacheUsagePercent, "kvCacheThreshold", d.config.KVCacheUtilThreshold)
-
-		return false // Found at least one pod with good capacity, so system is NOT saturated.
+// It returns an aggregate saturation signal where:
+//
+//	Saturation = Average(PodSaturationScore)
+//
+// For each pod, the score is determined by the most constrained resource (Compute or Memory):
+//
+//	PodScore = Max(WaitingQueue / QueueThreshold, KVCacheUsage / KVCacheThreshold)
+func (d *Detector) Saturation(_ context.Context, candidatePods []backendmetrics.PodMetrics) float64 {
+	if len(candidatePods) == 0 {
+		return 1.0
 	}
 
-	logger.V(logutil.VERBOSE).Info("No pods found with good capacity; system is considered SATURATED.")
-	return true
+	var totalScore float64
+	for _, podMetric := range candidatePods {
+		metrics := podMetric.GetMetrics()
+
+		if metrics == nil || time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
+			totalScore += 1.0
+			continue
+		}
+
+		qRatio := float64(metrics.WaitingQueueSize) / float64(d.config.QueueDepthThreshold)
+		kvRatio := metrics.KVCacheUsagePercent / d.config.KVCacheUtilThreshold
+
+		// Roofline Analysis: The pod is saturated if either resource is exhausted.
+		totalScore += max(qRatio, kvRatio)
+	}
+
+	return totalScore / float64(len(candidatePods))
 }

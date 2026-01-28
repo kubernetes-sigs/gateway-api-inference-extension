@@ -27,6 +27,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 )
 
+// DefaultTestPort is the standard port used for mock model servers in tests.
+const DefaultTestPort = 8000
+
 // PodWrapper wraps a Pod.
 type PodWrapper struct {
 	corev1.Pod
@@ -51,7 +54,8 @@ func MakePod(podName string) *PodWrapper {
 	}
 }
 
-// Complete sets necessary fields for a Pod to make it not denied by the apiserver
+// Complete sets necessary fields for a Pod to make it not denied by the apiserver.
+// It applies a default container image and ensures the model server port is exposed.
 func (p *PodWrapper) Complete() *PodWrapper {
 	if p.Pod.Namespace == "" {
 		p.Namespace("default")
@@ -60,6 +64,13 @@ func (p *PodWrapper) Complete() *PodWrapper {
 		{
 			Name:  "mock-vllm",
 			Image: "mock-vllm:latest",
+			Ports: []corev1.ContainerPort{
+				{
+					Name:          "http",
+					ContainerPort: DefaultTestPort,
+					Protocol:      corev1.ProtocolTCP,
+				},
+			},
 		},
 	}
 	return p

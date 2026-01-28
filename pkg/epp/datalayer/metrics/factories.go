@@ -27,7 +27,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 const (
@@ -87,7 +87,7 @@ type (
 
 // MetricsDataSourceFactory is a factory function used to instantiate data layer's
 // metrics data source plugins specified in a configuration.
-func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	cfg, err := defaultDataSourceConfigParams()
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle pl
 
 // ModelServerExtractorFactory is a factory function used to instantiate data layer's metrics
 // Extractor plugins specified in a configuration.
-func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle plugins.Handle) (plugins.Plugin, error) {
+func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	cfg, err := defaultExtractorConfigParams()
 	if err != nil {
 		return nil, err

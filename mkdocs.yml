@@ -18,6 +18,7 @@ theme:
     - navigation.tabs
     - navigation.top
     - navigation.expand
+    - content.tabs.link
   palette:
     primary: custom
   custom_dir: site-src/overrides
@@ -68,6 +69,7 @@ nav:
       - Getting started (Latest/Main): guides/getting-started-latest.md
       - Use Cases:
         - Serving Multiple Inference Pools (Latest/Main): guides/serving-multiple-inference-pools-latest.md
+        - Deploy As a Standalone Request Scheduler: guides/epp-standalone.md
       - Rollout:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md

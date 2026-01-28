@@ -23,12 +23,11 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
@@ -54,11 +53,6 @@ type AdmissionController interface {
 	) error
 }
 
-// saturationDetector defines the minimal interface required for checking if the backend pool is saturated.
-type saturationDetector interface {
-	IsSaturated(ctx context.Context, candidatePods []backendmetrics.PodMetrics) bool
-}
-
 // flowController defines the minimal interface required by FlowControlAdmissionController for enqueuing requests and
 // waiting for an admission outcome.
 type flowController interface {
@@ -68,14 +62,14 @@ type flowController interface {
 // rejectIfSheddableAndSaturated checks if a request should be immediately rejected.
 func rejectIfSheddableAndSaturated(
 	ctx context.Context,
-	sd saturationDetector,
+	sd contracts.SaturationDetector,
 	locator contracts.PodLocator,
 	reqCtx *handlers.RequestContext,
 	priority int,
 	logger logr.Logger,
 ) error {
 	if requtil.IsSheddable(priority) {
-		if sd.IsSaturated(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) {
+		if sd.Saturation(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) >= 1.0 {
 			logger.V(logutil.TRACE).Info("Request rejected: system saturated and request is sheddable",
 				"requestID", reqCtx.SchedulingRequest.RequestId)
 			return errutil.Error{
@@ -93,13 +87,13 @@ func rejectIfSheddableAndSaturated(
 // It rejects sheddable requests (priority < 0) if the saturationDetector indicates that the system is currently
 // saturated. Non-sheddable requests always bypass the saturation check.
 type LegacyAdmissionController struct {
-	saturationDetector saturationDetector
+	saturationDetector contracts.SaturationDetector
 	podLocator         contracts.PodLocator
 }
 
 // NewLegacyAdmissionController creates a new LegacyAdmissionController.
 func NewLegacyAdmissionController(
-	sd saturationDetector,
+	sd contracts.SaturationDetector,
 	pl contracts.PodLocator,
 ) *LegacyAdmissionController {
 	return &LegacyAdmissionController{

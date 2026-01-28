@@ -28,7 +28,7 @@ import (
 	"github.com/prometheus/common/model"
 	"go.uber.org/multierr"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 const (
@@ -50,7 +50,7 @@ type PodMetricsClientImpl struct {
 }
 
 // FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an updated one.
-func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, metadata *datalayer.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
+func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, metadata *fwkdl.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
 	url := p.getMetricEndpoint(metadata)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -76,7 +76,7 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, metadata *datal
 	return p.promToPodMetrics(metricFamilies, existing)
 }
 
-func (p *PodMetricsClientImpl) getMetricEndpoint(metadata *datalayer.EndpointMetadata) string {
+func (p *PodMetricsClientImpl) getMetricEndpoint(metadata *fwkdl.EndpointMetadata) string {
 	return p.ModelServerMetricsScheme + "://" + metadata.GetMetricsHost() + p.ModelServerMetricsPath
 }
 

@@ -25,13 +25,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
+
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 func TestFactory(t *testing.T) {
 	source := &FakeDataSource{}
 	factory := NewEndpointFactory([]DataSource{source}, 100*time.Millisecond)
 
-	pod1 := &EndpointMetadata{
+	pod1 := &fwkdl.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod1",
 			Namespace: "default",
@@ -44,7 +46,7 @@ func TestFactory(t *testing.T) {
 	dup := factory.NewEndpoint(context.Background(), pod1, nil)
 	assert.Nil(t, dup, "expected to fail to create a duplicate collector")
 
-	pod2 := &EndpointMetadata{
+	pod2 := &fwkdl.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod2",
 			Namespace: "default",

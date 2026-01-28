@@ -32,9 +32,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
 )
 
@@ -269,14 +270,14 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	if len(ds.pool.TargetPorts) == 1 {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
-	pods := []*datalayer.EndpointMetadata{}
+	pods := []*fwkdl.EndpointMetadata{}
 	for idx, port := range ds.pool.TargetPorts {
 		metricsPort := modelServerMetricsPort
 		if metricsPort == 0 {
 			metricsPort = port
 		}
 		pods = append(pods,
-			&datalayer.EndpointMetadata{
+			&fwkdl.EndpointMetadata{
 				NamespacedName: types.NamespacedName{
 					Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
 					Namespace: pod.Namespace,

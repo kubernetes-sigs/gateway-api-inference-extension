@@ -100,7 +100,7 @@ their justifications, please refer to the detailed documentation within the rele
     requests to the backends. Its design focuses on high throughput and backpressure.
 
 2.  **Pluggable `Policy` Framework (`./framework`)**: This defines the core interfaces for all pluggable logic. It
-    features a two-tier policy system for `InterFlow` (decisions *between* different flows) and `IntraFlow`
+    features a two-tier policy system for `Fairness` (decisions *between* different flows) and `Ordering`
     (decisions *within* a single flow) logic, covering both request dispatch and displacement.
 
 3.  **Extensible `SafeQueue` System (`./framework`)**: This defines the `framework.SafeQueue` interface for

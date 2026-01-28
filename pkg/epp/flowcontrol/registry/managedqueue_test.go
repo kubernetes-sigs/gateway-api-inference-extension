@@ -27,11 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework"
-	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 // --- Test Harness and Mocks ---
@@ -41,7 +41,7 @@ type mqTestHarness struct {
 	t          *testing.T
 	mq         *managedQueue
 	propagator *mockStatsPropagator
-	mockPolicy *frameworkmocks.MockIntraFlowDispatchPolicy
+	mockPolicy *frameworkmocks.MockOrderingPolicy
 }
 
 // newMockedMqHarness creates a harness that uses a mocked underlying queue.
@@ -61,13 +61,11 @@ func newRealMqHarness(t *testing.T, key types.FlowKey) *mqTestHarness {
 }
 
 // newMqHarness is the base constructor for the test harness.
-func newMqHarness(t *testing.T, queue framework.SafeQueue, key types.FlowKey, isDraining bool) *mqTestHarness {
+func newMqHarness(t *testing.T, queue flowcontrol.SafeQueue, key types.FlowKey, isDraining bool) *mqTestHarness {
 	t.Helper()
 
 	propagator := &mockStatsPropagator{}
-	mockPolicy := &frameworkmocks.MockIntraFlowDispatchPolicy{
-		ComparatorV: &frameworkmocks.MockItemComparator{},
-	}
+	mockPolicy := &frameworkmocks.MockOrderingPolicy{}
 
 	isDrainingFunc := func() bool { return isDraining }
 	mq := newManagedQueue(queue, mockPolicy, key, logr.Discard(), propagator.propagate, isDrainingFunc)
@@ -251,7 +249,7 @@ func TestManagedQueue_Cleanup(t *testing.T) {
 		{
 			name: "ShouldSucceed_AndDecrementStats_WhenItemsRemoved",
 			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.CleanupFunc = func(_ framework.PredicateFunc) []types.QueueItemAccessor {
+				q.CleanupFunc = func(_ flowcontrol.PredicateFunc) []types.QueueItemAccessor {
 					return items
 				}
 			},
@@ -261,7 +259,7 @@ func TestManagedQueue_Cleanup(t *testing.T) {
 		{
 			name: "ShouldSucceed_AndNotChangeStats_WhenNoItemsRemoved",
 			setupMock: func(q *frameworkmocks.MockSafeQueue, items []types.QueueItemAccessor) {
-				q.CleanupFunc = func(_ framework.PredicateFunc) []types.QueueItemAccessor {
+				q.CleanupFunc = func(_ flowcontrol.PredicateFunc) []types.QueueItemAccessor {
 					return nil // Simulate no items matching predicate.
 				}
 			},
@@ -345,7 +343,7 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 		q.PeekHeadV = item
 		q.PeekTailV = item
 		q.NameV = "MockQueue"
-		q.CapabilitiesV = []framework.QueueCapability{framework.CapabilityFIFO}
+		q.CapabilitiesV = []flowcontrol.QueueCapability{flowcontrol.CapabilityFIFO}
 		require.NoError(t, harness.mq.Add(item), "Test setup: Adding an item must succeed")
 
 		accessor := harness.mq.FlowQueueAccessor()
@@ -358,8 +356,8 @@ func TestManagedQueue_FlowQueueAccessor(t *testing.T) {
 		assert.Equal(t, harness.mq.ByteSize(), accessor.ByteSize(),
 			"Accessor ByteSize() must reflect the managed queue's current byte size")
 		assert.Equal(t, flowKey, accessor.FlowKey(), "Accessor FlowKey() must return the correct identifier for the flow")
-		assert.Equal(t, harness.mockPolicy.Comparator(), accessor.Comparator(),
-			"Accessor Comparator() must return the comparator provided by the configured intra-flow policy")
+		assert.Equal(t, harness.mockPolicy, accessor.OrderingPolicy(),
+			"Accessor OrderingPolicy() must return the policy provided by the configured ordering policy")
 
 		peekedHead := accessor.PeekHead()
 		assert.Same(t, item, peekedHead, "Accessor PeekHead() must return the exact item instance at the head")

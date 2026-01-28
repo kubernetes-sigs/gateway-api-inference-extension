@@ -96,6 +96,15 @@ func TestMain(m *testing.M) {
 }
 
 func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
+	// executionModes defines the permutations of EPP deployment modes to test.
+	executionModes := []struct {
+		name       string
+		standalone bool
+	}{
+		{name: "Standard", standalone: false},
+		{name: "Standalone", standalone: true},
+	}
+
 	tests := []struct {
 		name          string
 		requests      []*extProcPb.ProcessingRequest
@@ -103,6 +112,9 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		wantResponses []*extProcPb.ProcessingResponse
 		wantMetrics   map[string]string
 		waitForModel  string
+		// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
+		// InferenceModelRewrite) which are not available in Standalone mode.
+		requiresCRDs bool
 	}{
 		// --- Standard Routing Logic ---
 		{
@@ -277,6 +289,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": cleanMetric(metricReqTotal(modelToBeWritten, modelAfterRewrite)),
 			},
+			requiresCRDs: true,
 		},
 		{
 			name: "protocol: simple GET (header only)",
@@ -371,40 +384,49 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			// Resolve Model to Sync.
-			modelToSync := tc.waitForModel
-			if modelToSync == "" {
-				modelToSync = modelMyModel
-			}
+	for _, mode := range executionModes {
+		t.Run(mode.name, func(t *testing.T) {
+			for _, tc := range tests {
+				t.Run(tc.name, func(t *testing.T) {
+					if mode.standalone && tc.requiresCRDs {
+						t.Skipf("Skipping test %q: requires CRDs, but running in Standalone mode", tc.name)
+					}
 
-			h := NewTestHarness(t, context.Background()).
-				WithBaseResources().
-				WithPods(tc.pods).
-				WaitForSync(len(tc.pods), modelToSync)
+					var h *TestHarness
+					if mode.standalone {
+						h = NewTestHarness(t, context.Background(), WithStandaloneMode())
+					} else {
+						h = NewTestHarness(t, context.Background()).WithBaseResources()
+					}
 
-			// Wait for metrics to settle to avoid race conditions where Datastore has pods but Scheduler/Metrics collector
-			// hasn't processed them yet (causing random scheduling or missing metrics).
-			if len(tc.pods) > 0 {
-				h.WaitForReadyPodsMetric(len(tc.pods))
-			}
+					// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.
+					// We only wait for Pod discovery.
+					modelToSync := tc.waitForModel
+					if modelToSync == "" {
+						modelToSync = modelMyModel
+					}
 
-			responses, err := integration.StreamedRequest(t, h.Client, tc.requests, len(tc.wantResponses))
+					h.WithPods(tc.pods).WaitForSync(len(tc.pods), modelToSync)
+					if len(tc.pods) > 0 {
+						h.WaitForReadyPodsMetric(len(tc.pods))
+					}
 
-			require.NoError(t, err)
+					responses, err := integration.StreamedRequest(t, h.Client, tc.requests, len(tc.wantResponses))
+					require.NoError(t, err)
 
-			if diff := cmp.Diff(tc.wantResponses, responses,
-				protocmp.Transform(),
-				protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
-					return a.GetHeader().GetKey() < b.GetHeader().GetKey()
-				}),
-			); diff != "" {
-				t.Errorf("Response mismatch (-want +got): %v", diff)
-			}
+					if diff := cmp.Diff(tc.wantResponses, responses,
+						protocmp.Transform(),
+						protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
+							return a.GetHeader().GetKey() < b.GetHeader().GetKey()
+						}),
+					); diff != "" {
+						t.Errorf("Response mismatch (-want +got): %v", diff)
+					}
 
-			if len(tc.wantMetrics) > 0 {
-				h.ExpectMetrics(tc.wantMetrics)
+					if len(tc.wantMetrics) > 0 {
+						h.ExpectMetrics(tc.wantMetrics)
+					}
+				})
 			}
 		})
 	}

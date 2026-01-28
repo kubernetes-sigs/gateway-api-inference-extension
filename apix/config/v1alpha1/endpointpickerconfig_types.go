@@ -126,13 +126,13 @@ type SchedulingPlugin struct {
 
 	// +optional
 	// Weight is the weight fo be used if this plugin is a Scorer.
-	Weight *int `json:"weight"`
+	Weight *float64 `json:"weight"`
 }
 
 func (sp SchedulingPlugin) String() string {
 	var weight string
 	if sp.Weight != nil {
-		weight = fmt.Sprintf(", Weight: %d", *sp.Weight)
+		weight = fmt.Sprintf(", Weight: %f", *sp.Weight)
 	}
 	return fmt.Sprintf("{PluginRef: %s%s}", sp.PluginRef, weight)
 }

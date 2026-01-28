@@ -31,7 +31,7 @@ import (
 // `Remove` operations. This is a white-box test to ensure the internal data structure is always in a valid state.
 func TestMaxMinHeap_InternalProperty(t *testing.T) {
 	t.Parallel()
-	q := newMaxMinHeap(enqueueTimeComparator)
+	q := newMaxMinHeap(enqueueTimePolicy)
 
 	items := make([]*typesmocks.MockQueueItemAccessor, 20)
 	now := time.Now()
@@ -86,10 +86,10 @@ func verifyNode(t *testing.T, h *maxMinHeap, i int, msgAndArgs ...any) {
 	// Check children
 	if leftChild < n {
 		if isMinLevel {
-			require.False(t, h.comparator.Func()(h.items[i], h.items[leftChild]),
+			require.False(t, h.policy.Less(h.items[i], h.items[leftChild]),
 				"min-level node %d has child %d with smaller value. %v", i, leftChild, msgAndArgs)
 		} else { // isMaxLevel
-			require.False(t, h.comparator.Func()(h.items[leftChild], h.items[i]),
+			require.False(t, h.policy.Less(h.items[leftChild], h.items[i]),
 				"max-level node %d has child %d with larger value. %v", i, leftChild, msgAndArgs)
 		}
 		verifyNode(t, h, leftChild, msgAndArgs...)
@@ -97,10 +97,10 @@ func verifyNode(t *testing.T, h *maxMinHeap, i int, msgAndArgs ...any) {
 
 	if rightChild < n {
 		if isMinLevel {
-			require.False(t, h.comparator.Func()(h.items[i], h.items[rightChild]),
+			require.False(t, h.policy.Less(h.items[i], h.items[rightChild]),
 				"min-level node %d has child %d with smaller value. %v", i, rightChild, msgAndArgs)
 		} else { // isMaxLevel
-			require.False(t, h.comparator.Func()(h.items[rightChild], h.items[i]),
+			require.False(t, h.policy.Less(h.items[rightChild], h.items[i]),
 				"max-level node %d has child %d with larger value. %v", i, rightChild, msgAndArgs)
 		}
 		verifyNode(t, h, rightChild, msgAndArgs...)

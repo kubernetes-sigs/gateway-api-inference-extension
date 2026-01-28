@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -446,12 +447,12 @@ func TestEndpointMetadata(t *testing.T) {
 		op                func(ctx context.Context, ds Datastore)
 		pool              *v1.InferencePool
 		existingPods      []*corev1.Pod
-		wantEndpointMetas []*datalayer.EndpointMetadata
+		wantEndpointMetas []*fwkdl.EndpointMetadata
 	}{
 		{
 			name:         "Add new pod, no existing pods, should add",
 			existingPods: []*corev1.Pod{},
-			wantEndpointMetas: []*datalayer.EndpointMetadata{
+			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -473,7 +474,7 @@ func TestEndpointMetadata(t *testing.T) {
 		{
 			name:         "Add new pod, no existing pods, should add, multiple target ports",
 			existingPods: []*corev1.Pod{},
-			wantEndpointMetas: []*datalayer.EndpointMetadata{
+			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -507,7 +508,7 @@ func TestEndpointMetadata(t *testing.T) {
 		{
 			name:         "Add new pod, with existing pods, should add, multiple target ports",
 			existingPods: []*corev1.Pod{pod1},
-			wantEndpointMetas: []*datalayer.EndpointMetadata{
+			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -565,7 +566,7 @@ func TestEndpointMetadata(t *testing.T) {
 		{
 			name:         "Delete the pod, multiple target ports",
 			existingPods: []*corev1.Pod{pod1, pod2},
-			wantEndpointMetas: []*datalayer.EndpointMetadata{
+			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -617,11 +618,11 @@ func TestEndpointMetadata(t *testing.T) {
 				}
 
 				test.op(ctx, ds)
-				var gotMetadata []*datalayer.EndpointMetadata
+				var gotMetadata []*fwkdl.EndpointMetadata
 				for _, pm := range ds.PodList(AllPodsPredicate) {
 					gotMetadata = append(gotMetadata, pm.GetMetadata())
 				}
-				if diff := cmp.Diff(test.wantEndpointMetas, gotMetadata, cmpopts.SortSlices(func(a, b *datalayer.EndpointMetadata) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
+				if diff := cmp.Diff(test.wantEndpointMetas, gotMetadata, cmpopts.SortSlices(func(a, b *fwkdl.EndpointMetadata) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
 					t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
 				}
 			})

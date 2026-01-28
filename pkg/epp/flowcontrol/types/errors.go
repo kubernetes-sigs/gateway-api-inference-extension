@@ -40,7 +40,7 @@ var (
 
 // --- Pre-Enqueue Rejection Errors ---
 
-// The following errors can occur before a request is formally added to a `framework.SafeQueue`. When returned by
+// The following errors can occur before a request is formally added to a SafeQueue. When returned by
 // `FlowController.EnqueueAndWait()`, these specific errors will typically be wrapped by `ErrRejected`.
 var (
 	// ErrQueueAtCapacity indicates that a request could not be enqueued because queue capacity limits were met.
@@ -49,9 +49,8 @@ var (
 
 // --- Post-Enqueue Eviction Errors ---
 
-// The following errors occur when a request, already in a `framework.SafeQueue`, is removed for reasons other than
-// dispatch. When returned by `FlowController.EnqueueAndWait()`, these specific errors will typically be wrapped by
-// `ErrEvicted`.
+// The following errors occur when a request, already in a SafeQueue, is removed for reasons other than dispatch.
+// When returned by `FlowController.EnqueueAndWait()`, these specific errors will typically be wrapped by `ErrEvicted`.
 var (
 	// ErrTTLExpired indicates a request was evicted from a queue because its effective Time-To-Live expired.
 	ErrTTLExpired = errors.New("request TTL expired")

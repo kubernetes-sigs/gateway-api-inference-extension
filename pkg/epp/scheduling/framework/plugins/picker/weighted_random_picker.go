@@ -28,10 +28,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -40,7 +39,7 @@ const (
 
 // weightedScoredEndpoint represents a scored endpoint with its A-Res sampling key
 type weightedScoredEndpoint struct {
-	*types.ScoredEndpoint
+	*framework.ScoredEndpoint
 	key float64
 }
 
@@ -48,7 +47,7 @@ type weightedScoredEndpoint struct {
 var _ framework.Picker = &WeightedRandomPicker{}
 
 // WeightedRandomPickerFactory defines the factory function for WeightedRandomPicker.
-func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -66,7 +65,7 @@ func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 	}
 
 	return &WeightedRandomPicker{
-		typedName:         plugins.TypedName{Type: WeightedRandomPickerType, Name: WeightedRandomPickerType},
+		typedName:         fwkplugin.TypedName{Type: WeightedRandomPickerType, Name: WeightedRandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
 		randomPicker:      NewRandomPicker(maxNumOfEndpoints),
 	}
@@ -86,7 +85,7 @@ func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 // - Mathematically correct weighted random sampling
 // - Single pass algorithm with O(n + k log k) complexity
 type WeightedRandomPicker struct {
-	typedName         plugins.TypedName
+	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int
 	randomPicker      *RandomPicker // fallback for zero weights
 }
@@ -98,15 +97,15 @@ func (p *WeightedRandomPicker) WithName(name string) *WeightedRandomPicker {
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (p *WeightedRandomPicker) TypedName() plugins.TypedName {
+func (p *WeightedRandomPicker) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
 // Pick selects the endpoint(s) randomly from the list of candidates, where the probability of the endpoint to get picked is derived
 // from its weighted score.
-func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *types.CycleState, scoredEndpoints []*types.ScoredEndpoint) *types.ProfileRunResult {
+func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	// Check if there is at least one endpoint with Score > 0, if not let random picker run
-	if slices.IndexFunc(scoredEndpoints, func(scoredEndpoint *types.ScoredEndpoint) bool { return scoredEndpoint.Score > 0 }) == -1 {
+	if slices.IndexFunc(scoredEndpoints, func(scoredEndpoint *framework.ScoredEndpoint) bool { return scoredEndpoint.Score > 0 }) == -1 {
 		log.FromContext(ctx).V(logutil.DEBUG).Info("All scores are zero, delegating to RandomPicker for uniform selection")
 		return p.randomPicker.Pick(ctx, cycleState, scoredEndpoints)
 	}
@@ -144,10 +143,10 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *types.Cycle
 	// Select top k endpoints
 	selectedCount := min(p.maxNumOfEndpoints, len(weightedEndpoints))
 
-	targetEndpoints := make([]types.Endpoint, selectedCount)
+	targetEndpoints := make([]framework.Endpoint, selectedCount)
 	for i := range selectedCount {
 		targetEndpoints[i] = weightedEndpoints[i].ScoredEndpoint
 	}
 
-	return &types.ProfileRunResult{TargetEndpoints: targetEndpoints}
+	return &framework.ProfileRunResult{TargetEndpoints: targetEndpoints}
 }

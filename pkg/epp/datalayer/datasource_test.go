@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 
 func TestRegisterAndGetSource(t *testing.T) {
 	reg := DataSourceRegistry{}
-	ds := &FakeDataSource{typedName: &plugins.TypedName{Type: testType, Name: testType}}
+	ds := &FakeDataSource{typedName: &fwkplugin.TypedName{Type: testType, Name: testType}}
 
 	err := reg.Register(ds)
 	assert.NoError(t, err, "expected no error on first registration")

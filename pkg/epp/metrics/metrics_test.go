@@ -29,8 +29,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 )
 
 const (
@@ -969,6 +969,44 @@ func TestFlowControlQueueSizeMetric(t *testing.T) {
 
 	// Non-existent labels
 	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
+	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
+}
+
+func TestFlowControlQueueBytesMetric(t *testing.T) {
+	Reset()
+
+	const (
+		pool   = "pool-1"
+		model  = "llama-2"
+		target = "llama-base"
+	)
+
+	// Basic Inc/Dec
+	AddFlowControlQueueBytes("user-a", "100", pool, model, target, 32)
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
+	require.Equal(t, 32.0, val, "Gauge value should be 32 after Add for user-a/100")
+
+	SubFlowControlQueueBytes("user-a", "100", pool, model, target, 32)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Sub")
+	require.Equal(t, 0.0, val, "Gauge value should be 0 after Sub for user-a/100")
+
+	// Multiple labels
+	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 32)
+	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 16)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-b/200")
+	require.Equal(t, 48.0, val, "Gauge value should be 48 for user-b/200")
+
+	SubFlowControlQueueBytes("user-b", "200", pool, model, target, 48)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Sub")
+	require.Equal(t, 0.0, val, "Gauge value should be 0 for user-b/200 after one Sub")
+
+	// Non-existent labels
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }

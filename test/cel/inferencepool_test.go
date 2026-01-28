@@ -47,7 +47,7 @@ func TestValidateInferencePool(t *testing.T) {
 			EndpointPickerRef: v1.EndpointPickerRef{
 				Name: "epp",
 				Kind: "Service",
-				Port: ptrTo(v1.Port{Number: 9002}),
+				Port: &v1.Port{Number: 9002},
 			},
 		},
 	}
@@ -60,6 +60,13 @@ func TestValidateInferencePool(t *testing.T) {
 		{
 			desc: "passes validation with a valid configuration",
 			mutate: func(ip *v1.InferencePool) {
+			},
+			wantErrors: nil,
+		},
+		{
+			desc: "passes validation with a appProtocol configured",
+			mutate: func(ip *v1.InferencePool) {
+				ip.Spec.AppProtocol = v1.AppProtocolH2C
 			},
 			wantErrors: nil,
 		},

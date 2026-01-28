@@ -27,12 +27,12 @@ import (
 	"sync"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // HTTPDataSource is a data source that receives its data using HTTP client.
 type HTTPDataSource struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 	scheme    string // scheme to use
 	path      string // path to use
 
@@ -55,7 +55,7 @@ func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, pl
 	}
 
 	dataSrc := &HTTPDataSource{
-		typedName: plugins.TypedName{
+		typedName: fwkplugin.TypedName{
 			Type: pluginType,
 			Name: pluginName,
 		},
@@ -69,7 +69,7 @@ func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, pl
 }
 
 // TypedName returns the data source type and name.
-func (dataSrc *HTTPDataSource) TypedName() plugins.TypedName {
+func (dataSrc *HTTPDataSource) TypedName() fwkplugin.TypedName {
 	return dataSrc.typedName
 }
 

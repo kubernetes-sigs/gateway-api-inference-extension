@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -185,7 +186,9 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 // RunConformance runs the Inference Extension conformance tests using default options.
 func RunConformance(t *testing.T) {
-	RunConformanceWithOptions(t, DefaultOptions(t))
+	opts := DefaultOptions(t)
+	tests.RoundTripper = roundtripper.DefaultRoundTripper{Debug: opts.Debug, TimeoutConfig: opts.TimeoutConfig}
+	RunConformanceWithOptions(t, opts)
 }
 
 // RunConformanceWithOptions runs the Inference Extension conformance tests with specific options.

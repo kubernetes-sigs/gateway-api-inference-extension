@@ -29,10 +29,13 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
 )
 
@@ -74,7 +77,7 @@ func LoadRawConfig(configBytes []byte, logger logr.Logger) (*configapi.EndpointP
 // scheduler construction.
 func InstantiateAndConfigure(
 	rawConfig *configapi.EndpointPickerConfig,
-	handle plugins.Handle,
+	handle fwkplugin.Handle,
 	logger logr.Logger,
 ) (*config.Config, error) {
 
@@ -102,10 +105,27 @@ func InstantiateAndConfigure(
 		return nil, fmt.Errorf("data layer config build failed: %w", err)
 	}
 
+	var flowControlConfig *flowcontrol.Config
+	if featureGates[flowcontrol.FeatureGate] {
+		registryConfig, err := registry.NewConfig(handle)
+		if err != nil {
+			return nil, fmt.Errorf("flow registgry config build failed: %w", err)
+		}
+		cfg := &flowcontrol.Config{
+			Controller: fccontroller.Config{},
+			Registry:   registryConfig,
+		}
+		flowControlConfig, err = cfg.ValidateAndApplyDefaults()
+		if err != nil {
+			return nil, fmt.Errorf("flow control config build failed: %w", err)
+		}
+	}
+
 	return &config.Config{
 		SchedulerConfig:          schedulerConfig,
 		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
 		DataConfig:               dataConfig,
+		FlowControlConfig:        flowControlConfig,
 	}, nil
 }
 
@@ -118,7 +138,7 @@ func decodeRawConfig(configBytes []byte) (*configapi.EndpointPickerConfig, error
 	return cfg, nil
 }
 
-func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins.Handle) error {
+func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplugin.Handle) error {
 	pluginNames := sets.New[string]()
 	for _, spec := range configuredPlugins {
 		if spec.Type == "" {
@@ -129,7 +149,7 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins
 		}
 		pluginNames.Insert(spec.Name)
 
-		factory, ok := plugins.Registry[spec.Type]
+		factory, ok := fwkplugin.Registry[spec.Type]
 		if !ok {
 			return fmt.Errorf("plugin type '%s' is not registered", spec.Type)
 		}
@@ -146,13 +166,13 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle plugins
 
 func buildSchedulerConfig(
 	configProfiles []configapi.SchedulingProfile,
-	handle plugins.Handle,
+	handle fwkplugin.Handle,
 ) (*scheduling.SchedulerConfig, error) {
 
-	profiles := make(map[string]*framework.SchedulerProfile)
+	profiles := make(map[string]framework.SchedulerProfile)
 
 	for _, cfgProfile := range configProfiles {
-		fwProfile := framework.NewSchedulerProfile()
+		fwProfile := scheduling.NewSchedulerProfile()
 
 		for _, pluginRef := range cfgProfile.Plugins {
 			plugin := handle.Plugin(pluginRef.PluginRef)
@@ -168,7 +188,7 @@ func buildSchedulerConfig(
 				if pluginRef.Weight != nil {
 					weight = *pluginRef.Weight
 				}
-				plugin = framework.NewWeightedScorer(scorer, weight)
+				plugin = scheduling.NewWeightedScorer(scorer, weight)
 			}
 
 			if err := fwProfile.AddPlugins(plugin); err != nil {
@@ -233,21 +253,19 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilization
 	return cfg
 }
 
-func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle plugins.Handle) (*datalayer.Config, error) {
-	if !dataLayerEnabled {
-		if rawDataConfig != nil {
-			return nil, errors.New("the Datalayer has not been enabled, but you specified a configuration for it")
-		}
-		return nil, nil
-	}
-
-	if rawDataConfig == nil {
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle fwkplugin.Handle) (*datalayer.Config, error) {
+	if dataLayerEnabled && (rawDataConfig == nil || rawDataConfig.Sources == nil) { // enabled but no configuration
 		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
 	}
 
 	cfg := datalayer.Config{
 		Sources: []datalayer.DataSourceConfig{},
 	}
+
+	if rawDataConfig == nil { // metrics data collection not enabled and no additional configuration
+		return &cfg, nil
+	}
+
 	for _, source := range rawDataConfig.Sources {
 		if sourcePlugin, ok := handle.Plugin(source.PluginRef).(datalayer.DataSource); ok {
 			sourceConfig := datalayer.DataSourceConfig{
@@ -266,6 +284,5 @@ func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEna
 			return nil, fmt.Errorf("the plugin %s is not a datalayer.Source", source.PluginRef)
 		}
 	}
-
 	return &cfg, nil
 }

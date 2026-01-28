@@ -20,10 +20,9 @@ import (
 	"context"
 	"encoding/json"
 
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
 )
 
 const (
@@ -34,24 +33,24 @@ const (
 var _ framework.Scorer = &LoraAffinityScorer{}
 
 // LoraAffinityScorerFactory defines the factory function for LoraAffinityScorer.
-func LoraAffinityScorerFactory(name string, _ json.RawMessage, _ plugins.Handle) (plugins.Plugin, error) {
+func LoraAffinityScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewLoraAffinityScorer().WithName(name), nil
 }
 
 // NewLoraAffinityScorer initializes a new LoraAffinityScorer and returns its pointer.
 func NewLoraAffinityScorer() *LoraAffinityScorer {
 	return &LoraAffinityScorer{
-		typedName: plugins.TypedName{Type: LoraAffinityScorerType, Name: LoraAffinityScorerType},
+		typedName: fwkplugin.TypedName{Type: LoraAffinityScorerType, Name: LoraAffinityScorerType},
 	}
 }
 
 // LoraAffinityScorer scores list of candidate pods based on Lora affinity and availability.
 type LoraAffinityScorer struct {
-	typedName plugins.TypedName
+	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *LoraAffinityScorer) TypedName() plugins.TypedName {
+func (s *LoraAffinityScorer) TypedName() fwkplugin.TypedName {
 	return s.typedName
 }
 
@@ -74,8 +73,8 @@ func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
 	return s
 }
 
-func (s *LoraAffinityScorer) Score(_ context.Context, _ *types.CycleState, request *types.LLMRequest, endpoints []types.Endpoint) map[types.Endpoint]float64 {
-	scores := make(map[types.Endpoint]float64, len(endpoints))
+func (s *LoraAffinityScorer) Score(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+	scores := make(map[framework.Endpoint]float64, len(endpoints))
 
 	// Assign a score to each endpoint for loading the target adapter.
 	for _, endpoint := range endpoints {

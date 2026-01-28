@@ -25,8 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // TestNewPlugin_Configuration validates that the plugin correctly applies defaults and respects explicit configuration
@@ -81,17 +81,20 @@ func TestNewPlugin_Configuration(t *testing.T) {
 			detector := NewDetector(tc.config)
 			endpointName := "test-endpoint"
 
-			// 1. Verify MaxConcurrency via IsSaturated
+			// 1. Verify MaxConcurrency via Saturation
 
 			// A. Drive load to just below the limit (Max - 1)
+			// Expected Saturation = (Max - 1) / Max
 			driveLoad(ctx, detector, endpointName, int(tc.effectiveMax-1))
-			require.False(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}),
-				"expected NOT saturated at MaxConcurrency-1")
+			expectedSat := float64(tc.effectiveMax-1) / float64(tc.effectiveMax)
+			actualSat := detector.Saturation(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)})
+			require.InDelta(t, expectedSat, actualSat, 1e-6, "expected saturation gradient to reflect partial load")
 
 			// B. Increment to exactly the limit (Max)
+			// Expected Saturation = 1.0
 			driveLoad(ctx, detector, endpointName, 1)
-			require.True(t, detector.IsSaturated(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}),
-				"expected saturated at MaxConcurrency")
+			actualSat = detector.Saturation(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)})
+			require.InDelta(t, 1.0, actualSat, 1e-6, `expected 100% saturation at MaxConcurrency`)
 
 			// 2. Verify Headroom via Filter
 
@@ -111,55 +114,67 @@ func TestNewPlugin_Configuration(t *testing.T) {
 	}
 }
 
-// TestDetector_IsSaturated verifies the global circuit breaker logic.
-// It ensures saturation is reported ONLY when ALL candidate endpoints are full.
-func TestDetector_IsSaturated(t *testing.T) {
+// TestDetector_Saturation verifies the global saturation gradient logic.
+// It ensures saturation is reported as an aggregate ratio of TotalInflight / TotalCapacity.
+func TestDetector_Saturation(t *testing.T) {
 	t.Parallel()
 
-	const maxConcurrency = 5
+	const maxConcurrency = 10
 	config := Config{MaxConcurrency: maxConcurrency}
 
 	tests := []struct {
 		name               string
 		endpointLoadSetup  map[string]int // Map of EndpointName -> Request Count
-		candidateEndpoints []string       // Endpoints passed to IsSaturated
-		wantSaturation     bool
+		candidateEndpoints []string
+		wantSaturation     float64
 	}{
 		{
 			name:               "empty_candidate_list_fail_closed",
 			endpointLoadSetup:  nil,
 			candidateEndpoints: []string{},
-			wantSaturation:     true,
+			wantSaturation:     1.0,
 		},
 		{
-			name:               "single_endpoint_with_capacity",
-			endpointLoadSetup:  map[string]int{"endpoint-a": 4},
+			name:               "single_endpoint_empty",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 0},
 			candidateEndpoints: []string{"endpoint-a"},
-			wantSaturation:     false,
+			wantSaturation:     0.0,
+		},
+		{
+			name:               "single_endpoint_half_full",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 5},
+			candidateEndpoints: []string{"endpoint-a"},
+			wantSaturation:     0.5,
 		},
 		{
 			name:               "single_endpoint_full",
-			endpointLoadSetup:  map[string]int{"endpoint-a": 5},
+			endpointLoadSetup:  map[string]int{"endpoint-a": 10},
 			candidateEndpoints: []string{"endpoint-a"},
-			wantSaturation:     true,
+			wantSaturation:     1.0,
 		},
 		{
-			name:               "multi_endpoint_one_available",
-			endpointLoadSetup:  map[string]int{"endpoint-a": 5, "endpoint-b": 4},
+			name:               "multi_endpoint_mixed_load",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 10, "endpoint-b": 0},
 			candidateEndpoints: []string{"endpoint-a", "endpoint-b"},
-			wantSaturation:     false,
+			wantSaturation:     0.5,
 		},
 		{
-			name:               "multi_endpoint_all_full",
-			endpointLoadSetup:  map[string]int{"endpoint-a": 5, "endpoint-b": 6},
+			name:               "multi_endpoint_overloaded",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 15, "endpoint-b": 5},
 			candidateEndpoints: []string{"endpoint-a", "endpoint-b"},
-			wantSaturation:     true,
+			wantSaturation:     1.0,
+		},
+		{
+			name:               "multi_endpoint_very_overloaded",
+			endpointLoadSetup:  map[string]int{"endpoint-a": 15, "endpoint-b": 15},
+			candidateEndpoints: []string{"endpoint-a", "endpoint-b"},
+			wantSaturation:     1.5,
 		},
 		{
 			name:               "unknown_endpoint_assumed_empty",
 			endpointLoadSetup:  nil,
 			candidateEndpoints: []string{"endpoint-unknown"},
-			wantSaturation:     false,
+			wantSaturation:     0.0,
 		},
 	}
 
@@ -180,8 +195,8 @@ func TestDetector_IsSaturated(t *testing.T) {
 				candidates = append(candidates, newFakePodMetric(name))
 			}
 
-			got := detector.IsSaturated(ctx, candidates)
-			require.Equal(t, tc.wantSaturation, got, "IsSaturated result mismatch")
+			got := detector.Saturation(ctx, candidates)
+			require.InDelta(t, tc.wantSaturation, got, 1e-6, "Saturation result mismatch")
 		})
 	}
 }
@@ -191,32 +206,32 @@ func TestDetector_IsSaturated(t *testing.T) {
 func TestDetector_Lifecycle(t *testing.T) {
 	t.Parallel()
 
-	// MaxConcurrency 1 makes state changes immediate.
+	// MaxConcurrency 1 makes math simple.
 	detector := NewDetector(Config{MaxConcurrency: 1})
 	ctx := context.Background()
 	endpointName := "lifecycle-endpoint"
 	candidates := []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}
 
 	// 1. Initially Empty
-	require.False(t, detector.IsSaturated(ctx, candidates), "expected initially empty")
+	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected initially 0.0")
 
 	// 2. Increment (Saturated)
 	detector.PreRequest(ctx, nil, makeSchedulingResult(endpointName))
-	require.True(t, detector.IsSaturated(ctx, candidates), "expected saturated after 1 request")
+	require.InDelta(t, 1.0, detector.Saturation(ctx, candidates), 1e-6, "expected 1.0 after 1 request")
 
 	// 3. Decrement (Available)
 	targetEndpoint := newStubSchedulingEndpoint(endpointName)
 	detector.ResponseComplete(ctx, nil, nil, targetEndpoint.metadata)
-	require.False(t, detector.IsSaturated(ctx, candidates), "expected available after completion")
+	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected 0.0 after completion")
 
 	// 4. Increment again -> Delete -> Verify Reset
 	detector.PreRequest(ctx, nil, makeSchedulingResult(endpointName))
-	require.True(t, detector.IsSaturated(ctx, candidates), "re-saturation failed")
+	require.InDelta(t, 1.0, detector.Saturation(ctx, candidates), 1e-6, "re-saturation failed")
 
 	detector.DeleteEndpoint(fullEndpointName(endpointName))
 
 	// After deletion, the endpoint is "unknown" to the tracker, effectively count=0.
-	require.False(t, detector.IsSaturated(ctx, candidates), "expected clean state after DeleteEndpoint")
+	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected clean state after DeleteEndpoint")
 }
 
 // TestDetector_ConcurrencyStress performs a targeted race condition check.
@@ -303,7 +318,7 @@ func makeSchedulingResult(endpointName string) *schedulingtypes.SchedulingResult
 
 func newFakePodMetric(name string) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		Metadata: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
@@ -311,13 +326,13 @@ func newFakePodMetric(name string) *backendmetrics.FakePodMetrics {
 // It embeds the interface to satisfy the compiler but only implements GetMetadata.
 type stubSchedulingEndpoint struct {
 	schedulingtypes.Endpoint
-	metadata *datalayer.EndpointMetadata
+	metadata *fwkdl.EndpointMetadata
 }
 
 func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
 	return &stubSchedulingEndpoint{
-		metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		metadata: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
-func (f *stubSchedulingEndpoint) GetMetadata() *datalayer.EndpointMetadata { return f.metadata }
+func (f *stubSchedulingEndpoint) GetMetadata() *fwkdl.EndpointMetadata { return f.metadata }

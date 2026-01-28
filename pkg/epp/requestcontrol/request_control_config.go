@@ -17,67 +17,68 @@ limitations under the License.
 package requestcontrol
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 )
 
 // NewConfig creates a new Config object and returns its pointer.
 func NewConfig() *Config {
 	return &Config{
-		admissionPlugins:         []AdmissionPlugin{},
-		prepareDataPlugins:       []PrepareDataPlugin{},
-		preRequestPlugins:        []PreRequest{},
-		responseReceivedPlugins:  []ResponseReceived{},
-		responseStreamingPlugins: []ResponseStreaming{},
-		responseCompletePlugins:  []ResponseComplete{},
+		admissionPlugins:         []fwk.AdmissionPlugin{},
+		prepareDataPlugins:       []fwk.PrepareDataPlugin{},
+		preRequestPlugins:        []fwk.PreRequest{},
+		responseReceivedPlugins:  []fwk.ResponseReceived{},
+		responseStreamingPlugins: []fwk.ResponseStreaming{},
+		responseCompletePlugins:  []fwk.ResponseComplete{},
 	}
 }
 
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
-	admissionPlugins         []AdmissionPlugin
-	prepareDataPlugins       []PrepareDataPlugin
-	preRequestPlugins        []PreRequest
-	responseReceivedPlugins  []ResponseReceived
-	responseStreamingPlugins []ResponseStreaming
-	responseCompletePlugins  []ResponseComplete
+	admissionPlugins         []fwk.AdmissionPlugin
+	prepareDataPlugins       []fwk.PrepareDataPlugin
+	preRequestPlugins        []fwk.PreRequest
+	responseReceivedPlugins  []fwk.ResponseReceived
+	responseStreamingPlugins []fwk.ResponseStreaming
+	responseCompletePlugins  []fwk.ResponseComplete
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
 // If the Config has PreRequest plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithPreRequestPlugins(plugins ...PreRequest) *Config {
+func (c *Config) WithPreRequestPlugins(plugins ...fwk.PreRequest) *Config {
 	c.preRequestPlugins = plugins
 	return c
 }
 
 // WithResponseReceivedPlugins sets the given plugins as the ResponseReceived plugins.
 // If the Config has ResponseReceived plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseReceivedPlugins(plugins ...ResponseReceived) *Config {
+func (c *Config) WithResponseReceivedPlugins(plugins ...fwk.ResponseReceived) *Config {
 	c.responseReceivedPlugins = plugins
 	return c
 }
 
 // WithResponseStreamingPlugins sets the given plugins as the ResponseStreaming plugins.
 // If the Config has ResponseStreaming plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseStreamingPlugins(plugins ...ResponseStreaming) *Config {
+func (c *Config) WithResponseStreamingPlugins(plugins ...fwk.ResponseStreaming) *Config {
 	c.responseStreamingPlugins = plugins
 	return c
 }
 
 // WithResponseCompletePlugins sets the given plugins as the ResponseComplete plugins.
 // If the Config has ResponseComplete plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseCompletePlugins(plugins ...ResponseComplete) *Config {
+func (c *Config) WithResponseCompletePlugins(plugins ...fwk.ResponseComplete) *Config {
 	c.responseCompletePlugins = plugins
 	return c
 }
 
 // WithPrepareDataPlugins sets the given plugins as the PrepareData plugins.
-func (c *Config) WithPrepareDataPlugins(plugins ...PrepareDataPlugin) *Config {
+func (c *Config) WithPrepareDataPlugins(plugins ...fwk.PrepareDataPlugin) *Config {
 	c.prepareDataPlugins = plugins
 	return c
 }
 
 // WithAdmissionPlugins sets the given plugins as the AdmitRequest plugins.
-func (c *Config) WithAdmissionPlugins(plugins ...AdmissionPlugin) *Config {
+func (c *Config) WithAdmissionPlugins(plugins ...fwk.AdmissionPlugin) *Config {
 	c.admissionPlugins = plugins
 	return c
 }
@@ -85,21 +86,21 @@ func (c *Config) WithAdmissionPlugins(plugins ...AdmissionPlugin) *Config {
 // AddPlugins adds the given plugins to the Config.
 // The type of each plugin is checked and added to the corresponding list of plugins in the Config.
 // If a plugin implements multiple plugin interfaces, it will be added to each corresponding list.
-func (c *Config) AddPlugins(pluginObjects ...plugins.Plugin) {
+func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 	for _, plugin := range pluginObjects {
-		if preRequestPlugin, ok := plugin.(PreRequest); ok {
+		if preRequestPlugin, ok := plugin.(fwk.PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
 		}
-		if responseReceivedPlugin, ok := plugin.(ResponseReceived); ok {
+		if responseReceivedPlugin, ok := plugin.(fwk.ResponseReceived); ok {
 			c.responseReceivedPlugins = append(c.responseReceivedPlugins, responseReceivedPlugin)
 		}
-		if responseStreamingPlugin, ok := plugin.(ResponseStreaming); ok {
+		if responseStreamingPlugin, ok := plugin.(fwk.ResponseStreaming); ok {
 			c.responseStreamingPlugins = append(c.responseStreamingPlugins, responseStreamingPlugin)
 		}
-		if responseCompletePlugin, ok := plugin.(ResponseComplete); ok {
+		if responseCompletePlugin, ok := plugin.(fwk.ResponseComplete); ok {
 			c.responseCompletePlugins = append(c.responseCompletePlugins, responseCompletePlugin)
 		}
-		if prepareDataPlugin, ok := plugin.(PrepareDataPlugin); ok {
+		if prepareDataPlugin, ok := plugin.(fwk.PrepareDataPlugin); ok {
 			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)
 		}
 	}

@@ -97,10 +97,6 @@ func TestMain(m *testing.M) {
 	os.Exit(rc)
 }
 
-func ptrTo[T any](a T) *T {
-	return &a
-}
-
 func celErrorStringMatches(got, want string) bool {
 	gotL := strings.ToLower(got)
 	wantL := strings.ToLower(want)
