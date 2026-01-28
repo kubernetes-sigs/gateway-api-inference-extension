@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package requestcontrol contains helpers to decouple latency-predictor logic.
-package predicted_latency
+package predictedlatency
 
 import (
 	"strconv"
