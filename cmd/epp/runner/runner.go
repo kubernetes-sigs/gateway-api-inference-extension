@@ -357,20 +357,51 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
+// NewEndpointPoolFromOptions constructs an EndpointPool from standalone options.
+// This is shared between the production runner and standalone integration tests.
+func NewEndpointPoolFromOptions(
+	namespace string,
+	name string,
+	endpointSelector string,
+	endpointTargetPorts []int,
+) (*datalayer.EndpointPool, error) {
+
+	if namespace == "" {
+		return nil, errors.New("namespace must not be empty")
+	}
+	if name == "" {
+		return nil, errors.New("name must not be empty")
+	}
+	if endpointSelector == "" {
+		return nil, errors.New("endpoint selector must not be empty")
+	}
+	if len(endpointTargetPorts) == 0 {
+		return nil, errors.New("endpoint target ports must not be empty")
+	}
+
+	selectorMap, err := labels.ConvertSelectorToLabelsMap(endpointSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse endpoint selector %q: %w", endpointSelector, err)
+	}
+
+	pool := datalayer.NewEndpointPool(namespace, name)
+	pool.Selector = selectorMap
+	pool.TargetPorts = append(pool.TargetPorts, endpointTargetPorts...)
+
+	return pool, nil
+}
+
 func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32,
 	startCrdReconcilers bool, namespace, name, endpointSelector string, endpointTargetPorts []int) (datastore.Datastore, error) {
+
 	if startCrdReconcilers {
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort), nil
 	} else {
-		endpointPool := datalayer.NewEndpointPool(namespace, name)
-		labelsMap, err := labels.ConvertSelectorToLabelsMap(endpointSelector)
+		endpointPool, err := NewEndpointPoolFromOptions(namespace, name, endpointSelector, endpointTargetPorts)
 		if err != nil {
-			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-selector", err)
+			setupLog.Error(err, "Failed to construct endpoint pool from options")
 			return nil, err
 		}
-		endpointPool.Selector = labelsMap
-		endpointPool.TargetPorts = append(endpointPool.TargetPorts, endpointTargetPorts...)
-
 		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
 	}

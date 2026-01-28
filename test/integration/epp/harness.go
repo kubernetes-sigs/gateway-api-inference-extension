@@ -46,10 +46,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	eppRunner "sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -181,12 +181,13 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		// Disable CRD watching for Standalone mode.
 		runner.ControllerCfg = server.NewControllerConfig(false)
 
-		// Inject static Endpoint Pool.
-		// This replicates the manual pool construction that happens in runner.go CLI parsing.
-		// TODO(#2174): Refactor this to share logic with runner.go.
-		endpointPool := datalayer.NewEndpointPool(nsName, testPoolName)
-		endpointPool.Selector = map[string]string{"app": testPoolName}
-		endpointPool.TargetPorts = []int{epptestutil.DefaultTestPort}
+		endpointPool, err := eppRunner.NewEndpointPoolFromOptions(
+			nsName,
+			testPoolName,
+			"app="+testPoolName,
+			[]int{epptestutil.DefaultTestPort},
+		)
+		require.NoError(t, err)
 
 		runner.Datastore = datastore.NewDatastore(ctx, pmf, 0, datastore.WithEndpointPool(endpointPool))
 	} else {
