@@ -176,7 +176,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) 
 }
 
 // getEngineTypeFromEndpoint extracts the engine type from endpoint metadata labels.
-func getEngineTypeFromEndpoint(ep datalayer.Endpoint, labelKey string) string {
+func getEngineTypeFromEndpoint(ep fwkdl.Endpoint, labelKey string) string {
 	meta := ep.GetMetadata()
 	if meta == nil || meta.Labels == nil {
 		return DefaultEngineType
