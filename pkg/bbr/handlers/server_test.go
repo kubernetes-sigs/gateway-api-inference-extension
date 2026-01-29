@@ -27,6 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+
+	bbr "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	plugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 func TestProcessRequestBody(t *testing.T) {
@@ -139,7 +142,8 @@ func TestProcessRequestBody(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			srv := NewServer(tc.streaming, &fakeDatastore{})
+			fakePlugins := fakeBBRPlugins{}
+			srv := NewServer(tc.streaming, &fakeDatastore{}, fakePlugins)
 			streamedBody := &streamedBody{}
 			for i, body := range tc.bodys {
 				got, err := srv.processRequestBody(context.Background(), body, streamedBody, log.FromContext(ctx))
@@ -161,4 +165,19 @@ type fakeDatastore struct{}
 
 func (ds *fakeDatastore) GetBaseModel(modelName string) string {
 	return ""
+}
+
+type fakeBBRPlugin struct{}
+
+type fakeBBRPlugins []bbr.BBRPlugin
+
+func (p *fakeBBRPlugin) Execute(requestBodyBytes []byte) (mutatedBodyBytes []byte, headers map[string][]string, err error) {
+	return []byte{}, map[string][]string{}, nil
+}
+
+func (p *fakeBBRPlugin) TypedName() plugins.TypedName {
+	return plugins.TypedName{
+		Type: "fake",
+		Name: "test-plugin",
+	}
 }
