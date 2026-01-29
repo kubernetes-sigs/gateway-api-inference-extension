@@ -11,6 +11,7 @@ spec:
     metadata:
       labels:
         app: vllm-llama3-8b-instruct
+        inference.networking.k8s.io/engine-type: vllm
     spec:
       containers:
       - name: vllm-sim

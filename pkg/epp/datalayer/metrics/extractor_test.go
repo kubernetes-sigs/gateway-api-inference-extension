@@ -249,7 +249,7 @@ func TestExtractorMultiEngine(t *testing.T) {
 
 	// Case 1: Engine = vllm (uses default)
 	epVllm := datalayer.NewEndpoint(&fwkdl.EndpointMetadata{
-		Labels: map[string]string{EngineTypeLabelKey: "vllm"},
+		Labels: map[string]string{DefaultEngineTypeLabelKey: "vllm"},
 	}, nil)
 	_ = extractor.Extract(ctx, data, epVllm)
 	if epVllm.GetMetrics().WaitingQueueSize != 10 {
@@ -258,7 +258,7 @@ func TestExtractorMultiEngine(t *testing.T) {
 
 	// Case 2: Engine = sglang (uses specific)
 	epSgl := datalayer.NewEndpoint(&fwkdl.EndpointMetadata{
-		Labels: map[string]string{EngineTypeLabelKey: "sglang"},
+		Labels: map[string]string{DefaultEngineTypeLabelKey: "sglang"},
 	}, nil)
 	_ = extractor.Extract(ctx, data, epSgl)
 	if epSgl.GetMetrics().WaitingQueueSize != 20 {
@@ -296,7 +296,7 @@ func TestBackwardCompatibility(t *testing.T) {
 
 	// Case 2: Different label key or unknown value
 	epUnknown := datalayer.NewEndpoint(&fwkdl.EndpointMetadata{
-		Labels: map[string]string{EngineTypeLabelKey: "unknown-engine"},
+		Labels: map[string]string{DefaultEngineTypeLabelKey: "unknown-engine"},
 	}, nil)
 	_ = extractor.Extract(ctx, data, epUnknown)
 	if epUnknown.GetMetrics().WaitingQueueSize != 100 {

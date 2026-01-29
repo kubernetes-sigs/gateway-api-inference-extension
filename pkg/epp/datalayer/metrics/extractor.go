@@ -73,7 +73,7 @@ func NewModelServerExtractor(registry *MappingRegistry, engineLabelKey string) (
 		return nil, errors.New("mapping registry cannot be nil")
 	}
 	if engineLabelKey == "" {
-		engineLabelKey = EngineTypeLabelKey
+		engineLabelKey = DefaultEngineTypeLabelKey
 	}
 	return &Extractor{
 		typedName: fwkplugin.TypedName{

@@ -51,9 +51,9 @@ type (
 	engineConfigParams struct {
 		// Name is the engine type identifier.
 		Name string `json:"name"`
-		// IsDefault marks this engine as the default fallback when Pod has no engine label.
+		// Default marks this engine as the default fallback when Pod has no engine label.
 		// Only one engine should be marked as default.
-		IsDefault bool `json:"isDefault"`
+		Default bool `json:"default"`
 		// QueuedRequestsSpec defines the metric specification string for retrieving queued request count.
 		QueuedRequestsSpec string `json:"queuedRequestsSpec"`
 		// RunningRequestsSpec defines the metric specification string for retrieving running requests count.
@@ -81,7 +81,7 @@ type (
 var defaultEngineConfigs = []engineConfigParams{
 	{
 		Name:                "vllm",
-		IsDefault:           true,
+		Default:             true,
 		QueuedRequestsSpec:  "vllm:num_requests_waiting",
 		RunningRequestsSpec: "vllm:num_requests_running",
 		KVUsageSpec:         "vllm:kv_cache_usage_perc",
@@ -90,7 +90,7 @@ var defaultEngineConfigs = []engineConfigParams{
 	},
 	{
 		Name:                "sglang",
-		IsDefault:           false,
+		Default:             false,
 		QueuedRequestsSpec:  "sglang:num_queue_reqs",
 		RunningRequestsSpec: "sglang:num_running_reqs",
 		KVUsageSpec:         "sglang:token_usage",
@@ -155,7 +155,7 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 		}
 
 		// Also register as default if marked
-		if engineConfig.IsDefault {
+		if engineConfig.Default {
 			defaultCount++
 			if defaultCount > 1 {
 				return nil, errors.New("only one engine can be marked as default")
@@ -225,7 +225,7 @@ func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 
 func defaultExtractorConfigParams() *modelServerExtractorParams {
 	return &modelServerExtractorParams{
-		EngineLabelKey: EngineTypeLabelKey,
+		EngineLabelKey: DefaultEngineTypeLabelKey,
 		EngineConfigs:  defaultEngineConfigs,
 	}
 }

@@ -25,8 +25,8 @@ const (
 	// DefaultEngineType is the key for the fallback mapping.
 	DefaultEngineType = "default"
 
-	// EngineTypeLabelKey is the label on Pods that indicates the inference engine type.
-	EngineTypeLabelKey = "inference.networking.k8s.io/engine-type"
+	// DefaultEngineTypeLabelKey is the default label on Pods that indicates the inference engine type.
+	DefaultEngineTypeLabelKey = "inference.networking.k8s.io/engine-type"
 )
 
 // MappingRegistry holds multiple metric mappings for different inference engines.

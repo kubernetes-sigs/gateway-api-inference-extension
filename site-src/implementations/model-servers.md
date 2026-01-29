@@ -50,6 +50,8 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install the `in
 
 The Inference Extension supports collecting metrics from multiple inference engines simultaneously within the same `InferencePool`. This is useful for A/B testing or mixed-engine deployments.
 
+By default, EPP includes pre-configured metric mappings for **vLLM** (default) and **SGLang**. You only need to label your Pods with the engine type.
+
 ### 1. Label your Pods
 
 Label each deployment with the engine type:
@@ -66,29 +68,39 @@ metadata:
     inference.networking.k8s.io/engine-type: sglang
 ```
 
-### 2. Configure EPP
- 
- Enable multi-engine support and provide engine-specific configurations in your `EndpointPickerConfig`:
- 
- ```yaml
- apiVersion: inference.networking.x-k8s.io/v1alpha1
- kind: EndpointPickerConfig
- featureGates:
- - dataLayer
- plugins:
- - name: model-server-protocol-metrics
-   type: model-server-protocol-metrics
-   parameters:
-     enableMultiEngine: true
-     engineLabelKey: "inference.networking.k8s.io/engine-type"
-     engineConfigs:
-     - name: vllm
-       queuedRequestsSpec: "vllm:num_requests_waiting"
-       runningRequestsSpec: "vllm:num_requests_running"
-       kvUsageSpec: "vllm:kv_cache_usage_perc"
-     - name: sglang
-       queuedRequestsSpec: "sglang:num_queue_reqs"
- ```
- 
- If a Pod does not have the engine label, EPP falls back to the default metric specifications configured via global plugin parameters or standard flags.
+Pods without the engine label will use the default engine configuration (vLLM).
+
+### 2. Custom Engine Configuration (Optional)
+
+If you need to customize the metric mappings or add support for other engines (e.g., Triton), provide engine-specific configurations in your `EndpointPickerConfig`:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+featureGates:
+- dataLayer
+plugins:
+- name: model-server-protocol-metrics
+  type: model-server-protocol-metrics
+  parameters:
+    engineLabelKey: "inference.networking.k8s.io/engine-type"  # Optional, this is the default
+    engineConfigs:
+    - name: vllm
+      default: true  # One engine must be marked as default
+      queuedRequestsSpec: "vllm:num_requests_waiting"
+      runningRequestsSpec: "vllm:num_requests_running"
+      kvUsageSpec: "vllm:kv_cache_usage_perc"
+      loraSpec: "vllm:lora_requests_info"
+      cacheInfoSpec: "vllm:cache_config_info"
+    - name: sglang
+      queuedRequestsSpec: "sglang:num_queue_reqs"
+      runningRequestsSpec: "sglang:num_running_reqs"
+      kvUsageSpec: "sglang:token_usage"
+    - name: triton
+      queuedRequestsSpec: "nv_trt_llm_request_metrics{request_type=waiting}"
+      kvUsageSpec: "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
 ```
+
+**Key points:**
+- Exactly one engine must have `default: true` - this is used for Pods without an engine label
+- If no custom configuration is provided, EPP uses built-in vLLM and SGLang mappings with vLLM as default
