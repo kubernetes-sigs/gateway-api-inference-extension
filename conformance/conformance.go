@@ -36,48 +36,24 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
-	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
-	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api/pkg/features"
 
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	confflags "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/flags"
+	apikubernetes "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
+	confsuite "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/suite"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
-
-// GatewayLayerProfileName defines the name for the conformance profile that tests
-// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, InferenceObjective CRDs).
-// Future profiles will cover EPP and ModelServer layers.
-const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
-
-// TODO(#863) Create a dedicated share location for feature names similar to
-// sigs.k8s.io/gateway-api/pkg/features and change the tests from
-// string casting the feature name to referencing the shared feature names.
-
-// Conformance specific features
-const SupportInferencePool features.FeatureName = "SupportInferencePool"
-
-// InferenceCoreFeatures defines the core features that implementations
-// of the "Gateway" profile for the Inference Extension MUST support.
-var InferenceCoreFeatures = sets.New(
-	features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
-	features.SupportHTTPRoute,
-	SupportInferencePool,
-)
-
-var GatewayLayerProfile = confsuite.ConformanceProfile{
-	Name:         GatewayLayerProfileName,
-	CoreFeatures: InferenceCoreFeatures,
-}
 
 // logDebugf conditionally logs a debug message if debug mode is enabled.
 func logDebugf(t *testing.T, debug bool, format string, args ...any) {
@@ -124,7 +100,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	// Initially, run the GatewayLayerProfile. This will expand as other profiles
 	// (EPP, ModelServer) are added and can be selected via flags in future iterations.
-	conformanceProfiles := sets.New(GatewayLayerProfileName)
+	conformanceProfiles := sets.New(confsuite.GatewayLayerProfileName)
 
 	// Implementation details from flags
 	implementation := confsuite.ParseImplementation(
@@ -166,10 +142,10 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	// Populate SupportedFeatures based on the GatewayLayerProfile.
 	// Since all features are mandatory for this profile, add all defined core features.
-	if opts.ConformanceProfiles.Has(GatewayLayerProfileName) {
-		logDebugf(t, opts.Debug, "Populating SupportedFeatures with GatewayLayerProfile.CoreFeatures: %v", GatewayLayerProfile.CoreFeatures.UnsortedList())
-		if GatewayLayerProfile.CoreFeatures.Len() > 0 {
-			opts.SupportedFeatures = opts.SupportedFeatures.Insert(GatewayLayerProfile.CoreFeatures.UnsortedList()...)
+	if opts.ConformanceProfiles.Has(confsuite.GatewayLayerProfileName) {
+		logDebugf(t, opts.Debug, "Populating SupportedFeatures with GatewayLayerProfile.CoreFeatures: %v", confsuite.GatewayLayerProfile.CoreFeatures.UnsortedList())
+		if confsuite.GatewayLayerProfile.CoreFeatures.Len() > 0 {
+			opts.SupportedFeatures = opts.SupportedFeatures.Insert(confsuite.GatewayLayerProfile.CoreFeatures.UnsortedList()...)
 		}
 	}
 
@@ -199,11 +175,6 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 	t.Logf("Running Inference Extension conformance tests with GatewayClass %s", opts.GatewayClassName)
 	logDebugf(t, opts.Debug, "RunConformanceWithOptions: BaseManifests path being used by opts: %q", opts.BaseManifests)
 
-	// Register the GatewayLayerProfile with the suite runner.
-	// In the future, other profiles (EPP, ModelServer) will also be registered here,
-	// and the suite runner will execute tests based on the selected profiles.
-	confsuite.RegisterConformanceProfile(GatewayLayerProfile)
-
 	// Initialize the test suite.
 	cSuite, err := confsuite.NewConformanceTestSuite(opts)
 	require.NoError(t, err, "error initializing conformance suite")
@@ -216,7 +187,7 @@ func RunConformanceWithOptions(t *testing.T, opts confsuite.ConformanceOptions) 
 		if opts.AllowCRDsMismatch {
 			apiVersion = "UNDEFINED"
 		} else {
-			require.NoError(t, err, "error getting the gateway ineference extension version")
+			require.NoError(t, err, "error getting the gateway inference extension version")
 		}
 	}
 	SetupConformanceTestSuite(ctx, t, cSuite, opts, tests.ConformanceTests)

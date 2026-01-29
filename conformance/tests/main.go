@@ -19,11 +19,7 @@ limitations under the License.
 package tests
 
 import (
-	// Importing the suite package to access the ConformanceTest struct definition.
-	// For initial version directly importing from the core gateway-api repo.
-	// This may be adjusted in the future if we have need to create a copy of
-	// the suite utilities.
-	"sigs.k8s.io/gateway-api/conformance/utils/suite"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/suite"
 	// Do NOT add blank imports for specific test packages here.
 	// They should be added to the main conformance package instead
 	// to avoid import cycles.
