@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Copied from gateway-api/pkg/features
+// Copied from Gateway API: https://github.com/kubernetes-sigs/gateway-api/tree/28de270b3139a8e172d93d23cb41faa0bf5e4ec8/pkg/features
 
 package features
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Kubernetes Authors.
+Copyright 2026 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -67,16 +67,6 @@ var (
 	}
 	// Future profiles will cover EPP and ModelServer layers.
 )
-
-// RegisterConformanceProfile allows downstream tests to register unique profiles that
-// define their own set of features
-func RegisterConformanceProfile(p ConformanceProfile) {
-	_, ok := conformanceProfileMap[p.Name]
-	if ok {
-		panic(fmt.Sprintf("ConformanceProfile named %q is already registered", p.Name))
-	}
-	conformanceProfileMap[p.Name] = p
-}
 
 // -----------------------------------------------------------------------------
 // Conformance Profiles - Private Profile Mapping Helpers
