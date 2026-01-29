@@ -161,13 +161,18 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"Duration after which metrics are considered stale. This is used to determine if an endpoint's metrics are fresh enough.")
 	fs.StringVar(&opts.TotalQueuedRequestsMetric, "total-queued-requests-metric", opts.TotalQueuedRequestsMetric,
 		"Prometheus metric for the number of queued requests.")
+	_ = fs.MarkDeprecated("total-queued-requests-metric", "use engineConfigs in EndpointPickerConfig instead")
 	fs.StringVar(&opts.TotalRunningRequestsMetric, "total-running-requests-metric", opts.TotalRunningRequestsMetric,
 		"Prometheus metric for the number of running requests.")
+	_ = fs.MarkDeprecated("total-running-requests-metric", "use engineConfigs in EndpointPickerConfig instead")
 	fs.StringVar(&opts.KVCacheUsagePercentageMetric, "kv-cache-usage-percentage-metric", opts.KVCacheUsagePercentageMetric,
 		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
+	_ = fs.MarkDeprecated("kv-cache-usage-percentage-metric", "use engineConfigs in EndpointPickerConfig instead")
 	fs.StringVar(&opts.LoRAInfoMetric, "lora-info-metric", opts.LoRAInfoMetric,
 		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
+	_ = fs.MarkDeprecated("lora-info-metric", "use engineConfigs in EndpointPickerConfig instead")
 	fs.StringVar(&opts.CacheInfoMetric, "cache-info-metric", opts.CacheInfoMetric, "Prometheus metric for the cache info metrics.")
+	_ = fs.MarkDeprecated("cache-info-metric", "use engineConfigs in EndpointPickerConfig instead")
 	fs.IntVarP(&opts.LogVerbosity, "v", "v", opts.LogVerbosity, "Number for the log level verbosity.") // allow both --v and -v
 	gofs := flag.NewFlagSet("zap", flag.ExitOnError)
 	opts.ZapOptions.BindFlags(gofs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
@@ -229,6 +234,20 @@ func (opts *Options) Validate() error {
 	if opts.ModelServerMetricsScheme != "http" && opts.ModelServerMetricsScheme != "https" {
 		return fmt.Errorf("unexpected %q value for %q flag, it can only be set to 'http' or 'https'",
 			opts.ModelServerMetricsScheme, "model-server-metrics-scheme")
+	}
+
+	// Validate deprecated metric flags are not explicitly set
+	deprecatedMetricFlags := []string{
+		"total-queued-requests-metric",
+		"total-running-requests-metric",
+		"kv-cache-usage-percentage-metric",
+		"lora-info-metric",
+		"cache-info-metric",
+	}
+	for _, flagName := range deprecatedMetricFlags {
+		if f := opts.fs.Lookup(flagName); f != nil && f.Changed {
+			return fmt.Errorf("flag %q is deprecated and cannot be used; configure metrics via engineConfigs in EndpointPickerConfig instead", flagName)
+		}
 	}
 
 	return nil
