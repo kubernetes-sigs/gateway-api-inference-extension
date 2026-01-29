@@ -27,8 +27,8 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test"
 )
 
 const (
