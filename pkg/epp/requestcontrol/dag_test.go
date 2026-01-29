@@ -124,7 +124,17 @@ func TestPrepareDataGraph(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			dag, err := buildDAG(tc.plugins)
+			producers := make(map[string]fwkplugin.ProducerPlugin)
+			consumers := make(map[string]fwkplugin.ConsumerPlugin)
+			for _, p := range tc.plugins {
+				if pp, ok := p.(fwkplugin.ProducerPlugin); ok {
+					producers[p.TypedName().String()] = pp
+				}
+				if cp, ok := p.(fwkplugin.ConsumerPlugin); ok {
+					consumers[p.TypedName().String()] = cp
+				}
+			}
+			dag, err := buildDAG(producers, consumers)
 			if err != nil {
 				if tc.expectError {
 					assert.Error(t, err)

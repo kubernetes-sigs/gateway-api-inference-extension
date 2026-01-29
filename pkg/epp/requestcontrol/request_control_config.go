@@ -106,14 +106,53 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 	}
 }
 
+// ProducerConsumerPlugins iterates through all registered plugins and returns two slices:
+// one containing the names of plugins that implement the ProducerPlugin interface,
+// and another for plugins that implement the ConsumerPlugin interface.
+func (c *Config) ProducerConsumerPlugins() (map[string]plugin.ProducerPlugin, map[string]plugin.ConsumerPlugin) {
+	producers := make(map[string]plugin.ProducerPlugin)
+	consumers := make(map[string]plugin.ConsumerPlugin)
+	// Collect all unique plugins from the config.
+	allPlugins := make(map[string]plugin.Plugin)
+	for _, p := range c.admissionPlugins {
+		allPlugins[p.TypedName().String()] = p
+	}
+	for _, p := range c.prepareDataPlugins {
+		allPlugins[p.TypedName().String()] = p
+	}
+	for _, p := range c.preRequestPlugins {
+		allPlugins[p.TypedName().String()] = p
+	}
+	for _, p := range c.responseReceivedPlugins {
+		allPlugins[p.TypedName().String()] = p
+	}
+	for _, p := range c.responseStreamingPlugins {
+		allPlugins[p.TypedName().String()] = p
+	}
+	for _, p := range c.responseCompletePlugins {
+		allPlugins[p.TypedName().String()] = p
+	}
+
+	for name, p := range allPlugins {
+		if producer, ok := p.(plugin.ProducerPlugin); ok {
+			producers[name] = producer
+		}
+		if consumer, ok := p.(plugin.ConsumerPlugin); ok {
+			consumers[name] = consumer
+		}
+	}
+	return producers, consumers
+}
+
 // PrepareDataPluginGraph creates data dependency graph and sorts the plugins in topological order.
 // If a cycle is detected, it returns an error.
 func (c *Config) PrepareDataPluginGraph() error {
+	producers, consumers := c.ProducerConsumerPlugins()
 	// TODO(#1988): Add all producer and consumer plugins to the graph.
 	if len(c.prepareDataPlugins) == 0 {
 		return nil
 	}
-	dag, err := buildDAG(c.prepareDataPlugins)
+	dag, err := buildDAG(producers, consumers)
 	if err != nil {
 		return err
 	}
