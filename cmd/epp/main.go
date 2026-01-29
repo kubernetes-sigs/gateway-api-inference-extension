@@ -17,18 +17,52 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"os"
+	"runtime/debug"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
 )
 
 func main() {
-	// For adding out-of-tree plugins to the plugins registry, use the following:
-	// plugins.Register(my-out-of-tree-plugin-name, my-out-of-tree-plugin-factory-function)
-
-	if err := runner.NewRunner().Run(ctrl.SetupSignalHandler()); err != nil {
+	// Delegate to a run function.
+	// This ensures that if run() returns an error, we print it and exit.
+	// Crucially, it ensures that any defers inside run() execute BEFORE os.Exit is called.
+	if err := run(); err != nil {
+		// We use the global logger here assuming it was set during bootstrap or runner init.
+		// If setup failed completely, this writes to stderr.
+		ctrl.Log.Error(err, "Application exited with error")
 		os.Exit(1)
 	}
+}
+
+func run() error {
+	// Setup bootstrap logger.
+	// This logger is used for initialization errors before the Runner configures the user-specified logging format
+	// (JSON/Console, Verbosity).
+	bootstrapLog := zap.New(zap.UseDevMode(true))
+	ctrl.SetLogger(bootstrapLog)
+
+	// Panic Recovery: This catches panics on the main goroutine during initialization.
+	// Note: It will NOT catch panics in child goroutines spawned by the Manager.
+	defer func() {
+		if r := recover(); r != nil {
+			err, ok := r.(error)
+			if !ok {
+				err = fmt.Errorf("%v", r)
+			}
+			bootstrapLog.Error(err, "CRITICAL: Process panic recovered", "stack", string(debug.Stack()))
+			os.Exit(1)
+		}
+	}()
+
+	ctx := ctrl.SetupSignalHandler()
+
+	// Execute Runner.
+	// For adding out-of-tree plugins to the plugins registry, use the following:
+	// plugins.Register(name, factory)
+	return runner.NewRunner().Run(ctx)
 }
