@@ -17,16 +17,20 @@ limitations under the License.
 package config
 
 import (
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 )
 
 // Config is the configuration loaded from the text based configuration
 type Config struct {
-	SchedulerConfig          *scheduling.SchedulerConfig
-	SaturationDetectorConfig *utilizationdetector.Config
-	DataConfig               *datalayer.Config
-	FlowControlConfig        *flowcontrol.Config
+	SchedulerConfig           *scheduling.SchedulerConfig
+	SaturationDetectorType    configapi.SaturationDetectorType
+	UtilizationDetectorConfig *utilizationdetector.Config
+	ConcurrencyDetectorConfig *concurrencydetector.Config
+	DataConfig                *datalayer.Config
+	FlowControlConfig         *flowcontrol.Config
 }

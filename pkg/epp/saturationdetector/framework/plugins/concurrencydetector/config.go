@@ -16,6 +16,10 @@ limitations under the License.
 
 package concurrencydetector
 
+import (
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+)
+
 // Config holds the configuration for the Concurrency Detector.
 type Config struct {
 	// MaxConcurrency defines the saturation threshold for a backend.
@@ -55,3 +59,21 @@ const (
 	// DefaultHeadroom is the default burst allowance (0%).
 	DefaultHeadroom = 0.0
 )
+
+// NewConfigFromAPI converts the external API configuration to the internal concurrency detector config.
+func NewConfigFromAPI(apiConfig *configapi.SaturationDetector) *Config {
+	cfg := &Config{
+		MaxConcurrency: DefaultMaxConcurrency,
+		Headroom:       DefaultHeadroom,
+	}
+
+	if apiConfig != nil && apiConfig.Concurrency != nil {
+		if apiConfig.Concurrency.MaxConcurrency > 0 {
+			cfg.MaxConcurrency = int64(apiConfig.Concurrency.MaxConcurrency)
+		}
+		if apiConfig.Concurrency.Headroom >= 0.0 && apiConfig.Concurrency.Headroom <= 1.0 {
+			cfg.Headroom = apiConfig.Concurrency.Headroom
+		}
+	}
+	return cfg
+}

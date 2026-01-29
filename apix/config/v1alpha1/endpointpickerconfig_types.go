@@ -163,8 +163,29 @@ func (fg FeatureGates) String() string {
 	return "{" + result + "}"
 }
 
+// SaturationDetectorType specifies the implementation of the saturation detector to use.
+// +kubebuilder:validation:Enum=Utilization;Concurrency
+type SaturationDetectorType string
+
+const (
+	// SaturationDetectorTypeUtilization uses the legacy utilization-based detector (Queue Depth, KV Cache).
+	SaturationDetectorTypeUtilization SaturationDetectorType = "Utilization"
+	// SaturationDetectorTypeConcurrency uses the concurrency-based detector (In-Flight Requests).
+	SaturationDetectorTypeConcurrency SaturationDetectorType = "Concurrency"
+)
+
 // SaturationDetector
+//
+// TODO(kubernetes-sigs/gateway-api-inference-extension#1405): This structure currently mixes
+// explicitly nested fields for new detectors (e.g., Concurrency) with flattened fields
+// for the legacy utilization detector. This is a temporary state to maintain backward
+// compatibility while we transition SaturationDetector to a full proper extension point.
 type SaturationDetector struct {
+	// Type specifies which saturation detector implementation to use.
+	// Defaults to "Utilization".
+	// +optional
+	Type SaturationDetectorType `json:"type,omitempty"`
+
 	// +optional
 	// QueueDepthThreshold defines the backend waiting queue size above which a
 	// pod is considered to have insufficient capacity for new requests.
@@ -181,6 +202,24 @@ type SaturationDetector struct {
 	// "good capacity" considerations or treated as having no capacity for
 	// safety.
 	MetricsStalenessThreshold metav1.Duration `json:"metricsStalenessThreshold,omitempty"`
+
+	// Concurrency holds constraints for the "Concurrency" detector type.
+	// +optional
+	Concurrency *ConcurrencySaturationDetectorConfig `json:"concurrency,omitempty"`
+}
+
+// ConcurrencySaturationDetectorConfig configuration for the currency-based saturation detector.
+type ConcurrencySaturationDetectorConfig struct {
+	// MaxConcurrency defines the maximum number of in-flight requests allowed per replica.
+	// If 0, defaults to 100.
+	// +optional
+	MaxConcurrency int `json:"maxConcurrency,omitempty"`
+
+	// Headroom defines the extra capacity (as a fraction of MaxConcurrency) allowed for traffic shaping (Filter)
+	// but ignored for global saturation (IsSaturated).
+	// Range: [0.0, 1.0]. Defaults to 0.0.
+	// +optional
+	Headroom float64 `json:"headroom,omitempty"`
 }
 
 func (sd *SaturationDetector) String() string {

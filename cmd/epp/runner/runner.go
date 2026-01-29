@@ -71,6 +71,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol/plugins/test/responsereceived"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -274,7 +275,19 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
+	var saturationDetector contracts.SaturationDetector
+	if eppConfig.SaturationDetectorType == configapi.SaturationDetectorTypeConcurrency {
+		if eppConfig.ConcurrencyDetectorConfig == nil {
+			err := errors.New("concurrency detector selected but config is missing")
+			setupLog.Error(err, "invalid saturation detector config")
+			return err
+		}
+		setupLog.Info("Using Concurrency Saturation Detector", "config", eppConfig.ConcurrencyDetectorConfig)
+		saturationDetector = concurrencydetector.NewDetector(*eppConfig.ConcurrencyDetectorConfig)
+	} else {
+		setupLog.Info("Using Utilization Saturation Detector", "config", eppConfig.UtilizationDetectorConfig)
+		saturationDetector = utilizationdetector.NewDetector(eppConfig.UtilizationDetectorConfig, setupLog)
+	}
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
@@ -485,24 +498,24 @@ func applyDeprecatedEnvFeatureGate(envVar, featureName, featureGate string, rawC
 func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	if _, ok := os.LookupEnv(EnvSdQueueDepthThreshold); ok {
 		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
-		cfg.SaturationDetectorConfig.QueueDepthThreshold =
+		cfg.UtilizationDetectorConfig.QueueDepthThreshold =
 			env.GetEnvInt(EnvSdQueueDepthThreshold, utilizationdetector.DefaultQueueDepthThreshold, setupLog)
-		if cfg.SaturationDetectorConfig.QueueDepthThreshold <= 0 {
-			cfg.SaturationDetectorConfig.QueueDepthThreshold = utilizationdetector.DefaultQueueDepthThreshold
+		if cfg.UtilizationDetectorConfig.QueueDepthThreshold <= 0 {
+			cfg.UtilizationDetectorConfig.QueueDepthThreshold = utilizationdetector.DefaultQueueDepthThreshold
 		}
 	}
 	if _, ok := os.LookupEnv(EnvSdKVCacheUtilThreshold); ok {
 		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
-		cfg.SaturationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, utilizationdetector.DefaultKVCacheUtilThreshold, setupLog)
-		if cfg.SaturationDetectorConfig.KVCacheUtilThreshold <= 0 || cfg.SaturationDetectorConfig.KVCacheUtilThreshold >= 1 {
-			cfg.SaturationDetectorConfig.KVCacheUtilThreshold = utilizationdetector.DefaultKVCacheUtilThreshold
+		cfg.UtilizationDetectorConfig.KVCacheUtilThreshold = env.GetEnvFloat(EnvSdKVCacheUtilThreshold, utilizationdetector.DefaultKVCacheUtilThreshold, setupLog)
+		if cfg.UtilizationDetectorConfig.KVCacheUtilThreshold <= 0 || cfg.UtilizationDetectorConfig.KVCacheUtilThreshold >= 1 {
+			cfg.UtilizationDetectorConfig.KVCacheUtilThreshold = utilizationdetector.DefaultKVCacheUtilThreshold
 		}
 	}
 	if _, ok := os.LookupEnv(EnvSdMetricsStalenessThreshold); ok {
 		setupLog.Info("Configuring Saturation Detector using environment variables is deprecated and will be removed in next version")
-		cfg.SaturationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, utilizationdetector.DefaultMetricsStalenessThreshold, setupLog)
-		if cfg.SaturationDetectorConfig.MetricsStalenessThreshold <= 0 {
-			cfg.SaturationDetectorConfig.MetricsStalenessThreshold = utilizationdetector.DefaultMetricsStalenessThreshold
+		cfg.UtilizationDetectorConfig.MetricsStalenessThreshold = env.GetEnvDuration(EnvSdMetricsStalenessThreshold, utilizationdetector.DefaultMetricsStalenessThreshold, setupLog)
+		if cfg.UtilizationDetectorConfig.MetricsStalenessThreshold <= 0 {
+			cfg.UtilizationDetectorConfig.MetricsStalenessThreshold = utilizationdetector.DefaultMetricsStalenessThreshold
 		}
 	}
 }

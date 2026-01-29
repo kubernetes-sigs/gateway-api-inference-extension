@@ -34,6 +34,7 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 )
@@ -114,11 +115,20 @@ func InstantiateAndConfigure(
 	}
 
 	return &config.Config{
-		SchedulerConfig:          schedulerConfig,
-		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
-		DataConfig:               dataConfig,
-		FlowControlConfig:        flowControlConfig,
+		SchedulerConfig:           schedulerConfig,
+		SaturationDetectorType:    defaultDetectorType(rawConfig.SaturationDetector),
+		UtilizationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
+		ConcurrencyDetectorConfig: concurrencydetector.NewConfigFromAPI(rawConfig.SaturationDetector),
+		DataConfig:                dataConfig,
+		FlowControlConfig:         flowControlConfig,
 	}, nil
+}
+
+func defaultDetectorType(sd *configapi.SaturationDetector) configapi.SaturationDetectorType {
+	if sd == nil || sd.Type == "" {
+		return configapi.SaturationDetectorTypeUtilization
+	}
+	return sd.Type
 }
 
 func decodeRawConfig(configBytes []byte) (*configapi.EndpointPickerConfig, error) {
