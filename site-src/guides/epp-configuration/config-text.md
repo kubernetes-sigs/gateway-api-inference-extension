@@ -173,14 +173,6 @@ The configuration defines the set of plugins to be instantiated along with their
 Each plugin can also be given a name, enabling the same plugin type to be instantiated multiple
 times, if needed (such as when configuring multiple scheduling profiles).
 
-The set of plugins instantiated can include a Profile Handler, which determines which SchedulingProfiles
-will be used for a particular request. A Profile Handler must be specified, unless the configuration only
-contains one profile, in which case the `SingleProfileHandler` will be used.
-
-In addition, the set of instantiated plugins can also include a picker, which chooses the actual pod to which
-the request is scheduled after filtering and scoring. If one is not referenced in a SchedulingProfile, an
-instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
-
 The `plugins` section defines the set of plugins that will be instantiated and their parameters.
 Each entry in this section has the following form:
 
@@ -200,14 +192,30 @@ field is omitted, the plugin's type will be used as its name.
 - *parameters* which is optional, defines the set of parameters used to configure the plugin in question.
 The actual set of parameters varies from plugin to plugin.
 
-### SingleProfileHandler
+The available plugins are categorized below by their function.
+
+### Infrastructure Plugins
+
+The set of plugins instantiated can include a Profile Handler, which determines which SchedulingProfiles
+will be used for a particular request. A Profile Handler must be specified, unless the configuration only
+contains one profile, in which case the `SingleProfileHandler` will be used.
+
+#### SingleProfileHandler
 
 Selects a single profile which is always the primary profile.
 
 - *Type*: single-profile-handler
 - *Parameters*: none
 
-### PrefixCacheScorer
+### Scheduling Plugins (Scorers & Pickers)
+
+The set of instantiated plugins can also include a picker, which chooses the actual pod to which
+the request is scheduled after filtering and scoring. If one is not referenced in a `SchedulingProfile`, an
+instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
+
+These plugins are referenced within the `schedulingProfiles` section.
+
+#### PrefixCacheScorer
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
 
@@ -220,7 +228,7 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
   - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
     per server (pod). If not specified defaults to `31250`
 
-### LoRAAffinityScorer
+#### LoRAAffinityScorer
 
 Scores pods based on whether the requested LoRA adapter is already loaded in the pod's HBM, or if
 the pod is ready to load the LoRA on demand.
@@ -228,7 +236,23 @@ the pod is ready to load the LoRA on demand.
 - *Type*: lora-affinity-scorer
 - *Parameters*: none
 
-### MaxScorePicker
+#### KvCacheScorer
+
+Scores the candidate pods based on their KV cache utilization.
+
+- *Type*: kv-cache-utilization-scorer
+- *Parameters*: none
+
+#### QueueScorer
+
+Scores list of candidate pods based on the pod's waiting queue size. The lower the
+waiting queue size the pod has, the higher the score it will get (since it's more
+available to serve new request).
+
+- *Type*: queue-scorer
+- *Parameters*: none
+
+#### MaxScorePicker
 
 Picks the pod with the maximum score from the list of candidates. This is the default picker plugin
 if not specified.
@@ -238,7 +262,7 @@ if not specified.
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates, based on
     the scores of those endpoints. If not specified defaults to `1`.
 
-### RandomPicker
+#### RandomPicker
 
 Picks a random pod from the list of candidates.
 
@@ -247,7 +271,7 @@ Picks a random pod from the list of candidates.
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
-### WeightedRandomPicker
+#### WeightedRandomPicker
 
 Picks pod(s) from the list of candidates based on weighted random sampling using A-Res algorithm.
 
@@ -256,20 +280,36 @@ Picks pod(s) from the list of candidates based on weighted random sampling using
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
-### KvCacheScorer
+### Flow Control Plugins (Policies)
 
-Scores the candidate pods based on their KV cache utilization.
+These plugins are referenced within the `flowControl` section (Priority Bands).
 
-- *Type*: kv-cache-utilization-scorer
+#### GlobalStrictFairnessPolicy
+
+A specialized Fairness Policy that ignores flow isolation and serves all requests in a single global FIFO order (strict prioritization). This is the default Fairness Policy.
+
+- *Type*: global-strict-fairness-policy
 - *Parameters*: none
 
-### QueueScorer
+#### RoundRobinFairnessPolicy
 
-Scores list of candidate pods based on the pod's waiting queue size. The lower the
-waiting queue size the pod has, the higher the score it will get (since it's more
-available to serve new request).
+A Fairness Policy that ensures fair sharing of capacity between different flows (e.g., different models or LoRA adapters) by cycling through them in a round-robin fashion.
 
-- *Type*: queue-scorer
+- *Type*: round-robin-fairness-policy
+- *Parameters*: none
+
+#### FCFSOrderingPolicy
+
+An Ordering Policy that implements First-Come, First-Served ordering based on logical arrival time. This is the default Ordering Policy.
+
+- *Type*: fcfs-ordering-policy
+- *Parameters*: none
+
+#### EDFOrderingPolicy
+
+An Ordering Policy that implements Earliest Deadline First. It prioritizes requests with the closest expiration time (deadline).
+
+- *Type*: edf-ordering-policy
 - *Parameters*: none
 
 ## Scheduling Profiles
@@ -359,6 +399,8 @@ flowControl:
   priorityBands:
   - priority: 100
     maxBytes: 5368709120
+    orderingPolicyRef: fcfs-ordering-policy
+    fairnessPolicyRef: global-strict-fairness-policy
 ```
 
 The fields in the `flowControl` section are:
@@ -378,6 +420,10 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 - `priority`: (Required for `priorityBands` entries) The integer priority level. Higher values indicate higher priority.
 - `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
     - If `0` or omitted, the system default (1 GB) is used.
+- `orderingPolicyRef`: The name of the Ordering Policy plugin to use (e.g., `fcfs-ordering-policy`).
+    - Defaults to `fcfs-ordering-policy` if omitted.
+- `fairnessPolicyRef`: The name of the Fairness Policy plugin to use (e.g., `global-strict-fairness-policy`).
+    - Defaults to `global-strict-fairness-policy` if omitted.
 
 ## Data Layer configuration
 

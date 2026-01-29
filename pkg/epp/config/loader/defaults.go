@@ -20,8 +20,7 @@ import (
 	"fmt"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
@@ -143,12 +142,17 @@ func ensureSchedulingLayer(
 func ensureFlowControlLayer(
 	cfg *configapi.EndpointPickerConfig,
 	handle fwkplugin.Handle,
-	_ map[string]fwkplugin.Plugin,
+	allPlugins map[string]fwkplugin.Plugin,
 ) error {
-	if err := registerDefaultPlugin(cfg, handle, ordering.FCFSOrderingPolicyType); err != nil {
-		return err
+	if _, ok := allPlugins[registry.DefaultOrderingPolicyRef]; !ok {
+		if err := registerDefaultPlugin(cfg, handle, registry.DefaultOrderingPolicyRef); err != nil {
+			return err
+		}
 	}
-	return registerDefaultPlugin(cfg, handle, fairness.GlobalStrictFairnessPolicyType)
+	if _, ok := allPlugins[registry.DefaultFairnessPolicyRef]; !ok {
+		return registerDefaultPlugin(cfg, handle, registry.DefaultFairnessPolicyRef)
+	}
+	return nil
 }
 
 // registerDefaultPlugin instantiates a plugin with empty configuration (defaults) and adds it to both the handle and

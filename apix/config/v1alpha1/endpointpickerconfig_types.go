@@ -302,8 +302,19 @@ type PriorityBandConfig struct {
 	// If 0 or omitted, the system default is used.
 	// Default: 1 GB.
 	MaxBytes *int64 `json:"maxBytes,omitempty"`
+
+	// +optional
+	// FairnessPolicyRef specifies the name of the policy that governs flow selection.
+	// If omitted, the system default ("global-strict-fairness-policy") is used.
+	FairnessPolicyRef string `json:"fairnessPolicyRef,omitempty"`
+
+	// +optional
+	// OrderingPolicyRef specifies the name of the policy that governs request selection within a flow.
+	// If omitted, the system default ("fcfs-ordering-policy") is used.
+	OrderingPolicyRef string `json:"orderingPolicyRef,omitempty"`
 }
 
 func (pbc PriorityBandConfig) String() string {
-	return fmt.Sprintf("{Priority: %d, MaxBytes: %v}", pbc.Priority, pbc.MaxBytes)
+	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
+		pbc.Priority, pbc.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
 }

@@ -31,25 +31,33 @@ import (
 // time-bound requests, using FCFS as a tie-breaker for fairness.
 const EDFOrderingPolicyType = "edf-ordering-policy"
 
-func init() {
-	plugin.Register(EDFOrderingPolicyType, func(string, json.RawMessage, plugin.Handle) (plugin.Plugin, error) {
-		return newEDFPolicy(), nil
-	})
+func EDFOrderingPolicyFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+	return newEDFPolicy().withName(name), nil
 }
 
-// EDFPolicy implements an OrderingPolicy based on the Earliest Deadline First (EDF) scheduling algorithm.
 // Requests with earlier absolute deadlines (EnqueueTime + EffectiveTTL) are dispatched first.
 // See the documentation for the exported EDFOrderingPolicyType constant for detailed behavioral guarantees.
-type EDFPolicy struct{}
+type EDFPolicy struct {
+	name string
+}
 
 var _ flowcontrol.OrderingPolicy = &EDFPolicy{}
 
 func newEDFPolicy() *EDFPolicy {
-	return &EDFPolicy{}
+	return &EDFPolicy{
+		name: EDFOrderingPolicyType,
+	}
+}
+
+func (p *EDFPolicy) withName(name string) *EDFPolicy {
+	if name != "" {
+		p.name = name
+	}
+	return p
 }
 
 func (p *EDFPolicy) Name() string {
-	return EDFOrderingPolicyType
+	return p.name
 }
 
 // RequiredQueueCapabilities returns the queue capabilities required by this policy.
@@ -62,7 +70,7 @@ func (p *EDFPolicy) RequiredQueueCapabilities() []flowcontrol.QueueCapability {
 func (p *EDFPolicy) TypedName() plugin.TypedName {
 	return plugin.TypedName{
 		Type: EDFOrderingPolicyType,
-		Name: EDFOrderingPolicyType,
+		Name: p.name,
 	}
 }
 

@@ -129,7 +129,7 @@ func TestShard_New(t *testing.T) {
 		require.True(t, ok, "Priority band %d (High) must be initialized", highPriority)
 		assert.Equal(t, "High", bandHigh.config.PriorityName, "Priority band name must match the configuration")
 		require.NotNil(t, bandHigh.fairnessPolicy, "Fairness policy must be instantiated during construction")
-		assert.Equal(t, defaultFairnessPolicyRef, bandHigh.fairnessPolicy.TypedName().Name,
+		assert.Equal(t, DefaultFairnessPolicyRef, bandHigh.fairnessPolicy.TypedName().Name,
 			"Must match the configured fairness policy implementation")
 	})
 }
@@ -175,7 +175,7 @@ func TestShard_Accessors(t *testing.T) {
 			policy, err := h.shard.FairnessPolicy(highPriority)
 			require.NoError(t, err, "InterFlowDispatchPolicy accessor must succeed for a configured priority band")
 			require.NotNil(t, policy, "Returned policy must not be nil (guaranteed by contract)")
-			assert.Equal(t, defaultFairnessPolicyRef, policy.TypedName().Name,
+			assert.Equal(t, DefaultFairnessPolicyRef, policy.TypedName().Name,
 				"Must return the configured fairness policy implementation")
 		})
 	})

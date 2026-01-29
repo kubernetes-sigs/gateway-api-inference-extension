@@ -51,27 +51,31 @@ import (
 // `CapabilityPriorityConfigurable` queue is recommended.
 const FCFSOrderingPolicyType = "fcfs-ordering-policy"
 
-func init() {
-	plugin.Register(FCFSOrderingPolicyType, func(string, json.RawMessage, plugin.Handle) (plugin.Plugin, error) {
-		return newFCFS(), nil
-	})
+func FCFSOrderingPolicyFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+	return newFCFS().withName(name), nil
 }
 
 // fcfs is the internal implementation of the FCFS policy.
 // See the documentation for the exported `FCFSPolicyName` constant for detailed user-facing information about its
 // behavior.
-type fcfs struct{}
+type fcfs struct {
+	name string
+}
 
 var _ flowcontrol.OrderingPolicy = &fcfs{}
 
 // newFCFS creates a new `fcfs` policy instance.
 func newFCFS() *fcfs {
-	return &fcfs{}
+	return &fcfs{
+		name: FCFSOrderingPolicyType,
+	}
 }
 
-// Name returns the name of the policy.
-func (p *fcfs) Name() string {
-	return FCFSOrderingPolicyType
+func (p *fcfs) withName(name string) *fcfs {
+	if name != "" {
+		p.name = name
+	}
+	return p
 }
 
 // RequiredQueueCapabilities returns an empty slice, indicating that this policy can operate with any queue.
@@ -84,7 +88,7 @@ func (p *fcfs) RequiredQueueCapabilities() []flowcontrol.QueueCapability {
 func (p *fcfs) TypedName() plugin.TypedName {
 	return plugin.TypedName{
 		Type: FCFSOrderingPolicyType,
-		Name: FCFSOrderingPolicyType,
+		Name: p.name,
 	}
 }
 
