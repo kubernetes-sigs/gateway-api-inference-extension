@@ -44,9 +44,9 @@ type ConformanceProfile struct {
 type ConformanceProfileName string
 
 const (
-	// GatewayLayerConformanceProfileName indicates the name of the conformance profile
+	// GatewayLayerProfileName indicates the name of the conformance profile
 	// which covers the Gateway API layer aspects of the Inference Extension.
-	GatewayLayerConformanceProfileName ConformanceProfileName = "Gateway"
+	GatewayLayerProfileName ConformanceProfileName = "Gateway"
 )
 
 // -----------------------------------------------------------------------------
@@ -54,11 +54,11 @@ const (
 // -----------------------------------------------------------------------------
 
 var (
-	// GatewayLayerConformanceProfile is a ConformanceProfile that covers testing
+	// GatewayLayerProfile is a ConformanceProfile that covers testing
 	// the Gateway API layer aspects of the Inference Extension (e.g., InferencePool,
 	// InferenceObjective CRDs).
 	GatewayLayerProfile = ConformanceProfile{
-		Name: GatewayLayerConformanceProfileName,
+		Name: GatewayLayerProfileName,
 		CoreFeatures: sets.New(
 			features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
 			features.SupportHTTPRoute,
@@ -77,7 +77,7 @@ var (
 var conformanceProfileMap = map[ConformanceProfileName]ConformanceProfile{
 	// In the future, other profiles (EPP, ModelServer) will also be registered here,
 	// and the suite runner will execute tests based on the selected profiles.
-	GatewayLayerConformanceProfileName: GatewayLayerProfile,
+	GatewayLayerProfileName: GatewayLayerProfile,
 }
 
 // getConformanceProfileForName retrieves a known ConformanceProfile by its simple

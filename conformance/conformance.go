@@ -99,7 +99,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	// Initially, run the GatewayLayerProfile. This will expand as other profiles
 	// (EPP, ModelServer) are added and can be selected via flags in future iterations.
-	conformanceProfiles := sets.New(confsuite.GatewayLayerConformanceProfileName)
+	conformanceProfiles := sets.New(confsuite.GatewayLayerProfileName)
 
 	// Implementation details from flags
 	implementation := confsuite.ParseImplementation(
@@ -141,7 +141,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 
 	// Populate SupportedFeatures based on the GatewayLayerProfile.
 	// Since all features are mandatory for this profile, add all defined core features.
-	if opts.ConformanceProfiles.Has(confsuite.GatewayLayerConformanceProfileName) {
+	if opts.ConformanceProfiles.Has(confsuite.GatewayLayerProfileName) {
 		logDebugf(t, opts.Debug, "Populating SupportedFeatures with GatewayLayerProfile.CoreFeatures: %v", confsuite.GatewayLayerProfile.CoreFeatures.UnsortedList())
 		if confsuite.GatewayLayerProfile.CoreFeatures.Len() > 0 {
 			opts.SupportedFeatures = opts.SupportedFeatures.Insert(confsuite.GatewayLayerProfile.CoreFeatures.UnsortedList()...)

@@ -35,7 +35,7 @@ func TestBuildSummary(t *testing.T) {
 		{
 			name: "core tests failed, no extended tests",
 			report: confv1.ProfileReport{
-				Name: string(GatewayLayerConformanceProfileName),
+				Name: string(GatewayLayerProfileName),
 				Core: confv1.Status{
 					Result: confv1.Failure,
 					Statistics: confv1.Statistics{
@@ -49,7 +49,7 @@ func TestBuildSummary(t *testing.T) {
 		{
 			name: "core tests succeeded, extended tests failed",
 			report: confv1.ProfileReport{
-				Name: string(GatewayLayerConformanceProfileName),
+				Name: string(GatewayLayerProfileName),
 				Core: confv1.Status{
 					Result: confv1.Success,
 					Statistics: confv1.Statistics{
@@ -71,7 +71,7 @@ func TestBuildSummary(t *testing.T) {
 		{
 			name: "core tests partially succeeded, extended tests succeeded",
 			report: confv1.ProfileReport{
-				Name: string(GatewayLayerConformanceProfileName),
+				Name: string(GatewayLayerProfileName),
 				Core: confv1.Status{
 					Result: confv1.Partial,
 					Statistics: confv1.Statistics{
@@ -93,7 +93,7 @@ func TestBuildSummary(t *testing.T) {
 		{
 			name: "core tests succeeded, extended tests partially succeeded",
 			report: confv1.ProfileReport{
-				Name: string(GatewayLayerConformanceProfileName),
+				Name: string(GatewayLayerProfileName),
 				Core: confv1.Status{
 					Result: confv1.Success,
 					Statistics: confv1.Statistics{
