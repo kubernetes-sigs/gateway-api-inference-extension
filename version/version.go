@@ -31,16 +31,4 @@ const (
 
 	// BundleVersion is the value used for labeling the version of the gateway-api-inference-extension.
 	BundleVersion = "main-dev"
-
-	// BundleVersionAnnotation is the annotation key used in the Gateway API CRDs to specify
-	// the installed Gateway API version.
-	GatewayBundleVersionAnnotation = "gateway.networking.k8s.io/bundle-version"
-
-	// ChannelAnnotation is the annotation key used in the Gateway API CRDs to specify
-	// the installed Gateway API channel.
-	GatewayChannelAnnotation = "gateway.networking.k8s.io/channel"
-
-	// BundleVersion is the value used for the "gateway.networking.k8s.io/bundle-version" annotation.
-	// These value must be updated during the release process.
-	GatewayBundleVersion = "v1.4.0"
 )

@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Kubernetes Authors.
+Copyright 2026 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ const (
 
 var (
 	GatewayClassName           = flag.String("gateway-class", "gateway-conformance", "Name of GatewayClass to use for tests")
-	MeshName                   = flag.String("mesh-name", "", "Name of Mesh to use for tests")
 	ShowDebug                  = flag.Bool("debug", false, "Whether to print debug logs")
 	CleanupBaseResources       = flag.Bool("cleanup-base-resources", true, "Whether to cleanup base test resources after the run")
 	SupportedFeatures          = flag.String("supported-features", "", "Supported features included in conformance tests suites")

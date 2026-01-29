@@ -413,7 +413,7 @@ func waitNumberOfEndpointsForService(ctx context.Context, c client.Client, servi
 	return err
 }
 
-// Methods from upstream Gateway API conformance utils:
+// Copied from upstream gateway-api/conformance/utils/kubernetes:
 
 // GatewayRef is a tiny type for specifying an HTTP Route ParentRef without
 // relying on a specific api version.

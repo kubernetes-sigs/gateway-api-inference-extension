@@ -20,7 +20,6 @@ package suite
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -48,7 +47,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/tlog"
-	versionconsts "sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
 // -----------------------------------------------------------------------------
@@ -65,7 +63,6 @@ type ConformanceTestSuite struct {
 	RestConfig               *rest.Config
 	RoundTripper             roundtripper.RoundTripper
 	GatewayClassName         string
-	MeshName                 string
 	ControllerName           string
 	Debug                    bool
 	Cleanup                  bool
@@ -137,7 +134,6 @@ type ConformanceOptions struct {
 	Clientset            clientset.Interface
 	RestConfig           *rest.Config
 	GatewayClassName     string
-	MeshName             string
 	AddressType          string
 	Debug                bool
 	RoundTripper         roundtripper.RoundTripper
@@ -250,17 +246,6 @@ func NewConformanceTestSuite(options ConformanceOptions) (*ConformanceTestSuite,
 	if err != nil {
 		return nil, err
 	}
-	apiVersion, apiChannel, err := getAPIVersionAndChannel(installedCRDs.Items)
-	if err != nil {
-		// in case an error is returned and the AllowCRDsMismatch flag is false, the suite fails.
-		// This is the default behavior but can be customized in case one wants to experiment
-		// with mixed versions/channels of the API.
-		if !options.AllowCRDsMismatch {
-			return nil, err
-		}
-		apiVersion = undefinedKeyword
-		apiChannel = undefinedKeyword
-	}
 
 	mode := flags.DefaultMode
 	if options.Mode != "" {
@@ -297,8 +282,6 @@ func NewConformanceTestSuite(options ConformanceOptions) (*ConformanceTestSuite,
 		conformanceProfiles:         options.ConformanceProfiles,
 		implementation:              options.Implementation,
 		mode:                        mode,
-		apiVersion:                  apiVersion,
-		apiChannel:                  apiChannel,
 		supportedFeaturesSource:     source,
 		Hook:                        options.Hook,
 	}
@@ -524,35 +507,4 @@ func shouldInferSupportedFeatures(opts *ConformanceOptions) bool {
 		opts.SupportedFeatures.Len() == 0 &&
 		opts.ExemptFeatures.Len() == 0 &&
 		opts.RunTest == ""
-}
-
-// getAPIVersionAndChannel iterates over all the crds installed in the cluster and check the version and channel annotations.
-// In case the annotations are not found or there are crds with different versions or channels, an error is returned.
-func getAPIVersionAndChannel(crds []apiextensionsv1.CustomResourceDefinition) (version string, channel string, err error) {
-	for _, crd := range crds {
-		v, okv := crd.Annotations[versionconsts.GatewayBundleVersionAnnotation]
-		c, okc := crd.Annotations[versionconsts.GatewayChannelAnnotation]
-		if !okv && !okc {
-			continue
-		}
-		if !okv || !okc {
-			return "", "", errors.New("detected CRDs with partial version and channel annotations")
-		}
-		if version != "" && v != version {
-			return "", "", errors.New("multiple gateway API CRDs versions detected")
-		}
-		if channel != "" && c != channel {
-			return "", "", errors.New("multiple gateway API CRDs channels detected")
-		}
-		version = v
-		channel = c
-	}
-	if version == "" || channel == "" {
-		return "", "", errors.New("no Gateway API CRDs with the proper annotations found in the cluster")
-	}
-	if version != versionconsts.GatewayBundleVersion {
-		return "", "", errors.New(fmt.Sprintf("the installed CRDs version is different from the suite version, installed: %s, suite: %s", version, versionconsts.BundleVersion))
-	}
-
-	return version, channel, nil
 }
