@@ -27,7 +27,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -209,7 +208,7 @@ func (s *registryShard) IsActive() bool {
 }
 
 // ManagedQueue retrieves a specific `contracts.ManagedQueue` instance from this shard.
-func (s *registryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue, error) {
+func (s *registryShard) ManagedQueue(key flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -296,9 +295,9 @@ func (s *registryShard) Stats() contracts.ShardStats {
 // synchronizeFlow is the internal administrative method for creating a flow instance on this shard.
 // It is an idempotent "create if not exists" operation.
 func (s *registryShard) synchronizeFlow(
-	key types.FlowKey,
+	key flowcontrol.FlowKey,
 	policy flowcontrol.OrderingPolicy,
-	q flowcontrol.SafeQueue,
+	q contracts.SafeQueue,
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -324,7 +323,7 @@ func (s *registryShard) synchronizeFlow(
 }
 
 // deleteFlow removes a queue instance from the shard.
-func (s *registryShard) deleteFlow(key types.FlowKey) {
+func (s *registryShard) deleteFlow(key flowcontrol.FlowKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.logger.Info("Deleting queue instance.", "flowKey", key)
@@ -408,8 +407,8 @@ func (a *priorityBandAccessor) PolicyState() any {
 // FlowKeys returns a slice of all flow keys within this priority band.
 //
 // To minimize lock contention, this implementation first snapshots the flow IDs under a read lock and then constructs
-// the final slice of `types.FlowKey` structs outside of the lock.
-func (a *priorityBandAccessor) FlowKeys() []types.FlowKey {
+// the final slice of `flowcontrol.FlowKey` structs outside of the lock.
+func (a *priorityBandAccessor) FlowKeys() []flowcontrol.FlowKey {
 	a.shard.mu.RLock()
 	ids := make([]string, 0, len(a.band.queues))
 	for id := range a.band.queues {
@@ -417,9 +416,9 @@ func (a *priorityBandAccessor) FlowKeys() []types.FlowKey {
 	}
 	a.shard.mu.RUnlock()
 
-	flowKeys := make([]types.FlowKey, len(ids))
+	flowKeys := make([]flowcontrol.FlowKey, len(ids))
 	for i, id := range ids {
-		flowKeys[i] = types.FlowKey{ID: id, Priority: a.Priority()}
+		flowKeys[i] = flowcontrol.FlowKey{ID: id, Priority: a.Priority()}
 	}
 	return flowKeys
 }

@@ -23,7 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -53,7 +53,7 @@ const ListQueueName = "ListQueue"
 
 func init() {
 	MustRegisterQueue(RegisteredQueueName(ListQueueName),
-		func(_ flowcontrol.OrderingPolicy) (flowcontrol.SafeQueue, error) {
+		func(_ flowcontrol.OrderingPolicy) (contracts.SafeQueue, error) {
 			// The list queue is a simple FIFO queue and does not use an ordering policy.
 			return newListQueue(), nil
 		})
@@ -67,7 +67,7 @@ type listQueue struct {
 	mu       sync.RWMutex
 }
 
-// listItemHandle is the concrete type for `types.QueueItemHandle` used by `listQueue`.
+// listItemHandle is the concrete type for `flowcontrol.QueueItemHandle` used by `listQueue`.
 // It wraps the `list.Element` and includes a pointer to the owning `listQueue` for validation.
 type listItemHandle struct {
 	element       *list.Element
@@ -90,7 +90,7 @@ func (lh *listItemHandle) IsInvalidated() bool {
 	return lh.isInvalidated
 }
 
-var _ types.QueueItemHandle = &listItemHandle{}
+var _ flowcontrol.QueueItemHandle = &listItemHandle{}
 
 // newListQueue creates a new `listQueue` instance.
 func newListQueue() *listQueue {
@@ -102,7 +102,7 @@ func newListQueue() *listQueue {
 // --- SafeQueue Interface Implementation ---
 
 // Add enqueues an item to the back of the list.
-func (lq *listQueue) Add(item types.QueueItemAccessor) {
+func (lq *listQueue) Add(item flowcontrol.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
@@ -112,24 +112,24 @@ func (lq *listQueue) Add(item types.QueueItemAccessor) {
 }
 
 // Remove removes an item identified by the given handle from the queue.
-func (lq *listQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
+func (lq *listQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
 	if handle == nil || handle.IsInvalidated() {
-		return nil, flowcontrol.ErrInvalidQueueItemHandle
+		return nil, contracts.ErrInvalidQueueItemHandle
 	}
 
 	lh, ok := handle.(*listItemHandle)
 	if !ok {
-		return nil, flowcontrol.ErrInvalidQueueItemHandle
+		return nil, contracts.ErrInvalidQueueItemHandle
 	}
 
 	if lh.owner != lq {
-		return nil, flowcontrol.ErrQueueItemNotFound
+		return nil, contracts.ErrQueueItemNotFound
 	}
 
-	item := lh.element.Value.(types.QueueItemAccessor)
+	item := lh.element.Value.(flowcontrol.QueueItemAccessor)
 	lq.requests.Remove(lh.element)
 	lq.byteSize.Add(^item.OriginalRequest().ByteSize() + 1) // Atomic subtraction
 	handle.Invalidate()
@@ -137,17 +137,17 @@ func (lq *listQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccess
 }
 
 // Cleanup removes items from the queue that satisfy the predicate.
-func (lq *listQueue) Cleanup(predicate flowcontrol.PredicateFunc) (cleanedItems []types.QueueItemAccessor) {
+func (lq *listQueue) Cleanup(predicate contracts.PredicateFunc) (cleanedItems []flowcontrol.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
-	var removedItems []types.QueueItemAccessor
+	var removedItems []flowcontrol.QueueItemAccessor
 	var next *list.Element
 
 	for e := lq.requests.Front(); e != nil; e = next {
 		next = e.Next() // Get next before potentially removing e
 
-		item := e.Value.(types.QueueItemAccessor)
+		item := e.Value.(flowcontrol.QueueItemAccessor)
 		if predicate(item) {
 			lq.requests.Remove(e)
 			lq.byteSize.Add(^item.OriginalRequest().ByteSize() + 1) // Atomic subtraction
@@ -161,14 +161,14 @@ func (lq *listQueue) Cleanup(predicate flowcontrol.PredicateFunc) (cleanedItems 
 }
 
 // Drain removes all items from the queue and returns them.
-func (lq *listQueue) Drain() (removedItems []types.QueueItemAccessor) {
+func (lq *listQueue) Drain() (removedItems []flowcontrol.QueueItemAccessor) {
 	lq.mu.Lock()
 	defer lq.mu.Unlock()
 
-	removedItems = make([]types.QueueItemAccessor, 0, lq.requests.Len())
+	removedItems = make([]flowcontrol.QueueItemAccessor, 0, lq.requests.Len())
 
 	for e := lq.requests.Front(); e != nil; e = e.Next() {
-		item := e.Value.(types.QueueItemAccessor)
+		item := e.Value.(flowcontrol.QueueItemAccessor)
 		removedItems = append(removedItems, item)
 		if handle := item.Handle(); handle != nil {
 			handle.Invalidate()
@@ -203,7 +203,7 @@ func (lq *listQueue) ByteSize() uint64 {
 }
 
 // PeekHead returns the item at the front of the queue without removing it.
-func (lq *listQueue) PeekHead() types.QueueItemAccessor {
+func (lq *listQueue) PeekHead() flowcontrol.QueueItemAccessor {
 	lq.mu.RLock()
 	defer lq.mu.RUnlock()
 
@@ -211,11 +211,11 @@ func (lq *listQueue) PeekHead() types.QueueItemAccessor {
 		return nil
 	}
 	element := lq.requests.Front()
-	return element.Value.(types.QueueItemAccessor)
+	return element.Value.(flowcontrol.QueueItemAccessor)
 }
 
 // PeekTail returns the item at the back of the queue without removing it.
-func (lq *listQueue) PeekTail() types.QueueItemAccessor {
+func (lq *listQueue) PeekTail() flowcontrol.QueueItemAccessor {
 	lq.mu.RLock()
 	defer lq.mu.RUnlock()
 
@@ -223,5 +223,5 @@ func (lq *listQueue) PeekTail() types.QueueItemAccessor {
 		return nil
 	}
 	element := lq.requests.Back()
-	return element.Value.(types.QueueItemAccessor)
+	return element.Value.(flowcontrol.QueueItemAccessor)
 }

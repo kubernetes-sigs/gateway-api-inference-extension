@@ -31,9 +31,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 // --- Test Harness ---
@@ -110,7 +109,7 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 }
 
 // assertFlowExists synchronously checks if a flow's queue exists on the first shard.
-func (h *registryTestHarness) assertFlowExists(key types.FlowKey, msgAndArgs ...any) {
+func (h *registryTestHarness) assertFlowExists(key flowcontrol.FlowKey, msgAndArgs ...any) {
 	h.t.Helper()
 	require.NotEmpty(h.t, h.fr.allShards, "Cannot check for flow existence when no shards are present")
 	_, err := h.fr.allShards[0].ManagedQueue(key)
@@ -118,7 +117,7 @@ func (h *registryTestHarness) assertFlowExists(key types.FlowKey, msgAndArgs ...
 }
 
 // assertFlowDoesNotExist synchronously checks if a flow's queue does not exist.
-func (h *registryTestHarness) assertFlowDoesNotExist(key types.FlowKey, msgAndArgs ...any) {
+func (h *registryTestHarness) assertFlowDoesNotExist(key flowcontrol.FlowKey, msgAndArgs ...any) {
 	h.t.Helper()
 	if len(h.fr.allShards) == 0 {
 		assert.True(h.t, true, "Flow correctly does not exist because no shards exist")
@@ -130,7 +129,7 @@ func (h *registryTestHarness) assertFlowDoesNotExist(key types.FlowKey, msgAndAr
 }
 
 // openConnectionOnFlow ensures a flow is registered for the provided `key`.
-func (h *registryTestHarness) openConnectionOnFlow(key types.FlowKey) {
+func (h *registryTestHarness) openConnectionOnFlow(key flowcontrol.FlowKey) {
 	h.t.Helper()
 	err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error { return nil })
 	require.NoError(h.t, err, "Registering flow %s should not fail", key)
@@ -145,7 +144,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 	t.Run("ShouldJITRegisterFlow_OnFirstConnection", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "jit-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "jit-flow", Priority: highPriority}
 
 		h.assertFlowDoesNotExist(key, "Flow should not exist before the first connection")
 
@@ -162,7 +161,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 	t.Run("ShouldFail_WhenFlowIDIsEmpty", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "", Priority: highPriority} // Invalid key
+		key := flowcontrol.FlowKey{ID: "", Priority: highPriority} // Invalid key
 
 		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
 			t.Fatal("Callback must not be executed when the provided flow key is invalid")
@@ -196,7 +195,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		require.NoError(t, err)
 
 		h := newRegistryTestHarness(t, harnessOptions{config: cfg})
-		key := types.FlowKey{ID: "test-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "test-flow", Priority: highPriority}
 
 		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
 			t.Fatal("Callback must not be executed when the flow fails to register JIT")
@@ -215,7 +214,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 		require.NoError(t, err, "Test setup: scaling down to create a draining shard should not fail")
 		require.Len(t, h.fr.allShards, 3, "Test setup: should have 2 active and 1 draining shard")
 
-		key := types.FlowKey{ID: "test-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "test-flow", Priority: highPriority}
 
 		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
 			shards := conn.ActiveShards()
@@ -242,8 +241,8 @@ func TestFlowRegistry_Stats(t *testing.T) {
 	t.Parallel()
 
 	h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
-	keyHigh := types.FlowKey{ID: "high-pri-flow", Priority: highPriority}
-	keyLow := types.FlowKey{ID: "low-pri-flow", Priority: lowPriority}
+	keyHigh := flowcontrol.FlowKey{ID: "high-pri-flow", Priority: highPriority}
+	keyLow := flowcontrol.FlowKey{ID: "low-pri-flow", Priority: lowPriority}
 	h.openConnectionOnFlow(keyHigh)
 	h.openConnectionOnFlow(keyLow)
 
@@ -285,7 +284,7 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 	t.Run("ShouldCollectIdleFlow", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "idle-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "idle-flow", Priority: highPriority}
 
 		h.openConnectionOnFlow(key)                            // Create a flow, which is born Idle.
 		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second) // Advance the clock just past the GC timeout.
@@ -297,7 +296,7 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 	t.Run("ShouldNotCollectActiveFlow", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "active-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "active-flow", Priority: highPriority}
 
 		var wg sync.WaitGroup
 		leaseAcquired := make(chan struct{})
@@ -330,7 +329,7 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 	t.Run("ShouldResetGCTimer_WhenFlowBecomesActive", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "reactivated-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "reactivated-flow", Priority: highPriority}
 		h.openConnectionOnFlow(key)                            // Create an flow with a new idleness timer.
 		h.fakeClock.Step(h.config.FlowGCTimeout - time.Second) // Advance the clock to just before the GC timeout.
 		h.openConnectionOnFlow(key)                            // Open a new connection, resetting its idleness timer.
@@ -343,7 +342,7 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 	t.Run("ShouldSkipGC_WhenIdleTimeoutExpired_ButActiveLeaseExists", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "race-resurrected-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "race-resurrected-flow", Priority: highPriority}
 		h.openConnectionOnFlow(key)
 
 		// Manually manipulate the state to simulate a race condition.
@@ -374,7 +373,7 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 	t.Run("ShouldCollectDrainingShard_OnlyWhenEmpty", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
-		key := types.FlowKey{ID: "flow-on-draining-shard", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "flow-on-draining-shard", Priority: highPriority}
 		h.openConnectionOnFlow(key)
 
 		// Add an item to a queue on the soon-to-be Draining shard to keep it busy.
@@ -478,7 +477,7 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 			require.NoError(t, err, "Test setup: creating config should not fail")
 
 			h := newRegistryTestHarness(t, harnessOptions{config: config})
-			key := types.FlowKey{ID: "flow", Priority: highPriority}
+			key := flowcontrol.FlowKey{ID: "flow", Priority: highPriority}
 			h.openConnectionOnFlow(key)
 
 			err = h.fr.updateShardCount(tc.targetShardCount)
@@ -526,7 +525,7 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		// Start with 2 shards to ensure propagation works across the cluster.
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
 		dynamicPrio := 55
-		key := types.FlowKey{ID: "dynamic-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "dynamic-flow", Priority: dynamicPrio}
 
 		// Connect with a new priority.
 		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
@@ -553,7 +552,7 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
 		dynamicPrio := 77
-		key := types.FlowKey{ID: "race-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "race-flow", Priority: dynamicPrio}
 
 		var wg sync.WaitGroup
 		concurrency := 10
@@ -578,7 +577,7 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 1})
 		dynamicPrio := 88
-		key := types.FlowKey{ID: "scaling-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "scaling-flow", Priority: dynamicPrio}
 
 		// Create dynamic band on Shard 0.
 		h.openConnectionOnFlow(key)
@@ -609,7 +608,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 	t.Run("ConcurrentJITRegistrations_ShouldBeSafe", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "concurrent-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "concurrent-flow", Priority: highPriority}
 		numGoroutines := 50
 		var wg sync.WaitGroup
 		wg.Add(numGoroutines)
@@ -636,7 +635,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 	t.Run("ShouldRecover_WhenGCDeletesFlow_DuringConnectionAttempt", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "zombie-race-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "zombie-race-flow", Priority: highPriority}
 
 		// We want to force the specific race in pinActiveFlow where:
 		// 1. User loads ptr A.
@@ -696,7 +695,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 	t.Run("ShouldBackOff_WhenFlowIsMarkedForDeletion_ButStillInMap", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
-		key := types.FlowKey{ID: "doomed-flow", Priority: highPriority}
+		key := flowcontrol.FlowKey{ID: "doomed-flow", Priority: highPriority}
 		h.openConnectionOnFlow(key)
 
 		// Get the original flow state object.
@@ -752,7 +751,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for j := range opsPerWorker {
-					key := types.FlowKey{ID: fmt.Sprintf("flow-%d-%d", workerID, j), Priority: highPriority}
+					key := flowcontrol.FlowKey{ID: fmt.Sprintf("flow-%d-%d", workerID, j), Priority: highPriority}
 					_ = h.fr.WithConnection(key, func(contracts.ActiveFlowConnection) error { return nil })
 				}
 			}()
@@ -799,7 +798,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 				defer wg.Done()
 				for j := range opsPerWorker {
 					priority := 100 + (j % numPriorities) // Rotate through priorities
-					key := types.FlowKey{
+					key := flowcontrol.FlowKey{
 						ID:       fmt.Sprintf("flow-%d-%d", i, j),
 						Priority: priority,
 					}
@@ -811,8 +810,15 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 			}()
 		}
 
-		// Let workers create some bands before GC starts collecting
-		time.Sleep(50 * time.Millisecond)
+		// Wait for at least one band to be created.
+		require.Eventually(t, func() bool {
+			count := 0
+			h.fr.priorityBandStates.Range(func(_, _ any) bool {
+				count++
+				return true
+			})
+			return count > 0
+		}, 5*time.Second, 10*time.Millisecond, "Dynamic bands should be created")
 
 		// Check bands were created before GC collects them all
 		bandCount := 0
@@ -958,7 +964,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 	t.Run("ShouldCollectIdleDynamicBand", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
-		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
 		// Create dynamic band via JIT provisioning
 		h.openConnectionOnFlow(key)
@@ -1015,9 +1021,9 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 		// Create 3 dynamic bands
 		prio1, prio2, prio3 := 101, 102, 103
-		h.openConnectionOnFlow(types.FlowKey{ID: "flow-1", Priority: prio1})
-		h.openConnectionOnFlow(types.FlowKey{ID: "flow-2", Priority: prio2})
-		h.openConnectionOnFlow(types.FlowKey{ID: "flow-3", Priority: prio3})
+		h.openConnectionOnFlow(flowcontrol.FlowKey{ID: "flow-1", Priority: prio1})
+		h.openConnectionOnFlow(flowcontrol.FlowKey{ID: "flow-2", Priority: prio2})
+		h.openConnectionOnFlow(flowcontrol.FlowKey{ID: "flow-3", Priority: prio3})
 
 		// Verify all bands exist
 		h.fr.mu.RLock()
@@ -1050,7 +1056,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 	t.Run("ShouldCollectBand_AcrossMultipleShards", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 3})
-		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
 		// Create flow on all shards
 		h.openConnectionOnFlow(key)
@@ -1096,7 +1102,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 	t.Run("ShouldHandleConcurrentFlowCreation_DuringBandGC", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
-		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
 		// Create and collect flow (band becomes empty)
 		h.openConnectionOnFlow(key)
@@ -1119,7 +1125,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 
 		// Create a new flow _before_ running GC
 		// This will pin the band (increment leaseCount during provisioning)
-		newKey := types.FlowKey{ID: "new-flow", Priority: dynamicPrio}
+		newKey := flowcontrol.FlowKey{ID: "new-flow", Priority: dynamicPrio}
 		h.openConnectionOnFlow(newKey)
 
 		// Run GC - it should NOT collect the band because:
@@ -1144,7 +1150,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
-		key := types.FlowKey{ID: "jit-fail-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "jit-fail-flow", Priority: dynamicPrio}
 
 		// Manually create the priority band
 		err := h.fr.ensurePriorityBand(dynamicPrio)
@@ -1185,9 +1191,9 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		// Create 3 flows at the same priority
-		key1 := types.FlowKey{ID: "flow-1", Priority: dynamicPrio}
-		key2 := types.FlowKey{ID: "flow-2", Priority: dynamicPrio}
-		key3 := types.FlowKey{ID: "flow-3", Priority: dynamicPrio}
+		key1 := flowcontrol.FlowKey{ID: "flow-1", Priority: dynamicPrio}
+		key2 := flowcontrol.FlowKey{ID: "flow-2", Priority: dynamicPrio}
+		key3 := flowcontrol.FlowKey{ID: "flow-3", Priority: dynamicPrio}
 
 		h.openConnectionOnFlow(key1)
 		h.openConnectionOnFlow(key2)
@@ -1242,9 +1248,9 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
 		// Create 3 flows at the same priority
-		key1 := types.FlowKey{ID: "flow-1", Priority: dynamicPrio}
-		key2 := types.FlowKey{ID: "flow-2", Priority: dynamicPrio}
-		key3 := types.FlowKey{ID: "flow-3", Priority: dynamicPrio}
+		key1 := flowcontrol.FlowKey{ID: "flow-1", Priority: dynamicPrio}
+		key2 := flowcontrol.FlowKey{ID: "flow-2", Priority: dynamicPrio}
+		key3 := flowcontrol.FlowKey{ID: "flow-3", Priority: dynamicPrio}
 
 		h.openConnectionOnFlow(key1)
 		h.openConnectionOnFlow(key2)
@@ -1325,7 +1331,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
-		key := types.FlowKey{ID: "test-flow", Priority: dynamicPrio}
+		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 		h.openConnectionOnFlow(key)
 
 		// Manually manipulate the state to simulate a race condition.
@@ -1400,7 +1406,7 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 	registry, err := NewFlowRegistry(cfg, logr.Discard())
 	require.NoError(t, err)
 
-	key := types.FlowKey{
+	key := flowcontrol.FlowKey{
 		Priority: 100, // Dynamic, will trigger ensurePriorityBand
 		ID:       "flow-should-fail",
 	}

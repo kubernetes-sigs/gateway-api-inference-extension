@@ -26,6 +26,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -56,7 +57,7 @@ type AdmissionController interface {
 // flowController defines the minimal interface required by FlowControlAdmissionController for enqueuing requests and
 // waiting for an admission outcome.
 type flowController interface {
-	EnqueueAndWait(ctx context.Context, req types.FlowControlRequest) (types.QueueOutcome, error)
+	EnqueueAndWait(ctx context.Context, req flowcontrol.FlowControlRequest) (types.QueueOutcome, error)
 }
 
 // rejectIfSheddableAndSaturated checks if a request should be immediately rejected.
@@ -170,7 +171,7 @@ func (fcac *FlowControlAdmissionController) Admit(
 	return translateFlowControlOutcome(outcome, err)
 }
 
-// flowControlRequest is an adapter that implements the types.FlowControlRequest interface.
+// flowControlRequest is an adapter that implements the FlowControlRequest interface.
 type flowControlRequest struct {
 	requestID         string
 	fairnessID        string
@@ -182,7 +183,7 @@ type flowControlRequest struct {
 	targetModelName   string
 }
 
-var _ types.FlowControlRequest = &flowControlRequest{}
+var _ flowcontrol.FlowControlRequest = &flowControlRequest{}
 
 func (r *flowControlRequest) ID() string                         { return r.requestID }
 func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
@@ -191,8 +192,8 @@ func (r *flowControlRequest) GetMetadata() map[string]any        { return r.reqM
 func (r *flowControlRequest) InferencePoolName() string          { return r.inferencePoolName }
 func (r *flowControlRequest) ModelName() string                  { return r.modelName }
 func (r *flowControlRequest) TargetModelName() string            { return r.targetModelName }
-func (r *flowControlRequest) FlowKey() types.FlowKey {
-	return types.FlowKey{ID: r.fairnessID, Priority: r.priority}
+func (r *flowControlRequest) FlowKey() flowcontrol.FlowKey {
+	return flowcontrol.FlowKey{ID: r.fairnessID, Priority: r.priority}
 }
 
 // translateFlowControlOutcome maps the context-rich outcome of the Flow Control layer to the public errutil.Error

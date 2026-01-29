@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
@@ -51,8 +52,8 @@ const (
 	// defaultPriorityBandGCTimeout is the default duration of inactivity after which a dynamically provisioned
 	// priority band is garbage collected. Set to 2x flow GC timeout to ensure flows are cleaned up first.
 	defaultPriorityBandGCTimeout time.Duration = 2 * defaultFlowGCTimeout
-	// defaultEventChannelBufferSize is the default size of the buffered channel for control plane events.
-	defaultEventChannelBufferSize int = 4096
+	// dynamicDefaultPriorityBandName is the reserved name for the template band used for dynamic provisioning.
+	dynamicDefaultPriorityBandName = "Dynamic-Default"
 )
 
 // --- Capability Checking ---
@@ -134,13 +135,6 @@ type Config struct {
 	// Must be >= FlowGCTimeout to ensure flows are collected before bands.
 	// Optional: Defaults to `defaultPriorityBandGCTimeout` (10 minutes).
 	PriorityBandGCTimeout time.Duration
-
-	// EventChannelBufferSize defines the size of the buffered channel used for internal control plane events.
-	// A larger buffer can absorb larger bursts of events (e.g., from many queues becoming non-empty simultaneously)
-	// without blocking the data path, but consumes more memory.
-	// This value must be greater than zero.
-	// Optional: Defaults to `defaultEventChannelBufferSize` (4096).
-	EventChannelBufferSize int
 }
 
 // PriorityBandConfig defines the configuration template for a single priority band.
@@ -349,6 +343,76 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 
 // --- Constructors ---
 
+// NewConfigFromAPI creates a new Config by translating the API configuration.
+func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Handle) (*Config, error) {
+	if apiConfig == nil {
+		return NewConfig(handle)
+	}
+
+	opts := make([]ConfigOption, 0, len(apiConfig.PriorityBands)+3)
+
+	if apiConfig.MaxBytes != nil {
+		if *apiConfig.MaxBytes < 0 {
+			return nil, fmt.Errorf("MaxBytes must be non-negative, got %d", *apiConfig.MaxBytes)
+		}
+		opts = append(opts, WithMaxBytes(uint64(*apiConfig.MaxBytes)))
+	}
+
+	if apiConfig.DefaultPriorityBand != nil {
+		templateBand, err := buildDefaultPriorityBandTemplate(handle, apiConfig.DefaultPriorityBand)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, WithDefaultPriorityBand(templateBand))
+	}
+
+	for _, band := range apiConfig.PriorityBands {
+		pb, err := buildPriorityBand(handle, band)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, WithPriorityBand(pb))
+	}
+
+	return NewConfig(handle, opts...)
+}
+
+func buildDefaultPriorityBandTemplate(
+	handle plugin.Handle,
+	apiBand *configapi.PriorityBandConfig,
+) (*PriorityBandConfig, error) {
+	bandOpts := make([]PriorityBandConfigOption, 0, 1)
+	if apiBand.MaxBytes != nil {
+		if *apiBand.MaxBytes < 0 {
+			return nil, fmt.Errorf("DefaultPriorityBand MaxBytes must be non-negative, got %d", *apiBand.MaxBytes)
+		}
+		bandOpts = append(bandOpts, WithBandMaxBytes(uint64(*apiBand.MaxBytes)))
+	}
+
+	// We pass priority 0 as placeholder since it's a template.
+	templateBand, err := NewPriorityBandConfig(handle, 0, dynamicDefaultPriorityBandName, bandOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default priority band template: %w", err)
+	}
+	return templateBand, nil
+}
+
+func buildPriorityBand(handle plugin.Handle, band configapi.PriorityBandConfig) (*PriorityBandConfig, error) {
+	bandOpts := make([]PriorityBandConfigOption, 0, 1)
+	if band.MaxBytes != nil {
+		if *band.MaxBytes < 0 {
+			return nil, fmt.Errorf("priority band %d MaxBytes must be non-negative, got %d", band.Priority, *band.MaxBytes)
+		}
+		bandOpts = append(bandOpts, WithBandMaxBytes(uint64(*band.MaxBytes)))
+	}
+
+	pb, err := NewPriorityBandConfig(handle, band.Priority, "", bandOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create priority band config for priority %d: %w", band.Priority, err)
+	}
+	return pb, nil
+}
+
 // NewConfig creates a new Config populated with system defaults, applies the provided options, and enforces strict
 // validation.
 //
@@ -358,12 +422,11 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 func NewConfig(handle plugin.Handle, opts ...ConfigOption) (*Config, error) {
 	builder := &configBuilder{
 		config: &Config{
-			MaxBytes:               0, // no limit enforced
-			InitialShardCount:      defaultInitialShardCount,
-			FlowGCTimeout:          defaultFlowGCTimeout,
-			PriorityBandGCTimeout:  defaultPriorityBandGCTimeout,
-			EventChannelBufferSize: defaultEventChannelBufferSize,
-			PriorityBands:          make(map[int]*PriorityBandConfig),
+			MaxBytes:              0, // no limit enforced
+			InitialShardCount:     defaultInitialShardCount,
+			FlowGCTimeout:         defaultFlowGCTimeout,
+			PriorityBandGCTimeout: defaultPriorityBandGCTimeout,
+			PriorityBands:         make(map[int]*PriorityBandConfig),
 		},
 		checker: &runtimeCapabilityChecker{},
 	}
@@ -377,7 +440,7 @@ func NewConfig(handle plugin.Handle, opts ...ConfigOption) (*Config, error) {
 	// Initialize DefaultPriorityBand if missing.
 	// This ensures we always have a template for dynamic provisioning.
 	if builder.config.DefaultPriorityBand == nil {
-		template, err := NewPriorityBandConfig(handle, 0, "Dynamic-Default")
+		template, err := NewPriorityBandConfig(handle, 0, dynamicDefaultPriorityBandName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create default priority band: %w", err)
 		}
@@ -430,6 +493,9 @@ func NewPriorityBandConfig(
 // --- Validation, Defaults & Hydration ---
 
 func (p *PriorityBandConfig) applyDefaults(handle plugin.Handle) error {
+	if p.PriorityName == "" {
+		p.PriorityName = fmt.Sprintf("priority-%d", p.Priority)
+	}
 	if p.OrderingPolicy == nil {
 		policy, err := orderingPolicy(defaultOrderingPolicyRef, handle)
 		if err != nil {
@@ -489,9 +555,6 @@ func (c *Config) validate(checker capabilityChecker) error {
 	}
 	if c.PriorityBandGCTimeout < c.FlowGCTimeout {
 		return errors.New("priorityBandGCTimeout must be >= flowGCTimeout")
-	}
-	if c.EventChannelBufferSize <= 0 {
-		return errors.New("eventChannelBufferSize must be greater than 0")
 	}
 
 	// Validate the dynamic template.

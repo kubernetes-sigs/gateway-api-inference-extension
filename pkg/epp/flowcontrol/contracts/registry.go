@@ -17,7 +17,6 @@ limitations under the License.
 package contracts
 
 import (
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -29,7 +28,7 @@ import (
 //
 // # Flow Lifecycle
 //
-// A flow instance, identified by its immutable `types.FlowKey`, has a lease-based lifecycle managed by this interface.
+// A flow instance, identified by its immutable FlowKey, has a lease-based lifecycle managed by this interface.
 // Any implementation MUST adhere to this lifecycle:
 //
 //  1. Lease Acquisition: A client calls Connect to acquire a lease. This signals that the flow is in use and protects
@@ -67,8 +66,8 @@ type FlowRegistryDataPlane interface {
 	// It is the primary and sole entry point for interacting with the data path.
 	//
 	// This method handles the entire lifecycle of a flow connection:
-	// 1. Just-In-Time (JIT) Registration: If the flow for the given `types.FlowKey` does not exist, it is created and
-	//    registered automatically.
+	// 1. Just-In-Time (JIT) Registration: If the flow for the given FlowKey does not exist, it is created and registered
+	//    automatically.
 	// 2. Lease Acquisition: It acquires a lifecycle lease, protecting the flow from garbage collection.
 	// 3. Callback Execution: It invokes the provided function `fn`, passing in a temporary `ActiveFlowConnection` handle.
 	// 4. Guaranteed Lease Release: It ensures the lease is safely released when the callback function returns.
@@ -78,7 +77,7 @@ type FlowRegistryDataPlane interface {
 	//
 	// Errors returned by the callback `fn` are propagated up.
 	// Returns `ErrFlowIDEmpty` if the provided key has an empty ID.
-	WithConnection(key types.FlowKey, fn func(conn ActiveFlowConnection) error) error
+	WithConnection(key flowcontrol.FlowKey, fn func(conn ActiveFlowConnection) error) error
 }
 
 // ActiveFlowConnection represents a handle to a scoped, leased session on a flow.
@@ -95,7 +94,7 @@ type ActiveFlowConnection interface {
 	ActiveShards() []RegistryShard
 
 	// FlowKey returns the immutable identity of the flow this connection is pinned to.
-	FlowKey() types.FlowKey
+	FlowKey() flowcontrol.FlowKey
 }
 
 // RegistryShard defines the interface for a single slice (shard) of the `FlowRegistry`'s state.
@@ -110,12 +109,12 @@ type RegistryShard interface {
 	// being gracefully drained and should not be given new work.
 	IsActive() bool
 
-	// ManagedQueue retrieves the managed queue for the given, unique `types.FlowKey`. This is the primary method for
-	// accessing a specific flow's queue for either enqueueing or dispatching requests.
+	// ManagedQueue retrieves the managed queue for the given, unique FlowKey. This is the primary method for accessing
+	// a specific flow's queue for either enqueueing or dispatching requests.
 	//
-	// Returns an error wrapping `ErrPriorityBandNotFound` if the priority specified in the `key` is not configured, or
-	// `ErrFlowInstanceNotFound` if no instance exists for the given `key`.
-	ManagedQueue(key types.FlowKey) (ManagedQueue, error)
+	// Returns an error wrapping ErrPriorityBandNotFound if the priority specified in the key is not configured, or
+	// ErrFlowInstanceNotFound if no instance exists for the given key.
+	ManagedQueue(key flowcontrol.FlowKey) (ManagedQueue, error)
 
 	// FairnessPolicy retrieves the FairnessPolicy singleton configured for the specified priority band on this shard.
 	// This method provides access to the immutable logic component that governs inter-flow contention.
@@ -153,16 +152,16 @@ type ManagedQueue interface {
 	// Add attempts to enqueue an item, performing an atomic check on the parent shard's lifecycle state before adding
 	// the item to the underlying queue.
 	// Returns ErrShardDraining if the parent shard is no longer Active.
-	Add(item types.QueueItemAccessor) error
+	Add(item flowcontrol.QueueItemAccessor) error
 
 	// Remove atomically finds and removes an item from the underlying queue using its handle.
-	Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
+	Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error)
 
 	// Cleanup removes all items from the underlying queue that satisfy the predicate.
-	Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor
+	Cleanup(predicate PredicateFunc) []flowcontrol.QueueItemAccessor
 
 	// Drain removes all items from the underlying queue.
-	Drain() []types.QueueItemAccessor
+	Drain() []flowcontrol.QueueItemAccessor
 
 	// FlowQueueAccessor returns a read-only, flow-aware accessor for this queue, used by policy plugins.
 	// Conformance: This method MUST NOT return nil.

@@ -161,7 +161,7 @@ type mockProducedDataType struct {
 }
 
 // Clone implements types.Cloneable.
-func (m mockProducedDataType) Clone() datalayer.Cloneable {
+func (m mockProducedDataType) Clone() fwkdl.Cloneable {
 	return mockProducedDataType{value: m.value}
 }
 
@@ -605,7 +605,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 	}
 	for _, epf := range factories {
 		// Datastore setup
@@ -676,6 +676,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 				}
 				// Deep copy the body map.
 				maps.Copy(reqCtx.Request.Body, test.reqBodyMap)
+
+				// Add appropriate path header based on request body content for path-based API detection
+				if _, hasPrompt := test.reqBodyMap["prompt"]; hasPrompt {
+					reqCtx.Request.Headers[":path"] = "/v1/completions"
+				} else if _, hasMessages := test.reqBodyMap["messages"]; hasMessages {
+					reqCtx.Request.Headers[":path"] = "/v1/chat/completions"
+				}
 
 				returnedReqCtx, err := director.HandleRequest(ctx, reqCtx)
 
@@ -758,7 +765,7 @@ func TestGetRandomEndpoint(t *testing.T) {
 		period := time.Millisecond
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {

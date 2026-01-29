@@ -19,32 +19,34 @@ package flowcontrol
 import (
 	"fmt"
 
+	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-const (
-	FeatureGate = "flowControl"
-)
+const FeatureGate = "flowControl"
 
 // Config is the top-level configuration for the entire flow control module.
 // It embeds the configurations for the controller and the registry, providing a single point of entry for validation
 // and initialization.
 type Config struct {
-	Controller controller.Config
+	Controller *controller.Config
 	Registry   *registry.Config
 }
 
-// ValidateAndApplyDefaults checks the configuration for validity and populates any empty fields with system defaults.
-// It delegates validation to the underlying controller and registry configurations.
-// It returns a new, validated `Config` object and does not mutate the receiver.
-func (c *Config) ValidateAndApplyDefaults() (*Config, error) {
-	validatedControllerCfg, err := c.Controller.ValidateAndApplyDefaults()
+// NewConfigFromAPI creates a new Config by translating the top-level API configuration.
+func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Handle) (*Config, error) {
+	registryConfig, err := registry.NewConfigFromAPI(apiConfig, handle)
 	if err != nil {
-		return nil, fmt.Errorf("controller config validation failed: %w", err)
+		return nil, fmt.Errorf("failed to create registry config: %w", err)
+	}
+	ctrlCfg, err := controller.NewConfigFromAPI(apiConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create controller config: %w", err)
 	}
 	return &Config{
-		Controller: *validatedControllerCfg,
-		Registry:   c.Registry,
+		Controller: ctrlCfg,
+		Registry:   registryConfig,
 	}, nil
 }

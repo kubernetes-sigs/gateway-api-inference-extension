@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // TODO:
@@ -83,7 +84,7 @@ func NewCollector() *Collector {
 
 // Start initiates data source collection for the endpoint.
 // TODO: pass PoolInfo for backward compatibility
-func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sources []DataSource) error {
+func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, sources []fwkdl.DataSource) error {
 	var ready chan struct{}
 	started := false
 
@@ -93,7 +94,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep Endpoint, sourc
 		started = true
 		ready = make(chan struct{})
 
-		go func(endpoint Endpoint, sources []DataSource) {
+		go func(endpoint fwkdl.Endpoint, sources []fwkdl.DataSource) {
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {

@@ -33,6 +33,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
@@ -43,7 +44,7 @@ var (
 		},
 	}
 	pod1NamespacedName = types.NamespacedName{Name: pod1.Name + "-rank-0", Namespace: pod1.Namespace}
-	pod1Metrics        = &datalayer.Metrics{
+	pod1Metrics        = &fwkdl.Metrics{
 		WaitingQueueSize:    100,
 		KVCacheUsagePercent: 0.2,
 		MaxActiveModels:     2,
@@ -54,7 +55,7 @@ func TestNoMetricsCollected(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
 	}
 	for _, epf := range factories {
 		ds := datastore.NewDatastore(context.Background(), epf, 0)
@@ -70,13 +71,13 @@ func TestNoMetricsCollected(t *testing.T) {
 }
 
 func TestMetricsCollected(t *testing.T) {
-	metrics := map[types.NamespacedName]*datalayer.Metrics{
+	metrics := map[types.NamespacedName]*fwkdl.Metrics{
 		pod1NamespacedName: pod1Metrics,
 	}
 	period := time.Millisecond
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: metrics}, period),
-		datalayer.NewEndpointFactory([]datalayer.DataSource{&datalayer.FakeDataSource{Metrics: metrics}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{Metrics: metrics}}, period),
 	}
 	for _, epf := range factories {
 		inferencePool := &v1.InferencePool{

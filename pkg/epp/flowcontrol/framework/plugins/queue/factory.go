@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sync"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
@@ -29,7 +30,7 @@ import (
 type RegisteredQueueName string
 
 // QueueConstructor defines the function signature for creating a SafeQueue.
-type QueueConstructor func(policy flowcontrol.OrderingPolicy) (flowcontrol.SafeQueue, error)
+type QueueConstructor func(policy flowcontrol.OrderingPolicy) (contracts.SafeQueue, error)
 
 var (
 	// mu guards the registration map.
@@ -52,7 +53,7 @@ func MustRegisterQueue(name RegisteredQueueName, constructor QueueConstructor) {
 // NewQueueFromName creates a new SafeQueue given its registered name and the OrderingPolicy that will be optionally
 // used to configure the queue (provided it declares CapabilityPriorityConfigurable).
 // This is called by the FlowRegistry during initialization of a flow's ManagedQueue.
-func NewQueueFromName(name RegisteredQueueName, policy flowcontrol.OrderingPolicy) (flowcontrol.SafeQueue, error) {
+func NewQueueFromName(name RegisteredQueueName, policy flowcontrol.OrderingPolicy) (contracts.SafeQueue, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	constructor, ok := RegisteredQueues[name]

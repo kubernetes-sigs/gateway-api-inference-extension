@@ -36,7 +36,59 @@ import (
 const (
 	streamingRespPrefix = "data: "
 	streamingEndMsg     = "data: [DONE]"
+
+	// OpenAI API object types
+	objectTypeResponse            = "response"
+	objectTypeConversation        = "conversation"
+	objectTypeChatCompletion      = "chat.completion"
+	objectTypeChatCompletionChunk = "chat.completion.chunk"
+	objectTypeTextCompletion      = "text_completion"
 )
+
+// extractUsageByAPIType extracts usage statistics using the appropriate field names
+// based on the OpenAI API type identified by the "object" field.
+func extractUsageByAPIType(usg map[string]any, objectType string) fwkrq.Usage {
+	usage := fwkrq.Usage{}
+
+	switch {
+	case strings.HasPrefix(objectType, objectTypeResponse) || strings.HasPrefix(objectType, objectTypeConversation):
+		// Responses/Conversations APIs use input_tokens/output_tokens
+		if usg["input_tokens"] != nil {
+			usage.PromptTokens = int(usg["input_tokens"].(float64))
+		}
+		if usg["output_tokens"] != nil {
+			usage.CompletionTokens = int(usg["output_tokens"].(float64))
+		}
+	case objectType == objectTypeChatCompletion || objectType == objectTypeChatCompletionChunk || objectType == objectTypeTextCompletion:
+		// Traditional APIs use prompt_tokens/completion_tokens
+		if usg["prompt_tokens"] != nil {
+			usage.PromptTokens = int(usg["prompt_tokens"].(float64))
+		}
+		if usg["completion_tokens"] != nil {
+			usage.CompletionTokens = int(usg["completion_tokens"].(float64))
+		}
+	default:
+		// Fallback: try both field naming conventions
+		if usg["input_tokens"] != nil {
+			usage.PromptTokens = int(usg["input_tokens"].(float64))
+		} else if usg["prompt_tokens"] != nil {
+			usage.PromptTokens = int(usg["prompt_tokens"].(float64))
+		}
+
+		if usg["output_tokens"] != nil {
+			usage.CompletionTokens = int(usg["output_tokens"].(float64))
+		} else if usg["completion_tokens"] != nil {
+			usage.CompletionTokens = int(usg["completion_tokens"].(float64))
+		}
+	}
+
+	// total_tokens field name is consistent across all API types
+	if usg["total_tokens"] != nil {
+		usage.TotalTokens = int(usg["total_tokens"].(float64))
+	}
+
+	return usage
+}
 
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, response map[string]any) (*RequestContext, error) {
@@ -47,11 +99,8 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	}
 	if response["usage"] != nil {
 		usg := response["usage"].(map[string]any)
-		usage := fwkrq.Usage{
-			PromptTokens:     int(usg["prompt_tokens"].(float64)),
-			CompletionTokens: int(usg["completion_tokens"].(float64)),
-			TotalTokens:      int(usg["total_tokens"].(float64)),
-		}
+		objectType, _ := response["object"].(string)
+		usage := extractUsageByAPIType(usg, objectType)
 		if usg["prompt_token_details"] != nil {
 			detailsMap := usg["prompt_token_details"].(map[string]any)
 			if cachedTokens, ok := detailsMap["cached_tokens"]; ok {

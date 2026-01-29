@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller/internal"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
@@ -95,7 +96,7 @@ type managedWorker struct {
 type FlowController struct {
 	// --- Immutable dependencies (set at construction) ---
 
-	config                Config
+	config                *Config
 	registry              registryClient
 	saturationDetector    contracts.SaturationDetector
 	podLocator            contracts.PodLocator
@@ -127,7 +128,7 @@ type flowControllerOption func(*FlowController)
 // The provided context governs the lifecycle of the controller and all its workers.
 func NewFlowController(
 	ctx context.Context,
-	config Config,
+	config *Config,
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
 	podLocator contracts.PodLocator,
@@ -210,7 +211,7 @@ func (fc *FlowController) run(ctx context.Context) {
 //     backpressure to the caller.
 func (fc *FlowController) EnqueueAndWait(
 	ctx context.Context,
-	req types.FlowControlRequest,
+	req flowcontrol.FlowControlRequest,
 ) (types.QueueOutcome, error) {
 	flowKey := req.FlowKey()
 	priority := strconv.Itoa(flowKey.Priority)
@@ -301,7 +302,7 @@ var errNoShards = errors.New("no viable active shards available")
 // If this function returns an error, it guarantees that the provided `item` has been finalized.
 func (fc *FlowController) tryDistribution(
 	reqCtx context.Context,
-	req types.FlowControlRequest,
+	req flowcontrol.FlowControlRequest,
 	enqueueTime time.Time,
 	conn contracts.ActiveFlowConnection,
 ) (*internal.FlowItem, error) {
@@ -373,7 +374,7 @@ func (fc *FlowController) awaitFinalization(
 // createRequestContext derives the context that governs a request's lifecycle, enforcing the TTL deadline.
 func (fc *FlowController) createRequestContext(
 	ctx context.Context,
-	req types.FlowControlRequest,
+	req flowcontrol.FlowControlRequest,
 ) (context.Context, context.CancelFunc, time.Time) {
 	enqueueTime := fc.clock.Now()
 	effectiveTTL := req.InitialEffectiveTTL()

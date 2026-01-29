@@ -23,7 +23,6 @@ import (
 	"slices"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -65,7 +64,7 @@ func (p *roundRobin) TypedName() fwkplugin.TypedName {
 // It is initialized via NewState and stored on the PriorityBandAccessor.
 type roundRobinCursor struct {
 	mu           sync.Mutex
-	lastSelected *types.FlowKey
+	lastSelected *flowcontrol.FlowKey
 }
 
 // NewState initializes the policy state for a specific priority band.
@@ -99,7 +98,7 @@ func (p *roundRobin) Pick(
 	}
 
 	// Sort for deterministic ordering.
-	slices.SortFunc(keys, func(a, b types.FlowKey) int { return a.Compare(b) })
+	slices.SortFunc(keys, func(a, b flowcontrol.FlowKey) int { return a.Compare(b) })
 
 	startIndex := 0
 	if c.lastSelected != nil {

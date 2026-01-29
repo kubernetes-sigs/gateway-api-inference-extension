@@ -16,8 +16,6 @@ limitations under the License.
 
 package flowcontrol
 
-import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-
 // FlowQueueAccessor represents the runtime state of a single active Flow.
 //
 // Role in Fairness:
@@ -37,7 +35,7 @@ type FlowQueueAccessor interface {
 
 	// FlowKey returns the unique, immutable identity of the flow instance this queue belongs to.
 	// This provides essential context (like the logical grouping ID and Priority) to policies.
-	FlowKey() types.FlowKey
+	FlowKey() FlowKey
 }
 
 // PriorityBandAccessor represents a Priority Band (conceptually, a 'Flow Group')—a collection of flows contending for
@@ -62,7 +60,7 @@ type PriorityBandAccessor interface {
 	// FlowKeys returns the list of identities for every flow currently active within this group.
 	// The caller can use the ID field from each key to look up a specific queue via the Queue(id) method.
 	// The order of keys is not guaranteed unless specified by the implementation.
-	FlowKeys() []types.FlowKey
+	FlowKeys() []FlowKey
 
 	// Queue returns the specific Flow (queue) associated with the given logical ID within this group.
 	// Returns nil if the ID is not found in this group.

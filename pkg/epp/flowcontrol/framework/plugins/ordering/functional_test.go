@@ -22,9 +22,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -64,7 +63,7 @@ func TestOrderingPolicyConformance(t *testing.T) {
 				res := policy.Less(nil, nil)
 				assert.False(t, res, "Less(nil, nil) should be false")
 
-				mockItem := typesmocks.NewMockQueueItemAccessor(0, "test", types.FlowKey{})
+				mockItem := mocks.NewMockQueueItemAccessor(0, "test", flowcontrol.FlowKey{})
 				assert.True(t, policy.Less(mockItem, nil), "Less(item, nil) should be true (item preferred over nil)")
 				assert.False(t, policy.Less(nil, mockItem), "Less(nil, item) should be false")
 			})

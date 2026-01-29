@@ -19,7 +19,6 @@ package ordering
 import (
 	"encoding/json"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -91,7 +90,7 @@ func (p *fcfs) TypedName() plugin.TypedName {
 
 // Less returns true if item 'a' should be dispatched before item 'b'.
 // FCFS orders by logical enqueue time (earliest first).
-func (p *fcfs) Less(a, b types.QueueItemAccessor) bool {
+func (p *fcfs) Less(a, b flowcontrol.QueueItemAccessor) bool {
 	if a == nil && b == nil {
 		return false
 	}

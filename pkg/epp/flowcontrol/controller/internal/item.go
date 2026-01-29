@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
@@ -52,7 +53,7 @@ type FlowItem struct {
 
 	enqueueTime     time.Time
 	effectiveTTL    time.Duration
-	originalRequest types.FlowControlRequest
+	originalRequest flowcontrol.FlowControlRequest
 
 	// --- Synchronized State ---
 
@@ -61,7 +62,7 @@ type FlowItem struct {
 	// Read by inferOutcome (called by Finalize) to infer the outcome (Rejected vs. Evicted).
 	// Distinguishing between pre-admission (Rejection) and post-admission (Eviction) during asynchronous finalization
 	// relies on whether this handle is nil or non-nil.
-	handle atomic.Pointer[types.QueueItemHandle]
+	handle atomic.Pointer[flowcontrol.QueueItemHandle]
 
 	// finalState holds the result of the finalization. Stored atomically once.
 	// Use FinalState() for safe access.
@@ -77,10 +78,10 @@ type FlowItem struct {
 	onceFinalize sync.Once
 }
 
-var _ types.QueueItemAccessor = &FlowItem{}
+var _ flowcontrol.QueueItemAccessor = &FlowItem{}
 
 // NewItem allocates and initializes a new FlowItem for a request lifecycle.
-func NewItem(req types.FlowControlRequest, effectiveTTL time.Duration, enqueueTime time.Time) *FlowItem {
+func NewItem(req flowcontrol.FlowControlRequest, effectiveTTL time.Duration, enqueueTime time.Time) *FlowItem {
 	return &FlowItem{
 		enqueueTime:     enqueueTime,
 		effectiveTTL:    effectiveTTL,
@@ -95,8 +96,8 @@ func (fi *FlowItem) EnqueueTime() time.Time { return fi.enqueueTime }
 // EffectiveTTL returns the actual time-to-live assigned to this item.
 func (fi *FlowItem) EffectiveTTL() time.Duration { return fi.effectiveTTL }
 
-// OriginalRequest returns the original types.FlowControlRequest object.
-func (fi *FlowItem) OriginalRequest() types.FlowControlRequest { return fi.originalRequest }
+// OriginalRequest returns the original FlowControlRequest object.
+func (fi *FlowItem) OriginalRequest() flowcontrol.FlowControlRequest { return fi.originalRequest }
 
 // Done returns a read-only channel that will receive the FinalState pointer exactly once.
 func (fi *FlowItem) Done() <-chan *FinalState { return fi.done }
@@ -105,9 +106,9 @@ func (fi *FlowItem) Done() <-chan *FinalState { return fi.done }
 // Safe for concurrent access.
 func (fi *FlowItem) FinalState() *FinalState { return fi.finalState.Load() }
 
-// Handle returns the types.QueueItemHandle for this item within a queue.
+// Handle returns the QueueItemHandle for this item within a queue.
 // Returns nil if the item is not in a queue. Safe for concurrent access.
-func (fi *FlowItem) Handle() types.QueueItemHandle {
+func (fi *FlowItem) Handle() flowcontrol.QueueItemHandle {
 	ptr := fi.handle.Load()
 	if ptr == nil {
 		return nil
@@ -115,9 +116,9 @@ func (fi *FlowItem) Handle() types.QueueItemHandle {
 	return *ptr
 }
 
-// SetHandle associates a types.QueueItemHandle with this item. Called by the queue implementation (via Processor).
+// SetHandle associates a QueueItemHandle with this item. Called by the queue implementation (via Processor).
 // Safe for concurrent access.
-func (fi *FlowItem) SetHandle(handle types.QueueItemHandle) { fi.handle.Store(&handle) }
+func (fi *FlowItem) SetHandle(handle flowcontrol.QueueItemHandle) { fi.handle.Store(&handle) }
 
 // Finalize determines the item's terminal state based on the provided cause (e.g., Context error) and the item's
 // current admission status (queued or not).

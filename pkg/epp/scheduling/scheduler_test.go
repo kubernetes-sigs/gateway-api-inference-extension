@@ -26,13 +26,13 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	// Import config for thresholds
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/multi/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 )
 
 // Tests the default scheduler configuration and expected behavior.
@@ -83,7 +83,7 @@ func TestSchedule(t *testing.T) {
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
-					&datalayer.Metrics{
+					&fwkdl.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -94,7 +94,7 @@ func TestSchedule(t *testing.T) {
 					}, nil),
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-					&datalayer.Metrics{
+					&fwkdl.Metrics{
 						WaitingQueueSize:    0,
 						KVCacheUsagePercent: 0.2,
 						MaxActiveModels:     2,
@@ -105,7 +105,7 @@ func TestSchedule(t *testing.T) {
 					}, nil),
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}},
-					&datalayer.Metrics{
+					&fwkdl.Metrics{
 						WaitingQueueSize:    10,
 						KVCacheUsagePercent: 0.8,
 						MaxActiveModels:     2,
@@ -121,7 +121,7 @@ func TestSchedule(t *testing.T) {
 							&fwksched.ScoredEndpoint{
 								Endpoint: fwksched.NewEndpoint(
 									&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}},
-									&datalayer.Metrics{
+									&fwkdl.Metrics{
 										WaitingQueueSize:    0,
 										KVCacheUsagePercent: 0.2,
 										MaxActiveModels:     2,

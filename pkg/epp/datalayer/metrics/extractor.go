@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
@@ -52,7 +52,7 @@ type Extractor struct {
 	engineLabelKey string
 }
 
-// Produces returns the data attributes that are provided by the datalayer.metrics
+// Produces returns the data attributes that are provided by the fwkdl.metrics
 // package.
 func Produces() map[string]any {
 	return map[string]any{
@@ -98,7 +98,7 @@ func (ext *Extractor) ExpectedInputType() reflect.Type {
 
 // Extract transforms the data source output into a concrete attribute that
 // is stored on the given endpoint.
-func (ext *Extractor) Extract(ctx context.Context, data any, ep datalayer.Endpoint) error {
+func (ext *Extractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {
 	families, ok := data.(PrometheusMetricMap)
 	if !ok {
 		return fmt.Errorf("unexpected input in Extract: %T", data)
@@ -191,7 +191,7 @@ func getEngineTypeFromEndpoint(ep datalayer.Endpoint, labelKey string) string {
 }
 
 // populateLoRAMetrics updates the metrics with LoRA adapter info from the metric labels.
-func populateLoRAMetrics(clone *datalayer.Metrics, metric *dto.Metric, errs *[]error) {
+func populateLoRAMetrics(clone *fwkdl.Metrics, metric *dto.Metric, errs *[]error) {
 	clone.ActiveModels = map[string]int{}
 	clone.WaitingModels = map[string]int{}
 
@@ -214,7 +214,7 @@ func populateLoRAMetrics(clone *datalayer.Metrics, metric *dto.Metric, errs *[]e
 }
 
 // populateCacheInfoMetrics updates the metrics with cache info from the metric labels.
-func populateCacheInfoMetrics(clone *datalayer.Metrics, metric *dto.Metric, errs *[]error) {
+func populateCacheInfoMetrics(clone *fwkdl.Metrics, metric *dto.Metric, errs *[]error) {
 	clone.CacheBlockSize = 0
 	for _, label := range metric.GetLabel() {
 		switch label.GetName() {

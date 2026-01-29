@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -89,7 +88,7 @@ func (p *globalStrict) Pick(
 	}
 
 	var bestQueue flowcontrol.FlowQueueAccessor
-	var bestItem types.QueueItemAccessor
+	var bestItem flowcontrol.QueueItemAccessor
 	var iterationErr error
 
 	flowGroup.IterateQueues(func(queue flowcontrol.FlowQueueAccessor) (keepIterating bool) {

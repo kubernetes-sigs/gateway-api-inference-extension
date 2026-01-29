@@ -42,29 +42,29 @@ const (
 //     all endpoints for metrics summarization.
 type PoolInfo interface {
 	PoolGet() (*EndpointPool, error)
-	PodList(func(Endpoint) bool) []Endpoint
+	PodList(func(fwkdl.Endpoint) bool) []fwkdl.Endpoint
 }
 
 // EndpointFactory defines an interface for managing Endpoint lifecycle. Specifically,
 // providing methods to allocate and retire endpoints. This can potentially be used for
 // pooled memory or other management chores in the implementation.
 type EndpointFactory interface {
-	SetSources(sources []DataSource)
-	NewEndpoint(parent context.Context, inEnpointMetadata *fwkdl.EndpointMetadata, poolinfo PoolInfo) Endpoint
-	ReleaseEndpoint(ep Endpoint)
+	SetSources(sources []fwkdl.DataSource)
+	NewEndpoint(parent context.Context, inEnpointMetadata *fwkdl.EndpointMetadata, poolinfo PoolInfo) fwkdl.Endpoint
+	ReleaseEndpoint(ep fwkdl.Endpoint)
 }
 
 // EndpointLifecycle manages the life cycle (creation and termination) of
 // endpoints.
 type EndpointLifecycle struct {
-	sources         []DataSource  // data sources for collectors
-	collectors      sync.Map      // collectors map. key: Pod namespaced name, value: *Collector
-	refreshInterval time.Duration // metrics refresh interval
+	sources         []fwkdl.DataSource // data sources for collectors
+	collectors      sync.Map           // collectors map. key: Pod namespaced name, value: *Collector
+	refreshInterval time.Duration      // metrics refresh interval
 }
 
 // NewEndpointFactory returns a new endpoint for factory, managing collectors for
 // its endpoints. This function assumes that sources are not modified afterwards.
-func NewEndpointFactory(sources []DataSource, refreshMetricsInterval time.Duration) *EndpointLifecycle {
+func NewEndpointFactory(sources []fwkdl.DataSource, refreshMetricsInterval time.Duration) *EndpointLifecycle {
 	eplc := &EndpointLifecycle{
 		collectors:      sync.Map{},
 		refreshInterval: refreshMetricsInterval,
@@ -75,15 +75,15 @@ func NewEndpointFactory(sources []DataSource, refreshMetricsInterval time.Durati
 
 // SetSources sets the slice of collectors associated with the endpoint life cycle.
 // This overrides any sources which may have previously been set on creation.
-func (lc *EndpointLifecycle) SetSources(sources []DataSource) {
-	lc.sources = make([]DataSource, len(sources)) // clone the source slice
+func (lc *EndpointLifecycle) SetSources(sources []fwkdl.DataSource) {
+	lc.sources = make([]fwkdl.DataSource, len(sources)) // clone the source slice
 	copy(lc.sources, sources)
 }
 
 // NewEndpoint implements EndpointFactory.NewEndpoint.
 // Creates a new endpoint and starts its associated collector with its own ticker.
 // Guards against multiple concurrent calls for the same endpoint.
-func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *fwkdl.EndpointMetadata, _ PoolInfo) Endpoint {
+func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *fwkdl.EndpointMetadata, _ PoolInfo) fwkdl.Endpoint {
 	key := types.NamespacedName{Namespace: inEndpointMetadata.GetNamespacedName().Namespace, Name: inEndpointMetadata.GetNamespacedName().Name}
 	logger := log.FromContext(parent).WithValues("pod", key)
 
@@ -92,7 +92,7 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetad
 		return nil
 	}
 
-	endpoint := NewEndpoint(inEndpointMetadata, nil)
+	endpoint := fwkdl.NewEndpoint(inEndpointMetadata, nil)
 	collector := NewCollector() // TODO or full backward compatibility, set the logger and poolinfo
 
 	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {
@@ -113,7 +113,7 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetad
 
 // ReleaseEndpoint implements EndpointFactory.ReleaseEndpoint
 // Stops the collector and cleans up resources for the endpoint
-func (lc *EndpointLifecycle) ReleaseEndpoint(ep Endpoint) {
+func (lc *EndpointLifecycle) ReleaseEndpoint(ep fwkdl.Endpoint) {
 	key := ep.GetMetadata().GetNamespacedName()
 
 	if value, ok := lc.collectors.LoadAndDelete(key); ok {

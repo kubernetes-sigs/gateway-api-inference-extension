@@ -72,7 +72,7 @@ func TestExtractorExtract(t *testing.T) {
 		t.Errorf("incorrect expected input type: %v", inputType)
 	}
 
-	ep := datalayer.NewEndpoint(nil, nil)
+	ep := fwkdl.NewEndpoint(nil, nil)
 	if ep == nil {
 		t.Fatal("expected non-nil endpoint")
 	}

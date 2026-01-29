@@ -36,9 +36,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	typesmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
 
 // --- RegistryShard Mocks ---
@@ -49,7 +48,7 @@ import (
 type MockRegistryShard struct {
 	IDFunc                       func() string
 	IsActiveFunc                 func() bool
-	ManagedQueueFunc             func(key types.FlowKey) (contracts.ManagedQueue, error)
+	ManagedQueueFunc             func(key flowcontrol.FlowKey) (contracts.ManagedQueue, error)
 	FairnessPolicyFunc           func(priority int) (flowcontrol.FairnessPolicy, error)
 	PriorityBandAccessorFunc     func(priority int) (flowcontrol.PriorityBandAccessor, error)
 	AllOrderedPriorityLevelsFunc func() []int
@@ -70,7 +69,7 @@ func (m *MockRegistryShard) IsActive() bool {
 	return false
 }
 
-func (m *MockRegistryShard) ManagedQueue(key types.FlowKey) (contracts.ManagedQueue, error) {
+func (m *MockRegistryShard) ManagedQueue(key flowcontrol.FlowKey) (contracts.ManagedQueue, error) {
 	if m.ManagedQueueFunc != nil {
 		return m.ManagedQueueFunc(key)
 	}
@@ -143,6 +142,66 @@ func (m *MockPodLocator) Locate(ctx context.Context, requestMetadata map[string]
 	return result
 }
 
+// --- SafeQueue Mock ---
+
+// MockSafeQueue is a simple stub mock for the SafeQueue interface.
+// It is used for tests that need to control the exact return values of a queue's methods without simulating the queue's
+// internal logic or state.
+type MockSafeQueue struct {
+	NameV         string
+	CapabilitiesV []flowcontrol.QueueCapability
+	LenV          int
+	ByteSizeV     uint64
+	PeekHeadV     flowcontrol.QueueItemAccessor
+	PeekTailV     flowcontrol.QueueItemAccessor
+	AddFunc       func(item flowcontrol.QueueItemAccessor)
+	RemoveFunc    func(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error)
+	CleanupFunc   func(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor
+	DrainFunc     func() []flowcontrol.QueueItemAccessor
+}
+
+func (m *MockSafeQueue) Name() string                                { return m.NameV }
+func (m *MockSafeQueue) Capabilities() []flowcontrol.QueueCapability { return m.CapabilitiesV }
+func (m *MockSafeQueue) Len() int                                    { return m.LenV }
+func (m *MockSafeQueue) ByteSize() uint64                            { return m.ByteSizeV }
+
+func (m *MockSafeQueue) PeekHead() flowcontrol.QueueItemAccessor {
+	return m.PeekHeadV
+}
+
+func (m *MockSafeQueue) PeekTail() flowcontrol.QueueItemAccessor {
+	return m.PeekTailV
+}
+
+func (m *MockSafeQueue) Add(item flowcontrol.QueueItemAccessor) {
+	if m.AddFunc != nil {
+		m.AddFunc(item)
+	}
+}
+
+func (m *MockSafeQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
+	if m.RemoveFunc != nil {
+		return m.RemoveFunc(handle)
+	}
+	return nil, nil
+}
+
+func (m *MockSafeQueue) Cleanup(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor {
+	if m.CleanupFunc != nil {
+		return m.CleanupFunc(predicate)
+	}
+	return nil
+}
+
+func (m *MockSafeQueue) Drain() []flowcontrol.QueueItemAccessor {
+	if m.DrainFunc != nil {
+		return m.DrainFunc()
+	}
+	return nil
+}
+
+var _ contracts.SafeQueue = &MockSafeQueue{}
+
 // --- ManagedQueue Mock ---
 
 // MockManagedQueue is a high-fidelity, thread-safe mock of the `contracts.ManagedQueue` interface, designed
@@ -164,28 +223,28 @@ func (m *MockPodLocator) Locate(ctx context.Context, requestMetadata map[string]
 //     correctly connected to the queue's state without manual wiring in tests.
 type MockManagedQueue struct {
 	// FlowKeyV defines the flow specification for this mock queue. It should be set by the test.
-	FlowKeyV types.FlowKey
+	FlowKeyV flowcontrol.FlowKey
 
 	// AddFunc allows a test to completely override the default Add behavior.
-	AddFunc func(item types.QueueItemAccessor) error
+	AddFunc func(item flowcontrol.QueueItemAccessor) error
 	// RemoveFunc allows a test to completely override the default Remove behavior.
-	RemoveFunc func(handle types.QueueItemHandle) (types.QueueItemAccessor, error)
+	RemoveFunc func(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error)
 	// CleanupFunc allows a test to completely override the default Cleanup behavior.
-	CleanupFunc func(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor
+	CleanupFunc func(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor
 	// DrainFunc allows a test to completely override the default Drain behavior.
-	DrainFunc func() []types.QueueItemAccessor
+	DrainFunc func() []flowcontrol.QueueItemAccessor
 	// OrderingPolicyFunc allows a test to override OrderingPolicy.
 	OrderingPolicyFunc func() flowcontrol.OrderingPolicy
 
 	// mu protects access to the internal `items` map.
 	mu       sync.Mutex
 	initOnce sync.Once
-	items    map[types.QueueItemHandle]types.QueueItemAccessor
+	items    map[flowcontrol.QueueItemHandle]flowcontrol.QueueItemAccessor
 }
 
 func (m *MockManagedQueue) init() {
 	m.initOnce.Do(func() {
-		m.items = make(map[types.QueueItemHandle]types.QueueItemAccessor)
+		m.items = make(map[flowcontrol.QueueItemHandle]flowcontrol.QueueItemAccessor)
 	})
 }
 
@@ -197,7 +256,7 @@ func (m *MockManagedQueue) FlowQueueAccessor() flowcontrol.FlowQueueAccessor {
 // Add adds an item to the queue.
 // It checks for a test override before locking. If no override is present, it executes the default stateful logic,
 // which includes fulfilling the `SafeQueue.Add` contract.
-func (m *MockManagedQueue) Add(item types.QueueItemAccessor) error {
+func (m *MockManagedQueue) Add(item flowcontrol.QueueItemAccessor) error {
 	// If an override is provided, it is responsible for the full contract, including setting the handle.
 	if m.AddFunc != nil {
 		return m.AddFunc(item)
@@ -209,7 +268,7 @@ func (m *MockManagedQueue) Add(item types.QueueItemAccessor) error {
 
 	// Fulfill the `SafeQueue.Add` contract: the queue is responsible for setting the handle.
 	if item.Handle() == nil {
-		item.SetHandle(&typesmocks.MockQueueItemHandle{})
+		item.SetHandle(&mocks.MockQueueItemHandle{})
 	}
 
 	m.items[item.Handle()] = item
@@ -217,7 +276,7 @@ func (m *MockManagedQueue) Add(item types.QueueItemAccessor) error {
 }
 
 // Remove removes an item from the queue. It checks for a test override before locking.
-func (m *MockManagedQueue) Remove(handle types.QueueItemHandle) (types.QueueItemAccessor, error) {
+func (m *MockManagedQueue) Remove(handle flowcontrol.QueueItemHandle) (flowcontrol.QueueItemAccessor, error) {
 	if m.RemoveFunc != nil {
 		return m.RemoveFunc(handle)
 	}
@@ -233,14 +292,14 @@ func (m *MockManagedQueue) Remove(handle types.QueueItemHandle) (types.QueueItem
 }
 
 // Cleanup removes items matching a predicate. It checks for a test override before locking.
-func (m *MockManagedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.QueueItemAccessor {
+func (m *MockManagedQueue) Cleanup(predicate contracts.PredicateFunc) []flowcontrol.QueueItemAccessor {
 	if m.CleanupFunc != nil {
 		return m.CleanupFunc(predicate)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.init()
-	var removed []types.QueueItemAccessor
+	var removed []flowcontrol.QueueItemAccessor
 	for handle, item := range m.items {
 		if predicate(item) {
 			removed = append(removed, item)
@@ -251,22 +310,22 @@ func (m *MockManagedQueue) Cleanup(predicate flowcontrol.PredicateFunc) []types.
 }
 
 // Drain removes all items from the queue. It checks for a test override before locking.
-func (m *MockManagedQueue) Drain() []types.QueueItemAccessor {
+func (m *MockManagedQueue) Drain() []flowcontrol.QueueItemAccessor {
 	if m.DrainFunc != nil {
 		return m.DrainFunc()
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.init()
-	drained := make([]types.QueueItemAccessor, 0, len(m.items))
+	drained := make([]flowcontrol.QueueItemAccessor, 0, len(m.items))
 	for _, item := range m.items {
 		drained = append(drained, item)
 	}
-	m.items = make(map[types.QueueItemHandle]types.QueueItemAccessor)
+	m.items = make(map[flowcontrol.QueueItemHandle]flowcontrol.QueueItemAccessor)
 	return drained
 }
 
-func (m *MockManagedQueue) FlowKey() types.FlowKey                      { return m.FlowKeyV }
+func (m *MockManagedQueue) FlowKey() flowcontrol.FlowKey                { return m.FlowKeyV }
 func (m *MockManagedQueue) Name() string                                { return "" }
 func (m *MockManagedQueue) Capabilities() []flowcontrol.QueueCapability { return nil }
 func (m *MockManagedQueue) OrderingPolicy() flowcontrol.OrderingPolicy {
@@ -297,7 +356,7 @@ func (m *MockManagedQueue) ByteSize() uint64 {
 }
 
 // PeekHead returns the first item found in the mock queue. Note: map iteration order is not guaranteed.
-func (m *MockManagedQueue) PeekHead() types.QueueItemAccessor {
+func (m *MockManagedQueue) PeekHead() flowcontrol.QueueItemAccessor {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.init()
@@ -308,6 +367,6 @@ func (m *MockManagedQueue) PeekHead() types.QueueItemAccessor {
 }
 
 // PeekTail is not implemented for this mock.
-func (m *MockManagedQueue) PeekTail() types.QueueItemAccessor {
+func (m *MockManagedQueue) PeekTail() flowcontrol.QueueItemAccessor {
 	return nil
 }
