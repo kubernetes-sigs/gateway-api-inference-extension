@@ -484,6 +484,202 @@ def test_prediction_missing_prefix_cache_score():
     print("✓ Prediction correctly failed when prefix_cache_score was missing")
 
 
+def test_prediction_with_pod_type_prefill():
+    """Test predictions with pod_type='prefill' parameter."""
+    print("Testing prediction with pod_type='prefill'...")
+
+    features = {
+        "kv_cache_percentage": 0.5,
+        "input_token_length": 200,
+        "num_request_waiting": 4,
+        "num_request_running": 1,
+        "num_tokens_generated": 0,  # Prefill doesn't generate tokens
+        "prefix_cache_score": 0.7,
+        "pod_type": "prefill",
+    }
+
+    r = requests.post(f"{PREDICTION_URL}/predict", json=features)
+    assert r.status_code == 200
+
+    data = r.json()
+    assert "ttft_ms" in data
+    assert "tpot_ms" in data
+    assert data["ttft_ms"] > 0
+    assert data["tpot_ms"] >= 0  # Non-negative
+
+    print(f"✓ Prefill prediction: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
+
+
+def test_prediction_with_pod_type_decode():
+    """Test predictions with pod_type='decode' parameter."""
+    print("Testing prediction with pod_type='decode'...")
+
+    features = {
+        "kv_cache_percentage": 0.5,
+        "input_token_length": 200,
+        "num_request_waiting": 4,
+        "num_request_running": 1,
+        "num_tokens_generated": 10,
+        "prefix_cache_score": 0.7,
+        "pod_type": "decode",
+    }
+
+    r = requests.post(f"{PREDICTION_URL}/predict", json=features)
+    assert r.status_code == 200
+
+    data = r.json()
+    assert "ttft_ms" in data
+    assert "tpot_ms" in data
+    assert data["ttft_ms"] > 0
+    assert data["tpot_ms"] >= 0  # Non-negative
+
+    print(f"✓ Decode prediction: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
+
+
+def test_bulk_prediction_with_pod_type():
+    """Test bulk predictions with mixed pod types."""
+    print("Testing bulk prediction with pod_type...")
+
+    requests_data = [
+        # Prefill pod request
+        {
+            "kv_cache_percentage": 0.5,
+            "input_token_length": 200,
+            "num_request_waiting": 4,
+            "num_request_running": 1,
+            "num_tokens_generated": 0,
+            "prefix_cache_score": 0.7,
+            "pod_type": "prefill",
+        },
+        # Decode pod request
+        {
+            "kv_cache_percentage": 0.3,
+            "input_token_length": 150,
+            "num_request_waiting": 2,
+            "num_request_running": 1,
+            "num_tokens_generated": 10,
+            "prefix_cache_score": 0.5,
+            "pod_type": "decode",
+        },
+        # Legacy request (no pod_type)
+        {
+            "kv_cache_percentage": 0.6,
+            "input_token_length": 300,
+            "num_request_waiting": 3,
+            "num_request_running": 2,
+            "num_tokens_generated": 5,
+            "prefix_cache_score": 0.8,
+        }
+    ]
+
+    bulk_request = {"requests": requests_data}
+
+    r = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json=bulk_request)
+    assert r.status_code == 200
+
+    data = r.json()
+    assert data["total_requests"] == 3
+    assert data["successful_predictions"] == 3
+    assert data["failed_predictions"] == 0
+
+    predictions = data["predictions"]
+
+    # Check prefill prediction (index 0)
+    prefill_pred = predictions[0]
+    assert prefill_pred["ttft_ms"] > 0
+    assert prefill_pred["tpot_ms"] >= 0  # Relaxed constraint for prefill
+    print(f"  Prefill: TTFT={prefill_pred['ttft_ms']:.2f}ms, TPOT={prefill_pred['tpot_ms']:.2f}ms")
+
+    # Check decode prediction (index 1)
+    decode_pred = predictions[1]
+    assert decode_pred["ttft_ms"] > 0
+    assert decode_pred["tpot_ms"] > 0  # Should be positive for decode
+    print(f"  Decode: TTFT={decode_pred['ttft_ms']:.2f}ms, TPOT={decode_pred['tpot_ms']:.2f}ms")
+
+    # Check legacy prediction (index 2)
+    legacy_pred = predictions[2]
+    assert legacy_pred["ttft_ms"] > 0
+    assert legacy_pred["tpot_ms"] > 0
+    print(f"  Legacy: TTFT={legacy_pred['ttft_ms']:.2f}ms, TPOT={legacy_pred['tpot_ms']:.2f}ms")
+
+    print("✓ Bulk prediction with mixed pod types passed")
+
+
+def test_training_data_with_pod_type():
+    """Test that training server accepts pod_type in training data."""
+    print("Testing training data with pod_type...")
+
+    # Generate training samples with pod_type
+    prefill_entries = []
+    decode_entries = []
+
+    # Prefill training samples (TPOT should be 0)
+    for i in range(10):
+        prefill_entries.append({
+            "kv_cache_percentage": 0.5,
+            "input_token_length": 200 + i * 10,
+            "num_request_waiting": i % 5,
+            "num_request_running": 1,
+            "actual_ttft_ms": 100.0 + i * 5,
+            "actual_tpot_ms": 0.0,  # Prefill doesn't produce tokens
+            "num_tokens_generated": 0,
+            "prefix_cache_score": 0.7,
+            "pod_type": "prefill",
+        })
+
+    # Decode training samples (both TTFT and TPOT)
+    for i in range(10):
+        decode_entries.append({
+            "kv_cache_percentage": 0.5,
+            "input_token_length": 200 + i * 10,
+            "num_request_waiting": i % 5,
+            "num_request_running": 1,
+            "actual_ttft_ms": 100.0 + i * 5,
+            "actual_tpot_ms": 10.0 + i * 2,
+            "num_tokens_generated": 5 + i,
+            "prefix_cache_score": 0.7,
+            "pod_type": "decode",
+        })
+
+    all_entries = prefill_entries + decode_entries
+    payload = {"entries": all_entries}
+
+    r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json=payload)
+    assert r.status_code == 202
+    assert r.json().get("message") == f"Accepted {len(all_entries)} training samples."
+
+    print(f"✓ Successfully sent {len(all_entries)} training samples with pod_type")
+
+
+def test_invalid_pod_type():
+    """Test that invalid pod_type values are handled correctly."""
+    print("Testing invalid pod_type handling...")
+
+    features = {
+        "kv_cache_percentage": 0.5,
+        "input_token_length": 200,
+        "num_request_waiting": 4,
+        "num_request_running": 1,
+        "num_tokens_generated": 10,
+        "prefix_cache_score": 0.7,
+        "pod_type": "invalid_type",  # Invalid pod type
+    }
+
+    r = requests.post(f"{PREDICTION_URL}/predict", json=features)
+
+    # Should either accept it (treating as legacy) or reject with validation error
+    if r.status_code == 422:
+        print("✓ Invalid pod_type rejected with validation error (strict validation)")
+    elif r.status_code == 200:
+        data = r.json()
+        # If accepted, should still return valid predictions
+        assert data["ttft_ms"] > 0
+        assert data["tpot_ms"] >= 0
+        print("✓ Invalid pod_type accepted with fallback behavior (permissive validation)")
+    else:
+        assert False, f"Unexpected status code {r.status_code} for invalid pod_type"
+
+
 def test_training_server_metrics():
     """Test training server metrics endpoint."""
     r = requests.get(f"{TRAINING_URL}/metrics")
