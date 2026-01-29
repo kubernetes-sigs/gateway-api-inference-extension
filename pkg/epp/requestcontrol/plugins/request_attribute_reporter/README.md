@@ -1,12 +1,12 @@
-# Cost Reporting Plugin
+# Request Attribute Reporter Plugin
 
 ## Overview
 
-This plugin for the Endpoint Picker (EPP) allows you to report the "cost" of processing a request back to the downstream proxy (e.g., Envoy). The cost is calculated based on data extracted from the model server's response body. This information is returned as dynamic metadata in the `ext_proc` response.
+This plugin for the Endpoint Picker (EPP) allows you to report a value calculating from the request back to the downstream proxy (e.g., Envoy). The value is calculated based on data extracted from the model server's response body. This information is returned as dynamic metadata in the `ext_proc` response.
 
 Currently only data from the "usage" object in the response body is supported. See below for details.
 
-The plugin is designed to be flexible, allowing users to define how the cost is calculated using Common Expression Language (CEL) expressions without modifying the EPP binary.
+The plugin is designed to be flexible, allowing users to define how the value is calculated using Common Expression Language (CEL) expressions without modifying the EPP binary.
 
 ## Purpose
 
@@ -19,14 +19,14 @@ The primary purpose of this plugin is to provide visibility into resource consum
 
 ## Configuration
 
-The plugin is configured within the EPP server's configuration file (provided via `--config-file` or `--config-text`). It uses the `cost-reporter` type.
+The plugin is configured within the EPP server's configuration file (provided via `--config-file` or `--config-text`). It uses the `request-attribute-reporter` type.
 
 ```yaml
 apiVersion: config.apix.gateway-api-inference-extension.sigs.k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
   - name: total-tokens-cost-reporter
-    type: cost-reporter
+    type: request-attribute-reporter
     parameters:
       # Defines where in dynamic metadata to return the data
       metric:
@@ -35,7 +35,7 @@ plugins:
         name: x-gateway-inference-request-cost # Example key
         # Specifies the source of data for the CEL expression. Currently only "usage" is supported.
         dataSource: usage
-        # The CEL expression to calculate the cost. Must return an integer.
+        # The CEL expression to calculate the value. Must return an integer.
         expression: |
           usage.prompt_tokens + usage.completion_tokens
         # Optional: CEL expression to determine if this metric should be calculated/reported.
@@ -71,7 +71,7 @@ When `dataSource` is `usage`, the CEL expressions have access to a `usage` objec
 
 ## Dynamic Metadata Output
 
-The plugin sends the calculated cost back to the proxy via `ext_proc` dynamic metadata. For the example configuration above, the proxy will receive instructions to set metadata like this:
+The plugin sends the calculated value back to the proxy via `ext_proc` dynamic metadata. For the example configuration above, the proxy will receive instructions to set metadata like this:
 
 ```
 dynamic_metadata {
@@ -79,7 +79,7 @@ dynamic_metadata {
   value: {
     fields: {
       key: "x-gateway-inference-request-cost"
-      value: { number_value: <calculated_cost> }
+      value: { number_value: <calculated_value> }
     }
   }
 }

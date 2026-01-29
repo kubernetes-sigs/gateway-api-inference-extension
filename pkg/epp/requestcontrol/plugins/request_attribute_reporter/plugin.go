@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package costreporting
+package request_attribute_reporter
 
 import (
 	"context"
@@ -34,13 +34,13 @@ import (
 )
 
 const (
-	// CostReportingPluginType is the type of the cost reporting plugin.
-	CostReportingPluginType = "cost-reporter"
+	// RequestAttributeReporterType is the type of this plugin.
+	RequestAttributeReporterType = "request-attribute-reporter"
 	// DefaultNamespace is the default namespace for the dynamic metadata.
 	DefaultNamespace = "envoy.lb"
 )
 
-// Plugin is a plugin that reports the cost of a request based on the response body.
+// Plugin state
 type Plugin struct {
 	config         Config
 	logger         logr.Logger
@@ -49,10 +49,10 @@ type Plugin struct {
 	conditionProg  cel.Program // Can be nil if no condition
 }
 
-// Config is the configuration for the cost reporting plugin.
+// Plugin config
 type Config struct {
 	Metric Metric `json:"metric"`
-	// The CEL expression to calculate the cost. Must return an integer.
+	// The CEL expression to calculate the value. Must return an integer.
 	Expression string `json:"expression"`
 	// Optional: CEL expression to determine if this metric should be calculated/reported.
 	// Must return a boolean.
@@ -67,7 +67,7 @@ type Metric struct {
 	Name string `json:"name"`
 }
 
-func CostReportingPluginFactory(name string, rawParameters json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
+func RequestAttributeReporterPluginFactory(name string, rawParameters json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
 	logger := log.FromContext(handle.Context()).WithName(name)
 	parameters := Config{}
 	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
@@ -134,7 +134,7 @@ func New(config Config, logger logr.Logger) (*Plugin, error) {
 
 // Type returns the type of the plugin.
 func (c *Plugin) Type() string {
-	return CostReportingPluginType
+	return RequestAttributeReporterType
 }
 
 // TypedName returns the typed name of the plugin.
@@ -147,7 +147,7 @@ func (c *Plugin) TypedName() plugin.TypedName {
 // ResponseComplete implements the requestcontrol.ResponseComplete interface.
 func (c *Plugin) ResponseComplete(
 	ctx context.Context, request *scheduling.LLMRequest, response *requestcontrol.Response, _ *datalayer.EndpointMetadata) {
-	logger := c.logger.WithValues("plugin", CostReportingPluginType)
+	logger := c.logger.WithValues("plugin", RequestAttributeReporterType)
 
 	// Convert the request usage Go struct into a protobuf struct so that it can be used as a CEL variable.
 	celData, err := c.getCelData(response)
@@ -156,25 +156,25 @@ func (c *Plugin) ResponseComplete(
 		return
 	}
 
-	shouldCalculateCost, err := c.shouldCalculateCost(celData)
+	shouldCalculateValue, err := c.shouldCalculateValue(celData)
 	if err != nil {
-		logger.V(1).Error(err, "Error in shouldCalculateCost")
+		logger.V(1).Error(err, "Error in shouldCalculateValue")
 		return
 	}
-	if !shouldCalculateCost {
-		logger.V(1).Info("shouldCalculateCost is false, returning")
+	if !shouldCalculateValue {
+		logger.V(1).Info("shouldCalculateValue is false, returning")
 		return
 	}
 
-	intVal, err := c.calculateCost(celData)
+	intVal, err := c.calculateValue(celData)
 	if err != nil {
 		return // Error already logged
 	}
 	if intVal == -1 {
-		return // Type error in calculateCost
+		return // Type error in calculateValue
 	}
 
-	// Write the calculated cost to dynamic metadata so it can be returned via the ext_proc response.
+	// Write the calculated value to dynamic metadata so it can be returned via the ext_proc response.
 
 	if response.DynamicMetadata == nil {
 		response.DynamicMetadata = &structpb.Struct{Fields: make(map[string]*structpb.Value)}
@@ -209,7 +209,7 @@ func (c *Plugin) getCelData(response *requestcontrol.Response) (any, error) {
 	return usageStruct, nil
 }
 
-func (c *Plugin) shouldCalculateCost(celData any) (bool, error) {
+func (c *Plugin) shouldCalculateValue(celData any) (bool, error) {
 	if c.conditionProg != nil {
 		val, err := c.maybeExecuteProg(c.conditionProg, celData, "condition", c.config.Condition)
 		if err != nil {
@@ -223,7 +223,7 @@ func (c *Plugin) shouldCalculateCost(celData any) (bool, error) {
 	return true, nil
 }
 
-func (c *Plugin) calculateCost(celData any) (int64, error) {
+func (c *Plugin) calculateValue(celData any) (int64, error) {
 	val, err := c.maybeExecuteProg(c.expressionProg, celData, "expression", c.config.Expression)
 	if err != nil {
 		return -1, err // Error already logged

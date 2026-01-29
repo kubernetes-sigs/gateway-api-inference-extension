@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package costreporting
+package request_attribute_reporter
 
 import (
 	"context"
@@ -133,7 +133,7 @@ func TestPluginCreation(t *testing.T) {
 	}
 }
 
-func TestCostReporting(t *testing.T) {
+func TestValueReporting(t *testing.T) {
 	logger := zap.New(zap.UseDevMode(true))
 	tests := []struct {
 		name       string
@@ -333,7 +333,7 @@ func TestCostReporting(t *testing.T) {
 
 			plugin, err := New(tt.config, logger)
 			if err != nil {
-				t.Fatalf("Failed to create cost reporting plugin: %v", err)
+				t.Fatalf("Failed to create plugin: %v", err)
 			}
 
 			plugin.ResponseComplete(context.Background(), &scheduling.LLMRequest{}, currentResponse, &datalayer.EndpointMetadata{})
