@@ -149,7 +149,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 	span.SetAttributes(
 		attribute.String("target_model", reqCtx.TargetModelName),
-		attribute.Int("request_criticality", *infObjective.Spec.Priority),
+		attribute.Int("request_prio", *infObjective.Spec.Priority),
 	)
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
