@@ -31,7 +31,7 @@ import (
 
 func TestDatasource(t *testing.T) {
 	source := http.NewHTTPDataSource("https", "/metrics", true, MetricsDataSourceType,
-		"metrics-data-source", parseMetrics, PrometheusMetricType)
+		"metrics-data-source", parseMetrics, fwkdl.PrometheusMetricType)
 	extractor, err := NewModelServerExtractor(defaultTotalQueuedRequestsMetric, "", "", "", "")
 	assert.Nil(t, err, "failed to create extractor")
 

@@ -81,6 +81,8 @@ const testPoolName = "vllm-llama3-8b-instruct-pool"
 type HarnessConfig struct {
 	// StandaloneMode indicates if the EPP should run without watching Gateway API CRDs.
 	StandaloneMode bool
+	// SchedulerProfile allows injecting a custom scheduler configuration.
+	SchedulerProfile fwksched.SchedulerProfile
 }
 
 // HarnessOption is a functional option for configuring the TestHarness.
@@ -91,6 +93,13 @@ type HarnessOption func(*HarnessConfig)
 func WithStandaloneMode() HarnessOption {
 	return func(c *HarnessConfig) {
 		c.StandaloneMode = true
+	}
+}
+
+// WithSchedulerProfile configures a custom scheduling profile for the test.
+func WithSchedulerProfile(p fwksched.SchedulerProfile) HarnessOption {
+	return func(c *HarnessConfig) {
+		c.SchedulerProfile = p
 	}
 }
 
@@ -196,14 +205,17 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 	prefixPlugin, err := prefix.New(ctx, prefix.DefaultConfig)
 	require.NoError(t, err)
 
-	defaultProfile := scheduling.NewSchedulerProfile().
-		WithScorers(
-			scheduling.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(), 1),
-			scheduling.NewWeightedScorer(scorer.NewQueueScorer(), 1),
-			scheduling.NewWeightedScorer(prefixPlugin, 1),
-			scheduling.NewWeightedScorer(scorer.NewLoraAffinityScorer(), 1),
-		).
-		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
+	defaultProfile := config.SchedulerProfile
+	if defaultProfile == nil {
+		defaultProfile = scheduling.NewSchedulerProfile().
+			WithScorers(
+				scheduling.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(), 1),
+				scheduling.NewWeightedScorer(scorer.NewQueueScorer(), 1),
+				scheduling.NewWeightedScorer(prefixPlugin, 1),
+				scheduling.NewWeightedScorer(scorer.NewLoraAffinityScorer(), 1),
+			).
+			WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
+	}
 
 	profileHandler := profile.NewSingleProfileHandler()
 	profiles := make(map[string]fwksched.SchedulerProfile)
@@ -310,6 +322,7 @@ func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 			KVCacheUsagePercent: p.kvCacheUsage,
 			ActiveModels:        activeModelsMap,
 			WaitingModels:       make(map[string]int),
+			Custom:              p.customMetrics,
 		}
 	}
 	h.ServerRunner.TestPodMetricsClient.SetRes(metricsMap)

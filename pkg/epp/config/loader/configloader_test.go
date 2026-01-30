@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
@@ -43,6 +44,7 @@ import (
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -281,6 +283,20 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
 				require.NotNil(t, rawCfg.FlowControl, "Raw config should parse the struct")
 				require.Nil(t, cfg.FlowControlConfig, "Internal config should be nil when FeatureGate is disabled")
+			},
+		},
+		{
+			name:       "Success - Metric Scorer Wiring",
+			configText: successMetricScorerConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				p := handle.Plugin("metricScorer")
+				require.NotNil(t, p, "MetricScorer should be instantiated")
+				require.Equal(t, scorer.MetricScorerType, p.TypedName().Type)
+
+				ext := handle.Plugin("testExtractor")
+				require.NotNil(t, ext, "Prometheus extractor should be instantiated")
+				require.Equal(t, metrics.PrometheusMetricPluginType, ext.TypedName().Type)
 			},
 		},
 		{
@@ -562,11 +578,17 @@ func (m *mockSource) Extractors() []string {
 type mockExtractor struct{ mockPlugin }
 
 func (m *mockExtractor) ExpectedInputType() reflect.Type {
-	return reflect.TypeOf("")
+	return reflect.TypeFor[string]()
 }
 
 func (m *mockExtractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {
 	return nil
+}
+
+func (m *mockExtractor) Produces() map[string]any {
+	return map[string]any{
+		"request_latency": float64(0),
+	}
 }
 
 func registerTestPlugins(t *testing.T) {
@@ -629,4 +651,6 @@ func registerTestPlugins(t *testing.T) {
 	// Ensure system defaults are registered too.
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
+	fwkplugin.Register(scorer.MetricScorerType, scorer.MetricScorerFactory)
+	fwkplugin.Register(metrics.PrometheusMetricPluginType, metrics.PrometheusMetricPluginFactory)
 }

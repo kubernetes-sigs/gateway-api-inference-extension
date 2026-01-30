@@ -252,6 +252,19 @@ available to serve new request).
 - *Type*: queue-scorer
 - *Parameters*: none
 
+#### MetricScorer
+
+Scores candidate pods based on a custom numerical metric (e.g. from Prometheus).
+See [Custom Metric Scheduling](custom-metrics.md) for a detailed guide.
+
+- *Type*: metric-scorer
+- *Parameters*:
+  - `metricName`: The name of the metric to use for scoring.
+  - `min`: The minimum expected value (for normalizing).
+  - `max`: The maximum expected value (for normalizing).
+  - `optimizationMode`: `Minimize` or `Maximize`.
+  - `normalizationAlgo`: `Linear` or `Softmax`.
+
 #### MaxScorePicker
 
 Picks the pod with the maximum score from the list of candidates. This is the default picker plugin

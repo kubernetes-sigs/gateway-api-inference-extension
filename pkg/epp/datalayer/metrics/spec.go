@@ -25,6 +25,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // Spec represents a single metric's specification.
@@ -80,7 +81,7 @@ func addQuotesToLabelValues(input string) string {
 }
 
 // extract the metric family is common to standard and LoRA spec's.
-func extractFamily(spec *Spec, families PrometheusMetricMap) (*dto.MetricFamily, error) {
+func extractFamily(spec *Spec, families fwkdl.PrometheusMetricMap) (*dto.MetricFamily, error) {
 	if spec == nil {
 		return nil, errors.New("metric specification is nil")
 	}
@@ -97,7 +98,7 @@ func extractFamily(spec *Spec, families PrometheusMetricMap) (*dto.MetricFamily,
 }
 
 // getLatestMetric retrieves the latest metric based on Spec.
-func (spec *Spec) getLatestMetric(families PrometheusMetricMap) (*dto.Metric, error) {
+func (spec *Spec) getLatestMetric(families fwkdl.PrometheusMetricMap) (*dto.Metric, error) {
 	family, err := extractFamily(spec, families)
 	if err != nil {
 		return nil, err
@@ -147,6 +148,7 @@ func (spec *Spec) labelsMatch(metricLabels []*dto.LabelPair) bool {
 // extractValue gets the numeric value from different metric types.
 // Currently only Gauge and Counter are supported.
 func extractValue(metric *dto.Metric) float64 {
+	// TODO: Return error for unsupported metric types instead of 0.
 	if metric == nil {
 		return 0
 	}
@@ -155,6 +157,9 @@ func extractValue(metric *dto.Metric) float64 {
 	}
 	if counter := metric.GetCounter(); counter != nil {
 		return counter.GetValue()
+	}
+	if untyped := metric.GetUntyped(); untyped != nil {
+		return untyped.GetValue()
 	}
 	return 0
 }

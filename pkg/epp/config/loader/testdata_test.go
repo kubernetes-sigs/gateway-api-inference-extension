@@ -175,6 +175,42 @@ flowControl:
   maxBytes: 1024
 `
 
+// successMetricScorerConfigText tests that MetricScorer is correctly wired.
+const successMetricScorerConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: metricScorer
+  type: metric-scorer
+  parameters:
+    metricName: "request_latency"
+    min: 0
+    max: 100
+    optimizationMode: Minimize
+    normalizationAlgo: Softmax
+- name: maxScore
+  type: max-score-picker
+- name: testSource
+  type: test-source
+- name: testExtractor
+  type: prometheus-metric
+  parameters:
+    metricName: "test_metric"
+    labels:
+      env: "test"
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+  - pluginRef: metricScorer
+    weight: 100
+data:
+  sources:
+  - pluginRef: testSource
+    extractors:
+    - pluginRef: testExtractor
+`
+
 // successComplexFlowControlConfigText tests that Flow Control configuration with custom plugins is correctly loaded.
 const successComplexFlowControlConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1

@@ -380,6 +380,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
 	fwkplugin.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
 	fwkplugin.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	fwkplugin.Register(scorer.MetricScorerType, scorer.MetricScorerFactory)
 	// Flow Control plugins
 	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, fairness.GlobalStrictFairnessPolicyFactory)
 	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
@@ -394,6 +395,7 @@ func (r *Runner) registerInTreePlugins() {
 	// register datalayer metrics collection plugins
 	fwkplugin.Register(dlmetrics.MetricsDataSourceType, dlmetrics.MetricsDataSourceFactory)
 	fwkplugin.Register(dlmetrics.MetricsExtractorType, dlmetrics.ModelServerExtractorFactory)
+	fwkplugin.Register(dlmetrics.PrometheusMetricPluginType, dlmetrics.PrometheusMetricPluginFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver.Options) (*configapi.EndpointPickerConfig, error) {
