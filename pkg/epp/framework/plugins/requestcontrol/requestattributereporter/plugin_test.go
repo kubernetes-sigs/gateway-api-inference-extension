@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package request_attribute_reporter
+package requestattributereporter
 
 import (
 	"context"
@@ -45,10 +45,14 @@ func TestPluginCreation(t *testing.T) {
 		{
 			name: "valid config with default namespace",
 			config: Config{
-				Metric: Metric{
-					Name: "test-metric",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "test-attribute",
+						},
+						Expression: "usage.prompt_tokens",
+					},
 				},
-				Expression: "usage.prompt_tokens",
 			},
 			wantErr: false,
 			wantNS:  DefaultNamespace,
@@ -56,11 +60,15 @@ func TestPluginCreation(t *testing.T) {
 		{
 			name: "valid config with custom namespace",
 			config: Config{
-				Metric: Metric{
-					Name:      "test-metric",
-					Namespace: "custom-ns",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name:      "test-attribute",
+							Namespace: "custom-ns",
+						},
+						Expression: "usage.prompt_tokens",
+					},
 				},
-				Expression: "usage.prompt_tokens",
 			},
 			wantErr: false,
 			wantNS:  "custom-ns",
@@ -68,16 +76,24 @@ func TestPluginCreation(t *testing.T) {
 		{
 			name: "invalid config - missing name",
 			config: Config{
-				Metric:     Metric{},
-				Expression: "usage.prompt_tokens",
+				Attributes: []Attribute{
+					{
+						Key:        AttributeKey{},
+						Expression: "usage.prompt_tokens",
+					},
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid config - missing expression",
 			config: Config{
-				Metric: Metric{
-					Name: "test-metric",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "test-attribute",
+						},
+					},
 				},
 			},
 			wantErr: true,
@@ -85,21 +101,56 @@ func TestPluginCreation(t *testing.T) {
 		{
 			name: "invalid config - invalid expression CEL syntax",
 			config: Config{
-				Metric: Metric{
-					Name: "test-metric",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "test-attribute",
+						},
+						Expression: "usage.prompt_tokens + -",
+					},
 				},
-				Expression: "usage.prompt_tokens + -",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid config - invalid condition CEL syntax",
 			config: Config{
-				Metric: Metric{
-					Name: "test-metric",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "test-attribute",
+						},
+						Expression: "usage.prompt_tokens",
+						Condition:  "usage.prompt_tokens > ",
+					},
 				},
-				Expression: "usage.prompt_tokens",
-				Condition:  "usage.prompt_tokens > ",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid config - empty attributes",
+			config: Config{
+				Attributes: []Attribute{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid config - multiple attributes",
+			config: Config{
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "test-attribute",
+						},
+						Expression: "usage.prompt_tokens",
+					},
+					{
+						Key: AttributeKey{
+							Name: "test-attribute-2",
+						},
+						Expression: "usage.prompt_tokens",
+					},
+				},
 			},
 			wantErr: true,
 		},
@@ -125,9 +176,9 @@ func TestPluginCreation(t *testing.T) {
 				t.Fatalf("New() returned nil plugin without error")
 			}
 
-			metric := plugin.config.Metric
-			if metric.Namespace != tt.wantNS {
-				t.Errorf("Expected namespace %s, got %s", tt.wantNS, metric.Namespace)
+			attributeKey := plugin.config.Attributes[0].Key
+			if attributeKey.Namespace != tt.wantNS {
+				t.Errorf("Expected namespace %s, got %s", tt.wantNS, attributeKey.Namespace)
 			}
 		})
 	}
@@ -144,10 +195,14 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "request usage expression",
 			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "prompt_tokens",
+						},
+						Expression: "usage.prompt_tokens",
+					},
 				},
-				Expression: "usage.prompt_tokens",
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{
@@ -171,11 +226,15 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "request usage expression and condition with zero value",
 			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "prompt_tokens",
+						},
+						Expression: "usage.prompt_tokens",
+						Condition:  "has(usage.prompt_tokens)",
+					},
 				},
-				Expression: "usage.prompt_tokens",
-				Condition:  "has(usage.prompt_tokens)",
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{
@@ -199,11 +258,15 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "condition not met",
 			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "prompt_tokens",
+						},
+						Expression: "usage.prompt_tokens",
+						Condition:  "usage.completion_tokens > 0",
+					},
 				},
-				Expression: "usage.prompt_tokens",
-				Condition:  "usage.completion_tokens > 0",
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{
@@ -224,11 +287,15 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "condition evaluates to non-boolean",
 			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "prompt_tokens",
+						},
+						Expression: "usage.prompt_tokens",
+						Condition:  "usage.prompt_tokens", // This is an int, not bool
+					},
 				},
-				Expression: "usage.prompt_tokens",
-				Condition:  "usage.prompt_tokens", // This is an int, not bool
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{
@@ -240,10 +307,14 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "expression evaluates to non-numeric",
 			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "prompt_tokens",
+						},
+						Expression: "'not a number'",
+					},
 				},
-				Expression: "'not a number'",
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{
@@ -255,10 +326,14 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "expression runtime error - field not found",
 			config: Config{
-				Metric: Metric{
-					Name: "prompt_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "prompt_tokens",
+						},
+						Expression: "usage.non_existent_field", // No has() guard
+					},
 				},
-				Expression: "usage.non_existent_field", // No has() guard
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{
@@ -270,10 +345,14 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "usage fields missing with has() guards",
 			config: Config{
-				Metric: Metric{
-					Name: "total_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "total_tokens",
+						},
+						Expression: "(has(usage.prompt_tokens) ? usage.prompt_tokens : 0) + (has(usage.completion_tokens) ? usage.completion_tokens : 0)",
+					},
 				},
-				Expression: "(has(usage.prompt_tokens) ? usage.prompt_tokens : 0) + (has(usage.completion_tokens) ? usage.completion_tokens : 0)",
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{}, // Empty usage
@@ -295,10 +374,14 @@ func TestValueReporting(t *testing.T) {
 		{
 			name: "partial usage fields missing with has() guards",
 			config: Config{
-				Metric: Metric{
-					Name: "total_tokens",
+				Attributes: []Attribute{
+					{
+						Key: AttributeKey{
+							Name: "total_tokens",
+						},
+						Expression: "(has(usage.prompt_tokens) ? usage.prompt_tokens : 0) + (has(usage.completion_tokens) ? usage.completion_tokens : 0)",
+					},
 				},
-				Expression: "(has(usage.prompt_tokens) ? usage.prompt_tokens : 0) + (has(usage.completion_tokens) ? usage.completion_tokens : 0)",
 			},
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{

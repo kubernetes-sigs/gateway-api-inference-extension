@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package request_attribute_reporter
+package requestattributereporter
 
 import (
 	"context"
@@ -51,7 +51,11 @@ type Plugin struct {
 
 // Plugin config
 type Config struct {
-	Metric Metric `json:"metric"`
+	Attributes []Attribute `json:"attributes"`
+}
+
+type Attribute struct {
+	Key AttributeKey `json:"key"`
 	// The CEL expression to calculate the value. Must return an integer.
 	Expression string `json:"expression"`
 	// Optional: CEL expression to determine if this metric should be calculated/reported.
@@ -60,7 +64,7 @@ type Config struct {
 }
 
 // Defines where in dynamic metadata to return the data
-type Metric struct {
+type AttributeKey struct {
 	// Which top-level key to use in dynamic metadata. Optional. Defaults to envoy.lb if omitted
 	Namespace string `json:"namespace"`
 	// What key to use in the provided namespace for the value from the expression
@@ -69,12 +73,12 @@ type Metric struct {
 
 func RequestAttributeReporterPluginFactory(name string, rawParameters json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
 	logger := log.FromContext(handle.Context()).WithName(name)
-	parameters := Config{}
-	if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+	pluginConfig := Config{}
+	if err := json.Unmarshal(rawParameters, &pluginConfig); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	plugin, err := New(parameters, logger)
+	plugin, err := New(pluginConfig, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -82,15 +86,18 @@ func RequestAttributeReporterPluginFactory(name string, rawParameters json.RawMe
 }
 
 func New(config Config, logger logr.Logger) (*Plugin, error) {
-	metric := &config.Metric
-	if metric.Name == "" {
-		return nil, errors.New("metric.name cannot be empty")
+	if len(config.Attributes) != 1 {
+		return nil, errors.New("attributes must contain exactly one entry")
 	}
-	if config.Expression == "" {
-		return nil, errors.New("config.expression cannot be empty")
+	attributeKey := &config.Attributes[0].Key
+	if attributeKey.Name == "" {
+		return nil, errors.New("attributeKey.name cannot be empty")
 	}
-	if metric.Namespace == "" {
-		metric.Namespace = DefaultNamespace
+	if config.Attributes[0].Expression == "" {
+		return nil, errors.New("attributes[0].expression cannot be empty")
+	}
+	if attributeKey.Namespace == "" {
+		attributeKey.Namespace = DefaultNamespace
 	}
 
 	env, err := cel.NewEnv(
@@ -101,7 +108,7 @@ func New(config Config, logger logr.Logger) (*Plugin, error) {
 	}
 
 	// Compile Expression
-	exprAst, issues := env.Compile(config.Expression)
+	exprAst, issues := env.Compile(config.Attributes[0].Expression)
 	if issues != nil && issues.Err() != nil {
 		return nil, fmt.Errorf("failed to compile expression: %w", issues.Err())
 	}
@@ -112,8 +119,8 @@ func New(config Config, logger logr.Logger) (*Plugin, error) {
 
 	// Compile Condition (if provided)
 	var conditionProg cel.Program
-	if config.Condition != "" {
-		condAst, issues := env.Compile(config.Condition)
+	if config.Attributes[0].Condition != "" {
+		condAst, issues := env.Compile(config.Attributes[0].Condition)
 		if issues != nil && issues.Err() != nil {
 			return nil, fmt.Errorf("failed to compile condition: %w", issues.Err())
 		}
@@ -183,16 +190,16 @@ func (c *Plugin) ResponseComplete(
 		response.DynamicMetadata.Fields = make(map[string]*structpb.Value)
 	}
 
-	metric := c.config.Metric
-	metricValue := &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: float64(intVal)}}
+	attributeKey := c.config.Attributes[0].Key
+	attributeValue := &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: float64(intVal)}}
 
-	namespaceMap, ok := response.DynamicMetadata.Fields[metric.Namespace]
+	namespaceMap, ok := response.DynamicMetadata.Fields[attributeKey.Namespace]
 	if !ok {
 		namespaceMap = &structpb.Value{Kind: &structpb.Value_StructValue{StructValue: &structpb.Struct{Fields: make(map[string]*structpb.Value)}}}
-		response.DynamicMetadata.Fields[metric.Namespace] = namespaceMap
+		response.DynamicMetadata.Fields[attributeKey.Namespace] = namespaceMap
 	}
 
-	namespaceMap.GetStructValue().Fields[metric.Name] = metricValue
+	namespaceMap.GetStructValue().Fields[attributeKey.Name] = attributeValue
 
 	logger.V(1).Info("Wrote dynamic metadata value to dynamic metadata", "value", intVal)
 }
@@ -211,12 +218,12 @@ func (c *Plugin) getCelData(response *requestcontrol.Response) (any, error) {
 
 func (c *Plugin) shouldCalculateValue(celData any) (bool, error) {
 	if c.conditionProg != nil {
-		val, err := c.maybeExecuteProg(c.conditionProg, celData, "condition", c.config.Condition)
+		val, err := c.maybeExecuteProg(c.conditionProg, celData, "condition", c.config.Attributes[0].Condition)
 		if err != nil {
 			return false, err // Error already logged in maybeExecuteProg
 		}
 		if bVal, ok := val.(bool); !ok || !bVal {
-			c.logger.V(1).Info("Condition not met", "condition", c.config.Condition)
+			c.logger.V(1).Info("Condition not met", "condition", c.config.Attributes[0].Condition)
 			return false, nil
 		}
 	}
@@ -224,7 +231,7 @@ func (c *Plugin) shouldCalculateValue(celData any) (bool, error) {
 }
 
 func (c *Plugin) calculateValue(celData any) (int64, error) {
-	val, err := c.maybeExecuteProg(c.expressionProg, celData, "expression", c.config.Expression)
+	val, err := c.maybeExecuteProg(c.expressionProg, celData, "expression", c.config.Attributes[0].Expression)
 	if err != nil {
 		return -1, err // Error already logged
 	}
@@ -234,7 +241,7 @@ func (c *Plugin) calculateValue(celData any) (int64, error) {
 		// Try int64 as well
 		int64Val, ok := val.(int64)
 		if !ok {
-			c.logger.Error(errors.New("type conversion error"), "Expression result could not be converted to float64 or int64", "expression", c.config.Expression, "result", val)
+			c.logger.Error(errors.New("type conversion error"), "Expression result could not be converted to float64 or int64", "expression", c.config.Attributes[0].Expression, "result", val)
 			return -1, nil
 		}
 		doubleVal = float64(int64Val)

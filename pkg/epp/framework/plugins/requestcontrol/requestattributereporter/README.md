@@ -28,24 +28,23 @@ plugins:
   - name: total-tokens-cost-reporter
     type: request-attribute-reporter
     parameters:
-      # Defines where in dynamic metadata to return the data
-      metric:
-        namespace: envoy.lb  # Optional: Defaults to envoy.lb if omitted
-        # What key to use in the provided namespace for the value from the expression
-        name: x-gateway-inference-request-cost # Example key
-        # Specifies the source of data for the CEL expression. Currently only "usage" is supported.
-        dataSource: usage
-        # The CEL expression to calculate the value. Must return an integer.
-        expression: |
-          usage.prompt_tokens + usage.completion_tokens
-        # Optional: CEL expression to determine if this metric should be calculated/reported.
-        # Must return a boolean.
-        condition: "has(usage.prompt_tokens) && has(usage.completion_tokens)"
+      attributes:
+        - key:
+            # Defines where in dynamic metadata to return the data
+            namespace: envoy.lb  # Optional: Defaults to envoy.lb if omitted
+            # What key to use in the provided namespace for the value from the expression
+            name: x-gateway-inference-request-cost # Example key
+          # The CEL expression to calculate the value. Must return an integer.
+          expression: |
+            usage.prompt_tokens + usage.completion_tokens
+          # Optional: CEL expression to determine if this attribute should be calculated/reported.
+          # Must return a boolean.
+          condition: "has(usage.prompt_tokens) && has(usage.completion_tokens)"
 ```
 
 ## Available Data
 
-When `dataSource` is `usage`, the CEL expressions have access to a `usage` object. This object's structure depends on the format of the response body sent by the model server. Commonly, for OpenAI-compatible APIs, this object might include:
+The usage object's structure depends on the format of the response body sent by the model server. Commonly, for OpenAI-compatible APIs, this object might include:
 
 *   `usage.prompt_tokens`: Number of tokens in the prompt.
 *   `usage.completion_tokens`: Number of tokens in the generated completion.
