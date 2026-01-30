@@ -27,6 +27,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
@@ -103,6 +107,9 @@ type HarnessConfig struct {
 
 	// configText overrides the default testConfig if provided. A nil value means use default.
 	configText *string
+
+	// Tracing indicates if tracing should be enabled for this test.
+	Tracing bool
 }
 
 // HarnessOption is a functional option for configuring the TestHarness.
@@ -130,6 +137,13 @@ func WithConfigText(text string) HarnessOption {
 	}
 }
 
+// WithTracing enables tracing for the test harness.
+func WithTracing() HarnessOption {
+	return func(c *HarnessConfig) {
+		c.Tracing = true
+	}
+}
+
 // TestHarness encapsulates the environment for a single isolated EPP test run.
 // It manages the lifecycle of the controller manager, the EPP server, and the K8s namespace.
 type TestHarness struct {
@@ -140,9 +154,14 @@ type TestHarness struct {
 	// --- Config State ---
 	runMode            runMode
 	standaloneStrategy standaloneStrategy
+	Tracing            bool
 
 	Client    extProcPb.ExternalProcessor_ProcessClient
 	Datastore datastore.Datastore
+
+	// --- Tracing State ---
+	Exporter *tracetest.InMemoryExporter
+	tp       *sdktrace.TracerProvider
 
 	// Internal handles for cleanup
 	grpcConn *grpc.ClientConn
@@ -179,6 +198,20 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 	fakePmc := &backendmetrics.FakePodMetricsClient{}
 	mgr, dataStore, err := eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc)
 	require.NoError(t, err, "failed to create manager")
+
+	// 6. Tracing Setup (InMemory)
+	var exporter *tracetest.InMemoryExporter
+	var tp *sdktrace.TracerProvider
+	if config.Tracing {
+		exporter = tracetest.NewInMemoryExporter()
+		tp = sdktrace.NewTracerProvider(
+			sdktrace.WithSyncer(exporter),
+		)
+		otel.SetTracerProvider(tp)
+	}
+
+	// 7. Start Background Processes
+
 	mgrCtx, mgrCancel := context.WithCancel(ctx)
 
 	// Start Manager.
@@ -204,14 +237,24 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		Namespace:          eppOptions.PoolNamespace,
 		runMode:            config.runMode,
 		standaloneStrategy: config.standaloneStrategy,
+		Tracing:            config.Tracing,
 		Client:             client,
 		Datastore:          dataStore,
+		Exporter:           exporter,
+		tp:                 tp,
 		grpcConn:           conn,
 		fakePmc:            fakePmc,
 	}
 
+	// 8. Register Cleanup
+
 	t.Cleanup(func() {
 		mgrCancel()
+		if config.Tracing {
+			_ = tp.Shutdown(ctx)
+			// Reset to no-op to avoid pollution between tests.
+			otel.SetTracerProvider(noop.NewTracerProvider())
+		}
 		_ = h.grpcConn.Close()
 		// Deleting the Namespace cascades to all contained resources.
 		_ = k8sClient.Delete(context.Background(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: eppOptions.PoolNamespace}})
@@ -244,6 +287,11 @@ func defaultEppServerOptions(t *testing.T, namespace string) *eppServer.Options 
 	eppOptions.EndpointTargetPorts = []int{8000}
 	eppOptions.SecureServing = false
 	return eppOptions
+}
+
+// GetSpans returns the currently recorded spans from the in-memory exporter.
+func (h *TestHarness) GetSpans() tracetest.SpanStubs {
+	return h.Exporter.GetSpans()
 }
 
 // --- Fluent Builder API ---
