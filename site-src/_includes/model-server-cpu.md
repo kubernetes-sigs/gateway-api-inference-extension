@@ -1,4 +1,4 @@
-=== "CPU-Based vLLM deployment"
+=== "CPU-Based Model Server"
 
     ???+ warning
 
