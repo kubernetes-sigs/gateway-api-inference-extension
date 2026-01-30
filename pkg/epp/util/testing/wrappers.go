@@ -152,12 +152,24 @@ func (m *InferenceObjectiveWrapper) ObjRef() *v1alpha2.InferenceObjective {
 }
 
 func (m *InferenceObjectiveWrapper) PoolName(poolName string) *InferenceObjectiveWrapper {
+	if m.Spec.PoolRef == nil {
+		m.Spec.PoolRef = &v1alpha2.PoolObjectReference{}
+	}
 	m.Spec.PoolRef.Name = v1alpha2.ObjectName(poolName)
 	return m
 }
 
 func (m *InferenceObjectiveWrapper) PoolGroup(poolGroup string) *InferenceObjectiveWrapper {
+	if m.Spec.PoolRef == nil {
+		m.Spec.PoolRef = &v1alpha2.PoolObjectReference{}
+	}
 	m.Spec.PoolRef.Group = v1alpha2.Group(poolGroup)
+	return m
+}
+
+// PoolSelector sets the poolSelector field of the InferenceObjective.
+func (m *InferenceObjectiveWrapper) PoolSelector(selector *v1alpha2.PoolSelector) *InferenceObjectiveWrapper {
+	m.Spec.PoolSelector = selector
 	return m
 }
 
@@ -205,6 +217,12 @@ func MakeInferencePool(name string) *InferencePoolWrapper {
 
 func (m *InferencePoolWrapper) Namespace(ns string) *InferencePoolWrapper {
 	m.ObjectMeta.Namespace = ns
+	return m
+}
+
+// Labels sets the metadata labels on the InferencePool.
+func (m *InferencePoolWrapper) Labels(labels map[string]string) *InferencePoolWrapper {
+	m.ObjectMeta.Labels = labels
 	return m
 }
 
@@ -266,6 +284,12 @@ func MakeAlphaInferencePool(name string) *AlphaInferencePoolWrapper {
 
 func (m *AlphaInferencePoolWrapper) Namespace(ns string) *AlphaInferencePoolWrapper {
 	m.ObjectMeta.Namespace = ns
+	return m
+}
+
+// Labels sets the metadata labels on the InferencePool.
+func (m *AlphaInferencePoolWrapper) Labels(labels map[string]string) *AlphaInferencePoolWrapper {
+	m.ObjectMeta.Labels = labels
 	return m
 }
 
