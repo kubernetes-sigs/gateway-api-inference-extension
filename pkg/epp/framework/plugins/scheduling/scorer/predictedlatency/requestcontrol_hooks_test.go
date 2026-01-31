@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
@@ -59,7 +60,10 @@ func createTestSchedulingResult(metadata *fwkdl.EndpointMetadata) *schedulingtyp
 
 func createTestRouter() *PredictedLatency {
 	return &PredictedLatency{
-		sloContextStore:     sync.Map{},
+		sloContextStore: ttlcache.New(
+			ttlcache.WithTTL[string, *predictedLatencyCtx](DefaultConfig.ContextTTL),
+			ttlcache.WithDisableTouchOnHit[string, *predictedLatencyCtx](),
+		),
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		latencypredictor:    nil,
 		config:              DefaultConfig,
@@ -484,6 +488,7 @@ func TestPredictedLatency_ResponseComplete_Success(t *testing.T) {
 	predictedLatencyCtx.ttftSLO = 100
 	predictedLatencyCtx.avgTPOTSLO = 50
 	predictedLatencyCtx.incomingModelName = "incoming-model"
+	predictedLatencyCtx.targetMetadata = endpoint.GetMetadata()
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
