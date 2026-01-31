@@ -22,7 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -174,7 +176,7 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 
 	// Store the context using the request ID
 	reqID := request.Headers[requtil.RequestIdHeaderKey]
-	router.sloContextStore.Store(reqID, predictedLatencyCtx)
+	router.sloContextStore.Set(reqID, predictedLatencyCtx, ttlcache.DefaultTTL)
 }
 
 func TestPredictedLatency_Score(t *testing.T) {
@@ -723,4 +725,42 @@ func TestPredictedLatencyFactoryInvalidJSON(t *testing.T) {
 			assert.Nil(t, plugin)
 		})
 	}
+}
+
+func TestSloContextStoreEviction(t *testing.T) {
+	config := DefaultConfig
+	config.ContextTTL = 100 * time.Millisecond
+	pl := NewPredictedLatency(config, nil)
+
+	requestID := "test-req-id"
+	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
+
+	req := &fwksched.LLMRequest{
+		Headers: map[string]string{
+			requtil.RequestIdHeaderKey: requestID,
+		},
+	}
+
+	metadata := &fwkdl.EndpointMetadata{
+		NamespacedName: endpointName,
+	}
+
+	sloCtx := newPredictedLatencyContext(req)
+	sloCtx.targetMetadata = metadata
+	sloCtx.avgTPOTSLO = 0.05 
+	
+	pl.setPredictedLatencyContextForRequest(req, sloCtx)
+
+	queue := newRequestPriorityQueue()
+	queue.Add(requestID, sloCtx.avgTPOTSLO)
+	pl.runningRequestLists[endpointName] = queue
+	
+	assert.True(t, queue.Contains(requestID), "Request should be in queue initially")
+	item := pl.sloContextStore.Get(requestID)
+	assert.NotNil(t, item, "Item should be in cache initially")
+	
+	time.Sleep(300 * time.Millisecond)
+	item = pl.sloContextStore.Get(requestID)
+	assert.Nil(t, item, "Item should have been evicted from cache")
+	assert.False(t, queue.Contains(requestID), "Request should be removed from queue via OnEviction")
 }

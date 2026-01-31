@@ -22,8 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sync"
 	"time"
+
+	"github.com/jellydator/ttlcache/v3"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -40,7 +41,7 @@ type PredictedLatency struct {
 	typedName           plugin.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
 	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
-	sloContextStore     sync.Map // map[string]*SLORequestContext
+	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx]
 	headroomStrategy    headroomStrategy
 	config              Config
 }
@@ -48,23 +49,24 @@ type PredictedLatency struct {
 var _ framework.Scorer = &PredictedLatency{}
 
 type Config struct {
-	SamplingMean              float64 `json:"samplingMean,omitempty"`
-	MaxSampledTokens          int     `json:"maxSampledTokens,omitempty"`
-	SLOBufferFactor           float64 `json:"sloBufferFactor,omitempty"`
-	NegHeadroomTTFTWeight     float64 `json:"negHeadroomTTFTWeight,omitempty"`
-	NegHeadroomTPOTWeight     float64 `json:"negHeadroomTPOTWeight,omitempty"`
-	HeadroomTTFTWeight        float64 `json:"headroomTTFTWeight,omitempty"`
-	HeadroomTPOTWeight        float64 `json:"headroomTPOTWeight,omitempty"`
-	HeadroomSelectionStrategy string  `json:"headroomSelectionStrategy,omitempty"`
-	CompositeKVWeight         float64 `json:"compositeKVWeight,omitempty"`
-	CompositeQueueWeight      float64 `json:"compositeQueueWeight,omitempty"`
-	CompositePrefixWeight     float64 `json:"compositePrefixWeight,omitempty"`
-	EpsilonExploreSticky      float64 `json:"epsilonExploreSticky,omitempty"`
-	EpsilonExploreNeg         float64 `json:"epsilonExploreNeg,omitempty"`
-	AffinityGateTau           float64 `json:"affinityGateTau,omitempty"`
-	AffinityGateTauGlobal     float64 `json:"affinityGateTauGlobal,omitempty"`
-	SelectionMode             string  `json:"selectionMode,omitempty"`
-	StreamingMode             bool    `json:"streamingMode,omitempty"`
+	SamplingMean              float64       `json:"samplingMean,omitempty"`
+	MaxSampledTokens          int           `json:"maxSampledTokens,omitempty"`
+	SLOBufferFactor           float64       `json:"sloBufferFactor,omitempty"`
+	NegHeadroomTTFTWeight     float64       `json:"negHeadroomTTFTWeight,omitempty"`
+	NegHeadroomTPOTWeight     float64       `json:"negHeadroomTPOTWeight,omitempty"`
+	HeadroomTTFTWeight        float64       `json:"headroomTTFTWeight,omitempty"`
+	HeadroomTPOTWeight        float64       `json:"headroomTPOTWeight,omitempty"`
+	HeadroomSelectionStrategy string        `json:"headroomSelectionStrategy,omitempty"`
+	CompositeKVWeight         float64       `json:"compositeKVWeight,omitempty"`
+	CompositeQueueWeight      float64       `json:"compositeQueueWeight,omitempty"`
+	CompositePrefixWeight     float64       `json:"compositePrefixWeight,omitempty"`
+	EpsilonExploreSticky      float64       `json:"epsilonExploreSticky,omitempty"`
+	EpsilonExploreNeg         float64       `json:"epsilonExploreNeg,omitempty"`
+	AffinityGateTau           float64       `json:"affinityGateTau,omitempty"`
+	AffinityGateTauGlobal     float64       `json:"affinityGateTauGlobal,omitempty"`
+	ContextTTL                time.Duration `json:"contextTTL,omitempty"`
+	SelectionMode             string        `json:"selectionMode,omitempty"`
+	StreamingMode             bool          `json:"streamingMode,omitempty"`
 }
 
 var DefaultConfig = Config{
@@ -83,6 +85,7 @@ var DefaultConfig = Config{
 	EpsilonExploreNeg:         0.01,
 	AffinityGateTau:           0.80,
 	AffinityGateTauGlobal:     0.99,
+	ContextTTL:                5 * time.Minute,
 	SelectionMode:             "linear",
 	StreamingMode:             true,
 }
@@ -157,14 +160,28 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		strategy = headroomStrategyLeast
 	}
 
-	return &PredictedLatency{
+	predictedLatency := &PredictedLatency{
 		typedName:           plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
 		latencypredictor:    predictor,
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
-		sloContextStore:     sync.Map{},
 		headroomStrategy:    strategy,
 		config:              config,
 	}
+
+	predictedLatency.sloContextStore = ttlcache.New(
+		ttlcache.WithTTL[string, *predictedLatencyCtx](config.ContextTTL),
+		ttlcache.WithDisableTouchOnHit[string, *predictedLatencyCtx](),
+	)
+
+	predictedLatency.sloContextStore.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[string, *predictedLatencyCtx]) {
+		if reason != ttlcache.EvictionReasonExpired {
+			return
+		}
+		predictedLatency.removeRequestFromQueue(item.Key(), item.Value())
+	})
+
+	go predictedLatency.sloContextStore.Start()
+	return predictedLatency
 }
 
 func startPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
