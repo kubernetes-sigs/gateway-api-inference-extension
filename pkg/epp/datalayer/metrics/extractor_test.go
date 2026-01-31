@@ -18,6 +18,8 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -300,5 +302,143 @@ func TestBackwardCompatibility(t *testing.T) {
 	_ = extractor.Extract(ctx, data, epUnknown)
 	if epUnknown.GetMetrics().WaitingQueueSize != 100 {
 		t.Errorf("unknown label: expected 100, got %v", epUnknown.GetMetrics().WaitingQueueSize)
+	}
+}
+
+func TestModelServerExtractorFactoryDefaultEngine(t *testing.T) {
+	tests := []struct {
+		name         string
+		params       map[string]any
+		wantErr      bool
+		errContains  string
+		checkDefault string // engine name that should be default
+	}{
+		{
+			name:         "no params uses vllm as default",
+			params:       nil,
+			wantErr:      false,
+			checkDefault: "vllm",
+		},
+		{
+			name: "defaultEngine sglang",
+			params: map[string]any{
+				"defaultEngine": "sglang",
+			},
+			wantErr:      false,
+			checkDefault: "sglang",
+		},
+		{
+			name: "defaultEngine vllm explicit",
+			params: map[string]any{
+				"defaultEngine": "vllm",
+			},
+			wantErr:      false,
+			checkDefault: "vllm",
+		},
+		{
+			name: "defaultEngine not found",
+			params: map[string]any{
+				"defaultEngine": "unknown-engine",
+			},
+			wantErr:     true,
+			errContains: "not found in engineConfigs",
+		},
+		{
+			name: "engine config name is reserved default",
+			params: map[string]any{
+				"defaultEngine": "default",
+				"engineConfigs": []map[string]any{
+					{
+						"name":               "default",
+						"queuedRequestsSpec": "test:metric",
+					},
+				},
+			},
+			wantErr:     true,
+			errContains: "reserved",
+		},
+		{
+			name: "custom engineConfigs with defaultEngine",
+			params: map[string]any{
+				"defaultEngine": "custom",
+				"engineConfigs": []map[string]any{
+					{
+						"name":               "custom",
+						"queuedRequestsSpec": "test:metric",
+					},
+				},
+			},
+			wantErr:      false,
+			checkDefault: "custom",
+		},
+		{
+			name: "custom engineConfigs without matching defaultEngine",
+			params: map[string]any{
+				"engineConfigs": []map[string]any{
+					{
+						"name":               "custom",
+						"queuedRequestsSpec": "test:metric",
+					},
+				},
+			},
+			wantErr:     true,
+			errContains: "not found in engineConfigs", // default is "vllm" but not in custom configs
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var params json.RawMessage
+			if tt.params != nil {
+				var err error
+				params, err = json.Marshal(tt.params)
+				if err != nil {
+					t.Fatalf("failed to marshal params: %v", err)
+				}
+			}
+
+			plugin, err := ModelServerExtractorFactory("test", params, nil)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error but got nil")
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error %q does not contain %q", err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if plugin == nil {
+				t.Fatal("expected non-nil plugin")
+			}
+
+			// Verify the correct default is set
+			if tt.checkDefault != "" {
+				extractor, ok := plugin.(*Extractor)
+				if !ok {
+					t.Fatal("plugin is not an Extractor")
+				}
+
+				// Check that the default mapping exists and matches expected engine
+				defaultMapping, found := extractor.registry.Get(DefaultEngineType)
+				if !found {
+					t.Fatal("default mapping not found in registry")
+				}
+
+				engineMapping, found := extractor.registry.Get(tt.checkDefault)
+				if !found {
+					t.Fatalf("mapping for %q not found in registry", tt.checkDefault)
+				}
+
+				// The default mapping should be the same as the expected engine's mapping
+				if defaultMapping != engineMapping {
+					t.Errorf("default mapping does not match %q engine mapping", tt.checkDefault)
+				}
+			}
+		})
 	}
 }

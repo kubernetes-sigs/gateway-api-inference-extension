@@ -70,7 +70,23 @@ metadata:
 
 Pods without the engine label will use the default engine configuration (vLLM).
 
-### 2. Custom Engine Configuration (Optional)
+### 2. Change Default Engine (Optional)
+
+To use SGLang as the default engine instead of vLLM, simply set the `defaultEngine` parameter:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+featureGates:
+- dataLayer
+plugins:
+- name: model-server-protocol-metrics
+  type: model-server-protocol-metrics
+  parameters:
+    defaultEngine: "sglang"  # Pods without engine label will use SGLang metrics
+```
+
+### 3. Custom Engine Configuration (Optional)
 
 If you need to customize the metric mappings or add support for other engines (e.g., Triton), provide engine-specific configurations in your `EndpointPickerConfig`:
 
@@ -83,10 +99,10 @@ plugins:
 - name: model-server-protocol-metrics
   type: model-server-protocol-metrics
   parameters:
-    engineLabelKey: "inference.networking.k8s.io/engine-type"  # Optional, this is the default
+    engineLabelKey: "inference.networking.k8s.io/engine-type"  # Pod label key (optional, this is the default)
+    defaultEngine: "vllm"  # Which engine to use for Pods without engine label
     engineConfigs:
     - name: vllm
-      default: true  # One engine must be marked as default
       queuedRequestsSpec: "vllm:num_requests_waiting"
       runningRequestsSpec: "vllm:num_requests_running"
       kvUsageSpec: "vllm:kv_cache_usage_perc"
@@ -102,5 +118,6 @@ plugins:
 ```
 
 **Key points:**
-- Exactly one engine must have `default: true` - this is used for Pods without an engine label
+- Use `engineLabelKey` to customize the Pod label key for engine identification (defaults to `inference.networking.k8s.io/engine-type`)
+- Use `defaultEngine` to specify which engine is used for Pods without an engine label (defaults to "vllm")
 - If no custom configuration is provided, EPP uses built-in vLLM and SGLang mappings with vLLM as default

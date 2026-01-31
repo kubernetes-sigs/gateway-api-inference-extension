@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
@@ -51,9 +52,6 @@ type (
 	engineConfigParams struct {
 		// Name is the engine type identifier.
 		Name string `json:"name"`
-		// Default marks this engine as the default fallback when Pod has no engine label.
-		// Only one engine should be marked as default.
-		Default bool `json:"default"`
 		// QueuedRequestsSpec defines the metric specification string for retrieving queued request count.
 		QueuedRequestsSpec string `json:"queuedRequestsSpec"`
 		// RunningRequestsSpec defines the metric specification string for retrieving running requests count.
@@ -71,6 +69,9 @@ type (
 		// EngineLabelKey is the Pod label key used to identify the engine type.
 		// Defaults to "inference.networking.k8s.io/engine-type".
 		EngineLabelKey string `json:"engineLabelKey"`
+		// DefaultEngine specifies which built-in engine to use as the default for unlabeled Pods.
+		// Valid values are "vllm" (default) or "sglang". This only applies when using built-in configs.
+		DefaultEngine string `json:"defaultEngine"`
 		// EngineConfigs defines metric specifications for specific engine types.
 		// If not specified, default vLLM and SGLang configurations are used.
 		EngineConfigs []engineConfigParams `json:"engineConfigs"`
@@ -81,7 +82,6 @@ type (
 var defaultEngineConfigs = []engineConfigParams{
 	{
 		Name:                "vllm",
-		Default:             true,
 		QueuedRequestsSpec:  "vllm:num_requests_waiting",
 		RunningRequestsSpec: "vllm:num_requests_running",
 		KVUsageSpec:         "vllm:kv_cache_usage_perc",
@@ -90,7 +90,6 @@ var defaultEngineConfigs = []engineConfigParams{
 	},
 	{
 		Name:                "sglang",
-		Default:             false,
 		QueuedRequestsSpec:  "sglang:num_queue_reqs",
 		RunningRequestsSpec: "sglang:num_running_reqs",
 		KVUsageSpec:         "sglang:token_usage",
@@ -98,6 +97,9 @@ var defaultEngineConfigs = []engineConfigParams{
 		CacheInfoSpec:       "",
 	},
 }
+
+// defaultEngineName is the default engine used when defaultEngine is not specified.
+const defaultEngineName = "vllm"
 
 // MetricsDataSourceFactory is a factory function used to instantiate data layer's
 // metrics data source plugins specified in a configuration.
@@ -129,13 +131,21 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 		}
 	}
 
+	// Use defaultEngineName if defaultEngine is not specified
+	if cfg.DefaultEngine == "" {
+		cfg.DefaultEngine = defaultEngineName
+	}
+
 	registry := NewMappingRegistry()
 
 	// Validate and register engine configurations
-	defaultCount := 0
+	var defaultMapping *Mapping
 	for _, engineConfig := range cfg.EngineConfigs {
 		if engineConfig.Name == "" {
 			return nil, errors.New("engine config name cannot be empty")
+		}
+		if engineConfig.Name == DefaultEngineType {
+			return nil, fmt.Errorf("engine config name cannot be %q (reserved)", DefaultEngineType)
 		}
 
 		mapping, err := NewMapping(
@@ -154,21 +164,18 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 			return nil, fmt.Errorf("failed to register engine mapping for %q: %w", engineConfig.Name, err)
 		}
 
-		// Also register as default if marked
-		if engineConfig.Default {
-			defaultCount++
-			if defaultCount > 1 {
-				return nil, errors.New("only one engine can be marked as default")
-			}
-			if err := registry.Register(DefaultEngineType, mapping); err != nil {
-				return nil, fmt.Errorf("failed to register default mapping: %w", err)
-			}
+		// Track the default engine mapping
+		if engineConfig.Name == cfg.DefaultEngine {
+			defaultMapping = mapping
 		}
 	}
 
-	// Ensure at least one default is registered
-	if defaultCount == 0 {
-		return nil, errors.New("at least one engine must be marked as default (isDefault: true)")
+	// Validate and register the default engine
+	if defaultMapping == nil {
+		return nil, fmt.Errorf("defaultEngine %q not found in engineConfigs", cfg.DefaultEngine)
+	}
+	if err := registry.Register(DefaultEngineType, defaultMapping); err != nil {
+		return nil, fmt.Errorf("failed to register default mapping: %w", err)
 	}
 
 	extractor, err := NewModelServerExtractor(registry, cfg.EngineLabelKey)
@@ -243,7 +250,11 @@ func fromBoolFlag(name string) (bool, error) {
 	if f == nil {
 		return false, fmt.Errorf("flag not found: %s", name)
 	}
-	return f.Value.String() == "true", nil
+	b, err := strconv.ParseBool(f.Value.String())
+	if err != nil {
+		return false, fmt.Errorf("invalid bool flag %q: %w", name, err)
+	}
+	return b, nil
 }
 
 func parseMetrics(data io.Reader) (any, error) {
