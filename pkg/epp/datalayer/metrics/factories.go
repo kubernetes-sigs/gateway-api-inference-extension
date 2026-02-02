@@ -136,6 +136,11 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 		cfg.DefaultEngine = defaultEngineName
 	}
 
+	// Use DefaultEngineTypeLabelKey if engineLabelKey is not specified
+	if cfg.EngineLabelKey == "" {
+		cfg.EngineLabelKey = DefaultEngineTypeLabelKey
+	}
+
 	// Append default engine configs (vllm, sglang) if not explicitly defined by user
 	userDefinedEngines := make(map[string]bool)
 	for _, ec := range cfg.EngineConfigs {

@@ -453,6 +453,14 @@ func TestModelServerExtractorFactoryDefaultEngine(t *testing.T) {
 			wantErr:     true,
 			errContains: "already exists",
 		},
+		{
+			name: "empty engineLabelKey uses default",
+			params: map[string]any{
+				"engineLabelKey": "",
+			},
+			wantErr:      false,
+			checkDefault: "vllm",
+		},
 	}
 
 	for _, tt := range tests {
@@ -490,6 +498,11 @@ func TestModelServerExtractorFactoryDefaultEngine(t *testing.T) {
 				extractor, ok := plugin.(*Extractor)
 				if !ok {
 					t.Fatal("plugin is not an Extractor")
+				}
+
+				// Verify EngineLabelKey is defaulted correctly
+				if extractor.engineLabelKey != DefaultEngineTypeLabelKey {
+					t.Errorf("engineLabelKey = %q, want %q", extractor.engineLabelKey, DefaultEngineTypeLabelKey)
 				}
 
 				// Check that the default mapping exists and matches expected engine
