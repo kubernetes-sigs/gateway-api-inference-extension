@@ -38,3 +38,14 @@ epp: {{ include "gateway-api-inference-extension.name" . }}
 inferencepool: {{ include "gateway-api-inference-extension.name" . }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Mode labels
+*/}}
+{{- define "gateway-api-inference-extension.modeLabels" -}}
+{{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone -}}
+mode: standalone
+{{- else -}}
+mode: inferencepool
+{{- end -}}
+{{- end -}}
