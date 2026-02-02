@@ -372,17 +372,86 @@ func TestModelServerExtractorFactoryDefaultEngine(t *testing.T) {
 			checkDefault: "custom",
 		},
 		{
-			name: "custom engineConfigs without matching defaultEngine",
+			name: "custom engineConfigs auto-appends vllm and sglang",
 			params: map[string]any{
 				"engineConfigs": []map[string]any{
 					{
-						"name":               "custom",
-						"queuedRequestsSpec": "test:metric",
+						"name":               "triton",
+						"queuedRequestsSpec": "nv_trt_llm:waiting",
+					},
+				},
+			},
+			wantErr:      false,
+			checkDefault: "vllm", // vllm is auto-appended and becomes default
+		},
+		{
+			name: "custom engineConfigs with custom vllm preserves user config",
+			params: map[string]any{
+				"engineConfigs": []map[string]any{
+					{
+						"name":               "vllm",
+						"queuedRequestsSpec": "custom:vllm_waiting",
+					},
+				},
+			},
+			wantErr:      false,
+			checkDefault: "vllm", // user's vllm config is used, sglang is auto-appended
+		},
+		{
+			name: "empty engineConfigs uses defaults",
+			params: map[string]any{
+				"engineConfigs": []map[string]any{},
+			},
+			wantErr:      false,
+			checkDefault: "vllm", // vllm and sglang are auto-appended
+		},
+		{
+			name: "defaultEngine triton with triton defined",
+			params: map[string]any{
+				"defaultEngine": "triton",
+				"engineConfigs": []map[string]any{
+					{
+						"name":               "triton",
+						"queuedRequestsSpec": "nv_trt_llm:waiting",
+					},
+				},
+			},
+			wantErr:      false,
+			checkDefault: "triton", // triton is default, vllm/sglang auto-appended
+		},
+		{
+			name: "both vllm and sglang custom defined",
+			params: map[string]any{
+				"engineConfigs": []map[string]any{
+					{
+						"name":               "vllm",
+						"queuedRequestsSpec": "custom:vllm_metric",
+					},
+					{
+						"name":               "sglang",
+						"queuedRequestsSpec": "custom:sglang_metric",
+					},
+				},
+			},
+			wantErr:      false,
+			checkDefault: "vllm", // no auto-append, user's configs used
+		},
+		{
+			name: "duplicate engine names",
+			params: map[string]any{
+				"engineConfigs": []map[string]any{
+					{
+						"name":               "vllm",
+						"queuedRequestsSpec": "custom:metric1",
+					},
+					{
+						"name":               "vllm",
+						"queuedRequestsSpec": "custom:metric2",
 					},
 				},
 			},
 			wantErr:     true,
-			errContains: "not found in engineConfigs", // default is "vllm" but not in custom configs
+			errContains: "already exists",
 		},
 	}
 

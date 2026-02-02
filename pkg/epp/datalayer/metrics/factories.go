@@ -69,11 +69,11 @@ type (
 		// EngineLabelKey is the Pod label key used to identify the engine type.
 		// Defaults to "inference.networking.k8s.io/engine-type".
 		EngineLabelKey string `json:"engineLabelKey"`
-		// DefaultEngine specifies which built-in engine to use as the default for unlabeled Pods.
-		// Valid values are "vllm" (default) or "sglang". This only applies when using built-in configs.
+		// DefaultEngine specifies which engine to use as the default for unlabeled Pods.
+		// Can be any engine name from EngineConfigs. Defaults to "vllm".
 		DefaultEngine string `json:"defaultEngine"`
 		// EngineConfigs defines metric specifications for specific engine types.
-		// If not specified, default vLLM and SGLang configurations are used.
+		// Built-in vLLM and SGLang configs are automatically appended if not explicitly defined.
 		EngineConfigs []engineConfigParams `json:"engineConfigs"`
 	}
 )
@@ -134,6 +134,17 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 	// Use defaultEngineName if defaultEngine is not specified
 	if cfg.DefaultEngine == "" {
 		cfg.DefaultEngine = defaultEngineName
+	}
+
+	// Append default engine configs (vllm, sglang) if not explicitly defined by user
+	userDefinedEngines := make(map[string]bool)
+	for _, ec := range cfg.EngineConfigs {
+		userDefinedEngines[ec.Name] = true
+	}
+	for _, defaultCfg := range defaultEngineConfigs {
+		if !userDefinedEngines[defaultCfg.Name] {
+			cfg.EngineConfigs = append(cfg.EngineConfigs, defaultCfg)
+		}
 	}
 
 	registry := NewMappingRegistry()
@@ -233,7 +244,6 @@ func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 func defaultExtractorConfigParams() *modelServerExtractorParams {
 	return &modelServerExtractorParams{
 		EngineLabelKey: DefaultEngineTypeLabelKey,
-		EngineConfigs:  defaultEngineConfigs,
 	}
 }
 
