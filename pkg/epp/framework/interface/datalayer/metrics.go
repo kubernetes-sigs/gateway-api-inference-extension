@@ -36,6 +36,9 @@ type Metrics struct {
 	// Number of GPU blocks in the model server for KV Cache.
 	CacheNumGPUBlocks int
 
+	// Custom holds custom metrics scraped from the model server.
+	// The key is the metric name and the value is the metric value.
+	Custom map[string]float64
 	// UpdateTime records the last time when the metrics were updated.
 	UpdateTime time.Time
 }
@@ -45,6 +48,7 @@ func NewMetrics() *Metrics {
 	return &Metrics{
 		ActiveModels:  make(map[string]int),
 		WaitingModels: make(map[string]int),
+		Custom:        make(map[string]float64),
 	}
 }
 
@@ -70,6 +74,10 @@ func (m *Metrics) Clone() *Metrics {
 	for key, value := range m.WaitingModels {
 		waitingModels[key] = value
 	}
+	custom := make(map[string]float64, len(m.Custom))
+	for key, value := range m.Custom {
+		custom[key] = value
+	}
 	return &Metrics{
 		ActiveModels:            activeModels,
 		WaitingModels:           waitingModels,
@@ -80,6 +88,7 @@ func (m *Metrics) Clone() *Metrics {
 		KvCacheMaxTokenCapacity: m.KvCacheMaxTokenCapacity,
 		CacheBlockSize:          m.CacheBlockSize,
 		CacheNumGPUBlocks:       m.CacheNumGPUBlocks,
+		Custom:                  custom,
 		UpdateTime:              m.UpdateTime,
 	}
 }

@@ -27,6 +27,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/http"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -60,6 +61,14 @@ type (
 		// CacheInfoSpec defines the metrics specification string for retrieving KV cache configuration.
 		CacheInfoSpec string // `json:"cacheInfoSpec"`
 	}
+
+	// Prometheus metric plugin configuration parameters
+	prometheusMetricPluginParams struct {
+		// MetricName is the name of the Prometheus metric to extract.
+		MetricName string `json:"metricName"`
+		// Labels is an optional map of labels to filter the metric by.
+		Labels map[string]string `json:"labels"`
+	}
 )
 
 // MetricsDataSourceFactory is a factory function used to instantiate data layer's
@@ -77,7 +86,7 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fw
 	}
 
 	ds := http.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, MetricsDataSourceType,
-		name, parseMetrics, PrometheusMetricType)
+		name, parseMetrics, fwkdl.PrometheusMetricType)
 	return ds, nil
 }
 
@@ -102,6 +111,28 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 	}
 	extractor.typedName.Name = name
 	return extractor, nil
+}
+
+// PrometheusMetricPluginFactory is a factory function used to instantiate Generic Prometheus Metric plugins.
+func PrometheusMetricPluginFactory(
+	name string,
+	parameters json.RawMessage,
+	handle fwkplugin.Handle,
+) (fwkplugin.Plugin, error) {
+	cfg := &prometheusMetricPluginParams{}
+	if parameters != nil {
+		if err := json.Unmarshal(parameters, cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse configuration for %s: %w", name, err)
+		}
+	}
+
+	if cfg.MetricName == "" {
+		return nil, fmt.Errorf("metricName is required for plugin %s", name)
+	}
+
+	plugin := NewPrometheusMetricPlugin(cfg.MetricName, cfg.Labels)
+	plugin.typedName.Name = name
+	return plugin, nil
 }
 
 // Names of CLI flags in main

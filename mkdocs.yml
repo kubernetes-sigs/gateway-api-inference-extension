@@ -56,6 +56,7 @@ nav:
     - Concepts:
         API Overview: concepts/api-overview.md
         Design Principles: concepts/design-principles.md
+        Data Layer Architecture: concepts/data-layer-architecture.md
         Conformance: concepts/conformance.md
         Roles and Personas: concepts/roles-and-personas.md
         Priority and Capacity: concepts/priority-and-capacity.md

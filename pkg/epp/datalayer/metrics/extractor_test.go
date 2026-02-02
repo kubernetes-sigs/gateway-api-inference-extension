@@ -58,7 +58,7 @@ func TestExtractorExtract(t *testing.T) {
 		t.Error("empty extractor name")
 	}
 
-	if inputType := extractor.ExpectedInputType(); inputType != PrometheusMetricType {
+	if inputType := extractor.ExpectedInputType(); inputType != fwkdl.PrometheusMetricType {
 		t.Errorf("incorrect expected input type: %v", inputType)
 	}
 
@@ -81,13 +81,13 @@ func TestExtractorExtract(t *testing.T) {
 		},
 		{
 			name:    "empty PrometheusMetricMap",
-			data:    PrometheusMetricMap{},
+			data:    fwkdl.PrometheusMetricMap{},
 			wantErr: true,  // errors when metrics are missing
 			updated: false, // and also not updated...
 		},
 		{
 			name: "single valid metric",
-			data: PrometheusMetricMap{
+			data: fwkdl.PrometheusMetricMap{
 				defaultTotalQueuedRequestsMetric: &dto.MetricFamily{
 					Type: dto.MetricType_GAUGE.Enum(),
 					Metric: []*dto.Metric{
@@ -102,7 +102,7 @@ func TestExtractorExtract(t *testing.T) {
 		},
 		{
 			name: "multiple valid metrics",
-			data: PrometheusMetricMap{
+			data: fwkdl.PrometheusMetricMap{
 				defaultTotalQueuedRequestsMetric: &dto.MetricFamily{
 					Type: dto.MetricType_GAUGE.Enum(),
 					Metric: []*dto.Metric{

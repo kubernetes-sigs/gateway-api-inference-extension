@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"k8s.io/utils/ptr"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // --- Test Helpers ---
@@ -207,7 +208,7 @@ func TestStringToMetricSpec(t *testing.T) {
 
 // TestGetMetric checks retrieving of standard metrics from a metric families.
 func TestGetMetric(t *testing.T) {
-	metricFamilies := PrometheusMetricMap{
+	metricFamilies := fwkdl.PrometheusMetricMap{
 		"metric1": makeMetricFamily("metric1",
 			makeMetric(map[string]string{"label1": "value1"}, 1.0, 1000),
 			makeMetric(map[string]string{"label1": "value2"}, 2.0, 2000),
@@ -333,7 +334,7 @@ func TestGetLoRAMetric(t *testing.T) {
 
 	testCases := []struct {
 		name             string
-		metricFamilies   PrometheusMetricMap
+		metricFamilies   fwkdl.PrometheusMetricMap
 		expectedAdapters map[string]int
 		expectedMax      int
 		expectedErr      error
@@ -341,7 +342,7 @@ func TestGetLoRAMetric(t *testing.T) {
 	}{
 		{
 			name: "no lora metrics",
-			metricFamilies: PrometheusMetricMap{
+			metricFamilies: fwkdl.PrometheusMetricMap{
 				"some_other_metric": makeMetricFamily("some_other_metric",
 					makeMetric(nil, 1.0, 1000),
 				),
@@ -353,7 +354,7 @@ func TestGetLoRAMetric(t *testing.T) {
 		},
 		{
 			name: "basic lora metrics",
-			metricFamilies: PrometheusMetricMap{
+			metricFamilies: fwkdl.PrometheusMetricMap{
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
 					makeMetric(map[string]string{"running_lora_adapters": "lora1", "max_lora": "2"}, 3000.0, 1000),       // Newer
 					makeMetric(map[string]string{"running_lora_adapters": "lora2,lora3", "max_lora": "4"}, 1000.0, 1000), // Older
@@ -367,7 +368,7 @@ func TestGetLoRAMetric(t *testing.T) {
 		},
 		{
 			name: "no matching lora metrics",
-			metricFamilies: PrometheusMetricMap{
+			metricFamilies: fwkdl.PrometheusMetricMap{
 				"vllm:lora_requests_info": makeMetricFamily("vllm:lora_requests_info",
 					makeMetric(map[string]string{"other_label": "value"}, 5.0, 3000),
 				),
@@ -510,6 +511,13 @@ func TestExtractValue(t *testing.T) {
 				Counter: &dto.Counter{Value: ptr.To(99.9)},
 			},
 			want: 99.9,
+		},
+		{
+			name: "untyped metric",
+			metric: &dto.Metric{
+				Untyped: &dto.Untyped{Value: ptr.To(123.456)},
+			},
+			want: 123.456,
 		},
 	}
 

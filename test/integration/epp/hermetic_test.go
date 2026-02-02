@@ -41,8 +41,13 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	fwsched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -105,6 +110,28 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{name: "Standalone", standalone: true},
 	}
 
+	// customProfile using active load scorer
+	configJSON := []byte(`{
+		"metricName": "vllm:num_requests_running",
+		"optimizationMode": "Minimize",
+		"normalizationAlgo": "Softmax",
+		"min": 0,
+		"max": 50
+	}`)
+	plugin, err := scorer.MetricScorerFactory("active-load-scorer", configJSON, nil)
+	require.NoError(t, err)
+	activeLoadScorer := plugin.(fwsched.Scorer)
+
+	prefixPlugin, err := prefix.New(context.Background(), prefix.DefaultConfig)
+	require.NoError(t, err)
+
+	customProfile := scheduling.NewSchedulerProfile().
+		WithScorers(
+			scheduling.NewWeightedScorer(prefixPlugin, 60),
+			scheduling.NewWeightedScorer(activeLoadScorer, 40),
+		).
+		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
+
 	tests := []struct {
 		name          string
 		requests      []*extProcPb.ProcessingRequest
@@ -115,6 +142,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
 		// InferenceModelRewrite) which are not available in Standalone mode.
 		requiresCRDs bool
+		harnessOpts  []HarnessOption
 	}{
 		// --- Standard Routing Logic ---
 		{
@@ -169,6 +197,17 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			wantMetrics: map[string]string{
 				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget)),
 			},
+		},
+		{
+			name:     "custom metrics: select lower load",
+			requests: integration.ReqLLM(logger, "test-custom", modelMyModel, modelMyModelTarget),
+			pods: []podState{
+				P(0, 0, 0.2).WithMetric("vllm:num_requests_running", 45), // Overloaded
+				P(1, 0, 0.2).WithMetric("vllm:num_requests_running", 0),  // Free - Winner
+				P(2, 0, 0.2).WithMetric("vllm:num_requests_running", 10), // Moderate
+			},
+			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelMyModelTarget, "test-custom"),
+			harnessOpts:   []HarnessOption{WithSchedulerProfile(customProfile)},
 		},
 
 		// --- Error Handling & Edge Cases ----
@@ -393,10 +432,12 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					}
 
 					var h *TestHarness
+					opts := append([]HarnessOption{}, tc.harnessOpts...)
 					if mode.standalone {
-						h = NewTestHarness(t, context.Background(), WithStandaloneMode())
+						opts = append(opts, WithStandaloneMode())
+						h = NewTestHarness(t, context.Background(), opts...)
 					} else {
-						h = NewTestHarness(t, context.Background()).WithBaseResources()
+						h = NewTestHarness(t, context.Background(), opts...).WithBaseResources()
 					}
 
 					// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.

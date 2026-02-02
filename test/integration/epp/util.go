@@ -140,16 +140,25 @@ func ExpectStreamResp(chunks ...string) []*extProcPb.ProcessingResponse {
 // --- Data Structures & Metrics Helpers ---
 
 type podState struct {
-	index        int
-	queueSize    int
-	kvCacheUsage float64
-	activeModels []string
+	index         int
+	queueSize     int
+	kvCacheUsage  float64
+	activeModels  []string
+	customMetrics map[string]float64
 }
 
 // P constructs a Pod State: Index, Queue, KV%, Models...
 // Usage: P(0, 5, 0.2, "model-a")
 func P(idx int, q int, kv float64, models ...string) podState {
-	return podState{index: idx, queueSize: q, kvCacheUsage: kv, activeModels: models}
+	return podState{index: idx, queueSize: q, kvCacheUsage: kv, activeModels: models, customMetrics: make(map[string]float64)}
+}
+
+func (p podState) WithMetric(name string, value float64) podState {
+	if p.customMetrics == nil {
+		p.customMetrics = make(map[string]float64)
+	}
+	p.customMetrics[name] = value
+	return p
 }
 
 type label struct{ name, value string }
