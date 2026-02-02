@@ -88,7 +88,7 @@ plugins:
 
 ### 3. Custom Engine Configuration (Optional)
 
-If you need to customize the metric mappings or add support for other engines (e.g., Triton), provide engine-specific configurations in your `EndpointPickerConfig`:
+If you need to customize the metric mappings or add support for other engines (e.g., Triton), provide engine-specific configurations in your `EndpointPickerConfig`. Note that built-in vLLM and SGLang configs are automatically included, so you only need to define them if you want to override the defaults:
 
 ```yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha1
@@ -102,6 +102,7 @@ plugins:
     engineLabelKey: "inference.networking.k8s.io/engine-type"  # Pod label key (optional, this is the default)
     defaultEngine: "vllm"  # Which engine to use for Pods without engine label
     engineConfigs:
+    # vllm and sglang are optional - only define them to override defaults
     - name: vllm
       queuedRequestsSpec: "vllm:num_requests_waiting"
       runningRequestsSpec: "vllm:num_requests_running"
@@ -120,4 +121,4 @@ plugins:
 **Key points:**
 - Use `engineLabelKey` to customize the Pod label key for engine identification (defaults to `inference.networking.k8s.io/engine-type`)
 - Use `defaultEngine` to specify which engine is used for Pods without an engine label (defaults to "vllm")
-- If no custom configuration is provided, EPP uses built-in vLLM and SGLang mappings with vLLM as default
+- Built-in vLLM and SGLang configs are automatically included, even when adding custom engines
