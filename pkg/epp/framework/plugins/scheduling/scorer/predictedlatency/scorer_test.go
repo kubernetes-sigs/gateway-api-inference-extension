@@ -747,18 +747,18 @@ func TestSloContextStoreEviction(t *testing.T) {
 
 	sloCtx := newPredictedLatencyContext(req)
 	sloCtx.targetMetadata = metadata
-	sloCtx.avgTPOTSLO = 0.05 
-	
+	sloCtx.avgTPOTSLO = 0.05
+
 	pl.setPredictedLatencyContextForRequest(req, sloCtx)
 
 	queue := newRequestPriorityQueue()
 	queue.Add(requestID, sloCtx.avgTPOTSLO)
 	pl.runningRequestLists[endpointName] = queue
-	
+
 	assert.True(t, queue.Contains(requestID), "Request should be in queue initially")
 	item := pl.sloContextStore.Get(requestID)
 	assert.NotNil(t, item, "Item should be in cache initially")
-	
+
 	time.Sleep(300 * time.Millisecond)
 	item = pl.sloContextStore.Get(requestID)
 	assert.Nil(t, item, "Item should have been evicted from cache")
