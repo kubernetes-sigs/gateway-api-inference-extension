@@ -283,7 +283,7 @@ func TestFlowRegistry_Stats(t *testing.T) {
 func TestFlowRegistry_GarbageCollection(t *testing.T) {
 	t.Run("ShouldCollectIdleFlow", func(t *testing.T) {
 		t.Parallel()
-		h := newRegistryTestHarness(t, harnessOptions{})
+		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 		key := flowcontrol.FlowKey{ID: "idle-flow", Priority: highPriority}
 
 		h.openConnectionOnFlow(key)                            // Create a flow, which is born Idle.
