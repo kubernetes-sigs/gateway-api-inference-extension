@@ -103,6 +103,9 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 		if prepareDataPlugin, ok := plugin.(fwk.PrepareDataPlugin); ok {
 			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)
 		}
+		if admissionPlugin, ok := plugin.(fwk.AdmissionPlugin); ok {
+			c.admissionPlugins = append(c.admissionPlugins, admissionPlugin)
+		}
 	}
 }
 
