@@ -43,7 +43,7 @@ const (
 
 func TestServer(t *testing.T) {
 	expectedRequestHeaders := map[string]string{metadata.DestinationEndpointKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
-		"Content-Length": "42", ":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
+		"Content-Length": "52", ":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
 	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", "x-test": "body"}
 	expectedSchedulerHeaders := map[string]string{":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
 
@@ -78,8 +78,8 @@ func TestServer(t *testing.T) {
 		}
 
 		// Send request body
-		requestBody := "{\"model\":\"food-review\",\"prompt\":\"Is banana tasty?\"}"
-		expectedBody := "{\"model\":\"v1\",\"prompt\":\"Is banana tasty?\"}"
+		requestBody := "{\"model\":\"qwen-uncensored\",\"prompt\":\"Is processed food healthy?\"}"
+		expectedBody := "{\"model\":\"v1\",\"prompt\":\"Is processed food healthy?\"}"
 		request = &pb.ProcessingRequest{
 			Request: &pb.ProcessingRequest_RequestBody{
 				RequestBody: &pb.HttpBody{

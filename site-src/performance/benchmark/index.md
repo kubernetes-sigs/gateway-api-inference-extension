@@ -18,7 +18,7 @@ __Note:__ Only the GPU-based model server deployment option is supported for ben
 You are more likely to see the benefits of the inference extension when there are a decent number of replicas to make the optimal routing decision.
 
 ```bash
-kubectl scale deployment vllm-llama3-8b-instruct --replicas=8
+kubectl scale deployment vllm-qwen3-32b --replicas=8
 ```
 
 ### Expose the model server via a k8s service
@@ -26,7 +26,7 @@ kubectl scale deployment vllm-llama3-8b-instruct --replicas=8
 To establish a baseline, expose the vLLM deployment as a k8s service:
 
 ```bash
-kubectl expose deployment vllm-llama3-8b-instruct --port=80 --target-port=8000 --type=LoadBalancer
+kubectl expose deployment vllm-qwen3-32b --port=80 --target-port=8000 --type=LoadBalancer
 ```
 
 ## Run benchmark
@@ -110,7 +110,7 @@ The examples below shows how to get the IP of a gateway or a k8s service.
 # Get gateway IP
 GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
 # Get LoadBalancer k8s service IP
-SVC_IP=$(kubectl get service/vllm-llama3-8b-instruct -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+SVC_IP=$(kubectl get service/vllm-qwen3-32b -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 echo $GW_IP
 echo $SVC_IP
@@ -227,6 +227,6 @@ This guide shows how to run the jupyter notebook using vscode after completing k
     ```
 
 1. Open the notebook `./benchmarking/benchmark.ipynb`, and run each cell. In the last cell update the benchmark ids with`inference-extension` and `k8s-svc`. At the end you should
-    see a bar chart like below where **"ie"** represents inference extension. This chart is generated using this benchmarking tool with 6 vLLM (v1) model servers (H100 80 GB), [llama2-7b](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf/tree/main) and the [ShareGPT dataset](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json).
+    see a bar chart like below where **"ie"** represents inference extension. This chart is generated using this benchmarking tool with 6 vLLM (v1) model servers (H100 80 GB), [Qwen3-32B](https://huggingface.co/Qwen/Qwen3-32B) and the [ShareGPT dataset](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json).
     
     ![alt text](example-bar-chart.png)

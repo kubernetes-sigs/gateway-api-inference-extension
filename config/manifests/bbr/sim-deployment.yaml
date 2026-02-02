@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-deepseek-r1
+  name: vllm-deepseek-v3.2
 spec:
   replicas: 1 
   selector:
     matchLabels:
-      app: vllm-deepseek-r1
+      app: vllm-deepseek-v3.2
   template:
     metadata:
       labels:
-        app: vllm-deepseek-r1
+        app: vllm-deepseek-v3.2
     spec:
       containers:
       - name: vllm-sim
@@ -18,7 +18,7 @@ spec:
         imagePullPolicy: Always
         args:
         - --model
-        - deepseek/vllm-deepseek-r1
+        - deepseek-ai/DeepSeek-V3.2
         - --port
         - "8000"
         - --max-loras
@@ -50,7 +50,7 @@ metadata:
   labels:
     inference.networking.k8s.io/bbr-managed: "true"
 data:
-  baseModel: deepseek/vllm-deepseek-r1
+  baseModel: deepseek-ai/DeepSeek-V3.2
   adapters: |
     - ski-resorts
     - movie-critique

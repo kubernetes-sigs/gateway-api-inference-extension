@@ -86,7 +86,7 @@ jobs:
       GATEWAY_TYPE: gke
       PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch || github.event.issue.number || github.event.number || 'actions' }}
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      MODEL: meta-llama/Llama-3.1-8B-Instruct
+      MODEL: Qwen/Qwen3-32B
       GSA_EMAIL: ${{ secrets.GCS_WORKLOAD_SA }}
       GCS_BUCKET: igw-e2e-benchmark-results
       KSA_NAME: igw-e2e-benchmark-sa
@@ -170,9 +170,9 @@ jobs:
       - name: Deploy InferencePool and Endpoint Picker Extension
         run: |
           export IGW_CHART_VERSION=v1.1.0
-          helm install vllm-llama3-8b-instruct \
+          helm install vllm-qwen3-32b \
           --namespace $NAMESPACE \
-          --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+          --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
           --set provider.name=$GATEWAY_TYPE \
           --version $IGW_CHART_VERSION \
           oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-decode-heavy-deployment.log
@@ -310,7 +310,7 @@ jobs:
         if: always()
         run: |
           GATEWAY_NAME=inference-gateway
-          helm uninstall vllm-llama3-8b-instruct -n ${NAMESPACE} --ignore-not-found
+          helm uninstall vllm-qwen3-32b -n ${NAMESPACE} --ignore-not-found
           helm uninstall decode-heavy-benchmark -n ${NAMESPACE} --ignore-not-found
           kubectl delete httproute llm-route -n ${NAMESPACE} --ignore-not-found
           kubectl delete gateway ${GATEWAY_NAME} -n ${NAMESPACE} --ignore-not-found

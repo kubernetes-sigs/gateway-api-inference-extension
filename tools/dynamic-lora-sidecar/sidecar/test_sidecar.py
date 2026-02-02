@@ -23,43 +23,43 @@ from sidecar import LoraReconciler, LoraAdapter, CONFIG_MAP_FILE, BASE_FIELD, AD
 TEST_CONFIG_DATA = {
     BASE_FIELD: {
         "host": "localhost",
-        "name": "sql-loras-llama",
+        "name": "uncensored-loras-qwen",
         "port": 8000,
         "ensureExist": {
             "models": [
                 {
-                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
-                    "id": "sql-lora-v1",
-                    "source": "yard1/llama-2-7b-sql-lora-test",
+                    "base-model": "Qwen/Qwen3-32B",
+                    "id": "uncensored-lora-v1",
+                    "source": "nicoboss/Qwen3-32B-Uncensored",
                 },
                 {
-                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
-                    "id": "sql-lora-v3",
-                    "source": "yard1/llama-2-7b-sql-lora-test",
+                    "base-model": "Qwen/Qwen3-32B",
+                    "id": "uncensored-lora-v3",
+                    "source": "nicoboss/Qwen3-32B-Uncensored",
                 },
                 {
-                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
+                    "base-model": "Qwen/Qwen3-32B",
                     "id": "already_exists",
-                    "source": "yard1/llama-2-7b-sql-lora-test",
+                    "source": "nicoboss/Qwen3-32B-Uncensored",
                 },
             ]
         },
         "ensureNotExist": {
             "models": [
                 {
-                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
-                    "id": "sql-lora-v2",
-                    "source": "yard1/llama-2-7b-sql-lora-test",
+                    "base-model": "Qwen/Qwen3-32B",
+                    "id": "uncensored-lora-v2",
+                    "source": "nicoboss/Qwen3-32B-Uncensored",
                 },
                 {
-                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
-                    "id": "sql-lora-v3",
-                    "source": "yard1/llama-2-7b-sql-lora-test",
+                    "base-model": "Qwen/Qwen3-32B",
+                    "id": "uncensored-lora-v3",
+                    "source": "nicoboss/Qwen3-32B-Uncensored",
                 },
                 {
-                    "base-model": "meta-llama/Llama-3.1-8B-Instruct",
+                    "base-model": "Qwen/Qwen3-32B",
                     "id": "to_remove",
-                    "source": "yard1/llama-2-7b-sql-lora-test",
+                    "source": "nicoboss/Qwen3-32B-Uncensored",
                 },
             ]
         },
@@ -84,7 +84,7 @@ RESPONSES = {
                 "object": "model",
                 "created": 1729693000,
                 "owned_by": "vllm",
-                "root": "meta-llama/Llama-3.1-8B-Instruct",
+                "root": "Qwen/Qwen3-32B",
                 "parent": None,
                 "max_model_len": 4096,
             },
@@ -93,7 +93,7 @@ RESPONSES = {
                 "object": "model",
                 "created": 1729693000,
                 "owned_by": "vllm",
-                "root": "yard1/llama-2-7b-sql-lora-test",
+                "root": "nicoboss/Qwen3-32B-Uncensored",
                 "parent": "base1",
                 "max_model_len": None,
             },
@@ -209,12 +209,12 @@ class LoraReconcilerTest(unittest.TestCase):
                         
                         # Check that the adapters with the correct IDs were loaded
                         loaded_ids = [call.args[0].id for call in mock_load.call_args_list]
-                        self.assertIn("sql-lora-v1", loaded_ids, "sql-lora-v1 should have been loaded")
+                        self.assertIn("uncensored-lora-v1", loaded_ids, "uncensored-lora-v1 should have been loaded")
                         self.assertIn("already_exists", loaded_ids, "already_exists should have been loaded")
                         
                         # Check that the adapters with the correct IDs were unloaded
                         unloaded_ids = [call.args[0].id for call in mock_unload.call_args_list]
-                        self.assertIn("sql-lora-v2", unloaded_ids, "sql-lora-v2 should have been unloaded")
+                        self.assertIn("uncensored-lora-v2", unloaded_ids, "uncensored-lora-v2 should have been unloaded")
                         self.assertIn("to_remove", unloaded_ids, "to_remove should have been unloaded")
 
     def test_health_check_settings(self):

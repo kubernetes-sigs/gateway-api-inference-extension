@@ -59,11 +59,11 @@ config:
     streaming: true
   server:
     type: vllm
-    model_name: meta-llama/Llama-3.1-8B-Instruct
+    model_name: Qwen/Qwen3-32B
     base_url: http://0.0.0.0:8000
     ignore_eos: true
   tokenizer:
-    pretrained_model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
+    pretrained_model_name_or_path: Qwen/Qwen3-32B
   data:
     type: billsum_conversations
     path: ""

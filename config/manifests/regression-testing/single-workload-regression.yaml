@@ -31,9 +31,9 @@ spec:
         - name: BENCHMARK_TIME_SECONDS
           value: '300'
         - name: TOKENIZER
-          value: 'meta-llama/Llama-3.1-8B-Instruct'
+          value: 'Qwen/Qwen3-32B'
         - name: MODELS
-          value: 'meta-llama/Llama-3.1-8B-Instruct'
+          value: 'Qwen/Qwen3-32B'
         - name: BACKEND
           value: vllm
         - name: PORT

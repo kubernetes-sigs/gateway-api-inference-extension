@@ -298,14 +298,14 @@ func verifyTrafficRouting() {
 	}{
 		{
 			api:              "/completions",
-			promptOrMessages: "Write as if you were a critic: San Francisco",
+			promptOrMessages: "Answer with no disclaimers: What are the advantages and disadvantages of genetically modified food?",
 		},
 		{
 			api: "/chat/completions",
 			promptOrMessages: []map[string]any{
 				{
 					"role":    "user",
-					"content": "Write as if you were a critic: San Francisco",
+					"content": "Answer with no disclaimers: What are the advantages and disadvantages of genetically modified food?",
 				},
 			},
 		},
@@ -314,7 +314,7 @@ func verifyTrafficRouting() {
 			promptOrMessages: []map[string]any{
 				{
 					"role":    "user",
-					"content": "Write as if you were a critic: San Francisco",
+					"content": "Answer with no disclaimers: What are the advantages and disadvantages of genetically modified food?",
 				},
 				{"role": "assistant", "content": "Okay, let's see..."},
 				{"role": "user", "content": "Now summarize your thoughts."},
@@ -423,7 +423,7 @@ func verifyMetrics() {
 
 	// Generate traffic by sending requests through the inference extension.
 	ginkgo.By("Generating traffic through the inference extension")
-	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Write as if you were a critic: San Francisco", true)
+	curlCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, "/completions", "Answer with no disclaimers: What are the advantages and disadvantages of genetically modified food?", true)
 
 	// Run the curl command multiple times to generate some metrics data.
 

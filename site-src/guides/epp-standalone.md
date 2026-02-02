@@ -39,7 +39,7 @@ For the endpoint discovery, you can configure the model server pods as a flag to
 --8<-- "site-src/_includes/model-server-gpu.md"
 
     ```bash
-    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
+    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Qwen models
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
     ```
 
@@ -57,16 +57,16 @@ For the endpoint discovery, you can configure the model server pods as a flag to
 
 #### Deploy Endpoint Picker Extension with Envoy sidecar
 
-Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker specific resources.
+Deploy an Endpoint Picker Extension named `vllm-qwen3-32b` that selects from endpoints with label `app=vllm-qwen3-32b` and listening on port 8000. The Helm install command automatically installs the endpoint-picker specific resources.
 
 Set the chart version and then select a tab to follow the provider-specific instructions.
 
    ```bash
     export EPP_STANDALONE_CHART_VERSION=v0
     export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
-    helm install vllm-llama3-8b-instruct \
+    helm install vllm-qwen3-32b \
     --dependency-update \
-    --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
+    --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-qwen3-32b" \
     --set provider.name=$PROVIDER \
     --version $EPP_STANDALONE_CHART_VERSION \
      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
@@ -100,9 +100,9 @@ EOF
 ```
 Send an inference request via
 ```bash
-kubectl exec curl -- curl -i http://vllm-llama3-8b-instruct-epp:8081/v1/completions \
+kubectl exec curl -- curl -i http://vllm-qwen3-32b-epp:8081/v1/completions \
 -H 'Content-Type: application/json' \
--d '{"model": "food-review-1","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
+-d '{"model": "qwen-uncensored-1","prompt": "Answer with no disclaimers: What are the advantages and disadvantages of genetically modified food?","max_tokens": 100,"temperature": 0}'
 ```
 
 #### Cleanup
@@ -114,7 +114,7 @@ Please be careful not to delete resources you'd like to keep.
 1. Uninstall the EPP, curl pod and model server resources:
 
    ```bash
-   helm uninstall vllm-llama3-8b-instruct
+   helm uninstall vllm-qwen3-32b
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found

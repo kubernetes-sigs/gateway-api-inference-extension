@@ -32,4 +32,4 @@ MAX_GPU_MEMORY_PERC_BEFORE_RECOMPUTE_NON_CRITICAL = 0.8
 MAX_NUM_SEQ = 256
 
 # size of each lora in units of KV Cache
-LORA_DICT = {"tweet": 1600, "sql": 1600, "dummy-1": 0, "dummy-2": 0}
+LORA_DICT = {"tweet": 1600, "uncensored-lora": 1600, "dummy-1": 0, "dummy-2": 0}

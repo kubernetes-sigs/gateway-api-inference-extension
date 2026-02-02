@@ -51,7 +51,7 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 			appPodBackendPrefix = "secondary-inference-model-server"
 			requestBody         = `{
                 "model": "conformance-fake-model",
-                "prompt": "Write as if you were a critic: San Francisco"
+                "prompt": "Answer with no disclaimers: What are the advantages and disadvantages of genetically modified food?"
             }`
 		)
 
