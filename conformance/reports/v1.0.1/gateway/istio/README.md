@@ -6,7 +6,7 @@ This directory contains conformance test results for Gateway API Inference Exten
 
 | Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report | Status |
 |--------------------------|----------------|------------------------|---------|--------|--------|
-| v1.3.0 | Gateway | 1.28.3 | default | [./1.28.3-default-gateway-report.yaml](././1.28.3-default-gateway-report.yaml) | PASS |
+| v1.0.1 | Gateway | 1.28.3 | default | [./1.28.3-default-gateway-report.yaml](./1.28.3-default-gateway-report.yaml) | PASS |
 
 ## Running the Tests
 
