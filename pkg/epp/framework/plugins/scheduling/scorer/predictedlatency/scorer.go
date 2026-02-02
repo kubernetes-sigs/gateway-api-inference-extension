@@ -170,7 +170,7 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 
 	predictedLatency.sloContextStore = ttlcache.New(
 		ttlcache.WithTTL[string, *predictedLatencyCtx](config.ContextTTL),
-		ttlcache.WithDisableTouchOnHit[string, *predictedLatencyCtx](),
+
 	)
 
 	predictedLatency.sloContextStore.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[string, *predictedLatencyCtx]) {

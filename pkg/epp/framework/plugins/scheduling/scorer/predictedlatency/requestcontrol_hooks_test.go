@@ -62,7 +62,6 @@ func createTestRouter() *PredictedLatency {
 	return &PredictedLatency{
 		sloContextStore: ttlcache.New(
 			ttlcache.WithTTL[string, *predictedLatencyCtx](DefaultConfig.ContextTTL),
-			ttlcache.WithDisableTouchOnHit[string, *predictedLatencyCtx](),
 		),
 		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
 		latencypredictor:    nil,
