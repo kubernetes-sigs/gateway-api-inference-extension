@@ -43,6 +43,7 @@ require (
 require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/jellydator/ttlcache/v3 v3.4.0
+	github.com/google/cel-go v0.26.0
 	github.com/spf13/pflag v1.0.10
 	go.opentelemetry.io/otel/trace v1.39.0
 	sigs.k8s.io/kustomize/api v0.21.0
@@ -88,7 +89,6 @@ require (
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.26.0 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect

@@ -1,6 +1,6 @@
 GatewayAPIInferenceExtensionVersion: v1.1.0
 apiVersion: gateway.networking.k8s.io/v1
-date: "2025-12-18T16:59:22Z"
+date: "2026-01-29T23:03:15Z"
 gatewayAPIChannel: experimental
 gatewayAPIVersion: v1.4.1
 implementation:
@@ -9,7 +9,7 @@ implementation:
   organization: nginx
   project: nginx-gateway-fabric
   url: https://github.com/nginx/nginx-gateway-fabric
-  version: v2.3.0
+  version: v2.4.0
 kind: ConformanceReport
 mode: default
 profiles:

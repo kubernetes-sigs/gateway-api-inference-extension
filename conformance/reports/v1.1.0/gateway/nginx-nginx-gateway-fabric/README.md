@@ -4,7 +4,8 @@
 
 | Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                                     |
 |--------------------------|----------------|------------------------|---------|----------------------------------------------------------------------------|
-| v1.1.0                   | Gateway        | v2.3.0                 | default | [v2.3.0 report](./inference-v2.3.0-report.yaml)    
+| v1.1.0                   | Gateway        | v2.3.0                 | default | [v2.3.0 report](./inference-v2.3.0-report.yaml)                            |
+| v1.1.0                   | Gateway        | v2.4.0                 | default | [v2.4.0 report](./inference-v2.4.0-report.yaml)                            |
 
 ## Reproduce
 
