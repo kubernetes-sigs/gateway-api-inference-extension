@@ -141,7 +141,7 @@ func TestPrepareDataGraph(t *testing.T) {
 					return
 				}
 			}
-			orderedPlugins, err := sortPlugins(dag, tc.plugins)
+			orderedPlugins, err := topologicalSort(dag)
 
 			if tc.expectError {
 				assert.Error(t, err)

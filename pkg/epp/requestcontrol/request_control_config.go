@@ -152,10 +152,12 @@ func (c *Config) ValidateAndOrderDataDependencies() error {
 	if err != nil {
 		return err
 	}
-	plugins, err := sortPlugins(dag, c.prepareDataPlugins)
+	// Topologically sort the DAG to determine the order of plugin execution.
+	plugins, err := topologicalSort(dag)
 	if err != nil {
 		return err
 	}
+	// Reorder the prepareDataPlugins in the Config based on the sorted order.
 	c.orderPrepareDataPlugins(plugins)
 
 	return nil

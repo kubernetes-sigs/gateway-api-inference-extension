@@ -21,8 +21,6 @@ import (
 	"slices"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-
-	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 )
 
 // buildDAG builds a dependency graph among data preparation plugins based on their
@@ -60,20 +58,6 @@ func buildDAG(producers map[string]plugin.ProducerPlugin, consumers map[string]p
 		}
 	}
 	return dag, nil
-}
-
-// sortPlugins builds the dependency graph and returns the plugins ordered in topological order.
-// If there is a cycle, it returns an error.
-func sortPlugins(dag map[string][]string, plugins []fwk.PrepareDataPlugin) ([]string, error) {
-	nameToPlugin := map[string]fwk.PrepareDataPlugin{}
-	for _, plugin := range plugins {
-		nameToPlugin[plugin.TypedName().String()] = plugin
-	}
-	sortedPlugins, err := topologicalSort(dag)
-	if err != nil {
-		return nil, err
-	}
-	return sortedPlugins, nil
 }
 
 // TopologicalSort performs Kahn's Algorithm on a DAG.
