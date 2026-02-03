@@ -338,7 +338,7 @@ func TestDetector_TokenFilter(t *testing.T) {
 		MaxTokenConcurrency: 100,
 		Headroom:            0.2, // Burst limit = 100 * 1.2 = 120 tokens
 	}
-	
+
 	ctx := context.Background()
 	detector := NewDetector(config)
 	endpointName := "token-filter-endpoint"
@@ -476,7 +476,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	wg.Wait()
 
 	// Strict white-box check: Counter MUST be exactly 0.
-	finalCount := detector.tracker.get(fullID)
+	finalCount := detector.requestTracker.get(fullID)
 	require.Equal(t, int64(0), finalCount, "atomic counter drift detected; expected 0")
 }
 

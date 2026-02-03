@@ -85,7 +85,7 @@ var (
 
 // Detector implements a saturation detector and scheduling filter based on active request concurrency.
 type Detector struct {
-	tracker        *concurrencyTracker
+	requestTracker *concurrencyTracker // requests in flight per endpoint
 	tokenTracker   *concurrencyTracker // tokens in flight per endpoint
 	tokenLedger    *tokenLedger        // requestID -> {endpointID -> tokensAdded}
 	tokenEstimator TokenEstimator      // SimpleTokenEstimator with CharactersPerToken
@@ -110,11 +110,11 @@ func NewDetector(config Config) *Detector {
 	}
 
 	return &Detector{
-		tracker:      newConcurrencyTracker(),
-		tokenTracker: newConcurrencyTracker(),
-		tokenLedger:  newTokenLedger(),
+		requestTracker: newConcurrencyTracker(),
+		tokenTracker:   newConcurrencyTracker(),
+		tokenLedger:    newTokenLedger(),
 		tokenEstimator: NewSimpleTokenEstimator(),
-		config:       config,
+		config:         config,
 	}
 }
 
@@ -144,7 +144,7 @@ func (d *Detector) Saturation(_ context.Context, candidateEndpoints []metrics.Po
 			totalInflight += tokenCount
 			totalCapacity += d.config.MaxTokenConcurrency
 		} else {
-			inflight := d.tracker.get(endpointID)
+			inflight := d.requestTracker.get(endpointID)
 			totalInflight += inflight
 			totalCapacity += d.config.MaxConcurrency
 		}
@@ -178,10 +178,10 @@ func (d *Detector) Filter(
 			}
 		} else {
 			limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
-			if d.tracker.get(endpointID) < limit {
+			if d.requestTracker.get(endpointID) < limit {
 				filtered = append(filtered, endpoint)
 			}
-		}		
+		}
 	}
 	return filtered
 }
@@ -195,7 +195,7 @@ func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, 
 		d.tokenTracker.add(eid, tokens)
 		d.tokenLedger.add(request.RequestId, eid, tokens)
 	} else {
-		d.tracker.inc(eid)
+		d.requestTracker.inc(eid)
 	}
 }
 
@@ -207,13 +207,13 @@ func (d *Detector) ResponseComplete(
 	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
 	eid := targetEndpoint.NamespacedName.String()
-	if d.config.ConcurrencyMode == ConcurrencyModeTokens{
+	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
 		tokenCount, ok := d.tokenLedger.remove(request.RequestId)
 		if ok {
 			d.tokenTracker.add(eid, -tokenCount)
 		}
 	} else {
-		d.tracker.dec(eid)
+		d.requestTracker.dec(eid)
 	}
 }
 
@@ -225,7 +225,7 @@ func (d *Detector) DeleteEndpoint(endpointID string) {
 			d.tokenTracker.add(endpointID, -e.tokenCount)
 		}
 	} else {
-		d.tracker.delete(endpointID)
+		d.requestTracker.delete(endpointID)
 	}
 }
 
