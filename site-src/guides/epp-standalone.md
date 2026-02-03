@@ -37,16 +37,14 @@ For the endpoint discovery, you have two options:
 
 #### Deploy Sample Model Server
 
---8<-- "site-src/_includes/model-server-intro.md"
-
---8<-- "site-src/_includes/model-server-gpu.md"
+--8<-- "site-src/_includes/vllm-gpu.md"
 
     ```bash
     kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
     ```
 
---8<-- "site-src/_includes/model-server-cpu.md"
+--8<-- "site-src/_includes/vllm-cpu.md"
 
     ```bash
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
@@ -78,7 +76,10 @@ Set the chart version and then select a tab to follow the provider-specific inst
    ```
 
 ##### Option 2: InferencePool Dependency
+Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and 
+listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
 
+Set the chart version and then select a tab to follow the provider-specific instructions.
    ```bash
     # Install the Inference Extension CRDs
     kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
