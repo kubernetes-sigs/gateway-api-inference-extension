@@ -17,8 +17,14 @@ limitations under the License.
 package pod
 
 import (
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
+
+const PortDiscoveryAnnotationName = "inference.networking.x-k8s.io/port-discovery"
 
 func IsPodReady(pod *corev1.Pod) bool {
 	if !pod.DeletionTimestamp.IsZero() {
@@ -33,4 +39,22 @@ func IsPodReady(pod *corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+func ExtractInferencePortsDeclaration(pod *corev1.Pod) (sets.Set[int], bool) {
+	inferencePorts := sets.New[int]()
+	annotations := pod.GetAnnotations()
+	if portDiscoveryAnnotation, ok := annotations[PortDiscoveryAnnotationName]; ok {
+		portStrs := strings.Split(portDiscoveryAnnotation, ",")
+		for _, portStr := range portStrs {
+			var portNum int
+			_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
+			if err == nil {
+				inferencePorts.Insert(portNum)
+			}
+		}
+		return inferencePorts, true
+	} else {
+		return nil, false
+	}
 }
