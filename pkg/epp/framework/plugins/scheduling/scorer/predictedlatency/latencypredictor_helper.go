@@ -139,8 +139,7 @@ func processFirstTokenForLatencyPrediction(
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
 	}
-	targetPod := predictedLatencyCtx.targetMetadata
-	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetPod.NamespacedName.Name]
+	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[pod.GetMetadata().NamespacedName.Name]
 	logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "prefixCacheScore", prefixCacheScore)
 	recordTTFTTrainingData(ctx, predictor, requestBuilder, predictedLatencyCtx, m, pod, now, prefixCacheScore)
 
