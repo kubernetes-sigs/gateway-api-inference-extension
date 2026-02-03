@@ -166,16 +166,22 @@ func (d *Detector) Filter(
 	_ *framework.LLMRequest,
 	endpoints []framework.Endpoint,
 ) []framework.Endpoint {
-	limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
-
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
 	filtered := make([]framework.Endpoint, 0, len(endpoints))
 
 	for _, endpoint := range endpoints {
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
-		if d.tracker.get(endpointID) < limit {
-			filtered = append(filtered, endpoint)
-		}
+		if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+			limit := int64(float64(d.config.MaxTokenConcurrency) * (1.0 + d.config.Headroom))
+			if d.tokenTracker.get(endpointID) < limit {
+				filtered = append(filtered, endpoint)
+			}
+		} else {
+			limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
+			if d.tracker.get(endpointID) < limit {
+				filtered = append(filtered, endpoint)
+			}
+		}		
 	}
 	return filtered
 }
