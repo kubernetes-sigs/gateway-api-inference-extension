@@ -44,8 +44,8 @@ Mode labels
 */}}
 {{- define "gateway-api-inference-extension.modeLabels" -}}
 {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone -}}
-mode: standalone
+inference.networking.k8s.io/igw-mode: standalone
 {{- else -}}
-mode: inferencepool
+inference.networking.k8s.io/igw-mode: inferencepool
 {{- end -}}
 {{- end -}}
