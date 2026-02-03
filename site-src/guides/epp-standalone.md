@@ -22,7 +22,10 @@ A simpler deployment mode would reduce the barrier to adopting the EPP for such 
 
 ## How
 A proxy is deployed as a sidecar to the EPP. The proxy and EPP continue to communicate via ext-proc protocol over localhost.
-For the endpoint discovery, you can configure the model server pods as a flag to EPP instead of using InferencePool dependency.
+For the endpoint discovery, you have two options:
+
+* Direct Flags: Configure model server pod selectors directly as a flag to the EPP. This is the simplest method for standalone jobs.
+* InferencePool Dependency: Use the InferencePool Custom Resource (CR) for more structured management within the Kubernetes ecosystem.
 
 ## Example
 
@@ -57,6 +60,8 @@ For the endpoint discovery, you can configure the model server pods as a flag to
 
 #### Deploy Endpoint Picker Extension with Envoy sidecar
 
+##### Option 1: Direct Flags
+
 Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker specific resources.
 
 Set the chart version and then select a tab to follow the provider-specific instructions.
@@ -67,6 +72,23 @@ Set the chart version and then select a tab to follow the provider-specific inst
     helm install vllm-llama3-8b-instruct \
     --dependency-update \
     --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
+    --set provider.name=$PROVIDER \
+    --version $EPP_STANDALONE_CHART_VERSION \
+     oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
+   ```
+
+##### Option 2: InferencePool Dependency
+
+   ```bash
+    # Install the Inference Extension CRDs
+    kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
+    
+    export EPP_STANDALONE_CHART_VERSION=v0
+    export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
+    helm install vllm-llama3-8b-instruct \
+    --dependency-update \
+    --set inferenceExtension.endpointsServer.standalone=false \
+    --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
     --set provider.name=$PROVIDER \
     --version $EPP_STANDALONE_CHART_VERSION \
      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
@@ -119,6 +141,7 @@ Please be careful not to delete resources you'd like to keep.
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
+   kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
    kubectl delete secret hf-token --ignore-not-found
    kubectl delete pod curl --ignore-not-found
    ```
