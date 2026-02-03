@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -37,13 +38,14 @@ import (
 )
 
 type PredictedLatency struct {
-	typedName           plugin.TypedName
-	latencypredictor    latencypredictor.PredictorInterface
-	requestBuilder      PredictionRequestBuilder
-	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
-	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx]
-	headroomStrategy    headroomStrategy
-	config              Config
+	typedName              plugin.TypedName
+	latencypredictor       latencypredictor.PredictorInterface
+	requestBuilder         PredictionRequestBuilder
+	runningRequestLists    map[types.NamespacedName]*requestPriorityQueue
+	runningRequestListsMux sync.RWMutex                                  // Protects runningRequestLists map structure
+	sloContextStore        *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
+	headroomStrategy       headroomStrategy
+	config                 Config
 }
 
 var _ framework.Scorer = &PredictedLatency{}
@@ -416,4 +418,30 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(endpoint.GetMetadata().NamespacedName)]
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
+}
+
+// AddToRunningRequests allows external tracking of pod load.
+// Used by wrappers (e.g., P/D scorer) to track non-primary pods in runningRequestLists.
+// This enables the scorer to see load on all pods involved in a request.
+func (s *PredictedLatency) AddToRunningRequests(podName types.NamespacedName, requestID string, priority float64) {
+	s.runningRequestListsMux.Lock()
+	defer s.runningRequestListsMux.Unlock()
+
+	queue, ok := s.runningRequestLists[podName]
+	if !ok {
+		queue = newRequestPriorityQueue()
+		s.runningRequestLists[podName] = queue
+	}
+	queue.Add(requestID, priority)
+}
+
+// RemoveFromRunningRequests allows external cleanup of pod load tracking.
+// Used by wrappers (e.g., P/D scorer) to remove non-primary pods from runningRequestLists.
+func (s *PredictedLatency) RemoveFromRunningRequests(podName types.NamespacedName, requestID string) {
+	s.runningRequestListsMux.Lock()
+	defer s.runningRequestListsMux.Unlock()
+
+	if queue, ok := s.runningRequestLists[podName]; ok {
+		queue.Remove(requestID)
+	}
 }
