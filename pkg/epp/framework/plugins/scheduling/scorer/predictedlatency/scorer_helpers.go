@@ -107,7 +107,13 @@ func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predict
 		Name:      ctx.targetMetadata.NamespacedName.Name,
 		Namespace: ctx.targetMetadata.NamespacedName.Namespace,
 	}
-	if queue, ok := s.runningRequestLists[endpointName]; ok {
+
+	// Get queue for this endpoint (protected by mutex)
+	s.runningRequestListsMux.RLock()
+	queue, ok := s.runningRequestLists[endpointName]
+	s.runningRequestListsMux.RUnlock()
+
+	if ok {
 		queue.Remove(requestID)
 	}
 }
