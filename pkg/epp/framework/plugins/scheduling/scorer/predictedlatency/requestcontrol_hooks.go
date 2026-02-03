@@ -89,6 +89,26 @@ func (s *PredictedLatency) getPredictedLatencyContextForRequest(request *schedul
 	return nil, fmt.Errorf("SLO context not found for request ID: %s", id)
 }
 
+// GetAvgTPOTSLO returns the average TPOT SLO for a request.
+// Used by wrappers (e.g., P/D scorer) to get priority values for tracking.
+func (s *PredictedLatency) GetAvgTPOTSLO(request *schedulingtypes.LLMRequest) (float64, error) {
+	ctx, err := s.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		return 0, err
+	}
+	return ctx.avgTPOTSLO, nil
+}
+
+// GetSchedulingResult returns the scheduling result for a request.
+// Used by wrappers (e.g., P/D scorer) to access profile results for cleanup.
+func (s *PredictedLatency) GetSchedulingResult(request *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
+	ctx, err := s.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	return ctx.schedulingResult, nil
+}
+
 func (s *PredictedLatency) setPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest, ctx *predictedLatencyCtx) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
 	s.sloContextStore.Set(id, ctx, ttlcache.DefaultTTL)
@@ -181,11 +201,15 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
+
+	// Get or create queue for this endpoint (protected by mutex)
+	t.runningRequestListsMux.Lock()
 	endpointRequestList, ok := t.runningRequestLists[endpointName]
 	if !ok {
 		endpointRequestList = newRequestPriorityQueue()
 		t.runningRequestLists[endpointName] = endpointRequestList
 	}
+	t.runningRequestListsMux.Unlock()
 
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
