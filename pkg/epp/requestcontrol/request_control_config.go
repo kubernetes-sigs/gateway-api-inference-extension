@@ -144,14 +144,10 @@ func (c *Config) ProducerConsumerPlugins() (map[string]plugin.ProducerPlugin, ma
 	return producers, consumers
 }
 
-// PrepareDataPluginGraph creates data dependency graph and sorts the plugins in topological order.
+// ValidateDataDependencies creates a data dependency graph and sorts the plugins in topological order.
 // If a cycle is detected, it returns an error.
-func (c *Config) PrepareDataPluginGraph() error {
+func (c *Config) ValidateAndOrderDataDependencies() error {
 	producers, consumers := c.ProducerConsumerPlugins()
-	// TODO(#1988): Add all producer and consumer plugins to the graph.
-	if len(c.prepareDataPlugins) == 0 {
-		return nil
-	}
 	dag, err := buildDAG(producers, consumers)
 	if err != nil {
 		return err
@@ -160,7 +156,22 @@ func (c *Config) PrepareDataPluginGraph() error {
 	if err != nil {
 		return err
 	}
-	c.prepareDataPlugins = plugins
+	c.orderPrepareDataPlugins(plugins)
 
 	return nil
+}
+
+// orderPrepareDataPlugins reorders the prepareDataPlugins in the Config based on the given sorted plugin names.
+func (c *Config) orderPrepareDataPlugins(sortedPluginNames []string) {
+	sortedPlugins := make([]fwk.PrepareDataPlugin, 0, len(sortedPluginNames))
+	nameToPlugin := make(map[string]fwk.PrepareDataPlugin)
+	for _, plugin := range c.prepareDataPlugins {
+		nameToPlugin[plugin.TypedName().String()] = plugin
+	}
+	for _, name := range sortedPluginNames {
+		if plugin, ok := nameToPlugin[name]; ok {
+			sortedPlugins = append(sortedPlugins, plugin)
+		}
+	}
+	c.prepareDataPlugins = sortedPlugins
 }

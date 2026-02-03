@@ -162,20 +162,16 @@ func TestPrepareDataGraph(t *testing.T) {
 				t.Errorf("prepareDataGraph() mismatch (-want +got):\n%s", diff)
 			}
 
-			orderedPluginNames := make([]string, len(orderedPlugins))
-			for i, p := range orderedPlugins {
-				orderedPluginNames[i] = p.TypedName().String()
-			}
 			assertTopologicalOrder(t, dag, orderedPlugins)
 		})
 	}
 }
 
-func assertTopologicalOrder(t *testing.T, dag map[string][]string, ordered []fwk.PrepareDataPlugin) {
+func assertTopologicalOrder(t *testing.T, dag map[string][]string, ordered []string) {
 	t.Helper()
 	positions := make(map[string]int)
 	for i, p := range ordered {
-		positions[p.TypedName().String()] = i
+		positions[p] = i
 	}
 
 	for node, dependencies := range dag {
