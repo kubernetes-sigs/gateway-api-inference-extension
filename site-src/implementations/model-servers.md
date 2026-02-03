@@ -45,3 +45,80 @@ Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install the `in
 - name=lora-info-metric
   value="" # Set an empty metric to disable LoRA metric scraping as they are not supported by SGLang yet.
 ```
+
+## Multi-Engine Support
+
+The Inference Extension supports collecting metrics from multiple inference engines simultaneously within the same `InferencePool`. This is useful for A/B testing or mixed-engine deployments.
+
+By default, EPP includes pre-configured metric mappings for **vLLM** (default) and **SGLang**. You only need to label your Pods with the engine type.
+
+### 1. Label your Pods
+
+Label each deployment with the engine type:
+
+```yaml
+# vLLM Deployment
+metadata:
+  labels:
+    inference.networking.k8s.io/engine-type: vllm
+
+# SGLang Deployment
+metadata:
+  labels:
+    inference.networking.k8s.io/engine-type: sglang
+```
+
+Pods without the engine label will use the default engine configuration (vLLM).
+
+### 2. Change Default Engine (Optional)
+
+To use SGLang as the default engine instead of vLLM, simply set the `defaultEngine` parameter:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+featureGates:
+- dataLayer
+plugins:
+- name: model-server-protocol-metrics
+  type: model-server-protocol-metrics
+  parameters:
+    defaultEngine: "sglang"  # Pods without engine label will use SGLang metrics
+```
+
+### 3. Custom Engine Configuration (Optional)
+
+If you need to customize the metric mappings or add support for other engines (e.g., Triton), provide engine-specific configurations in your `EndpointPickerConfig`. Note that built-in vLLM and SGLang configs are automatically included, so you only need to define them if you want to override the defaults:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+featureGates:
+- dataLayer
+plugins:
+- name: model-server-protocol-metrics
+  type: model-server-protocol-metrics
+  parameters:
+    engineLabelKey: "inference.networking.k8s.io/engine-type"  # Pod label key (optional, this is the default)
+    defaultEngine: "vllm"  # Which engine to use for Pods without engine label
+    engineConfigs:
+    # vllm and sglang are optional - only define them to override defaults
+    - name: vllm
+      queuedRequestsSpec: "vllm:num_requests_waiting"
+      runningRequestsSpec: "vllm:num_requests_running"
+      kvUsageSpec: "vllm:kv_cache_usage_perc"
+      loraSpec: "vllm:lora_requests_info"
+      cacheInfoSpec: "vllm:cache_config_info"
+    - name: sglang
+      queuedRequestsSpec: "sglang:num_queue_reqs"
+      runningRequestsSpec: "sglang:num_running_reqs"
+      kvUsageSpec: "sglang:token_usage"
+    - name: triton
+      queuedRequestsSpec: "nv_trt_llm_request_metrics{request_type=waiting}"
+      kvUsageSpec: "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
+```
+
+**Key points:**
+- Use `engineLabelKey` to customize the Pod label key for engine identification (defaults to `inference.networking.k8s.io/engine-type`)
+- Use `defaultEngine` to specify which engine is used for Pods without an engine label (defaults to "vllm")
+- Built-in vLLM and SGLang configs are automatically included, even when adding custom engines

@@ -19,5 +19,5 @@ An EPP instance handles a single `InferencePool` (and so for each `InferencePool
 - Observability
   - The EPP generates metrics to enhance observability.
   - It reports InferenceObjective-level metrics, further broken down by target model.
-  - Detailed information regarding metrics can be found on the [website](https://gateway-api-inference-extension.sigs.k8s.io/guides/metrics/).
+  - Detailed information regarding metrics can be found on the [website](https://gateway-api-inference-extension.sigs.k8s.io/guides/metrics-and-observability).
   

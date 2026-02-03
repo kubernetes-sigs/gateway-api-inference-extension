@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app: sgl-llama3-8b-instruct
+        inference.networking.k8s.io/engine-type: sglang
     spec:
       containers:
         - name: sglang

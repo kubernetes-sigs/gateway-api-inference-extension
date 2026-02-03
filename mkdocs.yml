@@ -73,7 +73,9 @@ nav:
       - Rollout:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md
-      - Metrics and Observability: guides/metrics-and-observability.md
+      - Observability:
+        - Metrics: guides/metrics-and-observability.md
+        - Traces: guides/trace.md
       - Configuration Guide:
           - Configuring the EndPoint Picker via configuration YAML file: guides/epp-configuration/config-text.md
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
@@ -85,7 +87,7 @@ nav:
       - Conformance Tests: guides/conformance-tests.md
   - Performance:
     - Benchmark: performance/benchmark/index.md
-    - Advanced Benchmarking Configs: 
+    - Advanced Benchmarking Configs:
       - Prefix Cache Aware: performance/benchmark/advanced-configs/prefix-cache-aware.md
       - Decode Heavy Workload: performance/benchmark/advanced-configs/decode-heavy-workload.md
       - Prefill Heavy Workload: performance/benchmark/advanced-configs/prefill-heavy-workload.md

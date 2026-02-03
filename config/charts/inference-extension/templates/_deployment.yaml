@@ -6,6 +6,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+    {{- include "gateway-api-inference-extension.modeLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.inferenceExtension.replicas | default 1 }}
   strategy:
@@ -23,6 +24,7 @@ spec:
     metadata:
       labels:
         {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
+        {{- include "gateway-api-inference-extension.modeLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool

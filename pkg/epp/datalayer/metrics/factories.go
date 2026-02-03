@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Kubernetes Authors.
+Copyright 2026 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -40,27 +41,65 @@ type (
 	// Data source configuration parameters
 	metricsDatasourceParams struct {
 		// Scheme defines the protocol scheme used in metrics retrieval (e.g., "http").
-		Scheme string // `json:"scheme"`
+		Scheme string `json:"scheme"`
 		// Path defines the URL path used in metrics retrieval (e.g., "/metrics").
-		Path string // `json:"path"`
+		Path string `json:"path"`
 		// InsecureSkipVerify defines whether model server certificate should be verified or not.
-		InsecureSkipVerify bool // `json:"insecureSkipVerify"`
+		InsecureSkipVerify bool `json:"insecureSkipVerify"`
+	}
+
+	// engineConfigParams holds metric specifications for a specific engine type.
+	engineConfigParams struct {
+		// Name is the engine type identifier.
+		Name string `json:"name"`
+		// QueuedRequestsSpec defines the metric specification string for retrieving queued request count.
+		QueuedRequestsSpec string `json:"queuedRequestsSpec"`
+		// RunningRequestsSpec defines the metric specification string for retrieving running requests count.
+		RunningRequestsSpec string `json:"runningRequestsSpec"`
+		// KVUsageSpec defines the metric specification string for retrieving KV cache usage.
+		KVUsageSpec string `json:"kvUsageSpec"`
+		// LoRASpec defines the metric specification string for retrieving LoRA availability.
+		LoRASpec string `json:"loraSpec"`
+		// CacheInfoSpec defines the metrics specification string for retrieving KV cache configuration.
+		CacheInfoSpec string `json:"cacheInfoSpec"`
 	}
 
 	// Extractor configuration parameters
 	modelServerExtractorParams struct {
-		// QueueRequestsSpec defines the metric specification string for retrieving queued request count.
-		QueueRequestsSpec string // `json:"queuedRequestsSpec"`
-		// RunningRequestsSpec defines the metric specification string for retrieving running requests count.
-		RunningRequestsSpec string // `json:"runningRequestsSpec"`
-		// KVUsage defines the metric specification string for retrieving KV cache usage.
-		KVUsageSpec string // `json:"kvUsageSpec"`
-		// LoRASpec defines the metric specification string for retrieving LoRA availability.
-		LoRASpec string // `json:"loraSpec"`
-		// CacheInfoSpec defines the metrics specification string for retrieving KV cache configuration.
-		CacheInfoSpec string // `json:"cacheInfoSpec"`
+		// EngineLabelKey is the Pod label key used to identify the engine type.
+		// Defaults to "inference.networking.k8s.io/engine-type".
+		EngineLabelKey string `json:"engineLabelKey"`
+		// DefaultEngine specifies which engine to use as the default for unlabeled Pods.
+		// Can be any engine name from EngineConfigs. Defaults to "vllm".
+		DefaultEngine string `json:"defaultEngine"`
+		// EngineConfigs defines metric specifications for specific engine types.
+		// Built-in vLLM and SGLang configs are automatically appended if not explicitly defined.
+		EngineConfigs []engineConfigParams `json:"engineConfigs"`
 	}
 )
+
+// Default engine configurations for vLLM and SGLang.
+var defaultEngineConfigs = []engineConfigParams{
+	{
+		Name:                "vllm",
+		QueuedRequestsSpec:  "vllm:num_requests_waiting",
+		RunningRequestsSpec: "vllm:num_requests_running",
+		KVUsageSpec:         "vllm:kv_cache_usage_perc",
+		LoRASpec:            "vllm:lora_requests_info",
+		CacheInfoSpec:       "vllm:cache_config_info",
+	},
+	{
+		Name:                "sglang",
+		QueuedRequestsSpec:  "sglang:num_queue_reqs",
+		RunningRequestsSpec: "sglang:num_running_reqs",
+		KVUsageSpec:         "sglang:token_usage",
+		LoRASpec:            "",
+		CacheInfoSpec:       "",
+	},
+}
+
+// defaultEngineName is the default engine used when defaultEngine is not specified.
+const defaultEngineName = "vllm"
 
 // MetricsDataSourceFactory is a factory function used to instantiate data layer's
 // metrics data source plugins specified in a configuration.
@@ -84,10 +123,7 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fw
 // ModelServerExtractorFactory is a factory function used to instantiate data layer's metrics
 // Extractor plugins specified in a configuration.
 func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	cfg, err := defaultExtractorConfigParams()
-	if err != nil {
-		return nil, err
-	}
+	cfg := defaultExtractorConfigParams()
 
 	if parameters != nil { // overlay the defaults with configured values
 		if err := json.Unmarshal(parameters, cfg); err != nil {
@@ -95,8 +131,70 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 		}
 	}
 
-	extractor, err := NewModelServerExtractor(cfg.QueueRequestsSpec, cfg.RunningRequestsSpec, cfg.KVUsageSpec,
-		cfg.LoRASpec, cfg.CacheInfoSpec)
+	// Use defaultEngineName if defaultEngine is not specified
+	if cfg.DefaultEngine == "" {
+		cfg.DefaultEngine = defaultEngineName
+	}
+
+	// Use DefaultEngineTypeLabelKey if engineLabelKey is not specified
+	if cfg.EngineLabelKey == "" {
+		cfg.EngineLabelKey = DefaultEngineTypeLabelKey
+	}
+
+	// Append default engine configs (vllm, sglang) if not explicitly defined by user
+	userDefinedEngines := make(map[string]bool)
+	for _, ec := range cfg.EngineConfigs {
+		userDefinedEngines[ec.Name] = true
+	}
+	for _, defaultCfg := range defaultEngineConfigs {
+		if !userDefinedEngines[defaultCfg.Name] {
+			cfg.EngineConfigs = append(cfg.EngineConfigs, defaultCfg)
+		}
+	}
+
+	registry := NewMappingRegistry()
+
+	// Validate and register engine configurations
+	var defaultMapping *Mapping
+	for _, engineConfig := range cfg.EngineConfigs {
+		if engineConfig.Name == "" {
+			return nil, errors.New("engine config name cannot be empty")
+		}
+		if engineConfig.Name == DefaultEngineType {
+			return nil, fmt.Errorf("engine config name cannot be %q (reserved)", DefaultEngineType)
+		}
+
+		mapping, err := NewMapping(
+			engineConfig.QueuedRequestsSpec,
+			engineConfig.RunningRequestsSpec,
+			engineConfig.KVUsageSpec,
+			engineConfig.LoRASpec,
+			engineConfig.CacheInfoSpec,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create mapping for engine %q: %w", engineConfig.Name, err)
+		}
+
+		// Register by engine name
+		if err := registry.Register(engineConfig.Name, mapping); err != nil {
+			return nil, fmt.Errorf("failed to register engine mapping for %q: %w", engineConfig.Name, err)
+		}
+
+		// Track the default engine mapping
+		if engineConfig.Name == cfg.DefaultEngine {
+			defaultMapping = mapping
+		}
+	}
+
+	// Validate and register the default engine
+	if defaultMapping == nil {
+		return nil, fmt.Errorf("defaultEngine %q not found in engineConfigs", cfg.DefaultEngine)
+	}
+	if err := registry.Register(DefaultEngineType, defaultMapping); err != nil {
+		return nil, fmt.Errorf("failed to register default mapping: %w", err)
+	}
+
+	extractor, err := NewModelServerExtractor(registry, cfg.EngineLabelKey)
 	if err != nil {
 		return nil, err
 	}
@@ -117,11 +215,6 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 //
 //  2. Deprecation notice on these flags being moved to the configuration file
 const (
-	totalQueuedRequestsMetricSpecFlag        = "total-queued-requests-metric"
-	totalRunningRequestsMetricSpecFlag       = "total-running-requests-metric"
-	kvCacheUsagePercentageMetricSpecFlags    = "kv-cache-usage-percentage-metric"
-	loraInfoMetricSpecFlag                   = "lora-info-metric"
-	cacheInfoMetricSpecFlag                  = "cache-info-metric"
 	modelServerMetricsPathFlag               = "model-server-metrics-path"
 	modelServerMetricsSchemeFlag             = "model-server-metrics-scheme"
 	modelServerMetricsInsecureSkipVerifyFlag = "model-server-metrics-https-insecure-skip-verify"
@@ -130,42 +223,33 @@ const (
 // return the default configuration state. The defaults are populated from
 // existing command line flags.
 func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
-	var err error
 	cfg := &metricsDatasourceParams{}
 
-	if cfg.Scheme, err = fromStringFlag(modelServerMetricsSchemeFlag); err != nil {
+	scheme, err := fromStringFlag(modelServerMetricsSchemeFlag)
+	if err != nil {
 		return nil, err
 	}
-	if cfg.Path, err = fromStringFlag(modelServerMetricsPathFlag); err != nil {
+	cfg.Scheme = scheme
+
+	path, err := fromStringFlag(modelServerMetricsPathFlag)
+	if err != nil {
 		return nil, err
 	}
-	if cfg.InsecureSkipVerify, err = fromBoolFlag(modelServerMetricsInsecureSkipVerifyFlag); err != nil {
+	cfg.Path = path
+
+	insecure, err := fromBoolFlag(modelServerMetricsInsecureSkipVerifyFlag)
+	if err != nil {
 		return nil, err
 	}
+	cfg.InsecureSkipVerify = insecure
+
 	return cfg, nil
 }
 
-func defaultExtractorConfigParams() (*modelServerExtractorParams, error) {
-	var err error
-	cfg := &modelServerExtractorParams{}
-
-	if cfg.QueueRequestsSpec, err = fromStringFlag(totalQueuedRequestsMetricSpecFlag); err != nil {
-		return nil, err
+func defaultExtractorConfigParams() *modelServerExtractorParams {
+	return &modelServerExtractorParams{
+		EngineLabelKey: DefaultEngineTypeLabelKey,
 	}
-	if cfg.RunningRequestsSpec, err = fromStringFlag(totalRunningRequestsMetricSpecFlag); err != nil {
-		return nil, err
-	}
-	if cfg.KVUsageSpec, err = fromStringFlag(kvCacheUsagePercentageMetricSpecFlags); err != nil {
-		return nil, err
-	}
-	if cfg.LoRASpec, err = fromStringFlag(loraInfoMetricSpecFlag); err != nil {
-		return nil, err
-	}
-	if cfg.CacheInfoSpec, err = fromStringFlag(cacheInfoMetricSpecFlag); err != nil {
-		return nil, err
-	}
-
-	return cfg, nil
 }
 
 func fromStringFlag(name string) (string, error) {

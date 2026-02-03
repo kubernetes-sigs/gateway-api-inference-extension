@@ -84,19 +84,39 @@ type testHarness struct {
 	mockProcessorFactory *mockShardProcessorFactory
 }
 
+// unitHarnessOption allows configuring the test harness.
+type unitHarnessOption func(*testHarnessOpts)
+
+type testHarnessOpts struct {
+	clock clock.WithTicker
+}
+
+func withHarnessClock(c clock.WithTicker) unitHarnessOption {
+	return func(o *testHarnessOpts) {
+		o.clock = c
+	}
+}
+
 // newUnitHarness creates a test environment with a mock processor factory, suitable for focused unit tests of the
 // controller's logic. It starts the controller's run loop using the provided context for lifecycle management.
-func newUnitHarness(t *testing.T, ctx context.Context, cfg *Config, registry *mockRegistryClient) *testHarness {
+func newUnitHarness(
+	t *testing.T,
+	ctx context.Context,
+	cfg *Config,
+	registry *mockRegistryClient,
+	opts ...unitHarnessOption,
+) *testHarness {
 	t.Helper()
+
+	harnessOpts := &testHarnessOpts{
+		clock: testclock.NewFakeClock(time.Now()),
+	}
+	for _, opt := range opts {
+		opt(harnessOpts)
+	}
+
 	mockDetector := &mocks.MockSaturationDetector{}
 	mockPodLocator := &mocks.MockPodLocator{}
-
-	// Initialize the FakeClock with the current system time.
-	// The controller implementation uses the injected clock to calculate the deadline timestamp,vbut uses the standard
-	// context.WithDeadline (which relies on the system clock) to enforce it.
-	// If the FakeClock's time is far from the system time, deadlines calculated based on the FakeClockvmight already be
-	// expired according to the system clock, causing immediate TTL failures.
-	mockClock := testclock.NewFakeClock(time.Now())
 
 	mockProcessorFactory := &mockShardProcessorFactory{
 		processors: make(map[string]*mockShardProcessor),
@@ -107,22 +127,26 @@ func newUnitHarness(t *testing.T, ctx context.Context, cfg *Config, registry *mo
 		registry = &mockRegistryClient{}
 	}
 
-	opts := []flowControllerOption{
+	fcOpts := []flowControllerOption{
 		withRegistryClient(registry),
-		withClock(mockClock),
+		withClock(harnessOpts.clock),
 		withShardProcessorFactory(mockProcessorFactory.new),
 	}
-	fc, err := NewFlowController(ctx, cfg, registry, mockDetector, mockPodLocator, opts...)
+	fc, err := NewFlowController(ctx, cfg, registry, mockDetector, mockPodLocator, fcOpts...)
 	require.NoError(t, err, "failed to create FlowController for unit test harness")
 
 	h := &testHarness{
 		fc:                   fc,
 		cfg:                  cfg,
-		clock:                mockClock,
+		clock:                harnessOpts.clock,
 		mockRegistry:         registry,
-		mockClock:            mockClock,
 		mockProcessorFactory: mockProcessorFactory,
 	}
+
+	if fc, ok := harnessOpts.clock.(*testclock.FakeClock); ok {
+		h.mockClock = fc
+	}
+
 	return h
 }
 
@@ -830,7 +854,11 @@ func TestFlowController_EnqueueAndWait(t *testing.T) {
 			t.Parallel()
 			// Configure a short TTL to keep the test reasonably fast.
 			const requestTTL = 50 * time.Millisecond
-			h := newUnitHarness(t, t.Context(), &Config{DefaultRequestTTL: requestTTL}, nil)
+			h := newUnitHarness(t, t.Context(), &Config{
+				DefaultRequestTTL:               requestTTL,
+				ProcessorReconciliationInterval: time.Minute,
+				ExpiryCleanupInterval:           time.Minute,
+			}, nil, withHarnessClock(clock.RealClock{}))
 
 			shardA := newMockShard("shard-A").build()
 			h.mockRegistry.WithConnectionFunc = func(key flowcontrol.FlowKey, fn func(_ contracts.ActiveFlowConnection) error) error {
