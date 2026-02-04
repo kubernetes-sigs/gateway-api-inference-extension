@@ -16,7 +16,7 @@ inferenceExtension:
 
   endpointsServer:
     #set it to false when you want to deploy epp-standalone with inferencepool
-    standalone: true
+    inferencepoolDisabled: true
     # Required when standalone is true
     #    endpointSelector: app=vllm-llama3-8b-instruct
     targetPorts: 8000
