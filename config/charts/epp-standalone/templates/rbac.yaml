@@ -1,4 +1,4 @@
-{{- if not (and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone) }}
+{{- if not (and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.inferencepoolDisabled) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

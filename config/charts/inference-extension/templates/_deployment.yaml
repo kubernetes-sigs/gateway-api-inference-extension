@@ -75,13 +75,13 @@ spec:
           args:
           {{- /* 1. Determine Model Server Type Logic */ -}}
           {{- $modelServerType := "vllm" }}
-          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone -}}
+          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.inferencepoolDisabled -}}
             {{- $modelServerType = .Values.inferenceExtension.endpointsServer.modelServerType | default "vllm" }}
           {{- else }}
             {{- $modelServerType = .Values.inferencePool.modelServerType | default "vllm" }}
           {{- end }}
           {{- /* 2. Mode Specific Flags */ -}}
-          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone }}
+          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.inferencepoolDisabled }}
               - --endpoint-selector
               - {{ .Values.inferenceExtension.endpointsServer.endpointSelector | quote }}
               - --endpoint-target-ports

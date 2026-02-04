@@ -309,7 +309,7 @@ provider:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
 
-# This is not used when you deploy epp-standalone with inferenceextension.endpointsServer.standalone=true
+# This is not used when you deploy epp-standalone with inferenceExtension.endpointsServer.inferencepoolDisabled=true
 inferencePool:
   targetPorts:
     - number: 8000
