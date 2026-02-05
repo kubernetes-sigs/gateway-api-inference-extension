@@ -230,7 +230,12 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	refreshLastSeenMetrics(ctx, predictedLatencyCtx)
 	t.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx); err != nil {
+	// Create endpoint wrapper with refreshed metrics (same pattern as ResponseStreaming/ResponseComplete)
+	podWrapper := fwkdl.NewEndpoint(
+		targetMetadata,
+		predictedLatencyCtx.lastSeenMetrics[schedulingResult.PrimaryProfileName],
+	)
+	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx, podWrapper); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "Process PreRequest in latencypredictor failed")
 	}
 }
