@@ -61,6 +61,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	dlmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
@@ -272,7 +273,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
-	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf); err != nil {
+	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, ds); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return err
 	}
@@ -516,7 +517,7 @@ func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	}
 }
 
-func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, epf datalayer.EndpointFactory) error {
+func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, epf datalayer.EndpointFactory, ds fwkdl.StoreNotifier) error {
 	disallowedMetricsExtractor := ""
 	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
 		disallowedMetricsExtractor = dlmetrics.MetricsExtractorType
@@ -532,10 +533,26 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, ep
 		return err
 	}
 
-	epf.SetSources(sources)
+	// Separate collection sources (timer-based) from notification sources
+	collectors := []fwkdl.DataSource{}
+
 	for _, src := range sources {
 		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
+
+		// Check if this is a notification source and attach to datastore
+		if notifySrc, ok := src.(fwkdl.NotificationDataSource); ok {
+			if err := notifySrc.AttachToStore(ds); err != nil {
+				return fmt.Errorf("failed to attach notification source %s: %w", src.TypedName().String(), err)
+			}
+		} else if collectSrc, ok := src.(fwkdl.DataSource); ok {
+			// This is a collection source, add to list for EndpointFactory
+			collectors = append(collectors, collectSrc)
+		}
 	}
+
+	// Only pass collection sources to EndpointFactory for timer-based collection
+	epf.SetSources(collectors)
+
 	return nil
 }
 
