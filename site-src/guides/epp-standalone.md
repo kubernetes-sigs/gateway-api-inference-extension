@@ -66,7 +66,7 @@ For the endpoint discovery, you have two options:
 The InferencePool Custom Resource (CR) provides structured management within the Kubernetes ecosystem and 
 supports the entire suite of Inference APIs, including the use of InferenceObjectives for defining workload priority.
 Deploy an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and
-listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
+listening on port 8000. The Helm install command automatically deploys an InferencePool instance, the epp along with provider specific resources.
 
 Set the chart version and then select a tab to follow the provider-specific instructions.
    ```bash
@@ -89,7 +89,8 @@ Set the chart version and then select a tab to follow the provider-specific inst
 
 Without Inference APIs Support, you can configure model server pod selectors directly as a flag to the EPP. This is the simplest method for standalone jobs 
 without needing to install the inference extension apis, but it will not support the features that depend on inference APIs.
-Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker specific resources.
+Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. 
+The Helm install command automatically deploys the epp along with provider specific resources.
 
 Set the chart version and then select a tab to follow the provider-specific instructions.
 
