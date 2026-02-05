@@ -98,11 +98,13 @@ func TestMain(m *testing.M) {
 func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 	// executionModes defines the permutations of EPP deployment modes to test.
 	executionModes := []struct {
-		name       string
-		standalone bool
+		name          string
+		mode          runMode
+		standaloneCfg *standaloneConfig
 	}{
-		{name: "Standard", standalone: false},
-		{name: "Standalone", standalone: true},
+		{name: "Standard", mode: ModeStandard},
+		{name: "Standalone-NoCRD", mode: ModeStandalone, standaloneCfg: &standaloneConfig{StrategyWithCRD}},
+		{name: "Standalone-WithCRD", mode: ModeStandalone, standaloneCfg: &standaloneConfig{StrategyWithCRD}},
 	}
 
 	tests := []struct {
@@ -113,7 +115,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		wantMetrics   map[string]string
 		waitForModel  string
 		// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
-		// InferenceModelRewrite) which are not available in Standalone mode.
+		// InferenceModelRewrite) which are not available in standaloneCfg mode.
 		requiresCRDs bool
 	}{
 		// --- Standard Routing Logic ---
@@ -389,7 +391,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			for _, tc := range tests {
 				t.Run(tc.name, func(t *testing.T) {
 					if mode.standalone && tc.requiresCRDs {
-						t.Skipf("Skipping test %q: requires CRDs, but running in Standalone mode", tc.name)
+						t.Skipf("Skipping test %q: requires CRDs, but running in standaloneCfg mode", tc.name)
 					}
 
 					var h *TestHarness
@@ -399,7 +401,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						h = NewTestHarness(t, context.Background()).WithBaseResources()
 					}
 
-					// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.
+					// In standaloneCfg mode, we cannot wait for an Objective CRD to sync as it doesn't exist.
 					// We only wait for Pod discovery.
 					modelToSync := tc.waitForModel
 					if modelToSync == "" {
