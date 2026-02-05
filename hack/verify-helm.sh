@@ -93,10 +93,10 @@ done
 declare -A test_cases_epp_standalone
 
 # InferencePool Helm Chart test cases
-test_cases_epp_standalone["basic"]="--set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
-test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
-test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway'"
-test_cases_epp_standalone["inferencepool"]="--set inferenceExtension.endpointsServer.inferencepoolDisabled=false --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_epp_standalone["basic"]="--set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway --set inferenceExtension.endpointsServer.createInferencePool=false"
+test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
+test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
+test_cases_epp_standalone["inferencepool"]="--set inferenceExtension.endpointsServer.createInferencePool=true --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 
 
 echo "Processing dependencies for epp-standalone chart..."

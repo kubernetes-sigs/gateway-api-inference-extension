@@ -29,8 +29,8 @@ Cluster RBAC unique name
 Selector labels
 */}}
 {{- define "gateway-api-inference-extension.selectorLabels" -}}
-{{- /* Check if endpointsServer exists AND if standalone is true */ -}}
-{{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.inferencepoolDisabled -}}
+{{- /* Check if endpointsServer exists AND if createInferencePool is false */ -}}
+{{- if and .Values.inferenceExtension.endpointsServer (not .Values.inferenceExtension.endpointsServer.createInferencePool) -}}
 {{- /* LOGIC FOR STANDALONE EPP MODE */ -}}
 epp: {{ include "gateway-api-inference-extension.name" . }}
 {{- else -}}
@@ -43,7 +43,7 @@ inferencepool: {{ include "gateway-api-inference-extension.name" . }}
 Mode labels
 */}}
 {{- define "gateway-api-inference-extension.modeLabels" -}}
-{{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.inferencepoolDisabled -}}
+{{- if and .Values.inferenceExtension.endpointsServer (not .Values.inferenceExtension.endpointsServer.createInferencePool) -}}
 inference.networking.k8s.io/igw-mode: standalone
 {{- else -}}
 inference.networking.k8s.io/igw-mode: inferencepool
