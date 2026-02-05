@@ -58,9 +58,6 @@ For the endpoint discovery, you have two options:
 
 #### Deploy Endpoint Picker Extension with Envoy sidecar
 
-<!-- TABS:START -->
-
-<!-- TAB:With Inference APIs Support -->
 === "Without Inference APIs Support"
 
 Deploy an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and
@@ -81,7 +78,6 @@ Set the chart version and then select a tab to follow the provider-specific inst
      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
    ```
 
-<!-- TAB:Without Inference APIs Support -->
 === "Without Inference APIs Support"
 
 Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. 
@@ -101,7 +97,6 @@ Set the chart version and then select a tab to follow the provider-specific inst
      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
    ```
 
-<!-- TABS:END -->
 #### Try it out
 
 Wait until the EPP deployment is ready.
