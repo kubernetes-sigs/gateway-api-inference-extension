@@ -445,8 +445,9 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = newRequestPriorityQueue()
-				r.runningRequestLists[podName].Add("req1", 0.04)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				r.runningRequestLists.Store(podName, queue)
 			},
 			expectedCount: 1,
 		},
@@ -457,10 +458,11 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
-				r.runningRequestLists[endpointName].Add("req1", 0.04)
-				r.runningRequestLists[endpointName].Add("req2", 0.03)
-				r.runningRequestLists[endpointName].Add("req3", 0.05)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				queue.Add("req2", 0.03)
+				queue.Add("req3", 0.05)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedCount: 3,
 		},
@@ -500,8 +502,9 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
-				r.runningRequestLists[endpointName].Add("req1", 0.04)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedSLO: 0.04,
 		},
@@ -512,11 +515,12 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
+				queue := newRequestPriorityQueue()
 				// Add in any order - heap will maintain minimum at top
-				r.runningRequestLists[endpointName].Add("req1", 0.05)
-				r.runningRequestLists[endpointName].Add("req2", 0.03) // This is the minimum
-				r.runningRequestLists[endpointName].Add("req3", 0.04)
+				queue.Add("req1", 0.05)
+				queue.Add("req2", 0.03) // This is the minimum
+				queue.Add("req3", 0.04)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedSLO: 0.03, // Minimum TPOT (heap guarantees this is at items[0])
 		},
@@ -753,7 +757,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 
 	queue := newRequestPriorityQueue()
 	queue.Add(requestID, sloCtx.avgTPOTSLO)
-	pl.runningRequestLists[endpointName] = queue
+	pl.runningRequestLists.Store(endpointName, queue)
 
 	assert.True(t, queue.Contains(requestID), "Request should be in queue initially")
 	item := pl.sloContextStore.Get(requestID)

@@ -202,14 +202,9 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
 
-	// Get or create queue for this endpoint (protected by mutex)
-	t.runningRequestListsMux.Lock()
-	endpointRequestList, ok := t.runningRequestLists[endpointName]
-	if !ok {
-		endpointRequestList = newRequestPriorityQueue()
-		t.runningRequestLists[endpointName] = endpointRequestList
-	}
-	t.runningRequestListsMux.Unlock()
+	// Get or create queue for this endpoint using sync.Map
+	actual, _ := t.runningRequestLists.LoadOrStore(endpointName, newRequestPriorityQueue())
+	endpointRequestList := actual.(*requestPriorityQueue)
 
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
