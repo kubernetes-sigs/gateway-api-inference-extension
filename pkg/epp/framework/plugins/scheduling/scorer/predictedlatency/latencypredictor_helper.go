@@ -21,7 +21,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -67,7 +66,9 @@ func getLatestMetricsForProfile(predictedLatencyCtx *predictedLatencyCtx) (*fwkd
 func processPreRequestForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
+	requestBuilder PredictionRequestBuilder,
 	predictedLatencyCtx *predictedLatencyCtx,
+	pod framework.Endpoint,
 ) error {
 	logger := log.FromContext(ctx)
 
@@ -81,17 +82,17 @@ func processPreRequestForLatencyPrediction(
 		return err
 	}
 
-	targetPod := predictedLatencyCtx.targetMetadata
-	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetPod.NamespacedName.Name]
+	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[pod.GetMetadata().NamespacedName.Name]
 
-	in := latencypredictor.PredictionRequest{
-		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
-		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningRequestsSize,
-		NumTokensGenerated: 0,
-		PrefixCacheScore:   prefix_cache_score,
-	}
+	// Build prediction request using the builder (ensures pod type is included for P/D)
+	in := requestBuilder.BuildPredictionRequest(
+		ctx,
+		pod,
+		m,
+		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		0, // NumTokensGenerated is 0 for pre-request TTFT prediction
+		prefix_cache_score,
+	)
 
 	// Predict TTFT
 	start := time.Now()
@@ -144,7 +145,7 @@ func processFirstTokenForLatencyPrediction(
 	recordTTFTTrainingData(ctx, predictor, requestBuilder, predictedLatencyCtx, m, pod, now, prefixCacheScore)
 
 	if streamingMode {
-		predictFirstTPOT(ctx, predictor, predictedLatencyCtx)
+		predictFirstTPOT(ctx, predictor, requestBuilder, predictedLatencyCtx, pod)
 	}
 
 	// Advance timestamp
@@ -193,7 +194,9 @@ func recordTTFTTrainingData(
 func predictFirstTPOT(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
+	requestBuilder PredictionRequestBuilder,
 	predictedLatencyCtx *predictedLatencyCtx,
+	pod framework.Endpoint,
 ) {
 	logger := log.FromContext(ctx)
 	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
@@ -203,15 +206,15 @@ func predictFirstTPOT(
 		return
 	}
 
-	// Predict first TPOT
-	in := latencypredictor.PredictionRequest{
-		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
-		NumRequestWaiting:  m.WaitingQueueSize,
-		NumRequestRunning:  m.RunningRequestsSize,
-		NumTokensGenerated: predictedLatencyCtx.generatedTokenCount,
-		PrefixCacheScore:   0,
-	}
+	// Build prediction request using the builder (ensures pod type is included for P/D)
+	in := requestBuilder.BuildPredictionRequest(
+		ctx,
+		pod,
+		m,
+		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		predictedLatencyCtx.generatedTokenCount,
+		0, // TPOT does not use prefix cache score
+	)
 	start := time.Now()
 	p, err := predictor.Predict(ctx, in)
 	dur := time.Since(start)
@@ -281,14 +284,15 @@ func processTokenForLatencyPrediction(
 
 	// Sampled predict
 	if predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) {
-		in := latencypredictor.PredictionRequest{
-			KVCachePercentage:  m.KVCacheUsagePercent,
-			InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
-			NumRequestWaiting:  m.WaitingQueueSize,
-			NumRequestRunning:  m.RunningRequestsSize,
-			NumTokensGenerated: predictedLatencyCtx.generatedTokenCount,
-			PrefixCacheScore:   0, // TPOT does not use prefix cache score
-		}
+		// Build prediction request using the builder (ensures pod type is included for P/D)
+		in := requestBuilder.BuildPredictionRequest(
+			ctx,
+			pod,
+			m,
+			predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+			predictedLatencyCtx.generatedTokenCount,
+			0, // TPOT does not use prefix cache score
+		)
 		start := time.Now()
 		p, err := predictor.Predict(ctx, in)
 		dur := time.Since(start)
