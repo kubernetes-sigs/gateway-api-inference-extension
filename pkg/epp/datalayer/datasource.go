@@ -32,8 +32,8 @@ type DataSourceRegistry struct {
 	sources sync.Map
 }
 
-// Register adds a new DataSource to the registry.
-func (dsr *DataSourceRegistry) Register(src fwkdl.DataSource) error {
+// Register adds a new data source to the registry.
+func (dsr *DataSourceRegistry) Register(src fwkdl.DataSourceBase) error {
 	if src == nil {
 		return errors.New("unable to register a nil data source")
 	}
@@ -44,10 +44,10 @@ func (dsr *DataSourceRegistry) Register(src fwkdl.DataSource) error {
 }
 
 // GetSources returns all registered sources.
-func (dsr *DataSourceRegistry) GetSources() []fwkdl.DataSource {
-	var result []fwkdl.DataSource
+func (dsr *DataSourceRegistry) GetSources() []fwkdl.DataSourceBase {
+	var result []fwkdl.DataSourceBase
 	dsr.sources.Range(func(_, val any) bool {
-		if ds, ok := val.(fwkdl.DataSource); ok {
+		if ds, ok := val.(fwkdl.DataSourceBase); ok {
 			result = append(result, ds)
 		}
 		return true
@@ -58,12 +58,12 @@ func (dsr *DataSourceRegistry) GetSources() []fwkdl.DataSource {
 // --- default registry accessors ---
 
 // RegisterSource adds a new data source to the default registry.
-func RegisterSource(src fwkdl.DataSource) error {
+func RegisterSource(src fwkdl.DataSourceBase) error {
 	return defaultDataSources.Register(src)
 }
 
 // GetSources returns the list of data sources registered in the default registry.
-func GetSources() []fwkdl.DataSource {
+func GetSources() []fwkdl.DataSourceBase {
 	return defaultDataSources.GetSources()
 }
 
