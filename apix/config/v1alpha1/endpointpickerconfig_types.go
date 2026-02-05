@@ -59,17 +59,22 @@ type EndpointPickerConfig struct {
 	// FlowControl configures the Flow Control layer.
 	// This configuration is only respected if the "flowControl" FeatureGate is enabled.
 	FlowControl *FlowControlConfig `json:"flowControl,omitempty"`
+
+	// +optional
+	// RequestControl configures the request control stage of the EPP pipeline.
+	RequestControl *RequestControlConfig `json:"requestControl,omitempty"`
 }
 
 func (cfg EndpointPickerConfig) String() string {
 	return fmt.Sprintf(
-		"{FeatureGates: %v, Plugins: %v, SchedulingProfiles: %v, Data: %v, SaturationDetector: %v, FlowControl: %v}",
+		"{FeatureGates: %v, Plugins: %v, SchedulingProfiles: %v, Data: %v, SaturationDetector: %v, FlowControl: %v, RequestControl: %v}",
 		cfg.FeatureGates,
 		cfg.Plugins,
 		cfg.SchedulingProfiles,
 		cfg.Data,
 		cfg.SaturationDetector,
 		cfg.FlowControl,
+		cfg.RequestControl,
 	)
 }
 
@@ -181,6 +186,24 @@ type SaturationDetector struct {
 	// "good capacity" considerations or treated as having no capacity for
 	// safety.
 	MetricsStalenessThreshold metav1.Duration `json:"metricsStalenessThreshold,omitempty"`
+}
+
+// RequestControlConfig configures the request control stage.
+type RequestControlConfig struct {
+	// +optional
+	// PrepareDataTimeout defines the timeout for PrepareData plugins.
+	// If omitted, defaults to 400ms.
+	PrepareDataTimeout *metav1.Duration `json:"prepareDataTimeout,omitempty"`
+}
+
+func (rc *RequestControlConfig) String() string {
+	if rc == nil {
+		return "{}"
+	}
+	if rc.PrepareDataTimeout == nil {
+		return "{PrepareDataTimeout: default(400ms)}"
+	}
+	return "{PrepareDataTimeout: " + rc.PrepareDataTimeout.String() + "}"
 }
 
 func (sd *SaturationDetector) String() string {

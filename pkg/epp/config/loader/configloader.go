@@ -118,6 +118,7 @@ func InstantiateAndConfigure(
 		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
 		DataConfig:               dataConfig,
 		FlowControlConfig:        flowControlConfig,
+		RequestControlConfig:     buildRequestControlConfig(rawConfig.RequestControl),
 	}, nil
 }
 
@@ -242,6 +243,17 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilization
 		}
 	}
 
+	return cfg
+}
+
+func buildRequestControlConfig(apiConfig *configapi.RequestControlConfig) *config.RequestControlConfig {
+	if apiConfig == nil {
+		return nil
+	}
+	cfg := &config.RequestControlConfig{}
+	if apiConfig.PrepareDataTimeout != nil && apiConfig.PrepareDataTimeout.Duration > 0 {
+		cfg.PrepareDataTimeout = apiConfig.PrepareDataTimeout.Duration
+	}
 	return cfg
 }
 

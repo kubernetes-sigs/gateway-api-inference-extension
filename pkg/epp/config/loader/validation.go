@@ -32,6 +32,9 @@ func validateConfig(cfg *configapi.EndpointPickerConfig) error {
 	if err := validateSchedulingProfiles(cfg); err != nil {
 		return fmt.Errorf("scheduling profile validation failed: %w", err)
 	}
+	if err := validateRequestControl(cfg.RequestControl); err != nil {
+		return fmt.Errorf("request control validation failed: %w", err)
+	}
 	return nil
 }
 
@@ -76,5 +79,15 @@ func validateFeatureGates(gates configapi.FeatureGates) error {
 		}
 	}
 
+	return nil
+}
+
+func validateRequestControl(cfg *configapi.RequestControlConfig) error {
+	if cfg == nil || cfg.PrepareDataTimeout == nil {
+		return nil
+	}
+	if cfg.PrepareDataTimeout.Duration <= 0 {
+		return fmt.Errorf("prepareDataTimeout must be greater than 0")
+	}
 	return nil
 }

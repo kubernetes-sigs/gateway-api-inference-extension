@@ -17,6 +17,8 @@ limitations under the License.
 package config
 
 import (
+	"time"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
@@ -29,4 +31,10 @@ type Config struct {
 	SaturationDetectorConfig *utilizationdetector.Config
 	DataConfig               *datalayer.Config
 	FlowControlConfig        *flowcontrol.Config
+	RequestControlConfig     *RequestControlConfig
+}
+
+// RequestControlConfig holds configuration for request control behaviors.
+type RequestControlConfig struct {
+	PrepareDataTimeout time.Duration
 }
