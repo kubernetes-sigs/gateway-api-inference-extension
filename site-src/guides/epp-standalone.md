@@ -62,10 +62,10 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
 
 === "With Inference APIs Support"
 
-        Deploy an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and
-        listening on port 8000. The Helm install command automatically deploys an InferencePool instance, the epp along with provider specific resources.
+      Deploy an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and
+      listening on port 8000. The Helm install command automatically deploys an InferencePool instance, the epp along with provider specific resources.
         
-        Set the chart version and then select a tab to follow the provider-specific instructions.
+      Set the chart version and then select a tab to follow the provider-specific instructions.
            ```bash
             # Install the Inference Extension CRDs
             kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
@@ -82,10 +82,10 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
 
 === "Without Inference APIs Support"
 
-        Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. 
-        The Helm install command automatically deploys the epp along with provider specific resources.
+     Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. 
+     The Helm install command automatically deploys the epp along with provider specific resources.
         
-        Set the chart version and then select a tab to follow the provider-specific instructions.
+     Set the chart version and then select a tab to follow the provider-specific instructions.
         
            ```bash
             export EPP_STANDALONE_CHART_VERSION=v0
