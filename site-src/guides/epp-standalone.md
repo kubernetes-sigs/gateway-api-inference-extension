@@ -24,8 +24,8 @@ A simpler deployment mode would reduce the barrier to adopting the EPP for such 
 A proxy is deployed as a sidecar to the EPP. The proxy and EPP continue to communicate via ext-proc protocol over localhost.
 For the endpoint discovery, you have two options:
 
-* With Inference APIs Support: The EPP is configured using the Inference CRDs, the pool is expressed using an instance of the InferencePool API and the entire suite of inference APIs are supported, including the use of InferenceObjectives for defining priorities.
-* Without Inference APIs Support: The EPP is configured using command line flags. This is the simplest method for standalone jobs which doesn't require installing the inference extension apis, which means no support for the features expressed using the inference APIs (such as InferenceObjectives).
+* **With Inference APIs Support**: The EPP is configured using the Inference CRDs, the pool is expressed using an instance of the InferencePool API and the entire suite of inference APIs are supported, including the use of InferenceObjectives for defining priorities.
+* **Without Inference APIs Support**: The EPP is configured using command line flags. This is the simplest method for standalone jobs which doesn't require installing the inference extension apis, which means no support for the features expressed using the inference APIs (such as InferenceObjectives).
 
 ## Example
 
@@ -61,7 +61,7 @@ For the endpoint discovery, you have two options:
 <!-- TABS:START -->
 
 <!-- TAB:With Inference APIs Support -->
-##### Option 1: With Inference APIs Support
+=== "Without Inference APIs Support"
 
 Deploy an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and
 listening on port 8000. The Helm install command automatically deploys an InferencePool instance, the epp along with provider specific resources.
@@ -82,7 +82,7 @@ Set the chart version and then select a tab to follow the provider-specific inst
    ```
 
 <!-- TAB:Without Inference APIs Support -->
-##### Option 2: Without Inference APIs Support
+=== "Without Inference APIs Support"
 
 Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. 
 The Helm install command automatically deploys the epp along with provider specific resources.
