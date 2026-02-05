@@ -298,14 +298,13 @@ func (s *PredictedLatency) getEndpointMinTPOTSLO(endpoint schedulingtypes.Endpoi
 		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
 	}
 
-	// Get queue for this endpoint (protected by mutex)
-	s.runningRequestListsMux.RLock()
-	runningReqs, ok := s.runningRequestLists[endpointName]
-	s.runningRequestListsMux.RUnlock()
-
-	if ok && runningReqs.GetSize() > 0 {
-		if topReq := runningReqs.Peek(); topReq != nil {
-			return topReq.tpot
+	// Get queue for this endpoint using sync.Map
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		runningReqs := value.(*requestPriorityQueue)
+		if runningReqs.GetSize() > 0 {
+			if topReq := runningReqs.Peek(); topReq != nil {
+				return topReq.tpot
+			}
 		}
 	}
 	return 0 // no running requests or no TPOT SLOs
@@ -317,12 +316,9 @@ func (s *PredictedLatency) getEndpointRunningRequestCount(endpoint schedulingtyp
 		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
 	}
 
-	// Get queue for this endpoint (protected by mutex)
-	s.runningRequestListsMux.RLock()
-	runningReqs, ok := s.runningRequestLists[endpointName]
-	s.runningRequestListsMux.RUnlock()
-
-	if ok {
+	// Get queue for this endpoint using sync.Map
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		runningReqs := value.(*requestPriorityQueue)
 		return runningReqs.GetSize()
 	}
 	return 0 // no running requests

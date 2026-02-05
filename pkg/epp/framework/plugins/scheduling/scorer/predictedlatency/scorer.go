@@ -38,14 +38,13 @@ import (
 )
 
 type PredictedLatency struct {
-	typedName              plugin.TypedName
-	latencypredictor       latencypredictor.PredictorInterface
-	requestBuilder         PredictionRequestBuilder
-	runningRequestLists    map[types.NamespacedName]*requestPriorityQueue
-	runningRequestListsMux sync.RWMutex                                  // Protects runningRequestLists map structure
-	sloContextStore        *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
-	headroomStrategy       headroomStrategy
-	config                 Config
+	typedName           plugin.TypedName
+	latencypredictor    latencypredictor.PredictorInterface
+	requestBuilder      PredictionRequestBuilder
+	runningRequestLists sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
+	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
+	headroomStrategy    headroomStrategy
+	config              Config
 }
 
 var _ framework.Scorer = &PredictedLatency{}
@@ -179,12 +178,12 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	}
 
 	predictedLatency := &PredictedLatency{
-		typedName:           plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
-		latencypredictor:    predictor,
-		requestBuilder:      requestBuilder,
-		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
-		headroomStrategy:    strategy,
-		config:              config,
+		typedName:        plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
+		latencypredictor: predictor,
+		requestBuilder:   requestBuilder,
+		// runningRequestLists is a sync.Map and needs no initialization
+		headroomStrategy: strategy,
+		config:           config,
 	}
 
 	predictedLatency.sloContextStore = ttlcache.New(
@@ -424,24 +423,17 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 // Used by wrappers (e.g., P/D scorer) to track non-primary pods in runningRequestLists.
 // This enables the scorer to see load on all pods involved in a request.
 func (s *PredictedLatency) AddToRunningRequests(podName types.NamespacedName, requestID string, priority float64) {
-	s.runningRequestListsMux.Lock()
-	defer s.runningRequestListsMux.Unlock()
-
-	queue, ok := s.runningRequestLists[podName]
-	if !ok {
-		queue = newRequestPriorityQueue()
-		s.runningRequestLists[podName] = queue
-	}
+	// LoadOrStore atomically loads or stores the queue
+	actual, _ := s.runningRequestLists.LoadOrStore(podName, newRequestPriorityQueue())
+	queue := actual.(*requestPriorityQueue)
 	queue.Add(requestID, priority)
 }
 
 // RemoveFromRunningRequests allows external cleanup of pod load tracking.
 // Used by wrappers (e.g., P/D scorer) to remove non-primary pods from runningRequestLists.
 func (s *PredictedLatency) RemoveFromRunningRequests(podName types.NamespacedName, requestID string) {
-	s.runningRequestListsMux.Lock()
-	defer s.runningRequestListsMux.Unlock()
-
-	if queue, ok := s.runningRequestLists[podName]; ok {
+	if value, ok := s.runningRequestLists.Load(podName); ok {
+		queue := value.(*requestPriorityQueue)
 		queue.Remove(requestID)
 	}
 }
