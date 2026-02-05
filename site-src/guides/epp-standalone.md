@@ -86,7 +86,6 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
      The Helm install command automatically deploys the epp along with provider specific resources.
         
      Set the chart version and then select a tab to follow the provider-specific instructions.
-        
            ```bash
             export EPP_STANDALONE_CHART_VERSION=v0
             export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
