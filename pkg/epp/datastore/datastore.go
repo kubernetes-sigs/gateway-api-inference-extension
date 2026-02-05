@@ -312,17 +312,22 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	// remove virtual pods that are no longer in the pool
-	ds.pods.Range(func(k, v any) bool {
-		pm := v.(backendmetrics.PodMetrics)
-		if pm.GetMetadata().PodName != pod.Name {
-			return true
+	if hasDynamicPorts {
+		for idx, port := range ds.pool.TargetPorts {
+			if portsOnAnnotation.Has(port) {
+				continue
+			}
+
+			namespacedName := types.NamespacedName{
+				Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
+				Namespace: pod.Namespace,
+			}
+			if ep, ok := ds.pods.Load(namespacedName); ok {
+				ds.pods.Delete(namespacedName)
+				ds.epf.ReleaseEndpoint(ep.(fwkdl.Endpoint))
+			}
 		}
-		if !existingEpSet.Has(pm.GetMetadata().NamespacedName) {
-			ds.pods.Delete(k)
-			ds.epf.ReleaseEndpoint(pm)
-		}
-		return true
-	})
+	}
 
 	return result
 }
