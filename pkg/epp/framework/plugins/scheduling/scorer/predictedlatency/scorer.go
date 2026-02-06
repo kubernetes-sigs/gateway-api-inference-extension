@@ -104,7 +104,7 @@ func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle 
 		return nil, fmt.Errorf("invalid PredictedLatency config: %w", err)
 	}
 
-	predictor, err := startPredictor(handle)
+	predictor, err := StartPredictor(handle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start latency predictor: %w", err)
 	}
@@ -186,7 +186,9 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	return predictedLatency
 }
 
-func startPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
+// StartPredictor initializes and starts the latency predictor.
+// Exported to allow reuse in custom scorer implementations (e.g., llm-d-inference-scheduler).
+func StartPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
 	// Initialize the latency predictor
 	predictor := latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
 	if err := predictor.Start(handle.Context()); err != nil {
