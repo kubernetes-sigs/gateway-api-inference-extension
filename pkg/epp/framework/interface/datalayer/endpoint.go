@@ -90,21 +90,6 @@ func (srv *ModelServer) GetAttributes() AttributeMap {
 	return srv.attributes
 }
 
-// Get retrieves an attribute value by key, forwarding to the underlying AttributeMap.
-func (srv *ModelServer) Get(key string) (Cloneable, bool) {
-	return srv.attributes.Get(key)
-}
-
-// Put stores an attribute value by key, forwarding to the underlying AttributeMap.
-func (srv *ModelServer) Put(key string, value Cloneable) {
-	srv.attributes.Put(key, value)
-}
-
-// Keys returns all attribute keys, forwarding to the underlying AttributeMap.
-func (srv *ModelServer) Keys() []string {
-	return srv.attributes.Keys()
-}
-
 func (srv *ModelServer) Clone() *ModelServer {
 	clone := &ModelServer{
 		attributes: srv.attributes.Clone(),

@@ -48,6 +48,7 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, request *sch
 
 	// Prepare inputs for bulk prediction
 	metricsStates := make([]*fwkdl.Metrics, len(candidateEndpoints))
+	targetEndpointsMetadatas := make([]*fwkdl.EndpointMetadata, len(candidateEndpoints))
 	prompts := make([]string, len(candidateEndpoints))
 	generatedTokenCounts := make([]int, len(candidateEndpoints))
 	prefixCacheScores := make([]float64, len(candidateEndpoints))
@@ -61,13 +62,14 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, request *sch
 		logger.V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", endpoint.GetMetadata().String(), "prefixCacheScore", prefixCacheScore)
 
 		metricsStates[i] = endpoint.GetMetrics()
+		targetEndpointsMetadatas[i] = endpoint.GetMetadata()
 		prompts[i] = request.Body.Completions.Prompt
 		generatedTokenCounts[i] = 1
 		prefixCacheScores[i] = prefixCacheScore
 	}
 
 	// Bulk predict
-	bulkPredictions, err := bulkPredictWithMetrics(ctx, s.latencypredictor, metricsStates, s.requestBuilder, candidateEndpoints, prompts, generatedTokenCounts, prefixCacheScores)
+	bulkPredictions, err := bulkPredictWithMetrics(ctx, s.latencypredictor, metricsStates, s.requestBuilder, targetEndpointsMetadatas, prompts, generatedTokenCounts, prefixCacheScores)
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(err, "Bulk prediction failed")
 		return nil, err

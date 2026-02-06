@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -42,13 +41,13 @@ func TestBulkPredictWithMetrics(t *testing.T) {
 		{KVCacheUsagePercent: 0.6},
 	}
 	requestBuilder := &DefaultPredictionRequestBuilder{}
-	pods := []schedulingtypes.Endpoint{
-		fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
+	pods := []*fwkdl.EndpointMetadata{
+		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-		}, nil),
-		fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
+		},
+		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod2"},
-		}, nil),
+		},
 	}
 	prompts := []string{"prompt1", "prompt2"}
 	generatedTokenCounts := []int{1, 1}
@@ -73,10 +72,10 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 		{KVCacheUsagePercent: 0.5},
 	}
 	requestBuilder := &DefaultPredictionRequestBuilder{}
-	pods := []schedulingtypes.Endpoint{
-		fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
+	pods := []*fwkdl.EndpointMetadata{
+		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-		}, nil),
+		},
 	}
 	prompts := []string{"prompt1"}
 	generatedTokenCounts := []int{1}
@@ -92,10 +91,10 @@ func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 	mockPredictor := &mockPredictor{}
 	metricsStates := []*fwkdl.Metrics{{}}
 	requestBuilder := &DefaultPredictionRequestBuilder{}
-	pods := []schedulingtypes.Endpoint{
-		fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
+	pods := []*fwkdl.EndpointMetadata{
+		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-		}, nil),
+		},
 	}
 	prompts := []string{"prompt1", "prompt2"} // Mismatch length
 	generatedTokenCounts := []int{1}
@@ -112,10 +111,10 @@ func TestBulkPredictWithMetrics_NilMetricsState(t *testing.T) {
 	mockPredictor := &mockPredictor{}
 	metricsStates := []*fwkdl.Metrics{nil} // Nil metrics state
 	requestBuilder := &DefaultPredictionRequestBuilder{}
-	pods := []schedulingtypes.Endpoint{
-		fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
+	pods := []*fwkdl.EndpointMetadata{
+		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-		}, nil),
+		},
 	}
 	prompts := []string{"prompt1"}
 	generatedTokenCounts := []int{1}
