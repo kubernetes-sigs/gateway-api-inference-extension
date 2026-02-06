@@ -31,6 +31,10 @@ import (
 const nilString = "<nil>"
 
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
+type RequestObjectiveSpec struct {
+	Spec v1alpha2.InferenceObjectiveSpec
+}
+
 type LLMRequest struct {
 	// RequestId is the Envoy generated Id for the request being processed
 	RequestId string
@@ -42,7 +46,7 @@ type LLMRequest struct {
 	Headers map[string]string
 
 	// Request Objective
-	InferenceObjectiveSpec v1alpha2.InferenceObjectiveSpec
+	ObjectiveSpec RequestObjectiveSpec
 }
 
 func (r *LLMRequest) String() string {
