@@ -27,7 +27,6 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
@@ -68,7 +67,6 @@ func processPreRequestForLatencyPrediction(
 	predictor latencypredictor.PredictorInterface,
 	requestBuilder PredictionRequestBuilder,
 	predictedLatencyCtx *predictedLatencyCtx,
-	pod framework.Endpoint,
 ) error {
 	logger := log.FromContext(ctx)
 
@@ -82,12 +80,13 @@ func processPreRequestForLatencyPrediction(
 		return err
 	}
 
-	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[pod.GetMetadata().NamespacedName.Name]
+	targetEndpointMetadata := predictedLatencyCtx.targetMetadata
+	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
 
 	// Build prediction request using the builder (ensures pod type is included for P/D)
 	in := requestBuilder.BuildPredictionRequest(
 		ctx,
-		pod,
+		targetEndpointMetadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
 		0, // NumTokensGenerated is 0 for pre-request TTFT prediction
@@ -124,7 +123,6 @@ func processFirstTokenForLatencyPrediction(
 	streamingMode bool,
 	requestBuilder PredictionRequestBuilder,
 	predictedLatencyCtx *predictedLatencyCtx,
-	pod framework.Endpoint,
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,
@@ -140,12 +138,13 @@ func processFirstTokenForLatencyPrediction(
 		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
 		return
 	}
-	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[pod.GetMetadata().NamespacedName.Name]
+	targetEndpointMetadata := predictedLatencyCtx.targetMetadata
+	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
 	logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "prefixCacheScore", prefixCacheScore)
-	recordTTFTTrainingData(ctx, predictor, requestBuilder, predictedLatencyCtx, m, pod, now, prefixCacheScore)
+	recordTTFTTrainingData(ctx, predictor, requestBuilder, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
 
 	if streamingMode {
-		predictFirstTPOT(ctx, predictor, requestBuilder, predictedLatencyCtx, pod)
+		predictFirstTPOT(ctx, predictor, requestBuilder, predictedLatencyCtx, targetEndpointMetadata)
 	}
 
 	// Advance timestamp
@@ -169,7 +168,7 @@ func recordTTFTTrainingData(
 	requestBuilder PredictionRequestBuilder,
 	predictedLatencyCtx *predictedLatencyCtx,
 	m *fwkdl.Metrics,
-	pod framework.Endpoint,
+	targetEndpointMetadata *fwkdl.EndpointMetadata,
 	now time.Time,
 	prefixCacheScore float64,
 ) {
@@ -177,7 +176,7 @@ func recordTTFTTrainingData(
 	// Build training entry using the builder
 	entry := requestBuilder.BuildTrainingEntry(
 		ctx,
-		pod,
+		targetEndpointMetadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
 		predictedLatencyCtx.ttft,
@@ -196,7 +195,7 @@ func predictFirstTPOT(
 	predictor latencypredictor.PredictorInterface,
 	requestBuilder PredictionRequestBuilder,
 	predictedLatencyCtx *predictedLatencyCtx,
-	pod framework.Endpoint,
+	targetEndpointMetadata *fwkdl.EndpointMetadata,
 ) {
 	logger := log.FromContext(ctx)
 	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
@@ -209,7 +208,7 @@ func predictFirstTPOT(
 	// Build prediction request using the builder (ensures pod type is included for P/D)
 	in := requestBuilder.BuildPredictionRequest(
 		ctx,
-		pod,
+		targetEndpointMetadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
 		predictedLatencyCtx.generatedTokenCount,
@@ -236,7 +235,7 @@ func processTokenForLatencyPrediction(
 	predictor latencypredictor.PredictorInterface,
 	requestBuilder PredictionRequestBuilder,
 	predictedLatencyCtx *predictedLatencyCtx,
-	pod framework.Endpoint,
+	targetEndpointMetadata *fwkdl.EndpointMetadata,
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,
@@ -269,7 +268,7 @@ func processTokenForLatencyPrediction(
 	// Record actual TPOT using builder
 	entry := requestBuilder.BuildTrainingEntry(
 		ctx,
-		pod,
+		targetEndpointMetadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
 		0, // TTFT not recorded for TPOT
@@ -287,7 +286,7 @@ func processTokenForLatencyPrediction(
 		// Build prediction request using the builder (ensures pod type is included for P/D)
 		in := requestBuilder.BuildPredictionRequest(
 			ctx,
-			pod,
+			targetEndpointMetadata,
 			m,
 			predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
 			predictedLatencyCtx.generatedTokenCount,
@@ -323,7 +322,7 @@ func bulkPredictWithMetrics(
 	predictor latencypredictor.PredictorInterface,
 	metricsStates []*fwkdl.Metrics,
 	requestBuilder PredictionRequestBuilder,
-	pods []framework.Endpoint,
+	targetEndpointsMetadatas []*fwkdl.EndpointMetadata,
 	prompts []string,
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
@@ -331,9 +330,9 @@ func bulkPredictWithMetrics(
 	logger := log.FromContext(ctx)
 
 	// Validate input lengths
-	if len(pods) != len(metricsStates) || len(metricsStates) != len(prompts) || len(prompts) != len(generatedTokenCounts) || len(generatedTokenCounts) != len(prefixCacheScores) {
-		return nil, fmt.Errorf("input slice lengths must match: pods=%d, metrics=%d, prompts=%d, tokenCounts=%d, prefixScores=%d",
-			len(pods), len(metricsStates), len(prompts), len(generatedTokenCounts), len(prefixCacheScores))
+	if len(targetEndpointsMetadatas) != len(metricsStates) || len(metricsStates) != len(prompts) || len(prompts) != len(generatedTokenCounts) || len(generatedTokenCounts) != len(prefixCacheScores) {
+		return nil, fmt.Errorf("input slice lengths must match: endpoints=%d, metrics=%d, prompts=%d, tokenCounts=%d, prefixScores=%d",
+			len(targetEndpointsMetadatas), len(metricsStates), len(prompts), len(generatedTokenCounts), len(prefixCacheScores))
 	}
 
 	if len(metricsStates) == 0 {
@@ -347,12 +346,19 @@ func bulkPredictWithMetrics(
 		}
 	}
 
+	// Validate that no endpoint metadata is nil
+	for i, endpointMetadata := range targetEndpointsMetadatas {
+		if endpointMetadata == nil {
+			return nil, fmt.Errorf("endpoint metadata at index %d cannot be nil", i)
+		}
+	}
+
 	// Build bulk prediction requests using the builder
 	bulkRequests := make([]latencypredictor.PredictionRequest, len(metricsStates))
 	for i := range metricsStates {
 		bulkRequests[i] = requestBuilder.BuildPredictionRequest(
 			ctx,
-			pods[i],
+			targetEndpointsMetadatas[i],
 			metricsStates[i],
 			prompts[i],
 			generatedTokenCounts[i],
