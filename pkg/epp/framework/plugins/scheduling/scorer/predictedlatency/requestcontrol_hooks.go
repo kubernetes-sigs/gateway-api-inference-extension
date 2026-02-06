@@ -100,7 +100,8 @@ func (s *PredictedLatency) GetAvgTPOTSLO(request *schedulingtypes.LLMRequest) (f
 }
 
 // GetSchedulingResult returns the scheduling result for a request.
-// Used by wrappers (e.g., P/D scorer) to access profile results for cleanup.
+// Used by wrappers (e.g., P/D scorer) to access profile results and scheduling information
+// for custom hook logic and cleanup.
 func (s *PredictedLatency) GetSchedulingResult(request *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
 	ctx, err := s.getPredictedLatencyContextForRequest(request)
 	if err != nil {
@@ -117,17 +118,6 @@ func (s *PredictedLatency) setPredictedLatencyContextForRequest(request *schedul
 func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
 	s.sloContextStore.Delete(id)
-}
-
-// GetSchedulingResultForRequest returns the scheduling result for a request.
-// This is exposed to allow wrapper implementations (e.g., P/D-aware routers)
-// to access scheduling information for custom hook logic.
-func (s *PredictedLatency) GetSchedulingResultForRequest(request *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
-	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		return nil, err
-	}
-	return predictedLatencyCtx.schedulingResult, nil
 }
 
 // GetLastSeenMetricsForRequest returns the last seen metrics for all profiles in a request.
