@@ -30,11 +30,12 @@ import (
 
 const nilString = "<nil>"
 
-// LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
+// RequestObjectives represents the scheduling objectives parsed from the InferenceObjectiveSpec, to be used in scheduling decisions.
 type RequestObjectives struct {
 	Spec v1alpha2.InferenceObjectiveSpec
 }
 
+// LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
 type LLMRequest struct {
 	// RequestId is the Envoy generated Id for the request being processed
 	RequestId string
