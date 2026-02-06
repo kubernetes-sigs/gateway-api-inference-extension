@@ -85,35 +85,35 @@ func TestEndpointDataSourceExpectedEventDataType(t *testing.T) {
 
 // setupDataSourceWithExtractor creates a data source and adds an extractor to it.
 // Uses require to fail fast if setup fails.
-func setupDataSourceWithExtractor(t *testing.T, dsName, extractorName string) (*EndpointDataSource, *mocks.MockEndpointExtractor) {
+func setupDataSourceWithExtractor(t *testing.T, extractorName string) (*EndpointDataSource, *mocks.MockEndpointExtractor) {
 	t.Helper()
-	ds := NewEndpointDataSource(dsName)
+	ds := NewEndpointDataSource("test-source")
 	extractor := mocks.NewMockEndpointExtractor(extractorName)
 	err := ds.AddExtractor(extractor)
 	require.NoError(t, err, "Failed to add extractor during setup")
 	return ds, extractor
 }
 
-// createTestPod creates a test Pod with the given name and namespace
-func createTestPod(name, namespace, ip string) *corev1.Pod {
+// createTestPod creates a test Pod
+func createTestPod() *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:      "test-pod",
+			Namespace: "default",
 		},
 		Status: corev1.PodStatus{
-			PodIP: ip,
+			PodIP: "10.0.0.1",
 		},
 	}
 }
 
-// createTestEndpoint creates a test endpoint with the given name and namespace
-func createTestEndpoint(name, namespace string) fwkdl.Endpoint {
+// createTestEndpoint creates a test endpoint
+func createTestEndpoint() fwkdl.Endpoint {
 	return fwkdl.NewEndpoint(
 		&fwkdl.EndpointMetadata{
 			NamespacedName: types.NamespacedName{
-				Name:      name,
-				Namespace: namespace,
+				Name:      "test-pod",
+				Namespace: "default",
 			},
 		},
 		nil,
@@ -121,7 +121,7 @@ func createTestEndpoint(name, namespace string) fwkdl.Endpoint {
 }
 
 func TestEndpointDataSourceAddExtractorSuccess(t *testing.T) {
-	ds, extractor := setupDataSourceWithExtractor(t, "test-source", "test-extractor")
+	ds, extractor := setupDataSourceWithExtractor(t, "test-extractor")
 
 	// Verify extractor is in the list
 	extractors := ds.Extractors()
@@ -172,7 +172,7 @@ func (w *wrongTypeExtractor) Extract(ctx context.Context, data any, ep fwkdl.End
 }
 
 func TestEndpointDataSourceAddExtractorDuplicate(t *testing.T) {
-	ds, extractor := setupDataSourceWithExtractor(t, "test-source", "test-extractor")
+	ds, extractor := setupDataSourceWithExtractor(t, "test-extractor")
 
 	// Try to add the same extractor again - should fail
 	err := ds.AddExtractor(extractor)
@@ -185,11 +185,11 @@ func TestEndpointDataSourceAddExtractorDuplicate(t *testing.T) {
 }
 
 func TestEndpointDataSourceNotifyAddEvent(t *testing.T) {
-	ds, extractor := setupDataSourceWithExtractor(t, "test-source", "test-extractor")
+	ds, extractor := setupDataSourceWithExtractor(t, "test-extractor")
 
 	// Create test Pod and endpoint
-	pod := createTestPod("test-pod", "default", "10.0.0.1")
-	endpoint := createTestEndpoint("test-pod", "default")
+	pod := createTestPod()
+	endpoint := createTestEndpoint()
 
 	// Create change notification
 	event := fwkdl.ChangeNotification{
@@ -214,14 +214,14 @@ func TestEndpointDataSourceNotifyAddEvent(t *testing.T) {
 }
 
 func TestEndpointDataSourceNotifyDeleteEvent(t *testing.T) {
-	ds, extractor := setupDataSourceWithExtractor(t, "test-source", "test-extractor")
+	ds, extractor := setupDataSourceWithExtractor(t, "test-extractor")
 
 	// Create test Pod with deletion timestamp
 	now := metav1.Now()
-	pod := createTestPod("test-pod", "default", "10.0.0.1")
+	pod := createTestPod()
 	pod.DeletionTimestamp = &now
 
-	endpoint := createTestEndpoint("test-pod", "default")
+	endpoint := createTestEndpoint()
 
 	// Create delete notification
 	event := fwkdl.ChangeNotification{
@@ -246,7 +246,7 @@ func TestEndpointDataSourceNotifyDeleteEvent(t *testing.T) {
 }
 
 func TestEndpointDataSourceNotifyMultipleExtractors(t *testing.T) {
-	ds, extractor1 := setupDataSourceWithExtractor(t, "test-source", "extractor-1")
+	ds, extractor1 := setupDataSourceWithExtractor(t, "extractor-1")
 
 	// Add a second extractor
 	extractor2 := mocks.NewMockEndpointExtractor("extractor-2")
@@ -254,8 +254,8 @@ func TestEndpointDataSourceNotifyMultipleExtractors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create test Pod and endpoint
-	pod := createTestPod("test-pod", "default", "10.0.0.1")
-	endpoint := createTestEndpoint("test-pod", "default")
+	pod := createTestPod()
+	endpoint := createTestEndpoint()
 
 	// Create change notification
 	event := fwkdl.ChangeNotification{
@@ -282,7 +282,7 @@ func TestEndpointDataSourceNotifyMultipleExtractors(t *testing.T) {
 }
 
 func TestEndpointDataSourceNotifyExtractorError(t *testing.T) {
-	ds, extractor1 := setupDataSourceWithExtractor(t, "test-source", "extractor-1")
+	ds, extractor1 := setupDataSourceWithExtractor(t, "extractor-1")
 
 	// Add a second extractor that will succeed
 	extractor2 := mocks.NewMockEndpointExtractor("extractor-2")
@@ -294,8 +294,8 @@ func TestEndpointDataSourceNotifyExtractorError(t *testing.T) {
 	extractor1.SetExtractError(expectedErr)
 
 	// Create test Pod and endpoint
-	pod := createTestPod("test-pod", "default", "10.0.0.1")
-	endpoint := createTestEndpoint("test-pod", "default")
+	pod := createTestPod()
+	endpoint := createTestEndpoint()
 
 	// Create change notification
 	event := fwkdl.ChangeNotification{

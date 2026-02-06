@@ -140,17 +140,17 @@ func (m *MockEndpointFactory) ReleaseEndpoint(ep fwkdl.Endpoint) {
 }
 
 // Helper function to create a test pod
-func createNotificationTestPod(name, namespace, ip string) *corev1.Pod {
+func createNotificationTestPod() *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:      "test-pod",
+			Namespace: "default",
 			Labels: map[string]string{
 				"app": "test-model",
 			},
 		},
 		Status: corev1.PodStatus{
-			PodIP: ip,
+			PodIP: "10.0.0.1",
 		},
 	}
 }
@@ -197,7 +197,7 @@ func TestDatastorePodUpdateOrAddIfNotExistNotifiesObserver(t *testing.T) {
 	ds, mockExtractor := setupDatastoreWithObserver(t, createNotificationTestPool())
 
 	// Create a test pod
-	testPod := createNotificationTestPod("test-pod", "default", "10.0.0.1")
+	testPod := createNotificationTestPod()
 
 	// Call PodUpdateOrAddIfNotExist
 	isExisting := ds.PodUpdateOrAddIfNotExist(testPod)
@@ -231,14 +231,14 @@ func TestDatastorePodUpdateOrAddIfNotExistNotifiesObserverOnUpdate(t *testing.T)
 	ds, mockExtractor := setupDatastoreWithObserver(t, createNotificationTestPool())
 
 	// Add pod first time
-	testPod := createNotificationTestPod("test-pod", "default", "10.0.0.1")
+	testPod := createNotificationTestPod()
 	ds.PodUpdateOrAddIfNotExist(testPod)
 
 	// Clear extractor calls
 	mockExtractor.Reset()
 
 	// Update the pod (same pod, potentially different state)
-	updatedPod := createNotificationTestPod("test-pod", "default", "10.0.0.1")
+	updatedPod := createNotificationTestPod()
 	updatedPod.Labels["version"] = "v2"
 	isExisting := ds.PodUpdateOrAddIfNotExist(updatedPod)
 
@@ -258,7 +258,7 @@ func TestDatastorePodDeleteNotifiesObserver(t *testing.T) {
 	ds, mockExtractor := setupDatastoreWithObserver(t, createNotificationTestPool())
 
 	// Add a pod first
-	testPod := createNotificationTestPod("test-pod", "default", "10.0.0.1")
+	testPod := createNotificationTestPod()
 	ds.PodUpdateOrAddIfNotExist(testPod)
 
 	// Clear extractor calls from the add operation
@@ -302,7 +302,7 @@ func TestDatastorePodDeleteMultipleEndpoints(t *testing.T) {
 	ds, mockExtractor := setupDatastoreWithObserver(t, pool)
 
 	// Add a pod (will create 2 endpoints due to 2 target ports)
-	testPod := createNotificationTestPod("test-pod", "default", "10.0.0.1")
+	testPod := createNotificationTestPod()
 	ds.PodUpdateOrAddIfNotExist(testPod)
 
 	// Clear extractor calls from the add operations
@@ -342,7 +342,7 @@ func TestDatastoreNoObserverRegistered(t *testing.T) {
 	require.NoError(t, err, "Failed to set pool")
 
 	// Add a pod without registering an observer - should not panic
-	testPod := createNotificationTestPod("test-pod", "default", "10.0.0.1")
+	testPod := createNotificationTestPod()
 	assert.NotPanics(t, func() {
 		ds.PodUpdateOrAddIfNotExist(testPod)
 	}, "Should not panic when no observer is registered")
