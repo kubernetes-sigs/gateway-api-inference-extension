@@ -112,14 +112,3 @@ provider:
 experimentalHttpRoute:
   enabled: false # a flag to indicate whether to create the httproute as part of the chart or not.
   inferenceGatewayName: inference-gateway
-
-# DEPRECATED and will be removed in v1.3. Instead, use `provider.istio.*`.
-istio:
-  destinationRule:
-    # Provide a way to override the default calculated host
-    host: ""
-    # Optional: Enables customization of the traffic policy
-    trafficPolicy: {}
-      # connectionPool:
-      #   http:
-      #     maxRequestsPerConnection: 256000
