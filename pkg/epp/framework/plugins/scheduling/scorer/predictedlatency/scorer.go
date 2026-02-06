@@ -69,11 +69,6 @@ type Config struct {
 	ContextTTL                time.Duration `json:"contextTTL,omitempty"`
 	SelectionMode             string        `json:"selectionMode,omitempty"`
 	StreamingMode             bool          `json:"streamingMode,omitempty"`
-
-	// RequestBuilder allows customization of prediction and training request construction.
-	// This field is not serialized and must be set programmatically.
-	// If nil, defaults to DefaultPredictionRequestBuilder.
-	RequestBuilder PredictionRequestBuilder `json:"-"`
 }
 
 var DefaultConfig = Config{
@@ -103,11 +98,6 @@ func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle 
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal config for PredictedLatency: %w", err)
 		}
-	}
-
-	// Use provided builder or default to DefaultPredictionRequestBuilder
-	if parameters.RequestBuilder == nil {
-		parameters.RequestBuilder = &DefaultPredictionRequestBuilder{}
 	}
 
 	if err := parameters.validate(); err != nil {
@@ -172,16 +162,10 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		strategy = headroomStrategyLeast
 	}
 
-	// Ensure requestBuilder is set
-	requestBuilder := config.RequestBuilder
-	if requestBuilder == nil {
-		requestBuilder = &DefaultPredictionRequestBuilder{}
-	}
-
 	predictedLatency := &PredictedLatency{
 		typedName:        plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
 		latencypredictor: predictor,
-		requestBuilder:   requestBuilder,
+		requestBuilder:   &DefaultPredictionRequestBuilder{}, // Default, can be customized via SetRequestBuilder
 		// runningRequestLists is a sync.Map and needs no initialization
 		headroomStrategy: strategy,
 		config:           config,
@@ -228,6 +212,16 @@ func (s *PredictedLatency) Category() framework.ScorerCategory {
 func (s *PredictedLatency) WithName(name string) *PredictedLatency {
 	s.typedName.Name = name
 	return s
+}
+
+// SetRequestBuilder sets a custom prediction request builder.
+// This allows external packages (e.g., llm-d-inference-scheduler) to customize
+// how prediction and training requests are constructed, for example to add
+// pod type information for disaggregated serving scenarios.
+func (s *PredictedLatency) SetRequestBuilder(builder PredictionRequestBuilder) {
+	if builder != nil {
+		s.requestBuilder = builder
+	}
 }
 
 func (s *PredictedLatency) epsilonGreedyAffinityGate(
