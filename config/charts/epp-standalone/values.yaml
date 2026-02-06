@@ -296,11 +296,22 @@ inferenceExtension:
 
   tracing:
     enabled: false
+    otelExporterEndpoint: "http://localhost:4317"
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "0.1"
 
   latencyPredictor:
     # common latencyPredictor setting exists in config/charts/inference-extension/values.yaml
     enabled: false
 
+jaeger:
+  enabled: false
+  storage:
+    type: memory
+  provisionDataStore:
+    cassandra: false
+    elasticsearch: false
 # Options: ["gke"]
 provider:
   name: none

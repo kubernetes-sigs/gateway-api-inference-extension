@@ -62,6 +62,7 @@ inferenceExtension:
       extraLabels: {}
   tracing:
     enabled: false
+    # OpenTelemetry collector endpoint
     otelExporterEndpoint: "http://localhost:4317"
     sampling:
       sampler: "parentbased_traceidratio"

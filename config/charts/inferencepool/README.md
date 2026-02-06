@@ -294,8 +294,41 @@ inferenceExtension:
       sampler: "parentbased_traceidratio"
       samplerArg: "0.1"
 ```
-Make sure that the `otelExporterEndpoint` points to your OpenTelemetry collector endpoint. 
+Make sure that the `otelExporterEndpoint` points to your OpenTelemetry collector endpoint.
 Current only the `parentbased_traceidratio` sampler is supported. You can adjust the base sampling ratio using the `samplerArg` (e.g., 0.1 means 10% of traces will be sampled).
+
+To use Jaeger for visualization, deploy Jaeger separately (for example via the `epp-standalone` chart) and set `otelExporterEndpoint` to the collector OTLP endpoint.
+
+Example: Deploy Jaeger via `epp-standalone` and send traces from `inferencepool`:
+
+1. Deploy `epp-standalone` with Jaeger enabled (this deploys a Jaeger collector service named `<release>-jaeger-collector`):
+
+```bash
+helm dependency update ./config/charts/epp-standalone
+helm install epp-observability ./config/charts/epp-standalone \
+  --set jaeger.enabled=true
+```
+
+2. Configure `inferencepool` to export traces to that Jaeger collector OTLP gRPC endpoint:
+
+```yaml
+inferenceExtension:
+  tracing:
+    enabled: true
+    otelExporterEndpoint: "http://epp-observability-jaeger-collector.default.svc.cluster.local:4317"
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "1.0"
+```
+
+3. Verify the collector service exists and (optionally) access Jaeger UI:
+
+```bash
+kubectl get svc epp-observability-jaeger-collector
+kubectl port-forward svc/epp-observability-jaeger-query 16686:16686
+```
+
+Then open `http://localhost:16686` and search for service name `gateway-api-inference-extension`.
 
 ## Notes
 
