@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strings"
 
+	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -39,6 +40,9 @@ type LLMRequest struct {
 	Body *LLMRequestBody
 	// Headers is a map of the request headers.
 	Headers map[string]string
+
+	// Request Objective
+	InferenceObjectiveSpec v1alpha2.InferenceObjectiveSpec
 }
 
 func (r *LLMRequest) String() string {

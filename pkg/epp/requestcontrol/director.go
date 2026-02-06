@@ -152,10 +152,11 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		TargetModel: reqCtx.TargetModelName,
-		Body:        requestBody,
-		Headers:     reqCtx.Request.Headers,
+		RequestId:              reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		TargetModel:            reqCtx.TargetModelName,
+		Body:                   requestBody,
+		Headers:                reqCtx.Request.Headers,
+		InferenceObjectiveSpec: infObjective.Spec,
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
@@ -183,7 +184,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	// Run admit request plugins
-	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods, infObjective.Spec.Priority) {
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
 		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "request cannot be admitted"}
 	}
@@ -356,11 +357,11 @@ func (d *Director) runPrepareDataPlugins(ctx context.Context,
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
-	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint, priority *int) bool {
+	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) bool {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.admissionPlugins {
 		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
-		if denyReason := plugin.AdmitRequest(ctx, request, endpoints, priority); denyReason != nil {
+		if denyReason := plugin.AdmitRequest(ctx, request, endpoints); denyReason != nil {
 			loggerDebug.Info("AdmitRequest plugin denied the request", "plugin", plugin.TypedName(), "reason", denyReason.Error())
 			return false
 		}

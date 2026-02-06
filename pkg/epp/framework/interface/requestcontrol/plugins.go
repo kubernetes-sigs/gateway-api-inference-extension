@@ -80,5 +80,5 @@ type AdmissionPlugin interface {
 	plugin.Plugin
 	// AdmitRequest returns the denial reason, wrapped as error if the request is denied.
 	// If the request is allowed, it returns nil.
-	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint, priority *int) error
+	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
 }
