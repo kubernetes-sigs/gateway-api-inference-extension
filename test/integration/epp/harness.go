@@ -392,7 +392,7 @@ func (h *TestHarness) WaitForSync(expectedPods int, checkModelObjective string) 
 	require.Eventually(h.t, func() bool {
 		// If we are NOT in standalone mode without CRDs, we must wait for the Pool CRD to sync.
 		// In standaloneCfg mode, there is no CRD controller, so this check is skipped.
-		if !(h.Mode == ModeStandalone && h.StandaloneConfig.strategy == StrategyNoCRD) && !h.Datastore.PoolHasSynced() {
+		if (h.Mode != ModeStandalone || h.StandaloneConfig.strategy != StrategyNoCRD) && !h.Datastore.PoolHasSynced() {
 			return false
 		}
 
@@ -402,7 +402,7 @@ func (h *TestHarness) WaitForSync(expectedPods int, checkModelObjective string) 
 		// In standalone mode without CRD, Objectives are not CRDs, so we skip checking the Objective store unless we add logic to mock
 		// that too.
 		// For now, we skip objective verification in standalone mode without CRD.
-		if !(h.Mode == ModeStandalone && h.StandaloneConfig.strategy == StrategyNoCRD) && checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
+		if (h.Mode != ModeStandalone || h.StandaloneConfig.strategy != StrategyNoCRD) && checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
 			return false
 		}
 		return true
