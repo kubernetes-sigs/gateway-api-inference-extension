@@ -225,12 +225,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	refreshLastSeenMetrics(ctx, predictedLatencyCtx)
 	t.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	// Create endpoint wrapper with refreshed metrics (same pattern as ResponseStreaming/ResponseComplete)
-	podWrapper := fwkdl.NewEndpoint(
-		targetMetadata,
-		predictedLatencyCtx.lastSeenMetrics[schedulingResult.PrimaryProfileName],
-	)
-	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx, podWrapper); err != nil {
+	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "Process PreRequest in latencypredictor failed")
 	}
 }
@@ -262,16 +257,10 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 		return
 	}
 
-	// Create a schedulingtypes.Endpoint wrapper for the metadata
-	podWrapper := fwkdl.NewEndpoint(
-		targetMetadata,
-		predictedLatencyCtx.lastSeenMetrics[predictedLatencyCtx.schedulingResult.PrimaryProfileName],
-	)
-
 	if predictedLatencyCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
@@ -295,12 +284,7 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	}
 	now := time.Now()
 	if !t.config.StreamingMode {
-		// Create a schedulingtypes.Endpoint wrapper for non-streaming responses
-		podWrapper := fwkdl.NewEndpoint(
-			targetMetadata,
-			predictedLatencyCtx.lastSeenMetrics[predictedLatencyCtx.schedulingResult.PrimaryProfileName],
-		)
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, podWrapper, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if predictedLatencyCtx.ttft > 0 {

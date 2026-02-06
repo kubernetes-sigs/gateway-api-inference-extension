@@ -22,15 +22,15 @@ import (
 	"strings"
 	"time"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
 type headroomStrategy string
 
 type choice struct {
-	endpointName schedulingtypes.Endpoint
+	endpointName fwksched.Endpoint
 	weight       int
 }
 
@@ -71,8 +71,8 @@ type PredictionRequestBuilder interface {
 	// BuildPredictionRequest constructs a prediction request for a pod
 	BuildPredictionRequest(
 		ctx context.Context,
-		pod schedulingtypes.Endpoint,
-		metrics *datalayer.Metrics,
+		targetEndpointMetadata *fwkdl.EndpointMetadata,
+		metrics *fwkdl.Metrics,
 		prompt string,
 		generatedTokens int,
 		prefixCacheScore float64,
@@ -81,8 +81,8 @@ type PredictionRequestBuilder interface {
 	// BuildTrainingEntry constructs a training entry for a pod
 	BuildTrainingEntry(
 		ctx context.Context,
-		pod schedulingtypes.Endpoint,
-		metrics *datalayer.Metrics,
+		targetEndpointMetadata *fwkdl.EndpointMetadata,
+		metrics *fwkdl.Metrics,
 		prompt string,
 		actualTTFT float64,
 		actualTPOT float64,
@@ -99,8 +99,8 @@ type DefaultPredictionRequestBuilder struct{}
 // BuildPredictionRequest constructs a standard prediction request without pod type information
 func (b *DefaultPredictionRequestBuilder) BuildPredictionRequest(
 	ctx context.Context,
-	pod schedulingtypes.Endpoint,
-	metrics *datalayer.Metrics,
+	targetEndpointMetadata *fwkdl.EndpointMetadata,
+	metrics *fwkdl.Metrics,
 	prompt string,
 	generatedTokens int,
 	prefixCacheScore float64,
@@ -119,8 +119,8 @@ func (b *DefaultPredictionRequestBuilder) BuildPredictionRequest(
 // BuildTrainingEntry constructs a standard training entry without pod type information
 func (b *DefaultPredictionRequestBuilder) BuildTrainingEntry(
 	ctx context.Context,
-	pod schedulingtypes.Endpoint,
-	metrics *datalayer.Metrics,
+	targetEndpointMetadata *fwkdl.EndpointMetadata,
+	metrics *fwkdl.Metrics,
 	prompt string,
 	actualTTFT float64,
 	actualTPOT float64,
