@@ -128,7 +128,8 @@ type TestHarness struct {
 	Namespace string
 
 	// --- Config State ---
-	StandaloneMode bool
+	Mode             runMode
+	StandaloneConfig *standaloneConfig
 
 	Mgr          ctrl.Manager
 	ServerRunner *server.ExtProcServerRunner
@@ -203,7 +204,7 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 
 	// Configure Datastore based on mode.
 	// We disable periodic resync (0) to ensure deterministic test behavior.
-	if config.StandaloneMode {
+	if config.mode == ModeStandalone && config.standaloneCfg.strategy == StrategyNoCRD {
 		// Disable CRD watching for standaloneCfg mode.
 		runner.ControllerCfg = server.NewControllerConfig(false)
 
@@ -279,15 +280,17 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 	)
 
 	h := &TestHarness{
-		t:              t,
-		ctx:            serverCtx,
-		Namespace:      nsName,
-		StandaloneMode: config.StandaloneMode,
-		Mgr:            mgr,
-		ServerRunner:   runner,
-		Client:         client,
-		Datastore:      runner.Datastore,
-		grpcConn:       conn,
+		t:                t,
+		ctx:              serverCtx,
+		Namespace:        nsName,
+		Mode:             config.mode,
+		StandaloneConfig: config.standaloneCfg,
+
+		Mgr:          mgr,
+		ServerRunner: runner,
+		Client:       client,
+		Datastore:    runner.Datastore,
+		grpcConn:     conn,
 	}
 
 	// 7. Register Cleanup
@@ -387,25 +390,26 @@ func (h *TestHarness) WaitForReadyPodsMetric(expectedCount int) {
 func (h *TestHarness) WaitForSync(expectedPods int, checkModelObjective string) *TestHarness {
 	h.t.Helper()
 	require.Eventually(h.t, func() bool {
-		// If we are NOT in standalone mode, we must wait for the Pool CRD to sync.
+		// If we are NOT in standalone mode without CRDs, we must wait for the Pool CRD to sync.
 		// In standaloneCfg mode, there is no CRD controller, so this check is skipped.
-		if !h.StandaloneMode && !h.Datastore.PoolHasSynced() {
+		if !(h.Mode == ModeStandalone && h.StandaloneConfig.strategy == StrategyNoCRD) && !h.Datastore.PoolHasSynced() {
 			return false
 		}
 
 		if len(h.Datastore.PodList(datastore.AllPodsPredicate)) != expectedPods {
 			return false
 		}
-		// In standaloneCfg mode, Objectives are not CRDs, so we skip checking the Objective store unless we add logic to mock
+		// In standalone mode without CRD, Objectives are not CRDs, so we skip checking the Objective store unless we add logic to mock
 		// that too.
-		// For now, we skip objective verification in standaloneCfg.
-		if !h.StandaloneMode && checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
+		// For now, we skip objective verification in standalone mode without CRD.
+		if !(h.Mode == ModeStandalone && h.StandaloneConfig.strategy == StrategyNoCRD) && checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
 			return false
 		}
 		return true
 	}, 10*time.Second, 50*time.Millisecond,
 		"Datastore sync timed out.\n- mode: standaloneCfg=%v\n- PoolSynced: %v\n- Pods Found: %d (Expected: %d)",
-		h.StandaloneMode,
+		h.Mode,
+		h.StandaloneConfig,
 		h.Datastore.PoolHasSynced(),
 		len(h.Datastore.PodList(datastore.AllPodsPredicate)),
 		expectedPods,
