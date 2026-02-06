@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"strings"
 
-	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -32,7 +31,7 @@ const nilString = "<nil>"
 
 // RequestObjectives represents the scheduling objectives parsed from the InferenceObjectiveSpec, to be used in scheduling decisions.
 type RequestObjectives struct {
-	Spec v1alpha2.InferenceObjectiveSpec
+	Priority int
 }
 
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
@@ -45,7 +44,6 @@ type LLMRequest struct {
 	Body *LLMRequestBody
 	// Headers is a map of the request headers.
 	Headers map[string]string
-
 	// Request Objective
 	Objectives RequestObjectives
 }

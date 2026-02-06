@@ -149,7 +149,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 
 	// Parse inference objective.
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
-	requestObjectives := fwksched.RequestObjectives{Spec: infObjective.Spec}
+	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
