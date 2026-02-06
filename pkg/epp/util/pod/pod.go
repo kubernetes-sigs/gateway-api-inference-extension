@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-const PortDiscoveryAnnotationName = "inference.networking.x-k8s.io/port-discovery"
+const activePortsAnnotation = "inference.networking.k8s.io/active-ports"
 
 func IsPodReady(pod *corev1.Pod) bool {
 	if !pod.DeletionTimestamp.IsZero() {
@@ -41,11 +41,11 @@ func IsPodReady(pod *corev1.Pod) bool {
 	return false
 }
 
-func ExtractInferencePortsDeclaration(pod *corev1.Pod) (sets.Set[int], bool) {
+func ExtractActivePorts(pod *corev1.Pod) (sets.Set[int], bool) {
 	inferencePorts := sets.New[int]()
 	annotations := pod.GetAnnotations()
-	if portDiscoveryAnnotation, ok := annotations[PortDiscoveryAnnotationName]; ok {
-		portStrs := strings.Split(portDiscoveryAnnotation, ",")
+	if portsAnnotation, ok := annotations[activePortsAnnotation]; ok {
+		portStrs := strings.Split(portsAnnotation, ",")
 		for _, portStr := range portStrs {
 			var portNum int
 			_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)

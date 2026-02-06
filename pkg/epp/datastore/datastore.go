@@ -271,9 +271,9 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*fwkdl.EndpointMetadata{}
-	portsOnAnnotation, hasDynamicPorts := podutil.ExtractInferencePortsDeclaration(pod)
+	activePorts, activePortsDeclared := podutil.ExtractActivePorts(pod)
 	for idx, port := range ds.pool.TargetPorts {
-		if hasDynamicPorts && !portsOnAnnotation.Has(port) {
+		if activePortsDeclared && !activePorts.Has(port) {
 			continue
 		}
 		metricsPort := modelServerMetricsPort
@@ -311,10 +311,10 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		ep.UpdateMetadata(endpointMetadata)
 	}
 
-	// remove virtual pods that are no longer in the pool
-	if hasDynamicPorts {
+	// remove endpoints that are no longer active in the pool
+	if activePortsDeclared {
 		for idx, port := range ds.pool.TargetPorts {
-			if portsOnAnnotation.Has(port) {
+			if activePorts.Has(port) {
 				continue
 			}
 
