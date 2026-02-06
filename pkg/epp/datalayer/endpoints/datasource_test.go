@@ -129,7 +129,6 @@ func TestEndpointDataSourceAddExtractorSuccess(t *testing.T) {
 	assert.Contains(t, extractors, extractor.TypedName().String(), "Should contain the added extractor")
 }
 
-
 func TestEndpointDataSourceAddExtractorWrongType(t *testing.T) {
 	ds := NewEndpointDataSource("test-source")
 
@@ -172,7 +171,6 @@ func (w *wrongTypeExtractor) Extract(ctx context.Context, data any, ep fwkdl.End
 	return nil
 }
 
-
 func TestEndpointDataSourceAddExtractorDuplicate(t *testing.T) {
 	ds, extractor := setupDataSourceWithExtractor(t, "test-source", "test-extractor")
 
@@ -185,7 +183,6 @@ func TestEndpointDataSourceAddExtractorDuplicate(t *testing.T) {
 	extractors := ds.Extractors()
 	assert.Len(t, extractors, 1, "Should have only one extractor")
 }
-
 
 func TestEndpointDataSourceNotifyAddEvent(t *testing.T) {
 	ds, extractor := setupDataSourceWithExtractor(t, "test-source", "test-extractor")
@@ -248,7 +245,6 @@ func TestEndpointDataSourceNotifyDeleteEvent(t *testing.T) {
 	assert.NotNil(t, call.ChangeNotification.Data.(*corev1.Pod).DeletionTimestamp, "Pod should have deletion timestamp")
 }
 
-
 func TestEndpointDataSourceNotifyMultipleExtractors(t *testing.T) {
 	ds, extractor1 := setupDataSourceWithExtractor(t, "test-source", "extractor-1")
 
@@ -275,7 +271,7 @@ func TestEndpointDataSourceNotifyMultipleExtractors(t *testing.T) {
 	// Verify both extractors were called
 	calls1 := extractor1.GetExtractCalls()
 	calls2 := extractor2.GetExtractCalls()
-	
+
 	assert.Len(t, calls1, 1, "Extractor 1 should be called once")
 	assert.Len(t, calls2, 1, "Extractor 2 should be called once")
 
@@ -318,7 +314,7 @@ func TestEndpointDataSourceNotifyExtractorError(t *testing.T) {
 	// Verify both extractors were still called despite the error
 	calls1 := extractor1.GetExtractCalls()
 	calls2 := extractor2.GetExtractCalls()
-	
+
 	assert.Len(t, calls1, 1, "Extractor 1 should be called even though it errors")
 	assert.Len(t, calls2, 1, "Extractor 2 should be called even though extractor 1 errored")
 	assert.Equal(t, calls1[0].ChangeNotification.Data, calls2[0].ChangeNotification.Data, "Both should receive same Pod data")

@@ -118,6 +118,7 @@ func (m *MockReader) List(ctx context.Context, list client.ObjectList, opts ...c
 	}
 	return nil
 }
+
 // MockEndpointFactory is a simple mock that creates real endpoints
 type MockEndpointFactory struct{}
 
@@ -211,7 +212,7 @@ func TestDatastorePodUpdateOrAddIfNotExistNotifiesObserver(t *testing.T) {
 	// Verify the notification details
 	call := calls[0]
 	assert.Equal(t, fwkdl.EventAddedOrModified, call.ChangeNotification.Type, "Event type should be AddedOrModified")
-	
+
 	// Verify the data is the pod
 	pod, ok := call.ChangeNotification.Data.(*corev1.Pod)
 	require.True(t, ok, "Event data should be *corev1.Pod")
