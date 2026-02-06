@@ -25,10 +25,36 @@ import (
 
 // ParentStatusApplyConfiguration represents a declarative configuration of the ParentStatus type for use
 // with apply.
+//
+// ParentStatus defines the observed state of InferencePool from a Parent, i.e. Gateway.
 type ParentStatusApplyConfiguration struct {
-	Conditions     []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
-	ParentRef      *ParentReferenceApplyConfiguration   `json:"parentRef,omitempty"`
-	ControllerName *apiv1.ControllerName                `json:"controllerName,omitempty"`
+	// Conditions is a list of status conditions that provide information about the observed
+	// state of the InferencePool. This field is required to be set by the controller that
+	// manages the InferencePool.
+	//
+	// Supported condition types are:
+	//
+	// * "Accepted"
+	// * "ResolvedRefs"
+	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
+	// ParentRef is used to identify the parent resource that this status
+	// is associated with. It is used to match the InferencePool with the parent
+	// resource, such as a Gateway.
+	ParentRef *ParentReferenceApplyConfiguration `json:"parentRef,omitempty"`
+	// ControllerName is a domain/path string that indicates the name of the controller that
+	// wrote this status. This corresponds with the GatewayClass controllerName field when the
+	// parentRef references a Gateway kind.
+	//
+	// Example: "example.net/gateway-controller".
+	//
+	// The format of this field is DOMAIN "/" PATH, where DOMAIN and PATH are valid Kubernetes names:
+	//
+	// https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+	//
+	// Controllers MAY populate this field when writing status. When populating this field, controllers
+	// should ensure that entries to status populated with their ControllerName are cleaned up when they
+	// are no longer necessary.
+	ControllerName *apiv1.ControllerName `json:"controllerName,omitempty"`
 }
 
 // ParentStatusApplyConfiguration constructs a declarative configuration of the ParentStatus type for use with

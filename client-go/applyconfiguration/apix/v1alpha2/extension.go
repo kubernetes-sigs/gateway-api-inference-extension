@@ -24,11 +24,30 @@ import (
 
 // ExtensionApplyConfiguration represents a declarative configuration of the Extension type for use
 // with apply.
+//
+// Extension specifies how to configure an extension that runs the endpoint picker.
 type ExtensionApplyConfiguration struct {
-	Group       *apixv1alpha2.Group                `json:"group,omitempty"`
-	Kind        *apixv1alpha2.Kind                 `json:"kind,omitempty"`
-	Name        *apixv1alpha2.ObjectName           `json:"name,omitempty"`
-	PortNumber  *apixv1alpha2.PortNumber           `json:"portNumber,omitempty"`
+	// Group is the group of the referent.
+	// The default value is "", representing the Core API group.
+	Group *apixv1alpha2.Group `json:"group,omitempty"`
+	// Kind is the Kubernetes resource kind of the referent.
+	//
+	// Defaults to "Service" when not specified.
+	//
+	// ExternalName services can refer to CNAME DNS records that may live
+	// outside of the cluster and as such are difficult to reason about in
+	// terms of conformance. They also may not be safe to forward to (see
+	// CVE-2021-25740 for more information). Implementations MUST NOT
+	// support ExternalName Services.
+	Kind *apixv1alpha2.Kind `json:"kind,omitempty"`
+	// Name is the name of the referent.
+	Name *apixv1alpha2.ObjectName `json:"name,omitempty"`
+	// The port number on the service running the extension. When unspecified,
+	// implementations SHOULD infer a default value of 9002 when the Kind is
+	// Service.
+	PortNumber *apixv1alpha2.PortNumber `json:"portNumber,omitempty"`
+	// Configures how the gateway handles the case when the extension is not responsive.
+	// Defaults to failClose.
 	FailureMode *apixv1alpha2.ExtensionFailureMode `json:"failureMode,omitempty"`
 }
 

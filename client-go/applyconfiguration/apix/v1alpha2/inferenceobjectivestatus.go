@@ -24,7 +24,14 @@ import (
 
 // InferenceObjectiveStatusApplyConfiguration represents a declarative configuration of the InferenceObjectiveStatus type for use
 // with apply.
+//
+// InferenceObjectiveStatus defines the observed state of InferenceObjective
 type InferenceObjectiveStatusApplyConfiguration struct {
+	// Conditions track the state of the InferenceObjective.
+	//
+	// Known condition types are:
+	//
+	// * "Accepted"
 	Conditions []v1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 

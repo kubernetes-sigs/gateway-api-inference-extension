@@ -26,11 +26,17 @@ import (
 
 // InferencePoolApplyConfiguration represents a declarative configuration of the InferencePool type for use
 // with apply.
+//
+// InferencePool is the Schema for the InferencePools API.
+//
+// TODO: change the annotation once it gets officially approved
 type InferencePoolApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                                 *InferencePoolSpecApplyConfiguration   `json:"spec,omitempty"`
-	Status                               *InferencePoolStatusApplyConfiguration `json:"status,omitempty"`
+	// Spec defines the desired state of the InferencePool.
+	Spec *InferencePoolSpecApplyConfiguration `json:"spec,omitempty"`
+	// Status defines the observed state of the InferencePool.
+	Status *InferencePoolStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // InferencePool constructs a declarative configuration of the InferencePool type for use with
@@ -43,6 +49,7 @@ func InferencePool(name, namespace string) *InferencePoolApplyConfiguration {
 	b.WithAPIVersion("inference.networking.k8s.io/v1")
 	return b
 }
+
 func (b InferencePoolApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

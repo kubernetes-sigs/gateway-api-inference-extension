@@ -57,7 +57,7 @@ func NewInferencePoolImportInformer(client versioned.Interface, namespace string
 // one. This reduces memory footprint and number of connections to the server.
 func NewFilteredInferencePoolImportInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
+		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
@@ -82,7 +82,7 @@ func NewFilteredInferencePoolImportInformer(client versioned.Interface, namespac
 				}
 				return client.InferenceV1alpha1().InferencePoolImports(namespace).Watch(ctx, options)
 			},
-		},
+		}, client),
 		&gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport{},
 		resyncPeriod,
 		indexers,

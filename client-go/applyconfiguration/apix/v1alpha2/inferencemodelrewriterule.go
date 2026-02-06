@@ -20,8 +20,17 @@ package v1alpha2
 
 // InferenceModelRewriteRuleApplyConfiguration represents a declarative configuration of the InferenceModelRewriteRule type for use
 // with apply.
+//
+// InferenceModelRewriteRule defines the match criteria and corresponding action.
+// For details on how precedence is determined across multiple rules and
+// InferenceModelRewrite resources, see the "Precedence and Conflict Resolution"
+// section in InferenceModelRewriteSpec.
 type InferenceModelRewriteRuleApplyConfiguration struct {
-	Matches []MatchApplyConfiguration       `json:"matches,omitempty"`
+	Matches []MatchApplyConfiguration `json:"matches,omitempty"`
+	// --- Actions ---
+	// Targets defines how to distribute traffic across a set of
+	// weighted model targets. This is used for traffic splitting, A/B tests,
+	// or canary rollouts.
 	Targets []TargetModelApplyConfiguration `json:"targets,omitempty"`
 }
 

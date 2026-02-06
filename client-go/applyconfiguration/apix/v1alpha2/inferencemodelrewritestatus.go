@@ -24,7 +24,14 @@ import (
 
 // InferenceModelRewriteStatusApplyConfiguration represents a declarative configuration of the InferenceModelRewriteStatus type for use
 // with apply.
+//
+// InferenceModelRewriteStatus defines the observed state of InferenceModelRewrite.
 type InferenceModelRewriteStatusApplyConfiguration struct {
+	// Conditions track the state of the InferenceModelRewrite.
+	//
+	// Known condition types are:
+	//
+	// * "Accepted"
 	Conditions []v1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 

@@ -24,10 +24,16 @@ import (
 
 // PoolObjectReferenceApplyConfiguration represents a declarative configuration of the PoolObjectReference type for use
 // with apply.
+//
+// PoolObjectReference identifies an API object within the namespace of the
+// referrer.
 type PoolObjectReferenceApplyConfiguration struct {
-	Group *apixv1alpha2.Group      `json:"group,omitempty"`
-	Kind  *apixv1alpha2.Kind       `json:"kind,omitempty"`
-	Name  *apixv1alpha2.ObjectName `json:"name,omitempty"`
+	// Group is the group of the referent.
+	Group *apixv1alpha2.Group `json:"group,omitempty"`
+	// Kind is kind of the referent. For example "InferencePool".
+	Kind *apixv1alpha2.Kind `json:"kind,omitempty"`
+	// Name is the name of the referent.
+	Name *apixv1alpha2.ObjectName `json:"name,omitempty"`
 }
 
 // PoolObjectReferenceApplyConfiguration constructs a declarative configuration of the PoolObjectReference type for use with

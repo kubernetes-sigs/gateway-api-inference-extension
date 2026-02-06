@@ -24,10 +24,31 @@ import (
 
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
+//
+// InferencePoolSpec defines the desired state of the InferencePool.
 type InferencePoolSpecApplyConfiguration struct {
-	Selector          *LabelSelectorApplyConfiguration     `json:"selector,omitempty"`
-	TargetPorts       []PortApplyConfiguration             `json:"targetPorts,omitempty"`
-	AppProtocol       *apiv1.AppProtocol                   `json:"appProtocol,omitempty"`
+	// Selector determines which Pods are members of this inference pool.
+	// It matches Pods by their labels only within the same namespace; cross-namespace
+	// selection is not supported.
+	//
+	// The structure of this LabelSelector is intentionally simple to be compatible
+	// with Kubernetes Service selectors, as some implementations may translate
+	// this configuration into a Service resource.
+	Selector *LabelSelectorApplyConfiguration `json:"selector,omitempty"`
+	// TargetPorts defines a list of ports that are exposed by this InferencePool.
+	// Every port will be treated as a distinctive endpoint by EPP,
+	// addressable as a 'podIP:portNumber' combination.
+	TargetPorts []PortApplyConfiguration `json:"targetPorts,omitempty"`
+	// AppProtocol describes the application protocol for all the target ports.
+	//
+	// If unspecified, the protocol defaults to HTTP/1.1.
+	//
+	// Supported values include:
+	// * "http": HTTP/1.1. This is the default.
+	// * "kubernetes.io/h2c": HTTP/2 over cleartext.
+	AppProtocol *apiv1.AppProtocol `json:"appProtocol,omitempty"`
+	// EndpointPickerRef is a reference to the Endpoint Picker extension and its
+	// associated configuration.
 	EndpointPickerRef *EndpointPickerRefApplyConfiguration `json:"endpointPickerRef,omitempty"`
 }
 

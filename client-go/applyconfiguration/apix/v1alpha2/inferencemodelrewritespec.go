@@ -20,9 +20,27 @@ package v1alpha2
 
 // InferenceModelRewriteSpecApplyConfiguration represents a declarative configuration of the InferenceModelRewriteSpec type for use
 // with apply.
+//
+// InferenceModelRewriteSpec defines the desired state of InferenceModelRewrite.
 type InferenceModelRewriteSpecApplyConfiguration struct {
-	PoolRef *PoolObjectReferenceApplyConfiguration        `json:"poolRef,omitempty"`
-	Rules   []InferenceModelRewriteRuleApplyConfiguration `json:"rules,omitempty"`
+	// PoolRef is a reference to the inference pool.
+	PoolRef *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
+	// --- Precedence and Conflict Resolution ---
+	// If multiple InferenceModelRewrite resources target the same
+	// InferencePool, the controller will merge them based on precedence.
+	//
+	// Across all rules specified on applicable rewrites, precedence MUST be
+	// given to the match having an "Exact" model match over a generic match
+	// (a rule with an empty `matches` array).
+	//
+	// If ties still exist across multiple InferenceModelRewrite resources (e.g.
+	// two rewrites both have an exact match for the same model), matching
+	// precedence MUST be determined by the oldest resource based on
+	// creation timestamp.
+	//
+	// If ties still exist within a single InferenceModelRewrite resource, the
+	// FIRST matching rule (in list order) is used.
+	Rules []InferenceModelRewriteRuleApplyConfiguration `json:"rules,omitempty"`
 }
 
 // InferenceModelRewriteSpecApplyConfiguration constructs a declarative configuration of the InferenceModelRewriteSpec type for use with

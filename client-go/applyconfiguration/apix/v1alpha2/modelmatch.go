@@ -24,9 +24,14 @@ import (
 
 // ModelMatchApplyConfiguration represents a declarative configuration of the ModelMatch type for use
 // with apply.
+//
+// ModelMatch defines how to match against the model name in the request body.
 type ModelMatchApplyConfiguration struct {
-	Type  *apixv1alpha2.MatchValidationType `json:"type,omitempty"`
-	Value *string                           `json:"value,omitempty"`
+	// Type specifies the kind of string matching to use.
+	// Supported value is "Exact". Defaults to "Exact".
+	Type *apixv1alpha2.MatchValidationType `json:"type,omitempty"`
+	// Value is the model name string to match against.
+	Value *string `json:"value,omitempty"`
 }
 
 // ModelMatchApplyConfiguration constructs a declarative configuration of the ModelMatch type for use with

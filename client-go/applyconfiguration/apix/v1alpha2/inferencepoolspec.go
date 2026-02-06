@@ -24,10 +24,21 @@ import (
 
 // InferencePoolSpecApplyConfiguration represents a declarative configuration of the InferencePoolSpec type for use
 // with apply.
+//
+// InferencePoolSpec defines the desired state of InferencePool
 type InferencePoolSpecApplyConfiguration struct {
-	Selector         map[apixv1alpha2.LabelKey]apixv1alpha2.LabelValue `json:"selector,omitempty"`
-	TargetPortNumber *int32                                            `json:"targetPortNumber,omitempty"`
-	ExtensionRef     *ExtensionApplyConfiguration                      `json:"extensionRef,omitempty"`
+	// Selector defines a map of labels to watch model server Pods
+	// that should be included in the InferencePool.
+	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
+	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
+	// If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
+	// Cross namesoace selector is not supported.
+	Selector map[apixv1alpha2.LabelKey]apixv1alpha2.LabelValue `json:"selector,omitempty"`
+	// TargetPortNumber defines the port number to access the selected model server Pods.
+	// The number must be in the range 1 to 65535.
+	TargetPortNumber *int32 `json:"targetPortNumber,omitempty"`
+	// Extension configures an endpoint picker as an extension service.
+	ExtensionRef *ExtensionApplyConfiguration `json:"extensionRef,omitempty"`
 }
 
 // InferencePoolSpecApplyConfiguration constructs a declarative configuration of the InferencePoolSpec type for use with

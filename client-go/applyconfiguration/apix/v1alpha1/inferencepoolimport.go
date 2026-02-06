@@ -26,10 +26,13 @@ import (
 
 // InferencePoolImportApplyConfiguration represents a declarative configuration of the InferencePoolImport type for use
 // with apply.
+//
+// InferencePoolImport is the Schema for the InferencePoolImports API.
 type InferencePoolImportApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Status                           *InferencePoolImportStatusApplyConfiguration `json:"status,omitempty"`
+	// Status defines the observed state of the InferencePoolImport.
+	Status *InferencePoolImportStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // InferencePoolImport constructs a declarative configuration of the InferencePoolImport type for use with
@@ -42,6 +45,7 @@ func InferencePoolImport(name, namespace string) *InferencePoolImportApplyConfig
 	b.WithAPIVersion("inference.networking.x-k8s.io/v1alpha1")
 	return b
 }
+
 func (b InferencePoolImportApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value
