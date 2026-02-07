@@ -113,20 +113,21 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
 	reqCtx.ResponseSize = len(responseBytes)
-	// ResponseComplete is to indicate the response is complete. In non-streaming
-	// case, it will be set to be true once the response is processed; in
-	// streaming case, it will be set to be true once the last chunk is processed.
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
-	// will add the processing for streaming case.
-	reqCtx.ResponseComplete = true
-
 	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
 
 	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
+func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) {
+	if reqCtx.RespContentType == request.GRPCContentType {
+		s.handleGRPCResponseBodyModelStreaming(ctx, reqCtx, responseBytes)
+	} else {
+		s.handleResponseBodyModelStreamingInText(ctx, reqCtx, string(responseBytes))
+	}
+}
+
+func (s *StreamingServer) handleResponseBodyModelStreamingInText(ctx context.Context, reqCtx *RequestContext, responseText string) {
 	logger := log.FromContext(ctx)
 	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
 	if err != nil {
@@ -139,7 +140,6 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 	}
 
 	if strings.Contains(responseText, streamingEndMsg) {
-		reqCtx.ResponseComplete = true
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
 		cachedToken := 0
