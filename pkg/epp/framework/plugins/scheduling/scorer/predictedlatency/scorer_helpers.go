@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -95,4 +96,17 @@ func (s *PredictedLatency) selectEndpointBasedOnStrategy(
 		return nil
 	}
 	return selectedEndpoint
+}
+
+func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predictedLatencyCtx) {
+	if ctx == nil || ctx.targetMetadata == nil {
+		return
+	}
+	endpointName := types.NamespacedName{
+		Name:      ctx.targetMetadata.NamespacedName.Name,
+		Namespace: ctx.targetMetadata.NamespacedName.Namespace,
+	}
+	if queue, ok := s.runningRequestLists[endpointName]; ok {
+		queue.Remove(requestID)
+	}
 }

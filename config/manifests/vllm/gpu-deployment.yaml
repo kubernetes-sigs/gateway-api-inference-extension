@@ -27,8 +27,6 @@ spec:
           - "8000"
           - "--max-num-seq"
           - "1024"
-          - "--compilation-config"
-          - "3"
           - "--enable-lora"
           - "--max-loras"
           - "2"

@@ -219,14 +219,25 @@ class LightweightPredictor:
     def _prepare_features_with_interaction(self, df: pd.DataFrame, model_type: str) -> pd.DataFrame:
         """
         Prepare features with interaction terms to match training server.
-        
         Args:
             df: DataFrame with raw features
             model_type: 'ttft' or 'tpot'
-        
         Returns:
             DataFrame with engineered features including interactions
         """
+        # Encode pod_type as categorical (common for both TTFT and TPOT)
+        # Convert to categorical with known categories for consistent encoding
+        if 'pod_type' in df.columns:
+            df['pod_type'] = df['pod_type'].fillna('')  # Handle NaN
+            df['pod_type_cat'] = pd.Categorical(
+                df['pod_type'],
+                categories=['', 'prefill', 'decode'],  # '' = monolithic, prefill, decode
+                ordered=False
+            )
+        else:
+            # If pod_type column doesn't exist, create it as empty (monolithic)
+            df['pod_type_cat'] = pd.Categorical([''] * len(df), categories=['', 'prefill', 'decode'], ordered=False)
+
         if model_type == "ttft":
             # Create interaction: prefix score * input length
             df['effective_input_tokens'] = (1-df['prefix_cache_score']) * df['input_token_length']
@@ -238,9 +249,9 @@ class LightweightPredictor:
 
             # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
             df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
- 
-            
-            # Return TTFT features with interaction
+
+
+            # Return TTFT features with interaction and pod_type
             feature_cols = [
                 'kv_cache_percentage',
                 'input_token_length',
@@ -248,11 +259,12 @@ class LightweightPredictor:
                 'num_request_running',
                 'prefix_cache_score',
                 'effective_input_tokens',
-                'prefill_score_bucket'
+                'prefill_score_bucket',
+                'pod_type_cat'
             ]
-            
+
             return df[feature_cols]
-            
+
         else:  # tpot
             # TPOT doesn't use prefix_cache_score, so no interaction needed
             feature_cols = [
@@ -260,9 +272,10 @@ class LightweightPredictor:
                 'input_token_length',
                 'num_request_waiting',
                 'num_request_running',
-                'num_tokens_generated'
+                'num_tokens_generated',
+                'pod_type_cat'
             ]
-            
+
             return df[feature_cols]
 
     def load_models(self) -> bool:
@@ -314,7 +327,7 @@ class LightweightPredictor:
                     'num_request_running': features['num_request_running'],
                     'prefix_cache_score': features['prefix_cache_score']
                 }
-                
+
                 tpot_raw_data = {
                     'kv_cache_percentage': features['kv_cache_percentage'],
                     'input_token_length': features['input_token_length'],
@@ -322,21 +335,34 @@ class LightweightPredictor:
                     'num_request_running': features['num_request_running'],
                     'num_tokens_generated': features['num_tokens_generated']
                 }
-                
+
                 # Prepare features with interactions
                 df_ttft_raw = pd.DataFrame([ttft_raw_data])
+                # Add pod_type if present
+                if 'pod_type' in features:
+                    df_ttft_raw['pod_type'] = features['pod_type']
                 df_ttft = self._prepare_features_with_interaction(df_ttft_raw, "ttft")
-               
-                
+
+
                 df_tpot_raw = pd.DataFrame([tpot_raw_data])
+                # Add pod_type if present
+                if 'pod_type' in features:
+                    df_tpot_raw['pod_type'] = features['pod_type']
                 df_tpot = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
                 #df_tpot = pd.DataFrame([tpot_raw_data])
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    
+                    # Bayesian Ridge can't handle categorical features directly
+                    # Drop categorical bucket, but one-hot encode pod_type
                     ttft_for_scale = df_ttft.drop(columns=['prefill_score_bucket'], errors='ignore')
+                    if 'pod_type_cat' in ttft_for_scale.columns:
+                        ttft_for_scale = pd.get_dummies(ttft_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                     ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
-                    tpot_scaled = self.tpot_scaler.transform(df_tpot)
+
+                    tpot_for_scale = df_tpot.copy()
+                    if 'pod_type_cat' in tpot_for_scale.columns:
+                        tpot_for_scale = pd.get_dummies(tpot_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
+                    tpot_scaled = self.tpot_scaler.transform(tpot_for_scale)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
                     tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
@@ -388,37 +414,53 @@ class LightweightPredictor:
                 # Create raw feature data (without interaction)
                 ttft_raw_data = []
                 tpot_raw_data = []
-                
+
                 for features in features_list:
-                    ttft_raw_data.append({
+                    ttft_entry = {
                         'kv_cache_percentage': features['kv_cache_percentage'],
                         'input_token_length': features['input_token_length'],
                         'num_request_waiting': features['num_request_waiting'],
                         'num_request_running': features['num_request_running'],
                         'prefix_cache_score': features['prefix_cache_score']
-                    })
-                    
-                    tpot_raw_data.append({
+                    }
+                    # Add pod_type if present
+                    if 'pod_type' in features:
+                        ttft_entry['pod_type'] = features['pod_type']
+                    ttft_raw_data.append(ttft_entry)
+
+                    tpot_entry = {
                         'kv_cache_percentage': features['kv_cache_percentage'],
                         'input_token_length': features['input_token_length'],
                         'num_request_waiting': features['num_request_waiting'],
                         'num_request_running': features['num_request_running'],
                         'num_tokens_generated': features['num_tokens_generated']
-                    })
-                
+                    }
+                    # Add pod_type if present
+                    if 'pod_type' in features:
+                        tpot_entry['pod_type'] = features['pod_type']
+                    tpot_raw_data.append(tpot_entry)
+
                 # Prepare features with interactions
                 df_ttft_raw = pd.DataFrame(ttft_raw_data)
                 df_ttft_batch = self._prepare_features_with_interaction(df_ttft_raw, "ttft")
                 #df_ttft_batch = pd.DataFrame(ttft_raw_data)
-                
+
                 df_tpot_raw = pd.DataFrame(tpot_raw_data)
                 df_tpot_batch = self._prepare_features_with_interaction(df_tpot_raw, "tpot")
                 #df_tpot_batch = pd.DataFrame(tpot_raw_data)
 
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
+                    # Bayesian Ridge can't handle categorical features directly
+                    # Drop categorical bucket, but one-hot encode pod_type
                     ttft_for_scale = df_ttft_batch.drop(columns=['prefill_score_bucket'], errors='ignore')
+                    if 'pod_type_cat' in ttft_for_scale.columns:
+                        ttft_for_scale = pd.get_dummies(ttft_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                     ttft_scaled = self.ttft_scaler.transform(ttft_for_scale)
-                    tpot_scaled = self.tpot_scaler.transform(df_tpot_batch)
+
+                    tpot_for_scale = df_tpot_batch.copy()
+                    if 'pod_type_cat' in tpot_for_scale.columns:
+                        tpot_for_scale = pd.get_dummies(tpot_for_scale, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
+                    tpot_scaled = self.tpot_scaler.transform(tpot_for_scale)
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
                     tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
@@ -471,6 +513,7 @@ class PredictionRequest(BaseModel):
     num_request_running: int = Field(..., ge=0)
     num_tokens_generated: int = Field(..., ge=0)
     prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
+    pod_type: Optional[str] = Field(default="", description="Pod type: 'prefill', 'decode', or '' for monolithic")
 
 
 class PredictionResponse(BaseModel):

@@ -17,15 +17,16 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
   | jq -r '.[] | select(.prerelease == false) | .tag_name' \
   | sort -V \
   | tail -n1)
+MODEL_SERVER=vllm  # sglang is also supported.
 ```
 
 ### Deploy Sample Model Server
 
---8<-- "site-src/_includes/vllm-gpu.md"
+--8<-- "site-src/_includes/model-server-gpu.md"
 
     ```bash
-    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/gpu-deployment.yaml
+    kubectl create secret generic hf-token --from-literal-token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml
     ```
 
 --8<-- "site-src/_includes/vllm-cpu.md"
@@ -39,12 +40,6 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
     ```bash
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/sim-deployment.yaml
     ```
-
---8<-- "site-src/_includes/sglang-gpu.md"
-    
-   ```bash
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/sglang/gpu-deployment.yaml
-   ```
 
 ### Install the Inference Extension CRDs
 
@@ -204,9 +199,9 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       
        For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
 
-### Deploy the InferencePool and Endpoint Picker Extension
+### Deploy the InferencePool and Endpoint Picker
 
-   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
+   The Helm install command automatically installs the EPP, InferencePool along with provider specific resources.
 
    Set the chart version and then select a tab to follow the provider-specific instructions.
 
@@ -215,10 +210,6 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
    ```
 
 --8<-- "site-src/_includes/epp.md"
-
-For sglang deployment:
-
---8<-- "site-src/_includes/epp-sglang.md"
 
 ### Verify HttpRoute and InferencePool Status
 
@@ -250,10 +241,10 @@ You have now deployed a basic Inference Gateway with a simple routing strategy. 
    1. Uninstall the InferencePool, InferenceObjective and model server resources:
 
       ```bash
-      helm uninstall vllm-llama3-8b-instruct
+      helm uninstall ${MODEL_SERVER}-llama3-8b-instruct --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/inferenceobjective.yaml --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
-      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
+      kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
       ```

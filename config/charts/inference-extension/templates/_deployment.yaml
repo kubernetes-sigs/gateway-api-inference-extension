@@ -6,6 +6,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+    {{- include "gateway-api-inference-extension.modeLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.inferenceExtension.replicas | default 1 }}
   strategy:
@@ -23,6 +24,7 @@ spec:
     metadata:
       labels:
         {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
+        {{- include "gateway-api-inference-extension.modeLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
@@ -73,13 +75,13 @@ spec:
           args:
           {{- /* 1. Determine Model Server Type Logic */ -}}
           {{- $modelServerType := "vllm" }}
-          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone -}}
+          {{- if and .Values.inferenceExtension.endpointsServer (not .Values.inferenceExtension.endpointsServer.createInferencePool) -}}
             {{- $modelServerType = .Values.inferenceExtension.endpointsServer.modelServerType | default "vllm" }}
           {{- else }}
             {{- $modelServerType = .Values.inferencePool.modelServerType | default "vllm" }}
           {{- end }}
           {{- /* 2. Mode Specific Flags */ -}}
-          {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.standalone }}
+          {{- if and .Values.inferenceExtension.endpointsServer (not .Values.inferenceExtension.endpointsServer.createInferencePool) }}
               - --endpoint-selector
               - {{ .Values.inferenceExtension.endpointsServer.endpointSelector | quote }}
               - --endpoint-target-ports
@@ -127,6 +129,10 @@ spec:
           {{- end }}
           {{- if not .Values.inferenceExtension.monitoring.prometheus.auth.enabled }}
               - --metrics-endpoint-auth=false
+          {{- end }}
+          {{- with .Values.inferenceExtension.resources }}
+          resources:
+            {{ toYaml . | nindent 12 }}
           {{- end }}
           ports:
             - name: grpc

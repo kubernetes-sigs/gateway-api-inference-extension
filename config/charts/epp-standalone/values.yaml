@@ -15,10 +15,13 @@ inferenceExtension:
   pluginsConfigFile: "default-plugins.yaml"
 
   endpointsServer:
-    standalone: true
-    # Required when standalone is true
-    #    endpointSelector: app=vllm-llama3-8b-instruct
+    # set it to false when you want to deploy epp-standalone with inferencepool
+    createInferencePool: true
+    # Required when createInferencePool is false
+#    endpointSelector: app=vllm-llama3-8b-instruct
+    # unused when createInferencePool is true
     targetPorts: 8000
+    # unused when createInferencePool is true
     modelServerType: vllm # vllm, triton-tensorrt-llm
 
 
@@ -308,3 +311,16 @@ provider:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
 
+# This is not used when you deploy epp-standalone with inferenceExtension.endpointsServer.createInferencePool=false
+inferencePool:
+  targetPorts:
+    - number: 8000
+  modelServerType: vllm # vllm, triton-tensorrt-llm
+  apiVersion: inference.networking.k8s.io/v1
+  # modelServers: # REQUIRED
+  #   matchLabels:
+  #     app: vllm-llama3-8b-instruct
+
+  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
+  # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
+  targetPortNumber: 8000

@@ -19,9 +19,7 @@ Major discussions and notifications will be sent on both the
 [SIG-Network](https://groups.google.com/forum/#!forum/kubernetes-sig-network)
 mailing lists.
 
-Although we may end up creating a new Slack channel in the future, our
-conversations are currently split between the following Kubernetes Slack
-channels:
+Our conversations are currently split between the following Kubernetes Slack channels:
 
 * [#gateway-api-inference-extension](https://kubernetes.slack.com/archives/C08E3RZMT2P)
 * [#sig-network-gateway-api](https://kubernetes.slack.com/archives/CR0H13KGA)

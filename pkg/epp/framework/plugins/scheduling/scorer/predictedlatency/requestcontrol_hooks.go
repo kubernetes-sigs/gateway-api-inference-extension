@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/jellydator/ttlcache/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -82,15 +83,15 @@ func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedL
 
 func (s *PredictedLatency) getPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) (*predictedLatencyCtx, error) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	if ctx, exists := s.sloContextStore.Load(id); exists {
-		return ctx.(*predictedLatencyCtx), nil
+	if item := s.sloContextStore.Get(id); item != nil {
+		return item.Value(), nil
 	}
 	return nil, fmt.Errorf("SLO context not found for request ID: %s", id)
 }
 
 func (s *PredictedLatency) setPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest, ctx *predictedLatencyCtx) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	s.sloContextStore.Store(id, ctx)
+	s.sloContextStore.Set(id, ctx, ttlcache.DefaultTTL)
 }
 
 func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) {
@@ -234,23 +235,8 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 		}
 	}
 
-	endpointName := types.NamespacedName{
-		Name:      targetMetadata.NamespacedName.Name,
-		Namespace: targetMetadata.NamespacedName.Namespace,
-	}
-
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	endpointRequestList, ok := t.runningRequestLists[endpointName]
-	if !ok {
-		err := fmt.Errorf("no running request list found for endpoint %s", endpointName.String())
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency: Failed to remove request from queue", "requestID", id)
-		return
-	}
-
-	_, removed := endpointRequestList.Remove(id)
-	if !removed {
-		logger.V(logutil.TRACE).Info("PredictedLatency: Item not found in queue", "endpointName", endpointName, "requestID", id)
-	}
+	t.removeRequestFromQueue(id, predictedLatencyCtx)
 	t.deletePredictedLatencyContextForRequest(request)
 }
 

@@ -22,7 +22,10 @@ A simpler deployment mode would reduce the barrier to adopting the EPP for such 
 
 ## How
 A proxy is deployed as a sidecar to the EPP. The proxy and EPP continue to communicate via ext-proc protocol over localhost.
-For the endpoint discovery, you can configure the model server pods as a flag to EPP instead of using InferencePool dependency.
+For the endpoint discovery, you have two options:
+
+* **With Inference APIs Support**: The EPP is configured using the Inference CRDs, the pool is expressed using an instance of the InferencePool API and the entire suite of inference APIs are supported, including the use of InferenceObjectives for defining priorities.
+* **Without Inference APIs Support**: The EPP is configured using command line flags. This is the simplest method for standalone jobs which doesn't require installing the inference extension apis, which means no support for the features expressed using the inference APIs (such as InferenceObjectives).
 
 ## Example
 
@@ -34,16 +37,14 @@ For the endpoint discovery, you can configure the model server pods as a flag to
 
 #### Deploy Sample Model Server
 
---8<-- "site-src/_includes/model-server-intro.md"
-
---8<-- "site-src/_includes/model-server-gpu.md"
+--8<-- "site-src/_includes/vllm-gpu.md"
 
     ```bash
     kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
     ```
 
---8<-- "site-src/_includes/model-server-cpu.md"
+--8<-- "site-src/_includes/vllm-cpu.md"
 
     ```bash
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
@@ -57,20 +58,45 @@ For the endpoint discovery, you can configure the model server pods as a flag to
 
 #### Deploy Endpoint Picker Extension with Envoy sidecar
 
-Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker specific resources.
+Choose one of the following options to deploy an Endpoint Picker Extension with Envoy sidecar.
 
-Set the chart version and then select a tab to follow the provider-specific instructions.
+=== "With Inference APIs Support"
 
-   ```bash
-    export EPP_STANDALONE_CHART_VERSION=v0
-    export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
-    helm install vllm-llama3-8b-instruct \
-    --dependency-update \
-    --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
-    --set provider.name=$PROVIDER \
-    --version $EPP_STANDALONE_CHART_VERSION \
-     oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
-   ```
+      Deploy an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label app: vllm-llama3-8b-instruct and
+      listening on port 8000. The Helm install command automatically deploys an InferencePool instance, the epp along with provider specific resources.
+        
+      Set the chart version and then select a tab to follow the provider-specific instructions.
+           ```bash
+            # Install the Inference Extension CRDs
+            kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
+            
+            export EPP_STANDALONE_CHART_VERSION=v0
+            export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
+            helm install vllm-llama3-8b-instruct \
+            --dependency-update \
+            --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+            --set provider.name=$PROVIDER \
+            --version $EPP_STANDALONE_CHART_VERSION \
+             oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
+           ```
+
+=== "Without Inference APIs Support"
+
+     Deploy an Endpoint Picker Extension named `vllm-llama3-8b-instruct` that selects from endpoints with label `app=vllm-llama3-8b-instruct` and listening on port 8000. 
+     The Helm install command automatically deploys the epp along with provider specific resources.
+        
+     Set the chart version and then select a tab to follow the provider-specific instructions.
+           ```bash
+            export EPP_STANDALONE_CHART_VERSION=v0
+            export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
+            helm install vllm-llama3-8b-instruct \
+            --dependency-update \
+            --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
+            --set inferenceExtension.endpointsServer.createInferencePool=false
+            --set provider.name=$PROVIDER \
+            --version $EPP_STANDALONE_CHART_VERSION \
+             oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
+           ```
 
 #### Try it out
 
@@ -119,6 +145,7 @@ Please be careful not to delete resources you'd like to keep.
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
    kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
+   kubectl delete -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd --ignore-not-found
    kubectl delete secret hf-token --ignore-not-found
    kubectl delete pod curl --ignore-not-found
    ```

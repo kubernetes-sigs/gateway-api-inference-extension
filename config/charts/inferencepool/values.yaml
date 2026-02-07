@@ -44,6 +44,14 @@ inferenceExtension:
 
   tolerations: []
 
+#  resources:
+#    requests:
+#      cpu: 1000m
+#      memory: 1Gi
+#    limits:
+#      cpu: 4000m
+#      memory: 8Gi
+
   # Sidecar configuration for EPP
   sidecar:
     enabled: false
