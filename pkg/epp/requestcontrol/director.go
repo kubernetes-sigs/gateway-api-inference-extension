@@ -43,13 +43,6 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-const (
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2081):
-	// Make this timeout configurable per-plugin or globally via the Director configuration to support plugins with
-	// varying latency profiles.
-	prepareDataTimeout = 400 * time.Millisecond
-)
-
 // Datastore defines the interface required by the Director.
 type Datastore interface {
 	PoolGet() (*datalayer.EndpointPool, error)
@@ -354,7 +347,13 @@ func (d *Director) runPrepareDataPlugins(ctx context.Context,
 	if len(d.requestControlPlugins.prepareDataPlugins) == 0 {
 		return nil
 	}
-	return prepareDataPluginsWithTimeout(prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, endpoints)
+	return prepareDataPluginsWithTimeout(
+		d.requestControlPlugins.prepareDataTimeout,
+		d.requestControlPlugins.prepareDataPlugins,
+		ctx,
+		request,
+		endpoints,
+	)
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
