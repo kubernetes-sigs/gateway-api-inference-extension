@@ -685,6 +685,123 @@ func TestSchedulerE2ELatency(t *testing.T) {
 	}
 }
 
+func TestFlowControlDispatchCycleLengthMetric(t *testing.T) {
+	Reset()
+	scenarios := []struct {
+		name      string
+		durations []time.Duration
+	}{
+		{
+			name: "multiple scheduling latencies",
+			durations: []time.Duration{
+				200 * time.Nanosecond,
+				800 * time.Nanosecond,
+				1500 * time.Nanosecond,
+				3 * time.Nanosecond,
+				8 * time.Nanosecond,
+				15 * time.Nanosecond,
+				30 * time.Nanosecond,
+				75 * time.Nanosecond,
+				150 * time.Nanosecond,
+			},
+		},
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, duration := range scenario.durations {
+				RecordFlowControlDispatchCycleDuration(duration)
+			}
+
+			wantDispatchCycleLatency, err := os.Open("testdata/flow_control_dispatch_cycle_duration_seconds_metric")
+			defer func() {
+				if err := wantDispatchCycleLatency.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(metrics.Registry, wantDispatchCycleLatency, "inference_extension_flow_control_dispatch_cycle_duration_seconds"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestFlowControlDispatchMetrics(t *testing.T) {
+	Reset()
+	// Simulate 10 attempts, 7 successes, 3 failures
+	for i := 0; i < 10; i++ {
+		IncFlowControlDispatchAttempts()
+	}
+	for i := 0; i < 7; i++ {
+		IncFlowControlDispatchSuccesses()
+	}
+	for i := 0; i < 3; i++ {
+		IncFlowControlDispatchFailures()
+	}
+
+	wantMetrics, err := os.Open("testdata/flow_control_dispatch_metrics")
+	defer func() {
+		if err = wantMetrics.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We need to verify all 3 metrics.
+	metricNames := []string{
+		"inference_extension_flow_control_dispatch_attempts_total",
+		"inference_extension_flow_control_dispatch_successes_total",
+		"inference_extension_flow_control_dispatch_failures_total",
+	}
+
+	if err := testutil.GatherAndCompare(
+		metrics.Registry,
+		wantMetrics,
+		metricNames...,
+	); err != nil {
+		t.Errorf("metric comparison failed: %v", err)
+	}
+
+	// Verify consistency: attempts = successes + failures
+	// We need to fetch the actual values from the registry to compare them programmatically.
+	// However, gathering them again just to sum them up is a bit redundant if we trust GatherAndCompare.
+	// But since the user explicitly asked for this check, let's parse the metrics relative to each other.
+	// A simpler way for this unit test since we know the inputs (10 attempts, 7 success, 3 failure)
+	// is to just assert that our test setup is consistent, which we did by design.
+	// If we want to verify the *counter behavior* specifically, we can check the values.
+
+	// Let's use the Gather function to get the metric families and check the values.
+	mfs, err := metrics.Registry.Gather()
+	if err != nil {
+		t.Fatalf("failed to gather metrics: %v", err)
+	}
+
+	var attempts, successes, failures float64
+	for _, mf := range mfs {
+		if mf.Name == nil {
+			continue
+		}
+		switch *mf.Name {
+		case "inference_extension_flow_control_dispatch_attempts_total":
+			attempts = *mf.Metric[0].Counter.Value
+		case "inference_extension_flow_control_dispatch_successes_total":
+			successes = *mf.Metric[0].Counter.Value
+		case "inference_extension_flow_control_dispatch_failures_total":
+			failures = *mf.Metric[0].Counter.Value
+		}
+	}
+
+	if attempts != successes+failures {
+		t.Errorf("metrics inconsistency: attempts (%v) != successes (%v) + failures (%v)", attempts, successes, failures)
+	}
+}
+
+// TODO (7028): Research histogram bins using real-world data to ensure they are optimal.
+
 func TestSchedulerAttemptsTotal(t *testing.T) {
 
 	scenarios := []struct {

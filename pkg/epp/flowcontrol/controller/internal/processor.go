@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
 // maxCleanupWorkers caps the number of concurrent workers for background cleanup tasks. This prevents a single shard
@@ -320,12 +321,18 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		}
 
 		// --- Dispatch ---
+		metrics.IncFlowControlDispatchAttempts()
 		if err := sp.dispatchItem(item); err != nil {
 			sp.logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle",
 				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
+			// Add to failed dispatches
+			metrics.IncFlowControlDispatchFailures()
 			continue // Continue to the next band to maximize work conservation.
+		} else {
+			// Add to successful dispatches
+			metrics.IncFlowControlDispatchSuccesses()
+			return true
 		}
-		return true
 	}
 	return false
 }
@@ -370,6 +377,7 @@ func (sp *ShardProcessor) dispatchItem(itemAcc flowcontrol.QueueItemAccessor) er
 	}
 
 	removedItem := removedItemAcc.(*FlowItem)
+	// Add to attempted dispatches
 	sp.logger.V(logutil.TRACE).Info("Item dispatched.", "flowKey", req.FlowKey(), "reqID", req.ID())
 	removedItem.FinalizeWithOutcome(types.QueueOutcomeDispatched, nil)
 	return nil
