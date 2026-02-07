@@ -21,10 +21,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"strconv"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -74,6 +77,9 @@ type Datastore interface {
 
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
+
+	// Allow registering data sources for change notification
+	fwkdl.StoreNotifier
 }
 
 // NewDatastore creates a new data store.
@@ -115,6 +121,12 @@ type datastore struct {
 	// used only if there is only one inference engine per pod
 	modelServerMetricsPort int32 // TODO: deprecating
 	epf                    datalayer.EndpointFactory
+
+	// Single endpoint observer for Endpoint change notification events.
+	// Note: Can be extended to support multiple observers or observers for different data types
+	// (e.g., []NotificationDataSource or map[reflect.Type][]NotificationDataSource)
+	endpointObserver fwkdl.NotificationDataSource
+	observerMu       sync.RWMutex
 }
 
 func (ds *datastore) Clear() {
@@ -293,16 +305,24 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	result := true
 	for _, endpointMetadata := range pods {
 		var ep fwkdl.Endpoint
+		var eventType fwkdl.EventType
 		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
 		if !ok {
 			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
 			ds.pods.Store(endpointMetadata.NamespacedName, ep)
 			result = false
+			eventType = fwkdl.EventAddedOrModified
 		} else {
 			ep = existing.(backendmetrics.PodMetrics)
+			eventType = fwkdl.EventAddedOrModified
 		}
 		// Update endpoint properties if anything changed.
 		ep.UpdateMetadata(endpointMetadata)
+
+		// Notify observer of endpoint change.
+		// Note: notifyEndpointObserver handles context with timeout internally.
+		// Called synchronously to ensure notification completes before returning.
+		ds.notifyEndpointObserver(eventType, pod, ep)
 	}
 	return result
 }
@@ -311,11 +331,69 @@ func (ds *datastore) PodDelete(podName string) {
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(fwkdl.Endpoint)
 		if ep.GetMetadata().PodName == podName {
+			// Notify observer before deleting the endpoint
+			// Create minimal Pod info for deletion event with deletion timestamp
+			now := metav1.Now()
+			deletedPod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              podName,
+					Namespace:         ep.GetMetadata().GetNamespacedName().Namespace,
+					DeletionTimestamp: &now,
+				},
+			}
+			ds.notifyEndpointObserver(fwkdl.EventDeleted, deletedPod, ep)
+
 			ds.pods.Delete(k)
 			ds.epf.ReleaseEndpoint(ep)
 		}
 		return true
 	})
+}
+
+// RegisterObserver implements StoreNotifier interface.
+// Registers an observer for a specific data type. Currently only supports Endpoint type.
+func (ds *datastore) RegisterObserver(objType reflect.Type, observer fwkdl.NotificationDataSource) error {
+	ds.observerMu.Lock()
+	defer ds.observerMu.Unlock()
+
+	if ds.endpointObserver != nil { // an observer is already registered
+		return fmt.Errorf("an observer for %v is already registered", objType)
+	}
+
+	// Validate that the observer expects *corev1.Pod as the data type
+	expectedType := observer.ExpectedEventDataType()
+	podType := reflect.TypeOf((*corev1.Pod)(nil))
+	if expectedType != podType {
+		return fmt.Errorf("observer expects %v but datastore provides %v for endpoint notifications", expectedType, podType)
+	}
+
+	// For now, only support Endpoint type
+	// In the future, this can be extended to support multiple types and multiple observers per type
+	ds.endpointObserver = observer
+	return nil
+}
+
+// notifyEndpointObserver notifies the registered endpoint observer of a change event.
+// TODO: do we need a timeout here? If so, what should it be set to (or be configurable)?
+// Should this run in a Go routine? Set the context in the caller?
+func (ds *datastore) notifyEndpointObserver(eventType fwkdl.EventType, data any, ep fwkdl.Endpoint) {
+	ds.observerMu.RLock()
+	observer := ds.endpointObserver
+	ds.observerMu.RUnlock()
+
+	if observer == nil {
+		return
+	}
+
+	event := fwkdl.ChangeNotification{
+		Type: eventType,
+		Data: data,
+	}
+
+	ctx, cancel := context.WithTimeout(ds.parentCtx, time.Second)
+	defer cancel()
+
+	_ = observer.Notify(ctx, event, ep)
 }
 
 func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) error {

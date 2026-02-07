@@ -30,8 +30,8 @@ type Config struct {
 
 // DataSourceConfig defines the configuration of a specific DataSource
 type DataSourceConfig struct {
-	Plugin     fwkdl.DataSource  // the data source plugin instance
-	Extractors []fwkdl.Extractor // extractors defined for the data source
+	Plugin     fwkdl.DataSourceBase // the data source plugin instance
+	Extractors []fwkdl.Extractor    // extractors defined for the data source
 }
 
 // WithConfig sets up the data layer based on the provided configuration.
