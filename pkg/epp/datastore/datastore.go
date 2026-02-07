@@ -271,7 +271,11 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*fwkdl.EndpointMetadata{}
+	activePorts, activePortsDeclared := podutil.ExtractActivePorts(pod)
 	for idx, port := range ds.pool.TargetPorts {
+		if activePortsDeclared && !activePorts.Has(port) {
+			continue
+		}
 		metricsPort := modelServerMetricsPort
 		if metricsPort == 0 {
 			metricsPort = port
@@ -291,7 +295,9 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	result := true
+	existingEpSet := sets.Set[types.NamespacedName]{}
 	for _, endpointMetadata := range pods {
+		existingEpSet.Insert(endpointMetadata.NamespacedName)
 		var ep fwkdl.Endpoint
 		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
 		if !ok {
@@ -304,6 +310,25 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		// Update endpoint properties if anything changed.
 		ep.UpdateMetadata(endpointMetadata)
 	}
+
+	// remove endpoints that are no longer active in the pool
+	if activePortsDeclared {
+		for idx, port := range ds.pool.TargetPorts {
+			if activePorts.Has(port) {
+				continue
+			}
+
+			namespacedName := types.NamespacedName{
+				Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
+				Namespace: pod.Namespace,
+			}
+			if ep, ok := ds.pods.Load(namespacedName); ok {
+				ds.pods.Delete(namespacedName)
+				ds.epf.ReleaseEndpoint(ep.(fwkdl.Endpoint))
+			}
+		}
+	}
+
 	return result
 }
 
