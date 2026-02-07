@@ -27,11 +27,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	dplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
 
 // static check to ensure Plugin implements the PrepareDataPlugin interface.
@@ -661,16 +661,16 @@ func TestPrepareRequestData(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify pod1 has the correct prefix match info
-	info1, ok := endpoint1.Get(dplugins.PrefixCacheMatchInfoKey)
+	info1, ok := endpoint1.Get(attrprefix.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
-	prefixInfo1 := info1.(*dplugins.PrefixCacheMatchInfo)
+	prefixInfo1 := info1.(*attrprefix.PrefixCacheMatchInfo)
 	assert.Equal(t, 1, prefixInfo1.MatchBlocks()) // one block ("aaaa") matches
 	assert.Equal(t, 2, prefixInfo1.TotalBlocks()) // "aaaacccc" -> 2 blocks
 
 	// Verify pod2 has no match info
-	info2, ok := endpoint2.Get(dplugins.PrefixCacheMatchInfoKey)
+	info2, ok := endpoint2.Get(attrprefix.PrefixCacheMatchInfoKey)
 	assert.True(t, ok)
-	prefixInfo2 := info2.(*dplugins.PrefixCacheMatchInfo)
+	prefixInfo2 := info2.(*attrprefix.PrefixCacheMatchInfo)
 	assert.Equal(t, 0, prefixInfo2.MatchBlocks()) // No match for pod2
 	assert.Equal(t, 2, prefixInfo2.TotalBlocks())
 }

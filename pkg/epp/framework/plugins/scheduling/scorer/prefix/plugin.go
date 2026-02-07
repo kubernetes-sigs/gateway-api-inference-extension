@@ -30,10 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
@@ -236,7 +236,7 @@ func (p *Plugin) WithName(name string) *Plugin {
 }
 
 func (p *Plugin) Produces() map[string]any {
-	return map[string]any{approximateprefix.PrefixCacheMatchInfoKey: approximateprefix.PrefixCacheMatchInfo{}}
+	return map[string]any{attrprefix.PrefixCacheMatchInfoKey: attrprefix.PrefixCacheMatchInfo{}}
 }
 
 func (p *Plugin) Consumes() map[string]any {
@@ -255,7 +255,7 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMR
 
 	for _, endpoint := range endpoints {
 		matchLen := state.PrefixCacheServers[ServerID(endpoint.GetMetadata().NamespacedName)]
-		endpoint.Put(approximateprefix.PrefixCacheMatchInfoKey, approximateprefix.NewPrefixCacheMatchInfo(matchLen, total, blockSize))
+		endpoint.Put(attrprefix.PrefixCacheMatchInfoKey, attrprefix.NewPrefixCacheMatchInfo(matchLen, total, blockSize))
 	}
 
 	// Store the state in plugin state for later use.

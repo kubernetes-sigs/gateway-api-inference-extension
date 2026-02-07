@@ -42,8 +42,8 @@ require (
 
 require (
 	github.com/go-logr/zapr v1.3.0
-	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/google/cel-go v0.26.0
+	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/spf13/pflag v1.0.10
 	go.opentelemetry.io/otel/trace v1.40.0
 	sigs.k8s.io/kustomize/api v0.21.0
