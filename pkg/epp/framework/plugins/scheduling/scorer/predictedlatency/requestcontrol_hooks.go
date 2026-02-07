@@ -33,6 +33,7 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
 var _ requestcontrol.PreRequest = &PredictedLatency{}
@@ -120,44 +121,98 @@ func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *sche
 	s.sloContextStore.Delete(id)
 }
 
-// GetLastSeenMetricsForRequest returns the last seen metrics for all profiles in a request.
-// This is exposed to allow wrapper implementations to access metrics for custom training logic.
-func (s *PredictedLatency) GetLastSeenMetricsForRequest(request *schedulingtypes.LLMRequest) (map[string]*fwkdl.Metrics, error) {
+// RecordTrainingForProfile records training data for a specific scheduling profile.
+// This high-level method encapsulates all complexity of assembling and sending training data,
+// allowing custom scorers (e.g., P/D-aware) to record training without manual assembly.
+//
+// Parameters:
+//   - profileName: The scheduling profile to record training for (e.g., "prefill", "decode")
+//   - actualTTFT: Measured time-to-first-token in milliseconds
+//   - actualTPOT: Measured time-per-output-token in milliseconds
+//   - generatedTokens: Number of tokens generated
+//
+// The method:
+//  1. Retrieves request context and profile-specific data
+//  2. Uses the configured requestBuilder to construct the training entry (respecting customizations like pod type labels)
+//  3. Sends the training data to the predictor
+//
+// This maintains proper abstraction: GAIE handles HOW to record (mechanism),
+// while custom builders define WHAT labels to add (policy).
+func (s *PredictedLatency) RecordTrainingForProfile(
+	ctx context.Context,
+	request *schedulingtypes.LLMRequest,
+	profileName string,
+	actualTTFT float64,
+	actualTPOT float64,
+	generatedTokens int,
+) error {
+	logger := log.FromContext(ctx)
+
+	// Get request context
 	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to get request context: %w", err)
 	}
-	return predictedLatencyCtx.lastSeenMetrics, nil
-}
 
-// GetPrefixCacheScoresForRequest returns the prefix cache scores for all pods in a request.
-func (s *PredictedLatency) GetPrefixCacheScoresForRequest(request *schedulingtypes.LLMRequest) (map[string]float64, error) {
-	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		return nil, err
+	// Get scheduling result
+	schedulingResult := predictedLatencyCtx.schedulingResult
+	if schedulingResult == nil {
+		return errors.New("no scheduling result available for request")
 	}
-	return predictedLatencyCtx.prefixCacheScoresForEndpoints, nil
-}
 
-// GetRequestPrompt returns the prompt for a request.
-func (s *PredictedLatency) GetRequestPrompt(request *schedulingtypes.LLMRequest) (string, error) {
-	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		return "", err
+	// Extract profile-specific data
+	profileResult, exists := schedulingResult.ProfileResults[profileName]
+	if !exists || profileResult == nil {
+		return fmt.Errorf("profile %q not found in scheduling result", profileName)
 	}
-	return predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt, nil
-}
 
-// GetRequestBuilder returns the PredictionRequestBuilder used by this router.
-// This allows wrappers to use the same builder for consistency.
-func (s *PredictedLatency) GetRequestBuilder() PredictionRequestBuilder {
-	return s.requestBuilder
-}
+	if len(profileResult.TargetEndpoints) == 0 {
+		return fmt.Errorf("no target endpoints for profile %q", profileName)
+	}
 
-// GetLatencyPredictor returns the latency predictor client.
-// This allows wrappers to record training data using the same predictor.
-func (s *PredictedLatency) GetLatencyPredictor() interface{} {
-	return s.latencypredictor
+	endpoint := profileResult.TargetEndpoints[0]
+	endpointMetadata := endpoint.GetMetadata()
+
+	// Get metrics for this profile
+	metrics, exists := predictedLatencyCtx.lastSeenMetrics[profileName]
+	if !exists || metrics == nil {
+		return fmt.Errorf("no metrics available for profile %q", profileName)
+	}
+
+	// Get prefix cache score
+	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[endpointMetadata.String()]
+
+	// Get prompt
+	prompt := predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt
+
+	// Build training entry using configured builder
+	// The builder may add custom labels (e.g., PDPredictionRequestBuilder adds pod type)
+	entry := s.requestBuilder.BuildTrainingEntry(
+		ctx,
+		endpointMetadata,
+		metrics,
+		prompt,
+		actualTTFT,
+		actualTPOT,
+		time.Now(),
+		generatedTokens,
+		prefixCacheScore,
+	)
+
+	// Send to predictor
+	if err := s.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+		return fmt.Errorf("failed to record training data: %w", err)
+	}
+
+	logger.V(logutil.DEBUG).Info("Recorded training data for profile",
+		"profile", profileName,
+		"pod", endpointMetadata.NamespacedName.Name,
+		"actualTTFT", actualTTFT,
+		"actualTPOT", actualTPOT,
+		"generatedTokens", generatedTokens,
+	)
+
+	return nil
 }
 
 // --- RequestControl Hooks ---
