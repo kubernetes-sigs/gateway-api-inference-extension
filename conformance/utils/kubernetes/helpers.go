@@ -224,6 +224,35 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Reader, poolNN types.
 	t.Logf("Successfully verified that InferencePool %s has no parent statuses.", poolNN.String())
 }
 
+func InferencePoolMustHaveControllerName(
+	t *testing.T,
+	client client.Client,
+	poolNN types.NamespacedName,
+) {
+	t.Helper()
+
+	var pool inferenceapi.InferencePool
+
+	require.Eventually(t, func() bool {
+		err := client.Get(context.Background(), poolNN, &pool)
+		if err != nil {
+			return false
+		}
+
+		if len(pool.Status.Parents) == 0 {
+			return false
+		}
+
+		for _, parent := range pool.Status.Parents {
+			if parent.ControllerName == "" {
+				return false
+			}
+		}
+
+		return true
+	}, time.Minute, time.Second)
+}
+
 // HTTPRouteMustBeAcceptedAndResolved waits for the specified HTTPRoute
 // to be Accepted and have its references resolved by the specified Gateway.
 // It uses the upstream Gateway API's HTTPRouteMustHaveCondition helper.
