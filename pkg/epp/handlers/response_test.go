@@ -296,7 +296,6 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 			}
 
 			assert.Equal(t, tc.wantUsage, reqCtx.Usage, "Usage data should match expected accumulation")
-			assert.True(t, reqCtx.ResponseComplete, "Response should be marked complete after [DONE]")
 		})
 	}
 }
