@@ -296,9 +296,14 @@ func (s *PredictedLatency) getEndpointMinTPOTSLO(endpoint schedulingtypes.Endpoi
 		Name:      endpoint.GetMetadata().NamespacedName.Name,
 		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
 	}
-	if runningReqs, ok := s.runningRequestLists[endpointName]; ok && runningReqs.GetSize() > 0 {
-		if topReq := runningReqs.Peek(); topReq != nil {
-			return topReq.tpot
+
+	// Get queue for this endpoint using sync.Map
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		runningReqs := value.(*requestPriorityQueue)
+		if runningReqs.GetSize() > 0 {
+			if topReq := runningReqs.Peek(); topReq != nil {
+				return topReq.tpot
+			}
 		}
 	}
 	return 0 // no running requests or no TPOT SLOs
@@ -309,7 +314,10 @@ func (s *PredictedLatency) getEndpointRunningRequestCount(endpoint schedulingtyp
 		Name:      endpoint.GetMetadata().NamespacedName.Name,
 		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
 	}
-	if runningReqs, ok := s.runningRequestLists[endpointName]; ok {
+
+	// Get queue for this endpoint using sync.Map
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		runningReqs := value.(*requestPriorityQueue)
 		return runningReqs.GetSize()
 	}
 	return 0 // no running requests

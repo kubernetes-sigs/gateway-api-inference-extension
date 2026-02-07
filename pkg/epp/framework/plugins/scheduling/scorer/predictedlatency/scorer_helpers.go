@@ -106,7 +106,10 @@ func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predict
 		Name:      ctx.targetMetadata.NamespacedName.Name,
 		Namespace: ctx.targetMetadata.NamespacedName.Namespace,
 	}
-	if queue, ok := s.runningRequestLists[endpointName]; ok {
+
+	// Get queue for this endpoint using sync.Map
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		queue := value.(*requestPriorityQueue)
 		queue.Remove(requestID)
 	}
 }

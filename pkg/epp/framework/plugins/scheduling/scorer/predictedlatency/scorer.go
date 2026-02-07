@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -40,8 +41,9 @@ import (
 type PredictedLatency struct {
 	typedName           plugin.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
-	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
-	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx]
+	requestBuilder      PredictionRequestBuilder
+	runningRequestLists sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
+	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
 	headroomStrategy    headroomStrategy
 	config              Config
 }
@@ -102,7 +104,7 @@ func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle 
 		return nil, fmt.Errorf("invalid PredictedLatency config: %w", err)
 	}
 
-	predictor, err := startPredictor(handle)
+	predictor, err := StartPredictor(handle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start latency predictor: %w", err)
 	}
@@ -161,11 +163,12 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	}
 
 	predictedLatency := &PredictedLatency{
-		typedName:           plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
-		latencypredictor:    predictor,
-		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
-		headroomStrategy:    strategy,
-		config:              config,
+		typedName:        plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
+		latencypredictor: predictor,
+		requestBuilder:   &DefaultPredictionRequestBuilder{}, // Default, can be customized via SetRequestBuilder
+		// runningRequestLists is a sync.Map and needs no initialization
+		headroomStrategy: strategy,
+		config:           config,
 	}
 
 	predictedLatency.sloContextStore = ttlcache.New(
@@ -183,7 +186,9 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	return predictedLatency
 }
 
-func startPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
+// StartPredictor initializes and starts the latency predictor.
+// Exported to allow reuse in custom scorer implementations (e.g., llm-d-inference-scheduler).
+func StartPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
 	// Initialize the latency predictor
 	predictor := latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
 	if err := predictor.Start(handle.Context()); err != nil {
@@ -209,6 +214,16 @@ func (s *PredictedLatency) Category() framework.ScorerCategory {
 func (s *PredictedLatency) WithName(name string) *PredictedLatency {
 	s.typedName.Name = name
 	return s
+}
+
+// SetRequestBuilder sets a custom prediction request builder.
+// This allows external packages (e.g., llm-d-inference-scheduler) to customize
+// how prediction and training requests are constructed, for example to add
+// pod type information for disaggregated serving scenarios.
+func (s *PredictedLatency) SetRequestBuilder(builder PredictionRequestBuilder) {
+	if builder != nil {
+		s.requestBuilder = builder
+	}
 }
 
 func (s *PredictedLatency) epsilonGreedyAffinityGate(
@@ -399,4 +414,23 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(endpoint.GetMetadata().NamespacedName)]
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
+}
+
+// AddToRunningRequests allows external tracking of pod load.
+// Used by wrappers (e.g., P/D scorer) to track non-primary pods in runningRequestLists.
+// This enables the scorer to see load on all pods involved in a request.
+func (s *PredictedLatency) AddToRunningRequests(podName types.NamespacedName, requestID string, priority float64) {
+	// LoadOrStore atomically loads or stores the queue
+	actual, _ := s.runningRequestLists.LoadOrStore(podName, newRequestPriorityQueue())
+	queue := actual.(*requestPriorityQueue)
+	queue.Add(requestID, priority)
+}
+
+// RemoveFromRunningRequests allows external cleanup of pod load tracking.
+// Used by wrappers (e.g., P/D scorer) to remove non-primary pods from runningRequestLists.
+func (s *PredictedLatency) RemoveFromRunningRequests(podName types.NamespacedName, requestID string) {
+	if value, ok := s.runningRequestLists.Load(podName); ok {
+		queue := value.(*requestPriorityQueue)
+		queue.Remove(requestID)
+	}
 }
