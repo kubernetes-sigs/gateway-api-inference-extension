@@ -20,8 +20,25 @@ package v1alpha2
 
 // TargetModelApplyConfiguration represents a declarative configuration of the TargetModel type for use
 // with apply.
+//
+// TargetModel defines a weighted model destination for traffic distribution.
 type TargetModelApplyConfiguration struct {
-	Weight       *int32  `json:"weight,omitempty"`
+	// (The following comment is copied from the original targetModel)
+	// Weight is used to determine the proportion of traffic that should be
+	// sent to this model when multiple target models are specified.
+	//
+	// Weight defines the proportion of requests forwarded to the specified
+	// model. This is computed as weight/(sum of all weights in this
+	// TargetModels list). For non-zero values, there may be some epsilon from
+	// the exact proportion defined here depending on the precision an
+	// implementation supports. Weight is not a percentage and the sum of
+	// weights does not need to equal 100.
+	//
+	// If a weight is set for any targetModel, it must be set for all targetModels.
+	// Conversely weights are optional, so long as ALL targetModels do not specify a weight.
+	Weight *int32 `json:"weight,omitempty"`
+	// --- Destination Types ---
+	// ModelRewrite specifies a static model name destination.
 	ModelRewrite *string `json:"modelRewrite,omitempty"`
 }
 

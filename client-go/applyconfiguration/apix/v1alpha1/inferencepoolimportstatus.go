@@ -20,7 +20,10 @@ package v1alpha1
 
 // InferencePoolImportStatusApplyConfiguration represents a declarative configuration of the InferencePoolImportStatus type for use
 // with apply.
+//
+// InferencePoolImportStatus defines the observed state of the InferencePoolImport.
 type InferencePoolImportStatusApplyConfiguration struct {
+	// Controllers is a list of controllers that are responsible for managing the InferencePoolImport.
 	Controllers []ImportControllerApplyConfiguration `json:"controllers,omitempty"`
 }
 

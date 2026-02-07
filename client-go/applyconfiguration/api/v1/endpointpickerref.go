@@ -24,11 +24,36 @@ import (
 
 // EndpointPickerRefApplyConfiguration represents a declarative configuration of the EndpointPickerRef type for use
 // with apply.
+//
+// EndpointPickerRef specifies a reference to an Endpoint Picker extension and its
+// associated configuration.
 type EndpointPickerRefApplyConfiguration struct {
-	Group       *apiv1.Group                     `json:"group,omitempty"`
-	Kind        *apiv1.Kind                      `json:"kind,omitempty"`
-	Name        *apiv1.ObjectName                `json:"name,omitempty"`
-	Port        *PortApplyConfiguration          `json:"port,omitempty"`
+	// Group is the group of the referent API object. When unspecified, the default value
+	// is "", representing the Core API group.
+	Group *apiv1.Group `json:"group,omitempty"`
+	// Kind is the Kubernetes resource kind of the referent.
+	//
+	// Required if the referent is ambiguous, e.g. service with multiple ports.
+	//
+	// Defaults to "Service" when not specified.
+	//
+	// ExternalName services can refer to CNAME DNS records that may live
+	// outside of the cluster and as such are difficult to reason about in
+	// terms of conformance. They also may not be safe to forward to (see
+	// CVE-2021-25740 for more information). Implementations MUST NOT
+	// support ExternalName Services.
+	Kind *apiv1.Kind `json:"kind,omitempty"`
+	// Name is the name of the referent API object.
+	Name *apiv1.ObjectName `json:"name,omitempty"`
+	// Port is the port of the Endpoint Picker extension service.
+	//
+	// Port is required when the referent is a Kubernetes Service. In this
+	// case, the port number is the service port number, not the target port.
+	// For other resources, destination port might be derived from the referent
+	// resource or this field.
+	Port *PortApplyConfiguration `json:"port,omitempty"`
+	// FailureMode configures how the parent handles the case when the Endpoint Picker extension
+	// is non-responsive. When unspecified, defaults to "FailClose".
 	FailureMode *apiv1.EndpointPickerFailureMode `json:"failureMode,omitempty"`
 }
 

@@ -24,7 +24,13 @@ import (
 
 // LabelSelectorApplyConfiguration represents a declarative configuration of the LabelSelector type for use
 // with apply.
+//
+// LabelSelector defines a query for resources based on their labels.
+// This simplified version uses only the matchLabels field.
 type LabelSelectorApplyConfiguration struct {
+	// MatchLabels contains a set of required {key,value} pairs.
+	// An object must match every label in this map to be selected.
+	// The matching logic is an AND operation on all entries.
 	MatchLabels map[apiv1.LabelKey]apiv1.LabelValue `json:"matchLabels,omitempty"`
 }
 

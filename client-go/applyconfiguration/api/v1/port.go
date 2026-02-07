@@ -24,7 +24,11 @@ import (
 
 // PortApplyConfiguration represents a declarative configuration of the Port type for use
 // with apply.
+//
+// Port defines the network port that will be exposed by this InferencePool.
 type PortApplyConfiguration struct {
+	// Number defines the port number to access the selected model server Pods.
+	// The number must be in the range 1 to 65535.
 	Number *apiv1.PortNumber `json:"number,omitempty"`
 }
 

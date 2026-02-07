@@ -26,6 +26,8 @@ import (
 
 // InferenceModelRewriteApplyConfiguration represents a declarative configuration of the InferenceModelRewrite type for use
 // with apply.
+//
+// InferenceModelRewrite is the Schema for the InferenceModelRewrite API.
 type InferenceModelRewriteApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -43,6 +45,7 @@ func InferenceModelRewrite(name, namespace string) *InferenceModelRewriteApplyCo
 	b.WithAPIVersion("inference.networking.x-k8s.io/v1alpha2")
 	return b
 }
+
 func (b InferenceModelRewriteApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value
