@@ -21,8 +21,9 @@ package v1alpha2
 // InferenceObjectiveSpecApplyConfiguration represents a declarative configuration of the InferenceObjectiveSpec type for use
 // with apply.
 type InferenceObjectiveSpecApplyConfiguration struct {
-	Priority *int                                   `json:"priority,omitempty"`
-	PoolRef  *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
+	Priority     *int                                   `json:"priority,omitempty"`
+	PoolRef      *PoolObjectReferenceApplyConfiguration `json:"poolRef,omitempty"`
+	PoolSelector *PoolSelectorApplyConfiguration        `json:"poolSelector,omitempty"`
 }
 
 // InferenceObjectiveSpecApplyConfiguration constructs a declarative configuration of the InferenceObjectiveSpec type for use with
@@ -44,5 +45,13 @@ func (b *InferenceObjectiveSpecApplyConfiguration) WithPriority(value int) *Infe
 // If called multiple times, the PoolRef field is set to the value of the last call.
 func (b *InferenceObjectiveSpecApplyConfiguration) WithPoolRef(value *PoolObjectReferenceApplyConfiguration) *InferenceObjectiveSpecApplyConfiguration {
 	b.PoolRef = value
+	return b
+}
+
+// WithPoolSelector sets the PoolSelector field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PoolSelector field is set to the value of the last call.
+func (b *InferenceObjectiveSpecApplyConfiguration) WithPoolSelector(value *PoolSelectorApplyConfiguration) *InferenceObjectiveSpecApplyConfiguration {
+	b.PoolSelector = value
 	return b
 }

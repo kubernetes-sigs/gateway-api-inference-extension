@@ -86,6 +86,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apixv1alpha2.InferencePoolSpecApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("InferencePoolStatus"):
 		return &apixv1alpha2.InferencePoolStatusApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("LabelSelectorRequirement"):
+		return &apixv1alpha2.LabelSelectorRequirementApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("Match"):
 		return &apixv1alpha2.MatchApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("ModelMatch"):
@@ -94,6 +96,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apixv1alpha2.ParentGatewayReferenceApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("PoolObjectReference"):
 		return &apixv1alpha2.PoolObjectReferenceApplyConfiguration{}
+	case v1alpha2.SchemeGroupVersion.WithKind("PoolSelector"):
+		return &apixv1alpha2.PoolSelectorApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("PoolStatus"):
 		return &apixv1alpha2.PoolStatusApplyConfiguration{}
 	case v1alpha2.SchemeGroupVersion.WithKind("TargetModel"):

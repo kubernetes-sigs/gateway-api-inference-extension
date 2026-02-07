@@ -55,6 +55,8 @@ type InferenceObjectiveList struct {
 // performance and latency goals for the model. These workloads are
 // expected to operate within an InferencePool sharing compute capacity with other
 // InferenceObjectives, defined by the Inference Platform Admin.
+//
+// +kubebuilder:validation:XValidation:rule="has(self.poolRef) != has(self.poolSelector)",message="exactly one of poolRef or poolSelector must be specified"
 type InferenceObjectiveSpec struct {
 
 	// Priority defines how important it is to serve the request compared to other requests in the same pool.
@@ -72,10 +74,19 @@ type InferenceObjectiveSpec struct {
 	// +optional
 	Priority *int `json:"priority,omitempty"`
 
-	// PoolRef is a reference to the inference pool, the pool must exist in the same namespace.
+	// PoolRef is a reference to a specific inference pool by name.
+	// The pool must exist in the same namespace.
+	// Mutually exclusive with poolSelector.
 	//
-	// +kubebuilder:validation:Required
-	PoolRef PoolObjectReference `json:"poolRef"`
+	// +optional
+	PoolRef *PoolObjectReference `json:"poolRef,omitempty"`
+
+	// PoolSelector selects InferencePools by their labels within the same namespace.
+	// This allows a single InferenceObjective to apply to multiple pools matching the selector.
+	// Mutually exclusive with poolRef.
+	//
+	// +optional
+	PoolSelector *PoolSelector `json:"poolSelector,omitempty"`
 }
 
 // InferenceObjectiveStatus defines the observed state of InferenceObjective

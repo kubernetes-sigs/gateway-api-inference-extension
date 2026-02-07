@@ -23,10 +23,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -79,6 +81,14 @@ var (
 			CreationTimestamp(metav1.Unix(1000, 0)).
 			PoolName(inferencePool.Name).
 			PoolGroup("inference.networking.k8s.io").ObjRef()
+
+	infPool = utiltest.MakeInferencePool("test-alpha-pool").
+		Namespace("ns1").
+		Labels(map[string]string{
+			"graduation": "beta",
+			"plan":       "plus",
+		}).
+		ObjRef()
 )
 
 func TestInferenceObjectiveReconciler(t *testing.T) {
@@ -205,5 +215,306 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 
 			})
 		}
+	}
+}
+
+func TestInferenceObjectiveReconcilerWithPoolSelector(t *testing.T) {
+	// Create an objective with poolSelector matching the pool's labels
+	infObjectiveWithSelector := &v1alpha2.InferenceObjective{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "obj-with-selector",
+			Namespace:         infPool.Namespace,
+			CreationTimestamp: metav1.Unix(1000, 0),
+		},
+		Spec: v1alpha2.InferenceObjectiveSpec{
+			Priority: ptr.To(5),
+			PoolSelector: &v1alpha2.PoolSelector{
+				Group: v1.GroupName,
+				Kind:  "InferencePool",
+				MatchLabels: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					"graduation": "beta",
+				},
+			},
+		},
+	}
+
+	// Create an objective with poolSelector that doesn't match
+	infObjectiveNonMatchingSelector := &v1alpha2.InferenceObjective{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "obj-non-matching",
+			Namespace:         infPool.Namespace,
+			CreationTimestamp: metav1.Unix(1000, 0),
+		},
+		Spec: v1alpha2.InferenceObjectiveSpec{
+			Priority: ptr.To(3),
+			PoolSelector: &v1alpha2.PoolSelector{
+				Group: v1.GroupName,
+				Kind:  "InferencePool",
+				MatchLabels: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					"graduation": "ga", // Does not match pool's "beta" label
+				},
+			},
+		},
+	}
+
+	// Create an objective with matchExpressions
+	infObjectiveWithExpressions := &v1alpha2.InferenceObjective{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "obj-with-expressions",
+			Namespace:         infPool.Namespace,
+			CreationTimestamp: metav1.Unix(1000, 0),
+		},
+		Spec: v1alpha2.InferenceObjectiveSpec{
+			Priority: ptr.To(7),
+			PoolSelector: &v1alpha2.PoolSelector{
+				Group: v1.GroupName,
+				Kind:  "InferencePool",
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "plan",
+						Operator: v1alpha2.LabelSelectorOpIn,
+						Values:   []v1alpha2.LabelValue{"plus", "pro"},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name           string
+		objective      *v1alpha2.InferenceObjective
+		wantObjectives []*v1alpha2.InferenceObjective
+	}{
+		{
+			name:           "Objective with matching poolSelector is added",
+			objective:      infObjectiveWithSelector,
+			wantObjectives: []*v1alpha2.InferenceObjective{infObjectiveWithSelector},
+		},
+		{
+			name:           "Objective with non-matching poolSelector is not added",
+			objective:      infObjectiveNonMatchingSelector,
+			wantObjectives: []*v1alpha2.InferenceObjective{},
+		},
+		{
+			name:           "Objective with matching matchExpressions is added",
+			objective:      infObjectiveWithExpressions,
+			wantObjectives: []*v1alpha2.InferenceObjective{infObjectiveWithExpressions},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			period := time.Second
+			epf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period)
+
+			// Create a fake client with the pool and objective
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			_ = v1alpha2.Install(scheme)
+			_ = v1.Install(scheme)
+
+			initObjs := []client.Object{infPool, test.objective}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(initObjs...).
+				Build()
+
+			ds := datastore.NewDatastore(t.Context(), epf, 0)
+
+			reconciler := &InferenceObjectiveReconciler{
+				Reader:    fakeClient,
+				Datastore: ds,
+				PoolGKNN: common.GKNN{
+					NamespacedName: types.NamespacedName{
+						Name:      infPool.Name,
+						Namespace: infPool.Namespace,
+					},
+					GroupKind: schema.GroupKind{
+						Group: v1.GroupName,
+						Kind:  "InferencePool",
+					},
+				},
+			}
+
+			// Call Reconcile
+			req := ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      test.objective.Name,
+					Namespace: test.objective.Namespace,
+				},
+			}
+			_, err := reconciler.Reconcile(context.Background(), req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Check the datastore
+			gotObjectives := ds.ObjectiveGetAll()
+			if len(gotObjectives) != len(test.wantObjectives) {
+				t.Errorf("unexpected number of objectives; want: %d, got: %d", len(test.wantObjectives), len(gotObjectives))
+			}
+
+			if len(test.wantObjectives) > 0 {
+				got := ds.ObjectiveGet(test.objective.Name)
+				if got == nil {
+					t.Errorf("expected objective %s to be in datastore", test.objective.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestPoolSelectorToLabelSelector(t *testing.T) {
+	tests := []struct {
+		name          string
+		selector      *v1alpha2.PoolSelector
+		poolLabels    map[string]string
+		expectedMatch bool
+		expectError   bool
+	}{
+		{
+			name: "matchLabels matches",
+			selector: &v1alpha2.PoolSelector{
+				MatchLabels: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					"env": "prod",
+				},
+			},
+			poolLabels:    map[string]string{"env": "prod", "tier": "backend"},
+			expectedMatch: true,
+		},
+		{
+			name: "matchLabels does not match",
+			selector: &v1alpha2.PoolSelector{
+				MatchLabels: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					"env": "staging",
+				},
+			},
+			poolLabels:    map[string]string{"env": "prod"},
+			expectedMatch: false,
+		},
+		{
+			name: "matchExpressions In operator matches",
+			selector: &v1alpha2.PoolSelector{
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "tier",
+						Operator: v1alpha2.LabelSelectorOpIn,
+						Values:   []v1alpha2.LabelValue{"frontend", "backend"},
+					},
+				},
+			},
+			poolLabels:    map[string]string{"tier": "backend"},
+			expectedMatch: true,
+		},
+		{
+			name: "matchExpressions In operator does not match",
+			selector: &v1alpha2.PoolSelector{
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "tier",
+						Operator: v1alpha2.LabelSelectorOpIn,
+						Values:   []v1alpha2.LabelValue{"frontend", "backend"},
+					},
+				},
+			},
+			poolLabels:    map[string]string{"tier": "database"},
+			expectedMatch: false,
+		},
+		{
+			name: "matchExpressions NotIn operator matches",
+			selector: &v1alpha2.PoolSelector{
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "env",
+						Operator: v1alpha2.LabelSelectorOpNotIn,
+						Values:   []v1alpha2.LabelValue{"dev", "staging"},
+					},
+				},
+			},
+			poolLabels:    map[string]string{"env": "prod"},
+			expectedMatch: true,
+		},
+		{
+			name: "matchExpressions Exists operator matches",
+			selector: &v1alpha2.PoolSelector{
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "feature-flag",
+						Operator: v1alpha2.LabelSelectorOpExists,
+					},
+				},
+			},
+			poolLabels:    map[string]string{"feature-flag": "enabled"},
+			expectedMatch: true,
+		},
+		{
+			name: "matchExpressions Exists operator does not match",
+			selector: &v1alpha2.PoolSelector{
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "feature-flag",
+						Operator: v1alpha2.LabelSelectorOpExists,
+					},
+				},
+			},
+			poolLabels:    map[string]string{"other-label": "value"},
+			expectedMatch: false,
+		},
+		{
+			name: "matchExpressions DoesNotExist operator matches",
+			selector: &v1alpha2.PoolSelector{
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "deprecated",
+						Operator: v1alpha2.LabelSelectorOpDoesNotExist,
+					},
+				},
+			},
+			poolLabels:    map[string]string{"env": "prod"},
+			expectedMatch: true,
+		},
+		{
+			name: "combined matchLabels and matchExpressions",
+			selector: &v1alpha2.PoolSelector{
+				MatchLabels: map[v1alpha2.LabelKey]v1alpha2.LabelValue{
+					"env": "prod",
+				},
+				MatchExpressions: []v1alpha2.LabelSelectorRequirement{
+					{
+						Key:      "tier",
+						Operator: v1alpha2.LabelSelectorOpIn,
+						Values:   []v1alpha2.LabelValue{"frontend", "backend"},
+					},
+				},
+			},
+			poolLabels:    map[string]string{"env": "prod", "tier": "backend"},
+			expectedMatch: true,
+		},
+		{
+			name:          "empty selector matches everything",
+			selector:      &v1alpha2.PoolSelector{},
+			poolLabels:    map[string]string{"any": "label"},
+			expectedMatch: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			labelSelector, err := poolSelectorToLabelSelector(test.selector)
+			if test.expectError {
+				if err == nil {
+					t.Fatalf("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			matches := labelSelector.Matches(labels.Set(test.poolLabels))
+			if matches != test.expectedMatch {
+				t.Errorf("expected match=%v, got match=%v", test.expectedMatch, matches)
+			}
+		})
 	}
 }

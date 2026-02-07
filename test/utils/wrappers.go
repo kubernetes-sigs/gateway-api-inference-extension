@@ -38,7 +38,7 @@ func MakeModelWrapper(namespacedName types.NamespacedName) *InferenceObjectiveWr
 				Namespace: namespacedName.Namespace,
 			},
 			Spec: v1alpha2.InferenceObjectiveSpec{
-				PoolRef: v1alpha2.PoolObjectReference{},
+				PoolRef: &v1alpha2.PoolObjectReference{},
 			},
 		},
 	}
@@ -58,7 +58,7 @@ func (m *InferenceObjectiveWrapper) SetPoolRef(name string) *InferenceObjectiveW
 		Kind:  "inferencepools",
 		Name:  v1alpha2.ObjectName(name),
 	}
-	m.Spec.PoolRef = ref
+	m.Spec.PoolRef = &ref
 	return m
 }
 
