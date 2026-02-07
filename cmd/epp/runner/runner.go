@@ -36,7 +36,6 @@ import (
 	uberzap "go.uber.org/zap"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -353,18 +352,15 @@ func (r *Runner) Run(ctx context.Context) error {
 
 func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32,
 	startCrdReconcilers bool, namespace, name, endpointSelector string, endpointTargetPorts []int) (datastore.Datastore, error) {
+
 	if startCrdReconcilers {
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort), nil
 	} else {
-		endpointPool := datalayer.NewEndpointPool(namespace, name)
-		labelsMap, err := labels.ConvertSelectorToLabelsMap(endpointSelector)
+		endpointPool, err := runserver.NewEndpointPoolFromOptions(namespace, name, endpointSelector, endpointTargetPorts)
 		if err != nil {
-			setupLog.Error(err, "Failed to parse flag %q with error: %w", "endpoint-selector", err)
+			setupLog.Error(err, "Failed to construct endpoint pool from options")
 			return nil, err
 		}
-		endpointPool.Selector = labelsMap
-		endpointPool.TargetPorts = append(endpointPool.TargetPorts, endpointTargetPorts...)
-
 		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
 	}
