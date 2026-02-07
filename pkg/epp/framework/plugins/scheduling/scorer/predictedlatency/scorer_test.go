@@ -398,7 +398,7 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 					selectedCount++
 				}
 			}
-			assert.Equal(t, 1, selectedCount, "Strategy %s should select exactly one pod", tt.strategy)
+			assert.Equal(t, 1, selectedCount, "strategy %s should select exactly one pod", tt.strategy)
 		})
 	}
 }
