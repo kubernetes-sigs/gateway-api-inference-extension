@@ -85,7 +85,7 @@ func processPreRequestForLatencyPrediction(
 
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
+		InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&predictedLatencyCtx.schedulingRequest))),
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: 0,
@@ -172,7 +172,7 @@ func recordTTFTTrainingData(
 	// Train TTFT
 	entry := latencypredictor.TrainingEntry{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
+		InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&predictedLatencyCtx.schedulingRequest))),
 		ActualTTFT:         predictedLatencyCtx.ttft,
 		ActualTPOT:         0,
 		Timestamp:          now,
@@ -202,7 +202,7 @@ func predictFirstTPOT(
 	// Predict first TPOT
 	in := latencypredictor.PredictionRequest{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
+		InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&predictedLatencyCtx.schedulingRequest))),
 		NumRequestWaiting:  m.WaitingQueueSize,
 		NumRequestRunning:  m.RunningRequestsSize,
 		NumTokensGenerated: predictedLatencyCtx.generatedTokenCount,
@@ -260,7 +260,7 @@ func processTokenForLatencyPrediction(
 	// Record actual TPOT
 	entry := latencypredictor.TrainingEntry{
 		KVCachePercentage:  m.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
+		InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&predictedLatencyCtx.schedulingRequest))),
 		ActualTTFT:         0,
 		ActualTPOT:         latencyMs,
 		Timestamp:          now,
@@ -277,7 +277,7 @@ func processTokenForLatencyPrediction(
 	if predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) {
 		in := latencypredictor.PredictionRequest{
 			KVCachePercentage:  m.KVCacheUsagePercent,
-			InputTokenLength:   len(strings.Fields(predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt)),
+			InputTokenLength:   len(strings.Fields(requtil.GetPromptText(&predictedLatencyCtx.schedulingRequest))),
 			NumRequestWaiting:  m.WaitingQueueSize,
 			NumRequestRunning:  m.RunningRequestsSize,
 			NumTokensGenerated: predictedLatencyCtx.generatedTokenCount,
