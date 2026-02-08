@@ -31,10 +31,19 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
 const (
+
+	// --- Internal Keys (for Legacy/Gauge Usage) ---
+	KVCacheUsagePercentKey = "KVCacheUsagePercent"
+	WaitingQueueSizeKey    = "WaitingQueueSize"
+	RunningRequestsSizeKey = "RunningRequestsSize"
+	MaxActiveModelsKey     = "MaxActiveModels"
+	ActiveModelsKey        = "ActiveModels"
+	WaitingModelsKey       = "WaitingModels"
+	UpdateTimeKey          = "UpdateTime"
+
 	// LoRA metrics based on MSP
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
 	LoraInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
@@ -56,13 +65,13 @@ type Extractor struct {
 // package.
 func Produces() map[string]any {
 	return map[string]any{
-		metrics.WaitingQueueSizeKey:    int(0),
-		metrics.RunningRequestsSizeKey: int(0),
-		metrics.KVCacheUsagePercentKey: float64(0),
-		metrics.ActiveModelsKey:        map[string]int{},
-		metrics.WaitingModelsKey:       map[string]int{},
-		metrics.MaxActiveModelsKey:     int(0),
-		metrics.UpdateTimeKey:          time.Time{},
+		WaitingQueueSizeKey:    int(0),
+		RunningRequestsSizeKey: int(0),
+		KVCacheUsagePercentKey: float64(0),
+		ActiveModelsKey:        map[string]int{},
+		WaitingModelsKey:       map[string]int{},
+		MaxActiveModelsKey:     int(0),
+		UpdateTimeKey:          time.Time{},
 	}
 }
 

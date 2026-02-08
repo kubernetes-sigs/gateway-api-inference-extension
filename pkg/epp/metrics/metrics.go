@@ -36,15 +36,6 @@ const (
 	InferencePoolComponent      = "inference_pool"
 	InferenceExtension          = "inference_extension"
 
-	// --- Internal Keys (for Legacy/Gauge Usage) ---
-	KVCacheUsagePercentKey = "KVCacheUsagePercent"
-	WaitingQueueSizeKey    = "WaitingQueueSize"
-	RunningRequestsSizeKey = "RunningRequestsSize"
-	MaxActiveModelsKey     = "MaxActiveModels"
-	ActiveModelsKey        = "ActiveModels"
-	WaitingModelsKey       = "WaitingModels"
-	UpdateTimeKey          = "UpdateTime"
-
 	// Metric Type Values
 	TypeTPOT                   = "tpot"
 	TypePredictedTPOT          = "predicted_tpot"
