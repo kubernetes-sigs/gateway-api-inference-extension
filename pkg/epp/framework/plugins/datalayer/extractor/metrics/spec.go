@@ -25,6 +25,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
 // Spec represents a single metric's specification.
@@ -80,7 +82,7 @@ func addQuotesToLabelValues(input string) string {
 }
 
 // extract the metric family is common to standard and LoRA spec's.
-func extractFamily(spec *Spec, families PrometheusMetricMap) (*dto.MetricFamily, error) {
+func extractFamily(spec *Spec, families sourcemetrics.PrometheusMetricMap) (*dto.MetricFamily, error) {
 	if spec == nil {
 		return nil, errors.New("metric specification is nil")
 	}
@@ -97,7 +99,7 @@ func extractFamily(spec *Spec, families PrometheusMetricMap) (*dto.MetricFamily,
 }
 
 // getLatestMetric retrieves the latest metric based on Spec.
-func (spec *Spec) getLatestMetric(families PrometheusMetricMap) (*dto.Metric, error) {
+func (spec *Spec) getLatestMetric(families sourcemetrics.PrometheusMetricMap) (*dto.Metric, error) {
 	family, err := extractFamily(spec, families)
 	if err != nil {
 		return nil, err

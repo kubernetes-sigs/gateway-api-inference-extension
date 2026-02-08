@@ -28,6 +28,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
 const (
@@ -69,7 +70,7 @@ func TestExtractorExtract(t *testing.T) {
 		t.Error("empty extractor name")
 	}
 
-	if inputType := extractor.ExpectedInputType(); inputType != PrometheusMetricType {
+	if inputType := extractor.ExpectedInputType(); inputType != sourcemetrics.PrometheusMetricType {
 		t.Errorf("incorrect expected input type: %v", inputType)
 	}
 
@@ -92,13 +93,13 @@ func TestExtractorExtract(t *testing.T) {
 		},
 		{
 			name:    "empty PrometheusMetricMap",
-			data:    PrometheusMetricMap{},
+			data:    sourcemetrics.PrometheusMetricMap{},
 			wantErr: true,  // errors when metrics are missing
 			updated: false, // and also not updated...
 		},
 		{
 			name: "single valid metric",
-			data: PrometheusMetricMap{
+			data: sourcemetrics.PrometheusMetricMap{
 				defaultTotalQueuedRequestsMetric: &dto.MetricFamily{
 					Type: dto.MetricType_GAUGE.Enum(),
 					Metric: []*dto.Metric{
@@ -113,7 +114,7 @@ func TestExtractorExtract(t *testing.T) {
 		},
 		{
 			name: "multiple valid metrics",
-			data: PrometheusMetricMap{
+			data: sourcemetrics.PrometheusMetricMap{
 				defaultTotalQueuedRequestsMetric: &dto.MetricFamily{
 					Type: dto.MetricType_GAUGE.Enum(),
 					Metric: []*dto.Metric{
@@ -229,7 +230,7 @@ func TestExtractorMultiEngine(t *testing.T) {
 	extractor, _ := NewModelServerExtractor(registry, "")
 
 	// Sample metric data
-	data := PrometheusMetricMap{
+	data := sourcemetrics.PrometheusMetricMap{
 		"vllm:num_requests_waiting": &dto.MetricFamily{
 			Type: dto.MetricType_GAUGE.Enum(),
 			Metric: []*dto.Metric{
@@ -277,7 +278,7 @@ func TestBackwardCompatibility(t *testing.T) {
 
 	extractor, _ := NewModelServerExtractor(registry, "")
 
-	data := PrometheusMetricMap{
+	data := sourcemetrics.PrometheusMetricMap{
 		"vllm:num_requests_waiting": &dto.MetricFamily{
 			Type: dto.MetricType_GAUGE.Enum(),
 			Metric: []*dto.Metric{

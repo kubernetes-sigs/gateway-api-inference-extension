@@ -20,6 +20,8 @@ import (
 	"fmt"
 
 	dto "github.com/prometheus/client_model/go"
+
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
 // LoRASpec extends the standard Spec to allow special case
@@ -46,7 +48,7 @@ func parseStringToLoRASpec(spec string) (*LoRASpec, error) {
 // generates new series and only most recent should be used. The value of each
 // series is its creation timestamp so we can retrieve the latest by sorting on
 // that the value first.
-func (spec *LoRASpec) getLatestMetric(families PrometheusMetricMap) (*dto.Metric, error) {
+func (spec *LoRASpec) getLatestMetric(families sourcemetrics.PrometheusMetricMap) (*dto.Metric, error) {
 	family, err := extractFamily(spec.Spec, families)
 	if err != nil {
 		return nil, err

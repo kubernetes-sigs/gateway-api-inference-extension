@@ -19,12 +19,10 @@ package metrics
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/http"
 )
@@ -38,40 +36,17 @@ func TestDatasource(t *testing.T) {
 		"metrics-data-source", parseMetrics, PrometheusMetricType)
 	assert.Nil(t, err, "failed to create HTTP datasource")
 
-	registry := NewMappingRegistry()
-	mapping, _ := NewMapping(defaultTotalQueuedRequestsMetric, "", "", "", "")
-	_ = registry.Register(DefaultEngineType, mapping)
-	extractor, err := NewModelServerExtractor(registry, "")
-	assert.Nil(t, err, "failed to create extractor")
-
 	dsType := source.TypedName().Type
 	assert.Equal(t, MetricsDataSourceType, dsType)
 
-	err = source.AddExtractor(extractor)
-	assert.Nil(t, err, "failed to add extractor")
-
-	err = source.AddExtractor(extractor)
-	assert.NotNil(t, err, "expected to fail to add the same extractor twice")
-
-	extractors := source.Extractors()
-	assert.Len(t, extractors, 1)
-	assert.Equal(t, extractor.TypedName().String(), extractors[0])
-
-	err = datalayer.RegisterSource(source)
-	assert.Nil(t, err, "failed to register")
-
 	ctx := context.Background()
-	factory := datalayer.NewEndpointFactory([]fwkdl.DataSource{source}, 100*time.Millisecond)
-	pod := &fwkdl.EndpointMetadata{
+	endpoint := fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
 		NamespacedName: types.NamespacedName{
 			Name:      "pod1",
 			Namespace: "default",
 		},
 		Address: "1.2.3.4:5678",
-	}
-	endpoint := factory.NewEndpoint(ctx, pod, nil)
-	assert.NotNil(t, endpoint, "failed to create endpoint")
-
+	}, nil)
 	err = source.Collect(ctx, endpoint)
 	assert.NotNil(t, err, "expected to fail to collect metrics")
 }

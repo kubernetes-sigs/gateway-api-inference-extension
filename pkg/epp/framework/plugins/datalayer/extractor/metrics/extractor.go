@@ -31,6 +31,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
 const (
@@ -102,13 +103,13 @@ func (ext *Extractor) TypedName() fwkplugin.TypedName {
 // ExpectedType defines the type expected by the metrics.Extractor - a
 // parsed output from a Prometheus metrics endpoint.
 func (ext *Extractor) ExpectedInputType() reflect.Type {
-	return PrometheusMetricType
+	return sourcemetrics.PrometheusMetricType
 }
 
 // Extract transforms the data source output into a concrete attribute that
 // is stored on the given endpoint.
 func (ext *Extractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {
-	families, ok := data.(PrometheusMetricMap)
+	families, ok := data.(sourcemetrics.PrometheusMetricMap)
 	if !ok {
 		return fmt.Errorf("unexpected input in Extract: %T", data)
 	}
