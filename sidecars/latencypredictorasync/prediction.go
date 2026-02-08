@@ -26,7 +26,7 @@ import (
 	"net/http"
 	"time"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
 // Predict uses cached coefficients (Bayesian Ridge) or HTTP calls (XGBoost/LightGBM) for prediction.

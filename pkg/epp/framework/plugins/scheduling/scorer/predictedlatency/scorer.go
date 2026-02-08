@@ -25,12 +25,11 @@ import (
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
-
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
