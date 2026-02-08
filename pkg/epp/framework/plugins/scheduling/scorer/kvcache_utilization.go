@@ -22,7 +22,7 @@ import (
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
 const (
