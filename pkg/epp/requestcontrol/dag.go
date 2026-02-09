@@ -41,6 +41,7 @@ func buildDAG(producers map[string]plugin.ProducerPlugin, consumers map[string]p
 			}
 			if producer.Produces() != nil && consumer.Consumes() != nil {
 				for producedKey, producedData := range producer.Produces() {
+					// TODO(#1988): Verify that pool-level plugins do not produce or consume data from request-level plugins and vice versa.
 					if consumedData, ok := consumer.Consumes()[producedKey]; ok {
 						// Check types are same. Reflection is avoided here for simplicity.
 						// TODO(#1985): Document this detail in IGW docs.
