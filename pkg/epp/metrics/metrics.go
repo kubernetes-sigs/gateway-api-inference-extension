@@ -820,6 +820,7 @@ func RecordFlowControlRequestQueueDuration(
 func RecordFlowControlDispatchCycleDuration(duration time.Duration) {
 	flowControlDispatchCycleDuration.WithLabelValues().Observe(duration.Seconds())
 }
+
 // RecordFlowControlRequestQueueDuration records the duration a request was in the enqueuing process in the Flow Control layer.
 func RecordFlowControlRequestEnqueueDuration(
 	priority string, outcome string,
