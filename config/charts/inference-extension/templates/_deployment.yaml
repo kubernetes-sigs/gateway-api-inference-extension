@@ -181,7 +181,13 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "gateway-api-inference-extension"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: {{ .Values.inferenceExtension.tracing.otelExporterEndpoint | quote }}
+              {{- $endpoint := .Values.inferenceExtension.tracing.otelExporterEndpoint -}}
+              {{- if and (hasKey .Values "jaeger") (.Values.jaeger.enabled) -}}
+                {{- if or (not $endpoint) (eq $endpoint "http://localhost:4317") -}}
+                  {{- $endpoint = (printf "http://%s-jaeger-collector:4317" .Release.Name) -}}
+                {{- end -}}
+              {{- end -}}
+              value: {{ $endpoint | quote }}
             - name: OTEL_TRACES_EXPORTER
               value: "otlp"
             - name: OTEL_RESOURCE_ATTRIBUTES_NODE_NAME
