@@ -72,7 +72,7 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
             
             export STANDALONE_CHART_VERSION=v0
             export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
-            helm install vllm-llama3-8b-instruct \
+            helm install vllm-llama3-8b-instruct-standalone \
             --dependency-update \
             --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
             --set provider.name=$PROVIDER \
@@ -89,7 +89,7 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
            ```bash
             export STANDALONE_CHART_VERSION=v0
             export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
-            helm install vllm-llama3-8b-instruct \
+            helm install vllm-llama3-8b-instruct-standalone \
             --dependency-update \
             --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
             --set inferenceExtension.endpointsServer.createInferencePool=false
