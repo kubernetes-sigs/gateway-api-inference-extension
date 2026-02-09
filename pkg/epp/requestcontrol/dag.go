@@ -39,10 +39,8 @@ func buildDAG(producers map[string]plugin.ProducerPlugin, consumers map[string]p
 			if pName == cName {
 				continue
 			}
-			// Check whether plugin[i] produces something consumed by plugin[j]. In that case, j depends on i.
 			if producer.Produces() != nil && consumer.Consumes() != nil {
 				for producedKey, producedData := range producer.Produces() {
-					// If plugin j consumes the produced key, then j depends on i. We can break after the first match.
 					if consumedData, ok := consumer.Consumes()[producedKey]; ok {
 						// Check types are same. Reflection is avoided here for simplicity.
 						// TODO(#1985): Document this detail in IGW docs.
