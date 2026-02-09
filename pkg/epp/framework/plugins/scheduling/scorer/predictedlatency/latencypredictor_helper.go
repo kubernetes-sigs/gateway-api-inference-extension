@@ -80,13 +80,13 @@ func processPreRequestForLatencyPrediction(
 		return err
 	}
 
-	targetEndpointMetadata := predictedLatencyCtx.targetMetadata
-	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
+	target_endpoint_metadata := predictedLatencyCtx.targetMetadata
+	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[target_endpoint_metadata.NamespacedName.Name]
 
 	// Build prediction request using the builder (ensures pod type is included for P/D)
 	in := requestBuilder.BuildPredictionRequest(
 		ctx,
-		targetEndpointMetadata,
+		target_endpoint_metadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
 		0, // NumTokensGenerated is 0 for pre-request TTFT prediction
