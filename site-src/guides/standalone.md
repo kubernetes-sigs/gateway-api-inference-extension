@@ -76,7 +76,7 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
             --dependency-update \
             --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
             --set provider.name=$PROVIDER \
-            --version $EPP_STANDALONE_CHART_VERSION \
+            --version $STANDALONE_CHART_VERSION \
              oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
            ```
 
@@ -94,7 +94,7 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
             --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-llama3-8b-instruct" \
             --set inferenceExtension.endpointsServer.createInferencePool=false
             --set provider.name=$PROVIDER \
-            --version $EPP_STANDALONE_CHART_VERSION \
+            --version $STANDALONE_CHART_VERSION \
              oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
            ```
 
