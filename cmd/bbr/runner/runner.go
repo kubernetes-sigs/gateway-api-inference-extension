@@ -42,7 +42,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -53,7 +53,7 @@ var (
 	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
 	streaming           = flag.Bool("streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
 	secureServing       = flag.Bool("secure-serving", true, "Enables secure serving.")
-	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	logVerbosity        = flag.Int("v", logutil.DEFAULT, "number for the log level verbosity")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -198,6 +198,5 @@ func initLogging(opts *zap.Options) {
 		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
 	}
 
-	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
-	ctrl.SetLogger(logger)
+	logutil.InitLogging(opts)
 }

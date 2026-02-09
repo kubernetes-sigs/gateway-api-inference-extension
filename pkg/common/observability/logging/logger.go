@@ -22,9 +22,15 @@ import (
 	"github.com/go-logr/logr"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
+
+func InitLogging(opts *zap.Options) {
+	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
+	ctrl.SetLogger(logger)
+}
 
 // NewTestLogger creates a new Zap logger using the dev mode.
 func NewTestLogger() logr.Logger {

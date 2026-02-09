@@ -33,7 +33,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
-	uberzap "go.uber.org/zap"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -42,7 +41,6 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -50,6 +48,7 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
@@ -163,7 +162,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	})
 	setupLog.Info("Flags processed", "flags", flags)
 
-	initLogging(&opts.ZapOptions)
+	logutil.InitLogging(&opts.ZapOptions)
 
 	if opts.Tracing {
 		err := common.InitTracing(ctx, setupLog)
@@ -581,11 +580,6 @@ func setupMetricsV1(opts *runserver.Options) (datalayer.EndpointFactory, error) 
 	},
 		opts.RefreshMetricsInterval)
 	return pmf, nil
-}
-
-func initLogging(opts *zap.Options) {
-	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
-	ctrl.SetLogger(logger)
 }
 
 // registerExtProcServer adds the ExtProcServerRunner as a Runnable to the manager.
