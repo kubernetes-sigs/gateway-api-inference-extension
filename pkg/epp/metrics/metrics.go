@@ -405,14 +405,7 @@ var (
 			Name:      "flow_control_dispatch_cycle_duration_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken for each dispatch cycle in the EPP flow control layer.", compbasemetrics.ALPHA),
 			Buckets: []float64{
-				0.000000005, // 5 ns
-				0.000000010, // 10 ns
-				0.000000025, // 25 ns
-				0.000000050, // 50 ns
-				0.000000100, // 100 ns
-				0.000000250, // 250 ns
-				0.000000500, // 500 ns
-				0.000001000, // 1000 ns (1 µs)
+				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
 		},
 		[]string{},
