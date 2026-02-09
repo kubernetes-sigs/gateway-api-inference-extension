@@ -70,14 +70,14 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
             # Install the Inference Extension CRDs
             kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
             
-            export EPP_STANDALONE_CHART_VERSION=v0
+            export STANDALONE_CHART_VERSION=v0
             export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
             helm install vllm-llama3-8b-instruct \
             --dependency-update \
             --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
             --set provider.name=$PROVIDER \
             --version $EPP_STANDALONE_CHART_VERSION \
-             oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
+             oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
            ```
 
 === "Without Inference APIs Support"
@@ -87,7 +87,7 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
         
      Set the chart version and then select a tab to follow the provider-specific instructions.
            ```bash
-            export EPP_STANDALONE_CHART_VERSION=v0
+            export STANDALONE_CHART_VERSION=v0
             export PROVIDER=<YOUR_PROVIDER> #optional, can be gke as gke needed it specific epp monitoring resources.
             helm install vllm-llama3-8b-instruct \
             --dependency-update \
@@ -95,14 +95,14 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
             --set inferenceExtension.endpointsServer.createInferencePool=false
             --set provider.name=$PROVIDER \
             --version $EPP_STANDALONE_CHART_VERSION \
-             oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/epp-standalone
+             oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
            ```
 
 #### Try it out
 
 Wait until the EPP deployment is ready.
 
-Once you epp-standalone pod is running,
+Once you EPP pod is running,
 Install the curl pod as follows:
 ```bash
 cat <<EOF | kubectl apply -f -

@@ -1,5 +1,5 @@
 apiVersion: v2
-name: epp-standalone
+name: standalone
 description: A Helm chart for Endpoint Picker
 
 type: application

@@ -15,7 +15,7 @@ inferenceExtension:
   pluginsConfigFile: "default-plugins.yaml"
 
   endpointsServer:
-    # set it to false when you want to deploy epp-standalone with inferencepool
+    # set it to false when you want to deploy EPP with inferencepool
     createInferencePool: true
     # Required when createInferencePool is false
 #    endpointSelector: app=vllm-llama3-8b-instruct
@@ -311,7 +311,7 @@ provider:
     # Set to true if the cluster is an Autopilot cluster.
     autopilot: false
 
-# This is not used when you deploy epp-standalone with inferenceExtension.endpointsServer.createInferencePool=false
+# This is not used when you deploy standalone with inferenceExtension.endpointsServer.createInferencePool=false
 inferencePool:
   targetPorts:
     - number: 8000

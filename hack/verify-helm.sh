@@ -90,29 +90,29 @@ for key in "${!test_cases_inference_pool[@]}"; do
   echo "Test case ${key} passed validation."
 done
 
-declare -A test_cases_epp_standalone
+declare -A test_cases_standalone
 
 # InferencePool Helm Chart test cases
-test_cases_epp_standalone["basic"]="--set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway --set inferenceExtension.endpointsServer.createInferencePool=false"
-test_cases_epp_standalone["gke-provider"]="--set provider.name=gke --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
-test_cases_epp_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
-test_cases_epp_standalone["inferencepool"]="--set inferenceExtension.endpointsServer.createInferencePool=true --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_standalone["basic"]="--set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway --set inferenceExtension.endpointsServer.createInferencePool=false"
+test_cases_standalone["gke-provider"]="--set provider.name=gke --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
+test_cases_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
+test_cases_standalone["inferencepool"]="--set inferenceExtension.endpointsServer.createInferencePool=true --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
 
 
-echo "Processing dependencies for epp-standalone chart..."
-${SCRIPT_ROOT}/bin/helm dependency ${DEP_CMD} ${SCRIPT_ROOT}/config/charts/epp-standalone
+echo "Processing dependencies for standalone chart..."
+${SCRIPT_ROOT}/bin/helm dependency ${DEP_CMD} ${SCRIPT_ROOT}/config/charts/standalone
 if [ $? -ne 0 ]; then
   echo "Helm dependency ${DEP_CMD} failed."
   exit 1
 fi
 
 # Running tests cases
-echo "Running helm template command for epp-standalone chart..."
+echo "Running helm template command for standalone chart..."
 # Loop through the keys of the associative array
-for key in "${!test_cases_epp_standalone[@]}"; do
+for key in "${!test_cases_standalone[@]}"; do
   echo "Running test: ${key}"
-  output_dir="${SCRIPT_ROOT}/bin/epp-standalone-${key}"
-  command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/epp-standalone ${test_cases_epp_standalone[$key]} --output-dir=${output_dir}"
+  output_dir="${SCRIPT_ROOT}/bin/standalone-${key}"
+  command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/standalone ${test_cases_standalone[$key]} --output-dir=${output_dir}"
   echo "Executing: ${command}"
   ${command}
   if [ $? -ne 0 ]; then
