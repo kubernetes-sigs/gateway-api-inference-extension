@@ -102,7 +102,7 @@ Choose one of the following options to deploy an Endpoint Picker Extension with 
 
 Wait until the EPP deployment is ready.
 
-Once you EPP pod is running,
+Once the EPP pod is running,
 Install the curl pod as follows:
 ```bash
 cat <<EOF | kubectl apply -f -
