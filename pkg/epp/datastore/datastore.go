@@ -72,6 +72,11 @@ type Datastore interface {
 	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
 	PodDelete(podName string)
 
+	// EndpointSetHealthy marks an endpoint as healthy or unhealthy based on metrics scraping results.
+	// When healthy is false, the endpoint is removed from PodList results.
+	// When healthy is true, the endpoint is added back.
+	EndpointSetHealthy(ep fwkdl.Endpoint, healthy bool)
+
 	// Clears the store state, happens when the pool gets deleted.
 	Clear()
 }
@@ -256,6 +261,18 @@ func (ds *datastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoi
 	return res
 }
 
+// EndpointSetHealthy marks an endpoint as healthy or unhealthy based on metrics scraping results.
+// When healthy is false, the endpoint is removed from PodList results.
+// When healthy is true, the endpoint is added back.
+func (ds *datastore) EndpointSetHealthy(ep fwkdl.Endpoint, healthy bool) {
+	name := ep.GetMetadata().NamespacedName
+	if healthy {
+		ds.pods.Store(name, ep)
+	} else {
+		ds.pods.Delete(name)
+	}
+}
+
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	if ds.pool == nil {
 		return true
@@ -308,11 +325,15 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 }
 
 func (ds *datastore) PodDelete(podName string) {
+	// First, release all endpoints (including unhealthy ones not in pods map) via factory.
+	// This ensures collectors are stopped even for endpoints that were removed due to being unhealthy.
+	ds.epf.ReleaseEndpointsByPodName(podName)
+
+	// Then clean up any remaining entries in pods map (healthy endpoints).
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(fwkdl.Endpoint)
 		if ep.GetMetadata().PodName == podName {
 			ds.pods.Delete(k)
-			ds.epf.ReleaseEndpoint(ep)
 		}
 		return true
 	})

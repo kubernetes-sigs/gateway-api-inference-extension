@@ -18,6 +18,7 @@ package datalayer
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -33,6 +34,7 @@ type FakeDataSource struct {
 	typedName *plugin.TypedName
 	callCount int64
 	Metrics   map[types.NamespacedName]*fwkdl.Metrics
+	errMu     sync.RWMutex
 	Errors    map[types.NamespacedName]error
 }
 
@@ -50,10 +52,22 @@ func (fds *FakeDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
 
 func (fds *FakeDataSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
 	atomic.AddInt64(&fds.callCount, 1)
-	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
-		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
-			ep.UpdateMetrics(metrics)
-		}
+	key := ep.GetMetadata().Clone().NamespacedName
+	fds.errMu.RLock()
+	err, hasErr := fds.Errors[key]
+	fds.errMu.RUnlock()
+	if hasErr {
+		return err
+	}
+	if metrics, ok := fds.Metrics[key]; ok {
+		ep.UpdateMetrics(metrics)
 	}
 	return nil
+}
+
+// SetErrors sets the error map for the fake data source (thread-safe).
+func (fds *FakeDataSource) SetErrors(errors map[types.NamespacedName]error) {
+	fds.errMu.Lock()
+	defer fds.errMu.Unlock()
+	fds.Errors = errors
 }

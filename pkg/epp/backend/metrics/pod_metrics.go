@@ -109,6 +109,11 @@ func (pm *podMetrics) refreshMetrics() error {
 	// considered better than no updates.
 	if updated != nil {
 		pm.UpdateMetrics(updated)
+		// Mark endpoint as healthy since we got metrics (even partial)
+		pm.ds.EndpointSetHealthy(pm, true)
+	} else {
+		// Mark endpoint as unhealthy since metrics fetch completely failed
+		pm.ds.EndpointSetHealthy(pm, false)
 	}
 
 	return nil
