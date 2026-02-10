@@ -62,6 +62,14 @@ func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
 }
 
 func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) fwkdl.Endpoint {
+	key := metadata.NamespacedName
+
+	// Check if endpoint already exists (e.g., unhealthy endpoint with running collector).
+	// Return nil to prevent duplicate goroutines and let the existing collector recover.
+	if _, ok := f.endpoints.Load(key); ok {
+		return nil
+	}
+
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -74,12 +82,15 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 	pm.metadata.Store(metadata)
 	pm.metrics.Store(fwkdl.NewMetrics())
 
-	// Track the endpoint for cleanup
+	// Track the endpoint for cleanup.
 	entry := &endpointEntry{
 		endpoint: pm,
 		podName:  metadata.PodName,
 	}
-	f.endpoints.Store(metadata.NamespacedName, entry)
+	// Use LoadOrStore for atomic operation in case of concurrent calls.
+	if _, loaded := f.endpoints.LoadOrStore(key, entry); loaded {
+		return nil
+	}
 
 	pm.startRefreshLoop(parentCtx)
 	return pm

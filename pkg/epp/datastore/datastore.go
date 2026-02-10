@@ -313,6 +313,11 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
 		if !ok {
 			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
+			if ep == nil {
+				// Collector already exists for this endpoint (e.g., unhealthy endpoint).
+				// Skip adding to pods map; the collector will call EndpointSetHealthy when it recovers.
+				continue
+			}
 			ds.pods.Store(endpointMetadata.NamespacedName, ep)
 			result = false
 		} else {

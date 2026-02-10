@@ -553,6 +553,112 @@ func TestMultiPortPartialFailure(t *testing.T) {
 	})
 }
 
+// TestPodUpdateDoesNotReaddUnhealthyEndpoint tests that when an unhealthy endpoint
+// is removed from PodList due to metrics scraping failure, calling PodUpdateOrAddIfNotExist
+// (simulating a pod update event) does not re-add the unhealthy endpoint.
+// The endpoint should only be re-added when the collector recovers.
+func TestPodUpdateDoesNotReaddUnhealthyEndpoint(t *testing.T) {
+	period := time.Millisecond
+
+	// Test with FakePodMetricsClient
+	t.Run("pod update does not readd unhealthy endpoint with FakePodMetricsClient", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		pmc := &backendmetrics.FakePodMetricsClient{
+			Res: map[types.NamespacedName]*backendmetrics.MetricsState{
+				pod1NamespacedName: {WaitingQueueSize: 0, KVCacheUsagePercent: 0.2},
+			},
+			Err: map[types.NamespacedName]error{
+				pod1NamespacedName: errors.New("injected error"),
+			},
+		}
+		epf := backendmetrics.NewPodMetricsFactory(pmc, period)
+
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		ds := NewDatastore(ctx, epf, 0)
+		_ = ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool))
+
+		// Add pod1
+		ds.PodUpdateOrAddIfNotExist(pod1)
+
+		// Wait for pod1 to be marked unhealthy and removed from PodList
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+			pods := ds.PodList(AllPodsPredicate)
+			assert.Equal(t, 0, len(pods), "Expected pod1 to be removed from PodList due to unhealthy")
+		}, 5*time.Second, 10*time.Millisecond)
+
+		// Simulate a pod update event by calling PodUpdateOrAddIfNotExist again
+		// This should NOT re-add the unhealthy endpoint (previously this would panic or re-add)
+		ds.PodUpdateOrAddIfNotExist(pod1)
+
+		// Verify the endpoint is still not in PodList (should not be re-added)
+		pods := ds.PodList(AllPodsPredicate)
+		assert.Equal(t, 0, len(pods), "Unhealthy endpoint should not be re-added by pod update")
+
+		// Now clear the error to simulate recovery
+		pmc.SetErr(map[types.NamespacedName]error{})
+
+		// Wait for pod1 to recover and be added back by the collector
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+			pods := ds.PodList(AllPodsPredicate)
+			assert.Equal(t, 1, len(pods), "Expected pod1 to be recovered by collector")
+		}, 5*time.Second, 10*time.Millisecond)
+	})
+
+	// Test with FakeDataSource
+	t.Run("pod update does not readd unhealthy endpoint with FakeDataSource", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		fds := &datalayer.FakeDataSource{
+			Metrics: map[types.NamespacedName]*fwkdl.Metrics{
+				pod1NamespacedName: pod1Metrics,
+			},
+			Errors: map[types.NamespacedName]error{
+				pod1NamespacedName: errors.New("injected error"),
+			},
+		}
+		epf := datalayer.NewEndpointFactory([]fwkdl.DataSource{fds}, period)
+
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		ds := NewDatastore(ctx, epf, 0)
+		_ = ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool))
+
+		// Add pod1
+		ds.PodUpdateOrAddIfNotExist(pod1)
+
+		// Wait for pod1 to be marked unhealthy and removed from PodList
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+			pods := ds.PodList(AllPodsPredicate)
+			assert.Equal(t, 0, len(pods), "Expected pod1 to be removed from PodList due to unhealthy")
+		}, 5*time.Second, 10*time.Millisecond)
+
+		// Simulate a pod update event by calling PodUpdateOrAddIfNotExist again
+		// This should NOT re-add the unhealthy endpoint
+		ds.PodUpdateOrAddIfNotExist(pod1)
+
+		// Verify the endpoint is still not in PodList
+		pods := ds.PodList(AllPodsPredicate)
+		assert.Equal(t, 0, len(pods), "Unhealthy endpoint should not be re-added by pod update")
+
+		// Now clear the error to simulate recovery
+		fds.SetErrors(map[types.NamespacedName]error{})
+
+		// Wait for pod1 to recover and be added back by the collector
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+			pods := ds.PodList(AllPodsPredicate)
+			assert.Equal(t, 1, len(pods), "Expected pod1 to be recovered by collector")
+		}, 5*time.Second, 10*time.Millisecond)
+	})
+}
+
 func TestPods(t *testing.T) {
 	tests := []struct {
 		name         string
