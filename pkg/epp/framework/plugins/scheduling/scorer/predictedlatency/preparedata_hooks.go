@@ -30,9 +30,9 @@ import (
 // PrepareRequestData prepares the SLO context for the request, including parsing SLO headers and gathering prefix cache scores abds generating predictions.
 func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
-	sloCtx := s.getOrMakePredictedLatencyContextForRequest(request)
+	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request)
 
-	s.parseSLOHeaders(ctx, request, sloCtx)
+	s.parseSLOHeaders(ctx, request, predictedLatencyCtx)
 	var prefixCacheScore float64
 	for _, endpoint := range endpoints {
 
@@ -49,9 +49,15 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
 			prefixCacheScore = 0.0
 		}
-		sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
+		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
 	}
-	s.setPredictedLatencyContextForRequest(request, sloCtx)
+	predictions, err := s.generatePredictions(ctx, request, predictedLatencyCtx, endpoints)
+	if err == nil && len(predictions) == len(endpoints) {
+		s.updateRequestContextWithPredictions(predictedLatencyCtx, predictions)
+		s.updateHasValidPod(ctx, predictedLatencyCtx, endpoints)
+	}
+
+	s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 	return nil
 }
 

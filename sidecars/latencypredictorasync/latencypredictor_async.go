@@ -86,12 +86,12 @@ func (p *Predictor) Start(ctx context.Context) error {
 }
 
 // Stop stops background work, then does a final flush/refresh.
-func (p *Predictor) Stop() {
+func (p *Predictor) Stop(ctx context.Context) {
 	close(p.done)
 	p.wg.Wait() // Wait for the background loop to finish
 	// final flush & refresh
-	p.flushTraining()
-	p.refreshMetrics()
+	p.flushTraining(ctx)
+	p.refreshMetrics(ctx)
 	p.logger.Info("Latency predictor async client stopped.")
 }
 
@@ -106,14 +106,15 @@ func (p *Predictor) backgroundLoop() {
 	for {
 		select {
 		case <-flushTicker.C:
-			p.flushTraining()
-		case <-metricsTicker.C:
-			p.refreshMetrics()
-			// Also refresh server status periodically
+			// ✅ Create context with timeout for background flush
 			ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
-			if err := p.refreshServerStatus(ctx); err != nil {
-				p.logger.Error(err, "failed to refresh server status during background refresh")
-			}
+			p.flushTraining(ctx)
+			cancel()
+		case <-metricsTicker.C:
+			// ✅ Create context with timeout for background refresh
+			ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
+			p.refreshMetrics(ctx)
+			p.refreshServerStatus(ctx)
 			cancel()
 		case <-p.done:
 			return

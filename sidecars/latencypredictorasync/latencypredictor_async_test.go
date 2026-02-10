@@ -75,7 +75,11 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 
 	// Create predictor
 	predictor := New(config, logger)
-	defer predictor.Stop()
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		predictor.Stop(ctx) // ✅ Pass context to Stop()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -814,7 +818,12 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
-	defer httpPredictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpPredictor.Stop(stopCtx)
+	}()
 
 	err = httpPredictor.Start(ctx)
 	if err != nil {
@@ -996,7 +1005,12 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
-	defer httpPredictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpPredictor.Stop(stopCtx)
+	}()
 
 	err = httpPredictor.Start(ctx)
 	if err != nil {
@@ -1607,7 +1621,12 @@ func BenchmarkPrediction(b *testing.B) {
 	}
 
 	predictor := New(config, logger)
-	defer predictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		predictor.Stop(stopCtx)
+	}()
 
 	ctx := context.Background()
 	err := predictor.Start(ctx)
@@ -1679,7 +1698,12 @@ func BenchmarkBulkPrediction(b *testing.B) {
 	}
 
 	predictor := New(config, logger)
-	defer predictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		predictor.Stop(stopCtx)
+	}()
 
 	ctx := context.Background()
 	err := predictor.Start(ctx)
@@ -2237,7 +2261,7 @@ func TestConfigurationHandling(t *testing.T) {
 			len(config.PredictionURLs), len(predictionURLs))
 	}
 
-	// Cleanup without starting background processes
+	// ✅ Properly cleanup
 	close(predictor.done)
 	predictor.wg.Wait()
 

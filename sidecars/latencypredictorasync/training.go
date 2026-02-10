@@ -139,7 +139,7 @@ func (p *Predictor) sampleFromSlice(entries []TrainingEntry, sampleSize int) []T
 }
 
 // flushTraining sends buffered entries to training server in one bulk POST, with error handling.
-func (p *Predictor) flushTraining() {
+func (p *Predictor) flushTraining(ctx context.Context) {
 	p.bufferMu.Lock()
 	if len(p.pending) == 0 {
 		p.bufferMu.Unlock()
@@ -166,7 +166,12 @@ func (p *Predictor) flushTraining() {
 
 	// Send training data to training server
 	url := p.config.TrainingURL + "/add_training_data_bulk"
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(data))
+
+	// ✅ Use provided context with timeout
+	reqCtx, cancel := context.WithTimeout(ctx, p.config.HTTPTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		p.logger.Error(err, "Failed to create bulk POST request", "url", url)
 		return
@@ -289,12 +294,12 @@ func (p *Predictor) refreshModelInfo(ctx context.Context) error {
 }
 
 // refreshMetrics GETs /metrics from training server and caches parsed coefficients or fetches XGBoost trees.
-func (p *Predictor) refreshMetrics() {
-	ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
+func (p *Predictor) refreshMetrics(ctx context.Context) {
+	reqCtx, cancel := context.WithTimeout(ctx, p.config.HTTPTimeout)
 	defer cancel()
 
 	// Refresh model info first
-	if err := p.refreshModelInfo(ctx); err != nil {
+	if err := p.refreshModelInfo(reqCtx); err != nil {
 		p.logger.Error(err, "Failed to refresh model info during periodic refresh")
 		return
 	}
