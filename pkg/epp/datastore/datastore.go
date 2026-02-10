@@ -45,6 +45,15 @@ var (
 	AllPodsPredicate = func(_ fwkdl.Endpoint) bool { return true }
 )
 
+// CreateEndpointNamespacedName creates a namespaced name for an endpoint based on pod and rank index.
+// This ensures consistent naming between PodUpdateOrAddIfNotExist and podResyncAll.
+func CreateEndpointNamespacedName(pod *corev1.Pod, idx int) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
+		Namespace: pod.Namespace,
+	}
+}
+
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
 type Datastore interface {
 	// InferencePool operations
@@ -284,11 +293,8 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		}
 		pods = append(pods,
 			&fwkdl.EndpointMetadata{
-				NamespacedName: types.NamespacedName{
-					Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
-					Namespace: pod.Namespace,
-				},
-				PodName:     pod.Name,
+				NamespacedName: CreateEndpointNamespacedName(pod, idx),
+				PodName:        pod.Name,
 				Address:     pod.Status.PodIP,
 				Port:        strconv.Itoa(port),
 				MetricsHost: net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
@@ -344,10 +350,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 		// Calculate expected endpoint names based on current targetPorts.
 		for idx := range ds.pool.TargetPorts {
-			activeEndpoints.Insert(types.NamespacedName{
-				Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
-				Namespace: pod.Namespace,
-			})
+			activeEndpoints.Insert(CreateEndpointNamespacedName(&pod, idx))
 		}
 		if !ds.PodUpdateOrAddIfNotExist(&pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
