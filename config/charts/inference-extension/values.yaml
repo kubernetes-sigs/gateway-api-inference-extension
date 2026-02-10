@@ -3,7 +3,7 @@ latencyPredictor:
   # Training Server Configuration
   trainingServer:
     image:
-      hub: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo
+      hub: path/to/your/docker/repo
       name: latencypredictor-training-server
       tag: latest
       pullPolicy: Always
@@ -41,10 +41,10 @@ latencyPredictor:
 
   # Prediction Server Configuration
   predictionServers:
-    count: 10
+    count: 30
     startPort: 8001
     image:
-      hub: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo
+      hub: path/to/your/docker/repo
       name: latencypredictor-prediction-server
       tag: latest
       pullPolicy: Always
