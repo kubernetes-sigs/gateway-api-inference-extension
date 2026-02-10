@@ -286,10 +286,10 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 			&fwkdl.EndpointMetadata{
 				NamespacedName: createEndpointNamespacedName(pod, idx),
 				PodName:        pod.Name,
-				Address:     pod.Status.PodIP,
-				Port:        strconv.Itoa(port),
-				MetricsHost: net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
-				Labels:      labels,
+				Address:        pod.Status.PodIP,
+				Port:           strconv.Itoa(port),
+				MetricsHost:    net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
+				Labels:         labels,
 			})
 	}
 
