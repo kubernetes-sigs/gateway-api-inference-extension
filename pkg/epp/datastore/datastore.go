@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -144,14 +145,19 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 	oldEndpointPool := ds.pool
 	ds.pool = endpointPool
 
-	if oldEndpointPool == nil || !labels.Equals(oldEndpointPool.Selector, endpointPool.Selector) {
-		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endpointPool.Selector)
-		// A full resync is required to address two cases:
+	selectorChanged := oldEndpointPool == nil || !labels.Equals(oldEndpointPool.Selector, endpointPool.Selector)
+	targetPortsChanged := oldEndpointPool != nil && !slices.Equal(oldEndpointPool.TargetPorts, endpointPool.TargetPorts)
+
+	if selectorChanged || targetPortsChanged {
+		logger.V(logutil.DEFAULT).Info("Updating endpoints", "selector", endpointPool.Selector, "targetPortsChanged", targetPortsChanged)
+		// A full resync is required to address the following cases:
 		// 1) At startup, the pod events may get processed before the pool is synced with the datastore,
 		//    and hence they will not be added to the store since pool selector is not known yet
 		// 2) If the selector on the pool was updated, then we will not get any pod events, and so we need
 		//    to resync the whole pool: remove pods in the store that don't match the new selector and add
 		//    the ones that may have existed already to the store.
+		// 3) If the targetPorts changed, we need to resync to remove orphaned rank endpoints that no longer
+		//    exist in the new targetPorts configuration.
 		if err := ds.podResyncAll(ctx, reader); err != nil {
 			return fmt.Errorf("failed to update pods according to the pool selector - %w", err)
 		}
@@ -328,13 +334,21 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		return fmt.Errorf("failed to list pods - %w", err)
 	}
 
-	activePods := sets.New[string]()
+	// Track active endpoints by their full name (including rank suffix).
+	// This ensures orphaned rank endpoints are removed when targetPorts shrinks.
+	activeEndpoints := sets.New[types.NamespacedName]()
 	for _, pod := range podList.Items {
 		if !podutil.IsPodReady(&pod) {
 			continue
 		}
 		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-		activePods.Insert(pod.Name)
+		// Calculate expected endpoint names based on current targetPorts.
+		for idx := range ds.pool.TargetPorts {
+			activeEndpoints.Insert(types.NamespacedName{
+				Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
+				Namespace: pod.Namespace,
+			})
+		}
 		if !ds.PodUpdateOrAddIfNotExist(&pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
@@ -342,12 +356,14 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		}
 	}
 
-	// Remove pods that don't belong to the pool or not ready any more.
+	// Remove endpoints that don't belong to the pool, are not ready, or are orphaned ranks.
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(fwkdl.Endpoint)
-		if !activePods.Has(ep.GetMetadata().PodName) {
-			logger.V(logutil.VERBOSE).Info("Removing pod", "pod", ep.GetMetadata().PodName)
-			ds.PodDelete(ep.GetMetadata().PodName)
+		endpointName := ep.GetMetadata().NamespacedName
+		if !activeEndpoints.Has(endpointName) {
+			logger.V(logutil.VERBOSE).Info("Removing endpoint", "endpoint", endpointName)
+			ds.pods.Delete(k)
+			ds.epf.ReleaseEndpoint(ep)
 		}
 		return true
 	})
