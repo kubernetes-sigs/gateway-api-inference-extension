@@ -16,12 +16,12 @@ spec:
     spec:
       # Use the same node pool as your services
       nodeSelector:
-        cloud.google.com/gke-nodepool: "pool-2"
+        cloud.google.com/gke-nodepool: "pool-3"
       restartPolicy: Never
       containers:
       - name: test-runner
         # Use your test image here
-        image: placeholder-for-test-image:latest # TODO Replace with actual test image
+        image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/latencypredictor-test:latest # TODO Replace with actual test image
         imagePullPolicy: Always
         resources:
           requests:
@@ -39,7 +39,7 @@ spec:
         - name: TEST_TIMEOUT
           value: "300"  # 5 minutes
         - name: TARGET_QPS
-          value: "1000"  # Match the target QPS in your test script
+          value: "500"  # Match the target QPS in your test script
         envFrom:
         - configMapRef:
             name: prediction-server-config  # Reuse existing config if needed

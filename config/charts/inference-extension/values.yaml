@@ -3,7 +3,7 @@ latencyPredictor:
   # Training Server Configuration
   trainingServer:
     image:
-      hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+      hub: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo
       name: latencypredictor-training-server
       tag: latest
       pullPolicy: Always
@@ -41,20 +41,20 @@ latencyPredictor:
 
   # Prediction Server Configuration
   predictionServers:
-    count: 10
+    count: 1
     startPort: 8001
     image:
-      hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+      hub: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo
       name: latencypredictor-prediction-server
       tag: latest
       pullPolicy: Always
-    resources:
-      requests:
-        cpu: "500m"
-        memory: "1Gi"
-      limits:
-        cpu: "1000m"
-        memory: "2Gi"
+      resources:
+        requests:
+          cpu: "8000m"
+          memory: "4Gi"
+        limits:
+          cpu: "191000m"        # was 16000m — give headroom for 8 workers + probes
+          memory: "8Gi"
     livenessProbe:
       httpGet:
         path: /healthz
@@ -74,6 +74,9 @@ latencyPredictor:
       LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
       LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
       LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
+      HTTP_TIMEOUT: "30"
+      UVICORN_WORKERS: "8"
+      MODEL_SYNC_INTERVAL_SEC: "10"
 
   # EPP Environment Variables for Latency Predictor
   eppEnv:
