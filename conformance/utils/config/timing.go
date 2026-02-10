@@ -54,8 +54,8 @@ func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 	return InferenceExtensionTimeoutConfig{
 		TimeoutConfig:                          config, // Initialize embedded struct
 		GeneralMustHaveConditionTimeout:        300 * time.Second,
-		InferencePoolMustHaveConditionInterval: 10 * time.Second,
-		GatewayObjectPollInterval:              5 * time.Second,
+		InferencePoolMustHaveConditionInterval: 1 * time.Second,
+		GatewayObjectPollInterval:              1 * time.Second,
 		HTTPRouteDeletionReconciliationTimeout: 5 * time.Second,
 		ServiceUpdateTimeout:                   10 * time.Second,
 	}
