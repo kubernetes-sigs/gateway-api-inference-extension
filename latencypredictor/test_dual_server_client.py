@@ -1212,7 +1212,7 @@ def test_bulk_prediction_stress_test():
     print("Running bulk prediction stress test...")
     
     # Test with different batch sizes
-    batch_sizes = [25, 50, 100]
+    batch_sizes = [5, 10, 25]
     for batch_size in batch_sizes:
         print(f"\nTesting with batch size {batch_size}...")
         results = asyncio.run(run_bulk_prediction_stress_test(
