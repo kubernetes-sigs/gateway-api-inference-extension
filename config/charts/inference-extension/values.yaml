@@ -41,7 +41,7 @@ latencyPredictor:
 
   # Prediction Server Configuration
   predictionServers:
-    count: 30
+    count: 10
     startPort: 8001
     image:
       hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
