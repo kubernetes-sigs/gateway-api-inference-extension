@@ -23,10 +23,8 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"regexp"
-	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -49,6 +47,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/tracing"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config/loader"
@@ -165,9 +165,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	logutil.InitLogging(&opts.ZapOptions)
 
 	if opts.Tracing {
-		err := common.InitTracing(ctx, setupLog)
+		err := tracing.InitTracing(ctx, setupLog)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to init tracing %w", err)
 		}
 	}
 
@@ -253,7 +253,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	if opts.EnablePprof {
-		if err = setupPprofHandlers(mgr); err != nil {
+		setupLog.Info("Setting pprof handlers")
+		if err = profiling.SetupPprofHandlers(mgr); err != nil {
 			setupLog.Error(err, "Failed to setup pprof handlers")
 			return err
 		}
@@ -623,32 +624,6 @@ func verifyMetricMapping(mapping backendmetrics.MetricMapping) {
 	if mapping.CacheConfigInfo == nil {
 		setupLog.Info("Not scraping metric: CacheConfigInfo")
 	}
-}
-
-// setupPprofHandlers only implements the pre-defined profiles:
-// https://cs.opensource.google/go/go/+/refs/tags/go1.24.4:src/runtime/pprof/pprof.go;l=108
-func setupPprofHandlers(mgr ctrl.Manager) error {
-	setupLog.Info("Enabling pprof handlers")
-	var err error
-	profiles := []string{
-		"heap",
-		"goroutine",
-		"allocs",
-		"threadcreate",
-		"block",
-		"mutex",
-	}
-	for _, p := range profiles {
-		err = mgr.AddMetricsServerExtraHandler("/debug/pprof/"+p, pprof.Handler(p))
-		if err != nil {
-			return err
-		}
-	}
-
-	runtime.SetMutexProfileFraction(1)
-	runtime.SetBlockProfileRate(1)
-
-	return nil
 }
 
 func extractDeploymentName(podName string) (string, error) {

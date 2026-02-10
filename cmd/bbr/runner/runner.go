@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -54,6 +55,7 @@ var (
 	streaming           = flag.Bool("streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
 	secureServing       = flag.Bool("secure-serving", true, "Enables secure serving.")
 	logVerbosity        = flag.Int("v", logutil.DEFAULT, "number for the log level verbosity")
+	enablePprof         = flag.Bool("enable-pprof", true, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -138,6 +140,14 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		setupLog.Error(err, "Failed to create manager", "config", cfg)
 		return err
+	}
+
+	if *enablePprof {
+		setupLog.Info("Setting pprof handlers")
+		if err = profiling.SetupPprofHandlers(mgr); err != nil {
+			setupLog.Error(err, "Failed to setup pprof handlers")
+			return err
+		}
 	}
 
 	// Setup ExtProc Server Runner
