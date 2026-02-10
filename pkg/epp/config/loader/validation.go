@@ -17,6 +17,7 @@ limitations under the License.
 package loader
 
 import (
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -87,7 +88,7 @@ func validateRequestControl(cfg *configapi.RequestControlConfig) error {
 		return nil
 	}
 	if cfg.PrepareDataTimeout.Duration <= 0 {
-		return fmt.Errorf("prepareDataTimeout must be greater than 0")
+		return errors.New("prepareDataTimeout must be greater than 0")
 	}
 	return nil
 }
