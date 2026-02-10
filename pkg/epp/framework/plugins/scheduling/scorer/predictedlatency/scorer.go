@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
-	"k8s.io/apimachinery/pkg/types"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -413,23 +413,4 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(endpoint.GetMetadata().NamespacedName)]
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
-}
-
-// AddToRunningRequests allows external tracking of pod load.
-// Used by wrappers (e.g., P/D scorer) to track non-primary pods in runningRequestLists.
-// This enables the scorer to see load on all pods involved in a request.
-func (s *PredictedLatency) AddToRunningRequests(podName types.NamespacedName, requestID string, priority float64) {
-	// LoadOrStore atomically loads or stores the queue
-	actual, _ := s.runningRequestLists.LoadOrStore(podName, newRequestPriorityQueue())
-	queue := actual.(*requestPriorityQueue)
-	queue.Add(requestID, priority)
-}
-
-// RemoveFromRunningRequests allows external cleanup of pod load tracking.
-// Used by wrappers (e.g., P/D scorer) to remove non-primary pods from runningRequestLists.
-func (s *PredictedLatency) RemoveFromRunningRequests(podName types.NamespacedName, requestID string) {
-	if value, ok := s.runningRequestLists.Load(podName); ok {
-		queue := value.(*requestPriorityQueue)
-		queue.Remove(requestID)
-	}
 }

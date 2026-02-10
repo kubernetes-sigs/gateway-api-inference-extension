@@ -36,6 +36,14 @@ import (
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
+const (
+	// Experimental_DefaultPrefillProfile is the default profile name for prefill pods in disaggregated serving.
+	// This constant identifies prefill endpoints for load tracking and training data collection.
+	// This is hardcoded for now until we land on a canonical approach for plugins to identify
+	// prefill and decode endpoints (See https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2080)
+	Experimental_DefaultPrefillProfile = "prefill"
+)
+
 var _ requestcontrol.PreRequest = &PredictedLatency{}
 var _ requestcontrol.ResponseReceived = &PredictedLatency{}
 var _ requestcontrol.ResponseStreaming = &PredictedLatency{}
@@ -88,27 +96,6 @@ func (s *PredictedLatency) getPredictedLatencyContextForRequest(request *schedul
 		return item.Value(), nil
 	}
 	return nil, fmt.Errorf("SLO context not found for request ID: %s", id)
-}
-
-// GetAvgTPOTSLO returns the average TPOT SLO for a request.
-// Used by wrappers (e.g., P/D scorer) to get priority values for tracking.
-func (s *PredictedLatency) GetAvgTPOTSLO(request *schedulingtypes.LLMRequest) (float64, error) {
-	ctx, err := s.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		return 0, err
-	}
-	return ctx.avgTPOTSLO, nil
-}
-
-// GetSchedulingResult returns the scheduling result for a request.
-// Used by wrappers (e.g., P/D scorer) to access profile results and scheduling information
-// for custom hook logic and cleanup.
-func (s *PredictedLatency) GetSchedulingResult(request *schedulingtypes.LLMRequest) (*schedulingtypes.SchedulingResult, error) {
-	ctx, err := s.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.schedulingResult, nil
 }
 
 func (s *PredictedLatency) setPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest, ctx *predictedLatencyCtx) {
@@ -263,6 +250,30 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 		logger.V(logutil.TRACE).Info("PredictedLatency: Item already exists in queue", "endpointName", endpointName, "requestID", id)
 	}
 
+	// For disaggregated serving, also track the prefill pod if it was selected
+	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
+		if len(prefillResult.TargetEndpoints) > 0 {
+			prefillPod := prefillResult.TargetEndpoints[0].GetMetadata()
+			prefillEndpointName := types.NamespacedName{
+				Name:      prefillPod.NamespacedName.Name,
+				Namespace: prefillPod.NamespacedName.Namespace,
+			}
+
+			// Get or create queue for prefill endpoint
+			prefillActual, _ := t.runningRequestLists.LoadOrStore(prefillEndpointName, newRequestPriorityQueue())
+			prefillRequestList := prefillActual.(*requestPriorityQueue)
+
+			prefillAdded := prefillRequestList.Add(id, predictedLatencyCtx.avgTPOTSLO)
+			if !prefillAdded {
+				logger.V(logutil.TRACE).Info("PredictedLatency: Prefill item already exists in queue", "endpointName", prefillEndpointName, "requestID", id)
+			} else {
+				logger.V(logutil.DEBUG).Info("Tracked prefill pod in running requests",
+					"prefillPod", prefillPod.NamespacedName.Name,
+					"requestID", id)
+			}
+		}
+	}
+
 	// Set up SLO request context
 	predictedLatencyCtx.targetMetadata = targetMetadata
 	predictedLatencyCtx.schedulingResult = schedulingResult
@@ -351,6 +362,25 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
+
+	// For disaggregated serving, also remove the prefill pod from tracking
+	schedulingResult := predictedLatencyCtx.schedulingResult
+	if schedulingResult != nil {
+		if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
+			if len(prefillResult.TargetEndpoints) > 0 {
+				prefillPod := prefillResult.TargetEndpoints[0].GetMetadata()
+				prefillEndpointName := types.NamespacedName{
+					Name:      prefillPod.NamespacedName.Name,
+					Namespace: prefillPod.NamespacedName.Namespace,
+				}
+				t.removeRequestFromEndpoint(prefillEndpointName, id)
+				logger.V(logutil.DEBUG).Info("Removed prefill pod from running requests",
+					"prefillPod", prefillPod.NamespacedName.Name,
+					"requestID", id)
+			}
+		}
+	}
+
 	t.removeRequestFromQueue(id, predictedLatencyCtx)
 	t.deletePredictedLatencyContextForRequest(request)
 }
