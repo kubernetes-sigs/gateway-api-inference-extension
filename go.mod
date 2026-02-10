@@ -47,7 +47,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	go.opentelemetry.io/otel/trace v1.40.0
 	sigs.k8s.io/kustomize/api v0.21.0
-	sigs.k8s.io/kustomize/kyaml v0.21.0
+	sigs.k8s.io/kustomize/kyaml v0.21.1
 )
 
 require (
