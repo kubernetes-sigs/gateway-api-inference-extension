@@ -17,6 +17,9 @@ vLLM is configured as the default in the [endpoint picker extension](https://git
 
 ## Triton with TensorRT-LLM Backend
 
+Triton specific metric names need to be specified when starting the EPP.
+
+Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install the `inferencepool` via helm. See the [`inferencepool` helm guide](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/config/charts/inferencepool/README.md) for more details.
 
  Add the following to the `flags` in the helm chart as [flags to EPP](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/29ea29028496a638b162ff287c62c0087211bbe5/config/charts/inferencepool/values.yaml#L36)
 

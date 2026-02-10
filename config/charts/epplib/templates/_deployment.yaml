@@ -73,7 +73,14 @@ spec:
           image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
           imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "IfNotPresent" }}
           args:
-          {{- /* . Mode Specific Flags */ -}}
+          {{- /* 1. Determine Model Server Type Logic */ -}}
+          {{- $modelServerType := "vllm" }}
+          {{- if and .Values.inferenceExtension.endpointsServer (not .Values.inferenceExtension.endpointsServer.createInferencePool) -}}
+            {{- $modelServerType = .Values.inferenceExtension.endpointsServer.modelServerType | default "vllm" }}
+          {{- else }}
+            {{- $modelServerType = .Values.inferencePool.modelServerType | default "vllm" }}
+          {{- end }}
+          {{- /* 2. Mode Specific Flags */ -}}
           {{- if and .Values.inferenceExtension.endpointsServer (not .Values.inferenceExtension.endpointsServer.createInferencePool) }}
               - --endpoint-selector
               - {{ .Values.inferenceExtension.endpointsServer.endpointSelector | quote }}
@@ -89,6 +96,19 @@ spec:
               - --pool-group
               - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
           {{- end }}
+          {{- end }}
+          # SGLang specific metrics.
+          {{- if eq $modelServerType "sglang" }}
+              - --total-queued-requests-metric="sglang:num_queue_reqs"
+              - --kv-cache-usage-percentage-metric="sglang:token_usage"
+          {{- end }}
+          {{- if eq $modelServerType "triton-tensorrt-llm" }}
+              - --total-queued-requests-metric
+              - "nv_trt_llm_request_metrics{request_type=waiting}"
+              - --kv-cache-usage-percentage-metric
+              - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
+              - --lora-info-metric
+              - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
           {{- end }}
               - --zap-encoder
               - "json"

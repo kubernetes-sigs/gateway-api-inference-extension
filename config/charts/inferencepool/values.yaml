@@ -83,6 +83,7 @@ inferenceExtension:
 inferencePool:
   targetPorts:
     - number: 8000
+  modelServerType: vllm # vllm, triton-tensorrt-llm
   apiVersion: inference.networking.k8s.io/v1
   # modelServers: # REQUIRED
   #   matchLabels:

@@ -126,7 +126,7 @@ EOF
 ```
 Send an inference request via
 ```bash
-kubectl exec curl -- curl -i http://vllm-llama3-8b-instruct-standalone-epp:8081/v1/completions \
+kubectl exec curl -- curl -i http://vllm-llama3-8b-instruct-epp:8081/v1/completions \
 -H 'Content-Type: application/json' \
 -d '{"model": "food-review-1","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
 ```
