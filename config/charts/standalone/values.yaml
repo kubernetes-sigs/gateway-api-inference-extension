@@ -21,8 +21,6 @@ inferenceExtension:
 #    endpointSelector: app=vllm-llama3-8b-instruct
     # unused when createInferencePool is true
     targetPorts: 8000
-    # unused when createInferencePool is true
-    modelServerType: vllm # vllm, triton-tensorrt-llm
 
 
   sidecar:
@@ -315,7 +313,6 @@ provider:
 inferencePool:
   targetPorts:
     - number: 8000
-  modelServerType: vllm # vllm, triton-tensorrt-llm
   apiVersion: inference.networking.k8s.io/v1
   # modelServers: # REQUIRED
   #   matchLabels:

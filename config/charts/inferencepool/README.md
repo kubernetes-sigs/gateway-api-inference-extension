@@ -109,18 +109,6 @@ Then apply it with:
 $ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
 ```
 
-### Install for Triton TensorRT-LLM
-
-Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install for Triton TensorRT-LLM, e.g.,
-
-```txt
-$ helm install triton-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
-  --set inferencePool.modelServerType=triton-tensorrt-llm \
-  --set provider.name=[none|gke|istio] \
-  oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
-```
-
 ### Install with Latency-Based Routing
 
 For full details see the dedicated [Latency-Based Routing Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/latency-based-predictor.md)
@@ -223,7 +211,6 @@ The following table list the configurable parameters of the chart.
 |------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `inferencePool.apiVersion`                                 | The API version of the InferencePool resource. Defaults to `inference.networking.k8s.io/v1`. This can be changed to `inference.networking.x-k8s.io/v1alpha2` to support older API versions.                                                        |
 | `inferencePool.targetPortNumber`                           | Target port number for the vllm backends, will be used to scrape metrics by the inference extension. Defaults to 8000.                                                                                                                             |
-| `inferencePool.modelServerType`                            | Type of the model servers in the pool, valid options are [vllm, triton-tensorrt-llm], default is vllm.                                                                                                                                             |
 | `inferencePool.modelServers.matchLabels`                   | Label selector to match vllm backends managed by the inference pool.                                                                                                                                                                               |
 | `inferenceExtension.replicas`                              | Number of replicas for the endpoint picker extension service. If More than one replica is used, EPP will run in HA active-passive mode. Defaults to `1`.                                                                                           |
 | `inferenceExtension.image.name`                            | Name of the container image used for the endpoint picker.                                                                                                                                                                                          |
