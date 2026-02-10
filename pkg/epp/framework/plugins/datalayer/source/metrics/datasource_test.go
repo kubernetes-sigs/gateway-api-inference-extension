@@ -30,8 +30,14 @@ import (
 )
 
 func TestDatasource(t *testing.T) {
-	source := http.NewHTTPDataSource("https", "/metrics", true, MetricsDataSourceType,
+	_, err := http.NewHTTPDataSource("invalid", "/metrics", true, MetricsDataSourceType,
 		"metrics-data-source", parseMetrics, PrometheusMetricType)
+	assert.NotNil(t, err, "expected to fail with invalid scheme")
+
+	source, err := http.NewHTTPDataSource("https", "/metrics", true, MetricsDataSourceType,
+		"metrics-data-source", parseMetrics, PrometheusMetricType)
+	assert.Nil(t, err, "failed to create HTTP datasource")
+
 	registry := NewMappingRegistry()
 	mapping, _ := NewMapping(defaultTotalQueuedRequestsMetric, "", "", "", "")
 	_ = registry.Register(DefaultEngineType, mapping)

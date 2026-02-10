@@ -115,9 +115,8 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fw
 		}
 	}
 
-	ds := http.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, MetricsDataSourceType,
+	return http.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, MetricsDataSourceType,
 		name, parseMetrics, PrometheusMetricType)
-	return ds, nil
 }
 
 // ModelServerExtractorFactory is a factory function used to instantiate data layer's metrics

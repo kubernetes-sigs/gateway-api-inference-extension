@@ -46,7 +46,10 @@ type HTTPDataSource struct {
 // NewHTTPDataSource returns a new data source, configured with
 // the provided scheme, path and certificate verification parameters.
 func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, pluginType string,
-	pluginName string, parser func(io.Reader) (any, error), outputType reflect.Type) *HTTPDataSource {
+	pluginName string, parser func(io.Reader) (any, error), outputType reflect.Type) (*HTTPDataSource, error) {
+	if scheme != "http" && scheme != "https" {
+		return nil, fmt.Errorf("unsupported scheme: %s", scheme)
+	}
 	if scheme == "https" {
 		httpsTransport := baseTransport.Clone()
 		httpsTransport.TLSClientConfig = &tls.Config{
@@ -66,7 +69,7 @@ func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, pl
 		parser:     parser,
 		outputType: outputType,
 	}
-	return dataSrc
+	return dataSrc, nil
 }
 
 // TypedName returns the data source type and name.
