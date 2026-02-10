@@ -2,6 +2,7 @@
 
       Check that the HTTPRoute was successfully configured and references were resolved:
 
+
       ```bash
       kubectl get httproute vllm-llama3-8b-instruct -o yaml
       ```
@@ -10,7 +11,8 @@
 
    1. Verify the `InferencePool` Status:
 
-      Make sure the `InferencePool` is active before sending traffic.
+      Make sure the `InferencePool` is active before sending traffic:
+
 
       ```bash
       kubectl get inferencepool vllm-llama3-8b-instruct -o yaml

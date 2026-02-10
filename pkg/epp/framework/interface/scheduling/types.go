@@ -29,6 +29,11 @@ import (
 
 const nilString = "<nil>"
 
+// RequestObjectives represents the scheduling objectives parsed from the InferenceObjectiveSpec, to be used in scheduling decisions.
+type RequestObjectives struct {
+	Priority int
+}
+
 // LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
 type LLMRequest struct {
 	// RequestId is the Envoy generated Id for the request being processed
@@ -39,6 +44,8 @@ type LLMRequest struct {
 	Body *LLMRequestBody
 	// Headers is a map of the request headers.
 	Headers map[string]string
+	// Request Objective
+	Objectives RequestObjectives
 }
 
 func (r *LLMRequest) String() string {

@@ -1,5 +1,5 @@
 apiVersion: v2
-name: epp-standalone
+name: standalone
 description: A Helm chart for Endpoint Picker
 
 type: application
@@ -11,6 +11,6 @@ appVersion: "0.0.0"
 dependencies:
   - name: inference-extension
     version: 0.0.0
-    repository: "file://../inference-extension"
-    # This is needed to make use of the common values.yaml in ./config/charts/inference-extension/values.yaml
+    repository: "file://../epplib"
+    # This is needed to make use of the common values.yaml in ./config/charts/epplib/values.yaml
     alias: inferenceExtension

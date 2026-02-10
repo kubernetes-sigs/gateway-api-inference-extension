@@ -30,7 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"

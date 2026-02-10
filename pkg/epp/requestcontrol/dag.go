@@ -20,35 +20,36 @@ import (
 	"errors"
 	"slices"
 
-	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // buildDAG builds a dependency graph among data preparation plugins based on their
 // produced and consumed data keys.
-func buildDAG(plugins []fwk.PrepareDataPlugin) (map[string][]string, error) {
+func buildDAG(producers map[string]plugin.ProducerPlugin, consumers map[string]plugin.ConsumerPlugin) (map[string][]string, error) {
 	dag := make(map[string][]string)
-	for _, plugin := range plugins {
-		dag[plugin.TypedName().String()] = []string{}
-	}
 	// Create dependency graph as a DAG.
-	for i := range plugins {
-		for j := range plugins {
-			if i == j {
+	for _, producer := range producers {
+		dag[producer.TypedName().String()] = []string{}
+	}
+	for _, consumer := range consumers {
+		dag[consumer.TypedName().String()] = []string{}
+	}
+	for pName, producer := range producers {
+		for cName, consumer := range consumers {
+			if pName == cName {
 				continue
 			}
-			// Check whether plugin[i] produces something consumed by plugin[j]. In that case, j depends on i.
-			if plugins[i].Produces() != nil && plugins[j].Consumes() != nil {
-				for producedKey, producedData := range plugins[i].Produces() {
-					// If plugin j consumes the produced key, then j depends on i. We can break after the first match.
-					if consumedData, ok := plugins[j].Consumes()[producedKey]; ok {
+			if producer.Produces() != nil && consumer.Consumes() != nil {
+				for producedKey, producedData := range producer.Produces() {
+					// TODO(#1988): Verify that pool-level plugins do not produce or consume data from request-level plugins and vice versa.
+					if consumedData, ok := consumer.Consumes()[producedKey]; ok {
 						// Check types are same. Reflection is avoided here for simplicity.
 						// TODO(#1985): Document this detail in IGW docs.
 						if producedData != consumedData {
 							return nil, errors.New("data type mismatch between produced and consumed data for key: " + producedKey)
 						}
-						iPluginName := plugins[i].TypedName().String()
-						jPluginName := plugins[j].TypedName().String()
-						dag[jPluginName] = append(dag[jPluginName], iPluginName)
+						// Consumer depends on producer, so add an edge from consumer to producer.
+						dag[cName] = append(dag[cName], pName)
 						break
 					}
 				}
@@ -56,25 +57,6 @@ func buildDAG(plugins []fwk.PrepareDataPlugin) (map[string][]string, error) {
 		}
 	}
 	return dag, nil
-}
-
-// sortPlugins builds the dependency graph and returns the plugins ordered in topological order.
-// If there is a cycle, it returns an error.
-func sortPlugins(dag map[string][]string, plugins []fwk.PrepareDataPlugin) ([]fwk.PrepareDataPlugin, error) {
-	nameToPlugin := map[string]fwk.PrepareDataPlugin{}
-	for _, plugin := range plugins {
-		nameToPlugin[plugin.TypedName().String()] = plugin
-	}
-	sortedPlugins, err := topologicalSort(dag)
-	if err != nil {
-		return nil, err
-	}
-	orderedPlugins := []fwk.PrepareDataPlugin{}
-	for _, pluginName := range sortedPlugins {
-		orderedPlugins = append(orderedPlugins, nameToPlugin[pluginName])
-	}
-
-	return orderedPlugins, err
 }
 
 // TopologicalSort performs Kahn's Algorithm on a DAG.

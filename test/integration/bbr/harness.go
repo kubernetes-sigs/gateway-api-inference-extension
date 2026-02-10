@@ -26,7 +26,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 

@@ -16,14 +16,20 @@
 
 ### Deploy Sample Model Server
 
---8<-- "site-src/_includes/vllm-gpu.md"
+   Set the model server environment variable:
+
+   ```bash
+   MODEL_SERVER=vllm  # sglang is also supported.
+   ```
+
+--8<-- "site-src/_includes/model-server-gpu.md"
 
     ```bash
     kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
-    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml
     ```
 
---8<-- "site-src/_includes/vllm-cpu.md"
+--8<-- "site-src/_includes/model-server-cpu.md"
 
     ```bash
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
@@ -194,7 +200,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 ### Deploy the InferencePool and Endpoint Picker Extension
 
-   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the endpoint-picker, InferencePool along with provider specific resources.
+   The Helm install command automatically installs the EPP, InferencePool along with provider specific resources.
 
    Set the chart version and then select a tab to follow the provider-specific instructions.
 
@@ -206,7 +212,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 ### Verify HttpRoute and InferencePool Status
 
---8<-- "site-src/_includes/verify-status.md"
+--8<-- "site-src/_includes/verify-status-latest.md"
 
 ### Deploy InferenceObjective (Optional)
 
@@ -230,10 +236,10 @@ If you wish to exercise that function, then retain the setup you have deployed s
    1. Uninstall the InferencePool, InferenceObjective and model server resources:
 
       ```bash
-      helm uninstall vllm-llama3-8b-instruct
+      helm uninstall ${MODEL_SERVER}-llama3-8b-instruct --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
       ```

@@ -23,11 +23,11 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	compbasemetrics "k8s.io/component-base/metrics"
-
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	metricsutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/metrics"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	metricsutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/metrics"
 )
 
 const (
@@ -35,15 +35,6 @@ const (
 	InferenceObjectiveComponent = "inference_objective"
 	InferencePoolComponent      = "inference_pool"
 	InferenceExtension          = "inference_extension"
-
-	// --- Internal Keys (for Legacy/Gauge Usage) ---
-	KVCacheUsagePercentKey = "KVCacheUsagePercent"
-	WaitingQueueSizeKey    = "WaitingQueueSize"
-	RunningRequestsSizeKey = "RunningRequestsSize"
-	MaxActiveModelsKey     = "MaxActiveModels"
-	ActiveModelsKey        = "ActiveModels"
-	WaitingModelsKey       = "WaitingModels"
-	UpdateTimeKey          = "UpdateTime"
 
 	// Metric Type Values
 	TypeTPOT                   = "tpot"

@@ -24,7 +24,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
@@ -35,7 +34,6 @@ import (
 var _ requestcontrol.ResponseComplete = &Plugin{}
 
 func TestPluginCreation(t *testing.T) {
-	logger := zap.New(zap.UseDevMode(true))
 	tests := []struct {
 		name    string
 		config  Config
@@ -55,7 +53,7 @@ func TestPluginCreation(t *testing.T) {
 				},
 			},
 			wantErr: false,
-			wantNS:  DefaultNamespace,
+			wantNS:  defaultNamespace,
 		},
 		{
 			name: "valid config with custom namespace",
@@ -158,7 +156,7 @@ func TestPluginCreation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plugin, err := New(tt.config, logger)
+			plugin, err := New(context.Background(), tt.config)
 
 			if tt.wantErr {
 				if err == nil {
@@ -185,7 +183,6 @@ func TestPluginCreation(t *testing.T) {
 }
 
 func TestValueReporting(t *testing.T) {
-	logger := zap.New(zap.UseDevMode(true))
 	tests := []struct {
 		name       string
 		config     Config
@@ -211,7 +208,7 @@ func TestValueReporting(t *testing.T) {
 			},
 			wantResult: &structpb.Struct{
 				Fields: map[string]*structpb.Value{
-					DefaultNamespace: {
+					defaultNamespace: {
 						Kind: &structpb.Value_StructValue{
 							StructValue: &structpb.Struct{
 								Fields: map[string]*structpb.Value{
@@ -243,7 +240,7 @@ func TestValueReporting(t *testing.T) {
 			},
 			wantResult: &structpb.Struct{
 				Fields: map[string]*structpb.Value{
-					DefaultNamespace: {
+					defaultNamespace: {
 						Kind: &structpb.Value_StructValue{
 							StructValue: &structpb.Struct{
 								Fields: map[string]*structpb.Value{
@@ -359,7 +356,7 @@ func TestValueReporting(t *testing.T) {
 			},
 			wantResult: &structpb.Struct{
 				Fields: map[string]*structpb.Value{
-					DefaultNamespace: {
+					defaultNamespace: {
 						Kind: &structpb.Value_StructValue{
 							StructValue: &structpb.Struct{
 								Fields: map[string]*structpb.Value{
@@ -390,7 +387,7 @@ func TestValueReporting(t *testing.T) {
 			},
 			wantResult: &structpb.Struct{
 				Fields: map[string]*structpb.Value{
-					DefaultNamespace: {
+					defaultNamespace: {
 						Kind: &structpb.Value_StructValue{
 							StructValue: &structpb.Struct{
 								Fields: map[string]*structpb.Value{
@@ -414,7 +411,7 @@ func TestValueReporting(t *testing.T) {
 				currentResponse.DynamicMetadata = proto.Clone(tt.response.DynamicMetadata).(*structpb.Struct)
 			}
 
-			plugin, err := New(tt.config, logger)
+			plugin, err := New(context.Background(), tt.config)
 			if err != nil {
 				t.Fatalf("Failed to create plugin: %v", err)
 			}

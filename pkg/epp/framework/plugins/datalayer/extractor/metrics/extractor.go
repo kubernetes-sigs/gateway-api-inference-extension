@@ -28,13 +28,23 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
 const (
+
+	// --- Internal Keys (for Legacy/Gauge Usage) ---
+	KVCacheUsagePercentKey = "KVCacheUsagePercent"
+	WaitingQueueSizeKey    = "WaitingQueueSize"
+	RunningRequestsSizeKey = "RunningRequestsSize"
+	MaxActiveModelsKey     = "MaxActiveModels"
+	ActiveModelsKey        = "ActiveModels"
+	WaitingModelsKey       = "WaitingModels"
+	UpdateTimeKey          = "UpdateTime"
+
 	// LoRA metrics based on MSP
 	LoraInfoRunningAdaptersMetricName = "running_lora_adapters"
 	LoraInfoWaitingAdaptersMetricName = "waiting_lora_adapters"
@@ -56,13 +66,13 @@ type Extractor struct {
 // package.
 func Produces() map[string]any {
 	return map[string]any{
-		metrics.WaitingQueueSizeKey:    int(0),
-		metrics.RunningRequestsSizeKey: int(0),
-		metrics.KVCacheUsagePercentKey: float64(0),
-		metrics.ActiveModelsKey:        map[string]int{},
-		metrics.WaitingModelsKey:       map[string]int{},
-		metrics.MaxActiveModelsKey:     int(0),
-		metrics.UpdateTimeKey:          time.Time{},
+		WaitingQueueSizeKey:    int(0),
+		RunningRequestsSizeKey: int(0),
+		KVCacheUsagePercentKey: float64(0),
+		ActiveModelsKey:        map[string]int{},
+		WaitingModelsKey:       map[string]int{},
+		MaxActiveModelsKey:     int(0),
+		UpdateTimeKey:          time.Time{},
 	}
 }
 
@@ -93,13 +103,13 @@ func (ext *Extractor) TypedName() fwkplugin.TypedName {
 // ExpectedType defines the type expected by the metrics.Extractor - a
 // parsed output from a Prometheus metrics endpoint.
 func (ext *Extractor) ExpectedInputType() reflect.Type {
-	return PrometheusMetricType
+	return sourcemetrics.PrometheusMetricType
 }
 
 // Extract transforms the data source output into a concrete attribute that
 // is stored on the given endpoint.
 func (ext *Extractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {
-	families, ok := data.(PrometheusMetricMap)
+	families, ok := data.(sourcemetrics.PrometheusMetricMap)
 	if !ok {
 		return fmt.Errorf("unexpected input in Extract: %T", data)
 	}

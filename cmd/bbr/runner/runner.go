@@ -42,7 +42,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -53,7 +54,8 @@ var (
 	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
 	streaming           = flag.Bool("streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
 	secureServing       = flag.Bool("secure-serving", true, "Enables secure serving.")
-	logVerbosity        = flag.Int("v", logging.DEFAULT, "number for the log level verbosity")
+	logVerbosity        = flag.Int("v", logutil.DEFAULT, "number for the log level verbosity")
+	enablePprof         = flag.Bool("enable-pprof", true, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -140,6 +142,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	if *enablePprof {
+		setupLog.Info("Setting pprof handlers")
+		if err = profiling.SetupPprofHandlers(mgr); err != nil {
+			setupLog.Error(err, "Failed to setup pprof handlers")
+			return err
+		}
+	}
+
 	// Setup ExtProc Server Runner
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:      *grpcPort,
@@ -198,6 +208,5 @@ func initLogging(opts *zap.Options) {
 		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
 	}
 
-	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
-	ctrl.SetLogger(logger)
+	logutil.InitLogging(opts)
 }

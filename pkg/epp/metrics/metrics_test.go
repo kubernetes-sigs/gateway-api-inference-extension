@@ -29,7 +29,7 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
