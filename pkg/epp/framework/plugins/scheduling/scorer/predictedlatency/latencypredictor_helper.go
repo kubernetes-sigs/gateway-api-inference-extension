@@ -65,7 +65,7 @@ func getLatestMetricsForProfile(predictedLatencyCtx *predictedLatencyCtx) (*fwkd
 func processPreRequestForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	requestBuilder PredictionRequestBuilder,
+	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
 ) error {
 	logger := log.FromContext(ctx)
@@ -83,9 +83,9 @@ func processPreRequestForLatencyPrediction(
 	target_endpoint_metadata := predictedLatencyCtx.targetMetadata
 	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[target_endpoint_metadata.NamespacedName.Name]
 
-	// Build prediction request using the builder (ensures pod type is included for P/D)
-	in := requestBuilder.BuildPredictionRequest(
-		ctx,
+	// Build prediction request (pod type is included if endpointRoleLabel is configured)
+	in := buildPredictionRequest(
+		endpointRoleLabel,
 		target_endpoint_metadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
@@ -121,7 +121,7 @@ func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	streamingMode bool,
-	requestBuilder PredictionRequestBuilder,
+	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
 	now time.Time,
 	samplingMean float64,
@@ -141,10 +141,10 @@ func processFirstTokenForLatencyPrediction(
 	targetEndpointMetadata := predictedLatencyCtx.targetMetadata
 	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
 	logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "prefixCacheScore", prefixCacheScore)
-	recordTTFTTrainingData(ctx, predictor, requestBuilder, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
+	recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
 
 	if streamingMode {
-		predictFirstTPOT(ctx, predictor, requestBuilder, predictedLatencyCtx, targetEndpointMetadata)
+		predictFirstTPOT(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, targetEndpointMetadata)
 	}
 
 	// Advance timestamp
@@ -165,7 +165,7 @@ func initializeSampler(ctx context.Context, predictedLatencyCtx *predictedLatenc
 func recordTTFTTrainingData(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	requestBuilder PredictionRequestBuilder,
+	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
 	m *fwkdl.Metrics,
 	targetEndpointMetadata *fwkdl.EndpointMetadata,
@@ -173,9 +173,8 @@ func recordTTFTTrainingData(
 	prefixCacheScore float64,
 ) {
 	logger := log.FromContext(ctx)
-	// Build training entry using the builder
-	entry := requestBuilder.BuildTrainingEntry(
-		ctx,
+	entry := buildTrainingEntry(
+		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
@@ -193,7 +192,7 @@ func recordTTFTTrainingData(
 func predictFirstTPOT(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	requestBuilder PredictionRequestBuilder,
+	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
 	targetEndpointMetadata *fwkdl.EndpointMetadata,
 ) {
@@ -205,9 +204,8 @@ func predictFirstTPOT(
 		return
 	}
 
-	// Build prediction request using the builder (ensures pod type is included for P/D)
-	in := requestBuilder.BuildPredictionRequest(
-		ctx,
+	in := buildPredictionRequest(
+		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
@@ -233,7 +231,7 @@ func predictFirstTPOT(
 func processTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	requestBuilder PredictionRequestBuilder,
+	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
 	targetEndpointMetadata *fwkdl.EndpointMetadata,
 	now time.Time,
@@ -265,9 +263,8 @@ func processTokenForLatencyPrediction(
 			"error", err)
 		return
 	}
-	// Record actual TPOT using builder
-	entry := requestBuilder.BuildTrainingEntry(
-		ctx,
+	entry := buildTrainingEntry(
+		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
 		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
@@ -283,9 +280,8 @@ func processTokenForLatencyPrediction(
 
 	// Sampled predict
 	if predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) {
-		// Build prediction request using the builder (ensures pod type is included for P/D)
-		in := requestBuilder.BuildPredictionRequest(
-			ctx,
+		in := buildPredictionRequest(
+			endpointRoleLabel,
 			targetEndpointMetadata,
 			m,
 			predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
@@ -321,7 +317,7 @@ func bulkPredictWithMetrics(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	metricsStates []*fwkdl.Metrics,
-	requestBuilder PredictionRequestBuilder,
+	endpointRoleLabel string,
 	targetEndpointsMetadatas []*fwkdl.EndpointMetadata,
 	prompts []string,
 	generatedTokenCounts []int,
@@ -353,11 +349,11 @@ func bulkPredictWithMetrics(
 		}
 	}
 
-	// Build bulk prediction requests using the builder
+	// Build bulk prediction requests
 	bulkRequests := make([]latencypredictor.PredictionRequest, len(metricsStates))
 	for i := range metricsStates {
-		bulkRequests[i] = requestBuilder.BuildPredictionRequest(
-			ctx,
+		bulkRequests[i] = buildPredictionRequest(
+			endpointRoleLabel,
 			targetEndpointsMetadatas[i],
 			metricsStates[i],
 			prompts[i],

@@ -64,7 +64,6 @@ func createTestRouter() *PredictedLatency {
 		),
 		// runningRequestLists is a sync.Map and needs no initialization
 		latencypredictor: nil,
-		requestBuilder:   &DefaultPredictionRequestBuilder{},
 		config:           DefaultConfig,
 	}
 }
