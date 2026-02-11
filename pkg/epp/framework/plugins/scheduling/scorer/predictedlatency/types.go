@@ -18,7 +18,6 @@ limitations under the License.
 package predictedlatency
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -64,47 +63,22 @@ const (
 	podSelectionMax    podSelectionMode = "max"    // pick argmax weight
 )
 
-// PredictionRequestBuilder constructs prediction and training requests with optional customization.
-// This interface allows different implementations to customize how prediction requests are built,
-// for example to add pod type information for disaggregated serving scenarios.
-type PredictionRequestBuilder interface {
-	// BuildPredictionRequest constructs a prediction request for a pod
-	BuildPredictionRequest(
-		ctx context.Context,
-		targetEndpointMetadata *fwkdl.EndpointMetadata,
-		metrics *fwkdl.Metrics,
-		prompt string,
-		generatedTokens int,
-		prefixCacheScore float64,
-	) latencypredictor.PredictionRequest
-
-	// BuildTrainingEntry constructs a training entry for a pod
-	BuildTrainingEntry(
-		ctx context.Context,
-		targetEndpointMetadata *fwkdl.EndpointMetadata,
-		metrics *fwkdl.Metrics,
-		prompt string,
-		actualTTFT float64,
-		actualTPOT float64,
-		timestamp time.Time,
-		generatedTokens int,
-		prefixCacheScore float64,
-	) latencypredictor.TrainingEntry
-}
-
-// DefaultPredictionRequestBuilder provides the default monolithic behavior for building prediction requests.
-// This implementation leaves PodType empty, suitable for monolithic (non-disaggregated) deployments.
-type DefaultPredictionRequestBuilder struct{}
-
-// BuildPredictionRequest constructs a standard prediction request without pod type information
-func (b *DefaultPredictionRequestBuilder) BuildPredictionRequest(
-	ctx context.Context,
+// buildPredictionRequest constructs a prediction request from endpoint metrics and request data.
+// If endpointRoleLabel is configured, it extracts the role from the endpoint's labels and
+// populates the PodType field, enabling role-aware predictions (e.g., prefill vs decode).
+func buildPredictionRequest(
+	endpointRoleLabel string,
 	targetEndpointMetadata *fwkdl.EndpointMetadata,
 	metrics *fwkdl.Metrics,
 	prompt string,
 	generatedTokens int,
 	prefixCacheScore float64,
 ) latencypredictor.PredictionRequest {
+	podType := ""
+	if endpointRoleLabel != "" && targetEndpointMetadata != nil && targetEndpointMetadata.Labels != nil {
+		podType = targetEndpointMetadata.Labels[endpointRoleLabel]
+	}
+
 	return latencypredictor.PredictionRequest{
 		KVCachePercentage:  metrics.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(prompt)), // Simple word-based tokenization
@@ -112,13 +86,15 @@ func (b *DefaultPredictionRequestBuilder) BuildPredictionRequest(
 		NumRequestRunning:  metrics.RunningRequestsSize,
 		NumTokensGenerated: generatedTokens,
 		PrefixCacheScore:   prefixCacheScore,
-		PodType:            "", // Empty for monolithic deployments
+		PodType:            podType,
 	}
 }
 
-// BuildTrainingEntry constructs a standard training entry without pod type information
-func (b *DefaultPredictionRequestBuilder) BuildTrainingEntry(
-	ctx context.Context,
+// buildTrainingEntry constructs a training entry from actual latency measurements.
+// If endpointRoleLabel is configured, it extracts the role from the endpoint's labels and
+// populates the PodType field, enabling role-specific model training.
+func buildTrainingEntry(
+	endpointRoleLabel string,
 	targetEndpointMetadata *fwkdl.EndpointMetadata,
 	metrics *fwkdl.Metrics,
 	prompt string,
@@ -128,6 +104,11 @@ func (b *DefaultPredictionRequestBuilder) BuildTrainingEntry(
 	generatedTokens int,
 	prefixCacheScore float64,
 ) latencypredictor.TrainingEntry {
+	podType := ""
+	if endpointRoleLabel != "" && targetEndpointMetadata != nil && targetEndpointMetadata.Labels != nil {
+		podType = targetEndpointMetadata.Labels[endpointRoleLabel]
+	}
+
 	return latencypredictor.TrainingEntry{
 		KVCachePercentage:  metrics.KVCacheUsagePercent,
 		InputTokenLength:   len(strings.Fields(prompt)), // Simple word-based tokenization
@@ -138,6 +119,6 @@ func (b *DefaultPredictionRequestBuilder) BuildTrainingEntry(
 		NumRequestRunning:  metrics.RunningRequestsSize,
 		NumTokensGenerated: generatedTokens,
 		PrefixCacheScore:   prefixCacheScore,
-		PodType:            "", // Empty for monolithic deployments
+		PodType:            podType,
 	}
 }

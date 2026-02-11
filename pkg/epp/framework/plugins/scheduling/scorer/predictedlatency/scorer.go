@@ -40,7 +40,6 @@ import (
 type PredictedLatency struct {
 	typedName           plugin.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
-	requestBuilder      PredictionRequestBuilder
 	runningRequestLists sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
 	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
 	headroomStrategy    headroomStrategy
@@ -68,6 +67,7 @@ type Config struct {
 	ContextTTL                time.Duration `json:"contextTTL,omitempty"`
 	SelectionMode             string        `json:"selectionMode,omitempty"`
 	StreamingMode             bool          `json:"streamingMode,omitempty"`
+	EndpointRoleLabel         string        `json:"endpointRoleLabel,omitempty"`
 }
 
 var DefaultConfig = Config{
@@ -103,7 +103,7 @@ func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle 
 		return nil, fmt.Errorf("invalid PredictedLatency config: %w", err)
 	}
 
-	predictor, err := StartPredictor(handle)
+	predictor, err := startPredictor(handle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start latency predictor: %w", err)
 	}
@@ -164,7 +164,6 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	predictedLatency := &PredictedLatency{
 		typedName:        plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
 		latencypredictor: predictor,
-		requestBuilder:   &DefaultPredictionRequestBuilder{}, // Default, can be customized via SetRequestBuilder
 		// runningRequestLists is a sync.Map and needs no initialization
 		headroomStrategy: strategy,
 		config:           config,
@@ -185,9 +184,7 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	return predictedLatency
 }
 
-// StartPredictor initializes and starts the latency predictor.
-// Exported to allow reuse in custom scorer implementations (e.g., llm-d-inference-scheduler).
-func StartPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
+func startPredictor(handle plugin.Handle) (latencypredictor.PredictorInterface, error) {
 	// Initialize the latency predictor
 	predictor := latencypredictor.New(latencypredictor.ConfigFromEnv(), ctrl.Log.WithName("latency-predictor"))
 	if err := predictor.Start(handle.Context()); err != nil {
@@ -213,16 +210,6 @@ func (s *PredictedLatency) Category() framework.ScorerCategory {
 func (s *PredictedLatency) WithName(name string) *PredictedLatency {
 	s.typedName.Name = name
 	return s
-}
-
-// SetRequestBuilder sets a custom prediction request builder.
-// This allows external packages (e.g., llm-d-inference-scheduler) to customize
-// how prediction and training requests are constructed, for example to add
-// pod type information for disaggregated serving scenarios.
-func (s *PredictedLatency) SetRequestBuilder(builder PredictionRequestBuilder) {
-	if builder != nil {
-		s.requestBuilder = builder
-	}
 }
 
 func (s *PredictedLatency) epsilonGreedyAffinityGate(

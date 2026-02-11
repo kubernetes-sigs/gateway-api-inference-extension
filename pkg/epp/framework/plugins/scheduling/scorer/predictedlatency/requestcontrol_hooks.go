@@ -187,7 +187,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	refreshLastSeenMetrics(ctx, predictedLatencyCtx)
 	t.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx); err != nil {
+	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "Process PreRequest in latencypredictor failed")
 	}
 }
@@ -233,8 +233,8 @@ func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedu
 				"prefillPod", prefillMetadata.NamespacedName.Name,
 				"prefixCacheScore", prefixCacheScore)
 
-			entry := t.requestBuilder.BuildTrainingEntry(
-				ctx,
+			entry := buildTrainingEntry(
+				t.config.EndpointRoleLabel,
 				prefillMetadata,
 				prefillMetrics,
 				predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
@@ -272,9 +272,9 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 	}
 
 	if predictedLatencyCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.requestBuilder, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
@@ -298,7 +298,7 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	}
 	now := time.Now()
 	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.requestBuilder, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if predictedLatencyCtx.ttft > 0 {

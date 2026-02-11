@@ -40,7 +40,6 @@ func TestBulkPredictWithMetrics(t *testing.T) {
 		{KVCacheUsagePercent: 0.5},
 		{KVCacheUsagePercent: 0.6},
 	}
-	requestBuilder := &DefaultPredictionRequestBuilder{}
 	pods := []*fwkdl.EndpointMetadata{
 		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
@@ -53,7 +52,7 @@ func TestBulkPredictWithMetrics(t *testing.T) {
 	generatedTokenCounts := []int{1, 1}
 	prefixCacheScores := []float64{0.0, 0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, requestBuilder, pods, prompts, generatedTokenCounts, prefixCacheScores)
+	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores)
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 2)
@@ -71,7 +70,6 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 	metricsStates := []*fwkdl.Metrics{
 		{KVCacheUsagePercent: 0.5},
 	}
-	requestBuilder := &DefaultPredictionRequestBuilder{}
 	pods := []*fwkdl.EndpointMetadata{
 		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
@@ -81,7 +79,7 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, requestBuilder, pods, prompts, generatedTokenCounts, prefixCacheScores)
+	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores)
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
@@ -90,7 +88,6 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 	mockPredictor := &mockPredictor{}
 	metricsStates := []*fwkdl.Metrics{{}}
-	requestBuilder := &DefaultPredictionRequestBuilder{}
 	pods := []*fwkdl.EndpointMetadata{
 		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
@@ -100,7 +97,7 @@ func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, requestBuilder, pods, prompts, generatedTokenCounts, prefixCacheScores)
+	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores)
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
@@ -110,7 +107,6 @@ func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 func TestBulkPredictWithMetrics_NilMetricsState(t *testing.T) {
 	mockPredictor := &mockPredictor{}
 	metricsStates := []*fwkdl.Metrics{nil} // Nil metrics state
-	requestBuilder := &DefaultPredictionRequestBuilder{}
 	pods := []*fwkdl.EndpointMetadata{
 		{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
@@ -120,7 +116,7 @@ func TestBulkPredictWithMetrics_NilMetricsState(t *testing.T) {
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, requestBuilder, pods, prompts, generatedTokenCounts, prefixCacheScores)
+	results, err := bulkPredictWithMetrics(context.Background(), mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores)
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
