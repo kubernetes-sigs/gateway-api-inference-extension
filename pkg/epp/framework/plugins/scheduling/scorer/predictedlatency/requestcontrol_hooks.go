@@ -108,100 +108,6 @@ func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *sche
 	s.sloContextStore.Delete(id)
 }
 
-// RecordTrainingForProfile records training data for a specific scheduling profile.
-// This high-level method encapsulates all complexity of assembling and sending training data,
-// allowing custom scorers (e.g., P/D-aware) to record training without manual assembly.
-//
-// Parameters:
-//   - profileName: The scheduling profile to record training for (e.g., "prefill", "decode")
-//   - actualTTFT: Measured time-to-first-token in milliseconds
-//   - actualTPOT: Measured time-per-output-token in milliseconds
-//   - generatedTokens: Number of tokens generated
-//
-// The method:
-//  1. Retrieves request context and profile-specific data
-//  2. Uses the configured requestBuilder to construct the training entry (respecting customizations like pod type labels)
-//  3. Sends the training data to the predictor
-//
-// This maintains proper abstraction: GAIE handles HOW to record (mechanism),
-// while custom builders define WHAT labels to add (policy).
-func (s *PredictedLatency) RecordTrainingForProfile(
-	ctx context.Context,
-	request *schedulingtypes.LLMRequest,
-	profileName string,
-	actualTTFT float64,
-	actualTPOT float64,
-	generatedTokens int,
-) error {
-	logger := log.FromContext(ctx)
-
-	// Get request context
-	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		return fmt.Errorf("failed to get request context: %w", err)
-	}
-
-	// Get scheduling result
-	schedulingResult := predictedLatencyCtx.schedulingResult
-	if schedulingResult == nil {
-		return errors.New("no scheduling result available for request")
-	}
-
-	// Extract profile-specific data
-	profileResult, exists := schedulingResult.ProfileResults[profileName]
-	if !exists || profileResult == nil {
-		return fmt.Errorf("profile %q not found in scheduling result", profileName)
-	}
-
-	if len(profileResult.TargetEndpoints) == 0 {
-		return fmt.Errorf("no target endpoints for profile %q", profileName)
-	}
-
-	endpoint := profileResult.TargetEndpoints[0]
-	endpointMetadata := endpoint.GetMetadata()
-
-	// Get metrics for this profile
-	metrics, exists := predictedLatencyCtx.lastSeenMetrics[profileName]
-	if !exists || metrics == nil {
-		return fmt.Errorf("no metrics available for profile %q", profileName)
-	}
-
-	// Get prefix cache score
-	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[endpointMetadata.String()]
-
-	// Get prompt
-	prompt := predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt
-
-	// Build training entry using configured builder
-	// The builder may add custom labels (e.g., PDPredictionRequestBuilder adds pod type)
-	entry := s.requestBuilder.BuildTrainingEntry(
-		ctx,
-		endpointMetadata,
-		metrics,
-		prompt,
-		actualTTFT,
-		actualTPOT,
-		time.Now(),
-		generatedTokens,
-		prefixCacheScore,
-	)
-
-	// Send to predictor
-	if err := s.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-		return fmt.Errorf("failed to record training data: %w", err)
-	}
-
-	logger.V(logutil.DEBUG).Info("Recorded training data for profile",
-		"profile", profileName,
-		"pod", endpointMetadata.NamespacedName.Name,
-		"actualTTFT", actualTTFT,
-		"actualTPOT", actualTPOT,
-		"generatedTokens", generatedTokens,
-	)
-
-	return nil
-}
-
 // --- RequestControl Hooks ---
 
 func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult) {
@@ -291,6 +197,58 @@ func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedu
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
 		return
+	}
+
+	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		id := request.Headers[requtil.RequestIdHeaderKey]
+		logger.V(logutil.DEBUG).Error(err, "PredictedLatency.ResponseReceived: Failed to get context for request", "requestID", id)
+		return
+	}
+
+	schedulingResult := predictedLatencyCtx.schedulingResult
+	if schedulingResult == nil {
+		return
+	}
+
+	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
+		if len(prefillResult.TargetEndpoints) > 0 {
+			now := time.Now()
+			prefillTTFT := float64(now.Sub(predictedLatencyCtx.requestReceivedTimestamp).Milliseconds())
+
+			prefillEndpoint := prefillResult.TargetEndpoints[0]
+			prefillMetadata := prefillEndpoint.GetMetadata()
+
+			prefillMetrics, exists := predictedLatencyCtx.lastSeenMetrics[Experimental_DefaultPrefillProfile]
+			if !exists || prefillMetrics == nil {
+				logger.V(logutil.DEBUG).Info("No metrics available for prefill profile, skipping training")
+				return
+			}
+
+			prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[prefillMetadata.NamespacedName.Name]
+
+			logger.V(logutil.DEBUG).Info("Recording prefill training data",
+				"requestID", request.Headers[requtil.RequestIdHeaderKey],
+				"prefillTTFT_ms", prefillTTFT,
+				"prefillPod", prefillMetadata.NamespacedName.Name,
+				"prefixCacheScore", prefixCacheScore)
+
+			entry := t.requestBuilder.BuildTrainingEntry(
+				ctx,
+				prefillMetadata,
+				prefillMetrics,
+				predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+				prefillTTFT,
+				0,
+				now,
+				0,
+				prefixCacheScore,
+			)
+
+			if err := t.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+				logger.V(logutil.DEBUG).Error(err, "Failed to record prefill training data")
+			}
+		}
 	}
 }
 
