@@ -200,11 +200,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	startCrdReconcilers := opts.EndpointSelector == "" // If endpointSelector is empty, it means it's not in the standalone mode. Then we should start the inferencePool and other CRD Reconciler.
 	controllerCfg := runserver.NewControllerConfig(startCrdReconcilers)
 
-	if err := controllerCfg.PopulateControllerConfig(cfg); err != nil {
-		setupLog.Error(err, "Failed to populate controller config")
-		return err
-	}
-
 	ds, err := setupDatastore(ctx, epf, int32(opts.ModelServerMetricsPort), startCrdReconcilers,
 		opts.PoolName, opts.PoolNamespace, opts.EndpointSelector, opts.EndpointTargetPorts)
 	if err != nil {
