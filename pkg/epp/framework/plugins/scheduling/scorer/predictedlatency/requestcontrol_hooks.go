@@ -272,7 +272,7 @@ func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *scheduling
 	// If there is no valid pod for the request, reject it
 	if !predictedLatencyCtx.hasValidEndpoint && request.Objectives.Priority < 0 {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.AdmitRequest: Rejecting a sheddable request as no valid endpoint available due to slo violation", "requestID", request.Headers[requtil.RequestIdHeaderKey])
-		return fmt.Errorf("no valid endpoint available to serve the request")
+		return errors.New("no valid endpoint available to serve the request")
 	}
 
 	return nil
