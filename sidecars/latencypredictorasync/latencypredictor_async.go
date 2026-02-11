@@ -114,7 +114,9 @@ func (p *Predictor) backgroundLoop() {
 			// ✅ Create context with timeout for background refresh
 			ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
 			p.refreshMetrics(ctx)
-			p.refreshServerStatus(ctx)
+			if err := p.refreshServerStatus(ctx); err != nil {
+				p.logger.Error(err, "failed to refresh server status during background refresh")
+			}
 			cancel()
 		case <-p.done:
 			return
