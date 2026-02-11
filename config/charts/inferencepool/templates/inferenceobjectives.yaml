@@ -11,5 +11,5 @@ spec:
   priority: {{ .priority }}
   poolRef:
     group: {{ .Values.inferenceExtension.apiVersion }}
-    name: {{ .name }}
+    name: {{ $.Release.Name }}
 {{- end }}
