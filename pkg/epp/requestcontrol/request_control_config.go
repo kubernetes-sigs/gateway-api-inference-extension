@@ -25,6 +25,7 @@ import (
 func NewConfig() *Config {
 	return &Config{
 		admissionPlugins:         []fwk.AdmissionPlugin{},
+		preAdmissionPlugins:      []fwk.PreAdmissionPlugin{},
 		prepareDataPlugins:       []fwk.PrepareDataPlugin{},
 		preRequestPlugins:        []fwk.PreRequest{},
 		responseReceivedPlugins:  []fwk.ResponseReceived{},
@@ -36,6 +37,7 @@ func NewConfig() *Config {
 // Config provides a configuration for the requestcontrol plugins.
 type Config struct {
 	admissionPlugins         []fwk.AdmissionPlugin
+	preAdmissionPlugins      []fwk.PreAdmissionPlugin
 	prepareDataPlugins       []fwk.PrepareDataPlugin
 	preRequestPlugins        []fwk.PreRequest
 	responseReceivedPlugins  []fwk.ResponseReceived
@@ -83,6 +85,12 @@ func (c *Config) WithAdmissionPlugins(plugins ...fwk.AdmissionPlugin) *Config {
 	return c
 }
 
+// WithPreAdmissionPlugins sets the given plugins as the PreAdmission plugins.
+func (c *Config) WithPreAdmissionPlugins(plugins ...fwk.PreAdmissionPlugin) *Config {
+	c.preAdmissionPlugins = plugins
+	return c
+}
+
 // AddPlugins adds the given plugins to the Config.
 // The type of each plugin is checked and added to the corresponding list of plugins in the Config.
 // If a plugin implements multiple plugin interfaces, it will be added to each corresponding list.
@@ -90,6 +98,9 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 	for _, plugin := range pluginObjects {
 		if preRequestPlugin, ok := plugin.(fwk.PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
+		}
+		if preAdmissionPlugin, ok := plugin.(fwk.PreAdmissionPlugin); ok {
+			c.preAdmissionPlugins = append(c.preAdmissionPlugins, preAdmissionPlugin)
 		}
 		if responseReceivedPlugin, ok := plugin.(fwk.ResponseReceived); ok {
 			c.responseReceivedPlugins = append(c.responseReceivedPlugins, responseReceivedPlugin)
@@ -118,6 +129,9 @@ func (c *Config) ProducerConsumerPlugins() (map[string]plugin.ProducerPlugin, ma
 	// Collect all unique plugins from the config.
 	allPlugins := make(map[string]plugin.Plugin)
 	for _, p := range c.admissionPlugins {
+		allPlugins[p.TypedName().String()] = p
+	}
+	for _, p := range c.preAdmissionPlugins {
 		allPlugins[p.TypedName().String()] = p
 	}
 	for _, p := range c.prepareDataPlugins {

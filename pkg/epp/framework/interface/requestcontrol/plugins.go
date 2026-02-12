@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	PreAdmissionExtensionPoint      = "PreAdmission"
 	PreRequestExtensionPoint        = "PreRequest"
 	ResponseReceivedExtensionPoint  = "ResponseReceived"
 	ResponseStreamingExtensionPoint = "ResponseStreaming"
@@ -81,4 +82,11 @@ type AdmissionPlugin interface {
 	// AdmitRequest returns the denial reason, wrapped as error if the request is denied.
 	// If the request is allowed, it returns nil.
 	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
+}
+
+// PreAdmissionPlugin is called by the director before the admission controller is called.
+// This enables prepare and store information to be used in later stages of the plugin.
+type PreAdmissionPlugin interface {
+	plugin.Plugin
+	PrepareAdmission(ctx context.Context, request *types.LLMRequest) error
 }
