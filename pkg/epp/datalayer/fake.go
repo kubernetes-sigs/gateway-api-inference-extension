@@ -20,6 +20,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -55,5 +56,35 @@ func (fds *FakeDataSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error
 			ep.UpdateMetrics(metrics)
 		}
 	}
+	return nil
+}
+
+// FakeNotificationSource implements both DataSource and NotificationSource for testing.
+type FakeNotificationSource struct {
+	typedName plugin.TypedName
+	gvk       schema.GroupVersionKind
+}
+
+func (m *FakeNotificationSource) TypedName() plugin.TypedName {
+	return m.typedName
+}
+
+func (m *FakeNotificationSource) GVK() schema.GroupVersionKind {
+	return m.gvk
+}
+
+func (m *FakeNotificationSource) Notify(_ context.Context, _ fwkdl.NotificationEvent) error {
+	return nil
+}
+
+func (m *FakeNotificationSource) Extractors() []string {
+	return []string{}
+}
+
+func (m *FakeNotificationSource) AddExtractor(_ fwkdl.Extractor) error {
+	return nil
+}
+
+func (m *FakeNotificationSource) Collect(_ context.Context, _ fwkdl.Endpoint) error {
 	return nil
 }
