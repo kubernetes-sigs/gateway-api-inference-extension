@@ -390,6 +390,52 @@ var (
 		append([]string{"fairness_id", "priority", "outcome", "inference_pool"}, ModelLabels...),
 	)
 
+	flowControlDispatchCycleDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_dispatch_cycle_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken for each dispatch cycle in the EPP flow control layer.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.000000005, // 5 ns
+				0.000000010, // 10 ns
+				0.000000025, // 25 ns
+				0.000000050, // 50 ns
+				0.000000100, // 100 ns
+				0.000000250, // 250 ns
+				0.000000500, // 500 ns
+				0.000001000, // 1000 ns (1 µs)
+			},
+		},
+		[]string{},
+	)
+
+	flowControlDispatchAttempts = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_dispatch_attempts_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of dispatch attempts in the EPP flow control layer.", compbasemetrics.ALPHA),
+		},
+		[]string{},
+	)
+
+	flowControlDispatchSuccesses = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_dispatch_successes_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of successful dispatches in the EPP flow control layer.", compbasemetrics.ALPHA),
+		},
+		[]string{},
+	)
+
+	flowControlDispatchFailures = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_dispatch_failures_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of failed dispatches in the EPP flow control layer.", compbasemetrics.ALPHA),
+		},
+		[]string{},
+	)
+
 	flowControlQueueSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: InferenceExtension,
@@ -460,6 +506,10 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(PrefixCacheHitRatio)
 		metrics.Registry.MustRegister(PrefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
+		metrics.Registry.MustRegister(flowControlDispatchCycleDuration)
+		metrics.Registry.MustRegister(flowControlDispatchAttempts)
+		metrics.Registry.MustRegister(flowControlDispatchSuccesses)
+		metrics.Registry.MustRegister(flowControlDispatchFailures)
 		metrics.Registry.MustRegister(flowControlQueueSize)
 		metrics.Registry.MustRegister(flowControlQueueBytes)
 		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
@@ -509,6 +559,9 @@ func Reset() {
 	flowControlRequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
 	flowControlQueueBytes.Reset()
+	flowControlDispatchAttempts.Reset()
+	flowControlDispatchSuccesses.Reset()
+	flowControlDispatchFailures.Reset()
 	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
@@ -787,6 +840,26 @@ func RecordFlowControlRequestQueueDuration(
 		inferencePool,
 		modelName, targetModelName,
 	).Observe(duration.Seconds())
+}
+
+// RecordFlowControlDispatchCycleDuration records the duration of a dispatch cycle in the Flow Control layer.
+func RecordFlowControlDispatchCycleDuration(duration time.Duration) {
+	flowControlDispatchCycleDuration.WithLabelValues().Observe(duration.Seconds())
+}
+
+// IncFlowControlDispatchAttempts increments the number of attempted dispatches.
+func IncFlowControlDispatchAttempts() {
+	flowControlDispatchAttempts.WithLabelValues().Inc()
+}
+
+// IncFlowControlDispatchSuccesses increments the number of successful dispatches.
+func IncFlowControlDispatchSuccesses() {
+	flowControlDispatchSuccesses.WithLabelValues().Inc()
+}
+
+// IncFlowControlDispatchFailures increments the number of failed dispatches.
+func IncFlowControlDispatchFailures() {
+	flowControlDispatchFailures.WithLabelValues().Inc()
 }
 
 // IncFlowControlQueueSize increments the Flow Control queue size gauge.

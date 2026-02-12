@@ -1,0 +1,9 @@
+# HELP inference_extension_flow_control_dispatch_attempts_total [ALPHA] Total number of dispatch attempts in the EPP flow control layer.
+# TYPE inference_extension_flow_control_dispatch_attempts_total counter
+inference_extension_flow_control_dispatch_attempts_total 10
+# HELP inference_extension_flow_control_dispatch_failures_total [ALPHA] Total number of failed dispatches in the EPP flow control layer.
+# TYPE inference_extension_flow_control_dispatch_failures_total counter
+inference_extension_flow_control_dispatch_failures_total 3
+# HELP inference_extension_flow_control_dispatch_successes_total [ALPHA] Total number of successful dispatches in the EPP flow control layer.
+# TYPE inference_extension_flow_control_dispatch_successes_total counter
+inference_extension_flow_control_dispatch_successes_total 7
