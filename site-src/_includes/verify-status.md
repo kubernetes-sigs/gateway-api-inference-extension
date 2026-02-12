@@ -4,7 +4,7 @@
 
 
       ```bash
-      kubectl get httproute vllm-llama3-8b-instruct -o yaml
+      kubectl get httproute ${MODEL_SERVER}-vllm-qwen3-32b -o yaml
       ```
 
       The `HttpRoute` status should include `Accepted=True` and `ResolvedRefs=True`.
@@ -15,7 +15,7 @@
 
 
       ```bash
-      kubectl get inferencepool vllm-llama3-8b-instruct -o yaml
+      kubectl get inferencepool ${MODEL_SERVER}-vllm-qwen3-32b -o yaml
       ```
 
       The `InferencePool` status should include `Accepted=True` and `ResolvedRefs=True`.

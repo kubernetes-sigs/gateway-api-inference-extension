@@ -218,7 +218,7 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 }
 
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:
-// data: {"id":"...","object":"text_completion","created":1739400043,"model":"food-review-0","choices":[],
+// data: {"id":"...","object":"text_completion","created":1739400043,"model":"small-segment-lora-0","choices":[],
 // "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
 //
 // data: [DONE]

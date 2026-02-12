@@ -4,18 +4,18 @@ A chart to deploy an InferencePool and a corresponding EndpointPicker (epp) depl
 
 ## Install
 
-To install an InferencePool named `vllm-llama3-8b-instruct`  that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port `8000`, you can run the following command:
+To install an InferencePool named `vllm-qwen3-32b`  that selects from endpoints with label `app: vllm-qwen3-32b` and listening on port `8000`, you can run the following command:
 
 ```txt
-$ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+$ helm install vllm-qwen3-32b ./config/charts/inferencepool \
+  --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
 ```
 
 To install via the latest published chart in staging  (--version v0 indicates latest dev version), you can run the following command:
 
 ```txt
-$ helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+$ helm install vllm-qwen3-32b \
+  --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
   --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
 ```
@@ -27,8 +27,8 @@ Note that the provider name is needed to deploy provider-specific resources. If 
 To set cmd-line flags, you can use the `--set` option to set each flag, e.g.,:
 
 ```txt
-$ helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+$ helm install vllm-qwen3-32b \
+  --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
   --set inferenceExtension.flags.<FLAG_NAME>=<FLAG_VALUE>
   --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
@@ -64,7 +64,7 @@ inferenceExtension:
 Then apply it with:
 
 ```txt
-$ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+$ helm install vllm-qwen3-32b ./config/charts/inferencepool -f values.yaml
 ```
 
 ### Install with Custom EPP Plugins Configuration
@@ -106,7 +106,7 @@ inferenceExtension:
 Then apply it with:
 
 ```txt
-$ helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+$ helm install vllm-qwen3-32b ./config/charts/inferencepool -f values.yaml
 ```
 
 ### Install for Triton TensorRT-LLM
@@ -159,8 +159,8 @@ To enable HA, set `inferenceExtension.replicas` to a number greater than 1.
 * Via `--set` flag:
 
   ```txt
-  helm install vllm-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+  helm install vllm-qwen3-32b \
+  --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
   --set inferenceExtension.replicas=3 \
   --set provider=[none|gke] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0
@@ -176,7 +176,7 @@ To enable HA, set `inferenceExtension.replicas` to a number greater than 1.
   Then apply it with:
 
   ```txt
-  helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+  helm install vllm-qwen3-32b ./config/charts/inferencepool -f values.yaml
   ```
 
 ### Install with Monitoring
@@ -204,7 +204,7 @@ If you are using a GKE Autopilot cluster, you also need to set `provider.gke.aut
 Then apply it with:
 
 ```txt
-helm install vllm-llama3-8b-instruct ./config/charts/inferencepool -f values.yaml
+helm install vllm-qwen3-32b ./config/charts/inferencepool -f values.yaml
 ```
 
 ## Uninstall
