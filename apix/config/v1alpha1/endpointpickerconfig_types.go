@@ -32,7 +32,7 @@ type EndpointPickerConfig struct {
 
 	// +optional
 	// FeatureGates is a set of flags that enable various experimental features with the EPP.
-	// If omitted non of these experimental features will be enabled.
+	// If omitted none of these experimental features will be enabled.
 	FeatureGates FeatureGates `json:"featureGates,omitempty"`
 
 	// +required
@@ -124,14 +124,14 @@ func (sp SchedulingProfile) String() string {
 type SchedulingPlugin struct {
 	// +required
 	// +kubebuilder:validation:Required
-	// PluginRef specifies a partiular Plugin instance to be associated with
+	// PluginRef specifies a particular Plugin instance to be associated with
 	// this SchedulingProfile. The reference is to the name of an
 	// entry of the Plugins defined in the configuration's Plugins
 	// section
 	PluginRef string `json:"pluginRef"`
 
 	// +optional
-	// Weight is the weight fo be used if this plugin is a Scorer.
+	// Weight is the weight to be used if this plugin is a Scorer.
 	Weight *float64 `json:"weight"`
 }
 
@@ -221,7 +221,7 @@ func (dlc DataLayerConfig) String() string {
 type DataLayerSource struct {
 	// +required
 	// +kubebuilder:validation:Required
-	// PluginRef specifies a partiular Plugin instance to be associated with
+	// PluginRef specifies a particular Plugin instance to be associated with
 	// this Source. The reference is to the name of an entry of the Plugins
 	// defined in the configuration's Plugins section
 	PluginRef string `json:"pluginRef"`
@@ -242,7 +242,7 @@ func (dls DataLayerSource) String() string {
 type DataLayerExtractor struct {
 	// +required
 	// +kubebuilder:validation:Required
-	// PluginRef specifies a partiular Plugin instance to be associated with
+	// PluginRef specifies a particular Plugin instance to be associated with
 	// this Extractor. The reference is to the name of an entry of the Plugins
 	// defined in the configuration's Plugins section
 	PluginRef string `json:"pluginRef"`
