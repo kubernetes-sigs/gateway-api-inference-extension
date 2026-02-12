@@ -128,6 +128,77 @@ type LabelKey string
 // +kubebuilder:validation:Pattern=`^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$`
 type LabelValue string
 
+// LabelSelectorOperator is a set of operators for label selector requirements.
+//
+// +kubebuilder:validation:Enum=In;NotIn;Exists;DoesNotExist
+type LabelSelectorOperator string
+
+const (
+	// LabelSelectorOpIn matches labels where the key exists and the value is in the specified set.
+	LabelSelectorOpIn LabelSelectorOperator = "In"
+	// LabelSelectorOpNotIn matches labels where the key does not exist or the value is not in the specified set.
+	LabelSelectorOpNotIn LabelSelectorOperator = "NotIn"
+	// LabelSelectorOpExists matches labels where the key exists, regardless of value.
+	LabelSelectorOpExists LabelSelectorOperator = "Exists"
+	// LabelSelectorOpDoesNotExist matches labels where the key does not exist.
+	LabelSelectorOpDoesNotExist LabelSelectorOperator = "DoesNotExist"
+)
+
+// LabelSelectorRequirement is a selector requirement that contains values, a key, and an operator
+// that relates the key and values.
+type LabelSelectorRequirement struct {
+	// Key is the label key that the selector applies to.
+	//
+	// +kubebuilder:validation:Required
+	Key LabelKey `json:"key"`
+
+	// Operator represents a key's relationship to a set of values.
+	// Valid operators are In, NotIn, Exists and DoesNotExist.
+	//
+	// +kubebuilder:validation:Required
+	Operator LabelSelectorOperator `json:"operator"`
+
+	// Values is an array of string values. If the operator is In or NotIn,
+	// the values array must be non-empty. If the operator is Exists or DoesNotExist,
+	// the values array must be empty.
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=64
+	Values []LabelValue `json:"values,omitempty"`
+}
+
+// PoolSelector selects InferencePools based on labels and optionally filters by group/kind.
+// Only pools within the same namespace as the referencing resource are considered.
+type PoolSelector struct {
+	// Group constrains the selector to only match pools of a specific API group.
+	// If not specified, defaults to "inference.networking.k8s.io".
+	//
+	// +optional
+	// +kubebuilder:default="inference.networking.k8s.io"
+	Group Group `json:"group,omitempty"`
+
+	// Kind constrains the selector to only match pools of a specific kind.
+	// If not specified, defaults to "InferencePool".
+	//
+	// +optional
+	// +kubebuilder:default="InferencePool"
+	Kind Kind `json:"kind,omitempty"`
+
+	// MatchLabels is a map of {key,value} pairs. A pool is selected if all
+	// labels match. The matching is performed using an AND operation.
+	//
+	// +optional
+	// +kubebuilder:validation:MaxProperties=64
+	MatchLabels map[LabelKey]LabelValue `json:"matchLabels,omitempty"`
+
+	// MatchExpressions is a list of label selector requirements.
+	// The requirements are ANDed together.
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=16
+	MatchExpressions []LabelSelectorRequirement `json:"matchExpressions,omitempty"`
+}
+
 // PoolObjectReference identifies an API object within the namespace of the
 // referrer.
 type PoolObjectReference struct {
