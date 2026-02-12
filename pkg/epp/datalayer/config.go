@@ -22,8 +22,10 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
-// Config defines the configuration of EPP data layer, as the set of DataSources and
-// Extractors defined on them.
+// Config defines the configuration of EPP data layer, as the set of DataSources
+// and Extractors defined on them. Both poll-based and event-driven (notification)
+// sources are stored in Sources. Differentiation by type of source is handled during
+// the set-up phase.
 type Config struct {
 	Sources []DataSourceConfig // the data sources configured in the data layer
 }

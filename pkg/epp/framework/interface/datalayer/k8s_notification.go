@@ -36,6 +36,7 @@ const (
 // NotificationEvent carries the event type and the affected object.
 // Object is deep-copied by the framework core before delivery.
 type NotificationEvent struct {
+	// Type is the mutation type.
 	Type EventType
 	// Object is the current state of the object (for add/update) or the
 	// last known state (for delete). Note that for delete notifications
@@ -44,7 +45,7 @@ type NotificationEvent struct {
 }
 
 // TODO:
-// 1. combine data store notifications into this file and rename types accordingly
+// 1. add data store notifications into this package and rename types accordingly
 // 2. refactor interfaces to remove unused methods (e.g., DataSources Collect();
 //    Extractor Extract() for notification based use).
 
@@ -58,7 +59,7 @@ type NotificationSource interface {
 	GVK() schema.GroupVersionKind
 	// Notify is called by the framework core when a mutation event fires.
 	// The event object is already deep-copied.
-	Notify(ctx context.Context, event NotificationEvent)
+	Notify(ctx context.Context, event NotificationEvent) error
 }
 
 // NotificationExtractor processes k8s object events pushed from a

@@ -60,9 +60,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
+	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
@@ -278,7 +280,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
-	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf); err != nil {
+	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return err
 	}
@@ -401,6 +403,8 @@ func (r *Runner) registerInTreePlugins() {
 	// register datalayer metrics collection plugins
 	fwkplugin.Register(sourcemetrics.MetricsDataSourceType, sourcemetrics.MetricsDataSourceFactory)
 	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.ModelServerExtractorFactory)
+	// register datalayer k8s notification source plugin
+	fwkplugin.Register(sourcenotifications.NotificationSourceType, sourcenotifications.NotificationSourceFactory)
 	fwkplugin.Register(requestattributereporter.RequestAttributeReporterType, requestattributereporter.RequestAttributeReporterPluginFactory)
 }
 
@@ -523,7 +527,8 @@ func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	}
 }
 
-func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, epf datalayer.EndpointFactory) error {
+func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
+	epf datalayer.EndpointFactory, mgr ctrl.Manager) error {
 	disallowedMetricsExtractor := ""
 	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
 		disallowedMetricsExtractor = extractormetrics.MetricsExtractorType
@@ -533,14 +538,28 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config, ep
 		return err
 	}
 
-	sources := datalayer.GetSources()
-	if enableNewMetrics && len(sources) == 0 {
-		err := errors.New("data layer enabled but no data sources configured")
-		return err
+	allSources := datalayer.GetSources()
+	if enableNewMetrics && len(allSources) == 0 {
+		return errors.New("data layer enabled but no data sources configured")
 	}
 
-	epf.SetSources(sources)
-	for _, src := range sources {
+	// Partition sources: poll-based go to the endpoint factory, notification
+	// sources get bound to the manager's watch/reconciliation loops.
+	var collectors []fwkdl.DataSource
+	for _, src := range allSources {
+		if notifySrc, ok := src.(fwkdl.NotificationSource); ok {
+			if err := sourcenotifications.BindNotificationSource(notifySrc, mgr); err != nil {
+				return fmt.Errorf("failed to bind notification source %s: %w", notifySrc.TypedName(), err)
+			}
+			setupLog.Info("notification source bound", "source", notifySrc.TypedName().String(), "gvk", notifySrc.GVK())
+		} else {
+			collectors = append(collectors, src)
+		}
+	}
+
+	epf.SetSources(collectors)
+
+	for _, src := range allSources { // log data layer configuration
 		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
 	}
 	return nil

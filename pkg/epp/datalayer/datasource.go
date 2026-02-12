@@ -32,11 +32,30 @@ type DataSourceRegistry struct {
 	sources sync.Map
 }
 
-// Register adds a new DataSource to the registry.
+// Register adds a new DataSource to the registry. If the source implements
+// NotificationSource, GVK uniqueness is enforced.
 func (dsr *DataSourceRegistry) Register(src fwkdl.DataSource) error {
 	if src == nil {
 		return errors.New("unable to register a nil data source")
 	}
+
+	if ns, ok := src.(fwkdl.NotificationSource); ok { // check GVK uniqueness
+		gvk := ns.GVK()
+		var duplicateGVK bool
+		dsr.sources.Range(func(_, val any) bool {
+			if existing, ok := val.(fwkdl.NotificationSource); ok {
+				if existing.GVK() == gvk {
+					duplicateGVK = true
+					return false
+				}
+			}
+			return true
+		})
+		if duplicateGVK {
+			return fmt.Errorf("duplicate notification source for GVK %s", gvk)
+		}
+	}
+
 	if _, loaded := dsr.sources.LoadOrStore(src.TypedName().Name, src); loaded {
 		return fmt.Errorf("unable to register duplicate data source: %s", src.TypedName().String())
 	}

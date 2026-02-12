@@ -136,10 +136,11 @@ func TestNotify(t *testing.T) {
 	obj.SetNamespace("default")
 
 	// Test AddOrUpdate event.
-	src.Notify(ctx, fwkdl.NotificationEvent{
+	err := src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventAddOrUpdate,
 		Object: obj.DeepCopy(),
 	})
+	assert.NoError(t, err, "failed to notify")
 	events := ext.getEvents()
 	require.Len(t, events, 1)
 	assert.Equal(t, fwkdl.EventAddOrUpdate, events[0].Type)
@@ -150,10 +151,11 @@ func TestNotify(t *testing.T) {
 	assert.Equal(t, "test-cm", obj.GetName())
 
 	// Test Delete event.
-	src.Notify(ctx, fwkdl.NotificationEvent{
+	err = src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventDelete,
 		Object: obj.DeepCopy(),
 	})
+	assert.NoError(t, err, "failed to notify")
 	events = ext.getEvents()
 	require.Len(t, events, 2)
 	assert.Equal(t, fwkdl.EventDelete, events[1].Type)
@@ -170,11 +172,11 @@ func TestNotifyMultipleExtractors(t *testing.T) {
 	obj := &unstructured.Unstructured{}
 	obj.SetName("cm1")
 
-	src.Notify(context.Background(), fwkdl.NotificationEvent{
+	err := src.Notify(context.Background(), fwkdl.NotificationEvent{
 		Type:   fwkdl.EventAddOrUpdate,
 		Object: obj,
 	})
-
+	assert.NoError(t, err, "failed to notify")
 	assert.Len(t, ext1.getEvents(), 1)
 	assert.Len(t, ext2.getEvents(), 1)
 }
