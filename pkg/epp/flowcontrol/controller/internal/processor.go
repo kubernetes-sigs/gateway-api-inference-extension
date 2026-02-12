@@ -29,6 +29,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/saturation"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
@@ -66,6 +67,8 @@ type ShardProcessor struct {
 	shard                contracts.RegistryShard
 	saturationDetector   contracts.SaturationDetector
 	podLocator           contracts.PodLocator
+	usageLimitPolicy     flowcontrol.UsageLimitPolicy
+	evictor              flowcontrol.Evictor
 	clock                clock.WithTicker
 	cleanupSweepInterval time.Duration
 	logger               logr.Logger
@@ -97,6 +100,8 @@ func NewShardProcessor(
 		shard:                shard,
 		saturationDetector:   saturationDetector,
 		podLocator:           podLocator,
+		usageLimitPolicy:     saturation.NewDynamicUsagePolicy(clock), // TODO: Make this configurable
+		evictor:              saturation.NewNoOpEvictor(),             // TODO: Make this configurable
 		clock:                clock,
 		cleanupSweepInterval: cleanupSweepInterval,
 		logger:               logger,
@@ -291,6 +296,14 @@ func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
 // blocking to respect the policy's decision and prevent priority inversion, where dispatching lower-priority work might
 // exacerbate the saturation affecting the high-priority item.
 func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
+	// Schedule deferred eviction at the end of the dispatch cycle
+	defer func() {
+		if evicted, err := sp.evictor.ProcessScheduled(ctx); err != nil {
+			sp.logger.V(logutil.DEBUG).Info("Eviction processing failed", "error", err)
+		} else if evicted > 0 {
+			sp.logger.V(logutil.DEBUG).Info("Evicted queued requests to free capacity", "count", evicted)
+		}
+	}()
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
@@ -308,15 +321,33 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			continue
 		}
 
-		// --- Viability Check (Saturation/HoL Blocking) ---
+		// --- Viability Check (Saturation/HoL Blocking and Usage Limit Gating) ---
 		req := item.OriginalRequest()
 		candidates := sp.podLocator.Locate(ctx, req.GetMetadata())
-		if sp.saturationDetector.Saturation(ctx, candidates) >= 1.0 {
-			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
-				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
-			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
-			// lower-priority work might exacerbate the saturation affecting high-priority work.
-			return false
+		saturation := sp.saturationDetector.Saturation(ctx, candidates)
+		usageLimit := sp.usageLimitPolicy.ComputeLimit(ctx, priority, saturation, req.GetMetadata())
+
+		if saturation >= usageLimit {
+			if saturation >= 1.0 {
+				// Fully saturated - enforce HoL blocking
+				sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
+					"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName(),
+					"saturation", saturation, "usageLimit", usageLimit)
+				// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
+				// lower-priority work might exacerbate the saturation affecting high-priority work.
+				return false
+			}
+			// Gated by usage limit - schedule for potential eviction
+			sp.logger.V(logutil.DEBUG).Info("Priority band gated by usage limit; scheduling for eviction.",
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName(),
+				"priority", priority, "saturation", saturation, "usageLimit", usageLimit)
+
+			if queue, err := sp.shard.ManagedQueue(req.FlowKey()); err != nil {
+				sp.logger.Error(err, "Failed to get ManagedQueue for eviction scheduling", "flowKey", req.FlowKey())
+			} else {
+				sp.evictor.ScheduleEvictionCandidate(ctx, item, queue, priority, usageLimit)
+			}
+			continue
 		}
 
 		// --- Dispatch ---
@@ -327,6 +358,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		}
 		return true
 	}
+
 	return false
 }
 
