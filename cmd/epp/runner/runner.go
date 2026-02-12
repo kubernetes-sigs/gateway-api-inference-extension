@@ -153,6 +153,9 @@ func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runne
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	// Setup a very basic logger in case command line argument parsing fails
+	logutil.InitSetupLogging()
+
 	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 
 	opts := runserver.NewOptions()

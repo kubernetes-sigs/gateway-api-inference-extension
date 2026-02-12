@@ -223,6 +223,9 @@ func (opts *Options) Validate() error {
 		}
 	}
 
+	if opts.ConfigText == "" && opts.ConfigFile == "" {
+		return fmt.Errorf("one of the %q and %q flags must be set", "configText", "configFile")
+	}
 	if opts.ConfigText != "" && opts.ConfigFile != "" {
 		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
 	}
