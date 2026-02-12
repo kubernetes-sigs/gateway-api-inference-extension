@@ -113,6 +113,28 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		// should filter to endpoints that actually belong to its pool.
 		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		eppHeaderValue := strings.Join(allIPs, ",")
+		rt := &RoundTripper
+		gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
+			t,
+			rt,
+			rt.TimeoutConfig,
+			gwAddr,
+			gwhttp.ExpectedResponse{
+				Request: gwhttp.Request{
+					Host:   hostname,
+					Path:   path,
+					Method: http.MethodPost,
+					Body:   `{"model":"conformance-fake-model","prompt":"Warmup"}`,
+					Headers: map[string]string{
+						test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+					},
+				},
+				Response: gwhttp.Response{
+					StatusCodes: []int{http.StatusOK},
+				},
+				Namespace: resources.AppBackendNamespace,
+			},
+		)
 
 		requestBody := `{
 			"model": "conformance-fake-model",
