@@ -53,7 +53,7 @@ func BindNotificationSource(src fwkdl.NotificationSource, mgr ctrl.Manager) erro
 	// (needed in tests, the Register() of data sources still imposes
 	// one source per GVK).
 	controllerName := "notify_" + strings.ToLower(gvk.Kind) + "_" + src.TypedName().Name
-	
+
 	return ctrl.NewControllerManagedBy(mgr).
 		// Naming the controller allows you to see specific metrics/logs for this watch
 		Named(controllerName).
