@@ -99,9 +99,15 @@ func (s *PredictedLatency) selectEndpointBasedOnStrategy(
 	return selectedEndpoint
 }
 
-func (s *PredictedLatency) removeRequestFromEndpoint(endpointName types.NamespacedName, requestID string) {
+func (s *PredictedLatency) getRunningRequestList(endpointName types.NamespacedName) *requestPriorityQueue {
 	if value, ok := s.runningRequestLists.Load(endpointName); ok {
-		queue := value.(*requestPriorityQueue)
+		return value.(*requestPriorityQueue)
+	}
+	return nil
+}
+
+func (s *PredictedLatency) removeRequestFromEndpoint(endpointName types.NamespacedName, requestID string) {
+	if queue := s.getRunningRequestList(endpointName); queue != nil {
 		queue.Remove(requestID)
 	}
 }
