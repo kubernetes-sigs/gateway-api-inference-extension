@@ -27,13 +27,9 @@ import (
 	// Do NOT add blank imports for specific test packages here.
 	// They should be added to the main conformance package instead
 	// to avoid import cycles.
-	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/roundtripper"
 )
 
 // ConformanceTests holds all the conformance tests definitions for the
 // Gateway API Inference Extension suite. Tests are registered from other packages
 // using init() functions like the one in the basic package.
 var ConformanceTests []suite.ConformanceTest
-
-// TODO(#1729): this is a workaround to gradually remove the GW API dependency in conformance tests
-var RoundTripper roundtripper.DefaultRoundTripper
