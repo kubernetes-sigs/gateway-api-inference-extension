@@ -772,7 +772,6 @@ func TestFlowControlEnqueueDurationMetric(t *testing.T) {
 
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
-			// FIX: Loop through the indices to record one event at a time
 			for i := range scenario.priorities {
 				RecordFlowControlRequestEnqueueDuration(
 					scenario.priorities[i],
