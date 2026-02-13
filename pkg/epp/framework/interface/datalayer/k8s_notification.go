@@ -44,11 +44,6 @@ type NotificationEvent struct {
 	Object *unstructured.Unstructured
 }
 
-// TODO:
-// 1. add data store notifications into this package and rename types accordingly
-// 2. refactor interfaces to remove unused methods (e.g., DataSources Collect();
-//    Extractor Extract() for notification based use).
-
 // NotificationSource is an event-driven DataSource for a single k8s GVK.
 // The framework core owns the k8s notification mechanisms (e.g., watches,
 // caches, informers) and calls the source's Notify on events.

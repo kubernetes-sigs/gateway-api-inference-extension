@@ -20,17 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
-	"github.com/go-logr/logr"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -71,8 +64,6 @@ func (s *K8sNotificationSource) GVK() schema.GroupVersionKind {
 }
 
 // Extractors returns names of registered extractors.
-//
-// TODO: this can be extracted as a common utility function.
 func (s *K8sNotificationSource) Extractors() []string {
 	var names []string
 	s.extractors.Range(func(_, val any) bool {
@@ -102,8 +93,6 @@ func (s *K8sNotificationSource) AddExtractor(ext fwkdl.Extractor) error {
 }
 
 // Collect is a no-op. Notification sources are event-driven, not poll-based.
-//
-// TODO: refactor base interface to remove Collect()
 func (s *K8sNotificationSource) Collect(_ context.Context, _ fwkdl.Endpoint) error {
 	return nil
 }
@@ -129,72 +118,4 @@ func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.Notifica
 		logger.Error(errors.Join(errs...), "extractor(s) failed processing notification")
 	}
 	return nil
-}
-
-// BindNotificationSource registers a watcher/reconciler for the source's GVK.
-// The framework core owns the cache and reconciliation; the source only receives
-// deep-copied events via Notify.
-func BindNotificationSource(src fwkdl.NotificationSource, mgr ctrl.Manager) error {
-	gvk := src.GVK()
-	log := mgr.GetLogger().WithName("notification-controller").WithValues("gvk", gvk.Kind)
-
-	recon := &notificationReconciler{
-		client: mgr.GetClient(),
-		src:    src,
-		gvk:    gvk,
-		log:    log,
-	}
-
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(gvk)
-
-	return ctrl.NewControllerManagedBy(mgr).
-		// Naming the controller allows you to see specific metrics/logs for this watch
-		Named("notify_" + strings.ToLower(gvk.Kind)).
-		For(obj).
-		// ResourceVersionChanged is safer for generic notifications than GenerationChanged,
-		// as it catches metadata and status updates that the consumer might need.
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Complete(recon)
-}
-
-type notificationReconciler struct {
-	client client.Client
-	src    fwkdl.NotificationSource
-	gvk    schema.GroupVersionKind
-	log    logr.Logger
-}
-
-func (r *notificationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.log.WithValues("resource", req.NamespacedName, "gvk", r.gvk.String())
-
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(r.gvk)
-
-	err := r.client.Get(ctx, req.NamespacedName, u) // client.Get returns a unique instance
-	event := fwkdl.NotificationEvent{}
-
-	if err != nil {
-		if apierrors.IsNotFound(err) { // Ensure the object passed to Notify has identity metadata
-			u.SetName(req.Name)
-			u.SetNamespace(req.Namespace)
-
-			log.V(1).Info("sending delete notification")
-			event.Type = fwkdl.EventDelete
-			event.Object = u
-			return ctrl.Result{}, r.src.Notify(ctx, event)
-		}
-		log.Error(err, "failed to fetch resource from cache")
-		return ctrl.Result{}, err
-	}
-
-	log.V(1).Info("sending add/update notification")
-	event.Type = fwkdl.EventAddOrUpdate
-	event.Object = u
-	if err := r.src.Notify(ctx, event); err != nil {
-		log.Error(err, "notification source failed to process event")
-		return ctrl.Result{}, err // Requeue on failure
-	}
-
-	return ctrl.Result{}, nil
 }

@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,43 +34,6 @@ import (
 var (
 	testGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 )
-
-// mockNotificationExtractor implements both Extractor and NotificationExtractor.
-type mockNotificationExtractor struct {
-	name       string
-	events     []fwkdl.NotificationEvent
-	mu         sync.Mutex
-	extractErr error
-}
-
-func (m *mockNotificationExtractor) TypedName() fwkplugin.TypedName {
-	return fwkplugin.TypedName{Type: "mock-extractor", Name: m.name}
-}
-
-func (m *mockNotificationExtractor) ExpectedInputType() reflect.Type {
-	return reflect.TypeOf(unstructured.Unstructured{})
-}
-
-// Extract is the Extractor interface method — no-op for notification extractors.
-func (m *mockNotificationExtractor) Extract(_ context.Context, _ any, _ fwkdl.Endpoint) error {
-	return nil
-}
-
-// ExtractNotification is the NotificationExtractor method — the real work.
-func (m *mockNotificationExtractor) ExtractNotification(_ context.Context, event fwkdl.NotificationEvent) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.events = append(m.events, event)
-	return m.extractErr
-}
-
-func (m *mockNotificationExtractor) getEvents() []fwkdl.NotificationEvent {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	result := make([]fwkdl.NotificationEvent, len(m.events))
-	copy(result, m.events)
-	return result
-}
 
 // plainExtractor implements Extractor but NOT NotificationExtractor.
 type plainExtractor struct{}
@@ -98,8 +60,8 @@ func TestNewK8sNotificationSource(t *testing.T) {
 func TestAddExtractor(t *testing.T) {
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
 
-	ext1 := &mockNotificationExtractor{name: "ext1"}
-	ext2 := &mockNotificationExtractor{name: "ext2"}
+	ext1 := NewMockNotificationExtractor("ext1")
+	ext2 := NewMockNotificationExtractor("ext2")
 
 	require.NoError(t, src.AddExtractor(ext1))
 	require.NoError(t, src.AddExtractor(ext2))
@@ -126,7 +88,7 @@ func TestAddExtractorWrongType(t *testing.T) {
 
 func TestNotify(t *testing.T) {
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
-	ext := &mockNotificationExtractor{name: "ext1"}
+	ext := NewMockNotificationExtractor("ext1")
 	_ = src.AddExtractor(ext)
 
 	ctx := context.Background()
@@ -141,7 +103,7 @@ func TestNotify(t *testing.T) {
 		Object: obj.DeepCopy(),
 	})
 	assert.NoError(t, err, "failed to notify")
-	events := ext.getEvents()
+	events := ext.GetEvents()
 	require.Len(t, events, 1)
 	assert.Equal(t, fwkdl.EventAddOrUpdate, events[0].Type)
 	assert.Equal(t, "test-cm", events[0].Object.GetName())
@@ -156,7 +118,7 @@ func TestNotify(t *testing.T) {
 		Object: obj.DeepCopy(),
 	})
 	assert.NoError(t, err, "failed to notify")
-	events = ext.getEvents()
+	events = ext.GetEvents()
 	require.Len(t, events, 2)
 	assert.Equal(t, fwkdl.EventDelete, events[1].Type)
 	assert.Equal(t, "test-cm", events[1].Object.GetName())
@@ -164,8 +126,8 @@ func TestNotify(t *testing.T) {
 
 func TestNotifyMultipleExtractors(t *testing.T) {
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
-	ext1 := &mockNotificationExtractor{name: "ext1"}
-	ext2 := &mockNotificationExtractor{name: "ext2"}
+	ext1 := NewMockNotificationExtractor("ext1")
+	ext2 := NewMockNotificationExtractor("ext2")
 	_ = src.AddExtractor(ext1)
 	_ = src.AddExtractor(ext2)
 
@@ -177,8 +139,8 @@ func TestNotifyMultipleExtractors(t *testing.T) {
 		Object: obj,
 	})
 	assert.NoError(t, err, "failed to notify")
-	assert.Len(t, ext1.getEvents(), 1)
-	assert.Len(t, ext2.getEvents(), 1)
+	assert.Len(t, ext1.GetEvents(), 1)
+	assert.Len(t, ext2.GetEvents(), 1)
 }
 
 func TestNotificationSourceFactory(t *testing.T) {
