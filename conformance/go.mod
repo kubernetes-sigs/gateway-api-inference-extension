@@ -29,8 +29,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-require sigs.k8s.io/gateway-api/conformance v0.0.0-20251230180038-fc64fe627da4
-
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
