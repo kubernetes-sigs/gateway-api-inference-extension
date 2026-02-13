@@ -405,6 +405,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.ModelServerExtractorFactory)
 	// register datalayer k8s notification source plugin
 	fwkplugin.Register(sourcenotifications.NotificationSourceType, sourcenotifications.NotificationSourceFactory)
+	// register request control pluigns
 	fwkplugin.Register(requestattributereporter.RequestAttributeReporterType, requestattributereporter.RequestAttributeReporterPluginFactory)
 }
 
@@ -548,7 +549,7 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
 	var collectors []fwkdl.DataSource
 	for _, src := range allSources {
 		if notifySrc, ok := src.(fwkdl.NotificationSource); ok {
-			if err := sourcenotifications.BindNotificationSource(notifySrc, mgr); err != nil {
+			if err := datalayer.BindNotificationSource(notifySrc, mgr); err != nil {
 				return fmt.Errorf("failed to bind notification source %s: %w", notifySrc.TypedName(), err)
 			}
 			setupLog.Info("notification source bound", "source", notifySrc.TypedName().String(), "gvk", notifySrc.GVK())
