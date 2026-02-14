@@ -93,6 +93,8 @@ inferencePool:
   # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
   targetPortNumber: 8000
 
+
+
 # Options: ["gke", "istio", "none"]
 provider:
   name: none
@@ -120,3 +122,16 @@ provider:
 experimentalHttpRoute:
   enabled: false # a flag to indicate whether to create the httproute as part of the chart or not.
   inferenceGatewayName: inference-gateway
+
+
+# Optional: Define InferenceObjective(s) for this InferencePool.
+# Each InferenceObjective associates a name and priority with the InferencePool
+# created in the chart release.
+# Users reference these objectives by name in their request headers.
+# This is only used for when InferenceObjectives are known ahead of time,
+# they can still be created out of band of the chart release as needed.
+inferenceObjectives: []
+#   - name: high-priority
+#     priority: 5
+#   - name: low-priority
+#     priority: 1
