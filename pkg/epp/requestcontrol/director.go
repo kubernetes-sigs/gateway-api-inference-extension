@@ -125,26 +125,34 @@ func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.R
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 
-	// Parse Request, Resolve Target Models, and Determine Parameters
-	requestBodyMap := reqCtx.Request.Body
-	var ok bool
-	reqCtx.IncomingModelName, ok = requestBodyMap["model"].(string)
+	var requestBody *fwksched.LLMRequestBody
+	if reqCtx.SchedulingRequestBody != nil {
+		// Currently, only gRPC reqeust body will populate reqCtx.SchedulingRequestBody.
+		requestBody = reqCtx.SchedulingRequestBody
+		// Note: for gRPC request, there is no model can be extracted from the request.
+	} else {
+		// JSON: Extract from Body map
+		requestBodyMap := reqCtx.Request.Body
+		if model, ok := requestBodyMap["model"].(string); ok {
+			reqCtx.IncomingModelName = model
+		} else {
+			return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
+		}
 
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
-	}
-	if reqCtx.TargetModelName == "" {
-		// Default to incoming model name
-		reqCtx.TargetModelName = reqCtx.IncomingModelName
-	}
+		if reqCtx.TargetModelName == "" {
+			reqCtx.TargetModelName = reqCtx.IncomingModelName
+		}
 
-	d.applyWeightedModelRewrite(reqCtx)
+		d.applyWeightedModelRewrite(reqCtx)
 
-	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
+		// Update the body map with the target model name
+		reqCtx.Request.Body["model"] = reqCtx.TargetModelName
 
-	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body, reqCtx.Request.Headers)
-	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+		var err error
+		requestBody, err = requtil.ExtractRequestBody(reqCtx.Request.Body, reqCtx.Request.Headers)
+		if err != nil {
+			return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+		}
 	}
 
 	// Parse inference objective.
@@ -179,7 +187,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
 
 	// Prepare per request data by running PrepareData plugins.
-	if d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) != nil {
+	if err := d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods); err != nil {
 		// Don't fail the request if PrepareData plugins fail.
 		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
 	}
