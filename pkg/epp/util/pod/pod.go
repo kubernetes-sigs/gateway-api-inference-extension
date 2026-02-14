@@ -52,7 +52,7 @@ func ExtractActivePorts(pod *corev1.Pod) (sets.Set[int], bool) {
 		for _, portStr := range portStrs {
 			var portNum int
 			_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
-			if err == nil {
+			if err == nil && portNum > 0 {
 				inferencePorts.Insert(portNum)
 			}
 		}
