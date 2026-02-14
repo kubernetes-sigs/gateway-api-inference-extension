@@ -3,7 +3,7 @@ inferenceExtension:
   image:
     name: epp
     hub: registry.k8s.io/gateway-api-inference-extension
-    tag: v1.3.0
+    tag: v1.3.0-rc.1
     pullPolicy: Always
   extProcPort: 9002
   env: []
@@ -76,7 +76,7 @@ inferenceExtension:
       image:
         hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
         name: latencypredictor-training-server
-        tag: v1.3.0
+        tag: v1.3.0-rc.1
         pullPolicy: Always
       port: 8000
       resources:
@@ -117,7 +117,7 @@ inferenceExtension:
       image:
         hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
         name: latencypredictor-prediction-server
-        tag: v1.3.0
+        tag: v1.3.0-rc.1
         pullPolicy: Always
       resources:
         requests:
