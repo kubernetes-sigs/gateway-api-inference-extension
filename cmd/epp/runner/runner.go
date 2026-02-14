@@ -500,6 +500,10 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	r.schedulerConfig = cfg.SchedulerConfig
 
+	if cfg.RequestControlConfig != nil && cfg.RequestControlConfig.PrepareDataTimeout > 0 {
+		r.requestControlConfig.WithPrepareDataTimeout(cfg.RequestControlConfig.PrepareDataTimeout)
+	}
+
 	// Add requestControl plugins
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
