@@ -22,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )

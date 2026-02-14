@@ -75,6 +75,7 @@ import (
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling/framework/plugins/test/filter"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/env"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -154,7 +155,7 @@ func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runne
 
 func (r *Runner) Run(ctx context.Context) error {
 	// Setup a very basic logger in case command line argument parsing fails
-	logutil.InitSetupLogging()
+	logging.InitSetupLogging()
 
 	setupLog.Info(r.eppExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 
