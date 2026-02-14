@@ -41,6 +41,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
+	bbr "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	routing "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/routing"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
@@ -48,6 +50,7 @@ import (
 )
 
 var (
+	// Flags
 	grpcPort            = flag.Int("grpc-port", 9004, "The gRPC port used for communicating with Envoy proxy")
 	grpcHealthPort      = flag.Int("grpc-health-port", 9005, "The port used for gRPC liveness and readiness probes")
 	metricsPort         = flag.Int("metrics-port", 9090, "The metrics port")
@@ -57,7 +60,12 @@ var (
 	logVerbosity        = flag.Int("v", logutil.DEFAULT, "number for the log level verbosity")
 	enablePprof         = flag.Bool("enable-pprof", true, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 
+	// Logging
 	setupLog = ctrl.Log.WithName("setup")
+
+	// Contains the BBR plugins specs specified via repeated flags:
+	//   --plugin <type>:<name>[:<json>]
+	pluginSpecs bbr.BBRPluginSpecs
 )
 
 func NewRunner() *Runner {
@@ -69,6 +77,10 @@ func NewRunner() *Runner {
 // Runner is used to run bbr with its plugins
 type Runner struct {
 	bbrExecutableName string
+
+	// The slice of BBR plugin instances executed by the request handler,
+	// in the same order the plugin flags are provided.
+	bbrPluginInstances []bbr.BBRPlugin
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -82,6 +94,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	setupLog.Info(r.bbrExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
+
+	flag.Var(&pluginSpecs, "plugin", `Repeatable. --plugin <type>:<name>[:<json>]`)
 	flag.Parse()
 	initLogging(&opts)
 
@@ -150,12 +164,44 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 
+	// Register factories for all known in-tree BBR plugins
+	r.registerInTreePlugins()
+
+	// Construct BBR plugin instances for the in tree plugins that are (1) registered and (2) requested via the --plugin flags
+	if len(pluginSpecs) == 0 {
+		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
+
+		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
+		factory := bbr.Registry[routing.DefaultPluginType]
+		defaultPlugin, err := factory("", nil)
+		if err != nil {
+			setupLog.Error(err, "Failed to create default plugin")
+			return err
+		}
+		r.withPlugin(defaultPlugin)
+	} else {
+		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
+
+		for _, s := range pluginSpecs {
+			factory, ok := bbr.Registry[s.Type]
+			if !ok {
+				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
+			}
+			instance, err := factory(s.Name, s.JSON)
+			if err != nil {
+				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
+			}
+			r.withPlugin(instance)
+		}
+	}
+
 	// Setup ExtProc Server Runner
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:      *grpcPort,
-		Datastore:     ds,
-		SecureServing: *secureServing,
-		Streaming:     *streaming,
+		GrpcPort:        *grpcPort,
+		Datastore:       ds,
+		SecureServing:   *secureServing,
+		Streaming:       *streaming,
+		PluginInstances: r.bbrPluginInstances,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup BBR controllers")
@@ -181,6 +227,15 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	setupLog.Info("Manager terminated")
 	return nil
+}
+
+// registerInTreePlugins registers the factory functions of all known BBR plugins
+func (r *Runner) registerInTreePlugins() {
+	bbr.Register(routing.DefaultPluginType, routing.DefaultPluginFactory)
+}
+
+func (r *Runner) withPlugin(p bbr.BBRPlugin) {
+	r.bbrPluginInstances = append(r.bbrPluginInstances, p)
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.

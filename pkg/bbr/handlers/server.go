@@ -29,24 +29,28 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+
+	bbr "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 )
 
 type Datastore interface {
 	GetBaseModel(modelName string) string
 }
 
-func NewServer(streaming bool, ds Datastore) *Server {
+func NewServer(streaming bool, ds Datastore, bbrPluginInstances []bbr.BBRPlugin) *Server {
 	return &Server{
-		streaming: streaming,
-		ds:        ds,
+		streaming:       streaming,
+		ds:              ds,
+		pluginInstances: bbrPluginInstances,
 	}
 }
 
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
-	streaming bool
-	ds        Datastore
+	streaming       bool
+	ds              Datastore
+	pluginInstances []bbr.BBRPlugin
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
