@@ -17,8 +17,17 @@ limitations under the License.
 package pod
 
 import (
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
+
+// activePortsAnnotation is used to specify which ports on a pod should be considered
+// as active for inference traffic. The value should be a comma-separated list of port numbers.
+// Example: "8000,8001,8002"
+const activePortsAnnotation = "inference.networking.k8s.io/active-ports"
 
 func IsPodReady(pod *corev1.Pod) bool {
 	if !pod.DeletionTimestamp.IsZero() {
@@ -33,4 +42,22 @@ func IsPodReady(pod *corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+func ExtractActivePorts(pod *corev1.Pod) (sets.Set[int], bool) {
+	inferencePorts := sets.New[int]()
+	annotations := pod.GetAnnotations()
+	if portsAnnotation, ok := annotations[activePortsAnnotation]; ok {
+		portStrs := strings.Split(portsAnnotation, ",")
+		for _, portStr := range portStrs {
+			var portNum int
+			_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
+			if err == nil {
+				inferencePorts.Insert(portNum)
+			}
+		}
+		return inferencePorts, true
+	} else {
+		return nil, false
+	}
 }

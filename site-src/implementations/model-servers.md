@@ -122,3 +122,38 @@ plugins:
 - Use `engineLabelKey` to customize the Pod label key for engine identification (defaults to `inference.networking.k8s.io/engine-type`)
 - Use `defaultEngine` to specify which engine is used for Pods without an engine label (defaults to "vllm")
 - Built-in vLLM and SGLang configs are automatically included, even when adding custom engines
+
+## Active Port Declaration via Pod Annotations
+
+The EPP supports specifying which ports on a pod should be considered as active for inference traffic using pod annotations.
+This allows for fine-grained control over which ports the EPP will use when routing inference requests to model server pods.
+
+To specify active ports on a pod, add the annotation `inference.networking.k8s.io/active-ports` with a comma-separated list of port numbers.
+
+### Example
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: model-server-pod
+  annotations:
+    inference.networking.k8s.io/active-ports: "8000,8001,8002"
+spec:
+  containers:
+  - name: model-server
+    image: your-model-server:latest
+    ports:
+    - containerPort: 8000
+      name: http
+    - containerPort: 8001
+      name: metrics
+    - containerPort: 8002
+      name: health
+```
+
+In this example, the EPP will consider ports 8000, 8001, and 8002 as active ports for inference traffic on this pod.
+Any other ports exposed by the pod will not be used for inference requests unless specified in the annotation.
+
+This feature is particularly useful when your model server pods expose multiple ports and you want to explicitly control which ones
+are used for inference traffic routing.
