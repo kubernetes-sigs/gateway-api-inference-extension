@@ -33,6 +33,15 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
+)
+
+const (
+	// Experimental_DefaultPrefillProfile is the default profile name for prefill pods in disaggregated serving.
+	// This constant identifies prefill endpoints for load tracking and training data collection.
+	// This is hardcoded for now until we land on a canonical approach for plugins to identify
+	// prefill and decode endpoints (See https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2080)
+	Experimental_DefaultPrefillProfile = "prefill"
 )
 
 var _ requestcontrol.PreRequest = &PredictedLatency{}
@@ -131,11 +140,10 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	endpointRequestList, ok := t.runningRequestLists[endpointName]
-	if !ok {
-		endpointRequestList = newRequestPriorityQueue()
-		t.runningRequestLists[endpointName] = endpointRequestList
-	}
+
+	// Get or create queue for this endpoint using sync.Map
+	actual, _ := t.runningRequestLists.LoadOrStore(endpointName, newRequestPriorityQueue())
+	endpointRequestList := actual.(*requestPriorityQueue)
 
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
@@ -149,6 +157,30 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 		logger.V(logutil.TRACE).Info("PredictedLatency: Item already exists in queue", "endpointName", endpointName, "requestID", id)
 	}
 
+	// For disaggregated serving, also track the prefill pod if it was selected
+	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
+		if len(prefillResult.TargetEndpoints) > 0 {
+			prefillPod := prefillResult.TargetEndpoints[0].GetMetadata()
+			prefillEndpointName := types.NamespacedName{
+				Name:      prefillPod.NamespacedName.Name,
+				Namespace: prefillPod.NamespacedName.Namespace,
+			}
+
+			// Get or create queue for prefill endpoint
+			prefillActual, _ := t.runningRequestLists.LoadOrStore(prefillEndpointName, newRequestPriorityQueue())
+			prefillRequestList := prefillActual.(*requestPriorityQueue)
+
+			prefillAdded := prefillRequestList.Add(id, predictedLatencyCtx.avgTPOTSLO)
+			if !prefillAdded {
+				logger.V(logutil.TRACE).Info("PredictedLatency: Prefill item already exists in queue", "endpointName", prefillEndpointName, "requestID", id)
+			} else {
+				logger.V(logutil.DEBUG).Info("Tracked prefill pod in running requests",
+					"prefillPod", prefillPod.NamespacedName.Name,
+					"requestID", id)
+			}
+		}
+	}
+
 	// Set up SLO request context
 	predictedLatencyCtx.targetMetadata = targetMetadata
 	predictedLatencyCtx.schedulingResult = schedulingResult
@@ -156,7 +188,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	refreshLastSeenMetrics(ctx, predictedLatencyCtx)
 	t.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx); err != nil {
+	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "Process PreRequest in latencypredictor failed")
 	}
 }
@@ -166,6 +198,58 @@ func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedu
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
 		return
+	}
+
+	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		id := request.Headers[requtil.RequestIdHeaderKey]
+		logger.V(logutil.DEBUG).Error(err, "PredictedLatency.ResponseReceived: Failed to get context for request", "requestID", id)
+		return
+	}
+
+	schedulingResult := predictedLatencyCtx.schedulingResult
+	if schedulingResult == nil {
+		return
+	}
+
+	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
+		if len(prefillResult.TargetEndpoints) > 0 {
+			now := time.Now()
+			prefillTTFT := float64(now.Sub(predictedLatencyCtx.requestReceivedTimestamp).Milliseconds())
+
+			prefillEndpoint := prefillResult.TargetEndpoints[0]
+			prefillMetadata := prefillEndpoint.GetMetadata()
+
+			prefillMetrics, exists := predictedLatencyCtx.lastSeenMetrics[Experimental_DefaultPrefillProfile]
+			if !exists || prefillMetrics == nil {
+				logger.V(logutil.DEBUG).Info("No metrics available for prefill profile, skipping training")
+				return
+			}
+
+			prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[prefillMetadata.NamespacedName.Name]
+
+			logger.V(logutil.DEBUG).Info("Recording prefill training data",
+				"requestID", request.Headers[requtil.RequestIdHeaderKey],
+				"prefillTTFT_ms", prefillTTFT,
+				"prefillPod", prefillMetadata.NamespacedName.Name,
+				"prefixCacheScore", prefixCacheScore)
+
+			entry := buildTrainingEntry(
+				t.config.EndpointRoleLabel,
+				prefillMetadata,
+				prefillMetrics,
+				predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+				prefillTTFT,
+				0,
+				now,
+				0,
+				prefixCacheScore,
+			)
+
+			if err := t.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+				logger.V(logutil.DEBUG).Error(err, "Failed to record prefill training data")
+			}
+		}
 	}
 }
 
@@ -189,9 +273,9 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 	}
 
 	if predictedLatencyCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
@@ -215,7 +299,7 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	}
 	now := time.Now()
 	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if predictedLatencyCtx.ttft > 0 {
@@ -237,6 +321,25 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
+
+	// For disaggregated serving, also remove the prefill pod from tracking
+	schedulingResult := predictedLatencyCtx.schedulingResult
+	if schedulingResult != nil {
+		if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
+			if len(prefillResult.TargetEndpoints) > 0 {
+				prefillPod := prefillResult.TargetEndpoints[0].GetMetadata()
+				prefillEndpointName := types.NamespacedName{
+					Name:      prefillPod.NamespacedName.Name,
+					Namespace: prefillPod.NamespacedName.Namespace,
+				}
+				t.removeRequestFromEndpoint(prefillEndpointName, id)
+				logger.V(logutil.DEBUG).Info("Removed prefill pod from running requests",
+					"prefillPod", prefillPod.NamespacedName.Name,
+					"requestID", id)
+			}
+		}
+	}
+
 	t.removeRequestFromQueue(id, predictedLatencyCtx)
 	t.deletePredictedLatencyContextForRequest(request)
 }

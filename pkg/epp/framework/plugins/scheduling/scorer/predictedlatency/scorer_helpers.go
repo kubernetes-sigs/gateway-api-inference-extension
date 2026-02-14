@@ -99,6 +99,19 @@ func (s *PredictedLatency) selectEndpointBasedOnStrategy(
 	return selectedEndpoint
 }
 
+func (s *PredictedLatency) getRunningRequestList(endpointName types.NamespacedName) *requestPriorityQueue {
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		return value.(*requestPriorityQueue)
+	}
+	return nil
+}
+
+func (s *PredictedLatency) removeRequestFromEndpoint(endpointName types.NamespacedName, requestID string) {
+	if queue := s.getRunningRequestList(endpointName); queue != nil {
+		queue.Remove(requestID)
+	}
+}
+
 func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predictedLatencyCtx) {
 	if ctx == nil || ctx.targetMetadata == nil {
 		return
@@ -107,7 +120,5 @@ func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predict
 		Name:      ctx.targetMetadata.NamespacedName.Name,
 		Namespace: ctx.targetMetadata.NamespacedName.Namespace,
 	}
-	if queue, ok := s.runningRequestLists[endpointName]; ok {
-		queue.Remove(requestID)
-	}
+	s.removeRequestFromEndpoint(endpointName, requestID)
 }

@@ -22,10 +22,11 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
-	"k8s.io/apimachinery/pkg/types"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -39,8 +40,8 @@ import (
 type PredictedLatency struct {
 	typedName           plugin.TypedName
 	latencypredictor    latencypredictor.PredictorInterface
-	runningRequestLists map[types.NamespacedName]*requestPriorityQueue
-	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx]
+	runningRequestLists sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
+	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
 	headroomStrategy    headroomStrategy
 	config              Config
 }
@@ -66,6 +67,7 @@ type Config struct {
 	ContextTTL                time.Duration `json:"contextTTL,omitempty"`
 	SelectionMode             string        `json:"selectionMode,omitempty"`
 	StreamingMode             bool          `json:"streamingMode,omitempty"`
+	EndpointRoleLabel         string        `json:"endpointRoleLabel,omitempty"`
 }
 
 var DefaultConfig = Config{
@@ -160,11 +162,11 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	}
 
 	predictedLatency := &PredictedLatency{
-		typedName:           plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
-		latencypredictor:    predictor,
-		runningRequestLists: make(map[types.NamespacedName]*requestPriorityQueue),
-		headroomStrategy:    strategy,
-		config:              config,
+		typedName:        plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
+		latencypredictor: predictor,
+		// runningRequestLists is a sync.Map and needs no initialization
+		headroomStrategy: strategy,
+		config:           config,
 	}
 
 	predictedLatency.sloContextStore = ttlcache.New(
