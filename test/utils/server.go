@@ -192,3 +192,21 @@ func BuildEnvoyGRPCHeaders(headers map[string]string, rawValue bool) *pb.HttpHea
 		},
 	}
 }
+
+func BuildEnvoyGRPCTrailers(trailers map[string]string, rawValue bool) *pb.HttpTrailers {
+	headerValues := make([]*corev3.HeaderValue, 0)
+	for key, value := range trailers {
+		header := &corev3.HeaderValue{Key: key}
+		if rawValue {
+			header.RawValue = []byte(value)
+		} else {
+			header.Value = value
+		}
+		headerValues = append(headerValues, header)
+	}
+	return &pb.HttpTrailers{
+		Trailers: &corev3.HeaderMap{
+			Headers: headerValues,
+		},
+	}
+}
