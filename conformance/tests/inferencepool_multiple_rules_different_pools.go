@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
-	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -61,13 +61,12 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			k8sutils.HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(t, s.Client, routeNN, gatewayNN, secondaryPoolNN)
 		})
 
-		rt := &RoundTripper
 		t.Run("Traffic should be routed to the correct pool based on path", func(t *testing.T) {
 			gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 
 			t.Run("request to primary pool", func(t *testing.T) {
-				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, rt,
-					rt.TimeoutConfig, gwAddr, gwhttp.ExpectedResponse{
+				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper,
+					s.TimeoutConfig, gwAddr, gwhttp.ExpectedResponse{
 						Request: gwhttp.Request{
 							Path: primaryPath,
 						},
@@ -77,8 +76,8 @@ var HTTPRouteMultipleRulesDifferentPools = suite.ConformanceTest{
 			})
 
 			t.Run("request to secondary pool", func(t *testing.T) {
-				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, rt,
-					rt.TimeoutConfig, gwAddr, gwhttp.ExpectedResponse{
+				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper,
+					s.TimeoutConfig, gwAddr, gwhttp.ExpectedResponse{
 						Request: gwhttp.Request{
 							Path: secondaryPath,
 						},

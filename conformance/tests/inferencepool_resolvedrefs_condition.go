@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -71,7 +71,6 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 		gwPrimaryAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayPrimaryNN)
 		gwSecondaryAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewaySecondaryNN)
 
-		rt := &RoundTripper
 		t.Run("InferencePool should show Accepted:True by parents and be routable via multiple HTTPRoutes", func(t *testing.T) {
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayPrimaryNN)
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewaySecondaryNN)
@@ -79,8 +78,8 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwPrimaryAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
@@ -97,8 +96,8 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwSecondaryAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
@@ -129,8 +128,8 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwSecondaryAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
@@ -147,8 +146,8 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwPrimaryAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
@@ -177,8 +176,8 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwSecondaryAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
