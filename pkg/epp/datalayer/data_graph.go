@@ -14,14 +14,101 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requestcontrol
+package datalayer
 
 import (
 	"errors"
 	"slices"
 
+	fwkfc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwksch "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
+
+// ValidateAndOrderDataDependencies validates that the data dependencies among the given plugins are acyclic
+// and returns a topologically sorted order of plugin names based on their data dependencies.
+// Further, it validates that the plugins are ordered in a way that respects the layer execution order.
+func ValidateAndOrderDataDependencies(plugins []plugin.Plugin) ([]string, error) {
+	pluginMap := make(map[string]plugin.Plugin)
+	for _, p := range plugins {
+		pluginMap[p.TypedName().String()] = p
+	}
+	for _, p := range plugins {
+		pluginMap[p.TypedName().String()] = p
+	}
+	producers := make(map[string]plugin.ProducerPlugin)
+	consumers := make(map[string]plugin.ConsumerPlugin)
+	for name, p := range pluginMap {
+		if producer, ok := p.(plugin.ProducerPlugin); ok {
+			producers[name] = producer
+		}
+		if consumer, ok := p.(plugin.ConsumerPlugin); ok {
+			consumers[name] = consumer
+		}
+	}
+	dag, err := buildDAG(producers, consumers)
+	if err != nil {
+		return nil, err
+	}
+	// Topologically sort the DAG to determine the order of plugin execution.
+	pluginNames, err := topologicalSort(dag)
+	if err != nil {
+		return nil, err
+	}
+
+	return pluginNames, nil
+}
+
+// Define constants for layer execution order. Lower value means earlier execution.
+const (
+	FlowControlLayer    = 0
+	RequestControlLayer = 1
+	SchedulingLayer     = 2
+	DefaultLayer        = -1 // For plugins that don't fit into a known layer
+)
+
+func pluginToLayerExecutionOrder(plugin plugin.Plugin) int {
+	// Flow control plugins
+	if _, ok := plugin.(fwkfc.FairnessPolicy); ok {
+		return FlowControlLayer
+	}
+	if _, ok := plugin.(fwkfc.OrderingPolicy); ok {
+		return FlowControlLayer
+	}
+
+	// Request control plugins
+	if _, ok := plugin.(fwkrq.PrepareDataPlugin); ok {
+		return RequestControlLayer
+	}
+	if _, ok := plugin.(fwkrq.AdmissionPlugin); ok {
+		return RequestControlLayer
+	}
+	if _, ok := plugin.(fwkrq.PreRequest); ok {
+		return RequestControlLayer
+	}
+	if _, ok := plugin.(fwkrq.ResponseReceived); ok {
+		return RequestControlLayer
+	}
+
+	// Scheduling plugins
+	if _, ok := plugin.(fwksch.ProfileHandler); ok {
+		return SchedulingLayer
+	}
+	if _, ok := plugin.(fwksch.Filter); ok {
+		return SchedulingLayer
+	}
+	if _, ok := plugin.(fwksch.Scorer); ok {
+		return SchedulingLayer
+	}
+	if _, ok := plugin.(fwksch.Picker); ok {
+		return SchedulingLayer
+	}
+
+	// If the plugin doesn't match any known layer, return -1.
+	return DefaultLayer
+}
 
 // buildDAG builds a dependency graph among data preparation plugins based on their
 // produced and consumed data keys.
@@ -41,12 +128,14 @@ func buildDAG(producers map[string]plugin.ProducerPlugin, consumers map[string]p
 			}
 			if producer.Produces() != nil && consumer.Consumes() != nil {
 				for producedKey, producedData := range producer.Produces() {
-					// TODO(#1988): Verify that pool-level plugins do not produce or consume data from request-level plugins and vice versa.
 					if consumedData, ok := consumer.Consumes()[producedKey]; ok {
 						// Check types are same. Reflection is avoided here for simplicity.
 						// TODO(#1985): Document this detail in IGW docs.
 						if producedData != consumedData {
 							return nil, errors.New("data type mismatch between produced and consumed data for key: " + producedKey)
+						}
+						if pluginToLayerExecutionOrder(producer) > pluginToLayerExecutionOrder(consumer) {
+							return nil, errors.New("invalid plugin layer execution order: producer " + pName + " needs to be executed before consumer " + cName)
 						}
 						// Consumer depends on producer, so add an edge from consumer to producer.
 						dag[cName] = append(dag[cName], pName)
@@ -109,6 +198,8 @@ func topologicalSort(graph map[string][]string) ([]string, error) {
 	if len(result) != len(inDegree) {
 		return nil, errors.New("cycle detected: graph is not a DAG")
 	}
+
+	// Reverse to get the correct order since edges point from consumer to producer
 	slices.Reverse(result)
 	return result, nil
 }

@@ -109,65 +109,8 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 	}
 }
 
-// ProducerConsumerPlugins iterates through all registered plugins and returns two slices:
-// one containing the names of plugins that implement the ProducerPlugin interface,
-// and another for plugins that implement the ConsumerPlugin interface.
-func (c *Config) ProducerConsumerPlugins() (map[string]plugin.ProducerPlugin, map[string]plugin.ConsumerPlugin) {
-	producers := make(map[string]plugin.ProducerPlugin)
-	consumers := make(map[string]plugin.ConsumerPlugin)
-	// Collect all unique plugins from the config.
-	allPlugins := make(map[string]plugin.Plugin)
-	for _, p := range c.admissionPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.prepareDataPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.preRequestPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.responseReceivedPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.responseStreamingPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.responseCompletePlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-
-	for name, p := range allPlugins {
-		if producer, ok := p.(plugin.ProducerPlugin); ok {
-			producers[name] = producer
-		}
-		if consumer, ok := p.(plugin.ConsumerPlugin); ok {
-			consumers[name] = consumer
-		}
-	}
-	return producers, consumers
-}
-
-// ValidateDataDependencies creates a data dependency graph and sorts the plugins in topological order.
-// If a cycle is detected, it returns an error.
-func (c *Config) ValidateAndOrderDataDependencies() error {
-	producers, consumers := c.ProducerConsumerPlugins()
-	dag, err := buildDAG(producers, consumers)
-	if err != nil {
-		return err
-	}
-	// Topologically sort the DAG to determine the order of plugin execution.
-	plugins, err := topologicalSort(dag)
-	if err != nil {
-		return err
-	}
-	// Reorder the prepareDataPlugins in the Config based on the sorted order.
-	c.orderPrepareDataPlugins(plugins)
-
-	return nil
-}
-
-// orderPrepareDataPlugins reorders the prepareDataPlugins in the Config based on the given sorted plugin names.
-func (c *Config) orderPrepareDataPlugins(sortedPluginNames []string) {
+// OrderPrepareDataPlugins reorders the prepareDataPlugins in the Config based on the given sorted plugin names.
+func (c *Config) OrderPrepareDataPlugins(sortedPluginNames []string) {
 	sortedPlugins := make([]fwk.PrepareDataPlugin, 0, len(sortedPluginNames))
 	nameToPlugin := make(map[string]fwk.PrepareDataPlugin)
 	for _, plugin := range c.prepareDataPlugins {

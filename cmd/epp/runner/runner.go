@@ -504,8 +504,9 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 	r.requestControlConfig.AddPlugins(handle.GetAllPlugins()...)
 
 	// Sort data plugins in DAG order (topological sort). Also check DAG for cycles.
-	// Also Order PrepareData plugins based on data dependencies.
-	if err := r.requestControlConfig.ValidateAndOrderDataDependencies(); err != nil {
+	dag, err := datalayer.ValidateAndOrderDataDependencies(handle.GetAllPlugins())
+
+	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)
 	}
 	// TODO(#1970): Remove feature gate check once prepare data plugins are stable.
@@ -513,10 +514,13 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 		// If the feature gate is disabled, clear any prepare data plugins so they are not used.
 		r.requestControlConfig.WithPrepareDataPlugins()
 	}
+	// The plugins will be executed in topologically sorted order to ensure that data is produced before it is consumed.
+	r.requestControlConfig.OrderPrepareDataPlugins(dag)
 
 	r.applyDeprecatedSaturationConfig(cfg)
 
 	logger.Info("loaded configuration from file/text successfully")
+
 	return cfg, nil
 }
 
