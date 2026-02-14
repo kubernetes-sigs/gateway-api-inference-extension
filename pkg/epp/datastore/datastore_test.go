@@ -799,11 +799,11 @@ func TestActivePortFiltering(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                   string
-		pools                  []v1.InferencePool
-		pods                   []*corev1.Pod
-		wantEndpointCount      int
-		wantEndpointNames      []string
+		name              string
+		pools             []v1.InferencePool
+		pods              []*corev1.Pod
+		wantEndpointCount int
+		wantEndpointNames []string
 	}{
 		{
 			name: "Pod with active ports annotation filters endpoints",
@@ -815,7 +815,7 @@ func TestActivePortFiltering(t *testing.T) {
 				},
 			},
 			pods:              []*corev1.Pod{readyPod1},
-			wantEndpointCount: 2, // Only ports 8000 and 8002 should be active
+			wantEndpointCount: 2,                                      // Only ports 8000 and 8002 should be active
 			wantEndpointNames: []string{"pod1-rank-0", "pod1-rank-2"}, // ranks 1 and 3 (for ports 8001 and 8003) should be skipped
 		},
 		{
@@ -852,7 +852,7 @@ func TestActivePortFiltering(t *testing.T) {
 				},
 			},
 			pods:              []*corev1.Pod{readyPod1, readyPod2}, // pod1 has ports 8000,8002 active; pod2 has all ports active
-			wantEndpointCount: 5, // pod1: 2 endpoints (8000, 8002); pod2: 3 endpoints (8000, 8001, 8002)
+			wantEndpointCount: 5,                                   // pod1: 2 endpoints (8000, 8002); pod2: 3 endpoints (8000, 8001, 8002)
 		},
 	}
 

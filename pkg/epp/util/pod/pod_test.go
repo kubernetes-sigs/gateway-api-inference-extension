@@ -134,11 +134,11 @@ func TestExtractActivePorts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ports, exists := ExtractActivePorts(tt.pod)
-			
+
 			if exists != tt.expectedExists {
 				t.Errorf("ExtractActivePorts() exists = %v, want %v", exists, tt.expectedExists)
 			}
-			
+
 			if !reflect.DeepEqual(ports, tt.expectedPorts) {
 				t.Errorf("ExtractActivePorts() ports = %v, want %v", ports, tt.expectedPorts)
 			}
