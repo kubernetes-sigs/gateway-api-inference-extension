@@ -103,6 +103,10 @@ func (f *FakeLoggerDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	return poolutil.InferencePoolToEndpointPool(pool), nil
 }
 
+func (f *FakeLoggerDataStore) EndpointSetHealthy(_ fwkdl.Endpoint, _ bool) {
+	// Not implemented.
+}
+
 func (f *FakeLoggerDataStore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint {
 	var m = &fwkdl.Metrics{
 		ActiveModels:            map[string]int{"modelA": 1},
