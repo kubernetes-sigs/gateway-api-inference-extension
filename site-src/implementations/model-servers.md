@@ -130,6 +130,10 @@ This allows for fine-grained control over which ports the EPP will use when rout
 
 To specify active ports on a pod, add the annotation `inference.networking.k8s.io/active-ports` with a comma-separated list of port numbers.
 
+### Relationship to InferencePool CR TargetPorts
+
+The ports specified in the `inference.networking.k8s.io/active-ports` annotation are subject to the InferencePool CR's TargetPorts configuration. Only ports that are within the TargetPorts range defined in the InferencePool CR are considered valid and will be used for inference traffic. This annotation is optional - if it is not present, all ports in the InferencePool's TargetPorts range will be considered active for that pod.
+
 ### Example
 
 ```yaml
@@ -138,7 +142,7 @@ kind: Pod
 metadata:
   name: model-server-pod
   annotations:
-    inference.networking.k8s.io/active-ports: "8000,8001,8002"
+    inference.networking.k8s.io/active-ports: "8000,8002"
 spec:
   containers:
   - name: model-server
@@ -152,8 +156,6 @@ spec:
       name: health
 ```
 
-In this example, the EPP will consider ports 8000, 8001, and 8002 as active ports for inference traffic on this pod.
-Any other ports exposed by the pod will not be used for inference requests unless specified in the annotation.
+In this example, assuming ports 8000-8002 are defined in the InferencePool's TargetPorts, the EPP will only consider ports 8000 and 8002 as active ports for inference traffic on this pod (since 8001 is not specified in the annotation). Any other ports exposed by the pod that are not within the TargetPorts range will not be used for inference requests.
 
-This feature is particularly useful when your model server pods expose multiple ports and you want to explicitly control which ones
-are used for inference traffic routing.
+This feature is particularly useful when your model server pods expose multiple ports in the TargetPorts range and you want to explicitly control which ones are used for inference traffic routing.
