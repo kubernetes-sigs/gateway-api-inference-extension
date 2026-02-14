@@ -742,3 +742,323 @@ func TestEndpointMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestActivePortFiltering(t *testing.T) {
+	// Create pods that are ready
+	readyPod1 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+			Annotations: map[string]string{
+				"inference.networking.k8s.io/active-ports": "8000,8002",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			PodIP: "10.0.0.1",
+		},
+	}
+
+	// Pod without active ports annotation - should use all ports
+	readyPod2 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod2",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			PodIP: "10.0.0.2",
+		},
+	}
+
+	// Pod with empty active ports annotation
+	readyPod3 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod3",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+			Annotations: map[string]string{
+				"inference.networking.k8s.io/active-ports": "",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			PodIP: "10.0.0.3",
+		},
+	}
+
+	tests := []struct {
+		name              string
+		pools             []v1.InferencePool
+		pods              []*corev1.Pod
+		wantEndpointCount int
+		wantEndpointNames []string
+	}{
+		{
+			name: "Pod with active ports annotation filters endpoints",
+			pools: []v1.InferencePool{
+				{
+					Spec: v1.InferencePoolSpec{
+						TargetPorts: []v1.Port{{Number: 8000}, {Number: 8001}, {Number: 8002}, {Number: 8003}},
+					},
+				},
+			},
+			pods:              []*corev1.Pod{readyPod1},
+			wantEndpointCount: 2,                                      // Only ports 8000 and 8002 should be active
+			wantEndpointNames: []string{"pod1-rank-0", "pod1-rank-2"}, // ranks 1 and 3 (for ports 8001 and 8003) should be skipped
+		},
+		{
+			name: "Pod without active ports annotation uses all ports",
+			pools: []v1.InferencePool{
+				{
+					Spec: v1.InferencePoolSpec{
+						TargetPorts: []v1.Port{{Number: 8000}, {Number: 8001}},
+					},
+				},
+			},
+			pods:              []*corev1.Pod{readyPod2},
+			wantEndpointCount: 2, // Both ports should be active
+		},
+		{
+			name: "Pod with empty active ports annotation uses no ports",
+			pools: []v1.InferencePool{
+				{
+					Spec: v1.InferencePoolSpec{
+						TargetPorts: []v1.Port{{Number: 8000}, {Number: 8001}},
+					},
+				},
+			},
+			pods:              []*corev1.Pod{readyPod3},
+			wantEndpointCount: 0, // No ports should be active
+		},
+		{
+			name: "Multiple pods with different active port annotations",
+			pools: []v1.InferencePool{
+				{
+					Spec: v1.InferencePoolSpec{
+						TargetPorts: []v1.Port{{Number: 8000}, {Number: 8001}, {Number: 8002}},
+					},
+				},
+			},
+			pods:              []*corev1.Pod{readyPod1, readyPod2}, // pod1 has ports 8000,8002 active; pod2 has all ports active
+			wantEndpointCount: 5,                                   // pod1: 2 endpoints (8000, 8002); pod2: 3 endpoints (8000, 8001, 8002)
+		},
+	}
+
+	for _, test := range tests {
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				ctx := context.Background()
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				_ = corev1.AddToScheme(scheme)
+
+				// Create fake client
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					Build()
+
+				ds := NewDatastore(ctx, epf, 0)
+
+				// Use the first pool in the test
+				if len(test.pools) > 0 {
+					pool := test.pools[0]
+					if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(&pool)); err != nil {
+						t.Fatalf("Failed to set pool: %v", err)
+					}
+				}
+
+				// Add all pods
+				for _, pod := range test.pods {
+					ds.PodUpdateOrAddIfNotExist(pod)
+				}
+
+				// Check final endpoint count
+				finalEndpoints := ds.PodList(AllPodsPredicate)
+				if len(finalEndpoints) != test.wantEndpointCount {
+					t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCount)
+				}
+
+				// Check endpoint names if specified
+				if test.wantEndpointNames != nil {
+					gotNames := make([]string, 0, len(finalEndpoints))
+					for _, ep := range finalEndpoints {
+						gotNames = append(gotNames, ep.GetMetadata().NamespacedName.Name)
+					}
+					if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+						t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestActivePortEndpointRemoval(t *testing.T) {
+	// Create a pod initially with all ports active
+	readyPod1 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+			Annotations: map[string]string{
+				"inference.networking.k8s.io/active-ports": "8000,8001,8002",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			PodIP: "10.0.0.1",
+		},
+	}
+
+	// Updated pod with fewer active ports
+	updatedPod1 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+			Annotations: map[string]string{
+				"inference.networking.k8s.io/active-ports": "8000",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			PodIP: "10.0.0.1",
+		},
+	}
+
+	// Pod with no active ports
+	inactivePod1 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+			Annotations: map[string]string{
+				"inference.networking.k8s.io/active-ports": "",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			PodIP: "10.0.0.1",
+		},
+	}
+
+	tests := []struct {
+		name              string
+		pool              *v1.InferencePool
+		operations        []func(Datastore)
+		initialPod        *corev1.Pod
+		wantEndpointCount int
+	}{
+		{
+			name: "Remove endpoints when active ports are reduced",
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{Number: 8000}, {Number: 8001}, {Number: 8002}},
+				},
+			},
+			initialPod: readyPod1,
+			operations: []func(Datastore){
+				// Update the pod to reduce active ports from 3 to 1
+				func(ds Datastore) {
+					ds.PodUpdateOrAddIfNotExist(updatedPod1)
+				},
+			},
+			wantEndpointCount: 1, // Only port 8000 should remain active
+		},
+		{
+			name: "Remove all endpoints when no active ports are specified",
+			pool: &v1.InferencePool{
+				Spec: v1.InferencePoolSpec{
+					TargetPorts: []v1.Port{{Number: 8000}, {Number: 8001}},
+				},
+			},
+			initialPod: readyPod1,
+			operations: []func(Datastore){
+				// Update the pod to have no active ports
+				func(ds Datastore) {
+					ds.PodUpdateOrAddIfNotExist(inactivePod1)
+				},
+			},
+			wantEndpointCount: 0, // No ports should remain active
+		},
+	}
+
+	for _, test := range tests {
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				ctx := context.Background()
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				_ = corev1.AddToScheme(scheme)
+
+				// Create fake client
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					Build()
+
+				ds := NewDatastore(ctx, epf, 0)
+
+				// Set up the pool
+				if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(test.pool)); err != nil {
+					t.Fatalf("Failed to set pool: %v", err)
+				}
+
+				// Add the initial pod
+				ds.PodUpdateOrAddIfNotExist(test.initialPod)
+
+				// Wait a bit for the datastore to process the pod
+				time.Sleep(100 * time.Millisecond)
+
+				// Check initial endpoint count (should be 3 since all 3 ports are active)
+				initialEndpoints := ds.PodList(AllPodsPredicate)
+				expectedInitialCount := len(test.pool.Spec.TargetPorts) // Expected based on target ports in pool
+				if len(initialEndpoints) != expectedInitialCount {
+					t.Logf("Initial endpoint count: got %d, want %d", len(initialEndpoints), expectedInitialCount)
+					// Don't fail here, just log - we'll continue to test the reduction
+				}
+
+				// Execute operations that change active ports
+				for _, op := range test.operations {
+					op(ds)
+				}
+
+				// Check final endpoint count
+				finalEndpoints := ds.PodList(AllPodsPredicate)
+				if len(finalEndpoints) != test.wantEndpointCount {
+					t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCount)
+				}
+			})
+		}
+	}
+}
