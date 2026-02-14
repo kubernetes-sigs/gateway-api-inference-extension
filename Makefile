@@ -30,6 +30,9 @@ IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
 SYNCER_IMAGE_BUILD_EXTRA_OPTS ?=
 BBR_IMAGE_BUILD_EXTRA_OPTS ?=
+LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS ?=
+LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS ?=
+LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS ?=
 STAGING_IMAGE_REGISTRY ?= us-central1-docker.pkg.dev/k8s-staging-images
 IMAGE_REGISTRY ?= $(STAGING_IMAGE_REGISTRY)/gateway-api-inference-extension
 IMAGE_NAME := epp
@@ -55,6 +58,18 @@ BBR_IMAGE_NAME := bbr
 BBR_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(BBR_IMAGE_NAME)
 BBR_IMAGE_TAG ?= $(BBR_IMAGE_REPO):$(GIT_TAG)
 
+LATENCY_TRAINING_IMAGE_NAME := latency-training-server
+LATENCY_TRAINING_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LATENCY_TRAINING_IMAGE_NAME)
+LATENCY_TRAINING_IMAGE_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(GIT_TAG)
+
+LATENCY_PREDICTION_IMAGE_NAME := latency-prediction-server
+LATENCY_PREDICTION_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LATENCY_PREDICTION_IMAGE_NAME)
+LATENCY_PREDICTION_IMAGE_TAG ?= $(LATENCY_PREDICTION_IMAGE_REPO):$(GIT_TAG)
+
+LATENCY_PREDICTION_TEST_IMAGE_NAME := latency-prediction-test
+LATENCY_PREDICTION_TEST_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LATENCY_PREDICTION_TEST_IMAGE_NAME)
+LATENCY_PREDICTION_TEST_IMAGE_TAG ?= $(LATENCY_PREDICTION_TEST_IMAGE_REPO):$(GIT_TAG)
+
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
 BUILDER_IMAGE ?= golang:1.25
 ifdef GO_VERSION
@@ -66,12 +81,18 @@ ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
 SYNCER_IMAGE_EXTRA_TAG ?= $(SYNCER_IMAGE_REPO):$(EXTRA_TAG)
 BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
+LATENCY_TRAINING_IMAGE_EXTRA_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(EXTRA_TAG)
+LATENCY_PREDICTION_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_IMAGE_REPO):$(EXTRA_TAG)
+LATENCY_PREDICTION_TEST_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_TEST_IMAGE_REPO):$(EXTRA_TAG)
 BUILD_REF = $(EXTRA_TAG)
 endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
 SYNCER_IMAGE_BUILD_EXTRA_OPTS += -t $(SYNCER_IMAGE_EXTRA_TAG)
 BBR_IMAGE_BUILD_EXTRA_OPTS += -t $(BBR_IMAGE_EXTRA_TAG)
+LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_TRAINING_IMAGE_EXTRA_TAG)
+LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_IMAGE_EXTRA_TAG)
+LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_TEST_IMAGE_EXTRA_TAG)
 endif
 
 
@@ -297,6 +318,117 @@ bbr-image-load: bbr-image-build
 .PHONY: bbr-image-kind
 bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
 	kind load docker-image $(BBR_IMAGE_TAG) --name $(KIND_CLUSTER)
+
+##@ Latency Prediction - Training Server
+
+.PHONY: latency-training-image-local-build
+latency-training-image-local-build: ## Build the latency training server image using Docker Buildx for local development.
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) latency-training-image-build PUSH=$(PUSH)
+	$(MAKE) latency-training-image-build LOAD=$(LOAD)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: latency-training-image-local-push
+latency-training-image-local-push: PUSH=--push ## Build the latency training server image for local development and push it to registry.
+latency-training-image-local-push: latency-training-image-local-build
+
+.PHONY: latency-training-image-local-load
+latency-training-image-local-load: LOAD=--load ## Build the latency training server image for local development and load it in the local Docker registry.
+latency-training-image-local-load: latency-training-image-local-build
+
+.PHONY: latency-training-image-build
+latency-training-image-build: ## Build the latency training server image using Docker Buildx.
+	cd $(CURDIR)/latencypredictor && $(IMAGE_BUILD_CMD) -f Dockerfile-training -t $(LATENCY_TRAINING_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		$(PUSH) \
+		$(LOAD) \
+		$(LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS) ./
+
+.PHONY: latency-training-image-push
+latency-training-image-push: PUSH=--push ## Build the latency training server image and push it to registry.
+latency-training-image-push: latency-training-image-build
+
+.PHONY: latency-training-image-load
+latency-training-image-load: LOAD=--load ## Build the latency training server image and load it in the local Docker registry.
+latency-training-image-load: latency-training-image-build
+
+.PHONY: latency-training-image-kind
+latency-training-image-kind: latency-training-image-build ## Build the latency training server image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(LATENCY_TRAINING_IMAGE_TAG) --name $(KIND_CLUSTER)
+
+##@ Latency Prediction - Prediction Server
+
+.PHONY: latency-prediction-image-local-build
+latency-prediction-image-local-build: ## Build the latency prediction server image using Docker Buildx for local development.
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) latency-prediction-image-build PUSH=$(PUSH)
+	$(MAKE) latency-prediction-image-build LOAD=$(LOAD)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: latency-prediction-image-local-push
+latency-prediction-image-local-push: PUSH=--push ## Build the latency prediction server image for local development and push it to registry.
+latency-prediction-image-local-push: latency-prediction-image-local-build
+
+.PHONY: latency-prediction-image-local-load
+latency-prediction-image-local-load: LOAD=--load ## Build the latency prediction server image for local development and load it in the local Docker registry.
+latency-prediction-image-local-load: latency-prediction-image-local-build
+
+.PHONY: latency-prediction-image-build
+latency-prediction-image-build: ## Build the latency prediction server image using Docker Buildx.
+	cd $(CURDIR)/latencypredictor && $(IMAGE_BUILD_CMD) -f Dockerfile-prediction -t $(LATENCY_PREDICTION_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		$(PUSH) \
+		$(LOAD) \
+		$(LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS) ./
+
+.PHONY: latency-prediction-image-push
+latency-prediction-image-push: PUSH=--push ## Build the latency prediction server image and push it to registry.
+latency-prediction-image-push: latency-prediction-image-build
+
+.PHONY: latency-prediction-image-load
+latency-prediction-image-load: LOAD=--load ## Build the latency prediction server image and load it in the local Docker registry.
+latency-prediction-image-load: latency-prediction-image-build
+
+.PHONY: latency-prediction-image-kind
+latency-prediction-image-kind: latency-prediction-image-build ## Build the latency prediction server image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(LATENCY_PREDICTION_IMAGE_TAG) --name $(KIND_CLUSTER)
+
+##@ Latency Prediction - Test
+
+.PHONY: latency-prediction-test-image-local-build
+latency-prediction-test-image-local-build: ## Build the latency prediction test image using Docker Buildx for local development.
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) latency-prediction-test-image-build PUSH=$(PUSH)
+	$(MAKE) latency-prediction-test-image-build LOAD=$(LOAD)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: latency-prediction-test-image-local-push
+latency-prediction-test-image-local-push: PUSH=--push ## Build the latency prediction test image for local development and push it to registry.
+latency-prediction-test-image-local-push: latency-prediction-test-image-local-build
+
+.PHONY: latency-prediction-test-image-local-load
+latency-prediction-test-image-local-load: LOAD=--load ## Build the latency prediction test image for local development and load it in the local Docker registry.
+latency-prediction-test-image-local-load: latency-prediction-test-image-local-build
+
+.PHONY: latency-prediction-test-image-build
+latency-prediction-test-image-build: ## Build the latency prediction test image using Docker Buildx.
+	cd $(CURDIR)/latencypredictor && $(IMAGE_BUILD_CMD) -f Dockerfile-test -t $(LATENCY_PREDICTION_TEST_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		$(PUSH) \
+		$(LOAD) \
+		$(LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS) ./
+
+.PHONY: latency-prediction-test-image-push
+latency-prediction-test-image-push: PUSH=--push ## Build the latency prediction test image and push it to registry.
+latency-prediction-test-image-push: latency-prediction-test-image-build
+
+.PHONY: latency-prediction-test-image-load
+latency-prediction-test-image-load: LOAD=--load ## Build the latency prediction test image and load it in the local Docker registry.
+latency-prediction-test-image-load: latency-prediction-test-image-build
+
+.PHONY: latency-prediction-test-image-kind
+latency-prediction-test-image-kind: latency-prediction-test-image-build ## Build the latency prediction test image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(LATENCY_PREDICTION_TEST_IMAGE_TAG) --name $(KIND_CLUSTER)
 
 ##@ Docs
 
