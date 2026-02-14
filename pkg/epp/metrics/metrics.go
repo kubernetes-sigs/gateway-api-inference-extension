@@ -48,6 +48,10 @@ const (
 	TypeTTFTPredictionDuration = "ttft_prediction_duration"
 	TypeTTFTSLOViolation       = "ttft_slo_violation"
 	TypeTTFTSLOThreshold       = "ttft_slo_threshold"
+
+	TypeITL            = "itl"
+	TypeDecodeDuration = "decode_duration"
+	TypeE2ELatency     = "e2e_latency"
 )
 
 var (
@@ -163,6 +167,36 @@ var (
 			Name:      "request_tpot_prediction_duration_seconds",
 			Help:      metricsutil.HelpMsgWithStability("Duration taken to generate TPOT predictions in seconds for each model and target model.", compbasemetrics.ALPHA),
 			Buckets:   PredictionLatencyBuckets,
+		},
+		ModelLabels,
+	)
+
+	requestITL = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_itl_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model Inter-Token Latency distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets:   TPOTBuckets,
+		},
+		ModelLabels,
+	)
+
+	requestDecodeDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_decode_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model Decode Duration distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets:   GeneralLatencyBuckets,
+		},
+		ModelLabels,
+	)
+
+	requestE2ELatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: InferenceObjectiveComponent,
+			Name:      "request_e2e_latency_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Inference model E2E Latency (TTFT + Decode) distribution in seconds for each model and target model.", compbasemetrics.ALPHA),
+			Buckets:   GeneralLatencyBuckets,
 		},
 		ModelLabels,
 	)
@@ -458,6 +492,9 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(requestPredictedTTFT)
 		metrics.Registry.MustRegister(requestTPOTPredictionDuration)
 		metrics.Registry.MustRegister(requestTTFTPredictionDuration)
+		metrics.Registry.MustRegister(requestITL)
+		metrics.Registry.MustRegister(requestDecodeDuration)
+		metrics.Registry.MustRegister(requestE2ELatency)
 
 		// Register SLO violation counters
 		metrics.Registry.MustRegister(sloViolationCounter)
@@ -507,6 +544,9 @@ func Reset() {
 	requestPredictedTTFT.Reset()
 	requestTPOTPredictionDuration.Reset()
 	requestTTFTPredictionDuration.Reset()
+	requestITL.Reset()
+	requestDecodeDuration.Reset()
+	requestE2ELatency.Reset()
 
 	// Reset SLO violation counter
 	sloViolationCounter.Reset()
@@ -682,6 +722,42 @@ func RecordRequestTTFTPredictionDuration(ctx context.Context, modelName, targetM
 	}
 	requestTTFTPredictionDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
 	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeTTFTPredictionDuration).Set(duration)
+	return true
+}
+
+// RecordRequestITL records the Inter-Token Latency.
+func RecordRequestITL(ctx context.Context, modelName, targetModelName string, itl float64) bool {
+	if itl < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "ITL value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "itl", itl)
+		return false
+	}
+	requestITL.WithLabelValues(modelName, targetModelName).Observe(itl)
+	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeITL).Set(itl)
+	return true
+}
+
+// RecordRequestDecodeDuration records the Decode Duration.
+func RecordRequestDecodeDuration(ctx context.Context, modelName, targetModelName string, duration float64) bool {
+	if duration < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "Decode duration value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "duration", duration)
+		return false
+	}
+	requestDecodeDuration.WithLabelValues(modelName, targetModelName).Observe(duration)
+	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeDecodeDuration).Set(duration)
+	return true
+}
+
+// RecordRequestE2ELatency records the E2E Latency (TTFT + Decode).
+func RecordRequestE2ELatency(ctx context.Context, modelName, targetModelName string, duration float64) bool {
+	if duration < 0 {
+		log.FromContext(ctx).V(logutil.DEFAULT).Error(nil, "E2E latency value must be non-negative",
+			"modelName", modelName, "targetModelName", targetModelName, "duration", duration)
+		return false
+	}
+	requestE2ELatency.WithLabelValues(modelName, targetModelName).Observe(duration)
+	inferenceGauges.WithLabelValues(modelName, targetModelName, TypeE2ELatency).Set(duration)
 	return true
 }
 
