@@ -24,11 +24,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -115,6 +117,8 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
 		// InferenceModelRewrite) which are not available in Standalone mode.
 		requiresCRDs bool
+		// wantSpans lists the span names expected to be recorded.
+		wantSpans []string
 	}{
 		// --- Standard Routing Logic ---
 		{
@@ -130,6 +134,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				"inference_objective_request_total": cleanMetric(metricReqTotal(modelMyModel, modelMyModelTarget)),
 				"inference_pool_ready_pods":         cleanMetric(metricReadyPods(3)),
 			},
+			wantSpans: []string{"gateway.request", "gateway.request_orchestration"},
 		},
 		{
 			name:     "select active lora, low queue",
@@ -393,10 +398,18 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					}
 
 					var h *TestHarness
+					var harnessOpts []HarnessOption
+
+					if len(tc.wantSpans) > 0 {
+						harnessOpts = append(harnessOpts, WithTracing())
+					}
+
 					if mode.standalone {
-						h = NewTestHarness(t, context.Background(), WithStandaloneMode())
+						harnessOpts = append(harnessOpts, WithStandaloneMode())
+						h = NewTestHarness(t, context.Background(), harnessOpts...)
 					} else {
-						h = NewTestHarness(t, context.Background()).WithBaseResources()
+						harnessOpts = append(harnessOpts, WithStandaloneMode())
+						h = NewTestHarness(t, context.Background(), harnessOpts...).WithBaseResources()
 					}
 
 					// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.
@@ -425,6 +438,23 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 
 					if len(tc.wantMetrics) > 0 {
 						h.ExpectMetrics(tc.wantMetrics)
+					}
+
+					if len(tc.wantSpans) > 0 {
+						// Close the stream so the server finishes processing and ends the root span
+						_ = h.Client.CloseSend()
+						// Wait a bit for the server to finish and for the span to be exported
+						time.Sleep(200 * time.Millisecond)
+
+						spans := h.GetSpans()
+						recordedSpans := make(map[string]bool)
+						for _, s := range spans {
+							recordedSpans[s.Name] = true
+						}
+
+						for _, want := range tc.wantSpans {
+							assert.True(t, recordedSpans[want], "Expected span %q not found", want)
+						}
 					}
 				})
 			}
