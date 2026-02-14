@@ -165,6 +165,7 @@ skipped_dirs = [
     'hack/boilerplate/test',
     'internal/runnable/leader_election.go',
     '_output',
+    'pkg/epp/api',
     'pkg/epp/backend/metrics/pod_metrics_test.go',
     'pkg/epp/saturationdetector/config.go',
     'pkg/epp/scheduling/framework/plugins/multi/prefix/indexer_test.go',

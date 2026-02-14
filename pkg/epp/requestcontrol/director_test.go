@@ -295,6 +295,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	tests := []struct {
 		name                    string
 		reqBodyMap              map[string]any
+		schedulingRequestBody   *fwksched.LLMRequestBody
 		mockAdmissionController *mockAdmissionController
 		inferenceObjectiveName  string
 		schedulerMockSetup      func(m *mockScheduler)
@@ -329,6 +330,30 @@ func TestDirector_HandleRequest(t *testing.T) {
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel:   model,
+			inferenceObjectiveName: objectiveName,
+		}, {
+			name: "successful gRPC request with SchedulingRequestBody",
+			schedulingRequestBody: &fwksched.LLMRequestBody{
+				Completions: &fwksched.CompletionsRequest{
+					Prompt: "critical prompt",
+				},
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			initialTargetModelName: model,
+			wantReqCtx: &handlers.RequestContext{
+				ObjectiveKey:    objectiveName,
+				TargetModelName: model,
+				TargetPod: &fwkdl.EndpointMetadata{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
 			inferenceObjectiveName: objectiveName,
 		}, {
 			name: "successful request with model rewrite",
@@ -671,8 +696,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 							requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
 						},
 					},
-					ObjectiveKey:    test.inferenceObjectiveName,
-					TargetModelName: test.initialTargetModelName,
+					ObjectiveKey:          test.inferenceObjectiveName,
+					TargetModelName:       test.initialTargetModelName,
+					SchedulingRequestBody: test.schedulingRequestBody,
 				}
 				// Deep copy the body map.
 				maps.Copy(reqCtx.Request.Body, test.reqBodyMap)
