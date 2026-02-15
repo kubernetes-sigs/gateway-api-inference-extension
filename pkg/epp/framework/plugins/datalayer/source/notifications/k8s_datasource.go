@@ -43,10 +43,8 @@ type K8sNotificationSource struct {
 }
 
 // NewK8sNotificationSource returns a new notification source for the given GVK.
-func NewK8sNotificationSource(
-	pluginType, pluginName string,
-	gvk schema.GroupVersionKind,
-) *K8sNotificationSource {
+func NewK8sNotificationSource(pluginType, pluginName string,
+	gvk schema.GroupVersionKind) *K8sNotificationSource {
 	return &K8sNotificationSource{
 		typedName: fwkplugin.TypedName{Type: pluginType, Name: pluginName},
 		gvk:       gvk,
@@ -104,17 +102,14 @@ func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.Notifica
 
 	var errs []error
 	s.extractors.Range(func(_, val any) bool {
-		ext, ok := val.(fwkdl.NotificationExtractor)
-		if !ok { // TODO: needed? Was verified on AddExtractor
-			return true
-		}
+		ext := val.(fwkdl.NotificationExtractor) // safe, was verified on AddExtractor
 		if err := ext.ExtractNotification(ctx, event); err != nil {
 			errs = append(errs, fmt.Errorf("extractor %s: %w", ext.TypedName(), err))
 		}
 		return true
 	})
 
-	if len(errs) > 0 { // TODO: handle Extractor notification failure as error and retry?
+	if len(errs) > 0 {
 		logger.Error(errors.Join(errs...), "extractor(s) failed processing notification")
 	}
 	return nil

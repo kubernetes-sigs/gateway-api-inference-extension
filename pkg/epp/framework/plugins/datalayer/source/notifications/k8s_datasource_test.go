@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -60,19 +61,17 @@ func TestNewK8sNotificationSource(t *testing.T) {
 func TestAddExtractor(t *testing.T) {
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
 
-	ext1 := NewMockNotificationExtractor("ext1")
-	ext2 := NewMockNotificationExtractor("ext2")
+	ext1 := mocks.NewNotificationExtractor("ext1")
+	ext2 := mocks.NewNotificationExtractor("ext2")
 
 	require.NoError(t, src.AddExtractor(ext1))
 	require.NoError(t, src.AddExtractor(ext2))
 
-	// Duplicate.
-	err := src.AddExtractor(ext1)
+	err := src.AddExtractor(ext1) // error on duplicate
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate")
 
-	// Nil.
-	err = src.AddExtractor(nil)
+	err = src.AddExtractor(nil) // error on nil
 	assert.Error(t, err)
 
 	names := src.Extractors()
@@ -88,7 +87,7 @@ func TestAddExtractorWrongType(t *testing.T) {
 
 func TestNotify(t *testing.T) {
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
-	ext := NewMockNotificationExtractor("ext1")
+	ext := mocks.NewNotificationExtractor("ext1")
 	_ = src.AddExtractor(ext)
 
 	ctx := context.Background()
@@ -97,7 +96,7 @@ func TestNotify(t *testing.T) {
 	obj.SetName("test-cm")
 	obj.SetNamespace("default")
 
-	// Test AddOrUpdate event.
+	// test AddOrUpdate mutation
 	err := src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventAddOrUpdate,
 		Object: obj.DeepCopy(),
@@ -108,11 +107,11 @@ func TestNotify(t *testing.T) {
 	assert.Equal(t, fwkdl.EventAddOrUpdate, events[0].Type)
 	assert.Equal(t, "test-cm", events[0].Object.GetName())
 
-	// Verify deep copy: mutating the received object doesn't affect original.
+	// verify deep copy: mutating the received object doesn't affect original.
 	events[0].Object.SetName("mutated")
 	assert.Equal(t, "test-cm", obj.GetName())
 
-	// Test Delete event.
+	// test Delete event.
 	err = src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventDelete,
 		Object: obj.DeepCopy(),
@@ -126,8 +125,8 @@ func TestNotify(t *testing.T) {
 
 func TestNotifyMultipleExtractors(t *testing.T) {
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
-	ext1 := NewMockNotificationExtractor("ext1")
-	ext2 := NewMockNotificationExtractor("ext2")
+	ext1 := mocks.NewNotificationExtractor("ext1")
+	ext2 := mocks.NewNotificationExtractor("ext2")
 	_ = src.AddExtractor(ext1)
 	_ = src.AddExtractor(ext2)
 
@@ -143,15 +142,42 @@ func TestNotifyMultipleExtractors(t *testing.T) {
 	assert.Len(t, ext2.GetEvents(), 1)
 }
 
+// marshalParams is a test helper that marshals parameters to JSON.
+// Returns nil for nil params.
+func marshalParams(t *testing.T, params interface{}) json.RawMessage {
+	t.Helper()
+	if params == nil {
+		return nil
+	}
+	b, err := json.Marshal(params)
+	require.NoError(t, err, "failed to marshal test parameters")
+	return b
+}
+
+// verifyNotificationSource is a test helper that verifies a plugin implements
+// both NotificationSource and DataSource interfaces with expected properties.
+func verifyNotificationSource(t *testing.T, plugin fwkplugin.Plugin, wantGVK schema.GroupVersionKind, wantName string) {
+	t.Helper()
+
+	src, ok := plugin.(fwkdl.NotificationSource)
+	require.True(t, ok, "plugin should implement NotificationSource")
+
+	assert.Equal(t, wantGVK, src.GVK(), "GVK mismatch")
+	assert.Equal(t, wantName, src.TypedName().Name, "name mismatch")
+	assert.Equal(t, NotificationSourceType, src.TypedName().Type, "type mismatch")
+
+	_, ok = plugin.(fwkdl.DataSource)
+	assert.True(t, ok, "plugin should implement DataSource")
+}
+
 func TestNotificationSourceFactory(t *testing.T) {
-	tests := []struct {
-		name       string
-		pluginName string
-		params     interface{}
-		wantErr    bool
-		wantGVK    schema.GroupVersionKind
-		wantName   string
-		errContain string
+	testCases := []struct {
+		name          string
+		pluginName    string
+		params        interface{}
+		expectedError string // empty = no error expected, non-empty = error containing this text
+		wantGVK       schema.GroupVersionKind
+		wantName      string
 	}{
 		{
 			name:       "valid params",
@@ -175,56 +201,40 @@ func TestNotificationSourceFactory(t *testing.T) {
 			wantName:   schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}.String(),
 		},
 		{
-			name:       "missing version",
-			pluginName: "test",
-			params:     notificationSourceParams{Group: "", Kind: "ConfigMap"},
-			wantErr:    true,
-			errContain: "version and kind are required",
+			name:          "missing version",
+			pluginName:    "test",
+			params:        notificationSourceParams{Group: "", Kind: "ConfigMap"},
+			expectedError: "version and kind are required",
 		},
 		{
-			name:       "missing kind",
-			pluginName: "test",
-			params:     notificationSourceParams{Group: "", Version: "v1"},
-			wantErr:    true,
-			errContain: "version and kind are required",
+			name:          "missing kind",
+			pluginName:    "test",
+			params:        notificationSourceParams{Group: "", Version: "v1"},
+			expectedError: "version and kind are required",
 		},
 		{
-			name:       "nil params",
-			pluginName: "test",
-			params:     nil,
-			wantErr:    true,
-			errContain: "requires parameters",
+			name:          "nil params",
+			pluginName:    "test",
+			params:        nil,
+			expectedError: "requires parameters",
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			var rawParams json.RawMessage
-			if tt.params != nil {
-				b, err := json.Marshal(tt.params)
-				require.NoError(t, err)
-				rawParams = b
-			}
+			t.Parallel()
 
+			rawParams := marshalParams(t, tt.params)
 			plugin, err := NotificationSourceFactory(tt.pluginName, rawParams, nil)
-			if tt.wantErr {
-				assert.Error(t, err)
-				if tt.errContain != "" {
-					assert.Contains(t, err.Error(), tt.errContain)
-				}
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
 				return
 			}
 
 			require.NoError(t, err)
-			src, ok := plugin.(fwkdl.NotificationSource)
-			require.True(t, ok, "should implement NotificationSource")
-			assert.Equal(t, tt.wantGVK, src.GVK())
-			assert.Equal(t, tt.wantName, src.TypedName().Name)
-			assert.Equal(t, NotificationSourceType, src.TypedName().Type)
-
-			// Should also satisfy DataSource.
-			_, ok = plugin.(fwkdl.DataSource)
-			assert.True(t, ok, "should implement DataSource")
+			verifyNotificationSource(t, plugin, tt.wantGVK, tt.wantName)
 		})
 	}
 }
