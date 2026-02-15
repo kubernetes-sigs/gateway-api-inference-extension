@@ -19,7 +19,6 @@ package datalayer
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
@@ -65,20 +64,4 @@ func RegisterSource(src fwkdl.DataSource) error {
 // GetSources returns the list of data sources registered in the default registry.
 func GetSources() []fwkdl.DataSource {
 	return defaultDataSources.GetSources()
-}
-
-// ValidateExtractorType checks if an extractor can handle
-// the DataSource's output. It should be called by a DataSource
-// when an extractor is added.
-func ValidateExtractorType(collectorOutput, extractorInput reflect.Type) error {
-	if collectorOutput == nil || extractorInput == nil {
-		return errors.New("extractor input type or data source output type can't be nil")
-	}
-	if collectorOutput == extractorInput ||
-		(extractorInput.Kind() == reflect.Interface && extractorInput.NumMethod() == 0) ||
-		(extractorInput.Kind() == reflect.Interface && collectorOutput.Implements(extractorInput)) {
-		return nil
-	}
-	return fmt.Errorf("extractor input type %v cannot handle data source output type %v",
-		extractorInput, collectorOutput)
 }
