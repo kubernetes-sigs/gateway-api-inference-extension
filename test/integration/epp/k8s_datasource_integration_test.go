@@ -35,8 +35,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
