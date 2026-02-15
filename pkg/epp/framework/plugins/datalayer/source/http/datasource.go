@@ -26,7 +26,6 @@ import (
 	"reflect"
 	"sync"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -92,7 +91,7 @@ func (dataSrc *HTTPDataSource) Extractors() []string {
 // AddExtractor adds an extractor to the data source, validating it can process
 // the data source output type.
 func (dataSrc *HTTPDataSource) AddExtractor(extractor fwkdl.Extractor) error {
-	if err := datalayer.ValidateExtractorType(dataSrc.outputType, extractor.ExpectedInputType()); err != nil {
+	if err := fwkdl.ValidateExtractorType(dataSrc.outputType, extractor.ExpectedInputType()); err != nil {
 		return err
 	}
 	if _, loaded := dataSrc.extractors.LoadOrStore(extractor.TypedName().Name, extractor); loaded {

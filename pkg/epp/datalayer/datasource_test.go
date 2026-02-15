@@ -17,7 +17,6 @@ limitations under the License.
 package datalayer
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -62,44 +61,4 @@ func TestGetSourceWhenNoneAreRegistered(t *testing.T) {
 	reg := DataSourceRegistry{}
 	found := reg.GetSources()
 	assert.Empty(t, found, "expected no sources to be returned")
-}
-
-func TestValidateExtractorType(t *testing.T) {
-	type rawStruct struct{}
-	type iface interface{ Foo() }
-
-	tests := []struct {
-		name   string
-		output reflect.Type
-		input  reflect.Type
-		valid  bool
-	}{
-		{"exact match", typeOf(rawStruct{}), typeOf(rawStruct{}), true},
-		{"input is interface{}", typeOf(rawStruct{}), typeOf((*any)(nil)), true},
-		{"nil types are not allowed", typeOf(rawStruct{}), typeOf(nil), false},
-		{"output does not implement input", typeOf(rawStruct{}), typeOf((*iface)(nil)), false},
-	}
-
-	for _, tt := range tests {
-		err := ValidateExtractorType(tt.output, tt.input)
-		if tt.valid {
-			assert.NoError(t, err, "%s: expected valid extractor type", tt.name)
-		} else {
-			assert.Error(t, err, "%s: expected invalid extractor type", tt.name)
-		}
-	}
-}
-
-// typeOf returns the reflect.Type of a value.
-// If the value is a pointer (e.g., (*iface)(nil)), it returns the pointed-to type (via Elem()).
-// Otherwise, it returns the type as-is.
-func typeOf(v any) reflect.Type {
-	t := reflect.TypeOf(v)
-	if t == nil {
-		return nil
-	}
-	if t.Kind() == reflect.Ptr {
-		return t.Elem()
-	}
-	return t
 }
