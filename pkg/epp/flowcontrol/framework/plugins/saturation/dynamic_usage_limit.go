@@ -18,16 +18,12 @@ package saturation
 
 import (
 	"context"
-	"sort"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
 const (
@@ -69,11 +65,11 @@ type DynamicUsagePolicy struct {
 
 	// mu protects the saturations map.
 	mu          sync.Mutex
-	saturations map[string][]saturationSample
+	saturations map[int][]saturationSample
 
 	// mul protects the usageLimits map.
 	mul         sync.Mutex
-	usageLimits map[string]usageLimitEntry
+	usageLimits map[int]usageLimitEntry
 }
 
 // usageLimitEntry tracks the limit and when it was last updated for decay purposes.
@@ -96,8 +92,8 @@ func NewDynamicUsagePolicy(clk clock.Clock) *DynamicUsagePolicy {
 	return &DynamicUsagePolicy{
 		name:        DynamicUsageLimitPolicyType,
 		clock:       clk,
-		saturations: make(map[string][]saturationSample),
-		usageLimits: make(map[string]usageLimitEntry),
+		saturations: make(map[int][]saturationSample),
+		usageLimits: make(map[int]usageLimitEntry),
 	}
 }
 
@@ -122,14 +118,13 @@ func (p *DynamicUsagePolicy) TypedName() plugin.TypedName {
 //
 // Returns a limit in [0.0, 1.0] where 1.0 means no gating and 0.0 means fully gated.
 func (p *DynamicUsagePolicy) ComputeLimit(
-	ctx context.Context, priority int, saturation float64, requestMetadata map[string]any) (limit float64) {
-	saturationTrend := p.saturationTrend(requestMetadata, saturation)
+	ctx context.Context, priority int, saturation float64) (limit float64) {
+	saturationTrend := p.saturationTrend(priority, saturation)
 	p.mul.Lock()
 	defer p.mul.Unlock()
 
 	now := p.clock.Now()
-	cacheKey := generateUsageLimitCacheKey(requestMetadata, priority)
-	entry, ok := p.usageLimits[cacheKey]
+	entry, ok := p.usageLimits[priority]
 	u := 1.0 // Default usage limit
 	if ok {
 		u = entry.limit
@@ -179,7 +174,7 @@ func (p *DynamicUsagePolicy) ComputeLimit(
 	// clamp within [0,1]
 	u = max(0.0, min(1.0, u))
 
-	p.usageLimits[cacheKey] = usageLimitEntry{
+	p.usageLimits[priority] = usageLimitEntry{
 		limit:      u,
 		lastUpdate: now,
 	}
@@ -193,16 +188,14 @@ func (p *DynamicUsagePolicy) ComputeLimit(
 // Returns:
 //   - 0.0 if less than 2 samples exist or the time distance within samples is too small
 //   - Slope of the fitted line in saturation units per second (can be positive, negative, or zero)
-func (p *DynamicUsagePolicy) saturationTrend(requestMetadata map[string]any, saturation float64) float64 {
-	key := generateCacheKey(requestMetadata)
-
+func (p *DynamicUsagePolicy) saturationTrend(priority int, saturation float64) float64 {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	now := p.clock.Now()
 	cutoff := now.Add(-sampleWindowDuration)
 
-	samples, found := p.saturations[key]
+	samples, found := p.saturations[priority]
 	if found {
 		// Filter out old samples
 		validSamples := make([]saturationSample, 0, len(samples)+1)
@@ -223,7 +216,7 @@ func (p *DynamicUsagePolicy) saturationTrend(requestMetadata map[string]any, sat
 	})
 
 	// Update saturations
-	p.saturations[key] = samples
+	p.saturations[priority] = samples
 
 	// Compute delta/trend over the time window
 	if len(samples) < 2 {
@@ -261,70 +254,4 @@ func slope(samples []saturationSample) float64 {
 	}
 
 	return (n*tsSum - tSum*sSum) / denominator
-}
-
-// generateUsageLimitCacheKey creates a composite cache key from endpoint subset and priority.
-// This ensures that usage limits are tracked independently for each (subset, priority) pair.
-// FIXME: should also implement cache eviction
-func generateUsageLimitCacheKey(reqMetadata map[string]any, priority int) string {
-	subsetKey := generateCacheKey(reqMetadata)
-	// Use a separator that won't appear in endpoint addresses to avoid collisions
-	return subsetKey + "::" + strconv.Itoa(priority)
-}
-
-// following: lifted from locator.go
-// FIXME: should also implement cache eviction
-const (
-	// defaultCacheKey is used when no subset filter is present (Return All Pods).
-	defaultCacheKey = "__default__"
-
-	// emptySubsetCacheKey is used when a subset filter is present but empty (Return No Pods).
-	emptySubsetCacheKey = "__explicit_empty__"
-)
-
-// generateCacheKey creates a deterministic string key representing the pod selection criteria.
-// It handles the "x-gateway-destination-endpoint-subset" structure specifically.
-func generateCacheKey(reqMetadata map[string]any) string {
-	// No Metadata -> All Pods
-	if reqMetadata == nil {
-		return defaultCacheKey
-	}
-
-	subsetMap, found := reqMetadata[metadata.SubsetFilterNamespace].(map[string]any)
-	if !found {
-		return defaultCacheKey
-	}
-
-	// The subset filter key contains a list of endpoint strings (e.g., "10.0.0.1:8080").
-	// We must treat this list as a set (order independent).
-	endpointSubsetList, found := subsetMap[metadata.SubsetFilterKey].([]any)
-
-	// Namespace exists, but "subset" key is missing -> All Pods
-	if !found {
-		return defaultCacheKey
-	}
-
-	// "subset" key exists, but is empty list -> No Pods
-	if len(endpointSubsetList) == 0 {
-		return emptySubsetCacheKey
-	}
-
-	// Optimization: If there's only one endpoint, return it directly to avoid allocation.
-	if len(endpointSubsetList) == 1 {
-		if s, ok := endpointSubsetList[0].(string); ok {
-			return s
-		}
-		return defaultCacheKey // Fallback for malformed data.
-	}
-
-	// Copy and sort to ensure determinism ( [A, B] must equal [B, A] ).
-	endpoints := make([]string, 0, len(endpointSubsetList))
-	for _, ep := range endpointSubsetList {
-		if s, ok := ep.(string); ok {
-			endpoints = append(endpoints, s)
-		}
-	}
-
-	sort.Strings(endpoints)
-	return strings.Join(endpoints, "|")
 }

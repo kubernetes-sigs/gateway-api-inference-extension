@@ -153,7 +153,6 @@ type UsageLimitPolicy interface {
 	//   - ctx: Request context for logging, tracing, etc.
 	//   - priority: The priority level for which to compute the limit (higher numbers = higher priority)
 	//   - saturation: Current resource saturation as a fraction [0.0, 1.0]
-	//   - requestMetadata: Optional request-specific metadata (may include endpoint subset identifiers)
 	//
 	// Returns:
 	//   - limit: The maximum saturation threshold at which this priority can dispatch
@@ -161,7 +160,7 @@ type UsageLimitPolicy interface {
 	//     - 1.0 = no gating (can dispatch until fully saturated)
 	//     - Values between 0.0 and 1.0 reserve capacity headroom
 	//
-	ComputeLimit(ctx context.Context, priority int, saturation float64, requestMetadata map[string]any) (limit float64)
+	ComputeLimit(ctx context.Context, priority int, saturation float64) (limit float64)
 }
 
 // Evictor handles capacity reclamation by removing queued low-priority requests when the system

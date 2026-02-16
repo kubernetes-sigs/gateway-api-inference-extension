@@ -325,6 +325,9 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		metrics.RecordFlowControlDispatchCycleDuration(time.Since(dispatchCycleStart))
 	}()
 
+	pool := sp.podLocator.Locate(ctx, nil)
+	saturation := sp.saturationDetector.Saturation(ctx, pool)
+
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
@@ -344,9 +347,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 
 		// --- Viability Check (Saturation/HoL Blocking and Usage Limit Gating) ---
 		req := item.OriginalRequest()
-		candidates := sp.podLocator.Locate(ctx, req.GetMetadata())
-		saturation := sp.saturationDetector.Saturation(ctx, candidates)
-		usageLimit := sp.usageLimitPolicy.ComputeLimit(ctx, priority, saturation, req.GetMetadata())
+		usageLimit := sp.usageLimitPolicy.ComputeLimit(ctx, priority, saturation)
 
 		if saturation >= usageLimit {
 			if saturation >= 1.0 {
