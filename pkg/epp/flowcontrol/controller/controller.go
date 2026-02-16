@@ -96,6 +96,7 @@ type managedWorker struct {
 type FlowController struct {
 	// --- Immutable dependencies (set at construction) ---
 
+	poolName              string
 	config                *Config
 	registry              registryClient
 	saturationDetector    contracts.SaturationDetector
@@ -128,6 +129,7 @@ type flowControllerOption func(*FlowController)
 // The provided context governs the lifecycle of the controller and all its workers.
 func NewFlowController(
 	ctx context.Context,
+	poolName string,
 	config *Config,
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
@@ -135,6 +137,7 @@ func NewFlowController(
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
+		poolName:           poolName,
 		config:             config,
 		registry:           registry,
 		saturationDetector: sd,
@@ -156,6 +159,7 @@ func NewFlowController(
 	) shardProcessor {
 		return internal.NewShardProcessor(
 			ctx,
+			fc.poolName,
 			shard,
 			saturationDetector,
 			podLocator,

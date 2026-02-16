@@ -65,6 +65,7 @@ var ErrProcessorBusy = errors.New("shard processor is busy")
 // loop is the sole writer for all state-mutating operations. This makes complex transactions (like capacity checks)
 // inherently atomic without coarse-grained locks.
 type ShardProcessor struct {
+	poolName             string
 	shard                contracts.RegistryShard
 	saturationDetector   contracts.SaturationDetector
 	podLocator           contracts.PodLocator
@@ -87,6 +88,7 @@ type ShardProcessor struct {
 // NewShardProcessor creates a new ShardProcessor instance.
 func NewShardProcessor(
 	ctx context.Context,
+	poolName string,
 	shard contracts.RegistryShard,
 	saturationDetector contracts.SaturationDetector,
 	podLocator contracts.PodLocator,
@@ -97,6 +99,7 @@ func NewShardProcessor(
 ) *ShardProcessor {
 	return &ShardProcessor{
 		shard:                shard,
+		poolName:             poolName,
 		saturationDetector:   saturationDetector,
 		podLocator:           podLocator,
 		clock:                clock,
@@ -311,6 +314,12 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		metrics.RecordFlowControlDispatchCycleDuration(time.Since(dispatchCycleStart))
 	}()
 
+	pool := sp.podLocator.Locate(ctx, nil)
+	saturation := sp.saturationDetector.Saturation(ctx, pool)
+
+	// Record pool saturation metric
+	metrics.RecordFlowControlPoolSaturation(sp.poolName, saturation)
+
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
@@ -330,8 +339,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 
 		// --- Viability Check (Saturation/HoL Blocking) ---
 		req := item.OriginalRequest()
-		candidates := sp.podLocator.Locate(ctx, req.GetMetadata())
-		if sp.saturationDetector.Saturation(ctx, candidates) >= 1.0 {
+		if saturation >= 1.0 {
 			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
 				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
 			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where

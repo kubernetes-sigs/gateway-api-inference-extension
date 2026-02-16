@@ -431,6 +431,15 @@ var (
 		},
 		append([]string{"fairness_id", "priority", "inference_pool"}, modelLabels...),
 	)
+
+	flowControlPoolSaturation = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: InferenceExtension,
+			Name:      "flow_control_pool_saturation",
+			Help:      metricsutil.HelpMsgWithStability("Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated).", compbasemetrics.ALPHA),
+		},
+		[]string{"inference_pool"},
+	)
 )
 
 // --- Inference Model Rewrite Metrics ---
@@ -487,6 +496,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(flowControlDispatchCycleDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
 		metrics.Registry.MustRegister(flowControlQueueBytes)
+		metrics.Registry.MustRegister(flowControlPoolSaturation)
 		metrics.Registry.MustRegister(flowControlRequestEnqueueDuration)
 		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
 		for _, collector := range customCollectors {
@@ -535,6 +545,7 @@ func Reset() {
 	flowControlRequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
 	flowControlQueueBytes.Reset()
+	flowControlPoolSaturation.Reset()
 	flowControlRequestEnqueueDuration.Reset()
 	inferenceModelRewriteDecisionsTotal.Reset()
 }
@@ -847,6 +858,11 @@ func AddFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, ta
 // SubFlowControlQueueBytes decrements the Flow Control queue bytes gauge.
 func SubFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, targetModelName string, bytes uint64) {
 	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Sub(float64(bytes))
+}
+
+// RecordFlowControlPoolSaturation records the current saturation level for an inference pool.
+func RecordFlowControlPoolSaturation(inferencePool string, saturation float64) {
+	flowControlPoolSaturation.WithLabelValues(inferencePool).Set(saturation)
 }
 
 // SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
