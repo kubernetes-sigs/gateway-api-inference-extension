@@ -27,17 +27,16 @@ import (
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
-
-	bbr "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 )
 
 type Datastore interface {
 	GetBaseModel(modelName string) string
 }
 
-func NewServer(streaming bool, ds Datastore, bbrPluginInstances []bbr.BBRPlugin) *Server {
+func NewServer(streaming bool, ds Datastore, bbrPluginInstances []framework.BBRPlugin) *Server {
 	return &Server{
 		streaming:       streaming,
 		ds:              ds,
@@ -50,7 +49,7 @@ func NewServer(streaming bool, ds Datastore, bbrPluginInstances []bbr.BBRPlugin)
 type Server struct {
 	streaming       bool
 	ds              Datastore
-	pluginInstances []bbr.BBRPlugin
+	pluginInstances []framework.BBRPlugin
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {

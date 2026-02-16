@@ -32,8 +32,8 @@ import (
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
-	bbr "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -42,7 +42,7 @@ type ExtProcServerRunner struct {
 	Datastore       datastore.Datastore
 	SecureServing   bool
 	Streaming       bool
-	PluginInstances []bbr.BBRPlugin
+	PluginInstances []framework.BBRPlugin
 }
 
 func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunner {

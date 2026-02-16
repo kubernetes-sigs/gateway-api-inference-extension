@@ -39,10 +39,11 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	bbr "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
-	routing "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/routing"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
@@ -65,7 +66,7 @@ var (
 
 	// Contains the BBR plugins specs specified via repeated flags:
 	//   --plugin <type>:<name>[:<json>]
-	pluginSpecs bbr.BBRPluginSpecs
+	pluginSpecs config.BBRPluginSpecs
 )
 
 func NewRunner() *Runner {
@@ -80,7 +81,7 @@ type Runner struct {
 
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
-	bbrPluginInstances []bbr.BBRPlugin
+	bbrPluginInstances []framework.BBRPlugin
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -172,7 +173,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
 
 		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
-		factory := bbr.Registry[routing.DefaultPluginType]
+		factory := framework.Registry[plugins.DefaultPluginType]
 		defaultPlugin, err := factory("", nil)
 		if err != nil {
 			setupLog.Error(err, "Failed to create default plugin")
@@ -183,7 +184,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
 		for _, s := range pluginSpecs {
-			factory, ok := bbr.Registry[s.Type]
+			factory, ok := framework.Registry[s.Type]
 			if !ok {
 				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
 			}
@@ -231,10 +232,10 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
-	bbr.Register(routing.DefaultPluginType, routing.DefaultPluginFactory)
+	framework.Register(plugins.DefaultPluginType, plugins.DefaultPluginFactory)
 }
 
-func (r *Runner) withPlugin(p bbr.BBRPlugin) {
+func (r *Runner) withPlugin(p framework.BBRPlugin) {
 	r.bbrPluginInstances = append(r.bbrPluginInstances, p)
 }
 

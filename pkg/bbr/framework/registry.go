@@ -14,17 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package plugins
+package framework
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
-// Any no-argument function that returns BBRPlugin can be assigned to this type (including a concrete factory function)
-type PluginFactoryFunc func(name string, parameters json.RawMessage) (BBRPlugin, error)
+// Factory is the definition of the factory functions that are used to instantiate plugins
+// specified in a configuration.
+type FactoryFunc func(name string, parameters json.RawMessage) (BBRPlugin, error)
 
-// Registry is a simple mapping from the plugin name to the factory that creates this BBRPlugin
-var Registry = map[string]PluginFactoryFunc{}
-
-// Registers a plugin's factory
-func Register(pluginType string, factory PluginFactoryFunc) {
+// Register is a static function that can be called to register plugin factory functions.
+func Register(pluginType string, factory FactoryFunc) {
 	Registry[pluginType] = factory
 }
+
+// Registry is a mapping from plugin name to Factory function
+var Registry map[string]FactoryFunc = map[string]FactoryFunc{}
