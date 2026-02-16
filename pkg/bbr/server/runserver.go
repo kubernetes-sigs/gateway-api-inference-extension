@@ -38,11 +38,11 @@ import (
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
-	GrpcPort        int
-	Datastore       datastore.Datastore
-	SecureServing   bool
-	Streaming       bool
-	PluginInstances []framework.BBRPlugin
+	GrpcPort       int
+	Datastore      datastore.Datastore
+	SecureServing  bool
+	Streaming      bool
+	RequestPlugins []framework.BBRPlugin
 }
 
 func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunner {
@@ -83,7 +83,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore, r.PluginInstances))
+		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore, r.RequestPlugins))
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)

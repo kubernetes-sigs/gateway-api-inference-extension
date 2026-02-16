@@ -36,20 +36,20 @@ type Datastore interface {
 	GetBaseModel(modelName string) string
 }
 
-func NewServer(streaming bool, ds Datastore, bbrPluginInstances []framework.BBRPlugin) *Server {
+func NewServer(streaming bool, ds Datastore, requestPlugins []framework.BBRPlugin) *Server {
 	return &Server{
-		streaming:       streaming,
-		ds:              ds,
-		pluginInstances: bbrPluginInstances,
+		streaming:      streaming,
+		ds:             ds,
+		requestPlugins: requestPlugins,
 	}
 }
 
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
-	streaming       bool
-	ds              Datastore
-	pluginInstances []framework.BBRPlugin
+	streaming      bool
+	ds             Datastore
+	requestPlugins []framework.BBRPlugin
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {

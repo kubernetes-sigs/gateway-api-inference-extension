@@ -17,16 +17,26 @@ limitations under the License.
 package framework
 
 import (
+	"context"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-type BBRPlugin interface {
-	plugin.Plugin
+// BBRPlugin defines the interface for a plugin.
+// This interface should be embedded in all plugins across the code.
+type BBRPlugin plugin.Plugin // alias
 
-	// Execute runs the plugin's logic on the request body.
-	// A plugin's implementation logic CAN mutate the body of the message.
-	// A plugin's implementation MUST return a map of headers.
-	// If no headers are set by the implementation, the return headers map is nil.
-	// In the future, a headers map can be added to the plugin interface to allow different plugins on a chain to share information on the headers.
-	Execute(requestBodyBytes []byte) (mutatedBodyBytes []byte, headers map[string][]string, err error)
+type PayloadProcessor interface {
+	BBRPlugin
+	// Execute runs the payload processor plugin.
+	// Payload processor can mutate the headers and/or the body of the message.
+	Execute(ctx context.Context, headers map[string]string, body map[string]any) (updatedHeaders map[string]string, updatedBody map[string]any, err error)
+}
+
+type Guardrail interface {
+	BBRPlugin
+	// Execute runs guardrail plugin
+	// Guardrail plugin can inspect the request, including headers and payload and decide
+	// whether the request should be blocked or not.
+	Execute(ctx context.Context, headers map[string]string, body map[string]any) (bool, error)
 }

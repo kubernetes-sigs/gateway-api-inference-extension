@@ -25,6 +25,7 @@ import (
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -35,41 +36,29 @@ const (
 	baseModelHeader = "X-Gateway-Base-Model-Name"
 )
 
-type RequestBody struct {
-	Model string `json:"model"`
-}
-
 // HandleRequestBody handles request bodies.
 func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
 
-	// Executing BBR plugins in the order they were registered.
-	// This change is a transitional development step to test the BBR plugins.
-	// At the moment, the loop runs a no-op plugin.
-	// Once the Default BBR plugin is fully implemented and integrated, the loop will run actual pluggable logic.
-	for _, plugin := range s.pluginInstances {
-		var headers map[string][]string
-		var err error
-		logger.Info("Executing plugin", "plugin", plugin.TypedName())
-
-		requestBodyBytes, headers, err = plugin.Execute(requestBodyBytes)
-		if err != nil {
-			logger.Error(err, "Plugin execution failed", "plugin", plugin.TypedName())
-			return nil, fmt.Errorf("plugin %s failed: %w", plugin.TypedName(), err)
-		}
-		_ = headers // TODO: Handle headers returned by plugins
-	}
-
-	var requestBody RequestBody
+	var requestBody map[string]any
 	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
 		metrics.RecordModelNotParsedCounter()
 		return nil, err
 	}
 
-	logger.Info("Parsed model name", "model", requestBody.Model)
+	targetModel, ok := requestBody["model"].(string)
+	if !ok {
+		metrics.RecordModelNotParsedCounter()
+		return nil, nil
+	}
 
-	if requestBody.Model == "" {
+	// TODO pass headers!
+	s.executeRequestPlugins(ctx, map[string]string{}, requestBody)
+
+	logger.Info("Parsed model name", "model", targetModel)
+
+	if targetModel == "" {
 		metrics.RecordModelNotInBodyCounter()
 		logger.V(logutil.DEFAULT).Info("Request body does not contain model parameter")
 		if s.streaming {
@@ -91,7 +80,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 	}
 
 	metrics.RecordSuccessCounter()
-	baseModel := s.ds.GetBaseModel(requestBody.Model)
+	baseModel := s.ds.GetBaseModel(targetModel)
 
 	logger.Info("Base model from datastore", "baseModel", baseModel)
 
@@ -106,7 +95,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 								{
 									Header: &basepb.HeaderValue{
 										Key:      modelHeader,
-										RawValue: []byte(requestBody.Model),
+										RawValue: []byte(targetModel),
 									},
 								},
 								{
@@ -137,7 +126,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 								{
 									Header: &basepb.HeaderValue{
 										Key:      modelHeader,
-										RawValue: []byte(requestBody.Model),
+										RawValue: []byte(targetModel),
 									},
 								},
 								{
@@ -153,6 +142,33 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 			},
 		},
 	}, nil
+}
+
+// executePlugins executes BBR plugins in the order they were registered.
+func (s *Server) executeRequestPlugins(ctx context.Context, headers map[string]string,
+	body map[string]any) (bool, error) {
+	requestHeaders := headers
+	requestBody := body
+	var err error
+	for _, p := range s.requestPlugins {
+		log.FromContext(ctx).Info("Executing request plugin", "plugin", p.TypedName())
+		switch plugin := p.(type) {
+		case framework.PayloadProcessor:
+			requestHeaders, requestBody, err = plugin.Execute(ctx, requestHeaders, requestBody)
+			if err != nil {
+				return true, fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
+			}
+		case framework.Guardrail:
+			allowed, err := plugin.Execute(ctx, requestHeaders, requestBody)
+			if err != nil {
+				return false, fmt.Errorf("failed to execute guardrail %s - %w", plugin.TypedName(), err)
+			}
+			if !allowed {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {

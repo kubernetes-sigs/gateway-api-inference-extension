@@ -78,10 +78,9 @@ func NewRunner() *Runner {
 // Runner is used to run bbr with its plugins
 type Runner struct {
 	bbrExecutableName string
-
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
-	bbrPluginInstances []framework.BBRPlugin
+	plugins []framework.BBRPlugin
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -179,7 +178,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			setupLog.Error(err, "Failed to create default plugin")
 			return err
 		}
-		r.withPlugin(defaultPlugin)
+		r.plugins = append(r.plugins, defaultPlugin)
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
@@ -187,22 +186,24 @@ func (r *Runner) Run(ctx context.Context) error {
 			factory, ok := framework.Registry[s.Type]
 			if !ok {
 				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
+				continue
 			}
 			instance, err := factory(s.Name, s.JSON)
 			if err != nil {
 				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
+				continue
 			}
-			r.withPlugin(instance)
+			r.plugins = append(r.plugins, instance)
 		}
 	}
 
 	// Setup ExtProc Server Runner
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:        *grpcPort,
-		Datastore:       ds,
-		SecureServing:   *secureServing,
-		Streaming:       *streaming,
-		PluginInstances: r.bbrPluginInstances,
+		GrpcPort:       *grpcPort,
+		Datastore:      ds,
+		SecureServing:  *secureServing,
+		Streaming:      *streaming,
+		RequestPlugins: r.plugins,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup BBR controllers")
@@ -233,10 +234,6 @@ func (r *Runner) Run(ctx context.Context) error {
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
 	framework.Register(plugins.DefaultPluginType, plugins.DefaultPluginFactory)
-}
-
-func (r *Runner) withPlugin(p framework.BBRPlugin) {
-	r.bbrPluginInstances = append(r.bbrPluginInstances, p)
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.

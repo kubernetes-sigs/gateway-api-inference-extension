@@ -17,6 +17,7 @@ limitations under the License.
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
@@ -28,7 +29,7 @@ const (
 )
 
 // compile-time type validation
-var _ framework.BBRPlugin = &DefaultPlugin{}
+var _ framework.PayloadProcessor = &DefaultPlugin{}
 
 type DefaultPlugin struct {
 	typedName plugin.TypedName
@@ -36,7 +37,7 @@ type DefaultPlugin struct {
 
 // DefaultPluginFactory defines the factory function for DefaultPlugin.
 // The name and rawParameters are ignored as the plugin uses the default configuration.
-func DefaultPluginFactory(_ string, _ json.RawMessage) (framework.BBRPlugin, error) {
+func DefaultPluginFactory(_ string, _ json.RawMessage) (framework.PayloadProcessor, error) {
 	return NewDefaultPlugin(), nil
 }
 
@@ -62,6 +63,6 @@ func (p *DefaultPlugin) WithName(name string) *DefaultPlugin {
 // After integration, "no-op-plugin" will be replaced by "default-plugin",
 // which will extract the model name, map it to a base model, and set the
 // necessary request headers.
-func (p *DefaultPlugin) Execute(requestBodyBytes []byte) ([]byte, map[string][]string, error) {
-	return requestBodyBytes, nil, nil
+func (p *DefaultPlugin) Execute(ctx context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
+	return headers, body, nil
 }
