@@ -80,7 +80,7 @@ type Runner struct {
 	bbrExecutableName string
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
-	plugins []framework.BBRPlugin
+	requestPlugins []framework.BBRPlugin
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -178,7 +178,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			setupLog.Error(err, "Failed to create default plugin")
 			return err
 		}
-		r.plugins = append(r.plugins, defaultPlugin)
+		r.requestPlugins = append(r.requestPlugins, defaultPlugin)
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
@@ -193,7 +193,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
 				continue
 			}
-			r.plugins = append(r.plugins, instance)
+			r.requestPlugins = append(r.requestPlugins, instance)
 		}
 	}
 
@@ -203,7 +203,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		Datastore:      ds,
 		SecureServing:  *secureServing,
 		Streaming:      *streaming,
-		RequestPlugins: r.plugins,
+		RequestPlugins: r.requestPlugins,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup BBR controllers")
