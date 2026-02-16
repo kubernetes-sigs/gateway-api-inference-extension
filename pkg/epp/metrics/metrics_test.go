@@ -1120,6 +1120,47 @@ func TestFlowControlQueueBytesMetric(t *testing.T) {
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }
 
+func TestFlowControlPoolSaturationMetric(t *testing.T) {
+	Reset()
+
+	const pool = "test-pool"
+
+	// Set saturation to 0.5
+	RecordFlowControlPoolSaturation(pool, 0.5)
+	val, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value for pool saturation")
+	require.Equal(t, 0.5, val, "Gauge value should be 0.5")
+
+	// Update saturation to 1.0 (fully saturated)
+	RecordFlowControlPoolSaturation(pool, 1.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value after update")
+	require.Equal(t, 1.0, val, "Gauge value should be 1.0 after update")
+
+	// Update saturation to 0.0 (empty)
+	RecordFlowControlPoolSaturation(pool, 0.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value for empty pool")
+	require.Equal(t, 0.0, val, "Gauge value should be 0.0 for empty pool")
+
+	// Multiple pools
+	RecordFlowControlPoolSaturation("pool-a", 0.3)
+	RecordFlowControlPoolSaturation("pool-b", 0.7)
+
+	valA, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("pool-a"))
+	require.NoError(t, err, "Failed to get gauge value for pool-a")
+	require.Equal(t, 0.3, valA, "Gauge value should be 0.3 for pool-a")
+
+	valB, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("pool-b"))
+	require.NoError(t, err, "Failed to get gauge value for pool-b")
+	require.Equal(t, 0.7, valB, "Gauge value should be 0.7 for pool-b")
+
+	// Non-existent pool
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("non-existent"))
+	require.NoError(t, err, "Failed to get gauge value for non-existent pool")
+	require.Equal(t, 0.0, val, "Gauge value for non-existent pool should be 0")
+}
+
 func TestInferenceModelRewriteDecisionsTotalMetric(t *testing.T) {
 	Reset()
 
