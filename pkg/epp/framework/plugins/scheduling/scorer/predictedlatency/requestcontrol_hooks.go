@@ -157,30 +157,6 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 		logger.V(logutil.TRACE).Info("PredictedLatency: Item already exists in queue", "endpointName", endpointName, "requestID", id)
 	}
 
-	// For disaggregated serving, also track the prefill pod if it was selected
-	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
-		if len(prefillResult.TargetEndpoints) > 0 {
-			prefillPod := prefillResult.TargetEndpoints[0].GetMetadata()
-			prefillEndpointName := types.NamespacedName{
-				Name:      prefillPod.NamespacedName.Name,
-				Namespace: prefillPod.NamespacedName.Namespace,
-			}
-
-			// Get or create queue for prefill endpoint
-			prefillActual, _ := t.runningRequestLists.LoadOrStore(prefillEndpointName, newRequestPriorityQueue())
-			prefillRequestList := prefillActual.(*requestPriorityQueue)
-
-			prefillAdded := prefillRequestList.Add(id, predictedLatencyCtx.avgTPOTSLO)
-			if !prefillAdded {
-				logger.V(logutil.TRACE).Info("PredictedLatency: Prefill item already exists in queue", "endpointName", prefillEndpointName, "requestID", id)
-			} else {
-				logger.V(logutil.DEBUG).Info("Tracked prefill pod in running requests",
-					"prefillPod", prefillPod.NamespacedName.Name,
-					"requestID", id)
-			}
-		}
-	}
-
 	// Set up SLO request context
 	predictedLatencyCtx.targetMetadata = targetMetadata
 	predictedLatencyCtx.schedulingResult = schedulingResult
@@ -321,25 +297,6 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
-
-	// For disaggregated serving, also remove the prefill pod from tracking
-	schedulingResult := predictedLatencyCtx.schedulingResult
-	if schedulingResult != nil {
-		if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
-			if len(prefillResult.TargetEndpoints) > 0 {
-				prefillPod := prefillResult.TargetEndpoints[0].GetMetadata()
-				prefillEndpointName := types.NamespacedName{
-					Name:      prefillPod.NamespacedName.Name,
-					Namespace: prefillPod.NamespacedName.Namespace,
-				}
-				t.removeRequestFromEndpoint(prefillEndpointName, id)
-				logger.V(logutil.DEBUG).Info("Removed prefill pod from running requests",
-					"prefillPod", prefillPod.NamespacedName.Name,
-					"requestID", id)
-			}
-		}
-	}
-
 	t.removeRequestFromQueue(id, predictedLatencyCtx)
 	t.deletePredictedLatencyContextForRequest(request)
 }
