@@ -677,6 +677,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Error parsing the reqBodyMap, err is %v", err)
 				}
+				var err error
+				reqCtx.Request.RawBody, err = json.Marshal(test.reqBodyMap)
+				if err != nil {
+					t.Fatalf("Error parsing the reqBodyMap, err is %v", err)
+				}
 
 				// Add appropriate path header based on request body content for path-based API detection
 				if _, hasPrompt := test.reqBodyMap["prompt"]; hasPrompt {
@@ -709,15 +714,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 				}
 
 				if test.wantMutatedBodyModel != "" {
-					assert.NotEmpty(t, returnedReqCtx.Request.RawBody, "Expected mutated body, but reqCtx.Request.Body is nil")
+					assert.NotEmpty(t, returnedReqCtx.Request.UpdatedBody, "Expected mutated body, but reqCtx.Request.Body is nil")
 					updatedBodyMap := make(map[string]any)
-					if err := json.Unmarshal(reqCtx.Request.RawBody, &updatedBodyMap); err != nil {
+					if err := json.Unmarshal(reqCtx.Request.UpdatedBody, &updatedBodyMap); err != nil {
 						t.Errorf("Error to Unmarshal reqCtx.Request.UpdatedBody, err is %v", err)
 					}
 					assert.Equal(t, test.wantMutatedBodyModel, updatedBodyMap["model"],
 						"Mutated reqCtx.Request.Body model mismatch")
 				}
-				assert.Equal(t, len(reqCtx.Request.RawBody), reqCtx.RequestSize)
+				assert.Equal(t, len(reqCtx.Request.UpdatedBody), reqCtx.RequestSize)
 			})
 		}
 	}
