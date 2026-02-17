@@ -33,7 +33,6 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
-	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
 const (
@@ -174,58 +173,6 @@ func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedu
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
 		return
-	}
-
-	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		id := request.Headers[requtil.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency.ResponseReceived: Failed to get context for request", "requestID", id)
-		return
-	}
-
-	schedulingResult := predictedLatencyCtx.schedulingResult
-	if schedulingResult == nil {
-		return
-	}
-
-	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
-		if len(prefillResult.TargetEndpoints) > 0 {
-			now := time.Now()
-			prefillTTFT := float64(now.Sub(predictedLatencyCtx.requestReceivedTimestamp).Milliseconds())
-
-			prefillEndpoint := prefillResult.TargetEndpoints[0]
-			prefillMetadata := prefillEndpoint.GetMetadata()
-
-			prefillMetrics, exists := predictedLatencyCtx.lastSeenMetrics[Experimental_DefaultPrefillProfile]
-			if !exists || prefillMetrics == nil {
-				logger.V(logutil.DEBUG).Info("No metrics available for prefill profile, skipping training")
-				return
-			}
-
-			prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[prefillMetadata.NamespacedName.Name]
-
-			logger.V(logutil.DEBUG).Info("Recording prefill training data",
-				"requestID", request.Headers[requtil.RequestIdHeaderKey],
-				"prefillTTFT_ms", prefillTTFT,
-				"prefillPod", prefillMetadata.NamespacedName.Name,
-				"prefixCacheScore", prefixCacheScore)
-
-			entry := buildTrainingEntry(
-				t.config.EndpointRoleLabel,
-				prefillMetadata,
-				prefillMetrics,
-				predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
-				prefillTTFT,
-				0,
-				now,
-				0,
-				prefixCacheScore,
-			)
-
-			if err := t.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-				logger.V(logutil.DEBUG).Error(err, "Failed to record prefill training data")
-			}
-		}
 	}
 }
 
