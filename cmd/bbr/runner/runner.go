@@ -80,7 +80,7 @@ type Runner struct {
 	bbrExecutableName string
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
-	requestPlugins []framework.BBRPlugin
+	requestPlugins []framework.PayloadProcessor
 }
 
 // WithExecutableName sets the name of the executable containing the runner.

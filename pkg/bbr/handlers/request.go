@@ -156,28 +156,18 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 
 // executePlugins executes BBR plugins in the order they were registered.
 func (s *Server) executePlugins(ctx context.Context, headers map[string]string, body map[string]any,
-	plugins ...framework.BBRPlugin) (bool, error) {
+	plugins ...framework.PayloadProcessor) (bool, error) {
 	updatedHeaders := headers
 	updatedBody := body
 	var err error
-	for _, p := range plugins {
-		log.FromContext(ctx).Info("Executing request plugin", "plugin", p.TypedName())
-		switch plugin := p.(type) {
-		case framework.PayloadProcessor:
-			updatedHeaders, updatedBody, err = plugin.Execute(ctx, updatedHeaders, updatedBody)
-			if err != nil {
-				return true, fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
-			}
-		case framework.Guardrail:
-			allowed, err := plugin.Execute(ctx, updatedHeaders, updatedBody)
-			if err != nil {
-				return false, fmt.Errorf("failed to execute guardrail %s - %w", plugin.TypedName(), err)
-			}
-			if !allowed {
-				return false, nil
-			}
+	for _, plugin := range plugins {
+		log.FromContext(ctx).Info("Executing request plugin", "plugin", plugin.TypedName())
+		updatedHeaders, updatedBody, err = plugin.Execute(ctx, updatedHeaders, updatedBody)
+		if err != nil {
+			return true, fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
 		}
 	}
+
 	return true, nil
 }
 

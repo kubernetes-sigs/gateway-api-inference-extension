@@ -268,7 +268,7 @@ func TestHandleRequestBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := NewServer(test.streaming, &fakeDatastore{}, []framework.BBRPlugin{})
+			server := NewServer(test.streaming, &fakeDatastore{}, []framework.PayloadProcessor{})
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, bodyBytes)
 			if err != nil {

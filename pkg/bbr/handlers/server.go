@@ -36,7 +36,7 @@ type Datastore interface {
 	GetBaseModel(modelName string) string
 }
 
-func NewServer(streaming bool, ds Datastore, requestPlugins []framework.BBRPlugin) *Server {
+func NewServer(streaming bool, ds Datastore, requestPlugins []framework.PayloadProcessor) *Server {
 	return &Server{
 		streaming:      streaming,
 		ds:             ds,
@@ -49,7 +49,7 @@ func NewServer(streaming bool, ds Datastore, requestPlugins []framework.BBRPlugi
 type Server struct {
 	streaming      bool
 	ds             Datastore
-	requestPlugins []framework.BBRPlugin
+	requestPlugins []framework.PayloadProcessor
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
