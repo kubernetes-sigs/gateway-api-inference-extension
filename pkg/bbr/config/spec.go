@@ -69,6 +69,9 @@ func (p *BBRPluginSpecs) Set(s string) error {
 	return nil
 }
 
+// Type returns the flag type name for the pflag.Value interface.
+func (p *BBRPluginSpecs) Type() string { return "plugin" }
+
 func (p *BBRPluginSpecs) String() string {
 	specs := *p
 	out := make([]string, 0, len(specs)) // preallocate memory

@@ -18,13 +18,11 @@ package runner
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
 
-	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,13 +31,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
@@ -50,24 +46,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
-var (
-	// Flags
-	grpcPort            = flag.Int("grpc-port", 9004, "The gRPC port used for communicating with Envoy proxy")
-	grpcHealthPort      = flag.Int("grpc-health-port", 9005, "The port used for gRPC liveness and readiness probes")
-	metricsPort         = flag.Int("metrics-port", 9090, "The metrics port")
-	metricsEndpointAuth = flag.Bool("metrics-endpoint-auth", true, "Enables authentication and authorization of the metrics endpoint")
-	streaming           = flag.Bool("streaming", false, "Enables streaming support for Envoy full-duplex streaming mode")
-	secureServing       = flag.Bool("secure-serving", true, "Enables secure serving.")
-	logVerbosity        = flag.Int("v", logutil.DEFAULT, "number for the log level verbosity")
-	enablePprof         = flag.Bool("enable-pprof", true, "Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
-
-	// Logging
-	setupLog = ctrl.Log.WithName("setup")
-
-	// Contains the BBR plugins specs specified via repeated flags:
-	//   --plugin <type>:<name>[:<json>]
-	pluginSpecs config.BBRPluginSpecs
-)
+var setupLog = ctrl.Log.WithName("setup")
 
 func NewRunner() *Runner {
 	return &Runner{
@@ -91,20 +70,31 @@ func (r *Runner) WithExecutableName(exeName string) *Runner {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	// Setup a basic logger in case command-line argument parsing fails.
+	logutil.InitSetupLogging()
+
 	setupLog.Info(r.bbrExecutableName+" build", "commit-sha", version.CommitSHA, "build-ref", version.BuildRef)
-	opts := zap.Options{Development: true}
-	opts.BindFlags(flag.CommandLine)
 
-	flag.Var(&pluginSpecs, "plugin", `Repeatable. --plugin <type>:<name>[:<json>]`)
-	flag.Parse()
-	initLogging(&opts)
+	opts := runserver.NewOptions()
+	opts.AddFlags(pflag.CommandLine)
+	pflag.Parse()
 
-	// Print all flag values
+	if err := opts.Complete(); err != nil {
+		return err
+	}
+	if err := opts.Validate(); err != nil {
+		setupLog.Error(err, "Failed to validate flags")
+		return err
+	}
+
+	// Print all flag values.
 	flags := make(map[string]any)
-	flag.VisitAll(func(f *flag.Flag) {
+	pflag.VisitAll(func(f *pflag.Flag) {
 		flags[f.Name] = f.Value
 	})
 	setupLog.Info("Flags processed", "flags", flags)
+
+	logutil.InitLogging(&opts.ZapOptions)
 
 	// Init runtime.
 	cfg, err := ctrl.GetConfig()
@@ -122,9 +112,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress: fmt.Sprintf(":%d", *metricsPort),
+		BindAddress: fmt.Sprintf(":%d", opts.MetricsPort),
 		FilterProvider: func() func(c *rest.Config, httpClient *http.Client) (metricsserver.Filter, error) {
-			if *metricsEndpointAuth {
+			if opts.MetricsEndpointAuth {
 				return filters.WithAuthenticationAndAuthorization
 			}
 
@@ -142,7 +132,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			},
 		},
 	}
-	// Apply namespace filtering only if env var is set
+	// Apply namespace filtering only if env var is set.
 	namespace := os.Getenv("NAMESPACE")
 	if namespace != "" {
 		cacheOptions.DefaultNamespaces = map[string]cache.Config{
@@ -156,7 +146,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	if *enablePprof {
+	if opts.EnablePprof {
 		setupLog.Info("Setting pprof handlers")
 		if err = profiling.SetupPprofHandlers(mgr); err != nil {
 			setupLog.Error(err, "Failed to setup pprof handlers")
@@ -168,7 +158,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	r.registerInTreePlugins()
 
 	// Construct BBR plugin instances for the in tree plugins that are (1) registered and (2) requested via the --plugin flags
-	if len(pluginSpecs) == 0 {
+	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
 
 		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
@@ -182,7 +172,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
-		for _, s := range pluginSpecs {
+		for _, s := range opts.PluginSpecs {
 			factory, ok := framework.Registry[s.Type]
 			if !ok {
 				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
@@ -197,12 +187,12 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 
-	// Setup ExtProc Server Runner
+	// Setup ExtProc Server Runner.
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:       *grpcPort,
+		GrpcPort:       opts.GRPCPort,
 		Datastore:      ds,
-		SecureServing:  *secureServing,
-		Streaming:      *streaming,
+		SecureServing:  opts.SecureServing,
+		Streaming:      opts.Streaming,
 		RequestPlugins: r.requestPlugins,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
@@ -211,7 +201,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// Register health server.
-	if err := registerHealthServer(mgr, *grpcHealthPort); err != nil {
+	if err := registerHealthServer(mgr, opts.GRPCHealthPort); err != nil {
 		return err
 	}
 
@@ -246,20 +236,4 @@ func registerHealthServer(mgr manager.Manager, port int) error {
 		return err
 	}
 	return nil
-}
-
-func initLogging(opts *zap.Options) {
-	useV := true
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "zap-log-level" {
-			useV = false
-		}
-	})
-	if useV {
-		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-		lvl := -1 * (*logVerbosity)
-		opts.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
-	}
-
-	logutil.InitLogging(opts)
 }
