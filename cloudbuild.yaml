@@ -13,6 +13,7 @@ steps:
     - EXTRA_TAG=$_PULL_BASE_REF
     - DOCKER_BUILDX_CMD=/buildx-entrypoint
     - GIT_COMMIT_SHA=$_PULL_BASE_SHA
+    - PLATFORMS=linux/amd64,linux/arm64
   - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
     entrypoint: make
     args:
@@ -21,6 +22,7 @@ steps:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF
     - DOCKER_BUILDX_CMD=/buildx-entrypoint
+    - PLATFORMS=linux/amd64,linux/arm64
   - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
     entrypoint: make
     args:
@@ -38,6 +40,7 @@ steps:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF
     - DOCKER_BUILDX_CMD=/buildx-entrypoint
+    - PLATFORMS=linux/amd64,linux/arm64
 substitutions:
   # _GIT_TAG will be filled with a git-based tag for the image, of the form vYYYYMMDD-hash, and
   # can be used as a substitution
