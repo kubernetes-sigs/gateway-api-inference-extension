@@ -200,25 +200,24 @@ func processFirstTokenForLatencyPrediction(
 		return
 	}
 	targetEndpointMetadata := predictedLatencyCtx.targetMetadata
-	prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
-	logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "prefixCacheScore", prefixCacheScore)
-	recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
-
-	// For disaggregated serving, also record training data for prefill pod using same TTFT
 	if predictedLatencyCtx.schedulingResult != nil {
-		if prefillResult, exists := predictedLatencyCtx.schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil {
-			if len(prefillResult.TargetEndpoints) > 0 {
-				prefillMetadata := prefillResult.TargetEndpoints[0].GetMetadata()
-				prefillMetrics, metricsExist := predictedLatencyCtx.lastSeenMetrics[Experimental_DefaultPrefillProfile]
-				if metricsExist && prefillMetrics != nil {
-					prefillPrefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[prefillMetadata.NamespacedName.Name]
-					logger.V(logutil.DEBUG).Info("Recording prefill TTFT training data",
-						"ttft_ms", predictedLatencyCtx.ttft,
-						"prefillPod", prefillMetadata.NamespacedName.Name,
-						"prefixCacheScore", prefillPrefixCacheScore)
-					recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, prefillMetrics, prefillMetadata, now, prefillPrefixCacheScore)
-				}
+		if prefillResult, exists := predictedLatencyCtx.schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil && len(prefillResult.TargetEndpoints) > 0 {
+			// Disaggregated mode: record TTFT for prefill pod only (TTFT is dominated by prefill work)
+			prefillMetadata := prefillResult.TargetEndpoints[0].GetMetadata()
+			prefillMetrics, metricsExist := predictedLatencyCtx.lastSeenMetrics[Experimental_DefaultPrefillProfile]
+			if metricsExist && prefillMetrics != nil {
+				prefillPrefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[prefillMetadata.NamespacedName.Name]
+				logger.V(logutil.DEBUG).Info("Recording prefill TTFT training data",
+					"ttft_ms", predictedLatencyCtx.ttft,
+					"prefillPod", prefillMetadata.NamespacedName.Name,
+					"prefixCacheScore", prefillPrefixCacheScore)
+				recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, prefillMetrics, prefillMetadata, now, prefillPrefixCacheScore)
 			}
+		} else {
+			// Monolithic mode: record TTFT for the single pod
+			prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
+			logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "prefixCacheScore", prefixCacheScore)
+			recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
 		}
 	}
 
