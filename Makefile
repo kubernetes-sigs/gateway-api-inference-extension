@@ -399,7 +399,7 @@ latency-prediction-image-load: latency-prediction-image-build
 latency-prediction-image-kind: latency-prediction-image-build ## Build the latency prediction server image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
 	kind load docker-image $(LATENCY_PREDICTION_IMAGE_TAG) --name $(KIND_CLUSTER)
 
-##@ Latency Prediction - Test
+##@ Latency Prediction - Test Job Image
 
 .PHONY: latency-prediction-test-image-local-build
 latency-prediction-test-image-local-build: ## Build the latency prediction test image using Docker Buildx for local development.
