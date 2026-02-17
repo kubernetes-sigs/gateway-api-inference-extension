@@ -127,12 +127,39 @@ func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.R
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 
-	// Parse, mutate, and extract the request body
-	llmRequestBody, err := d.processRequestBody(ctx, reqCtx)
+	bodyMap := make(map[string]any)
+	if err := json.Unmarshal(reqCtx.Request.RawBody, &bodyMap); err != nil {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body"}
+	}
+
+	var ok bool
+	reqCtx.IncomingModelName, ok = bodyMap["model"].(string)
+
+	if !ok {
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
+	}
+	if reqCtx.TargetModelName == "" {
+		// Default to incoming model name
+		reqCtx.TargetModelName = reqCtx.IncomingModelName
+	}
+
+	d.applyWeightedModelRewrite(reqCtx)
+
+	bodyMap["model"] = reqCtx.TargetModelName
+	requestBody, err := requtil.ExtractRequestBody(bodyMap, reqCtx.Request.Headers)
 	if err != nil {
 		return reqCtx, err
 	}
 
+	// Marshal after HandleRequest to include modifications (e.g., model rewriting).
+	var requestBodyBytes []byte
+	requestBodyBytes, err = json.Marshal(bodyMap)
+	if err != nil {
+		logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "Error marshalling request body"}
+	}
+
+	// Parse inference objective.
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
