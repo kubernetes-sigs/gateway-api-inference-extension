@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -31,6 +32,66 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
+
+// buildPredictionRequest constructs a prediction request from endpoint metrics and request data.
+// If endpointRoleLabel is configured, it extracts the role from the endpoint's labels and
+// populates the PodType field, enabling role-aware predictions (e.g., prefill vs decode).
+func buildPredictionRequest(
+	endpointRoleLabel string,
+	targetEndpointMetadata *fwkdl.EndpointMetadata,
+	metrics *fwkdl.Metrics,
+	prompt string,
+	generatedTokens int,
+	prefixCacheScore float64,
+) latencypredictor.PredictionRequest {
+	podType := ""
+	if endpointRoleLabel != "" && targetEndpointMetadata != nil && targetEndpointMetadata.Labels != nil {
+		podType = targetEndpointMetadata.Labels[endpointRoleLabel]
+	}
+
+	return latencypredictor.PredictionRequest{
+		KVCachePercentage:  metrics.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(prompt)), // Simple word-based tokenization
+		NumRequestWaiting:  metrics.WaitingQueueSize,
+		NumRequestRunning:  metrics.RunningRequestsSize,
+		NumTokensGenerated: generatedTokens,
+		PrefixCacheScore:   prefixCacheScore,
+		PodType:            podType,
+	}
+}
+
+// buildTrainingEntry constructs a training entry from actual latency measurements.
+// If endpointRoleLabel is configured, it extracts the role from the endpoint's labels and
+// populates the PodType field, enabling role-specific model training.
+func buildTrainingEntry(
+	endpointRoleLabel string,
+	targetEndpointMetadata *fwkdl.EndpointMetadata,
+	metrics *fwkdl.Metrics,
+	prompt string,
+	actualTTFT float64,
+	actualTPOT float64,
+	timestamp time.Time,
+	generatedTokens int,
+	prefixCacheScore float64,
+) latencypredictor.TrainingEntry {
+	podType := ""
+	if endpointRoleLabel != "" && targetEndpointMetadata != nil && targetEndpointMetadata.Labels != nil {
+		podType = targetEndpointMetadata.Labels[endpointRoleLabel]
+	}
+
+	return latencypredictor.TrainingEntry{
+		KVCachePercentage:  metrics.KVCacheUsagePercent,
+		InputTokenLength:   len(strings.Fields(prompt)), // Simple word-based tokenization
+		ActualTTFT:         actualTTFT,
+		ActualTPOT:         actualTPOT,
+		Timestamp:          timestamp,
+		NumRequestWaiting:  metrics.WaitingQueueSize,
+		NumRequestRunning:  metrics.RunningRequestsSize,
+		NumTokensGenerated: generatedTokens,
+		PrefixCacheScore:   prefixCacheScore,
+		PodType:            podType,
+	}
+}
 
 // refreshLastSeenMetrics updates predictedLatencyCtx.LastSeenMetrics from the latest scheduling result.
 func refreshLastSeenMetrics(ctx context.Context, predictedLatencyCtx *predictedLatencyCtx) {
