@@ -30,7 +30,6 @@ import (
 	"io"
 	"net"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -454,34 +453,32 @@ func StartExtProcServer(
 	// Force IPv4 to match GetFreePort's binding and avoid IPv6 race conditions in CI.
 	serverAddr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	// Channel to signal if the server dies immediately (e.g., port binding error/panic)
-	serverErrChan := make(chan error, 1)
-
 	// Start server in background.
 	go func() {
 		logger.Info("Starting ExtProc server", "address", serverAddr)
 		if err := serverRunner(ctx); err != nil {
-			// Ignore expected cancellations during teardown.
-			if !strings.Contains(err.Error(), "context canceled") {
-				logger.Error(err, "Server stopped unexpectedly")
-				select {
-				case serverErrChan <- err:
-				default:
-				}
-			}
+			t.Error("Starting ExtProc server failed")
 		}
 	}()
+
+	return ExtProcServerClient(t, ctx, port, logger)
+}
+
+// ExtProcServerClient returns a ExternalProcessor_ProcessClient listen to localhost on given port.
+func ExtProcServerClient(
+	t *testing.T,
+	ctx context.Context,
+	port int,
+	logger logr.Logger,
+) (extProcPb.ExternalProcessor_ProcessClient, *grpc.ClientConn) {
+	t.Helper()
+
+	// Force IPv4 to match GetFreePort's binding and avoid IPv6 race conditions in CI.
+	serverAddr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	// Wait for TCP readiness.
 	// We must poll the port until the server successfully binds and listens.
 	require.Eventually(t, func() bool {
-		// Fast-fail if the server crashed immediately.
-		select {
-		case err := <-serverErrChan:
-			t.Fatalf("Server failed to start: %v", err)
-		default:
-		}
-
 		// Check if the port is open.
 		conn, err := net.DialTimeout("tcp", serverAddr, 50*time.Millisecond)
 		if err != nil {

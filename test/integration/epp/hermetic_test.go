@@ -45,7 +45,6 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	eppRunner "sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	eppServer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -102,6 +101,27 @@ func TestMain(m *testing.M) {
 }
 
 func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
+	const testConfig = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: prefix-cache-scorer
+  - type: lora-affinity-scorer
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: queue-scorer
+        weight: 1
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 1
+      - pluginRef: prefix-cache-scorer
+        weight: 1
+      - pluginRef: lora-affinity-scorer
+        weight: 1
+`
+
 	// executionModes defines the permutations of EPP deployment modes to test.
 	executionModes := []struct {
 		name       string
@@ -398,11 +418,49 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						t.Skipf("Skipping test %q: requires CRDs, but running in Standalone mode", tc.name)
 					}
 
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+
+					// Create dedicated namespace for the whole test
+					uid := uuid.New().String()[:8]
+					testNamespaceName := "epp-test-" + uid
+					ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespaceName}}
+					require.NoError(t, k8sClient.Create(ctx, ns), "failed to create test namespace")
+					defer func() {
+						if err := k8sClient.Delete(context.Background(), ns); err != nil {
+							t.Logf("failed to cleanup namespace %s: %v", testNamespaceName, err)
+						}
+					}()
+
+					opts := eppServer.NewOptions()
+					opts.PoolName = testPoolName
+					opts.PoolNamespace = testNamespaceName
+					opts.ConfigText = testConfig
+
+					metricsPort, err := integration.GetFreePort()
+					require.NoError(t, err)
+					opts.MetricsPort = metricsPort
+
+					grpcPort, err := integration.GetFreePort()
+					require.NoError(t, err)
+					opts.GRPCPort = grpcPort
+
+					healthPort, err := integration.GetFreePort()
+					require.NoError(t, err)
+					opts.GRPCHealthPort = healthPort
+					opts.EndpointTargetPorts = []int{8000}
+					opts.SecureServing = false
+
+					opts.RefreshPrometheusMetricsInterval = 50 * time.Millisecond
+					opts.MetricsStalenessThreshold = 2 * time.Second
+
 					var h *TestHarness
 					if mode.standalone {
-						h = NewTestHarness(t, context.Background(), WithStandaloneMode())
+						// Only standalone mode is using EndpointSelector.
+						opts.EndpointSelector = "app=" + testPoolName
+						h = NewTestHarness(t, context.Background(), opts, WithStandaloneMode())
 					} else {
-						h = NewTestHarness(t, context.Background()).WithBaseResources()
+						h = NewTestHarness(t, context.Background(), opts).WithBaseResources()
 					}
 
 					// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.
@@ -459,125 +517,4 @@ func loadBaseResources() []*unstructured.Unstructured {
 		objs = append(objs, u)
 	}
 	return objs
-}
-
-// TestCRDWatchers verifies that the EPP correctly populates its internal datastore
-// by watching InferenceModelRewrite and InferenceObjective resources.
-func TestCRDWatchers(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Create dedicated namespace for the whole test
-	uid := uuid.New().String()[:8]
-	testNamespaceName := "epp-test-" + uid
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespaceName}}
-	require.NoError(t, k8sClient.Create(ctx, ns), "failed to create test namespace")
-	defer func() {
-		if err := k8sClient.Delete(context.Background(), ns); err != nil {
-			t.Logf("failed to cleanup namespace %s: %v", testNamespaceName, err)
-		}
-	}()
-
-	const testPoolName = "test-pool"
-	opts := eppServer.NewOptions()
-	opts.PoolName = testPoolName
-	opts.PoolNamespace = testNamespaceName
-
-	metricsPort, err := integration.GetFreePort()
-	require.NoError(t, err)
-	opts.MetricsPort = metricsPort
-
-	grpcPort, err := integration.GetFreePort()
-	require.NoError(t, err)
-	opts.GRPCPort = grpcPort
-
-	healthPort, err := integration.GetFreePort()
-	require.NoError(t, err)
-	opts.GRPCHealthPort = healthPort
-	opts.EndpointTargetPorts = []int{8000}
-
-	mgr, dataStore, err := eppRunner.NewRunner().Setup(ctx, testEnv.Config, opts)
-	if err != nil {
-		t.Fatalf("Error getting the epp manager")
-	}
-	go func() {
-		err := mgr.Start(ctx)
-		if err != nil && !strings.Contains(err.Error(), "context canceled") {
-			t.Errorf("RunInternal failed: %v", err)
-		}
-	}()
-
-	// Create the Pool and CRs
-	pool := &v1.InferencePool{
-		ObjectMeta: metav1.ObjectMeta{Name: testPoolName, Namespace: testNamespaceName},
-		Spec: v1.InferencePoolSpec{
-			TargetPorts: []v1.Port{{Number: 8000}},
-			Selector: v1.LabelSelector{
-				MatchLabels: map[v1.LabelKey]v1.LabelValue{
-					"app": "test",
-				},
-			},
-			EndpointPickerRef: v1.EndpointPickerRef{
-				Name: v1.ObjectName("epp"),
-				Port: &v1.Port{Number: 8080},
-			},
-		},
-	}
-	require.NoError(t, k8sClient.Create(ctx, pool))
-
-	rewrite := &v1alpha2.InferenceModelRewrite{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-rewrite", Namespace: testNamespaceName},
-		Spec: v1alpha2.InferenceModelRewriteSpec{
-			PoolRef: &v1alpha2.PoolObjectReference{
-				Name:  v1alpha2.ObjectName("test-pool"),
-				Group: v1alpha2.Group(v1.GroupVersion.Group), // Make sure this is set to the correct group version
-				Kind:  v1alpha2.Kind("InferencePool"),
-			},
-			Rules: []v1alpha2.InferenceModelRewriteRule{
-				{
-					Matches: []v1alpha2.Match{
-						{
-							Model: &v1alpha2.ModelMatch{
-								Value: "source-model",
-							},
-						},
-					},
-					Targets: []v1alpha2.TargetModel{
-						{
-							ModelRewrite: "target-model",
-							Weight:       1,
-						},
-					},
-				},
-			},
-		},
-	}
-	require.NoError(t, k8sClient.Create(ctx, rewrite))
-
-	objective := &v1alpha2.InferenceObjective{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-objective", Namespace: testNamespaceName},
-		Spec: v1alpha2.InferenceObjectiveSpec{
-			PoolRef: v1alpha2.PoolObjectReference{
-				Name:  v1alpha2.ObjectName("test-pool"),
-				Group: v1alpha2.Group(v1.GroupVersion.Group), // Make sure this is set to the correct group version
-				Kind:  v1alpha2.Kind("InferencePool"),
-			},
-		},
-	}
-	require.NoError(t, k8sClient.Create(ctx, objective))
-
-	require.Eventually(t, func() bool {
-		if dataStore == nil {
-			return false
-		}
-		// Verify Rewrite
-		if rule, _ := dataStore.ModelRewriteGet("source-model"); rule == nil {
-			return false
-		}
-		// Verify Objective
-		if obj := dataStore.ObjectiveGet("test-objective"); obj == nil {
-			return false
-		}
-		return true
-	}, 10*time.Second, 100*time.Millisecond, "Failed to watch InferenceModelRewrite or InferenceObjective")
 }

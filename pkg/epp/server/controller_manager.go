@@ -93,7 +93,7 @@ func defaultManagerOptions(cfg ControllerConfig, gknn common.GKNN, metricsServer
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
+func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool, isIntegrationTest bool) (ctrl.Manager, error) {
 	opt, err := defaultManagerOptions(controllerCfg, gknn, metricsServerOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
@@ -106,6 +106,11 @@ func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restCon
 		opt.LeaderElectionID = fmt.Sprintf("epp-%s-%s.gateway-api-inference-extension.sigs.k8s.io", gknn.Namespace, gknn.Name)
 		opt.LeaderElectionNamespace = gknn.Namespace
 		opt.LeaderElectionReleaseOnCancel = true
+	}
+
+	if isIntegrationTest {
+		skipNameValidation := true
+		opt.Controller.SkipNameValidation = &skipNameValidation
 	}
 
 	manager, err := ctrl.NewManager(restConfig, opt)

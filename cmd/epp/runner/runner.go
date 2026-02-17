@@ -184,7 +184,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	mgr, _, err := r.Setup(ctx, cfg, opts)
+	mgr, _, _, err := r.Setup(ctx, cfg, opts)
 	if err != nil {
 		return err
 	}
@@ -200,23 +200,36 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options) (ctrl.Manager, datastore.Datastore, error) {
+// Setup configures the internal state of the Runner, including the manager,
+// datastore, and other server components. It returns the initialized Manager
+// without starting it, allowing for flexible in integration test.
+//
+// The returned Datastore and ExtProcServerRunner is **only** meant to use in the integration test.
+func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options) (ctrl.Manager, datastore.Datastore, *runserver.ExtProcServerRunner, error) {
 	rawConfig, err := r.parseConfigurationPhaseOne(ctx, opts)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// --- Setup Datastore ---
 	epf, err := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts)
+
+	var testPodMetricsClient *backendmetrics.FakePodMetricsClient
+	if opts.IsIntegrationTest {
+		testPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
+		// Test only, override epf with FakePodMetricsClient.
+		epf = backendmetrics.NewPodMetricsFactory(testPodMetricsClient, 10*time.Millisecond)
+	}
+
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	gknn, err := extractGKNN(opts.PoolName, opts.PoolGroup, opts.PoolNamespace, opts.EndpointSelector)
 	if err != nil {
 		setupLog.Error(err, "Failed to extract GKNN")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	startCrdReconcilers := opts.EndpointSelector == "" // If endpointSelector is empty, it means it's not in the standalone mode. Then we should start the inferencePool and other CRD Reconciler.
@@ -224,19 +237,19 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	if err := controllerCfg.PopulateControllerConfig(cfg); err != nil {
 		setupLog.Error(err, "Failed to populate controller config")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	ds, err := setupDatastore(ctx, epf, int32(opts.ModelServerMetricsPort), startCrdReconcilers,
-		opts.PoolName, opts.PoolNamespace, opts.EndpointSelector, opts.EndpointTargetPorts)
+		opts.PoolNamespace, opts.PoolName, opts.EndpointSelector, opts.EndpointTargetPorts)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup datastore")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	eppConfig, err := r.parseConfigurationPhaseTwo(ctx, rawConfig, ds)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// --- Setup Metrics Server ---
@@ -262,10 +275,10 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection)
+	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection, opts.IsIntegrationTest)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if opts.EnableLeaderElection {
@@ -284,7 +297,7 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		setupLog.Info("Setting pprof handlers")
 		if err = profiling.SetupPprofHandlers(mgr); err != nil {
 			setupLog.Error(err, "Failed to setup pprof handlers")
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
@@ -292,7 +305,7 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
 		setupLog.Error(err, "failed to create scheduler")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	setupLog.Info("parsed config", "scheduler-config", r.schedulerConfig)
@@ -302,7 +315,7 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
 	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
@@ -316,7 +329,7 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		setupLog.Info("Initializing experimental Flow Control layer")
 		registry, err := fcregistry.NewFlowRegistry(eppConfig.FlowControlConfig.Registry, setupLog)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to initialize Flow Registry: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
 		fc, err := fccontroller.NewFlowController(
 			ctx,
@@ -325,7 +338,7 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 			locator,
 		)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
 		}
 		go registry.Run(ctx)
 		admissionController = requestcontrol.NewFlowControlAdmissionController(fc, opts.PoolName)
@@ -352,22 +365,27 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
 	}
+
+	if opts.IsIntegrationTest {
+		serverRunner.TestPodMetricsClient = testPodMetricsClient
+	}
+
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
 	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, opts.GRPCHealthPort, isLeader, opts.EnableLeaderElection); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Register ext-proc server.
 	if err := registerExtProcServer(mgr, serverRunner, ctrl.Log.WithName("ext-proc")); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return mgr, ds, nil
+	return mgr, ds, serverRunner, nil
 }
 
 // NewEndpointPoolFromOptions constructs an EndpointPool from standalone options.
@@ -416,6 +434,7 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 			return nil, err
 		}
 		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
+		fmt.Println("endpointPoolOption is ", *endpointPool)
 		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
 	}
 }

@@ -93,6 +93,9 @@ type Options struct {
 
 	// internal
 	fs *pflag.FlagSet // FlagSet used in AddFlags() and consulted in Complete()
+
+	// Test only. Set for integration test.
+	IsIntegrationTest bool
 }
 
 // NewOptions returns a new Options struct initialized with the default values.
