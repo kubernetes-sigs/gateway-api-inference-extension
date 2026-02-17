@@ -174,12 +174,18 @@ api-lint: golangci-api-lint
 	$(GOLANGCI_API_LINT) run -c .golangci-kal.yml --timeout 15m0s ./...
 
 .PHONY: verify
-verify: vet fmt-verify generate ci-lint api-lint verify-all
+verify: vet fmt-verify generate ci-lint api-lint verify-all verify-fw-imports
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
 verify-crds: kubectl-validate
 	hack/verify-manifests.sh
+
+# Verify framework import rules.
+# Runs in permissive mode: allows current exceptions, fails on new violations.
+.PHONY: verify-fw-imports
+verify-fw-imports:
+	go run hack/verify-framework-imports.go
 
 #If you are running in local and your helm dependency is outdated, you can run `make verify-helm-charts MODE=local`
 .PHONY: verify-helm-charts

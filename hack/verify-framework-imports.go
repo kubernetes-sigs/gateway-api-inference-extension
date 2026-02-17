@@ -23,7 +23,6 @@ limitations under the License.
 package main
 
 import (
-	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -39,21 +38,79 @@ const (
 	repoModule    = "sigs.k8s.io/gateway-api-inference-extension"
 )
 
-// allowedExceptions lists additional import paths that are allowed
-// for framework files beyond pkg/epp/framework itself.
-// Add paths here that the framework is permitted to import from other
-// parts of the repository.
-var allowedExceptions = []string{
-	"pkg/common/observability/logging",
-	// "pkg/epp/util/error",
-}
-
 var (
 	additionalAllowed []string
+	strictMode        bool
 )
 
+// globalExceptions are paths that are always allowed for all framework files.
+// These are utility packages that the framework is permitted to import.
+var globalExceptions = []string{
+	"pkg/common/observability/logging",
+}
+
+// currentCodeExceptionMap maps existing violation in files to their allowed import exceptions.
+// This should cleaned-up alongside the relevant files and their imports.
+var currentCodeExceptionMap = map[string][]string{
+	"pkg/epp/framework/plugins/datalayer/extractor/metrics/podmetrics_parity_test.go": {
+		"pkg/epp/backend/metrics",
+		"pkg/epp/server",
+	},
+	"pkg/epp/framework/plugins/datalayer/source/http/datasource.go": {
+		"pkg/epp/datalayer",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/test/responsereceived/destination_endpoint_served_verifier.go": {
+		"pkg/epp/metadata",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/test/responsereceived/destination_endpoint_served_verifier_test.go": {
+		"pkg/epp/metadata",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/headers.go": {
+		"pkg/epp/util/error",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/latencypredictor_helper.go": {
+		"pkg/epp/metrics",
+		"pkg/epp/util/request",
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/latencypredictor_helper_test.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/prediction.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/requestcontrol_hooks.go": {
+		"pkg/epp/metrics",
+		"pkg/epp/util/request",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/requestcontrol_hooks_test.go": {
+		"pkg/epp/util/request",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/scorer.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/scorer_helpers.go": {
+		"pkg/epp/util/error",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/scorer_test.go": {
+		"pkg/epp/util/request",
+		"sidecars/latencypredictorasync",
+		"test/utils",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/prefix/indexer.go": {
+		"pkg/epp/metrics",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/prefix/plugin.go": {
+		"pkg/epp/metrics",
+	},
+}
+
+func init() {
+	pflag.StringSliceVar(&additionalAllowed, "allow", []string{}, "Additional allowed import paths (can be specified multiple times)")
+	pflag.BoolVar(&strictMode, "strict", false, "Fail on all violations (including allowed exceptions in current code)")
+}
+
 func main() {
-	pflag.StringSliceVar(&additionalAllowed, "allow", []string{}, "Additional allowed import paths via command line (can be specified multiple times)")
 	pflag.Parse()
 
 	if err := run(); err != nil {
@@ -62,48 +119,47 @@ func main() {
 	}
 }
 
-// isAllowedImport checks if the given import path starts with any allowed path
-func isAllowedImport(importPath string, allowedPaths map[string]struct{}) bool {
-	for allowedPath := range allowedPaths {
-		if strings.HasPrefix(importPath, allowedPath) {
-			return true
-		}
+type violation struct {
+	filePath   string
+	importPath string
+	isAllowed  bool
+}
+
+func (v violation) String() string {
+	return fmt.Sprintf("%s: imports %s", v.filePath, v.importPath)
+}
+
+func uniqueFileCount(violations []violation) int {
+	files := make(map[string]bool)
+	for _, v := range violations {
+		files[v.filePath] = true
 	}
-	return false
+	return len(files)
 }
 
 func run() error {
-	violations := []string{}
+	allowedViolations := []violation{}
+	newViolations := []violation{}
 
-	// build the list of allowed paths with deduplication
-	allowedPathsMap := make(map[string]struct{})
-	allowedPathsMap["pkg/epp/framework"] = struct{}{} // always allowed
-
-	// add built-in exceptions
-	for _, path := range allowedExceptions {
-		allowedPathsMap[path] = struct{}{}
+	allowedBasePaths := map[string]struct{}{
+		"pkg/epp/framework": {}, // framework itself is always allowed
 	}
-
-	// add exceptions from command-line
-	for _, path := range additionalAllowed {
-		allowedPathsMap[path] = struct{}{}
+	for _, exc := range globalExceptions { // add the global exceptions (e.g., logging, metrics)
+		allowedBasePaths[exc] = struct{}{}
 	}
-
-	// Convert map keys to slice for display purposes only
-	allowedPathsList := make([]string, 0, len(allowedPathsMap))
-	for path := range allowedPathsMap {
-		allowedPathsList = append(allowedPathsList, path)
+	for _, path := range additionalAllowed { // additional exceptions from command line
+		allowedBasePaths[path] = struct{}{}
 	}
 
 	fmt.Printf("Validating imports in %s\n", frameworkPath)
-	if len(allowedExceptions) > 0 {
-		fmt.Printf("Allowed exceptions (hardcoded): %v\n", allowedExceptions)
+	fmt.Printf("Globally allowed paths: %v\n", globalExceptions)
+	if !strictMode {
+		fmt.Printf("Running in permissive mode: allowed exceptions will be warned, new violations will fail\n")
+	} else {
+		fmt.Printf("Running in strict mode: all violations will fail\n")
 	}
 	if len(additionalAllowed) > 0 {
 		fmt.Printf("Additional allowed paths (via flags): %v\n", additionalAllowed)
-	}
-	if len(allowedPathsList) > 1 {
-		fmt.Printf("Total unique allowed paths: %v\n", allowedPathsList)
 	}
 	fmt.Println()
 
@@ -113,14 +169,14 @@ func run() error {
 			return err
 		}
 
+		relPath, err := filepath.Rel(".", path)
+		if err != nil {
+			relPath = path
+		}
+
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
-
-		// skip test files if desired (currently we check them too)
-		// if strings.HasSuffix(path, "_test.go") {
-		// 	return nil
-		// }
 
 		// parse the Go file
 		fset := token.NewFileSet()
@@ -134,16 +190,37 @@ func run() error {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 
 			if strings.HasPrefix(importPath, repoModule) {
-				relPath := strings.TrimPrefix(importPath, repoModule+"/")
+				relImportPath := strings.TrimPrefix(importPath, repoModule+"/")
 
-				// Check if the import path starts with any allowed path
-				allowed := isAllowedImport(relPath, allowedPathsMap)
+				// check if it's in allowed base paths
+				allowed := false
+				for basePath := range allowedBasePaths {
+					if strings.HasPrefix(relImportPath, basePath) {
+						allowed = true
+						break
+					}
+				}
 
 				if !allowed {
-					violations = append(violations, fmt.Sprintf(
-						"%s: imports %s (not in allowed paths)",
-						path, importPath,
-					))
+					isAllowed := false
+					if _, hasException := currentCodeExceptionMap[relPath]; hasException {
+						isAllowed = true
+					}
+
+					if strictMode { // in strict mode, treat all violations as errors
+						isAllowed = false
+					}
+
+					v := violation{
+						filePath:   relPath,
+						importPath: relImportPath,
+						isAllowed:  isAllowed,
+					}
+					if isAllowed {
+						allowedViolations = append(allowedViolations, v)
+					} else {
+						newViolations = append(newViolations, v)
+					}
 				}
 			}
 		}
@@ -155,16 +232,36 @@ func run() error {
 		return fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	if len(violations) > 0 { // report results
-		fmt.Printf("\nAllowed paths: %v\n", allowedPathsList)
-		fmt.Printf("❌ Found %d import violations:\n", len(violations))
-		fmt.Println()
-		for _, v := range violations {
-			fmt.Println("  " + v)
+	// report results
+	if len(allowedViolations) > 0 {
+		fmt.Printf("\n[WARNING] Allowed violations (current codebase): %d violations across %d files\n",
+			len(allowedViolations), uniqueFileCount(allowedViolations))
+		for _, v := range allowedViolations {
+			fmt.Println("  " + v.String())
 		}
-		return errors.New("import validation failed")
 	}
 
-	fmt.Printf("✅ All %s imports are valid!\n", frameworkPath)
+	if len(newViolations) > 0 {
+		fmt.Printf("\n[ERROR] Found %d new import violations across %d files:\n",
+			len(newViolations), uniqueFileCount(newViolations))
+		for _, v := range newViolations {
+			fmt.Println("  " + v.String())
+		}
+		return fmt.Errorf("import validation failed: %d new violations found", len(newViolations))
+	}
+
+	if strictMode && len(allowedViolations) > 0 {
+		fmt.Printf("\n[ERROR] Found %d total import violations (strict mode):\n", len(allowedViolations))
+		for _, v := range allowedViolations {
+			fmt.Println("  " + v.String())
+		}
+		return fmt.Errorf("import validation failed (strict mode)")
+	}
+
+	if len(allowedViolations) > 0 {
+		fmt.Printf("\n[PASS] No new violations. %d allowed exceptions exist in current codebase.\n", len(allowedViolations))
+	} else {
+		fmt.Printf("\n[PASS] All imports in %s are valid!\n", frameworkPath)
+	}
 	return nil
 }
