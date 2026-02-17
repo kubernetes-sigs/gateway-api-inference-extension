@@ -53,13 +53,6 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 		return nil, nil
 	}
 
-	// TODO pass headers!
-	// TODO handle updated headers and body
-	_, err := s.executeRequestPlugins(ctx, map[string]string{}, requestBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request plugins - %w", err)
-	}
-
 	logger.Info("Parsed model name", "model", targetModel)
 
 	if targetModel == "" {
@@ -81,6 +74,13 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 			})
 		}
 		return ret, nil
+	}
+
+	// TODO pass headers!
+	// TODO handle updated headers and body
+	_, err := s.executePlugins(ctx, map[string]string{}, requestBody, s.requestPlugins...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request plugins - %w", err)
 	}
 
 	metrics.RecordSuccessCounter()
@@ -149,21 +149,21 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 }
 
 // executePlugins executes BBR plugins in the order they were registered.
-func (s *Server) executeRequestPlugins(ctx context.Context, headers map[string]string,
-	body map[string]any) (bool, error) {
-	requestHeaders := headers
-	requestBody := body
+func (s *Server) executePlugins(ctx context.Context, headers map[string]string, body map[string]any,
+	plugins ...framework.BBRPlugin) (bool, error) {
+	updatedHeaders := headers
+	updatedBody := body
 	var err error
-	for _, p := range s.requestPlugins {
+	for _, p := range plugins {
 		log.FromContext(ctx).Info("Executing request plugin", "plugin", p.TypedName())
 		switch plugin := p.(type) {
 		case framework.PayloadProcessor:
-			requestHeaders, requestBody, err = plugin.Execute(ctx, requestHeaders, requestBody)
+			updatedHeaders, updatedBody, err = plugin.Execute(ctx, updatedHeaders, updatedBody)
 			if err != nil {
 				return true, fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
 			}
 		case framework.Guardrail:
-			allowed, err := plugin.Execute(ctx, requestHeaders, requestBody)
+			allowed, err := plugin.Execute(ctx, updatedHeaders, updatedBody)
 			if err != nil {
 				return false, fmt.Errorf("failed to execute guardrail %s - %w", plugin.TypedName(), err)
 			}
