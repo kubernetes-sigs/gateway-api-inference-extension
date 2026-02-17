@@ -186,12 +186,12 @@ func (r *Runner) Run(ctx context.Context) error {
 			factory, ok := framework.Registry[s.Type]
 			if !ok {
 				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
-				continue
+				return err
 			}
 			instance, err := factory(s.Name, s.JSON)
 			if err != nil {
 				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
-				continue
+				return err
 			}
 			r.requestPlugins = append(r.requestPlugins, instance)
 		}
