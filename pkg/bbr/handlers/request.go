@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -43,14 +44,19 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 
 	var requestBody map[string]any
 	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
-		metrics.RecordModelNotParsedCounter()
 		return nil, err
 	}
 
-	targetModel, ok := requestBody["model"].(string)
+	targetModelAny, ok := requestBody["model"]
 	if !ok {
 		metrics.RecordModelNotParsedCounter()
-		return nil, nil
+		targetModelAny = ""
+	}
+
+	targetModel, ok := targetModelAny.(string)
+	if !ok {
+		metrics.RecordModelNotParsedCounter()
+		return nil, errors.New("model is not a string")
 	}
 
 	logger.Info("Parsed model name", "model", targetModel)
