@@ -54,7 +54,11 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 	}
 
 	// TODO pass headers!
-	s.executeRequestPlugins(ctx, map[string]string{}, requestBody)
+	// TODO handle updated headers and body
+	_, err := s.executeRequestPlugins(ctx, map[string]string{}, requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request plugins - %w", err)
+	}
 
 	logger.Info("Parsed model name", "model", targetModel)
 
