@@ -84,8 +84,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 
 	// TODO pass headers!
 	// TODO handle updated headers and body
-	_, err := s.executePlugins(ctx, map[string]string{}, requestBody, s.requestPlugins...)
-	if err != nil {
+	if err := s.executePlugins(ctx, map[string]string{}, requestBody, s.requestPlugins); err != nil {
 		return nil, fmt.Errorf("failed to execute request plugins - %w", err)
 	}
 
@@ -156,7 +155,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 
 // executePlugins executes BBR plugins in the order they were registered.
 func (s *Server) executePlugins(ctx context.Context, headers map[string]string, body map[string]any,
-	plugins ...framework.PayloadProcessor) (bool, error) {
+	plugins []framework.PayloadProcessor) error {
 	updatedHeaders := headers
 	updatedBody := body
 	var err error
@@ -164,11 +163,11 @@ func (s *Server) executePlugins(ctx context.Context, headers map[string]string, 
 		log.FromContext(ctx).Info("Executing request plugin", "plugin", plugin.TypedName())
 		updatedHeaders, updatedBody, err = plugin.Execute(ctx, updatedHeaders, updatedBody)
 		if err != nil {
-			return true, fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
+			return fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
 		}
 	}
 
-	return true, nil
+	return nil
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
