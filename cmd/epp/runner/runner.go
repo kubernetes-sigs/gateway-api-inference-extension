@@ -184,22 +184,39 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	mgr, _, err := r.Setup(ctx, cfg, opts)
+	if err != nil {
+		return err
+	}
+
+	// --- Start Manager ---
+	// This blocks until a signal is received.
+	setupLog.Info("Controller manager starting")
+	if err := mgr.Start(ctx); err != nil {
+		setupLog.Error(err, "Error starting controller manager")
+		return err
+	}
+	setupLog.Info("Controller manager terminated")
+	return nil
+}
+
+func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options) (ctrl.Manager, datastore.Datastore, error) {
 	rawConfig, err := r.parseConfigurationPhaseOne(ctx, opts)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
-		return err
+		return nil, nil, err
 	}
 
 	// --- Setup Datastore ---
 	epf, err := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	gknn, err := extractGKNN(opts.PoolName, opts.PoolGroup, opts.PoolNamespace, opts.EndpointSelector)
 	if err != nil {
 		setupLog.Error(err, "Failed to extract GKNN")
-		return err
+		return nil, nil, err
 	}
 
 	startCrdReconcilers := opts.EndpointSelector == "" // If endpointSelector is empty, it means it's not in the standalone mode. Then we should start the inferencePool and other CRD Reconciler.
@@ -207,19 +224,19 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	if err := controllerCfg.PopulateControllerConfig(cfg); err != nil {
 		setupLog.Error(err, "Failed to populate controller config")
-		return err
+		return nil, nil, err
 	}
 
 	ds, err := setupDatastore(ctx, epf, int32(opts.ModelServerMetricsPort), startCrdReconcilers,
 		opts.PoolName, opts.PoolNamespace, opts.EndpointSelector, opts.EndpointTargetPorts)
 	if err != nil {
 		setupLog.Error(err, "Failed to setup datastore")
-		return err
+		return nil, nil, err
 	}
 	eppConfig, err := r.parseConfigurationPhaseTwo(ctx, rawConfig, ds)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
-		return err
+		return nil, nil, err
 	}
 
 	// --- Setup Metrics Server ---
@@ -248,7 +265,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
-		return err
+		return nil, nil, err
 	}
 
 	if opts.EnableLeaderElection {
@@ -267,7 +284,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Info("Setting pprof handlers")
 		if err = profiling.SetupPprofHandlers(mgr); err != nil {
 			setupLog.Error(err, "Failed to setup pprof handlers")
-			return err
+			return nil, nil, err
 		}
 	}
 
@@ -275,7 +292,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.schedulerConfig == nil {
 		err := errors.New("scheduler config must be set either by config api or through code")
 		setupLog.Error(err, "failed to create scheduler")
-		return err
+		return nil, nil, err
 	}
 
 	setupLog.Info("parsed config", "scheduler-config", r.schedulerConfig)
@@ -285,7 +302,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
 	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
-		return err
+		return nil, nil, err
 	}
 
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
@@ -299,7 +316,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		setupLog.Info("Initializing experimental Flow Control layer")
 		registry, err := fcregistry.NewFlowRegistry(eppConfig.FlowControlConfig.Registry, setupLog)
 		if err != nil {
-			return fmt.Errorf("failed to initialize Flow Registry: %w", err)
+			return nil, nil, fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
 		fc, err := fccontroller.NewFlowController(
 			ctx,
@@ -308,7 +325,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			locator,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to initialize Flow Controller: %w", err)
+			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
 		}
 		go registry.Run(ctx)
 		admissionController = requestcontrol.NewFlowControlAdmissionController(fc, opts.PoolName)
@@ -337,29 +354,20 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup EPP controllers")
-		return err
+		return nil, nil, err
 	}
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
 	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, opts.GRPCHealthPort, isLeader, opts.EnableLeaderElection); err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// Register ext-proc server.
 	if err := registerExtProcServer(mgr, serverRunner, ctrl.Log.WithName("ext-proc")); err != nil {
-		return err
+		return nil, nil, err
 	}
-
-	// --- Start Manager ---
-	// This blocks until a signal is received.
-	setupLog.Info("Controller manager starting")
-	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "Error starting controller manager")
-		return err
-	}
-	setupLog.Info("Controller manager terminated")
-	return nil
+	return mgr, ds, nil
 }
 
 // NewEndpointPoolFromOptions constructs an EndpointPool from standalone options.
