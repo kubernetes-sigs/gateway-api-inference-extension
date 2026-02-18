@@ -109,7 +109,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{})
+			server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
 			reqCtx := &RequestContext{
 				Request:  &Request{Headers: make(map[string]string)},
 				Response: &Response{Headers: make(map[string]string)},
@@ -369,7 +369,7 @@ func TestHandleRequestBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := NewServer(test.streaming, &fakeDatastore{}, []framework.PayloadProcessor{})
+			server := NewServer(test.streaming, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, bodyBytes)
 			if err != nil {
@@ -407,7 +407,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	noopPlugin := plugins.NewDefaultPlugin()
-	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{noopPlugin})
+	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{noopPlugin}, []framework.PayloadProcessor{})
 
 	bodyBytes, _ := json.Marshal(map[string]any{
 		"model":  "bar",
