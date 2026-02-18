@@ -52,7 +52,6 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 	require.NoError(t, err, "failed to acquire free port for BBR server")
 
 	// 2. Configure BBR Server
-	// BBR is simpler than EPP; it doesn't need a K8s Manager.
 	runner := runserver.NewDefaultExtProcServerRunner(port, false)
 	runner.SecureServing = false
 	runner.Streaming = streaming

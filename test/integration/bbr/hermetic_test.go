@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
+
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
