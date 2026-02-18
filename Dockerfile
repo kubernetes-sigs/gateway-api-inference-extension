@@ -2,10 +2,9 @@
 # https://docs.docker.com/engine/reference/builder/#understand-how-arg-and-from-interact
 ARG BUILDER_IMAGE=golang:1.25
 ARG BASE_IMAGE=gcr.io/distroless/static:nonroot
-ARG BUILDPLATFORM
 
 ## Multistage build
-FROM --platform=$BUILDPLATFORM ${BUILDER_IMAGE} AS builder
+FROM ${BUILDER_IMAGE} AS builder
 ARG TARGETARCH
 ENV CGO_ENABLED=0
 ENV GOOS=linux
