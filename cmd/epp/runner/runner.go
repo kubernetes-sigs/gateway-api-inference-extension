@@ -390,6 +390,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
 	fwkplugin.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
 	fwkplugin.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	fwkplugin.Register(scorer.TokenLoadScorerType, scorer.TokenLoadScorerFactory)
 	// Flow Control plugins
 	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, fairness.GlobalStrictFairnessPolicyFactory)
 	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
