@@ -131,17 +131,30 @@ func processPreRequestForLatencyPrediction(
 ) error {
 	logger := log.FromContext(ctx)
 
-	// just for debugging, print the req context scheduling result cycle state
-	// print the raw scores in scheduling result
+	// TTFT is dominated by prefill work in disagg mode, so use prefill pod metrics if available
+	target_endpoint_metadata := predictedLatencyCtx.targetMetadata
+	var m *fwkdl.Metrics
 
-	// Build prediction request
-	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
-	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
-		return err
+	if predictedLatencyCtx.schedulingResult != nil {
+		if prefillResult, exists := predictedLatencyCtx.schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil && len(prefillResult.TargetEndpoints) > 0 {
+			// Disaggregated mode: use prefill pod
+			target_endpoint_metadata = prefillResult.TargetEndpoints[0].GetMetadata()
+			m, metricsExist := predictedLatencyCtx.lastSeenMetrics[Experimental_DefaultPrefillProfile]
+			if !metricsExist || m == nil {
+				logger.V(logutil.DEBUG).Info("Skipping prediction due to missing prefill metrics")
+				return errors.New("no prefill metrics available for prediction")
+			}
+		} else {
+			// Monolithic mode: use primary profile
+			var err error
+			m, err = getLatestMetricsForProfile(predictedLatencyCtx)
+			if err != nil {
+				logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
+				return err
+			}
+		}
 	}
 
-	target_endpoint_metadata := predictedLatencyCtx.targetMetadata
 	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[target_endpoint_metadata.NamespacedName.Name]
 
 	// Build prediction request (pod type is included if endpointRoleLabel is configured)
