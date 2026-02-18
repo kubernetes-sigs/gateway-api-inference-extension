@@ -18,11 +18,13 @@ package metrics
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
@@ -47,6 +49,66 @@ type PodMetricsClientImpl struct {
 	ModelServerMetricsScheme string
 
 	Client *http.Client
+}
+
+type Config struct {
+	ModelServerMetricsScheme        string
+	ModelServerMetricsHTTPSInsecure bool
+	ModelServerMetricsPath          string
+
+	TotalQueuedRequestsMetric    string
+	TotalRunningRequestsMetric   string
+	KVCacheUsagePercentageMetric string
+	LoRAInfoMetric               string
+	CacheInfoMetric              string
+}
+
+func NewPodMetricsClientImpl(logger logr.Logger, config Config) (PodMetricsClient, error) {
+	mapping, err := NewMetricMapping(
+		config.TotalQueuedRequestsMetric,
+		config.TotalRunningRequestsMetric,
+		config.KVCacheUsagePercentageMetric,
+		config.LoRAInfoMetric,
+		config.CacheInfoMetric,
+	)
+	if err != nil {
+		return nil, err
+	}
+	verifyMetricMapping(logger, *mapping)
+
+	var metricsHttpClient *http.Client
+	if config.ModelServerMetricsScheme == "https" {
+		metricsHttpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: config.ModelServerMetricsHTTPSInsecure,
+				},
+			},
+		}
+	} else {
+		metricsHttpClient = http.DefaultClient
+	}
+	return &PodMetricsClientImpl{
+		MetricMapping:            mapping,
+		ModelServerMetricsPath:   config.ModelServerMetricsPath,
+		ModelServerMetricsScheme: config.ModelServerMetricsScheme,
+		Client:                   metricsHttpClient,
+	}, nil
+}
+
+func verifyMetricMapping(logger logr.Logger, mapping MetricMapping) {
+	if mapping.TotalQueuedRequests == nil {
+		logger.Info("Not scraping metric: TotalQueuedRequests")
+	}
+	if mapping.KVCacheUtilization == nil {
+		logger.Info("Not scraping metric: KVCacheUtilization")
+	}
+	if mapping.LoraRequestInfo == nil {
+		logger.Info("Not scraping metric: LoraRequestInfo")
+	}
+	if mapping.CacheConfigInfo == nil {
+		logger.Info("Not scraping metric: CacheConfigInfo")
+	}
 }
 
 // FetchMetrics fetches metrics from a given pod, clones the existing metrics object and returns an updated one.

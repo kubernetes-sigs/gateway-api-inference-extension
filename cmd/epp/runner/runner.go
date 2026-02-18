@@ -18,7 +18,6 @@ package runner
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -121,8 +120,7 @@ type Runner struct {
 	customCollectors     []prometheus.Collector
 
 	// Test overrides
-	testPodMetricsClient *backendmetrics.FakePodMetricsClient
-	skipNameValidation   bool
+	skipNameValidation bool
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -188,7 +186,22 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	mgr, _, _, err := r.Setup(ctx, cfg, opts)
+	pmc, err := backendmetrics.NewPodMetricsClientImpl(setupLog, backendmetrics.Config{
+		ModelServerMetricsScheme:        opts.ModelServerMetricsScheme,
+		ModelServerMetricsHTTPSInsecure: opts.ModelServerMetricsHTTPSInsecure,
+		ModelServerMetricsPath:          opts.ModelServerMetricsPath,
+
+		TotalQueuedRequestsMetric:    opts.TotalQueuedRequestsMetric,
+		TotalRunningRequestsMetric:   opts.TotalRunningRequestsMetric,
+		KVCacheUsagePercentageMetric: opts.KVCacheUsagePercentageMetric,
+		LoRAInfoMetric:               opts.LoRAInfoMetric,
+		CacheInfoMetric:              opts.CacheInfoMetric,
+	})
+	if err != nil {
+		return err
+	}
+
+	mgr, _, _, err := r.Setup(ctx, cfg, opts, pmc)
 	if err != nil {
 		return err
 	}
@@ -209,7 +222,7 @@ func (r *Runner) Run(ctx context.Context) error {
 // without starting it, allowing for flexible in integration test.
 //
 // The returned Datastore and ExtProcServerRunner is **only** meant to use in the integration test.
-func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options) (ctrl.Manager, datastore.Datastore, *runserver.ExtProcServerRunner, error) {
+func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) (ctrl.Manager, datastore.Datastore, *runserver.ExtProcServerRunner, error) {
 	rawConfig, err := r.parseConfigurationPhaseOne(ctx, opts)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
@@ -217,13 +230,7 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	}
 
 	// --- Setup Datastore ---
-	epf, err := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts)
-
-	if r.testPodMetricsClient != nil {
-		// Test only, override epf with FakePodMetricsClient.
-		epf = backendmetrics.NewPodMetricsFactory(r.testPodMetricsClient, 10*time.Millisecond)
-	}
-
+	epf, err := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts, pmc)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -236,7 +243,6 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	startCrdReconcilers := opts.EndpointSelector == "" // If endpointSelector is empty, it means it's not in the standalone mode. Then we should start the inferencePool and other CRD Reconciler.
 	controllerCfg := runserver.NewControllerConfig(startCrdReconcilers)
-
 	if err := controllerCfg.PopulateControllerConfig(cfg); err != nil {
 		setupLog.Error(err, "Failed to populate controller config")
 		return nil, nil, nil, err
@@ -366,10 +372,6 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		Director:                         director,
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
-	}
-
-	if r.testPodMetricsClient != nil {
-		serverRunner.TestPodMetricsClient = r.testPodMetricsClient
 	}
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
@@ -625,46 +627,15 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
 	return nil
 }
 
-func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options) (datalayer.EndpointFactory, error) {
+func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) (datalayer.EndpointFactory, error) {
 	if enableNewMetrics {
 		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval), nil
 	}
-	return setupMetricsV1(opts)
+	return setupMetricsV1(opts, pmc)
 }
 
-func setupMetricsV1(opts *runserver.Options) (datalayer.EndpointFactory, error) {
-	mapping, err := backendmetrics.NewMetricMapping(
-		opts.TotalQueuedRequestsMetric,
-		opts.TotalRunningRequestsMetric,
-		opts.KVCacheUsagePercentageMetric,
-		opts.LoRAInfoMetric,
-		opts.CacheInfoMetric,
-	)
-	if err != nil {
-		setupLog.Error(err, "Failed to create metric mapping from flags.")
-		return nil, err
-	}
-	verifyMetricMapping(*mapping)
-
-	var metricsHttpClient *http.Client
-	if opts.ModelServerMetricsScheme == "https" {
-		metricsHttpClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: opts.ModelServerMetricsHTTPSInsecure,
-				},
-			},
-		}
-	} else {
-		metricsHttpClient = http.DefaultClient
-	}
-
-	pmf := backendmetrics.NewPodMetricsFactory(&backendmetrics.PodMetricsClientImpl{
-		MetricMapping:            mapping,
-		ModelServerMetricsPath:   opts.ModelServerMetricsPath,
-		ModelServerMetricsScheme: opts.ModelServerMetricsScheme,
-		Client:                   metricsHttpClient,
-	},
+func setupMetricsV1(opts *runserver.Options, pmc backendmetrics.PodMetricsClient) (datalayer.EndpointFactory, error) {
+	pmf := backendmetrics.NewPodMetricsFactory(pmc,
 		opts.RefreshMetricsInterval)
 	return pmf, nil
 }
@@ -694,21 +665,6 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		return err
 	}
 	return nil
-}
-
-func verifyMetricMapping(mapping backendmetrics.MetricMapping) {
-	if mapping.TotalQueuedRequests == nil {
-		setupLog.Info("Not scraping metric: TotalQueuedRequests")
-	}
-	if mapping.KVCacheUtilization == nil {
-		setupLog.Info("Not scraping metric: KVCacheUtilization")
-	}
-	if mapping.LoraRequestInfo == nil {
-		setupLog.Info("Not scraping metric: LoraRequestInfo")
-	}
-	if mapping.CacheConfigInfo == nil {
-		setupLog.Info("Not scraping metric: CacheConfigInfo")
-	}
 }
 
 func extractDeploymentName(podName string) (string, error) {

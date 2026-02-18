@@ -94,6 +94,8 @@ type TestHarness struct {
 
 	// Internal handles for cleanup
 	grpcConn *grpc.ClientConn
+
+	fakePmc *backendmetrics.FakePodMetricsClient
 }
 
 // NewTestHarness boots up a fully isolated test environment.
@@ -106,12 +108,10 @@ func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Option
 	for _, opt := range opts {
 		opt(config)
 	}
-	eppRunner := eppRunner.NewRunner()
 
-	testPodMetricsClient := &backendmetrics.FakePodMetricsClient{}
-	eppRunner.WithTestPodMetricsClient(testPodMetricsClient).WithSkipNameValidation(true)
-
-	mgr, dataStore, runner, err := eppRunner.Setup(ctx, testEnv.Config, eppOptions)
+	fakePmc := &backendmetrics.FakePodMetricsClient{}
+	eppRunner := eppRunner.NewTestRunner()
+	mgr, dataStore, runner, err := eppRunner.Setup(ctx, testEnv.Config, eppOptions, fakePmc)
 	require.NoError(t, err, "failed to create manager")
 	mgrCtx, mgrCancel := context.WithCancel(ctx)
 
@@ -141,6 +141,7 @@ func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Option
 		Client:         client,
 		Datastore:      dataStore,
 		grpcConn:       conn,
+		fakePmc:        fakePmc,
 	}
 
 	t.Cleanup(func() {
@@ -190,7 +191,7 @@ func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 			WaitingModels:       make(map[string]int),
 		}
 	}
-	h.ServerRunner.TestPodMetricsClient.SetRes(metricsMap)
+	h.fakePmc.SetRes(metricsMap)
 
 	// Create K8s Objects.
 	for _, p := range pods {

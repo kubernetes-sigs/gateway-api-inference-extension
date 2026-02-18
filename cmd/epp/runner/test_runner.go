@@ -17,17 +17,22 @@ limitations under the License.
 package runner
 
 import (
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 )
 
-// WithTestPodMetricsClient sets the fake pod metrics client for integration tests.
-func (r *Runner) WithTestPodMetricsClient(client *backendmetrics.FakePodMetricsClient) *Runner {
-	r.testPodMetricsClient = client
-	return r
+// NewTestRunner creates a runner dedicated for integration test.
+func NewTestRunner() *Runner {
+	runner := &Runner{
+		eppExecutableName:    "GIEIntegrationTest",
+		requestControlConfig: requestcontrol.NewConfig(), // default requestcontrol config has empty plugin list
+		customCollectors:     []prometheus.Collector{},
+	}
+	runner.withSkipNameValidation(true)
+	return runner
 }
 
-// WithSkipNameValidation sets the flag to skip name validation for integration tests.
-func (r *Runner) WithSkipNameValidation(skip bool) *Runner {
+func (r *Runner) withSkipNameValidation(skip bool) *Runner {
 	r.skipNameValidation = skip
 	return r
 }

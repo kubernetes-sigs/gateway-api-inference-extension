@@ -60,10 +60,6 @@ type ExtProcServerRunner struct {
 	Director                         *requestcontrol.Director
 	SaturationDetector               *utilizationdetector.Detector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
-
-	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
-	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
-	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
 }
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
