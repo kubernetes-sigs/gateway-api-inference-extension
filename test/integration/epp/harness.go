@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 
 	eppRunner "sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -107,8 +108,9 @@ func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Option
 	}
 	eppRunner := eppRunner.NewRunner()
 
-	// Set isIntegrationTest here.
-	eppOptions.IsIntegrationTest = true
+	testPodMetricsClient := &backendmetrics.FakePodMetricsClient{}
+	eppRunner.WithTestPodMetricsClient(testPodMetricsClient).WithSkipNameValidation(true)
+
 	mgr, dataStore, runner, err := eppRunner.Setup(ctx, testEnv.Config, eppOptions)
 	require.NoError(t, err, "failed to create manager")
 	mgrCtx, mgrCancel := context.WithCancel(ctx)

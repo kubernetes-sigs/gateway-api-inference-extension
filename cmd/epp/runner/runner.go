@@ -119,6 +119,10 @@ type Runner struct {
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
+
+	// Test overrides
+	testPodMetricsClient *backendmetrics.FakePodMetricsClient
+	skipNameValidation   bool
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -215,11 +219,9 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	// --- Setup Datastore ---
 	epf, err := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts)
 
-	var testPodMetricsClient *backendmetrics.FakePodMetricsClient
-	if opts.IsIntegrationTest {
-		testPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
+	if r.testPodMetricsClient != nil {
 		// Test only, override epf with FakePodMetricsClient.
-		epf = backendmetrics.NewPodMetricsFactory(testPodMetricsClient, 10*time.Millisecond)
+		epf = backendmetrics.NewPodMetricsFactory(r.testPodMetricsClient, 10*time.Millisecond)
 	}
 
 	if err != nil {
@@ -275,7 +277,7 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection, opts.IsIntegrationTest)
+	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection, r.skipNameValidation)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return nil, nil, nil, err
@@ -366,8 +368,8 @@ func (r *Runner) Setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
 	}
 
-	if opts.IsIntegrationTest {
-		serverRunner.TestPodMetricsClient = testPodMetricsClient
+	if r.testPodMetricsClient != nil {
+		serverRunner.TestPodMetricsClient = r.testPodMetricsClient
 	}
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
