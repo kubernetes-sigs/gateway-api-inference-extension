@@ -17,22 +17,18 @@ limitations under the License.
 package runner
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"context"
+
+	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 )
 
-// NewTestRunner creates a runner dedicated for integration test.
-func NewTestRunner() *Runner {
-	runner := &Runner{
-		eppExecutableName:    "GIEIntegrationTest",
-		requestControlConfig: requestcontrol.NewConfig(), // default requestcontrol config has empty plugin list
-		customCollectors:     []prometheus.Collector{},
-	}
-	runner.withSkipNameValidation(true)
-	return runner
-}
-
-func (r *Runner) withSkipNameValidation(skip bool) *Runner {
-	r.skipNameValidation = skip
-	return r
+// NewTestRunnerSetup creates a setup runner dedicated for integration test and its corresponding dataStore.
+func NewTestRunnerSetup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) (ctrl.Manager, datastore.Datastore, error) {
+	runner := NewRunner()
+	runner.testOverrideSkipNameValidation = true
+	return runner.setup(ctx, cfg, opts, pmc)
 }

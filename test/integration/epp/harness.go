@@ -88,9 +88,8 @@ type TestHarness struct {
 	// --- Config State ---
 	StandaloneMode bool
 
-	ServerRunner *server.ExtProcServerRunner
-	Client       extProcPb.ExternalProcessor_ProcessClient
-	Datastore    datastore.Datastore
+	Client    extProcPb.ExternalProcessor_ProcessClient
+	Datastore datastore.Datastore
 
 	// Internal handles for cleanup
 	grpcConn *grpc.ClientConn
@@ -110,8 +109,7 @@ func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Option
 	}
 
 	fakePmc := &backendmetrics.FakePodMetricsClient{}
-	eppRunner := eppRunner.NewTestRunner()
-	mgr, dataStore, runner, err := eppRunner.Setup(ctx, testEnv.Config, eppOptions, fakePmc)
+	mgr, dataStore, err := eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc)
 	require.NoError(t, err, "failed to create manager")
 	mgrCtx, mgrCancel := context.WithCancel(ctx)
 
@@ -137,7 +135,6 @@ func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Option
 		ctx:            mgrCtx,
 		Namespace:      eppOptions.PoolNamespace,
 		StandaloneMode: config.StandaloneMode,
-		ServerRunner:   runner,
 		Client:         client,
 		Datastore:      dataStore,
 		grpcConn:       conn,
