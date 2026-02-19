@@ -77,7 +77,10 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			if err != nil {
 				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
-			creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
+			creds := credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+				NextProtos:   []string{"h2"},
+			})
 			srv = grpc.NewServer(grpc.Creds(creds))
 		} else {
 			srv = grpc.NewServer()

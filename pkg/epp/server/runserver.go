@@ -168,10 +168,12 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 					GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 						return reloader.Get(), nil
 					},
+					NextProtos: []string{"h2"},
 				})
 			} else {
 				creds = credentials.NewTLS(&tls.Config{
 					Certificates: []tls.Certificate{cert},
+					NextProtos:   []string{"h2"},
 				})
 			}
 			// Init the server.
