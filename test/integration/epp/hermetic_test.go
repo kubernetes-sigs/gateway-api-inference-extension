@@ -24,17 +24,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -47,7 +43,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	eppServer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -101,27 +96,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
-	const testConfig = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-  - type: queue-scorer
-  - type: kv-cache-utilization-scorer
-  - type: prefix-cache-scorer
-  - type: lora-affinity-scorer
-schedulingProfiles:
-  - name: default
-    plugins:
-      - pluginRef: queue-scorer
-        weight: 1
-      - pluginRef: kv-cache-utilization-scorer
-        weight: 1
-      - pluginRef: prefix-cache-scorer
-        weight: 1
-      - pluginRef: lora-affinity-scorer
-        weight: 1
-`
-
 	// executionModes defines the permutations of EPP deployment modes to test.
 	executionModes := []struct {
 		name       string
@@ -421,46 +395,11 @@ schedulingProfiles:
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 
-					// Create dedicated namespace for the whole test
-					uid := uuid.New().String()[:8]
-					testNamespaceName := "epp-test-" + uid
-					ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespaceName}}
-					require.NoError(t, k8sClient.Create(ctx, ns), "failed to create test namespace")
-					defer func() {
-						if err := k8sClient.Delete(context.Background(), ns); err != nil {
-							t.Logf("failed to cleanup namespace %s: %v", testNamespaceName, err)
-						}
-					}()
-
-					opts := eppServer.NewOptions()
-					opts.PoolName = testPoolName
-					opts.PoolNamespace = testNamespaceName
-					opts.ConfigText = testConfig
-
-					metricsPort, err := integration.GetFreePort()
-					require.NoError(t, err)
-					opts.MetricsPort = metricsPort
-
-					grpcPort, err := integration.GetFreePort()
-					require.NoError(t, err)
-					opts.GRPCPort = grpcPort
-
-					healthPort, err := integration.GetFreePort()
-					require.NoError(t, err)
-					opts.GRPCHealthPort = healthPort
-					opts.EndpointTargetPorts = []int{8000}
-					opts.SecureServing = false
-
-					opts.RefreshPrometheusMetricsInterval = 50 * time.Millisecond
-					opts.MetricsStalenessThreshold = 2 * time.Second
-
 					var h *TestHarness
 					if mode.standalone {
-						// Only standalone mode is using EndpointSelector.
-						opts.EndpointSelector = "app=" + testPoolName
-						h = NewTestHarness(t, context.Background(), opts, WithStandaloneMode())
+						h = NewTestHarness(t, ctx, WithStandaloneMode())
 					} else {
-						h = NewTestHarness(t, context.Background(), opts).WithBaseResources()
+						h = NewTestHarness(t, context.Background()).WithBaseResources()
 					}
 
 					// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.

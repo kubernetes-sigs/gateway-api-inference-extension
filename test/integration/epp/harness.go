@@ -24,6 +24,7 @@ import (
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -45,7 +46,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	eppServer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -59,7 +60,25 @@ var (
 	baseResources []*unstructured.Unstructured
 )
 
-const testPoolName = "vllm-llama3-8b-instruct-pool"
+const (
+	testPoolName = "vllm-llama3-8b-instruct-pool"
+	testConfig   = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: prefix-cache-scorer
+  - type: lora-affinity-scorer
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: queue-scorer
+      - pluginRef: kv-cache-utilization-scorer
+      - pluginRef: prefix-cache-scorer
+      - pluginRef: lora-affinity-scorer
+`
+)
 
 // HarnessConfig holds configuration options for the TestHarness.
 type HarnessConfig struct {
@@ -100,12 +119,24 @@ type TestHarness struct {
 // NewTestHarness boots up a fully isolated test environment.
 // It creates a unique Namespace, scopes the Manager to that Namespace, and starts the components.
 // Note: EPP tests must run serially because they rely on the global Prometheus registry.
-func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Options, opts ...HarnessOption) *TestHarness {
+func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *TestHarness {
 	t.Helper()
 
 	config := &HarnessConfig{}
 	for _, opt := range opts {
 		opt(config)
+	}
+
+	// Create dedicated namespace for the whole test
+	uid := uuid.New().String()[:8]
+	testNamespaceName := "epp-test-" + uid
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespaceName}}
+	require.NoError(t, k8sClient.Create(ctx, ns), "failed to create test namespace")
+
+	eppOptions := defaultEppServerOptions(t, testNamespaceName)
+	if config.StandaloneMode {
+		// Only standalone EPP need to set the EndpointSelector.
+		eppOptions.EndpointSelector = "app=" + testPoolName
 	}
 
 	fakePmc := &backendmetrics.FakePodMetricsClient{}
@@ -142,7 +173,6 @@ func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Option
 	}
 
 	t.Cleanup(func() {
-		// serverCancel()
 		mgrCancel()
 		_ = h.grpcConn.Close()
 		// Deleting the Namespace cascades to all contained resources.
@@ -152,6 +182,30 @@ func NewTestHarness(t *testing.T, ctx context.Context, eppOptions *server.Option
 	})
 
 	return h
+}
+
+func defaultEppServerOptions(t *testing.T, namespace string) *eppServer.Options {
+	t.Helper()
+
+	eppOptions := eppServer.NewOptions()
+	eppOptions.PoolName = testPoolName
+	eppOptions.PoolNamespace = namespace
+	eppOptions.ConfigText = testConfig
+
+	metricsPort, err := integration.GetFreePort()
+	require.NoError(t, err)
+	eppOptions.MetricsPort = metricsPort
+
+	grpcPort, err := integration.GetFreePort()
+	require.NoError(t, err)
+	eppOptions.GRPCPort = grpcPort
+
+	healthPort, err := integration.GetFreePort()
+	require.NoError(t, err)
+	eppOptions.GRPCHealthPort = healthPort
+	eppOptions.EndpointTargetPorts = []int{8000}
+	eppOptions.SecureServing = false
+	return eppOptions
 }
 
 // --- Fluent Builder API ---
