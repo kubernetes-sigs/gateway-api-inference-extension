@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	compbasemetrics "k8s.io/component-base/metrics"
@@ -54,6 +55,18 @@ var (
 		[]string{},
 	)
 
+	pluginProcessingLatencies = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: component,
+			Name:      "plugin_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Plugin processing latency distribution in seconds for each extension point, plugin type and plugin name.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
+			},
+		},
+		[]string{"extension_point", "plugin_type", "plugin_name"},
+	)
+
 	// TODO: Uncomment and use this metrics once the core server implementation has handling to skip body parsing if header exists.
 	/*
 		modelAlreadyPresentInHeaderCounter = prometheus.NewCounterVec(
@@ -75,6 +88,7 @@ func Register() {
 		metrics.Registry.MustRegister(successCounter)
 		metrics.Registry.MustRegister(modelNotInBodyCounter)
 		metrics.Registry.MustRegister(modelNotParsedCounter)
+		metrics.Registry.MustRegister(pluginProcessingLatencies)
 		// metrics.Registry.MustRegister(modelAlreadyPresentInHeaderCounter)
 	})
 }
@@ -92,6 +106,11 @@ func RecordModelNotInBodyCounter() {
 // RecordModelNotParsedCounter records the number of times the model was found in the body but it could not be parsed.
 func RecordModelNotParsedCounter() {
 	modelNotParsedCounter.WithLabelValues().Inc()
+}
+
+// RecordPluginProcessingLatency records the processing latency for a BBR plugin.
+func RecordPluginProcessingLatency(extensionPoint, pluginType, pluginName string, duration time.Duration) {
+	pluginProcessingLatencies.WithLabelValues(extensionPoint, pluginType, pluginName).Observe(duration.Seconds())
 }
 
 /*

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -35,6 +36,8 @@ import (
 const (
 	modelHeader     = "X-Gateway-Model-Name"
 	baseModelHeader = "X-Gateway-Base-Model-Name"
+
+	executeExtensionPoint = "Request"
 )
 
 // HandleRequestBody handles request bodies.
@@ -161,7 +164,9 @@ func (s *Server) executePlugins(ctx context.Context, headers map[string]string, 
 	var err error
 	for _, plugin := range plugins {
 		log.FromContext(ctx).Info("Executing request plugin", "plugin", plugin.TypedName())
+		before := time.Now()
 		updatedHeaders, updatedBody, err = plugin.Execute(ctx, updatedHeaders, updatedBody)
+		metrics.RecordPluginProcessingLatency(executeExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
 			return fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
 		}

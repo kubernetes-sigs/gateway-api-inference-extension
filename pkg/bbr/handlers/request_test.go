@@ -31,6 +31,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
@@ -298,6 +299,52 @@ func TestHandleRequestBody(t *testing.T) {
 
 	if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(wantMetrics), "inference_objective_request_total"); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
+	metrics.Register()
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	noopPlugin := plugins.NewDefaultPlugin()
+	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{noopPlugin})
+
+	bodyBytes, _ := json.Marshal(map[string]any{
+		"model":  "bar",
+		"prompt": "test",
+	})
+	_, err := server.HandleRequestBody(ctx, bodyBytes)
+	if err != nil {
+		t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
+	}
+
+	mfs, err := crmetrics.Registry.Gather()
+	if err != nil {
+		t.Fatalf("Failed to gather metrics: %v", err)
+	}
+
+	found := false
+	for _, mf := range mfs {
+		if mf.GetName() == "bbr_plugin_duration_seconds" {
+			for _, m := range mf.GetMetric() {
+				labels := map[string]string{}
+				for _, lp := range m.GetLabel() {
+					labels[lp.GetName()] = lp.GetValue()
+				}
+				if labels["extension_point"] == "Request" &&
+					labels["plugin_type"] == plugins.DefaultPluginType &&
+					labels["plugin_name"] == plugins.DefaultPluginType {
+					if m.GetHistogram().GetSampleCount() > 0 {
+						found = true
+					}
+				}
+			}
+		}
+	}
+
+	if !found {
+		t.Error("Expected bbr_plugin_duration_seconds metric with extension_point=Request, " +
+			"plugin_type=no-op-plugin, plugin_name=no-op-plugin to have observations, but none found")
 	}
 }
 

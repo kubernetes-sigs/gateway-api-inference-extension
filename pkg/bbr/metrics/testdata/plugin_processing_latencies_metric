@@ -1,0 +1,28 @@
+# HELP bbr_plugin_duration_seconds [ALPHA] Plugin processing latency distribution in seconds for each extension point, plugin type and plugin name.
+# TYPE bbr_plugin_duration_seconds histogram
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.0001"} 0
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.0002"} 0
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.0005"} 0
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.001"} 0
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.002"} 0
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.005"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.01"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.02"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.05"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="0.1"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA",le="+Inf"} 1
+bbr_plugin_duration_seconds_sum{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA"} 0.005
+bbr_plugin_duration_seconds_count{extension_point="Request",plugin_name="PluginA",plugin_type="TestPluginA"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.0001"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.0002"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.0005"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.001"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.002"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.005"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.01"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.02"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.05"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="0.1"} 1
+bbr_plugin_duration_seconds_bucket{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB",le="+Inf"} 1
+bbr_plugin_duration_seconds_sum{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB"} 1e-05
+bbr_plugin_duration_seconds_count{extension_point="Request",plugin_name="PluginB",plugin_type="TestPluginB"} 1
