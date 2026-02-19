@@ -18,15 +18,11 @@ package server
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"time"
 
 	"github.com/spf13/pflag"
-	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
@@ -34,7 +30,6 @@ import (
 const (
 	DefaultGrpcPort      = 9002
 	DefaultPoolNamespace = "default" // default when pool namespace is empty (CLI flag default is empty)
-	ZapLogLevelFlagName  = "zap-log-level"
 )
 
 // Options contains configuration values necessary to create and run the EPP.
@@ -74,17 +69,16 @@ type Options struct {
 	//
 	// Diagnostics.
 	//
-	LogVerbosity        int         // Number for the log level verbosity.
-	ZapOptions          zap.Options // Zap logging options
-	Tracing             bool        // Enables emitting traces.
-	HealthChecking      bool        // Enables health checking.
-	MetricsPort         int         // The metrics port exposed by EPP. (TODO: uint16)
-	GRPCHealthPort      int         // The port used for gRPC liveness and readiness probes. (TODO: uint16)
-	EnablePprof         bool        // Enables pprof handlers.
-	CertPath            string      // The path to the certificate for secure serving.
-	EnableCertReload    bool        // Enables certificate reloading of the certificates specified in --cert-path.
-	SecureServing       bool        // Enables secure serving.
-	MetricsEndpointAuth bool        // Enables authentication and authorization of the metrics endpoint.
+	logging.LoggingOptions        // Logging configuration.
+	Tracing                bool   // Enables emitting traces.
+	HealthChecking         bool   // Enables health checking.
+	MetricsPort            int    // The metrics port exposed by EPP. (TODO: uint16)
+	GRPCHealthPort         int    // The port used for gRPC liveness and readiness probes. (TODO: uint16)
+	EnablePprof            bool   // Enables pprof handlers.
+	CertPath               string // The path to the certificate for secure serving.
+	EnableCertReload       bool   // Enables certificate reloading of the certificates specified in --cert-path.
+	SecureServing          bool   // Enables secure serving.
+	MetricsEndpointAuth    bool   // Enables authentication and authorization of the metrics endpoint.
 	//
 	// Configuration.
 	//
@@ -92,7 +86,7 @@ type Options struct {
 	ConfigText string // The configuration specified as text, in lieu of a file.
 
 	// internal
-	fs *pflag.FlagSet // FlagSet used in AddFlags() and consulted in Complete()
+	fs *pflag.FlagSet // FlagSet used in AddFlags() and consulted in Validate()
 }
 
 // NewOptions returns a new Options struct initialized with the default values.
@@ -113,8 +107,7 @@ func NewOptions() *Options {
 		KVCacheUsagePercentageMetric:     "vllm:kv_cache_usage_perc",
 		LoRAInfoMetric:                   "vllm:lora_requests_info",
 		CacheInfoMetric:                  "vllm:cache_config_info",
-		LogVerbosity:                     logging.DEFAULT,
-		ZapOptions:                       zap.Options{Development: true},
+		LoggingOptions:                   *logging.NewOptions(),
 		Tracing:                          true,
 		MetricsPort:                      9090,
 		GRPCHealthPort:                   9003,
@@ -173,10 +166,9 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 	_ = fs.MarkDeprecated("lora-info-metric", "use engineConfigs in EndpointPickerConfig instead")
 	fs.StringVar(&opts.CacheInfoMetric, "cache-info-metric", opts.CacheInfoMetric, "Prometheus metric for the cache info metrics.")
 	_ = fs.MarkDeprecated("cache-info-metric", "use engineConfigs in EndpointPickerConfig instead")
-	fs.IntVarP(&opts.LogVerbosity, "v", "v", opts.LogVerbosity, "Number for the log level verbosity.") // allow both --v and -v
-	gofs := flag.NewFlagSet("zap", flag.ExitOnError)
-	opts.ZapOptions.BindFlags(gofs) // zap expects a standard Go FlagSet and pflag.FlagSet is not compatible.
-	fs.AddGoFlagSet(gofs)
+
+	opts.LoggingOptions.AddFlags(fs) // Add logging flags.
+
 	fs.BoolVar(&opts.Tracing, "tracing", opts.Tracing, "Enables emitting traces.")
 	fs.BoolVar(&opts.HealthChecking, "health-checking", opts.HealthChecking, "Enables health checking.")
 	fs.IntVar(&opts.MetricsPort, "metrics-port", opts.MetricsPort, "The metrics port exposed by EPP.")
@@ -203,14 +195,8 @@ func (opts *Options) Complete() error {
 
 	opts.EndpointTargetPorts = removeDuplicatePorts(opts.EndpointTargetPorts)
 
-	// ensure zap log level is set - explicitly by user or from "-v"
-	zapLogLevelFlag := opts.fs.Lookup(ZapLogLevelFlagName)
-	if zapLogLevelFlag != nil && !zapLogLevelFlag.Changed { // not set explicitly
-		lvl := -1 * (opts.LogVerbosity) // See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-		opts.ZapOptions.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
-		zapLogLevelFlag.Changed = true
-	}
-	return nil
+	// Complete logging options.
+	return opts.LoggingOptions.Complete()
 }
 
 func (opts *Options) Validate() error {
@@ -248,6 +234,11 @@ func (opts *Options) Validate() error {
 		if f := opts.fs.Lookup(flagName); f != nil && f.Changed {
 			return fmt.Errorf("flag %q is deprecated and cannot be used; configure metrics via engineConfigs in EndpointPickerConfig instead", flagName)
 		}
+	}
+
+	// Validate logging options.
+	if err := opts.LoggingOptions.Validate(); err != nil {
+		return err
 	}
 
 	return nil

@@ -17,13 +17,9 @@ limitations under the License.
 package server
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/spf13/pflag"
-	uberzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -32,7 +28,6 @@ import (
 const (
 	DefaultGrpcPort       = 9004
 	DefaultGrpcHealthPort = 9005
-	ZapLogLevelFlagName   = "zap-log-level"
 )
 
 // Options contains the command-line configuration for the BBR server.
@@ -45,20 +40,19 @@ type Options struct {
 	//
 	// Diagnostics.
 	//
-	LogVerbosity        int         // Number for the log level verbosity.
-	ZapOptions          zap.Options // Zap logging options.
-	MetricsPort         int         // The metrics port exposed by BBR.
-	GRPCHealthPort      int         // The port for gRPC liveness and readiness probes.
-	EnablePprof         bool        // Enables pprof handlers.
-	SecureServing       bool        // Enables secure serving.
-	MetricsEndpointAuth bool        // Enables authentication and authorization of the metrics endpoint.
+	logging.LoggingOptions      // Logging configuration.
+	MetricsPort            int  // The metrics port exposed by BBR.
+	GRPCHealthPort         int  // The port for gRPC liveness and readiness probes.
+	EnablePprof            bool // Enables pprof handlers.
+	SecureServing          bool // Enables secure serving.
+	MetricsEndpointAuth    bool // Enables authentication and authorization of the metrics endpoint.
 	//
 	// Plugins.
 	//
 	PluginSpecs config.BBRPluginSpecs // Repeatable --plugin <type>:<name>[:<json>] flag values.
 
 	// internal
-	fs *pflag.FlagSet // FlagSet used in AddFlags() and consulted in Complete()
+	fs *pflag.FlagSet // FlagSet used in AddFlags()
 }
 
 // NewOptions returns a new Options struct initialized with default values.
@@ -66,8 +60,7 @@ func NewOptions() *Options {
 	return &Options{
 		GRPCPort:            DefaultGrpcPort,
 		GRPCHealthPort:      DefaultGrpcHealthPort,
-		LogVerbosity:        logging.DEFAULT,
-		ZapOptions:          zap.Options{Development: true},
+		LoggingOptions:      *logging.NewOptions(),
 		MetricsPort:         9090,
 		EnablePprof:         true,
 		SecureServing:       true,
@@ -80,6 +73,7 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 	if fs == nil {
 		fs = pflag.CommandLine
 	}
+
 	opts.fs = fs
 
 	fs.IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort,
@@ -94,30 +88,18 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"Enables streaming support for Envoy full-duplex streaming mode.")
 	fs.BoolVar(&opts.SecureServing, "secure-serving", opts.SecureServing,
 		"Enables secure serving.")
-	fs.IntVarP(&opts.LogVerbosity, "v", "v", opts.LogVerbosity,
-		"Number for the log level verbosity.")
 	fs.BoolVar(&opts.EnablePprof, "enable-pprof", opts.EnablePprof,
 		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 
 	fs.Var(&opts.PluginSpecs, "plugin", `Repeatable. --plugin <type>:<name>[:<json>]`)
 
-	// Bind zap flags (zap expects a standard Go FlagSet; pflag.FlagSet is not compatible).
-	gofs := flag.NewFlagSet("zap", flag.ExitOnError)
-	opts.ZapOptions.BindFlags(gofs)
-	fs.AddGoFlagSet(gofs)
+	opts.LoggingOptions.AddFlags(fs) // Add logging flags.
 }
 
 // Complete performs post-processing of parsed command-line arguments.
 func (opts *Options) Complete() error {
-	// Derive the zap log level from the -v flag when --zap-log-level is not set explicitly.
-	zapLogLevelFlag := opts.fs.Lookup(ZapLogLevelFlagName)
-	if zapLogLevelFlag != nil && !zapLogLevelFlag.Changed {
-		// See https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/log/zap#Options.Level
-		lvl := -1 * (opts.LogVerbosity)
-		opts.ZapOptions.Level = uberzap.NewAtomicLevelAt(zapcore.Level(int8(lvl)))
-		zapLogLevelFlag.Changed = true
-	}
-	return nil
+	// Complete logging options.
+	return opts.LoggingOptions.Complete()
 }
 
 // Validate checks the Options for invalid or conflicting values.
@@ -147,9 +129,9 @@ func (opts *Options) Validate() error {
 			opts.GRPCPort, opts.GRPCHealthPort, opts.MetricsPort)
 	}
 
-	// Validate log verbosity is non-negative.
-	if opts.LogVerbosity < 0 {
-		return fmt.Errorf("invalid value %d for flag %q: must be >= 0", opts.LogVerbosity, "v")
+	// Validate logging options.
+	if err := opts.LoggingOptions.Validate(); err != nil {
+		return err
 	}
 
 	return nil
