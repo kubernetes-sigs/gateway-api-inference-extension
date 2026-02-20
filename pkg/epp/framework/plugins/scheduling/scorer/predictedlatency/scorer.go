@@ -309,20 +309,24 @@ func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleStat
 		return s.scoreWithoutPredictions(ctx, newPredictedLatencyContext(request), endpoints, rng)
 	}
 
-	predictions := predictedLatencyCtx.predictionsForScheduling
-	if len(predictions) != len(endpoints) {
-		logger.V(logutil.DEBUG).Info("PredictedLatency: prediction count mismatch, falling back to composite-only scoring",
-			"predictions", len(predictions), "endpoints", len(endpoints))
+	// Extract predictions for filtered endpoints (supports profile-based filtering)
+	allPreds := make([]endpointPredictionResult, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if pred, ok := predictedLatencyCtx.predictionsForScheduling[endpoint.GetMetadata().NamespacedName.Name]; ok {
+			allPreds = append(allPreds, pred)
+		}
+	}
+
+	if len(allPreds) != len(endpoints) {
+		logger.V(logutil.DEBUG).Info("PredictedLatency: missing predictions for some endpoints, falling back to composite-only scoring",
+			"endpoints", len(endpoints), "predictions", len(allPreds))
 		return s.scoreWithoutPredictions(ctx, predictedLatencyCtx, endpoints, rng)
 	}
+
 	// Initialize scores map with all pods having score 0
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = 0
-	}
-	allPreds := make([]endpointPredictionResult, 0, len(predictions))
-	for _, pred := range predictions {
-		allPreds = append(allPreds, pred)
 	}
 	allPreds, _ = s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", s.config.AffinityGateTauGlobal)
 
