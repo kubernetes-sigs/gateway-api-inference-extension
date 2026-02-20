@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app: sgl-qwen3-32b-instruct
+        inference.networking.k8s.io/engine-type: sglang
     spec:
       containers:
         - name: sglang
