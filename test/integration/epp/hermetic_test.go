@@ -399,7 +399,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					if mode.standalone {
 						h = NewTestHarness(t, ctx, WithStandaloneMode())
 					} else {
-						h = NewTestHarness(t, context.Background()).WithBaseResources()
+						h = NewTestHarness(t, ctx).WithBaseResources()
 					}
 
 					// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.
