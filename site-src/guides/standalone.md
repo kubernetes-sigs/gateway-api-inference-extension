@@ -44,7 +44,7 @@ For the endpoint discovery, you have two options:
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/gpu-deployment.yaml
     ```
 
---8<-- "site-src/_includes/vllm-cpu.md"
+--8<-- "site-src/_includes/model-server-cpu.md"
 
     ```bash
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
