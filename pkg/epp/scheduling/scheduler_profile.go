@@ -139,10 +139,11 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *fwksch
 		metrics.RecordPluginProcessingLatency(filterExtensionPoint, filter.TypedName().Type, filter.TypedName().Name, time.Since(before))
 		logger.V(logutil.DEBUG).Info("Completed running filter plugin successfully", "plugin", filter.TypedName(), "endpoints", filteredEndpoints)
 		if len(filteredEndpoints) == 0 {
+			logger.V(logutil.VERBOSE).Info("Filter eliminated all endpoints", "plugin", filter.TypedName(), "endpointsBefore", len(endpoints))
 			break
 		}
 	}
-	logger.V(logutil.VERBOSE).Info("Completed running filter plugins successfully")
+	logger.V(logutil.VERBOSE).Info("Completed running filter plugins", "remainingEndpoints", len(filteredEndpoints))
 
 	return filteredEndpoints
 }
