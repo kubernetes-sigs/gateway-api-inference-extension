@@ -365,8 +365,17 @@ class LatencyPredictor:
             .clip(upper=self.prefix_buckets - 1)
         )
 
-            # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
-            df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
+            # Only create categorical dtype when NOT in TreeLite mode
+            # TreeLite mode requires enable_categorical=False, which rejects categorical dtype
+            if not settings.USE_TREELITE:
+                df['prefill_score_bucket'] = pd.Categorical(
+                    df['prefill_score_bucket'].astype(int),
+                    categories=[0, 1, 2, 3],
+                    ordered=True
+                )
+            else:
+                # TreeLite mode: keep as int32 (XGBoost will treat as continuous feature)
+                df['prefill_score_bucket'] = df['prefill_score_bucket'].astype('int32')
 
 
             # Return TTFT features with interaction and pod_type
@@ -488,7 +497,25 @@ class LatencyPredictor:
                         else:
                             features_stump["prefill_score_bucket"] = features_stump["prefill_score_bucket"].astype("int32")
 
-                        
+                        # Choose objective based on TreeLite mode
+                        if settings.USE_TREELITE:
+                            # TreeLite mode: Use standard regression + conformal prediction for quantiles
+                            # (TreeLite compilation works best with simple objectives)
+                            objective = "reg:squarederror"
+                            model_params = {}
+                        else:
+                            # Non-TreeLite mode: Use native quantile regression (more accurate)
+                            objective = "reg:quantileerror"
+                            model_params = {"quantile_alpha": self.quantile}
+                            logging.info(f"Training XGBoost TTFT with native quantile regression (alpha={self.quantile:.2f})")
+
+                        # TreeLite 4.6.1 does NOT support XGBoost categorical features (categorical encoder not supported)
+                        # Disable categorical features when TreeLite mode is enabled
+                        enable_categorical = not settings.USE_TREELITE
+
+                        # Use 'hist' tree method for best performance
+                        tree_method = 'hist'
+
                         model = xgb.XGBRegressor(
                             n_estimators=200,
                             max_depth=6,
@@ -499,13 +526,13 @@ class LatencyPredictor:
                             gamma=0.2,
                             reg_alpha=0.01,
                             reg_lambda=0.1,
-                            objective="reg:quantileerror",
-                            quantile_alpha=self.quantile,
-                            tree_method="hist",
+                            objective=objective,
+                            tree_method=tree_method,
                             n_jobs=-1,
                             random_state=42,
                             verbosity=1,
-                            enable_categorical=True,
+                            enable_categorical=enable_categorical,
+                            **model_params
                             )
                         model.fit(features, target, sample_weight=sample_weight)    
                         return model
@@ -518,38 +545,70 @@ class LatencyPredictor:
                             features = features[tpot_order]
                         except Exception as _:
                             raise ValueError(f"TPOT features must be exactly {tpot_order}; got {list(features.columns)}")
-                    mono_str = "(1,1,1,1,1,0)"  # pod_type_cat has no monotone constraint
+                    mono_str = "(1,1,1,1,1)"
                 else:
-                    mono_str = "(0,0,0,0,0,0)"  # default (6 features with pod_type_cat)
+                    mono_str = "(0,0,0,0,0)"  # default
+
+                # Choose objective based on TreeLite mode
+                if settings.USE_TREELITE:
+                    # TreeLite mode: Use standard regression + conformal prediction for quantiles
+                    # (TreeLite compilation works best with simple objectives)
+                    objective = "reg:squarederror"
+                    model_params = {}
+                else:
+                    # Non-TreeLite mode: Use native quantile regression (more accurate)
+                    objective = "reg:quantileerror"
+                    model_params = {"quantile_alpha": self.quantile}
+                    logging.info(f"Training XGBoost TPOT with native quantile regression (alpha={self.quantile:.2f})")
+
+                # TreeLite 4.6.1 does NOT support XGBoost categorical features (categorical encoder not supported)
+                # Disable categorical features when TreeLite mode is enabled
+                # (TPOT doesn't use categorical features anyway, but keep logic consistent)
+                enable_categorical = not settings.USE_TREELITE
+
+                # Use 'hist' tree method for best performance
+                tree_method = 'hist'
+
                 model = xgb.XGBRegressor(
                 n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
                 max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
                 learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
                 subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
                 colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
-        
+
                 # Key parameters for accurate quantile regression:
                 min_child_weight=5,          # Low value allows fine-grained splits near p90 boundary (prevents overprediction)
                 gamma=0.2,                  # Low gamma allows splits with small loss reduction (critical for quantile accuracy)
-                #monotone_constraints=mono_str,  # Enforce monotonicity based on feature impact on latency   
+                #monotone_constraints=mono_str,  # Enforce monotonicity based on feature impact on latency
                 # Regularization to prevent overfitting:
                 reg_alpha=0.01,              # L1 regularization (Lasso) - encourages sparsity
                 reg_lambda=0.1,              # L2 regularization (Ridge) - prevents large coefficients
-        
+
                 # Quantile regression configuration:
-                objective="reg:quantileerror",    # Quantile loss (pinball loss) for quantile regression
-                quantile_alpha=self.quantile,     # Target quantile (e.g., 0.9 for p90)
-        
+                objective=objective,         # TreeLite: reg:squarederror, Non-TreeLite: reg:quantileerror
+
                 # Performance optimization:
-                tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
+                tree_method=tree_method,     # Efficient histogram algorithm; optimal for large datasets
                 n_jobs=-1,                   # Utilize all CPU cores for parallel training
                 random_state=42,             # Ensures reproducible results
                 verbosity=1,
-                enable_categorical=True       # Enable categorical feature support   
+                enable_categorical=enable_categorical,  # TreeLite mode: False, otherwise: True
+                **model_params
     )
                 model.fit(features, target, sample_weight=sample_weight)
                 return model
             elif self.model_type == ModelType.LIGHTGBM:  # LightGBM with quantile regression
+                # Choose objective based on TreeLite mode
+                if settings.USE_TREELITE:
+                    # Standard regression for TreeLite mode (conformal prediction converts to quantiles)
+                    objective = "regression"
+                    model_params = {}
+                else:
+                    # Native quantile regression (more accurate)
+                    objective = "quantile"
+                    model_params = {"alpha": self.quantile}
+                    logging.info(f"Training LightGBM with quantile objective (alpha={self.quantile:.2f})")
+
                 model = lgb.LGBMRegressor(
                 n_estimators=200,           # Number of trees
                 max_depth=6,                # Maximum tree depth
@@ -559,12 +618,12 @@ class LatencyPredictor:
                 min_child_samples=20,       # Minimum samples in leaf
                 reg_alpha=0.1,              # L1 regularization
                 reg_lambda=0.1,             # L2 regularization
-                objective="quantile",       # Quantile regression objective
-                alpha=self.quantile,        # Quantile level (e.g., 0.9 for p90)
+                objective=objective,        # TreeLite: regression, Non-TreeLite: quantile
                 n_jobs=-1,                  # Use all cores
                 random_state=42,            # Reproducibility
                 verbosity=-1,               # Suppress warnings
-                force_col_wise=True         # Better for small datasets
+                force_col_wise=True,        # Better for small datasets
+                **model_params
             )
                 model.fit(features, target, sample_weight=sample_weight, categorical_feature=['prefill_score_bucket'] if model_name == "ttft" else None)
                 return model
