@@ -31,6 +31,9 @@ const (
 	fakeSource = "fake-data-source"
 )
 
+var _ fwkdl.DataSource = (*FakeDataSource)(nil)
+var _ fwkdl.PollingDataSource = (*FakeDataSource)(nil)
+
 type FakeDataSource struct {
 	typedName *plugin.TypedName
 	callCount int64
@@ -59,7 +62,7 @@ func (fds *FakeDataSource) ExtractorType() reflect.Type {
 func (fds *FakeDataSource) Extractors() []string                 { return []string{} }
 func (fds *FakeDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
 
-func (fds *FakeDataSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
+func (fds *FakeDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
 	atomic.AddInt64(&fds.callCount, 1)
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
 		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {

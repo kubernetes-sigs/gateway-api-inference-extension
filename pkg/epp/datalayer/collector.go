@@ -19,6 +19,7 @@ package datalayer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -83,8 +84,31 @@ func NewCollector() *Collector {
 }
 
 // Start initiates data source collection for the endpoint.
+// All sources must implement PollingDataSource. Non-polling sources will result in an error.
 // TODO: pass PoolInfo for backward compatibility
 func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, sources []fwkdl.DataSource) error {
+	// Validate sources slice is not empty
+	if len(sources) == 0 {
+		return errors.New("cannot start collector with empty sources")
+	}
+
+	// Validate that all sources implement PollingDataSource
+	var invalidSources []string
+	var pollers []fwkdl.PollingDataSource
+	for _, src := range sources {
+		if src == nil {
+			return errors.New("cannot add nil data source")
+		}
+		if ps, ok := src.(fwkdl.PollingDataSource); ok {
+			pollers = append(pollers, ps)
+		} else {
+			invalidSources = append(invalidSources, src.TypedName().String())
+		}
+	}
+	if len(invalidSources) > 0 {
+		return fmt.Errorf("non-polling data sources cannot be used with Collector: %v", invalidSources)
+	}
+
 	var ready chan struct{}
 	started := false
 
@@ -94,7 +118,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 		started = true
 		ready = make(chan struct{})
 
-		go func(endpoint fwkdl.Endpoint, sources []fwkdl.DataSource) {
+		go func(endpoint fwkdl.Endpoint, sources []fwkdl.PollingDataSource) {
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {
@@ -112,12 +136,12 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 					// TODO: do not collect if there's no pool specified?
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
-						_ = src.Collect(ctx, endpoint) // TODO: track errors per collector?
-						cancel()                       // release the ctx timeout resources
+						_ = src.Poll(ctx, endpoint) // TODO: track errors per collector?
+						cancel()                    // release the ctx timeout resources
 					}
 				}
 			}
-		}(ep, sources)
+		}(ep, pollers)
 	})
 
 	if !started {

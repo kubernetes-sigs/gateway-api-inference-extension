@@ -107,9 +107,9 @@ func (dataSrc *HTTPDataSource) AddExtractor(extractor fwkdl.Extractor) error {
 	return nil
 }
 
-// Collect is triggered by the data layer framework to fetch potentially new
+// Poll is triggered by the data layer framework to fetch potentially new
 // data for an endpoint.
-func (dataSrc *HTTPDataSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
+func (dataSrc *HTTPDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
 	target := dataSrc.getEndpoint(ep.GetMetadata())
 	data, err := dataSrc.client.Get(ctx, target, ep.GetMetadata(), dataSrc.parser)
 
@@ -142,3 +142,4 @@ func (dataSrc *HTTPDataSource) getEndpoint(ep Addressable) *url.URL {
 }
 
 var _ fwkdl.DataSource = (*HTTPDataSource)(nil)
+var _ fwkdl.PollingDataSource = (*HTTPDataSource)(nil)

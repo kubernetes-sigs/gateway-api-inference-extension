@@ -357,9 +357,9 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 		return nil, fmt.Errorf("failed to create data source: %w", err)
 	}
 
-	dataSource, ok := plugin.(fwkdl.DataSource)
+	dataSource, ok := plugin.(fwkdl.PollingDataSource)
 	if !ok {
-		return nil, errors.New("plugin is not a DataSource")
+		return nil, errors.New("plugin is not a PollingDataSource")
 	}
 
 	if err := dataSource.AddExtractor(extractor); err != nil {
@@ -374,7 +374,7 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 	}
 	endpoint := fwkdl.NewEndpoint(metadata, fwkdl.NewMetrics())
 
-	if err := dataSource.Collect(ctx, endpoint); err != nil {
+	if err := dataSource.Poll(ctx, endpoint); err != nil {
 		return endpoint.GetMetrics(), err
 	}
 
