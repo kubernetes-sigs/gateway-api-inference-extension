@@ -173,12 +173,18 @@ func (r *Runner) Run(ctx context.Context) error {
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
 		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
-		bodyToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin("model", "")
+		factory := framework.Registry[plugins.BaseModelToHeaderPluginType]
+		defaultPlugin, err := factory("", nil)
 		if err != nil {
-			setupLog.Error(err, "failed to initlialize 'BodyFieldToHeader' plugin")
+			setupLog.Error(err, "Failed to create plugin", "pluginType", plugins.BaseModelToHeaderPluginType)
 			return err
 		}
-		r.requestPlugins = append(r.requestPlugins, bodyToHeaderPlugin)
+		// Type assert to concrete type to call WithDataStore method.
+		if plugin, ok := defaultPlugin.(*plugins.BaseModelToHeaderPlugin); ok {
+			// Set the DataStore for the BaseModelToHeaderPlugin.
+			plugin.WithDatastore(ds)
+			r.requestPlugins = append(r.requestPlugins, defaultPlugin)
+		}
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
@@ -233,6 +239,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
+	framework.Register(plugins.BaseModelToHeaderPluginType, plugins.BaseModelToHeaderPluginFactory)
 	framework.Register(plugins.BodyFieldToHeaderPluginType, plugins.BodyFieldToHeaderPluginFactory)
 }
 
