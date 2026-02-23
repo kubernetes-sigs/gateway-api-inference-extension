@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -67,11 +68,17 @@ type Scheduler interface {
 	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidatePods []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
 }
 
+// Scheduler defines the interface required by the Director for parser payload.
+type Parser interface {
+	ParseRequest(headers map[string]string, body []byte) (*fwksched.LLMRequestBody, error)
+}
+
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
 func NewDirectorWithConfig(
 	datastore Datastore,
 	scheduler Scheduler,
 	admissionController AdmissionController,
+	parser Parser,
 	podLocator contracts.PodLocator,
 	config *Config,
 ) *Director {
@@ -104,6 +111,7 @@ type Director struct {
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
 	defaultPriority int
+	parser          Parser
 }
 
 // getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
@@ -127,7 +135,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger := log.FromContext(ctx)
 
 	// Parse, mutate, and extract the request body
-	llmRequestBody, err := d.processRequestBody(ctx, reqCtx)
+	llmRequestBody, err := d.processRequestBody(ctx, reqCtx, d.parser)
 	if err != nil {
 		return reqCtx, err
 	}
@@ -188,7 +196,36 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext) (*scheduling.LLMRequestBody, error) {
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser Parser) (*scheduling.LLMRequestBody, error) {
+	if parser != nil {
+		return d.parseWithParser(ctx, reqCtx, parser)
+	}
+	return d.parseLegacy(ctx, reqCtx)
+}
+
+func (d *Director) parseWithParser(ctx context.Context, reqCtx *handlers.RequestContext, parser Parser) (*scheduling.LLMRequestBody, error) {
+	llmRequestBody, err := parser.ParseRequest(reqCtx.Request.Headers, reqCtx.Request.RawBody)
+	if err != nil {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "failed to parse the request"}
+	}
+
+	switch v := llmRequestBody.ParsedBody.(type) {
+	case proto.Message:
+		// Protos are not currently mutated, return as-is.
+		reqCtx.Request.UpdatedBody = reqCtx.Request.RawBody
+		reqCtx.RequestSize = len(reqCtx.Request.UpdatedBody)
+	case map[string]any:
+		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
+	}
+	return llmRequestBody, nil
+}
+
+// parseLegacy handles the original JSON unmarshaling flow.
+func (d *Director) parseLegacy(ctx context.Context, reqCtx *handlers.RequestContext) (*scheduling.LLMRequestBody, error) {
 	bodyMap := make(map[string]any)
 	if err := json.Unmarshal(reqCtx.Request.RawBody, &bodyMap); err != nil {
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body"}
@@ -198,7 +235,11 @@ func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.Requ
 		return nil, err
 	}
 
-	extractedBody, err := requtil.ExtractRequestBody(bodyMap, reqCtx.Request.Headers)
+	jsonBytes, err := json.Marshal(bodyMap)
+	if err != nil {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid request body"}
+	}
+	extractedBody, err := requtil.ExtractRequestBody(jsonBytes, reqCtx.Request.Headers)
 	if err != nil {
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
 	}

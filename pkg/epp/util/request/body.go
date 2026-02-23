@@ -73,12 +73,7 @@ func determineAPITypeFromPath(path string) string {
 }
 
 // ExtractRequestBody extracts the LLMRequestBody from the given request body map using path-based detection.
-func ExtractRequestBody(rawBody map[string]any, headers map[string]string) (*types.LLMRequestBody, error) {
-	jsonBytes, err := json.Marshal(rawBody)
-	if err != nil {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid request body"}
-	}
-
+func ExtractRequestBody(rawBody []byte, headers map[string]string) (*types.LLMRequestBody, error) {
 	// Determine API type from request path
 	path := getRequestPath(headers)
 	apiType := determineAPITypeFromPath(path)
@@ -86,21 +81,21 @@ func ExtractRequestBody(rawBody map[string]any, headers map[string]string) (*typ
 	switch apiType {
 	case conversationsAPI:
 		var conversations types.ConversationsRequest
-		if err = json.Unmarshal(jsonBytes, &conversations); err == nil && len(conversations.Items) > 0 {
+		if err := json.Unmarshal(rawBody, &conversations); err == nil && len(conversations.Items) > 0 {
 			return &types.LLMRequestBody{Conversations: &conversations}, nil
 		}
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid conversations request: must have items field"}
 
 	case responsesAPI:
 		var responses types.ResponsesRequest
-		if err = json.Unmarshal(jsonBytes, &responses); err == nil && responses.Input != nil {
+		if err := json.Unmarshal(rawBody, &responses); err == nil && responses.Input != nil {
 			return &types.LLMRequestBody{Responses: &responses}, nil
 		}
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid responses request: must have input field"}
 
 	case chatCompletionsAPI:
 		var chatCompletions types.ChatCompletionsRequest
-		if err = json.Unmarshal(jsonBytes, &chatCompletions); err == nil {
+		if err := json.Unmarshal(rawBody, &chatCompletions); err == nil {
 			if err = validateChatCompletionsMessages(chatCompletions.Messages); err == nil {
 				return &types.LLMRequestBody{ChatCompletions: &chatCompletions}, nil
 			}
@@ -109,7 +104,7 @@ func ExtractRequestBody(rawBody map[string]any, headers map[string]string) (*typ
 
 	case completionsAPI:
 		var completions types.CompletionsRequest
-		if err = json.Unmarshal(jsonBytes, &completions); err == nil && completions.Prompt != "" {
+		if err := json.Unmarshal(rawBody, &completions); err == nil && completions.Prompt != "" {
 			return &types.LLMRequestBody{Completions: &completions}, nil
 		}
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "invalid completions request: must have prompt field"}

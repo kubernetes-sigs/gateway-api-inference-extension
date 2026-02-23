@@ -59,10 +59,12 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkpp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
+	parser "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/payloadprocess"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
@@ -351,7 +353,11 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, locator)
 	}
 
-	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, locator, r.requestControlConfig)
+	var payloadParser fwkpp.Parser
+	if r.featureGates[fwkpp.PluggableParserFeatureGate] {
+		payloadParser = parser.NewParserFromConfig(true, opts.CustomParser)
+	}
+	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, payloadParser, locator, r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -486,6 +492,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	loader.RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
 	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
+	loader.RegisterFeatureGate(fwkpp.PluggableParserFeatureGate)
 
 	r.registerInTreePlugins()
 
