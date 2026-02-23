@@ -178,13 +178,13 @@ func processFirstTokenForLatencyPrediction(
 			recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, prefillMetrics, prefillTargetMetadata, now, prefillPrefixCacheScore)
 		}
 	} else {
-		m, err := getLatestMetricsForProfile(predictedLatencyCtx, predictedLatencyCtx.schedulingResult.PrimaryProfileName)
+		// Monolithic mode: record TTFT for the single pod
+		m, err := getLatestMetricsForProfile(predictedLatencyCtx, "")
 		if err != nil {
-			logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
+			logger.V(logutil.DEBUG).Info("Skipping TTFT training due to missing metrics or schedulingResult", "error", err)
 			return
 		}
 		targetEndpointMetadata := predictedLatencyCtx.targetMetadata
-		// Monolithic mode: record TTFT for the single pod
 		prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
 		logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "predicted_ttft_ms", predictedLatencyCtx.predictedTTFT, "prefixCacheScore", prefixCacheScore)
 		recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
@@ -289,9 +289,9 @@ func processTokenForLatencyPrediction(
 			"predicted_tpot_ms", predictedLatencyCtx.avgPredictedTPOT)
 	}
 
-	m, err := getLatestMetricsForProfile(predictedLatencyCtx, predictedLatencyCtx.schedulingResult.PrimaryProfileName)
+	m, err := getLatestMetricsForProfile(predictedLatencyCtx, "")
 	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
+		logger.V(logutil.DEBUG).Info("Skipping TPOT training due to missing metrics or schedulingResult",
 			"error", err)
 		return
 	}
