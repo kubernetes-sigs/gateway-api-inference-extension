@@ -77,6 +77,25 @@ schedulingProfiles:
       - pluginRef: kv-cache-utilization-scorer
       - pluginRef: prefix-cache-scorer
       - pluginRef: lora-affinity-scorer
+featureGates:
+`
+	testConifgWithPluggableParserEnabled = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: prefix-cache-scorer
+  - type: lora-affinity-scorer
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: queue-scorer
+      - pluginRef: kv-cache-utilization-scorer
+      - pluginRef: prefix-cache-scorer
+      - pluginRef: lora-affinity-scorer
+featureGates:
+  - pluggableParser
 `
 )
 
@@ -84,6 +103,8 @@ schedulingProfiles:
 type HarnessConfig struct {
 	// StandaloneMode indicates if the EPP should run without watching Gateway API CRDs.
 	StandaloneMode bool
+	CustomParser   string
+	ConfigOverride string
 }
 
 // HarnessOption is a functional option for configuring the TestHarness.
@@ -94,6 +115,13 @@ type HarnessOption func(*HarnessConfig)
 func WithStandaloneMode() HarnessOption {
 	return func(c *HarnessConfig) {
 		c.StandaloneMode = true
+	}
+}
+
+func WithCustomParser(customParser string, flagEnabled bool) HarnessOption {
+	return func(c *HarnessConfig) {
+		c.CustomParser = customParser
+		c.ConfigOverride = testConifgWithPluggableParserEnabled
 	}
 }
 
@@ -138,6 +166,7 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		// Only standalone EPP need to set the EndpointSelector.
 		eppOptions.EndpointSelector = "app=" + testPoolName
 	}
+	eppOptions.CustomParser = config.CustomParser
 
 	fakePmc := &backendmetrics.FakePodMetricsClient{}
 	mgr, dataStore, err := eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc)
