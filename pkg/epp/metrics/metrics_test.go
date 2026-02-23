@@ -34,21 +34,21 @@ import (
 )
 
 const (
-	RequestTotalMetric                 = InferenceObjectiveComponent + "_request_total"
-	RequestErrorTotalMetric            = InferenceObjectiveComponent + "_request_error_total"
-	RequestLatenciesMetric             = InferenceObjectiveComponent + "_request_duration_seconds"
-	RequestSizesMetric                 = InferenceObjectiveComponent + "_request_sizes"
-	ResponseSizesMetric                = InferenceObjectiveComponent + "_response_sizes"
-	InputTokensMetric                  = InferenceObjectiveComponent + "_input_tokens"
-	OutputTokensMetric                 = InferenceObjectiveComponent + "_output_tokens"
-	NormalizedTimePerOutputTokenMetric = InferenceObjectiveComponent + "_normalized_time_per_output_token_seconds"
-	RunningRequestsMetric              = InferenceObjectiveComponent + "_running_requests"
-	PromptCachedTokensMetric           = InferenceObjectiveComponent + "_prompt_cached_tokens"
-	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
-	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
-	PerPodQueueSizeMetrics             = InferencePoolComponent + "_per_pod_queue_size"
-	RequestTTFTSecondsMetric           = InferenceObjectiveComponent + "_request_ttft_seconds"
-	RequestTPOTSecondsMetric           = InferenceObjectiveComponent + "_request_tpot_seconds"
+	RequestTotalMetric                 = inferenceObjectiveComponent + "_request_total"
+	RequestErrorTotalMetric            = inferenceObjectiveComponent + "_request_error_total"
+	RequestLatenciesMetric             = inferenceObjectiveComponent + "_request_duration_seconds"
+	RequestSizesMetric                 = inferenceObjectiveComponent + "_request_sizes"
+	ResponseSizesMetric                = inferenceObjectiveComponent + "_response_sizes"
+	InputTokensMetric                  = inferenceObjectiveComponent + "_input_tokens"
+	OutputTokensMetric                 = inferenceObjectiveComponent + "_output_tokens"
+	NormalizedTimePerOutputTokenMetric = inferenceObjectiveComponent + "_normalized_time_per_output_token_seconds"
+	RunningRequestsMetric              = inferenceObjectiveComponent + "_running_requests"
+	PromptCachedTokensMetric           = inferenceObjectiveComponent + "_prompt_cached_tokens"
+	KVCacheAvgUsageMetric              = inferencePoolComponent + "_average_kv_cache_utilization"
+	QueueAvgSizeMetric                 = inferencePoolComponent + "_average_queue_size"
+	PerPodQueueSizeMetrics             = inferencePoolComponent + "_per_pod_queue_size"
+	RequestTTFTSecondsMetric           = inferenceObjectiveComponent + "_request_ttft_seconds"
+	RequestTPOTSecondsMetric           = inferenceObjectiveComponent + "_request_tpot_seconds"
 )
 
 func TestMain(m *testing.M) {
@@ -845,9 +845,9 @@ func TestSchedulerAttemptsTotal(t *testing.T) {
 func TestPrefixCacheMetrics(t *testing.T) {
 	Reset()
 	const (
-		PrefixCacheSizeMetric      = InferenceExtension + "_prefix_indexer_size"
-		PrefixCacheHitRatioMetric  = InferenceExtension + "_prefix_indexer_hit_ratio"
-		PrefixCacheHitLengthMetric = InferenceExtension + "_prefix_indexer_hit_bytes"
+		PrefixCacheSizeMetric      = inferenceExtension + "_prefix_indexer_size"
+		PrefixCacheHitRatioMetric  = inferenceExtension + "_prefix_indexer_hit_ratio"
+		PrefixCacheHitLengthMetric = inferenceExtension + "_prefix_indexer_hit_bytes"
 	)
 
 	type cacheMatchRecord struct {
