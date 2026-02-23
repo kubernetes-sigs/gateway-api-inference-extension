@@ -34,21 +34,17 @@ import (
 )
 
 const (
-	RequestTotalMetric                 = inferenceObjectiveComponent + "_request_total"
-	RequestErrorTotalMetric            = inferenceObjectiveComponent + "_request_error_total"
-	RequestLatenciesMetric             = inferenceObjectiveComponent + "_request_duration_seconds"
-	RequestSizesMetric                 = inferenceObjectiveComponent + "_request_sizes"
-	ResponseSizesMetric                = inferenceObjectiveComponent + "_response_sizes"
-	InputTokensMetric                  = inferenceObjectiveComponent + "_input_tokens"
-	OutputTokensMetric                 = inferenceObjectiveComponent + "_output_tokens"
-	NormalizedTimePerOutputTokenMetric = inferenceObjectiveComponent + "_normalized_time_per_output_token_seconds"
-	RunningRequestsMetric              = inferenceObjectiveComponent + "_running_requests"
-	PromptCachedTokensMetric           = inferenceObjectiveComponent + "_prompt_cached_tokens"
-	KVCacheAvgUsageMetric              = inferencePoolComponent + "_average_kv_cache_utilization"
-	QueueAvgSizeMetric                 = inferencePoolComponent + "_average_queue_size"
-	PerPodQueueSizeMetrics             = inferencePoolComponent + "_per_pod_queue_size"
-	RequestTTFTSecondsMetric           = inferenceObjectiveComponent + "_request_ttft_seconds"
-	RequestTPOTSecondsMetric           = inferenceObjectiveComponent + "_request_tpot_seconds"
+	requestTotalMetric                 = inferenceObjectiveComponent + "_request_total"
+	requestErrorTotalMetric            = inferenceObjectiveComponent + "_request_error_total"
+	requestLatenciesMetric             = inferenceObjectiveComponent + "_request_duration_seconds"
+	requestSizesMetric                 = inferenceObjectiveComponent + "_request_sizes"
+	responseSizesMetric                = inferenceObjectiveComponent + "_response_sizes"
+	inputTokensMetric                  = inferenceObjectiveComponent + "_input_tokens"
+	outputTokensMetric                 = inferenceObjectiveComponent + "_output_tokens"
+	normalizedTimePerOutputTokenMetric = inferenceObjectiveComponent + "_normalized_time_per_output_token_seconds"
+	runningRequestsMetric              = inferenceObjectiveComponent + "_running_requests"
+	kvCacheAvgUsageMetric              = inferencePoolComponent + "_average_kv_cache_utilization"
+	queueAvgSizeMetric                 = inferencePoolComponent + "_average_queue_size"
 )
 
 func TestMain(m *testing.M) {
@@ -107,7 +103,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestTotal, RequestTotalMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestTotal, requestTotalMetric); err != nil {
 				t.Error(err)
 			}
 			wantRequestSizes, err := os.Open("testdata/request_sizes_metric")
@@ -119,7 +115,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestSizes, RequestSizesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestSizes, requestSizesMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -179,7 +175,7 @@ func TestRecordRequestErrorCounter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestErrorCounter, RequestErrorTotalMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestErrorCounter, requestErrorTotalMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -261,7 +257,7 @@ func TestRecordRequestLatencies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestLatencies, RequestLatenciesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestLatencies, requestLatenciesMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -362,7 +358,7 @@ func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantLatencyPerToken, NormalizedTimePerOutputTokenMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantLatencyPerToken, normalizedTimePerOutputTokenMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -436,7 +432,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantResponseSize, ResponseSizesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantResponseSize, responseSizesMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -449,7 +445,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantInputToken, InputTokensMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantInputToken, inputTokensMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -462,7 +458,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantOutputToken, OutputTokensMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantOutputToken, outputTokensMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -522,7 +518,7 @@ func TestRunningRequestsMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRunningRequests, RunningRequestsMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRunningRequests, runningRequestsMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -558,7 +554,7 @@ func TestInferencePoolMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantKVCache, KVCacheAvgUsageMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantKVCache, kvCacheAvgUsageMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -571,7 +567,7 @@ func TestInferencePoolMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantQueueSize, QueueAvgSizeMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantQueueSize, queueAvgSizeMetric); err != nil {
 				t.Error(err)
 			}
 		})
