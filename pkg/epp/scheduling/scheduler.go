@@ -57,7 +57,7 @@ func (s *Scheduler) Schedule(ctx context.Context, request *framework.LLMRequest,
 	scheduleStart := time.Now()
 	defer func() {
 		metrics.RecordSchedulerE2ELatency(time.Since(scheduleStart))
-		metrics.RecordSchedulerAttempt(err)
+		metrics.RecordSchedulerAttempt(err, result)
 	}()
 
 	profileRunResults := map[string]*framework.ProfileRunResult{}
