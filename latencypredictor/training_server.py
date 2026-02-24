@@ -59,6 +59,11 @@ class ModelType(str, Enum):
     LIGHTGBM = "lightgbm"
 
 
+class ObjectiveType(str, Enum):
+    QUANTILE = "quantile"
+    MEAN = "mean"
+
+
 class RandomDropDeque(deque):
     def __init__(self, maxlen):
         super().__init__()
@@ -105,7 +110,9 @@ class Settings:
     MAX_TEST_DATA_SIZE: int = int(os.getenv("LATENCY_MAX_TEST_DATA_SIZE", "1000"))  # Max test samples to keep
     MODEL_TYPE: str = os.getenv("LATENCY_MODEL_TYPE", "xgboost")  # Default to XGBoost
     QUANTILE_ALPHA: float = float(os.getenv("LATENCY_QUANTILE_ALPHA", "0.9"))  # p90 quantile
+    OBJECTIVE_TYPE: ObjectiveType = ObjectiveType(os.getenv("LATENCY_OBJECTIVE_TYPE", "quantile"))
     SAMPLE_WEIGHTING_FOR_PREFIX_CACHE: bool = os.getenv("LATENCY_SAMPLE_WEIGHTING_FOR_PREFIX_CACHE", "false").lower() == "true"
+
 
 settings = Settings()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -224,7 +231,8 @@ class LatencyPredictor:
 
         self.model_type = ModelType(model_type)
         self.quantile = settings.QUANTILE_ALPHA
-        logging.info(f"Initialized LatencyPredictor with model type: {self.model_type}, quantile: {self.quantile}")
+        self.objective_type = settings.OBJECTIVE_TYPE
+        logging.info(f"Initialized LatencyPredictor with model type: {self.model_type}, objective: {self.objective_type}, quantile: {self.quantile}")
 
         # Data buckets for sampling
         self.cache_buckets = int(1.0 / 0.05)  # 20 buckets for cache percentage (0-100% in 5% increments)
@@ -258,11 +266,17 @@ class LatencyPredictor:
         self.ttft_violation_rates = deque(maxlen=5)
         self.tpot_violation_rates = deque(maxlen=5)
 
+        # Mean-objective metric tracking (store last 5 scores)
+        self.ttft_mae_scores = deque(maxlen=5)
+        self.tpot_mae_scores = deque(maxlen=5)
+        self.ttft_rmse_scores = deque(maxlen=5)
+        self.tpot_rmse_scores = deque(maxlen=5)
+
         self.ttft_model = None
         self.tpot_model = None
         self.ttft_scaler = None
         self.tpot_scaler = None
-    
+
         self.ttft_coefficients = None  # Will store descaled coefficients as dict
         self.tpot_coefficients = None  # Will store descaled coefficients as dict
 
@@ -355,6 +369,9 @@ class LatencyPredictor:
             # If pod_type column doesn't exist, create it as empty (monolithic)
             df['pod_type_cat'] = pd.Categorical([''] * len(df), categories=['', 'prefill', 'decode'], ordered=False)
 
+        # Binary feature: gives the tree a clean signal to partition idle vs queued
+        df['is_queued'] = (df['num_request_waiting'] > 0).astype(int)
+
         if model_type == "ttft":
             # Create interaction: prefix score * input length
             # This captures that prefix caching benefit scales with input size
@@ -371,6 +388,7 @@ class LatencyPredictor:
 
             # Return TTFT features with interaction and pod_type
             feature_cols = [
+            'is_queued',
             'kv_cache_percentage',
             'input_token_length',
             'num_request_waiting',
@@ -384,6 +402,7 @@ class LatencyPredictor:
         else:  # tpot
             # TPOT doesn't use prefix_cache_score, so no interaction needed
             feature_cols = [
+                'is_queued',
                 'kv_cache_percentage',
                 'input_token_length',
                 'num_request_waiting',
@@ -422,7 +441,7 @@ class LatencyPredictor:
     
 
 
-    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series, model_name: str = None, sample_weight: np.ndarray = None) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
+    def _train_model_with_scaling(self, features: pd.DataFrame, target: pd.Series, model_name: str = None, sample_weight: np.ndarray = None, drop_queue_features: bool = False) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
 
         try:
             if len(features) == 0 or len(target) == 0:
@@ -460,10 +479,16 @@ class LatencyPredictor:
             elif self.model_type == ModelType.XGBOOST:  # XGBoost with quantile regression
                 if model_name == "ttft":
                      # enforce your TTFT feature order (including pod_type_cat)
-                        ttft_order = [
-                            "kv_cache_percentage", "input_token_length", "num_request_waiting",
-                            "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"
-                        ]
+                        if drop_queue_features:
+                            ttft_order = [
+                                "kv_cache_percentage", "input_token_length",
+                                "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"
+                            ]
+                        else:
+                            ttft_order = [
+                                "is_queued", "kv_cache_percentage", "input_token_length", "num_request_waiting",
+                                "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"
+                            ]
                         if list(features.columns) != ttft_order:
                             try:
                                 features = features[ttft_order]
@@ -489,7 +514,7 @@ class LatencyPredictor:
                             features_stump["prefill_score_bucket"] = features_stump["prefill_score_bucket"].astype("int32")
 
                         
-                        model = xgb.XGBRegressor(
+                        xgb_params = dict(
                             n_estimators=200,
                             max_depth=6,
                             learning_rate=0.05,
@@ -499,73 +524,77 @@ class LatencyPredictor:
                             gamma=0.2,
                             reg_alpha=0.01,
                             reg_lambda=0.1,
-                            objective="reg:quantileerror",
-                            quantile_alpha=self.quantile,
                             tree_method="hist",
                             n_jobs=-1,
                             random_state=42,
                             verbosity=1,
                             enable_categorical=True,
-                            )
-                        model.fit(features, target, sample_weight=sample_weight)    
+                        )
+                        if self.objective_type == ObjectiveType.MEAN:
+                            xgb_params["objective"] = "reg:squarederror"
+                        else:
+                            xgb_params["objective"] = "reg:quantileerror"
+                            xgb_params["quantile_alpha"] = self.quantile
+                        model = xgb.XGBRegressor(**xgb_params)
+                        model.fit(features, target, sample_weight=sample_weight)
                         return model
 
 
                 elif model_name == "tpot":
-                    tpot_order = ["kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated","pod_type_cat"]
+                    if drop_queue_features:
+                        tpot_order = ["kv_cache_percentage","input_token_length","num_request_running","num_tokens_generated","pod_type_cat"]
+                    else:
+                        tpot_order = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated","pod_type_cat"]
                     if list(features.columns) != tpot_order:
                         try:
                             features = features[tpot_order]
                         except Exception as _:
                             raise ValueError(f"TPOT features must be exactly {tpot_order}; got {list(features.columns)}")
-                    mono_str = "(1,1,1,1,1,0)"  # pod_type_cat has no monotone constraint
+                xgb_params = dict(
+                    n_estimators=200,
+                    max_depth=6,
+                    learning_rate=0.05,
+                    subsample=0.8,
+                    colsample_bytree=0.8,
+                    min_child_weight=5,
+                    gamma=0.2,
+                    reg_alpha=0.01,
+                    reg_lambda=0.1,
+                    tree_method='hist',
+                    n_jobs=-1,
+                    random_state=42,
+                    verbosity=1,
+                    enable_categorical=True,
+                )
+                if self.objective_type == ObjectiveType.MEAN:
+                    xgb_params["objective"] = "reg:squarederror"
                 else:
-                    mono_str = "(0,0,0,0,0,0)"  # default (6 features with pod_type_cat)
-                model = xgb.XGBRegressor(
-                n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
-                max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
-                learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
-                subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
-                colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
-        
-                # Key parameters for accurate quantile regression:
-                min_child_weight=5,          # Low value allows fine-grained splits near p90 boundary (prevents overprediction)
-                gamma=0.2,                  # Low gamma allows splits with small loss reduction (critical for quantile accuracy)
-                #monotone_constraints=mono_str,  # Enforce monotonicity based on feature impact on latency   
-                # Regularization to prevent overfitting:
-                reg_alpha=0.01,              # L1 regularization (Lasso) - encourages sparsity
-                reg_lambda=0.1,              # L2 regularization (Ridge) - prevents large coefficients
-        
-                # Quantile regression configuration:
-                objective="reg:quantileerror",    # Quantile loss (pinball loss) for quantile regression
-                quantile_alpha=self.quantile,     # Target quantile (e.g., 0.9 for p90)
-        
-                # Performance optimization:
-                tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
-                n_jobs=-1,                   # Utilize all CPU cores for parallel training
-                random_state=42,             # Ensures reproducible results
-                verbosity=1,
-                enable_categorical=True       # Enable categorical feature support   
-    )
+                    xgb_params["objective"] = "reg:quantileerror"
+                    xgb_params["quantile_alpha"] = self.quantile
+                model = xgb.XGBRegressor(**xgb_params)
                 model.fit(features, target, sample_weight=sample_weight)
                 return model
-            elif self.model_type == ModelType.LIGHTGBM:  # LightGBM with quantile regression
-                model = lgb.LGBMRegressor(
-                n_estimators=200,           # Number of trees
-                max_depth=6,                # Maximum tree depth
-                learning_rate=0.05,         # Learning rate
-                subsample=0.8,              # Row sampling ratio
-                colsample_bytree=0.8,       # Column sampling ratio
-                min_child_samples=20,       # Minimum samples in leaf
-                reg_alpha=0.1,              # L1 regularization
-                reg_lambda=0.1,             # L2 regularization
-                objective="quantile",       # Quantile regression objective
-                alpha=self.quantile,        # Quantile level (e.g., 0.9 for p90)
-                n_jobs=-1,                  # Use all cores
-                random_state=42,            # Reproducibility
-                verbosity=-1,               # Suppress warnings
-                force_col_wise=True         # Better for small datasets
-            )
+            elif self.model_type == ModelType.LIGHTGBM:
+                lgb_params = dict(
+                    n_estimators=200,
+                    max_depth=6,
+                    learning_rate=0.05,
+                    subsample=0.8,
+                    colsample_bytree=0.8,
+                    min_child_samples=20,
+                    reg_alpha=0.1,
+                    reg_lambda=0.1,
+                    n_jobs=-1,
+                    random_state=42,
+                    verbosity=-1,
+                    force_col_wise=True,
+                )
+                if self.objective_type == ObjectiveType.MEAN:
+                    lgb_params["objective"] = "regression"
+                else:
+                    lgb_params["objective"] = "quantile"
+                    lgb_params["alpha"] = self.quantile
+                model = lgb.LGBMRegressor(**lgb_params)
                 model.fit(features, target, sample_weight=sample_weight, categorical_feature=['prefill_score_bucket'] if model_name == "ttft" else None)
                 return model
                 
@@ -573,8 +602,13 @@ class LatencyPredictor:
             logging.error(f"Error in _train_model_with_scaling: {e}", exc_info=True)
             raise
         
-    def _calculate_quantile_metrics_on_test(self, model, scaler, test_data, model_name, target_col):
-        """Calculate quantile-specific metrics on test data"""
+    def _calculate_metrics_on_test(self, model, scaler, test_data, model_name, target_col):
+        """Calculate metrics on test data.
+
+        For quantile objective: returns (quantile_loss, coverage, violation_rate).
+        For mean objective: returns (mae, rmse, None).
+        Returns (None, None, None) on failure.
+        """
         try:
             df_raw = pd.DataFrame(test_data).dropna()
             df_raw = df_raw[df_raw[target_col] > 0]
@@ -582,55 +616,51 @@ class LatencyPredictor:
             if len(df_raw) < 2:
                 return None, None, None
 
-        # Apply feature engineering to create interaction terms and categorical features
             df_features = self._prepare_features_with_interaction(df_raw.copy(), model_type=model_name)
 
-        # Get appropriate feature columns based on model type and name
             if model_name == "ttft":
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
                     feature_cols = [
-                        'kv_cache_percentage','input_token_length','num_request_waiting',
+                        'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
                         'num_request_running','prefix_cache_score','effective_input_tokens','pod_type_cat'
                     ]
-                else:  # XGBoost or LightGBM
+                else:
                     feature_cols = [
-                        'kv_cache_percentage','input_token_length','num_request_waiting',
+                        'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
                         'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket','pod_type_cat'
                     ]
-            else:  # tpot
-                feature_cols = ['kv_cache_percentage', 'input_token_length',
+            else:
+                feature_cols = ['is_queued','kv_cache_percentage', 'input_token_length',
                                'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'pod_type_cat']
 
             X = df_features[feature_cols]
 
-            # For Bayesian Ridge, one-hot encode pod_type_cat before scaling
             if self.model_type == ModelType.BAYESIAN_RIDGE and scaler is not None:
-                # One-hot encode pod_type_cat (Bayesian Ridge can't handle categorical features)
                 if 'pod_type_cat' in X.columns:
                     X = pd.get_dummies(X, columns=['pod_type_cat'], prefix='pod_type', drop_first=False)
                 X = scaler.transform(X)
 
             y_true = df_raw[target_col].values
             y_pred = model.predict(X)
-            
-            # For Bayesian Ridge (which doesn't do true quantile regression), 
-            # we'll estimate the quantile by adding a factor to the mean prediction
+
+            if self.objective_type == ObjectiveType.MEAN:
+                mae = float(np.mean(np.abs(y_true - y_pred)))
+                rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
+                return mae, rmse, None
+
+            # Quantile objective
             if self.model_type == ModelType.BAYESIAN_RIDGE:
-                # Rough approximation: add some multiple of std to get to desired quantile
-                # This is a simplification - in practice you'd want proper quantile regression
                 std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                 _, y_std = model.predict(X, return_std=True)
                 y_pred = y_pred + std_factor * y_std
-            
-            # Calculate quantile-specific metrics
+
             ql = quantile_loss(y_true, y_pred, self.quantile)
             coverage = quantile_coverage(y_true, y_pred, self.quantile)
             violation_rate = quantile_violation_rate(y_true, y_pred, self.quantile)
-            
             return ql, coverage, violation_rate
-            
+
         except Exception as e:
-            logging.error(f"Error calculating quantile metrics: {e}", exc_info=True)
+            logging.error(f"Error calculating metrics: {e}", exc_info=True)
             return None, None, None
 
     def _create_default_model(self, model_type: str) -> Union[Tuple[BayesianRidge, StandardScaler], xgb.XGBRegressor, lgb.LGBMRegressor]:
@@ -687,11 +717,11 @@ class LatencyPredictor:
                 if len(df_ttft) >= settings.MIN_SAMPLES_FOR_RETRAIN:
                     # Updated TTFT features to include prefix_cache_score and pod_type_cat
                     ttft_feature_cols_tree = [
-                    'kv_cache_percentage','input_token_length','num_request_waiting',
+                    'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
                     'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket','pod_type_cat'
                 ]
                     ttft_feature_cols_br = [
-                    'kv_cache_percentage','input_token_length','num_request_waiting',
+                    'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
                     'num_request_running','prefix_cache_score','effective_input_tokens'
                 ]
 
@@ -726,28 +756,30 @@ class LatencyPredictor:
                             new_ttft_model = result
                             new_ttft_scaler = None
 
-                        # Quantile metrics on test set
-                        ql = coverage = violation_rate = None
+                        # Evaluate on test set
+                        m1 = m2 = m3 = None
                         if self.ttft_test_data:
-                            ql, coverage, violation_rate = self._calculate_quantile_metrics_on_test(
+                            m1, m2, m3 = self._calculate_metrics_on_test(
                                 new_ttft_model, new_ttft_scaler,
-                                list(self.ttft_test_data),  # Pass raw data
-                                "ttft",                      # Pass model name instead of feature_cols
-                                'actual_ttft_ms'
-                            )       
+                                list(self.ttft_test_data), "ttft", 'actual_ttft_ms'
+                            )
 
-
-                        
-                        if ql is not None:
-                            self.ttft_quantile_loss_scores.append(ql)
-                            self.ttft_coverage_scores.append(coverage)
-                            self.ttft_violation_rates.append(violation_rate)
-                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. "
-                                       f"Quantile Loss = {ql:.4f}, "
-                                       f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                       f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
+                        if m1 is not None:
+                            if self.objective_type == ObjectiveType.MEAN:
+                                self.ttft_mae_scores.append(m1)
+                                self.ttft_rmse_scores.append(m2)
+                                logging.info(f"TTFT model trained on {len(df_ttft)} samples. "
+                                           f"MAE = {m1:.4f}, RMSE = {m2:.4f}")
+                            else:
+                                self.ttft_quantile_loss_scores.append(m1)
+                                self.ttft_coverage_scores.append(m2)
+                                self.ttft_violation_rates.append(m3)
+                                logging.info(f"TTFT model trained on {len(df_ttft)} samples. "
+                                           f"Quantile Loss = {m1:.4f}, "
+                                           f"Coverage = {m2:.2f}% (target: {self.quantile*100:.0f}%), "
+                                           f"Violation Rate = {m3:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
                         else:
-                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. Quantile metrics = N/A (insufficient test data)")
+                            logging.info(f"TTFT model trained on {len(df_ttft)} samples. Metrics = N/A (insufficient test data)")
 
                     except Exception:
                         logging.error("Error training TTFT model", exc_info=True)
@@ -769,24 +801,28 @@ class LatencyPredictor:
                             new_tpot_model = result
                             new_tpot_scaler = None
                         
-                        # Calculate quantile metrics on test data
-                        ql, coverage, violation_rate = self._calculate_quantile_metrics_on_test(
-                            new_tpot_model, new_tpot_scaler, 
-                            list(self.tpot_test_data),  # Pass raw data
-                        "tpot",                      # Pass model name instead of feature_cols
-                        'actual_tpot_ms'
-                )
-                        
-                        if ql is not None:
-                            self.tpot_quantile_loss_scores.append(ql)
-                            self.tpot_coverage_scores.append(coverage)
-                            self.tpot_violation_rates.append(violation_rate)
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. "
-                                       f"Quantile Loss = {ql:.4f}, "
-                                       f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                       f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
+                        # Evaluate on test set
+                        m1, m2, m3 = self._calculate_metrics_on_test(
+                            new_tpot_model, new_tpot_scaler,
+                            list(self.tpot_test_data), "tpot", 'actual_tpot_ms'
+                        )
+
+                        if m1 is not None:
+                            if self.objective_type == ObjectiveType.MEAN:
+                                self.tpot_mae_scores.append(m1)
+                                self.tpot_rmse_scores.append(m2)
+                                logging.info(f"TPOT model trained on {len(df_tpot)} samples. "
+                                           f"MAE = {m1:.4f}, RMSE = {m2:.4f}")
+                            else:
+                                self.tpot_quantile_loss_scores.append(m1)
+                                self.tpot_coverage_scores.append(m2)
+                                self.tpot_violation_rates.append(m3)
+                                logging.info(f"TPOT model trained on {len(df_tpot)} samples. "
+                                           f"Quantile Loss = {m1:.4f}, "
+                                           f"Coverage = {m2:.2f}% (target: {self.quantile*100:.0f}%), "
+                                           f"Violation Rate = {m3:.2f}% (target: {(1-self.quantile)*100:.0f}%)")
                         else:
-                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. Quantile metrics = N/A (insufficient test data)")
+                            logging.info(f"TPOT model trained on {len(df_tpot)} samples. Metrics = N/A (insufficient test data)")
                             
                     except Exception:
                         logging.error("Error training TPOT model", exc_info=True)
@@ -798,27 +834,27 @@ class LatencyPredictor:
                     self.ttft_model = new_ttft_model
                     if new_ttft_scaler is not None:
                         self.ttft_scaler = new_ttft_scaler
-                    
+
                     # Store descaled coefficients for Bayesian Ridge
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
                         ttft_features = ttft_feature_cols_br  # no 'prefill_score_bucket' for BR
                         self.ttft_coefficients = self._store_descaled_coefficients(
                         new_ttft_model, new_ttft_scaler, ttft_features, "TTFT"
                 )
-                        
+
                 if new_tpot_model:
                     self.tpot_model = new_tpot_model
                     if new_tpot_scaler is not None:
                         self.tpot_scaler = new_tpot_scaler
-                    
+
                     # Store descaled coefficients for Bayesian Ridge
                     if self.model_type == ModelType.BAYESIAN_RIDGE:
-                        tpot_features = ['kv_cache_percentage', 'input_token_length', 
+                        tpot_features = ['kv_cache_percentage', 'input_token_length',
                                        'num_request_waiting', 'num_request_running', 'num_tokens_generated']
                         self.tpot_coefficients = self._store_descaled_coefficients(
                             new_tpot_model, new_tpot_scaler, tpot_features, "TPOT"
                         )
-                
+
                 if self.is_ready:
                     self.last_retrain_time = datetime.now(timezone.utc)
                     try:
@@ -871,12 +907,15 @@ class LatencyPredictor:
 
                     ttft_pred_mean, ttft_std = self.ttft_model.predict(ttft_scaled, return_std=True)
                     tpot_pred_mean, tpot_std = self.tpot_model.predict(tpot_scaled, return_std=True)
-                    
+
+                    if self.objective_type == ObjectiveType.MEAN:
+                        return ttft_pred_mean[0], tpot_pred_mean[0], ttft_std[0], tpot_std[0]
+
                     # Approximate quantile prediction by adding factor to mean
                     std_factor = 1.28 if self.quantile == 0.9 else (2.0 if self.quantile == 0.95 else 0.674)
                     ttft_pred = ttft_pred_mean[0] + std_factor * ttft_std[0]
                     tpot_pred = tpot_pred_mean[0] + std_factor * tpot_std[0]
-                    
+
                     return ttft_pred, tpot_pred, ttft_std[0], tpot_std[0]
                 
                 elif self.model_type == ModelType.XGBOOST:
@@ -1048,10 +1087,10 @@ class LatencyPredictor:
                 os.makedirs(os.path.dirname(settings.TPOT_SCALER_PATH), exist_ok=True)
                 joblib.dump(self.tpot_scaler, settings.TPOT_SCALER_PATH)
                 logging.info("TPOT scaler saved.")
-        
+
         except Exception as e:
             logging.error(f"Error saving models: {e}", exc_info=True)
-            
+
     def flush_training_data(self, flush_training: bool = True, flush_test: bool = True, 
                    flush_metrics: bool = True, reason: str = None) -> dict:
         """
@@ -1108,8 +1147,12 @@ class LatencyPredictor:
                     self.tpot_coverage_scores.clear()
                     self.ttft_violation_rates.clear()
                     self.tpot_violation_rates.clear()
+                    self.ttft_mae_scores.clear()
+                    self.tpot_mae_scores.clear()
+                    self.ttft_rmse_scores.clear()
+                    self.tpot_rmse_scores.clear()
                     metrics_cleared = True
-                    logging.info("Cleared all quantile metric scores")
+                    logging.info("Cleared all metric scores")
         
                 return {
                     "success": True,
@@ -1167,8 +1210,9 @@ class LatencyPredictor:
             ttft_scaler, tpot_scaler = self.ttft_scaler, self.tpot_scaler
 
             lines: List[str] = []
-            # 1) Model type and quantile info
+            # 1) Model type, objective, and quantile info
             lines.append(f'model_type{{type="{self.model_type.value}"}} 1')
+            lines.append(f'objective_type{{type="{self.objective_type.value}"}} 1')
             lines.append(f'model_quantile{{}} {self.quantile}')
 
             # Helper: emit linear‐model coefs or tree importances
@@ -1204,14 +1248,14 @@ class LatencyPredictor:
                         lines.append(f'{prefix}_importance{{feature="{f}"}} {imp:.6f}')
 
             if self.model_type == ModelType.BAYESIAN_RIDGE:
-                ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                ttft_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
                   "num_request_running","prefix_cache_score","effective_input_tokens"]
-                tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                tpot_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
                   "num_request_running","num_tokens_generated"]
             else:
-                ttft_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                ttft_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
                   "num_request_running","prefix_cache_score","effective_input_tokens","prefill_score_bucket","pod_type_cat"]
-                tpot_feats = ["kv_cache_percentage","input_token_length","num_request_waiting",
+                tpot_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
                   "num_request_running","num_tokens_generated","pod_type_cat"]
             emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
             emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
@@ -1291,29 +1335,42 @@ class LatencyPredictor:
                         lines.append(f'avg_ttft_by_prefix{{prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {avg_ttft:.2f}')
                         lines.append(f'median_ttft_by_prefix{{prefix_bucket="{p}",range="{prefix_low:.2f}-{prefix_high:.2f}"}} {median_ttft:.2f}')
 
-            # 4) Quantile Loss scores (last up to 5)
-            for idx, score in enumerate(self.ttft_quantile_loss_scores):
-                lines.append(f'ttft_quantile_loss{{idx="{idx}"}} {score:.6f}')
-            for idx, score in enumerate(self.tpot_quantile_loss_scores):
-                lines.append(f'tpot_quantile_loss{{idx="{idx}"}} {score:.6f}')
+            if self.objective_type == ObjectiveType.MEAN:
+                # 4) MAE scores (last up to 5)
+                for idx, score in enumerate(self.ttft_mae_scores):
+                    lines.append(f'ttft_mae{{idx="{idx}"}} {score:.6f}')
+                for idx, score in enumerate(self.tpot_mae_scores):
+                    lines.append(f'tpot_mae{{idx="{idx}"}} {score:.6f}')
 
-            # 5) Coverage scores (should be close to quantile * 100)
-            for idx, coverage in enumerate(self.ttft_coverage_scores):
-                lines.append(f'ttft_coverage_percent{{idx="{idx}"}} {coverage:.6f}')
-            for idx, coverage in enumerate(self.tpot_coverage_scores):
-                lines.append(f'tpot_coverage_percent{{idx="{idx}"}} {coverage:.6f}')
+                # 5) RMSE scores
+                for idx, score in enumerate(self.ttft_rmse_scores):
+                    lines.append(f'ttft_rmse{{idx="{idx}"}} {score:.6f}')
+                for idx, score in enumerate(self.tpot_rmse_scores):
+                    lines.append(f'tpot_rmse{{idx="{idx}"}} {score:.6f}')
+            else:
+                # 4) Quantile Loss scores (last up to 5)
+                for idx, score in enumerate(self.ttft_quantile_loss_scores):
+                    lines.append(f'ttft_quantile_loss{{idx="{idx}"}} {score:.6f}')
+                for idx, score in enumerate(self.tpot_quantile_loss_scores):
+                    lines.append(f'tpot_quantile_loss{{idx="{idx}"}} {score:.6f}')
 
-            # 6) Violation rates (should be close to (1-quantile) * 100)
-            for idx, violation_rate in enumerate(self.ttft_violation_rates):
-                lines.append(f'ttft_violation_rate_percent{{idx="{idx}"}} {violation_rate:.6f}')
-            for idx, violation_rate in enumerate(self.tpot_violation_rates):
-                lines.append(f'tpot_violation_rate_percent{{idx="{idx}"}} {violation_rate:.6f}')
+                # 5) Coverage scores (should be close to quantile * 100)
+                for idx, coverage in enumerate(self.ttft_coverage_scores):
+                    lines.append(f'ttft_coverage_percent{{idx="{idx}"}} {coverage:.6f}')
+                for idx, coverage in enumerate(self.tpot_coverage_scores):
+                    lines.append(f'tpot_coverage_percent{{idx="{idx}"}} {coverage:.6f}')
 
-            # 7) Target metrics for reference
-            target_coverage = self.quantile * 100
-            target_violation_rate = (1 - self.quantile) * 100
-            lines.append(f'target_coverage_percent{{}} {target_coverage:.1f}')
-            lines.append(f'target_violation_rate_percent{{}} {target_violation_rate:.1f}')
+                # 6) Violation rates (should be close to (1-quantile) * 100)
+                for idx, violation_rate in enumerate(self.ttft_violation_rates):
+                    lines.append(f'ttft_violation_rate_percent{{idx="{idx}"}} {violation_rate:.6f}')
+                for idx, violation_rate in enumerate(self.tpot_violation_rates):
+                    lines.append(f'tpot_violation_rate_percent{{idx="{idx}"}} {violation_rate:.6f}')
+
+                # 7) Target metrics for reference
+                target_coverage = self.quantile * 100
+                target_violation_rate = (1 - self.quantile) * 100
+                lines.append(f'target_coverage_percent{{}} {target_coverage:.1f}')
+                lines.append(f'target_violation_rate_percent{{}} {target_violation_rate:.1f}')
 
             return "\n".join(lines) + "\n"
 
@@ -1325,7 +1382,7 @@ class LatencyPredictor:
 # --- FastAPI Application ---
 app = FastAPI(
     title="Latency Predictor Service",
-    description="A service to predict TTFT and TPOT using quantile regression with continuous training and feature scaling.",
+    description="A service to predict TTFT and TPOT using quantile or mean regression with continuous training and feature scaling.",
 )
 
 predictor = LatencyPredictor()
@@ -1353,15 +1410,16 @@ class PredictionRequest(BaseModel):
     pod_type: Optional[str] = Field(default="", description="Pod type: 'prefill', 'decode', or '' for monolithic")
 
 class PredictionResponse(BaseModel):
-    ttft_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TTFT in milliseconds")
-    tpot_ms: float = Field(..., description=f"Predicted {settings.QUANTILE_ALPHA:.0%} quantile TPOT in milliseconds")
+    ttft_ms: float = Field(..., description="Predicted TTFT in milliseconds (mean or quantile depending on objective)")
+    tpot_ms: float = Field(..., description="Predicted TPOT in milliseconds (mean or quantile depending on objective)")
     ttft_uncertainty: float = Field(..., description="Uncertainty estimate for TTFT prediction")
     tpot_uncertainty: float = Field(..., description="Uncertainty estimate for TPOT prediction")
     ttft_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TTFT")
     tpot_prediction_bounds: Tuple[float, float] = Field(..., description="Approximate prediction bounds for TPOT")
     predicted_at: datetime
     model_type: ModelType = Field(default=predictor.model_type.value, description="Type of model used for prediction")
-    quantile: float = Field(default=settings.QUANTILE_ALPHA, description="Quantile being predicted")
+    objective_type: str = Field(default=settings.OBJECTIVE_TYPE.value, description="Prediction objective: 'quantile' or 'mean'")
+    quantile: float = Field(default=settings.QUANTILE_ALPHA, description="Quantile being predicted (relevant when objective is 'quantile')")
     
 class BulkTrainingRequest(BaseModel):
     entries: List[TrainingEntry]
@@ -1427,6 +1485,7 @@ async def predict_endpoint(request: PredictionRequest):
             tpot_prediction_bounds=tpot_bounds,
             predicted_at=datetime.now(timezone.utc),
             model_type=predictor.model_type.value,
+            objective_type=predictor.objective_type.value,
             quantile=predictor.quantile
         )
     except HTTPException:
@@ -1460,11 +1519,16 @@ async def metrics():
     
 @app.get("/", include_in_schema=False)
 async def root():
+    if predictor.objective_type == ObjectiveType.MEAN:
+        desc = "Predicting mean TTFT and TPOT latencies"
+    else:
+        desc = f"Predicting {predictor.quantile:.0%} quantile for TTFT and TPOT latencies"
     return {
         "message": "Latency Predictor is running.",
         "model_type": predictor.model_type.value,
+        "objective_type": predictor.objective_type.value,
         "quantile": predictor.quantile,
-        "description": f"Predicting {predictor.quantile:.0%} quantile for TTFT and TPOT latencies"
+        "description": desc
     }
 
 @app.post("/flush", response_model=FlushResponse, status_code=status.HTTP_200_OK)
@@ -1670,9 +1734,9 @@ async def model_info(model_name: str):
         "ttft": settings.TTFT_MODEL_PATH,
         "tpot": settings.TPOT_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "tpot_scaler": settings.TPOT_SCALER_PATH,
     }
-    
+
     if model_name not in model_paths:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
     
@@ -1703,9 +1767,9 @@ async def download_model(model_name: str):
         "ttft": settings.TTFT_MODEL_PATH,
         "tpot": settings.TPOT_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "tpot_scaler": settings.TPOT_SCALER_PATH,
     }
-    
+
     if model_name not in model_paths:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_name}")
     
@@ -1731,9 +1795,9 @@ async def list_models():
         "ttft": settings.TTFT_MODEL_PATH,
         "tpot": settings.TPOT_MODEL_PATH,
         "ttft_scaler": settings.TTFT_SCALER_PATH,
-        "tpot_scaler": settings.TPOT_SCALER_PATH
+        "tpot_scaler": settings.TPOT_SCALER_PATH,
     }
-    
+
     for model_name, model_path in model_paths.items():
         if os.path.exists(model_path):
             stat = os.stat(model_path)
