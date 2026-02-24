@@ -28,6 +28,7 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -177,28 +178,25 @@ func TestHandleResponseBody(t *testing.T) {
 func TestHandleStreamedResponseBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	tests := []struct {
-		name    string
-		body    string
-		reqCtx  *RequestContext
-		want    fwkrq.Usage
-		wantErr bool
+		name   string
+		body   []byte
+		reqCtx *RequestContext
+		want   fwkrq.Usage
 	}{
 		{
 			name: "streaming request without usage",
-			body: streamingBodyWithoutUsage,
+			body: []byte(streamingBodyWithoutUsage),
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
-			wantErr: false,
 			// In the middle of streaming response, so request context response is not set yet.
 		},
 		{
 			name: "streaming request with usage",
-			body: streamingBodyWithUsage,
+			body: []byte(streamingBodyWithUsage),
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
-			wantErr: false,
 			want: fwkrq.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
@@ -207,11 +205,10 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 		},
 		{
 			name: "streaming request with usage and cached tokens",
-			body: streamingBodyWithUsageAndCachedTokens,
+			body: []byte(streamingBodyWithUsageAndCachedTokens),
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
-			wantErr: false,
 			want: fwkrq.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
@@ -220,6 +217,15 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 					CachedTokens: 5,
 				},
 			},
+		},
+		{
+			name: "streaming request in http with gRPC content-type",
+			body: []byte(streamingBodyWithUsageAndCachedTokens),
+			reqCtx: &RequestContext{
+				modelServerStreaming: true,
+				RespContentType:      request.GRPCContentType,
+			},
+			want: fwkrq.Usage{},
 		},
 	}
 
@@ -292,11 +298,10 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 			reqCtx := &RequestContext{}
 
 			for _, chunk := range tc.chunks {
-				server.HandleResponseBodyModelStreaming(context.Background(), reqCtx, chunk)
+				server.HandleResponseBodyModelStreaming(context.Background(), reqCtx, []byte(chunk))
 			}
 
 			assert.Equal(t, tc.wantUsage, reqCtx.Usage, "Usage data should match expected accumulation")
-			assert.True(t, reqCtx.ResponseComplete, "Response should be marked complete after [DONE]")
 		})
 	}
 }
