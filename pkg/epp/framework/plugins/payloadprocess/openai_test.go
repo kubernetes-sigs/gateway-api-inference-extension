@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -149,18 +150,136 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 func TestOpenAIParser_ParseResponse(t *testing.T) {
 	parser := NewOpenAIParser()
 
-	res, err := parser.ParseResponse([]byte("test"))
-	if res != nil || err != nil {
-		t.Errorf("ParseResponse should return nil, nil; got %v, %v", res, err)
+	tests := []struct {
+		name    string
+		body    []byte
+		want    *payloadprocess.ParsedResponse
+		wantErr bool
+	}{
+		{
+			name: "Successful usage extraction",
+			body: []byte(`{
+				"usage": {
+					"prompt_tokens": 10,
+					"completion_tokens": 20,
+					"total_tokens": 30
+				}
+			}`),
+			want: &payloadprocess.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     10,
+					CompletionTokens: 20,
+					TotalTokens:      30,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Success with cached tokens",
+			body: []byte(`{
+				"usage": {
+					"prompt_tokens": 15,
+					"completion_tokens": 5,
+					"total_tokens": 20,
+					"prompt_token_details": { "cached_tokens": 10 }
+				}
+			}`),
+			want: &payloadprocess.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     15,
+					CompletionTokens: 5,
+					TotalTokens:      20,
+					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+						CachedTokens: 10,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "Nil usage returns error",
+			body:    []byte(`{"choices": []}`), // No usage field
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "Invalid JSON returns error",
+			body:    []byte(`{invalid}`),
+			want:    nil,
+			wantErr: true,
+		},
 	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parser.ParseResponse(tt.body)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseResponse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ParseResponse() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 func TestOpenAIParser_ParseStreamResponse(t *testing.T) {
 	parser := NewOpenAIParser()
 
-	streamRes, err := parser.ParseStreamResponse([]byte("test"))
-	if streamRes != nil || err != nil {
-		t.Errorf("ParseStreamResponse should return nil, nil; got %v, %v", streamRes, err)
+	tests := []struct {
+		name    string
+		chunk   []byte
+		want    *payloadprocess.ParsedResponse
+		wantErr bool
+	}{
+		{
+			name:  "Stream chunk with usage",
+			chunk: []byte(`data: {"usage":{"prompt_tokens":7,"completion_tokens":10,"total_tokens":17}}`),
+			want: &payloadprocess.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     7,
+					CompletionTokens: 10,
+					TotalTokens:      17,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:  "Stream chunk with cached tokens",
+			chunk: []byte(`data: {"usage":{"prompt_tokens":10,"prompt_token_details":{"cached_tokens":5}}}`),
+			want: &payloadprocess.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens: 10,
+					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+						CachedTokens: 5,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "Chunk without usage returns error",
+			chunk:   []byte(`data: {"choices":[{"text":"hello"}]}`),
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "DONE message returns error",
+			chunk:   []byte(`data: [DONE]`),
+			want:    nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parser.ParseStreamResponse(tt.chunk)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseStreamResponse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ParseStreamResponse() mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

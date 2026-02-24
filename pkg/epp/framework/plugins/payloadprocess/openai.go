@@ -18,12 +18,14 @@ package payloadprocess
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+	resputil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/response"
 )
 
 const (
@@ -79,12 +81,22 @@ func (p *OpenAIParser) ParseRequest(headers map[string]string, body []byte) (*sc
 	return extractedBody, nil
 }
 
-// ParseResponse parses the response body and returns a ParsedResponse.
+// // ParseResponse parses the response body and returns a ParsedResponse
 func (p *OpenAIParser) ParseResponse(body []byte) (*payloadprocess.ParsedResponse, error) {
-	return nil, nil
+	usage, err := resputil.ExtractUsage(body)
+	if err != nil || usage == nil {
+		return nil, err
+	}
+	return &payloadprocess.ParsedResponse{Usage: usage}, nil
 }
 
-// ParseStreamResponse parses a chunk of the streaming response and returns ParsedResponse.
+// ParseStreamResponse parses a chunk of the streaming response and returns a ParsedResponse
 func (p *OpenAIParser) ParseStreamResponse(chunk []byte) (*payloadprocess.ParsedResponse, error) {
-	return nil, nil
+	responseBody := resputil.ExtractUsageStreaming(string(chunk))
+	if responseBody.Usage == nil {
+		return nil, errors.New("unable to parse usage from stream response")
+	}
+	return &payloadprocess.ParsedResponse{
+		Usage: responseBody.Usage,
+	}, nil
 }
