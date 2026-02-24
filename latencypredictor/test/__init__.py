@@ -9,4 +9,4 @@ This package contains end-to-end tests that verify:
 - High-QPS stress testing across multiple pods
 """
 
-__all__ = ['test_dual_server_client']
+__all__ = ["test_dual_server_client"]

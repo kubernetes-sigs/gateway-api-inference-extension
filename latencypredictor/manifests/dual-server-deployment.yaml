@@ -8,8 +8,7 @@ metadata:
   name: latency-predictor-shared-config
 data:
   # Model configuration (shared across all services)
-  LATENCY_MODEL_TYPE: "bayesian_ridge"
-  USE_TREELITE: "false"
+  LATENCY_MODEL_TYPE: "xgboost"
 
   # Data split configuration (shared between training server and tests)
   LATENCY_TEST_TRAIN_RATIO: "0.1"  # 10% test, 90% train
@@ -100,7 +99,8 @@ spec:
       # nodeSelector:
       #   cloud.google.com/gke-nodepool: "pool-2"
       containers:
-      - name: training-server
+      # FIT CONTAINER: Trains models and creates staging artifacts
+      - name: fit
         image: training-server:latest
         imagePullPolicy: Always
         ports:
@@ -119,15 +119,13 @@ spec:
           initialDelaySeconds: 45
           periodSeconds: 10
         resources:
-          # Increased CPU & memory
+          # Reduced from previous (no TreeLite compilation burden)
           requests:
-            cpu: "4000m"            # was 1000m
-            memory: "2Gi"           # was 512Mi
-            #ephemeral-storage: "50Gi" # new: reserve 5Gi of scratch space
+            cpu: "2000m"            # Reduced from 4000m (no compilation)
+            memory: "2Gi"           # Model training only
           limits:
-            cpu: "8000m"            # was 2000m
-            memory: "4Gi"           # was 1Gi
-            #ephemeral-storage: "100Gi" # new: cap at 10Gi of scratch space
+            cpu: "4000m"            # Reduced from 8000m
+            memory: "4Gi"
 
         envFrom:
         - configMapRef:
@@ -135,21 +133,58 @@ spec:
         - configMapRef:
             name: training-server-config
         env:
-        - name: LOG_LEVEL
-          value: DEBUG
+        # - name: LOG_LEVEL
+        #   value: DEBUG
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
         - name: SERVER_TYPE
-          value: "training"
+          value: "fit"
         volumeMounts:
         - name: model-storage
           mountPath: /models
+        - name: work-storage
+          mountPath: /work
+
+      # BUILD CONTAINER: Compiles TreeLite and publishes bundles
+      - name: build
+        image: training-server:latest  # Same image, different entrypoint
+        imagePullPolicy: Always
+        command: ["python", "-m", "training.build_worker"]
+        resources:
+          # Compilation-focused resources
+          requests:
+            cpu: "2000m"            # TreeLite compilation is CPU-intensive
+            memory: "2Gi"           # Compilation memory
+          limits:
+            cpu: "6000m"            # Allow burst for parallel compilation
+            memory: "4Gi"
+
+        envFrom:
+        - configMapRef:
+            name: training-server-config
+        env:
+        # - name: LOG_LEVEL
+        #   value: DEBUG
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVER_TYPE
+          value: "build"
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+        - name: work-storage
+          mountPath: /work
+
       volumes:
       - name: model-storage
         persistentVolumeClaim:
           claimName: training-models-pvc
+      - name: work-storage
+        emptyDir: {}  # Fast ephemeral storage for Fit→Build handoff
 
 ---
 # --- 4. Prediction Server Deployment ---

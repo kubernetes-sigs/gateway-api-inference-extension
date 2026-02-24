@@ -3,13 +3,16 @@
 Quick setup script to send initial training data and trigger model training.
 Run this before stress tests to ensure models are trained.
 """
+
 import os
 import time
-import requests
+
 import numpy as np
+import requests
 
 TRAINING_URL = os.getenv("TRAINING_SERVER_URL", "http://training-service:8000")
 PREDICTION_URL = os.getenv("PREDICTION_SERVER_URL", "http://prediction-service:80")
+
 
 def send_training_data(num_samples=1000):
     """Send training data to training server."""
@@ -27,23 +30,23 @@ def send_training_data(num_samples=1000):
         prefix = np.random.uniform(0.0, 1.0)
 
         # Generate with known pattern + noise
-        ttft_mu = (input_len*2.0 + waiting*3.0 + running*4.0 + kv*50.0 + prefix*30.0 + 95)
-        tpot_mu = (kv*100.0 + input_len*0.5 + tokens_gen*1.0 + running*5.0 + 9)
+        ttft_mu = input_len * 2.0 + waiting * 3.0 + running * 4.0 + kv * 50.0 + prefix * 30.0 + 95
+        tpot_mu = kv * 100.0 + input_len * 0.5 + tokens_gen * 1.0 + running * 5.0 + 9
 
-        entries.append({
-            "kv_cache_percentage": float(kv),
-            "input_token_length": int(input_len),
-            "num_request_waiting": int(waiting),
-            "num_request_running": int(running),
-            "actual_ttft_ms": float(max(1.0, ttft_mu + np.random.normal(0, 20))),
-            "actual_tpot_ms": float(max(1.0, tpot_mu + np.random.normal(0, 10))),
-            "num_tokens_generated": int(tokens_gen),
-            "prefix_cache_score": float(prefix),
-        })
+        entries.append(
+            {
+                "kv_cache_percentage": float(kv),
+                "input_token_length": int(input_len),
+                "num_request_waiting": int(waiting),
+                "num_request_running": int(running),
+                "actual_ttft_ms": float(max(1.0, ttft_mu + np.random.normal(0, 20))),
+                "actual_tpot_ms": float(max(1.0, tpot_mu + np.random.normal(0, 10))),
+                "num_tokens_generated": int(tokens_gen),
+                "prefix_cache_score": float(prefix),
+            }
+        )
 
-    response = requests.post(f"{TRAINING_URL}/add_training_data_bulk",
-                            json={"entries": entries},
-                            timeout=60)
+    response = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": entries}, timeout=60)
 
     if response.status_code == 202:
         print(f"✓ Successfully sent {num_samples} training samples")
@@ -51,6 +54,7 @@ def send_training_data(num_samples=1000):
     else:
         print(f"✗ Failed to send training data: {response.status_code}")
         return False
+
 
 def wait_for_training(max_wait=60):
     """Wait for training to complete."""
@@ -65,17 +69,18 @@ def wait_for_training(max_wait=60):
                 if data.get("is_ready"):
                     print("✓ Models trained and loaded")
                     return True
-        except Exception as e:
+        except Exception:
             print(f"Waiting... ({i*5}s)")
         time.sleep(5)
 
     print("✗ Models not ready after timeout")
     return False
 
+
 if __name__ == "__main__":
-    print("="*50)
+    print("=" * 50)
     print("Setting up training data for stress tests")
-    print("="*50)
+    print("=" * 50)
 
     if send_training_data(1000):
         if wait_for_training(60):

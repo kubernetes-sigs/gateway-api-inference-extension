@@ -25,22 +25,20 @@ Key features:
 - Automatic cleanup of old bundles
 """
 
-import os
 import logging
 import subprocess
-import tempfile
-import shutil
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
+from pathlib import Path
 
-from .model_bundle import ModelBundle, BundleRegistry, BundleState
-from common.bundle_constants import TTFT_TREELITE_FILENAME, TPOT_TREELITE_FILENAME
+from common.bundle_constants import TPOT_TREELITE_FILENAME, TTFT_TREELITE_FILENAME
+
+from .model_bundle import BundleRegistry, BundleState, ModelBundle
 
 
 class CompilationStatus(str, Enum):
     """Status of background TreeLite compilation."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -61,12 +59,7 @@ class BundleModelManager:
     - Automatic cleanup of old bundles
     """
 
-    def __init__(
-        self,
-        bundle_dir: str,
-        current_symlink: str,
-        max_bundles: int = 5
-    ):
+    def __init__(self, bundle_dir: str, current_symlink: str, max_bundles: int = 5):
         """
         Initialize the bundle manager.
 
@@ -89,7 +82,6 @@ class BundleModelManager:
         model_name: str,
         model_type: str,
         quantile: float,
-        use_treelite: bool
     ) -> ModelBundle:
         """
         Start a new model training session.
@@ -100,21 +92,15 @@ class BundleModelManager:
             model_name: Name of the model (ttft or tpot)
             model_type: Type of model (xgboost, lightgbm, etc.)
             quantile: Target quantile for predictions
-            use_treelite: Whether TreeLite compilation is enabled
 
         Returns:
             ModelBundle in TRAINING state
         """
-        bundle = self.registry.create_bundle(model_type, quantile, use_treelite)
+        bundle = self.registry.create_bundle(model_type, quantile)
         logging.info(f"Started training for {model_name}: bundle_id={bundle.manifest.bundle_id}")
         return bundle
 
-    def save_model_file(
-        self,
-        bundle: ModelBundle,
-        file_type: str,
-        source_path: str
-    ) -> bool:
+    def save_model_file(self, bundle: ModelBundle, file_type: str, source_path: str) -> bool:
         """
         Save a model file atomically to the bundle.
 
@@ -136,12 +122,7 @@ class BundleModelManager:
             logging.error(f"Error saving {file_type}: {e}", exc_info=True)
             return False
 
-    def start_compilation(
-        self,
-        bundle: ModelBundle,
-        model_name: str,
-        process: subprocess.Popen
-    ):
+    def start_compilation(self, bundle: ModelBundle, model_name: str, process: subprocess.Popen):
         """
         Track a background TreeLite compilation process.
 
@@ -154,28 +135,28 @@ class BundleModelManager:
         """
         # Transition to COMPILING state
         bundle.manifest.transition_state(
-            BundleState.COMPILING,
-            f"TreeLite compilation started for {model_name} (PID {process.pid})"
+            BundleState.COMPILING, f"TreeLite compilation started for {model_name} (PID {process.pid})"
         )
 
         # Create compilation tracking file
         status_file = bundle.path / f"{model_name}_compilation_status.json"
         import json
-        with open(status_file, 'w') as f:
-            json.dump({
-                'status': CompilationStatus.RUNNING,
-                'pid': process.pid,
-                'started_at': datetime.now(timezone.utc).isoformat(),
-                'model_name': model_name
-            }, f, indent=2)
+
+        with open(status_file, "w") as f:
+            json.dump(
+                {
+                    "status": CompilationStatus.RUNNING,
+                    "pid": process.pid,
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "model_name": model_name,
+                },
+                f,
+                indent=2,
+            )
 
         logging.info(f"Tracking compilation for {model_name} in bundle {bundle.manifest.bundle_id}")
 
-    def check_compilation_status(
-        self,
-        bundle: ModelBundle,
-        model_name: str
-    ) -> Optional[CompilationStatus]:
+    def check_compilation_status(self, bundle: ModelBundle, model_name: str) -> CompilationStatus | None:
         """
         Check status of background compilation.
 
@@ -191,21 +172,17 @@ class BundleModelManager:
             return None
 
         import json
+
         try:
             with open(status_file) as f:
                 data = json.load(f)
-            return CompilationStatus(data['status'])
+            return CompilationStatus(data["status"])
         except Exception as e:
             logging.warning(f"Error reading compilation status: {e}")
             return None
 
     def mark_compilation_complete(
-        self,
-        bundle: ModelBundle,
-        model_name: str,
-        treelite_path: str,
-        success: bool,
-        error_msg: Optional[str] = None
+        self, bundle: ModelBundle, model_name: str, treelite_path: str, success: bool, error_msg: str | None = None
     ):
         """
         Mark background compilation as complete.
@@ -224,20 +201,20 @@ class BundleModelManager:
 
         # Update status file
         status_data = {
-            'status': CompilationStatus.COMPLETED if success else CompilationStatus.FAILED,
-            'completed_at': datetime.now(timezone.utc).isoformat(),
-            'model_name': model_name
+            "status": CompilationStatus.COMPLETED if success else CompilationStatus.FAILED,
+            "completed_at": datetime.now(UTC).isoformat(),
+            "model_name": model_name,
         }
 
         if success:
             # Add .so file to bundle
             treelite_filename = TTFT_TREELITE_FILENAME if model_name == "ttft" else TPOT_TREELITE_FILENAME
             self.save_model_file(bundle, treelite_filename, treelite_path)
-            status_data['treelite_path'] = treelite_path
+            status_data["treelite_path"] = treelite_path
         else:
-            status_data['error'] = error_msg
+            status_data["error"] = error_msg
 
-        with open(status_file, 'w') as f:
+        with open(status_file, "w") as f:
             json.dump(status_data, f, indent=2)
 
         logging.info(
@@ -245,12 +222,7 @@ class BundleModelManager:
             f"in bundle {bundle.manifest.bundle_id}"
         )
 
-    def finalize_bundle(
-        self,
-        bundle: ModelBundle,
-        training_samples: Dict[str, int],
-        test_samples: Dict[str, int]
-    ):
+    def finalize_bundle(self, bundle: ModelBundle, training_samples: dict[str, int], test_samples: dict[str, int]):
         """
         Finalize and publish a bundle.
 
@@ -279,10 +251,7 @@ class BundleModelManager:
 
         # Transition to READY (only if not already READY from TreeLite compilation)
         if bundle.manifest.state != BundleState.READY:
-            bundle.manifest.transition_state(
-                BundleState.READY,
-                f"All files written and verified. Ready to publish."
-            )
+            bundle.manifest.transition_state(BundleState.READY, "All files written and verified. Ready to publish.")
         bundle.save_manifest()
 
         # Publish bundle (atomic symlink update)
@@ -297,7 +266,7 @@ class BundleModelManager:
             f"{sum(test_samples.values())} test samples"
         )
 
-    def get_active_bundle(self) -> Optional[ModelBundle]:
+    def get_active_bundle(self) -> ModelBundle | None:
         """
         Get the currently active bundle.
 
@@ -306,7 +275,7 @@ class BundleModelManager:
         """
         return self.registry.get_active_bundle(str(self.current_symlink))
 
-    def list_bundles(self) -> List[ModelBundle]:
+    def list_bundles(self) -> list[ModelBundle]:
         """
         List all bundles (sorted by creation time, newest first).
 
@@ -315,7 +284,7 @@ class BundleModelManager:
         """
         return self.registry.list_bundles()
 
-    def get_model_path(self, file_type: str) -> Optional[str]:
+    def get_model_path(self, file_type: str) -> str | None:
         """
         Get the current path to a model file within the active bundle.
 

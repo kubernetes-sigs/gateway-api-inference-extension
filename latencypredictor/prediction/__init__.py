@@ -9,4 +9,4 @@ This package contains the prediction server that:
 - Reports actual latencies back to training server for continuous learning
 """
 
-__all__ = ['prediction_server']
+__all__ = ["prediction_server"]

@@ -29,15 +29,14 @@ Design Principles:
 - No partial states (either complete bundle or nothing)
 """
 
-import os
-import json
 import hashlib
+import json
 import logging
+import os
 import threading
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Dict, List, Any
 from pathlib import Path
 
 
@@ -59,11 +58,12 @@ class BundleState(str, Enum):
 
     Note: Old bundles are deleted directly by cleanup_old_bundles(), no DEPRECATED state needed.
     """
-    TRAINING = "training"       # Initial state: models being trained
-    COMPILING = "compiling"     # TreeLite compilation in progress
-    READY = "ready"             # All files written, ready to publish
-    PUBLISHED = "published"     # Current active version
-    FAILED = "failed"           # Training or compilation failed
+
+    TRAINING = "training"  # Initial state: models being trained
+    COMPILING = "compiling"  # TreeLite compilation in progress
+    READY = "ready"  # All files written, ready to publish
+    PUBLISHED = "published"  # Current active version
+    FAILED = "failed"  # Training or compilation failed
 
 
 @dataclass
@@ -75,15 +75,15 @@ class BundleManifest:
     and their checksums. Prevents issues with partial downloads or
     corrupted files.
     """
+
     bundle_id: str
     version: str
     created_at: str  # ISO 8601 timestamp
     state: BundleState
 
     # Model type and configuration
-    model_type: str  # "xgboost", "lightgbm", "bayesian_ridge"
+    model_type: str  # "xgboost", "lightgbm"
     quantile: float
-    use_treelite: bool
 
     # Training cycle tracking
     # 0 = Default/untrained models (startup state)
@@ -91,26 +91,27 @@ class BundleManifest:
     training_cycle: int = 0
 
     # File checksums (SHA256)
-    files: Dict[str, str] = field(default_factory=dict)
+    files: dict[str, str] = field(default_factory=dict)
 
     # Metadata
-    training_samples: Dict[str, int] = field(default_factory=dict)  # {"ttft": 1000, "tpot": 1000}
-    test_samples: Dict[str, int] = field(default_factory=dict)
+    training_samples: dict[str, int] = field(default_factory=dict)  # {"ttft": 1000, "tpot": 1000}
+    test_samples: dict[str, int] = field(default_factory=dict)
+    toolchain: dict[str, str] = field(default_factory=dict)  # Python version, platform, library versions
 
     # State transition history
-    state_history: List[Dict[str, str]] = field(default_factory=list)
+    state_history: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         d = asdict(self)
-        d['state'] = self.state.value  # Convert enum to string
+        d["state"] = self.state.value  # Convert enum to string
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'BundleManifest':
+    def from_dict(cls, data: dict) -> "BundleManifest":
         """Restore from dictionary."""
         data = data.copy()
-        data['state'] = BundleState(data['state'])  # Convert string to enum
+        data["state"] = BundleState(data["state"])  # Convert string to enum
         return cls(**data)
 
     def add_file(self, name: str, path: str):
@@ -120,8 +121,8 @@ class BundleManifest:
 
         # Compute SHA256 checksum
         sha256 = hashlib.sha256()
-        with open(path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
                 sha256.update(chunk)
 
         self.files[name] = sha256.hexdigest()
@@ -136,8 +137,8 @@ class BundleManifest:
 
         # Compute SHA256 and compare
         sha256 = hashlib.sha256()
-        with open(path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
                 sha256.update(chunk)
 
         return sha256.hexdigest() == self.files[name]
@@ -154,12 +155,14 @@ class BundleManifest:
         self.state = new_state
 
         # Record transition in history
-        self.state_history.append({
-            "from": old_state.value,
-            "to": new_state.value,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "reason": reason
-        })
+        self.state_history.append(
+            {
+                "from": old_state.value,
+                "to": new_state.value,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "reason": reason,
+            }
+        )
 
         logging.info(f"Bundle {self.bundle_id[:8]}: {old_state.value} → {new_state.value} ({reason})")
 
@@ -169,7 +172,7 @@ class ModelBundle:
     Immutable versioned model bundle with atomic operations.
 
     A bundle represents a complete set of model artifacts:
-    - Base models (joblib files)
+    - Base models (native XGBoost JSON or LightGBM TXT files)
     - Compiled models (TreeLite .so files)
     - Calibration data (conformal prediction JSON)
     - Manifest (checksums and metadata)
@@ -180,7 +183,7 @@ class ModelBundle:
     - Versioned: Each bundle has unique ID based on content hash
     """
 
-    def __init__(self, bundle_dir: str, manifest: Optional[BundleManifest] = None):
+    def __init__(self, bundle_dir: str, manifest: BundleManifest | None = None):
         """
         Initialize a bundle (either new or existing).
 
@@ -199,11 +202,10 @@ class ModelBundle:
             self.manifest = BundleManifest(
                 bundle_id=bundle_id,
                 version="1.0.0",  # Could be incremented or use semantic versioning
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
                 state=BundleState.TRAINING,
                 model_type="",  # Set by caller
-                quantile=0.9,
-                use_treelite=True,
+                quantile=0.85,  # Default quantile (p85)
             )
 
         # Bundle path
@@ -216,13 +218,13 @@ class ModelBundle:
     @staticmethod
     def _generate_bundle_id() -> str:
         """Generate a unique bundle ID based on timestamp and random data."""
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         random_data = os.urandom(8).hex()
         content = f"{timestamp}-{random_data}"
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
     @classmethod
-    def load(cls, bundle_dir: str, bundle_id: str) -> 'ModelBundle':
+    def load(cls, bundle_dir: str, bundle_id: str) -> "ModelBundle":
         """
         Load an existing bundle from disk.
 
@@ -243,7 +245,7 @@ class ModelBundle:
         if not manifest_path.exists():
             raise FileNotFoundError(f"Bundle manifest not found: {manifest_path}")
 
-        with open(manifest_path, 'r') as f:
+        with open(manifest_path) as f:
             manifest_data = json.load(f)
 
         manifest = BundleManifest.from_dict(manifest_data)
@@ -251,15 +253,15 @@ class ModelBundle:
 
     def save_manifest(self):
         """Save the manifest to disk (atomic write)."""
-        tmp_path = self.manifest_path.with_suffix('.tmp')
+        tmp_path = self.manifest_path.with_suffix(".tmp")
 
-        with open(tmp_path, 'w') as f:
+        with open(tmp_path, "w") as f:
             json.dump(self.manifest.to_dict(), f, indent=2)
 
         # Atomic rename
         os.replace(tmp_path, self.manifest_path)
 
-    def add_file(self, name: str, source_path: str, dest_name: Optional[str] = None):
+    def add_file(self, name: str, source_path: str, dest_name: str | None = None):
         """
         Add a file to the bundle (atomic copy with checksum).
 
@@ -283,10 +285,11 @@ class ModelBundle:
         dest_path = self.path / dest_filename
 
         # Atomic copy via temp file
-        tmp_path = dest_path.with_suffix('.tmp')
+        tmp_path = dest_path.with_suffix(".tmp")
 
         # Copy file
         import shutil
+
         shutil.copy2(source_path, tmp_path)
 
         # Atomic rename
@@ -298,7 +301,7 @@ class ModelBundle:
 
         logging.debug(f"Bundle {self.manifest.bundle_id[:8]}: Added {name} ({os.path.getsize(dest_path)} bytes)")
 
-    def get_file_path(self, name: str) -> Optional[Path]:
+    def get_file_path(self, name: str) -> Path | None:
         """Get the path to a file in the bundle."""
         if name not in self.manifest.files:
             return None
@@ -325,7 +328,9 @@ class ModelBundle:
                 logging.error(f"Bundle {self.manifest.bundle_id[:8]}: Integrity check failed for {name}")
                 return False
 
-        logging.debug(f"Bundle {self.manifest.bundle_id[:8]}: Integrity check passed ({len(self.manifest.files)} files)")
+        logging.debug(
+            f"Bundle {self.manifest.bundle_id[:8]}: Integrity check passed ({len(self.manifest.files)} files)"
+        )
         return True
 
     def mark_ready(self):
@@ -357,7 +362,7 @@ class ModelBundle:
         symlink = Path(symlink_path)
 
         # Create temporary symlink
-        tmp_symlink = symlink.with_suffix('.tmp')
+        tmp_symlink = symlink.with_suffix(".tmp")
         if tmp_symlink.exists() or tmp_symlink.is_symlink():
             tmp_symlink.unlink()
 
@@ -397,14 +402,13 @@ class BundleRegistry:
         self.max_bundles = max_bundles
         self.lock = threading.RLock()
 
-    def create_bundle(self, model_type: str, quantile: float, use_treelite: bool) -> ModelBundle:
+    def create_bundle(self, model_type: str, quantile: float) -> ModelBundle:
         """
         Create a new bundle.
 
         Args:
             model_type: Model type ("xgboost", "lightgbm", etc.)
             quantile: Target quantile
-            use_treelite: Whether TreeLite is enabled
 
         Returns:
             New ModelBundle instance
@@ -413,13 +417,12 @@ class BundleRegistry:
             bundle = ModelBundle(str(self.bundle_dir))
             bundle.manifest.model_type = model_type
             bundle.manifest.quantile = quantile
-            bundle.manifest.use_treelite = use_treelite
             bundle.save_manifest()
 
-            logging.info(f"Created bundle {bundle.manifest.bundle_id[:8]} ({model_type}, q={quantile}, treelite={use_treelite})")
+            logging.info(f"Created bundle {bundle.manifest.bundle_id[:8]} ({model_type}, q={quantile})")
             return bundle
 
-    def list_bundles(self) -> List[str]:
+    def list_bundles(self) -> list[str]:
         """List all bundle IDs (sorted by creation time, newest first)."""
         bundles = []
         for path in self.bundle_dir.iterdir():
@@ -427,7 +430,7 @@ class BundleRegistry:
                 manifest_path = path / "manifest.json"
                 if manifest_path.exists():
                     try:
-                        with open(manifest_path, 'r') as f:
+                        with open(manifest_path) as f:
                             manifest_data = json.load(f)
                         created_at = manifest_data.get("created_at", "")
                         bundles.append((created_at, path.name))
@@ -438,7 +441,7 @@ class BundleRegistry:
         bundles.sort(reverse=True)
         return [bundle_id for _, bundle_id in bundles]
 
-    def get_active_bundle_id(self, symlink_path: str) -> Optional[str]:
+    def get_active_bundle_id(self, symlink_path: str) -> str | None:
         """Get the currently active bundle ID by reading symlink."""
         symlink = Path(symlink_path)
         if not symlink.is_symlink():
@@ -447,7 +450,7 @@ class BundleRegistry:
         target = symlink.resolve()
         return target.name if target.exists() else None
 
-    def get_active_bundle(self, symlink_path: str) -> Optional[ModelBundle]:
+    def get_active_bundle(self, symlink_path: str) -> ModelBundle | None:
         """
         Get the currently active bundle by loading it from disk.
 
@@ -479,7 +482,7 @@ class BundleRegistry:
             active_id = self.get_active_bundle_id(symlink_path)
 
             # Keep max_bundles most recent, plus active bundle
-            to_keep = set(bundles[:self.max_bundles])
+            to_keep = set(bundles[: self.max_bundles])
             if active_id:
                 to_keep.add(active_id)
 
@@ -488,5 +491,6 @@ class BundleRegistry:
                     bundle_path = self.bundle_dir / bundle_id
                     if bundle_path.exists():
                         import shutil
+
                         shutil.rmtree(bundle_path)
                         logging.info(f"Cleaned up old bundle: {bundle_id[:8]}")

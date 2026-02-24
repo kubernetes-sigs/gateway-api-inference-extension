@@ -42,3 +42,9 @@ config/charts/**/*.tgz
 # pytest files for latencypredictor
 **/__pycache__
 **/.pytest_cache
+
+# ruff caching
+**/.ruff_cache
+
+# Local development tests (not committed)
+latencypredictor/local_tests/

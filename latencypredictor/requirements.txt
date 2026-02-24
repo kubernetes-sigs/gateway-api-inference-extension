@@ -1,8 +1,7 @@
 # Production Requirements: XGBoost 3.1.3 + TreeLite 4.6.1
 #
-# This configuration uses modern ML stack with dual-mode quantile prediction:
-# - TreeLite mode (USE_TREELITE=true): Mean regression + conformal prediction + compiled .so
-# - Non-TreeLite mode (USE_TREELITE=false): Native quantile regression (reg:quantileerror)
+# This configuration uses TreeLite-only mode for XGBoost and LightGBM:
+# - Mean regression (reg:squarederror) + conformal prediction + compiled .so files
 
 # Web Framework
 fastapi
@@ -10,12 +9,11 @@ uvicorn[standard]
 pydantic
 requests
 aiohttp
-joblib
 
 # Core ML Libraries
 xgboost==3.1.3         # Latest stable (Jan 2026)
 lightgbm==4.6.0        # Latest stable (Feb 2025) - has native quantile regression
-scikit-learn==1.6.0    # Latest stable
+scikit-learn==1.6.0    # Required by XGBRegressor and LGBMRegressor sklearn APIs
 numpy>=2.0.0           # Use latest 2.x (all our deps support it)
 pandas==2.2.3          # Latest stable 2.x
 scipy>=1.14.0          # Latest (compatible with numpy 2.x)

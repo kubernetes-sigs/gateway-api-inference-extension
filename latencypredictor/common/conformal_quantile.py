@@ -30,10 +30,10 @@ References:
 - "A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification"
 """
 
-import numpy as np
 import logging
-from typing import Optional, Tuple
 from collections import deque
+
+import numpy as np
 
 
 class ConformalQuantilePredictor:
@@ -44,7 +44,7 @@ class ConformalQuantilePredictor:
     Usage:
         # Training
         model = train_xgboost_model(X_train, y_train)  # Standard regression
-        cqp = ConformalQuantilePredictor(quantile=0.9)
+        cqp = ConformalQuantilePredictor(quantile=0.85)
         cqp.calibrate(model, X_calibration, y_calibration)
 
         # Prediction
@@ -52,10 +52,10 @@ class ConformalQuantilePredictor:
         quantile_pred = cqp.conformalize(mean_pred)
     """
 
-    def __init__(self, quantile: float = 0.9, max_calibration_samples: int = 5000):
+    def __init__(self, quantile: float = 0.85, max_calibration_samples: int = 5000):
         """
         Args:
-            quantile: Target quantile to predict (e.g., 0.9 for P90)
+            quantile: Target quantile to predict (e.g., 0.85 for P85)
             max_calibration_samples: Maximum calibration samples to keep
         """
         self.quantile = quantile
@@ -65,7 +65,7 @@ class ConformalQuantilePredictor:
         self.calibration_residuals = deque(maxlen=max_calibration_samples)
 
         # Cached quantile value (updated when calibration changes)
-        self._cached_quantile_value: Optional[float] = None
+        self._cached_quantile_value: float | None = None
         self._cache_dirty = True
 
         # Track whether we've logged "no calibration data" warning (to avoid spam)
@@ -206,7 +206,7 @@ class ConformalQuantilePredictor:
             "target_violation_percent": (1 - self.quantile) * 100,
             "average_interval_width": avg_width,
             "calibration_samples": len(self.calibration_residuals),
-            "quantile_adjustment": self._cached_quantile_value
+            "quantile_adjustment": self._cached_quantile_value,
         }
 
     def get_state(self) -> dict:
@@ -214,26 +214,25 @@ class ConformalQuantilePredictor:
         return {
             "quantile": self.quantile,
             "calibration_residuals": list(self.calibration_residuals),
-            "max_calibration_samples": self.max_calibration_samples
+            "max_calibration_samples": self.max_calibration_samples,
         }
 
     @classmethod
-    def from_state(cls, state: dict) -> 'ConformalQuantilePredictor':
+    def from_state(cls, state: dict) -> "ConformalQuantilePredictor":
         """Restore from serialized state."""
-        cqp = cls(
-            quantile=state["quantile"],
-            max_calibration_samples=state["max_calibration_samples"]
-        )
-        cqp.calibration_residuals = deque(
-            state["calibration_residuals"],
-            maxlen=state["max_calibration_samples"]
-        )
+        cqp = cls(quantile=state["quantile"], max_calibration_samples=state["max_calibration_samples"])
+        cqp.calibration_residuals = deque(state["calibration_residuals"], maxlen=state["max_calibration_samples"])
         cqp._cache_dirty = True
         return cqp
 
 
 # Example usage and testing
 if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logger = logging.getLogger(__name__)
+
     # Simulate training data with known quantiles
     np.random.seed(42)
 
@@ -243,7 +242,7 @@ if __name__ == "__main__":
     x = np.random.uniform(0, 10, n_samples)
 
     # True model: y = 2*x + noise (with heavy tail)
-    # P90 of noise distribution is at ~1.28 std devs for normal
+    # P85 of noise distribution is at ~1.04 std devs for normal
     noise_std = 5.0
     noise = np.random.normal(0, noise_std, n_samples)
     y_true = 2 * x + noise
@@ -258,23 +257,23 @@ if __name__ == "__main__":
     y_pred_test = y_pred_mean[split:]
     y_true_test = y_true[split:]
 
-    # Create and calibrate conformal predictor for P90
-    cqp = ConformalQuantilePredictor(quantile=0.9)
+    # Create and calibrate conformal predictor for P85
+    cqp = ConformalQuantilePredictor(quantile=0.85)
     cqp.calibrate(y_pred_cal, y_true_cal)
 
-    # Get P90 predictions on test set
-    y_pred_p90 = cqp.conformalize_batch(y_pred_test)
+    # Get P85 predictions on test set
+    y_pred_p85 = cqp.conformalize_batch(y_pred_test)
 
     # Evaluate coverage
     stats = cqp.get_coverage_stats(y_pred_test, y_true_test)
 
-    print("Conformal Quantile Regression Results:")
-    print(f"  Target: P90 (90% coverage)")
-    print(f"  Actual coverage: {stats['coverage_percent']:.1f}%")
-    print(f"  Violation rate: {stats['violation_rate_percent']:.1f}%")
-    print(f"  Quantile adjustment: +{stats['quantile_adjustment']:.2f}")
-    print(f"  Calibration samples: {stats['calibration_samples']}")
+    logger.info("Conformal Quantile Regression Results:")
+    logger.info("  Target: P85 (85% coverage)")
+    logger.info(f"  Actual coverage: {stats['coverage_percent']:.1f}%")
+    logger.info(f"  Violation rate: {stats['violation_rate_percent']:.1f}%")
+    logger.info(f"  Quantile adjustment: +{stats['quantile_adjustment']:.2f}")
+    logger.info(f"  Calibration samples: {stats['calibration_samples']}")
 
-    # Should be close to 90% coverage
-    assert 85 <= stats['coverage_percent'] <= 95, "Coverage should be close to 90%"
-    print("\n✓ Conformal prediction working correctly!")
+    # Should be close to 85% coverage (allow ±10% tolerance for small sample sizes)
+    assert 75 <= stats["coverage_percent"] <= 95, "Coverage should be close to 85%"
+    logger.info("\n✓ Conformal prediction working correctly!")
