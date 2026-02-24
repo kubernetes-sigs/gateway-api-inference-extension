@@ -307,6 +307,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleStat
 	if err != nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency: no SLO context found for request, returning composite-only scores")
 		predictedLatencyCtx = newPredictedLatencyContext(request)
+		s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 		return s.scoreWithoutPredictions(ctx, predictedLatencyCtx, endpoints, rng)
 	}
 
