@@ -156,6 +156,35 @@ func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *fwksche
 	return m.denialError
 }
 
+// mockPreAdmissionPluginConfig holds configuration for creating a mock PreAdmissionPlugin.
+type mockPreAdmissionPluginConfig struct {
+	name string
+	err  error
+}
+
+// mockPreAdmissionPlugin is a test mock for PreAdmissionPlugin interface.
+type mockPreAdmissionPlugin struct {
+	typedName fwkplugin.TypedName
+	callCount int
+	err       error
+}
+
+func newMockPreAdmissionPlugin(cfg mockPreAdmissionPluginConfig) *mockPreAdmissionPlugin {
+	return &mockPreAdmissionPlugin{
+		typedName: fwkplugin.TypedName{Type: "mock-pre-admission", Name: cfg.name},
+		err:       cfg.err,
+	}
+}
+
+func (m *mockPreAdmissionPlugin) TypedName() fwkplugin.TypedName {
+	return m.typedName
+}
+
+func (m *mockPreAdmissionPlugin) PrepareAdmission(ctx context.Context, request *fwksched.LLMRequest) error {
+	m.callCount++
+	return m.err
+}
+
 type mockProducedDataType struct {
 	value int
 }
@@ -305,6 +334,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 		targetModelName         string                   // Expected model name after target model resolution
 		admitRequestDenialError error                    // Expected denial error from admission plugin
 		prepareDataPlugin       *mockPrepareDataPlugin
+		preAdmissionPlugins     []mockPreAdmissionPluginConfig // Plugin configs to create fresh instances
 	}{
 		{
 			name: "successful completions request",
@@ -441,6 +471,38 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantMutatedBodyModel:    model,
 			targetModelName:         model,
 			admitRequestDenialError: nil,
+		},
+		{
+			name: "successful chat completions request with pre-admission plugin",
+			reqBodyMap: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			wantReqCtx: &handlers.RequestContext{
+				TargetModelName: model,
+				TargetPod: &fwkdl.EndpointMetadata{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			wantMutatedBodyModel: model,
+			targetModelName:      model,
+			preAdmissionPlugins: []mockPreAdmissionPluginConfig{
+				{name: "test-pre-admission-plugin-with-error", err: errors.New("Pre Admission failed")},
+				{name: "test-pre-admission-plugin-without-error", err: nil},
+			},
 		},
 		{
 			name: "denied request by admit request plugin",
@@ -650,6 +712,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 				if test.prepareDataPlugin != nil {
 					config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
 				}
+				// Add preAdmissionPlugins if configured
+				if len(test.preAdmissionPlugins) > 0 {
+					var plugins []fwk.PreAdmissionPlugin
+					for _, cfg := range test.preAdmissionPlugins {
+						plugins = append(plugins, newMockPreAdmissionPlugin(cfg))
+					}
+					config = config.WithPreAdmissionPlugins(plugins...)
+				}
+
 				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
 				locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
@@ -711,6 +782,14 @@ func TestDirector_HandleRequest(t *testing.T) {
 					assert.NotNil(t, returnedReqCtx.Request.Body, "Expected mutated body, but reqCtx.Request.Body is nil")
 					assert.Equal(t, test.wantMutatedBodyModel, returnedReqCtx.Request.Body["model"],
 						"Mutated reqCtx.Request.Body model mismatch")
+				}
+
+				// Verify PreAdmissionPlugin call counts
+				if len(config.preAdmissionPlugins) > 0 {
+					for _, plugin := range config.preAdmissionPlugins {
+						mockPlugin := plugin.(*mockPreAdmissionPlugin)
+						assert.Equal(t, 1, mockPlugin.callCount, "PreAdmissionPlugin %s should be called exactly once", mockPlugin.TypedName().Name)
+					}
 				}
 			})
 		}
@@ -1233,6 +1312,84 @@ func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *fwksched.L
 func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
+}
+
+func TestDirector_RunPreAdmissionPlugins(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	tests := []struct {
+		name           string
+		plugins        []mockPreAdmissionPluginConfig
+		wantCallCounts []int
+	}{
+		{
+			name:           "single plugin called once",
+			plugins:        []mockPreAdmissionPluginConfig{{name: "plugin1", err: nil}},
+			wantCallCounts: []int{1},
+		},
+		{
+			name: "multiple plugins called in order",
+			plugins: []mockPreAdmissionPluginConfig{
+				{name: "plugin1", err: nil},
+				{name: "plugin2", err: nil},
+				{name: "plugin3", err: nil},
+			},
+			wantCallCounts: []int{1, 1, 1},
+		},
+		{
+			name:           "no plugins",
+			plugins:        []mockPreAdmissionPluginConfig{},
+			wantCallCounts: []int{},
+		},
+		{
+			name: "plugin with error continues execution",
+			plugins: []mockPreAdmissionPluginConfig{
+				{name: "plugin1", err: errors.New("plugin error")},
+				{name: "plugin2", err: nil},
+			},
+			wantCallCounts: []int{1, 1}, // Both plugins should be called despite error
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create mock plugins and convert to interface slice
+			var preAdmissionPlugins []fwk.PreAdmissionPlugin
+			for _, cfg := range tt.plugins {
+				preAdmissionPlugins = append(preAdmissionPlugins, newMockPreAdmissionPlugin(cfg))
+			}
+
+			// Create config with PreAdmissionPlugins
+			config := NewConfig().WithPreAdmissionPlugins(preAdmissionPlugins...)
+
+			// Create director with mock dependencies
+			director := NewDirectorWithConfig(
+				&mockDatastore{},
+				&mockScheduler{},
+				&mockAdmissionController{},
+				nil,
+				config,
+			)
+
+			// Create a test request
+			request := &fwksched.LLMRequest{
+				RequestId:   "test-request-id",
+				TargetModel: "test-target",
+			}
+
+			// Run PreAdmissionPlugins
+			director.runPreAdmissionPlugins(ctx, request)
+
+			// Verify each plugin was called the expected number of times
+			for i, plugin := range config.preAdmissionPlugins {
+				mockPlugin := plugin.(*mockPreAdmissionPlugin)
+				if mockPlugin.callCount != tt.wantCallCounts[i] {
+					t.Errorf("Plugin %s: got callCount = %d, want %d",
+						mockPlugin.TypedName().Name, mockPlugin.callCount, tt.wantCallCounts[i])
+				}
+			}
+		})
+	}
 }
 
 func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {

@@ -165,6 +165,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
+	// run pre admission plugins
+	d.runPreAdmissionPlugins(ctx, reqCtx.SchedulingRequest)
+
 	if err := d.admissionController.Admit(ctx, reqCtx, *infObjective.Spec.Priority); err != nil {
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
@@ -355,6 +358,21 @@ func (d *Director) runPrepareDataPlugins(ctx context.Context,
 		return nil
 	}
 	return prepareDataPluginsWithTimeout(prepareDataTimeout, d.requestControlPlugins.prepareDataPlugins, ctx, request, endpoints)
+}
+
+func (d *Director) runPreAdmissionPlugins(ctx context.Context, request *fwksched.LLMRequest) {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	for _, plugin := range d.requestControlPlugins.preAdmissionPlugins {
+		loggerDebug.Info("Running PreAdmission plugin", "plugin", plugin.TypedName())
+		before := time.Now()
+		err := plugin.PrepareAdmission(ctx, request)
+		metrics.RecordPluginProcessingLatency(fwk.PreAdmissionExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		if err == nil {
+			loggerDebug.Info("Completed running PreAdmission plugin successfully", "plugin", plugin.TypedName())
+		} else {
+			loggerDebug.Error(err, "PreAdmission plugin failed", "plugin", plugin.TypedName())
+		}
+	}
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
