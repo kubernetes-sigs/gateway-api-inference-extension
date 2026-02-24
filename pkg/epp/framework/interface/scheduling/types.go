@@ -323,9 +323,24 @@ type ProfileRunResult struct {
 	TargetEndpoints []Endpoint
 }
 
+// ProfileResults captures the profile run result map.
+type ProfileResults map[string]*ProfileRunResult
+
+// DecodeResult returns the result of the decode profile.
+func (p ProfileResults) DecodeResult(profileName string) (*ProfileRunResult, bool) {
+	res, ok := p[profileName]
+	return res, ok
+}
+
+// PrefillResult returns the result of the prefill profile.
+func (p ProfileResults) PrefillResult(profileName string) (*ProfileRunResult, bool) {
+	res, ok := p[profileName]
+	return res, ok
+}
+
 // SchedulingResult captures the result of the scheduling cycle.
 type SchedulingResult struct {
-	ProfileResults     map[string]*ProfileRunResult
+	ProfileResults     ProfileResults
 	PrimaryProfileName string
 }
 

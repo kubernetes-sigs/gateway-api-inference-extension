@@ -48,6 +48,11 @@ const (
 	TypeTTFTPredictionDuration = "ttft_prediction_duration"
 	TypeTTFTSLOViolation       = "ttft_slo_violation"
 	TypeTTFTSLOThreshold       = "ttft_slo_threshold"
+
+	// DecisionTypeDecodeOnly is for requests that are routed to decode instance only.
+	DecisionTypeDecodeOnly = "decode-only"
+	// DecisionTypePrefillDecode is for requests that are gone through P/D.
+	DecisionTypePrefillDecode = "prefill-decode"
 )
 
 var (
@@ -443,6 +448,18 @@ var inferenceModelRewriteDecisionsTotal = prometheus.NewCounterVec(
 	[]string{"model_rewrite_name", "model_name", "target_model"},
 )
 
+var (
+	// SchedulerPDDecisionCount records request P/D decision.
+	SchedulerPDDecisionCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: InferenceExtension,
+			Name:      "pd_decision_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of P/D disaggregation decisions made", compbasemetrics.ALPHA),
+		},
+		[]string{"model_name", "decision_type"}, // "decode-only" or "prefill-decode"
+	)
+)
+
 var registerMetrics sync.Once
 
 // Register all metrics.
@@ -489,6 +506,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(flowControlQueueBytes)
 		metrics.Registry.MustRegister(flowControlRequestEnqueueDuration)
 		metrics.Registry.MustRegister(inferenceModelRewriteDecisionsTotal)
+		metrics.Registry.MustRegister(SchedulerPDDecisionCount)
 		for _, collector := range customCollectors {
 			metrics.Registry.MustRegister(collector)
 		}
@@ -537,6 +555,18 @@ func Reset() {
 	flowControlQueueBytes.Reset()
 	flowControlRequestEnqueueDuration.Reset()
 	inferenceModelRewriteDecisionsTotal.Reset()
+	SchedulerPDDecisionCount.Reset()
+}
+
+// RecordPDDecision increments the counter for a specific P/D routing decision.
+// The decisionType must be one of the DecisionType* constants (e.g., DecisionTypeDecodeOnly).
+// The model parameter should be the target model name (e.g., from request.TargetModel);
+// if empty, the default value "unknown" is used to avoid empty labels.
+func RecordPDDecision(modelName, decisionType string) {
+	if modelName == "" {
+		modelName = "unknown"
+	}
+	SchedulerPDDecisionCount.WithLabelValues(modelName, decisionType).Inc()
 }
 
 // RecordRequestCounter records the number of requests.

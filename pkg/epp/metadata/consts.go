@@ -34,4 +34,6 @@ const (
 	ObjectiveKey = "x-gateway-inference-objective"
 	// ModelNameRewriteKey is the header key used to specify the model name to be used when the request is forwarded to the model server.
 	ModelNameRewriteKey = "x-gateway-model-name-rewrite"
+	// PrefillEndpointsHeader is the header name used to indicate Prefill worker <ip:port>
+	PrefillEndpointsHeader = "x-gateway-prefill-endpoints"
 )
