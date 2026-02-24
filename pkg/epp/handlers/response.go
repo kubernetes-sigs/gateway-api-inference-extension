@@ -120,8 +120,6 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		reqCtx.Usage = usage
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
-	reqCtx.ResponseSize = len(responseBytes)
-	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
 
 	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
 }

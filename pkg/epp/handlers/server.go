@@ -293,21 +293,28 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				// Message is buffered, we can read and decode.
 				if v.ResponseBody.EndOfStream {
+					loggerTrace.Info("stream completed")
+					reqCtx.ResponseSize = len(body)
+					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+
 					reqCtx.ResponseSize = len(body)
 					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 
 					var responseErr error
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
+					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
 					if responseErr != nil {
 						break
-					}
-					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
-					metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
-					metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
-					cachedToken := 0
-					if reqCtx.Usage.PromptTokenDetails != nil {
-						cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
+					} else if reqCtx.ResponseComplete {
+						metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+						metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
+						metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
+						metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
+						cachedToken := 0
+						if reqCtx.Usage.PromptTokenDetails != nil {
+							cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
+						}
+						metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 					}
 					metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 				}
