@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -93,16 +94,37 @@ func extractUsageByAPIType(usg map[string]any, objectType string) fwkrq.Usage {
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
+
+	var usage fwkrq.Usage
+	if s.parser != nil {
+		parsedResponse, parseErr := s.parser.ParseResponse(responseBytes)
+		if parseErr != nil || parsedResponse == nil || parsedResponse.Usage == nil {
+			return reqCtx, parseErr
+		}
+		usage = *parsedResponse.Usage
+	} else {
+		extractedUsage, err := extractUsage(responseBytes)
+		if err != nil || extractedUsage == nil {
+			if logger.V(logutil.DEBUG).Enabled() {
+				logger.V(logutil.DEBUG).Error(err, "Error unmarshalling response body", "body", string(responseBytes))
+			} else {
+				logger.V(logutil.DEFAULT).Error(err, "Error unmarshalling response body", "body", string(responseBytes))
+			}
+			return reqCtx, err
+		}
+		usage = *extractedUsage
+	}
+	reqCtx.Usage = usage
+	logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
+	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
+}
+
+func extractUsage(responseBytes []byte) (*fwkrq.Usage, error) {
 	var responseErr error
 	var responseBody map[string]any
 	responseErr = json.Unmarshal(responseBytes, &responseBody)
 	if responseErr != nil {
-		if logger.V(logutil.DEBUG).Enabled() {
-			logger.V(logutil.DEBUG).Error(responseErr, "Error unmarshalling request body", "body", string(responseBytes))
-		} else {
-			logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(responseBytes))
-		}
-		return reqCtx, responseErr
+		return nil, responseErr
 	}
 
 	if responseBody["usage"] != nil {
@@ -117,11 +139,9 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 				}
 			}
 		}
-		reqCtx.Usage = usage
-		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
+		return &usage, nil
 	}
-
-	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
+	return nil, errors.New("unable to extract usage")
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
@@ -131,13 +151,20 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 	if err != nil {
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
-
 	responseText := string(responseBytes)
-	// Parse usage on EVERY chunk to catch split streams (where usage and [DONE] are in different chunks).
-	if resp := parseRespForUsage(ctx, responseText); resp.Usage.TotalTokens > 0 {
-		reqCtx.Usage = resp.Usage
+	if s.parser != nil {
+		parsedResp, err := s.parser.ParseStreamResponse(responseBytes)
+		if err != nil || parsedResp.Usage == nil {
+			logger.Error(err, "error in HandleResponseBodyStreaming using parser")
+		} else {
+			reqCtx.Usage = *parsedResp.Usage
+		}
+	} else {
+		// Parse usage on EVERY chunk to catch split streams (where usage and [DONE] are in different chunks).
+		if resp := parseRespForUsage(ctx, responseText); resp.Usage.TotalTokens > 0 {
+			reqCtx.Usage = resp.Usage
+		}
 	}
-
 	if strings.Contains(responseText, streamingEndMsg) {
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)

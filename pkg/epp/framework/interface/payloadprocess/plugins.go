@@ -36,14 +36,14 @@ type Parser interface {
 	// ParseRequest parses the request body and headers and returns a map representation.
 	ParseRequest(headers map[string]string, body []byte) (*scheduling.LLMRequestBody, error)
 
-	// ParseResponse parses the response body and returns a map representation and usage statistics.
+	// ParseResponse parses the response body and returns ParsedResponse.
 	ParseResponse(body []byte) (*ParsedResponse, error)
 
-	// ParseStreamResponse parses a chunk of the streaming response and returns usage statistics and a boolean indicating if the stream is complete.
+	// ParseStreamResponse parses a chunk of the streaming response and returns ParsedResponse.
 	ParseStreamResponse(chunk []byte) (*ParsedResponse, error)
 }
 
 type ParsedResponse struct {
-	// usage is only populate when the raw response has usage.
-	usage *requestcontrol.Usage
+	// Usage is only populate when the raw response has usage.
+	Usage *requestcontrol.Usage
 }
