@@ -96,7 +96,6 @@ type managedWorker struct {
 type FlowController struct {
 	// --- Immutable dependencies (set at construction) ---
 
-	poolName              string
 	config                *Config
 	registry              registryClient
 	saturationDetector    contracts.SaturationDetector
@@ -137,7 +136,6 @@ func NewFlowController(
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
-		poolName:           poolName,
 		config:             config,
 		registry:           registry,
 		saturationDetector: sd,
@@ -159,7 +157,7 @@ func NewFlowController(
 	) shardProcessor {
 		return internal.NewShardProcessor(
 			ctx,
-			fc.poolName,
+			poolName,
 			shard,
 			saturationDetector,
 			podLocator,
