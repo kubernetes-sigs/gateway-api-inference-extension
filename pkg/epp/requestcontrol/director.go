@@ -146,6 +146,10 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err != nil {
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
 	}
+	// Share the handler's body map so PreRequest plugins can mutate the forwarded body
+	// (e.g., injecting nvext). Since maps are reference types, mutations through
+	// ParsedBody are visible when the handler re-marshals reqCtx.Request.Body.
+	requestBody.ParsedBody = reqCtx.Request.Body
 
 	// Parse inference objective.
 	infObjective := d.getInferenceObjective(ctx, reqCtx)

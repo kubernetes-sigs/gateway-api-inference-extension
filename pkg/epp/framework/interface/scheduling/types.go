@@ -69,6 +69,12 @@ type LLMRequestBody struct {
 	Responses *ResponsesRequest `json:"responses,omitempty"`
 	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
+
+	// ParsedBody holds the full deserialized request body (typically map[string]any).
+	// It shares the same reference as the handler's request body map, so mutations
+	// made by plugins (e.g., injecting an "nvext" field in PreRequest) are reflected
+	// when the body is re-marshaled for forwarding to the model server.
+	ParsedBody any `json:"-"`
 }
 
 func (r *LLMRequestBody) CacheSalt() string {
