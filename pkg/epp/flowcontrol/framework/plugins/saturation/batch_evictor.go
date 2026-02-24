@@ -18,6 +18,7 @@ package saturation
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"sync"
 
@@ -29,6 +30,11 @@ const (
 	// BatchEvictorType is the type of the batch evictor plugin.
 	BatchEvictorType = "batch-evictor"
 )
+
+// BatchEvictorFactory creates a new batch evictor.
+func BatchEvictorFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+	return NewBatchEvictor(), nil
+}
 
 // evictionCandidate represents a single item scheduled for potential eviction.
 type evictionCandidate struct {

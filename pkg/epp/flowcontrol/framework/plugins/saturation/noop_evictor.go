@@ -18,6 +18,7 @@ package saturation
 
 import (
 	"context"
+	"encoding/json"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -27,6 +28,11 @@ const (
 	// NoOpEvictorType is the type of the no-op evictor plugin.
 	NoOpEvictorType = "noop-evictor"
 )
+
+// NoOpEvictorFactory creates a new no-op evictor.
+func NoOpEvictorFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+	return NewNoOpEvictor(), nil
+}
 
 // NoOpEvictor is a stub implementation that performs no eviction.
 // This is useful as a default/fallback or when eviction is disabled.
@@ -49,7 +55,7 @@ func (e *NoOpEvictor) TypedName() plugin.TypedName {
 	}
 }
 
-// ScheduleEviction does nothing (no-op).
+// ScheduleEvictionCandidate does nothing (no-op).
 func (e *NoOpEvictor) ScheduleEvictionCandidate(ctx context.Context, candidate flowcontrol.QueueItemAccessor, queue flowcontrol.EvictableQueue, priority int, usageLimit float64) {
 	// No-op: don't schedule anything for eviction
 }

@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/saturation"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
@@ -126,6 +127,8 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		h.clock,
 		expiryCleanupInterval,
 		100,
+		saturation.NewNoOpUsagePolicy(),
+		saturation.NewNoOpEvictor(),
 		h.logger)
 	require.NotNil(t, h.processor, "NewShardProcessor should not return nil")
 

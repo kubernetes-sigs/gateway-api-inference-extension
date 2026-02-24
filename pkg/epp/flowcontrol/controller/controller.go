@@ -35,7 +35,6 @@ import (
 	k8srand "k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/clock"
-
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
@@ -132,6 +131,8 @@ func NewFlowController(
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
 	podLocator contracts.PodLocator,
+	usageLimitPolicy flowcontrol.UsageLimitPolicy,
+	evictor flowcontrol.Evictor,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
@@ -162,6 +163,8 @@ func NewFlowController(
 			clock,
 			cleanupSweepInterval,
 			enqueueChannelBufferSize,
+			usageLimitPolicy,
+			evictor,
 			logger)
 	}
 

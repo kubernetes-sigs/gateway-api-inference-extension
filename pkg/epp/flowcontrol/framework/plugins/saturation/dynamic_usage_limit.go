@@ -18,6 +18,7 @@ package saturation
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -30,6 +31,13 @@ const (
 	// DynamicUsageLimitPolicyType is the type of the dynamic usage limit policy plugin.
 	DynamicUsageLimitPolicyType = "dynamic-usage-limit-policy"
 )
+
+// DynamicUsagePolicyFactory creates a new dynamic usage limit policy.
+func DynamicUsagePolicyFactory(name string, _ json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
+	// Note: Uses clock.RealClock{}, consistently with FlowController's clock.
+	// Tests can inject fake clocks by calling NewDynamicUsagePolicy directly instead of using the factory.
+	return NewDynamicUsagePolicy(clock.RealClock{}), nil
+}
 
 // Private const values. These might evolve into config.
 const (

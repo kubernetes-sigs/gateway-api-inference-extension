@@ -30,7 +30,6 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/saturation"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -96,14 +95,16 @@ func NewShardProcessor(
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
+	usageLimitPolicy flowcontrol.UsageLimitPolicy,
+	evictor flowcontrol.Evictor,
 	logger logr.Logger,
 ) *ShardProcessor {
 	return &ShardProcessor{
 		shard:                shard,
 		saturationDetector:   saturationDetector,
 		podLocator:           podLocator,
-		usageLimitPolicy:     saturation.NewDynamicUsagePolicy(clock), // TODO: Make this configurable
-		evictor:              saturation.NewNoOpEvictor(),             // TODO: Make this configurable
+		usageLimitPolicy:     usageLimitPolicy,
+		evictor:              evictor,
 		clock:                clock,
 		cleanupSweepInterval: cleanupSweepInterval,
 		logger:               logger,
