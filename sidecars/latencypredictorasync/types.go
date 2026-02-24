@@ -28,6 +28,10 @@ const (
 	gbmModelType           = "lightgbm"
 	bayesianRidgeModelType = "bayesian_ridge"
 	xgBoostModelType       = "xgboost"
+
+	// ObjectiveType constants for prediction objective.
+	ObjectiveQuantile = "quantile"
+	ObjectiveMean     = "mean"
 )
 
 // --- Configuration ---
@@ -160,6 +164,7 @@ type PredictionResponse struct {
 	TPOTPredictionBounds [2]float64 `json:"tpot_prediction_bounds,omitempty"`
 	PredictedAt          time.Time  `json:"predicted_at"`
 	ModelType            string     `json:"model_type"`
+	ObjectiveType        string     `json:"objective_type,omitempty"`
 	Quantile             float64    `json:"quantile"`
 	LastModelLoad        *time.Time `json:"last_model_load"`
 }
@@ -196,6 +201,7 @@ type BulkPredictionResponseWithErrors struct {
 type ServerStatusResponse struct {
 	IsReady           bool            `json:"is_ready"`
 	ModelType         string          `json:"model_type"`
+	ObjectiveType     string          `json:"objective_type,omitempty"`
 	Quantile          float64         `json:"quantile"`
 	LastModelLoad     *time.Time      `json:"last_model_load"`
 	TrainingServerURL string          `json:"training_server_url"`
@@ -220,9 +226,10 @@ type BucketCounts struct {
 }
 
 type ModelInfo struct {
-	ModelType   string          `json:"model_type"`
-	ModelStatus map[string]bool `json:"model_status"`
-	Quantile    float64         `json:"quantile"`
+	ModelType     string          `json:"model_type"`
+	ObjectiveType string          `json:"objective_type,omitempty"`
+	ModelStatus   map[string]bool `json:"model_status"`
+	Quantile      float64         `json:"quantile"`
 }
 
 type MetricsResponse struct {

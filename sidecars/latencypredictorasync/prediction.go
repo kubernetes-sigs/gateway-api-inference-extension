@@ -34,15 +34,22 @@ func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*Predic
 	// Get current model type from server status first, fall back to model info
 	p.metricsMu.RLock()
 	modelType := ""
-	quantile := 0.9 // default
+	quantile := 0.9                        // default
+	objectiveType := ObjectiveQuantile // default for backward compatibility
 
 	if p.serverStatus != nil {
 		modelType = p.serverStatus.ModelType
 		quantile = p.serverStatus.Quantile
+		if p.serverStatus.ObjectiveType != "" {
+			objectiveType = p.serverStatus.ObjectiveType
+		}
 	} else if p.modelInfo != nil {
 		modelType = p.modelInfo.ModelType
 		if p.modelInfo.Quantile > 0 {
 			quantile = p.modelInfo.Quantile
+		}
+		if p.modelInfo.ObjectiveType != "" {
+			objectiveType = p.modelInfo.ObjectiveType
 		}
 	}
 
@@ -55,7 +62,7 @@ func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*Predic
 
 	switch modelType {
 	case bayesianRidgeModelType:
-		return p.predictBayesianRidge(req, mr, quantile)
+		return p.predictBayesianRidge(req, mr, quantile, objectiveType)
 	case xgBoostModelType, gbmModelType:
 		return p.predictHTTP(ctx, req)
 	default:
@@ -180,7 +187,7 @@ func (p *Predictor) PredictBulkStrict(ctx context.Context, requests []Prediction
 }
 
 // predictBayesianRidge uses cached coefficients for linear prediction
-func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsResponse, quantile float64) (*PredictionResponse, error) {
+func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsResponse, quantile float64, objectiveType string) (*PredictionResponse, error) {
 	if mr == nil || mr.Coefficients == nil {
 		return nil, errors.New("no cached Bayesian Ridge coefficients available for prediction")
 	}
@@ -203,11 +210,12 @@ func (p *Predictor) predictBayesianRidge(req PredictionRequest, mr *MetricsRespo
 		c.TPOTCoeffs["num_tokens_generated"]*float64(req.NumTokensGenerated)
 
 	return &PredictionResponse{
-		TTFT:        ttft,
-		TPOT:        tpot,
-		PredictedAt: time.Now(),
-		ModelType:   "bayesian_ridge",
-		Quantile:    quantile,
+		TTFT:          ttft,
+		TPOT:          tpot,
+		PredictedAt:   time.Now(),
+		ModelType:     bayesianRidgeModelType,
+		ObjectiveType: objectiveType,
+		Quantile:      quantile,
 	}, nil
 }
 
@@ -333,6 +341,7 @@ func (p *Predictor) refreshServerStatus(ctx context.Context) error {
 
 	p.logger.V(logutil.DEBUG).Info("Retrieved server status",
 		"model_type", status.ModelType,
+		"objective_type", status.ObjectiveType,
 		"quantile", status.Quantile,
 		"is_ready", status.IsReady)
 	return nil

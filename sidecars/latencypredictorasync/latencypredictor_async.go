@@ -207,6 +207,23 @@ func (p *Predictor) GetCurrentQuantile() float64 {
 	return 0.9 // Default quantile
 }
 
+// GetCurrentObjectiveType returns the current objective type from server status or defaults to "quantile".
+// Returns ObjectiveQuantile ("quantile") for backward compatibility with servers that don't report objective_type.
+func (p *Predictor) GetCurrentObjectiveType() string {
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+
+	if p.serverStatus != nil && p.serverStatus.ObjectiveType != "" {
+		return p.serverStatus.ObjectiveType
+	}
+
+	if p.modelInfo != nil && p.modelInfo.ObjectiveType != "" {
+		return p.modelInfo.ObjectiveType
+	}
+
+	return ObjectiveQuantile
+}
+
 // IsReady returns true if a prediction method is ready based on the current model type.
 func (p *Predictor) IsReady() bool {
 	switch p.GetCurrentModelType() {

@@ -167,8 +167,8 @@ func testModelInfo(t *testing.T, ctx context.Context, predictor *Predictor) {
 		t.Fatalf("Failed to get model info: %v", err)
 	}
 
-	t.Logf("Model Info - Type: %s, Model Status: %v, Quantile: %.2f",
-		modelInfo.ModelType, modelInfo.ModelStatus, modelInfo.Quantile)
+	t.Logf("Model Info - Type: %s, ObjectiveType: %s, Model Status: %v, Quantile: %.2f",
+		modelInfo.ModelType, modelInfo.ObjectiveType, modelInfo.ModelStatus, modelInfo.Quantile)
 
 	if modelInfo.ModelType == "" {
 		t.Error("Model type should not be empty")
@@ -208,6 +208,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	// Log current predictor state
 	t.Logf("Predictor state:")
 	t.Logf("  Current model type: %s", predictor.GetCurrentModelType())
+	t.Logf("  Current objective type: %s", predictor.GetCurrentObjectiveType())
 	t.Logf("  Current quantile: %.2f", predictor.GetCurrentQuantile())
 	t.Logf("  Overall ready: %t", predictor.IsReady())
 	t.Logf("  XGBoost ready: %t", predictor.IsXGBoostReady())
@@ -254,6 +255,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	t.Logf("  TTFT Bounds: [%.2f, %.2f]", response.TTFTPredictionBounds[0], response.TTFTPredictionBounds[1])
 	t.Logf("  TPOT Bounds: [%.2f, %.2f]", response.TPOTPredictionBounds[0], response.TPOTPredictionBounds[1])
 	t.Logf("  Model Type: %s", response.ModelType)
+	t.Logf("  Objective Type: %s", response.ObjectiveType)
 	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  Predicted At: %s", response.PredictedAt.Format(time.RFC3339))
 
