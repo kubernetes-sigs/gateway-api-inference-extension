@@ -71,6 +71,36 @@ type LLMRequestBody struct {
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
 }
 
+// PromptText returns a plain-text representation of the prompt from whichever
+// API type is populated, analogous to CacheSalt().
+func (r *LLMRequestBody) PromptText() string {
+	switch {
+	case r.Completions != nil:
+		return r.Completions.Prompt
+	case r.ChatCompletions != nil:
+		var sb strings.Builder
+		for _, msg := range r.ChatCompletions.Messages {
+			text := msg.Content.PlainText()
+			if text != "" {
+				sb.WriteString(text)
+				sb.WriteString(" ")
+			}
+		}
+		return sb.String()
+	case r.Responses != nil:
+		if s, ok := r.Responses.Input.(string); ok {
+			return s
+		}
+		b, _ := json.Marshal(r.Responses.Input)
+		return string(b)
+	case r.Conversations != nil:
+		b, _ := json.Marshal(r.Conversations.Items)
+		return string(b)
+	default:
+		return ""
+	}
+}
+
 func (r *LLMRequestBody) CacheSalt() string {
 	if r.Conversations != nil {
 		return r.Conversations.CacheSalt

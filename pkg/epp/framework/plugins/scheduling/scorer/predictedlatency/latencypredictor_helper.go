@@ -224,7 +224,7 @@ func recordTTFTTrainingData(
 		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		predictedLatencyCtx.promptText,
 		predictedLatencyCtx.ttft,
 		0, // TTFT training
 		now,
@@ -299,7 +299,7 @@ func processTokenForLatencyPrediction(
 		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		predictedLatencyCtx.promptText,
 		0, // TTFT not recorded for TPOT
 		latencyMs,
 		now,
@@ -316,7 +316,7 @@ func processTokenForLatencyPrediction(
 			endpointRoleLabel,
 			targetEndpointMetadata,
 			m,
-			predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+			predictedLatencyCtx.promptText,
 			predictedLatencyCtx.generatedTokenCount,
 			0, // TPOT does not use prefix cache score
 		)

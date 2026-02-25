@@ -120,6 +120,25 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 }
 
 func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+		Completions: &fwksched.CompletionsRequest{
+			Prompt: "test prompt",
+		},
+	})
+}
+
+func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+		ChatCompletions: &fwksched.ChatCompletionsRequest{
+			Messages: []fwksched.Message{
+				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
+				{Role: "user", Content: fwksched.Content{Raw: "Tell me a joke."}},
+			},
+		},
+	})
+}
+
+func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.LLMRequestBody) *fwksched.LLMRequest {
 	headers := make(map[string]string)
 	headers[requtil.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -131,11 +150,7 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMR
 
 	return &fwksched.LLMRequest{
 		Headers: headers,
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "test prompt",
-			},
-		},
+		Body:    body,
 	}
 }
 
@@ -277,6 +292,22 @@ func TestPredictedLatency_Score(t *testing.T) {
 			request:   createTestLLMRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{},
 			// Should return empty scores map
+			expectedScores: map[string]float64{},
+		},
+		{
+			name: "Chat completions request does not panic",
+			predictor: &mockPredictor{
+				predictions: map[string]*latencypredictor.PredictionResponse{
+					"0.5": {TTFT: 0.5, TPOT: 0.03},
+					"0.6": {TTFT: 0.6, TPOT: 0.04},
+				},
+			},
+			strategy: headroomStrategyLeast,
+			request:  createTestChatCompletionsLLMRequest("test-chat", 1.0, 0.05),
+			endpoints: []fwksched.Endpoint{
+				createTestEndpoint("pod1", 0.5, 2, 1),
+				createTestEndpoint("pod2", 0.6, 3, 2),
+			},
 			expectedScores: map[string]float64{},
 		},
 	}

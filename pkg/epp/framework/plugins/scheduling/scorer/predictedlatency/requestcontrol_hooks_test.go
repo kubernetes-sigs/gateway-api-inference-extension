@@ -77,11 +77,31 @@ func TestNewPredictedLatencyContext(t *testing.T) {
 
 	assert.NotNil(t, ctx)
 	assert.Equal(t, *request, ctx.schedulingRequest)
+	assert.Equal(t, "test prompt", ctx.promptText)
 	assert.NotNil(t, ctx.lastSeenMetrics)
 	assert.NotNil(t, ctx.prefixCacheScoresForEndpoints)
 	assert.NotNil(t, ctx.predictionsForScheduling)
 	assert.Empty(t, ctx.lastSeenMetrics)
 	assert.Empty(t, ctx.prefixCacheScoresForEndpoints)
+}
+
+func TestNewPredictedLatencyContext_NilBody(t *testing.T) {
+	request := &schedulingtypes.LLMRequest{
+		Headers: map[string]string{requtil.RequestIdHeaderKey: "test-nil-body"},
+		Body:    nil,
+	}
+	ctx := newPredictedLatencyContext(request)
+
+	assert.NotNil(t, ctx)
+	assert.Empty(t, ctx.promptText)
+}
+
+func TestNewPredictedLatencyContext_ChatCompletionsPrompt(t *testing.T) {
+	request := createTestChatCompletionsLLMRequest("test-chat", 1.0, 0.05)
+	ctx := newPredictedLatencyContext(request)
+
+	assert.NotNil(t, ctx)
+	assert.Equal(t, "You are a helpful assistant. Tell me a joke. ", ctx.promptText)
 }
 
 func TestPredictedLatency_SetAndGetSLOContext(t *testing.T) {
@@ -668,6 +688,7 @@ func TestPredictedLatencyContext_Fields(t *testing.T) {
 	assert.Nil(t, ctx.targetMetadata)
 	assert.Nil(t, ctx.schedulingResult)
 	assert.Nil(t, ctx.tokenSampler)
+	assert.Equal(t, "test prompt", ctx.promptText)
 }
 
 func TestPredictedLatencyContext_UpdateMetrics(t *testing.T) {

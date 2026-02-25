@@ -67,6 +67,9 @@ type predictedLatencyCtx struct {
 	tpotObservations          []float64
 	predictedTPOTObservations []float64
 
+	// promptText is the cached plain-text prompt, computed once per request.
+	promptText string
+
 	prefixCacheScoresForEndpoints map[string]float64
 
 	// ttftSLO is the target time to first token SLO for the request.
@@ -82,8 +85,13 @@ type predictedLatencyCtx struct {
 }
 
 func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
+	var prompt string
+	if request.Body != nil {
+		prompt = request.Body.PromptText()
+	}
 	return &predictedLatencyCtx{
 		schedulingRequest:             *request,
+		promptText:                    prompt,
 		lastSeenMetrics:               make(map[string]*fwkdl.Metrics),
 		prefixCacheScoresForEndpoints: make(map[string]float64),
 		predictionsForScheduling:      make(map[string]endpointPredictionResult),
