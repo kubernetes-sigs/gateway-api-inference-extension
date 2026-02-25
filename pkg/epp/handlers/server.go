@@ -70,35 +70,12 @@ type StreamingServer struct {
 	director  Director
 }
 
-// RequestContext stores context information during the life time of an HTTP request.
-//
-// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2082):
-// Refactor this monolithic struct. Fields related to the Envoy ext-proc protocol should be decoupled from the internal
-// request lifecycle state.
-type RequestContext struct {
-	TargetPod                 *fwkdl.EndpointMetadata
-	TargetEndpoint            string
-	IncomingModelName         string
-	TargetModelName           string
-	FairnessID                string
-	ObjectiveKey              string
-	RequestReceivedTimestamp  time.Time
-	ResponseCompleteTimestamp time.Time
-	RequestSize               int
-	Usage                     fwkrq.Usage
-	ResponseSize              int
-	ResponseComplete          bool
-	ResponseStatusCode        string
-	RequestRunning            bool
-	Request                   *Request
-
-	SchedulingRequest *schedulingtypes.LLMRequest
-
-	RequestState         StreamRequestState
-	modelServerStreaming bool
-
+// Fields related to the Envoy ext-proc protocol .
+type ProtocolContext struct {
+	Request  *Request
 	Response *Response
 
+	// Envoy ext-proc protocol responses
 	reqHeaderResp  *extProcPb.ProcessingResponse
 	reqBodyResp    []*extProcPb.ProcessingResponse
 	reqTrailerResp *extProcPb.ProcessingResponse
@@ -106,8 +83,50 @@ type RequestContext struct {
 	respHeaderResp  *extProcPb.ProcessingResponse
 	respBodyResp    []*extProcPb.ProcessingResponse
 	respTrailerResp *extProcPb.ProcessingResponse
+
+	// RequestState tracks the current phase in the Envoy ext-proc protocol
+	RequestState StreamRequestState
+
+	// modelServerStreaming indicates if the backend is streaming the response
+	modelServerStreaming bool
 }
 
+// RequestState tracks the logical request lifecycle and scheduling state.
+type RequestState struct {
+	TargetPod      *fwkdl.EndpointMetadata
+	TargetEndpoint string
+
+	IncomingModelName string
+	TargetModelName   string
+
+	FairnessID   string
+	ObjectiveKey string
+
+	RequestReceivedTimestamp  time.Time
+	ResponseCompleteTimestamp time.Time
+
+	RequestSize  int
+	ResponseSize int
+	Usage        fwkrq.Usage
+
+	ResponseComplete   bool
+	ResponseStatusCode string
+	RequestRunning     bool
+
+	SchedulingRequest *schedulingtypes.LLMRequest
+}
+
+// RequestContext stores context information during the lifetime of an HTTP request.
+// It composes ProtocolContext (Envoy/gRPC interaction) and RequestState (logical lifecycle).
+//
+// Note: Fields are embedded for backward compatibility during migration.
+// This allows existing code to access fields directly (e.g., reqCtx.TargetPod)
+// while new code can use the structured approach (e.g., reqCtx.State.TargetPod or reqCtx.Protocol.Request).
+type RequestContext struct {
+	// Embedded structs provide backward-compatible field access
+	ProtocolContext
+	RequestState
+}
 type Request struct {
 	Headers  map[string]string
 	Body     map[string]any
@@ -145,14 +164,16 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// Create request context to share states during life time of an HTTP request.
 	// See https://github.com/envoyproxy/envoy/issues/17540.
 	reqCtx := &RequestContext{
-		RequestState: RequestReceived,
-		Request: &Request{
-			Headers:  make(map[string]string),
-			Body:     make(map[string]any),
-			Metadata: make(map[string]any),
-		},
-		Response: &Response{
-			Headers: make(map[string]string),
+		ProtocolContext: ProtocolContext{
+			RequestState: RequestReceived,
+			Request: &Request{
+				Headers:  make(map[string]string),
+				Body:     make(map[string]any),
+				Metadata: make(map[string]any),
+			},
+			Response: &Response{
+				Headers: make(map[string]string),
+			},
 		},
 	}
 
@@ -275,7 +296,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					loggerTrace.Info("model server is streaming response")
 				}
 			}
-			reqCtx.RequestState = ResponseReceived
+			reqCtx.ProtocolContext.RequestState = ResponseReceived
 
 			var responseErr error
 			reqCtx, responseErr = s.HandleResponseHeaders(ctx, reqCtx, v)
@@ -383,15 +404,15 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProcessor_ProcessServer, logger logr.Logger) error {
 	loggerTrace := logger.V(logutil.TRACE)
 	// No switch statement as we could send multiple responses in one pass.
-	if r.RequestState == RequestReceived && r.reqHeaderResp != nil {
+	if r.ProtocolContext.RequestState == RequestReceived && r.reqHeaderResp != nil {
 		loggerTrace.Info("Sending request header response", "obj", r.reqHeaderResp)
 		if err := srv.Send(r.reqHeaderResp); err != nil {
 			logger.V(1).Error(err, "error sending response")
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
-		r.RequestState = HeaderRequestResponseComplete
+		r.ProtocolContext.RequestState = HeaderRequestResponseComplete
 	}
-	if r.RequestState == HeaderRequestResponseComplete && r.reqBodyResp != nil && len(r.reqBodyResp) > 0 {
+	if r.ProtocolContext.RequestState == HeaderRequestResponseComplete && r.reqBodyResp != nil && len(r.reqBodyResp) > 0 {
 		loggerTrace.Info("Sending request body response(s)")
 
 		for _, response := range r.reqBodyResp {
@@ -400,26 +421,27 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			}
 		}
 		logger.V(1).Info("EPP sent request body response(s) to proxy", "modelName", r.IncomingModelName, "targetModelName", r.TargetModelName)
-		r.RequestState = BodyRequestResponsesComplete
+		r.ProtocolContext.RequestState = BodyRequestResponsesComplete
 		metrics.IncRunningRequests(r.IncomingModelName)
 		r.RequestRunning = true
 		// Dump the response so a new stream message can begin
 		r.reqBodyResp = nil
 	}
-	if r.RequestState == BodyRequestResponsesComplete && r.reqTrailerResp != nil {
+	if r.ProtocolContext.RequestState == BodyRequestResponsesComplete && r.reqTrailerResp != nil {
 		// Trailers in requests are not guaranteed
 		if err := srv.Send(r.reqTrailerResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 	}
-	if r.RequestState == ResponseReceived && r.respHeaderResp != nil {
+	if r.ProtocolContext.RequestState == ResponseReceived && r.respHeaderResp != nil {
 		loggerTrace.Info("Sending response header response", "obj", r.respHeaderResp)
 		if err := srv.Send(r.respHeaderResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
-		r.RequestState = HeaderResponseResponseComplete
+		r.ProtocolContext.RequestState = HeaderResponseResponseComplete
 	}
-	if r.RequestState == HeaderResponseResponseComplete && r.respBodyResp != nil && len(r.respBodyResp) > 0 {
+	if r.ProtocolContext.RequestState == HeaderResponseResponseComplete && r.respBodyResp != nil && len(r.respBodyResp) > 0 {
+		loggerTrace.Info("Sending response body response(s)")
 		for _, response := range r.respBodyResp {
 			if err := srv.Send(response); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
@@ -428,13 +450,13 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			body := response.Response.(*extProcPb.ProcessingResponse_ResponseBody)
 			if body.ResponseBody.Response.GetBodyMutation().GetStreamedResponse().GetEndOfStream() {
 				logger.V(1).Info("EPP sent response body back to proxy")
-				r.RequestState = BodyResponseResponsesComplete
+				r.ProtocolContext.RequestState = BodyResponseResponsesComplete
 			}
 		}
 		// Dump the response so a new stream message can begin
 		r.respBodyResp = nil
 	}
-	if r.RequestState == BodyResponseResponsesComplete && r.respTrailerResp != nil {
+	if r.ProtocolContext.RequestState == BodyResponseResponsesComplete && r.respTrailerResp != nil {
 		// Trailers in requests are not guaranteed
 		if err := srv.Send(r.respTrailerResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)

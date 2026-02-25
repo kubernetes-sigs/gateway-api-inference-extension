@@ -58,7 +58,9 @@ func TestHandleRequestHeaders(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := &StreamingServer{}
 			reqCtx := &RequestContext{
-				Request: &Request{Headers: make(map[string]string)},
+				ProtocolContext: ProtocolContext{
+					Request: &Request{Headers: make(map[string]string)},
+				},
 			}
 			req := &extProcPb.ProcessingRequest_RequestHeaders{
 				RequestHeaders: &extProcPb.HttpHeaders{
@@ -83,14 +85,18 @@ func TestHandleRequestHeaders(t *testing.T) {
 func TestGenerateHeaders_Sanitization(t *testing.T) {
 	server := &StreamingServer{}
 	reqCtx := &RequestContext{
-		TargetEndpoint: "1.2.3.4:8080",
-		RequestSize:    123,
-		Request: &Request{
-			Headers: map[string]string{
-				"x-user-data":                   "important",              // should passthrough
-				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
-				metadata.DestinationEndpointKey: "1.1.1.1:666",            // should be stripped
-				"content-length":                "99999",                  // should be stripped (re-added by logic)
+		RequestState: RequestState{
+			TargetEndpoint: "1.2.3.4:8080",
+			RequestSize:    123,
+		},
+		ProtocolContext: ProtocolContext{
+			Request: &Request{
+				Headers: map[string]string{
+					"x-user-data":                   "important",              // should passthrough
+					metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
+					metadata.DestinationEndpointKey: "1.1.1.1:666",            // should be stripped
+					"content-length":                "99999",                  // should be stripped (re-added by logic)
+				},
 			},
 		},
 	}
@@ -113,18 +119,22 @@ func TestGenerateRequestHeaderResponse_MergeMetadata(t *testing.T) {
 
 	server := &StreamingServer{}
 	reqCtx := &RequestContext{
-		TargetEndpoint: "1.2.3.4:8080",
-		Request: &Request{
-			Headers: make(map[string]string),
+		RequestState: RequestState{
+			TargetEndpoint: "1.2.3.4:8080",
 		},
-		Response: &Response{
-			DynamicMetadata: &structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"existing_namespace": {
-						Kind: &structpb.Value_StructValue{
-							StructValue: &structpb.Struct{
-								Fields: map[string]*structpb.Value{
-									"existing_key": {Kind: &structpb.Value_StringValue{StringValue: "existing_value"}},
+		ProtocolContext: ProtocolContext{
+			Request: &Request{
+				Headers: make(map[string]string),
+			},
+			Response: &Response{
+				DynamicMetadata: &structpb.Struct{
+					Fields: map[string]*structpb.Value{
+						"existing_namespace": {
+							Kind: &structpb.Value_StructValue{
+								StructValue: &structpb.Struct{
+									Fields: map[string]*structpb.Value{
+										"existing_key": {Kind: &structpb.Value_StringValue{StringValue: "existing_value"}},
+									},
 								},
 							},
 						},

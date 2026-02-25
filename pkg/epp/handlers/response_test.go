@@ -187,7 +187,9 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			name: "streaming request without usage",
 			body: streamingBodyWithoutUsage,
 			reqCtx: &RequestContext{
-				modelServerStreaming: true,
+				ProtocolContext: ProtocolContext{
+					modelServerStreaming: true,
+				},
 			},
 			wantErr: false,
 			// In the middle of streaming response, so request context response is not set yet.
@@ -196,7 +198,9 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			name: "streaming request with usage",
 			body: streamingBodyWithUsage,
 			reqCtx: &RequestContext{
-				modelServerStreaming: true,
+				ProtocolContext: ProtocolContext{
+					modelServerStreaming: true,
+				},
 			},
 			wantErr: false,
 			want: fwkrq.Usage{
@@ -209,7 +213,9 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			name: "streaming request with usage and cached tokens",
 			body: streamingBodyWithUsageAndCachedTokens,
 			reqCtx: &RequestContext{
-				modelServerStreaming: true,
+				ProtocolContext: ProtocolContext{
+					modelServerStreaming: true,
+				},
 			},
 			wantErr: false,
 			want: fwkrq.Usage{
@@ -304,12 +310,14 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
 	server := &StreamingServer{}
 	reqCtx := &RequestContext{
-		Response: &Response{
-			Headers: map[string]string{
-				"x-backend-server":              "vllm-v0.6.3",            // should passthrough
-				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
-				metadata.DestinationEndpointKey: "10.2.0.5:8080",          // should be stripped
-				"content-length":                "500",                    // hould be stripped
+		ProtocolContext: ProtocolContext{
+			Response: &Response{
+				Headers: map[string]string{
+					"x-backend-server":              "vllm-v0.6.3",            // should passthrough
+					metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
+					metadata.DestinationEndpointKey: "10.2.0.5:8080",          // should be stripped
+					"content-length":                "500",                    // hould be stripped
+				},
 			},
 		},
 	}

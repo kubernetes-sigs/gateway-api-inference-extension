@@ -56,9 +56,13 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	reqCtx := &handlers.RequestContext{
-		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
-		Request: &handlers.Request{
-			Metadata: map[string]any{},
+		RequestState: handlers.RequestState{
+			SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		},
+		ProtocolContext: handlers.ProtocolContext{
+			Request: &handlers.Request{
+				Metadata: map[string]any{},
+			},
 		},
 	}
 
@@ -182,9 +186,13 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	reqCtx := &handlers.RequestContext{
-		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
-		Request: &handlers.Request{
-			Metadata: map[string]any{},
+		RequestState: handlers.RequestState{
+			SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		},
+		ProtocolContext: handlers.ProtocolContext{
+			Request: &handlers.Request{
+				Metadata: map[string]any{},
+			},
 		},
 	}
 

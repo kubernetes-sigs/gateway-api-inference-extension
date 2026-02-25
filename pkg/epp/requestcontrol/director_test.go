@@ -318,15 +318,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			initialTargetModelName: model,
 			wantReqCtx: &handlers.RequestContext{
-				ObjectiveKey:    objectiveName,
-				TargetModelName: model,
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					ObjectiveKey:    objectiveName,
+					TargetModelName: model,
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel:   model,
 			inferenceObjectiveName: objectiveName,
@@ -342,15 +344,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			initialTargetModelName: model,
 			wantReqCtx: &handlers.RequestContext{
-				ObjectiveKey:    model,
-				TargetModelName: modelRewritten,
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					ObjectiveKey:    model,
+					TargetModelName: modelRewritten,
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel:   modelRewritten,
 			inferenceObjectiveName: model,
@@ -371,14 +375,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			initialTargetModelName: model,
 			wantReqCtx: &handlers.RequestContext{
-				TargetModelName: model,
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					TargetModelName: model,
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel: model,
 			targetModelName:      model,
@@ -400,14 +406,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.dataProduced = true
 			},
 			wantReqCtx: &handlers.RequestContext{
-				TargetModelName: model,
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					TargetModelName: model,
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel: model,
 			targetModelName:      model,
@@ -429,14 +437,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
 			wantReqCtx: &handlers.RequestContext{
-				TargetModelName: model,
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					TargetModelName: model,
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel:    model,
 			targetModelName:         model,
@@ -483,15 +493,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			initialTargetModelName: model,
 			wantReqCtx: &handlers.RequestContext{
-				ObjectiveKey:    objectiveName,
-				TargetModelName: model,
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					ObjectiveKey:    objectiveName,
+					TargetModelName: model,
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			inferenceObjectiveName: objectiveName,
 		}, {
@@ -506,15 +518,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			initialTargetModelName: "resolved-target-model-A",
 			wantReqCtx: &handlers.RequestContext{
-				ObjectiveKey:    objectiveNameResolve,
-				TargetModelName: "resolved-target-model-A",
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					ObjectiveKey:    objectiveNameResolve,
+					TargetModelName: "resolved-target-model-A",
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel:   "resolved-target-model-A",
 			inferenceObjectiveName: objectiveNameResolve,
@@ -526,15 +540,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			initialTargetModelName: "food-review-1",
 			wantReqCtx: &handlers.RequestContext{
-				ObjectiveKey:    "food-review-1",
-				TargetModelName: "food-review-1",
-				TargetPod: &fwkdl.EndpointMetadata{
-					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
-					Address:        "192.168.1.100",
-					Port:           "8000",
-					MetricsHost:    "192.168.1.100:8000",
+				RequestState: handlers.RequestState{
+					ObjectiveKey:    "food-review-1",
+					TargetModelName: "food-review-1",
+					TargetPod: &fwkdl.EndpointMetadata{
+						NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+						Address:        "192.168.1.100",
+						Port:           "8000",
+						MetricsHost:    "192.168.1.100:8000",
+					},
+					TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 				},
-				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
 			wantMutatedBodyModel: "food-review-1",
 			reqBodyMap: map[string]any{
@@ -664,15 +680,19 @@ func TestDirector_HandleRequest(t *testing.T) {
 				}
 
 				reqCtx := &handlers.RequestContext{
-					Request: &handlers.Request{
-						// Create a copy of the map for each test run to avoid mutation issues.
-						Body: make(map[string]any),
-						Headers: map[string]string{
-							requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
+					ProtocolContext: handlers.ProtocolContext{
+						Request: &handlers.Request{
+							// Create a copy of the map for each test run to avoid mutation issues.
+							Body: make(map[string]any),
+							Headers: map[string]string{
+								requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
+							},
 						},
 					},
-					ObjectiveKey:    test.inferenceObjectiveName,
-					TargetModelName: test.initialTargetModelName,
+					RequestState: handlers.RequestState{
+						ObjectiveKey:    test.inferenceObjectiveName,
+						TargetModelName: test.initialTargetModelName,
+					},
 				}
 				// Deep copy the body map.
 				maps.Copy(reqCtx.Request.Body, test.reqBodyMap)
@@ -962,8 +982,10 @@ func TestDirector_ApplyWeightedModelRewrite(t *testing.T) {
 			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, locator, NewConfig())
 
 			reqCtx := &handlers.RequestContext{
-				IncomingModelName: test.incomingModel,
-				TargetModelName:   test.initialTarget,
+				RequestState: handlers.RequestState{
+					IncomingModelName: test.incomingModel,
+					TargetModelName:   test.initialTarget,
+				},
 			}
 
 			director.applyWeightedModelRewrite(reqCtx)
@@ -1069,16 +1091,19 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	)
 
 	reqCtx := &handlers.RequestContext{
-		Request: &handlers.Request{
-			Headers: map[string]string{
-				requtil.RequestIdHeaderKey: "test-req-id-for-response",
+		ProtocolContext: handlers.ProtocolContext{
+			Request: &handlers.Request{
+				Headers: map[string]string{
+					requtil.RequestIdHeaderKey: "test-req-id-for-response",
+				},
+			},
+			Response: &handlers.Response{ // Simulate some response headers
+				Headers: map[string]string{"X-Test-Response-Header": "TestValue"},
 			},
 		},
-		Response: &handlers.Response{ // Simulate some response headers
-			Headers: map[string]string{"X-Test-Response-Header": "TestValue"},
+		RequestState: handlers.RequestState{
+			TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 		},
-
-		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseReceived(ctx, reqCtx)
@@ -1107,15 +1132,19 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	director := NewDirectorWithConfig(ds, mockSched, nil, locator, NewConfig().WithResponseStreamingPlugins(ps1))
 
 	reqCtx := &handlers.RequestContext{
-		Request: &handlers.Request{
-			Headers: map[string]string{
-				requtil.RequestIdHeaderKey: "test-req-id-for-streaming",
+		ProtocolContext: handlers.ProtocolContext{
+			Request: &handlers.Request{
+				Headers: map[string]string{
+					requtil.RequestIdHeaderKey: "test-req-id-for-streaming",
+				},
+			},
+			Response: &handlers.Response{
+				Headers: map[string]string{"X-Test-Streaming-Header": "StreamValue"},
 			},
 		},
-		Response: &handlers.Response{
-			Headers: map[string]string{"X-Test-Streaming-Header": "StreamValue"},
+		RequestState: handlers.RequestState{
+			TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 		},
-		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseBodyStreaming(ctx, reqCtx)
@@ -1144,15 +1173,19 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	director := NewDirectorWithConfig(ds, mockSched, nil, locator, NewConfig().WithResponseCompletePlugins(pc1))
 
 	reqCtx := &handlers.RequestContext{
-		Request: &handlers.Request{
-			Headers: map[string]string{
-				requtil.RequestIdHeaderKey: "test-req-id-for-complete",
+		ProtocolContext: handlers.ProtocolContext{
+			Request: &handlers.Request{
+				Headers: map[string]string{
+					requtil.RequestIdHeaderKey: "test-req-id-for-complete",
+				},
+			},
+			Response: &handlers.Response{
+				Headers: map[string]string{"X-Test-Complete-Header": "CompleteValue"},
 			},
 		},
-		Response: &handlers.Response{
-			Headers: map[string]string{"X-Test-Complete-Header": "CompleteValue"},
+		RequestState: handlers.RequestState{
+			TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 		},
-		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
 	_, err := director.HandleResponseBodyComplete(ctx, reqCtx)
