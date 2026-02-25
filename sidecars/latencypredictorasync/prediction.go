@@ -34,7 +34,7 @@ func (p *Predictor) Predict(ctx context.Context, req PredictionRequest) (*Predic
 	// Get current model type from server status first, fall back to model info
 	p.metricsMu.RLock()
 	modelType := ""
-	quantile := 0.9                        // default
+	quantile := 0.9                    // default
 	objectiveType := ObjectiveQuantile // default for backward compatibility
 
 	if p.serverStatus != nil {
