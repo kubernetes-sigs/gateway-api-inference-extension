@@ -19,7 +19,6 @@ package datalayer
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -84,7 +83,7 @@ func NewCollector() *Collector {
 }
 
 // Start initiates data source collection for the endpoint.
-// All sources must implement PollingDataSource. Non-polling sources will result in an error.
+// All sources must implement PollingDataSource. Validation is performed by the caller.
 // TODO: pass PoolInfo for backward compatibility
 func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, sources []fwkdl.DataSource) error {
 	// Validate sources slice is not empty
@@ -92,21 +91,12 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 		return errors.New("cannot start collector with empty sources")
 	}
 
-	// Validate that all sources implement PollingDataSource
-	var invalidSources []string
-	var pollers []fwkdl.PollingDataSource
+	pollers := make([]fwkdl.PollingDataSource, 0, len(sources))
 	for _, src := range sources {
 		if src == nil {
 			return errors.New("cannot add nil data source")
 		}
-		if ps, ok := src.(fwkdl.PollingDataSource); ok {
-			pollers = append(pollers, ps)
-		} else {
-			invalidSources = append(invalidSources, src.TypedName().String())
-		}
-	}
-	if len(invalidSources) > 0 {
-		return fmt.Errorf("non-polling data sources cannot be used with Collector: %v", invalidSources)
+		pollers = append(pollers, src.(fwkdl.PollingDataSource))
 	}
 
 	var ready chan struct{}

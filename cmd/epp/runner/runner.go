@@ -614,8 +614,10 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
 				return fmt.Errorf("failed to bind notification source %s: %w", notifySrc.TypedName(), err)
 			}
 			setupLog.Info("notification source bound", "source", notifySrc.TypedName().String(), "gvk", notifySrc.GVK())
-		} else {
+		} else if _, isPolling := src.(fwkdl.PollingDataSource); isPolling {
 			collectors = append(collectors, src)
+		} else {
+			setupLog.Info("skipping non-polling data source", "source", src.TypedName().String())
 		}
 	}
 

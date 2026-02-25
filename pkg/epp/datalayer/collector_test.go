@@ -133,11 +133,6 @@ func TestCollectorStartSourceValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "non-polling source returns error",
-			sources: []fwkdl.DataSource{&FakeNotificationSource{}},
-			wantErr: true,
-		},
-		{
 			name:    "valid polling source succeeds",
 			sources: []fwkdl.DataSource{&FakeDataSource{}},
 			wantErr: false,
