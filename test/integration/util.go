@@ -73,10 +73,10 @@ func ReqLLMUnary(logger logr.Logger, prompt, model string) *extProcPb.Processing
 //   - Fragmentation (split bodies) to ensure the processor handles accumulation correctly.
 //   - Protocol attacks (e.g., missing headers).
 func ReqRaw(headers map[string]string, bodyChunks ...string) []*extProcPb.ProcessingRequest {
-	reqs := []*extProcPb.ProcessingRequest{}
+	reqs := make([]*extProcPb.ProcessingRequest, 0, 1+len(bodyChunks))
 
 	// 1. Headers Phase
-	hList := []*envoyCorev3.HeaderValue{}
+	hList := make([]*envoyCorev3.HeaderValue, 0, len(headers))
 	for k, v := range headers {
 		hList = append(hList, &envoyCorev3.HeaderValue{Key: k, Value: v})
 	}
@@ -108,7 +108,7 @@ func ReqRaw(headers map[string]string, bodyChunks ...string) []*extProcPb.Proces
 // Use this for testing non-inference traffic, such as GET requests, health checks, or requests that should bypass the
 // inference processor logic.
 func ReqHeaderOnly(headers map[string]string) []*extProcPb.ProcessingRequest {
-	hList := []*envoyCorev3.HeaderValue{}
+	hList := make([]*envoyCorev3.HeaderValue, 0, len(headers))
 	for k, v := range headers {
 		hList = append(hList, &envoyCorev3.HeaderValue{Key: k, Value: v})
 	}
@@ -160,7 +160,7 @@ func GenerateStreamedRequestSet(
 	prompt, model, targetModel string,
 	filterMetadata []string,
 ) []*extProcPb.ProcessingRequest {
-	requests := []*extProcPb.ProcessingRequest{}
+	requests := make([]*extProcPb.ProcessingRequest, 0, 2)
 
 	// Headers
 	headers := []*envoyCorev3.HeaderValue{
@@ -221,20 +221,20 @@ func NewRequestBufferedResponse(
 	rewrittenBody string,
 	otherHeaders ...*envoyCorev3.HeaderValueOption,
 ) []*extProcPb.ProcessingResponse {
-	setHeaders := []*envoyCorev3.HeaderValueOption{
-		{
+	setHeaders := make([]*envoyCorev3.HeaderValueOption, 0, 2+len(otherHeaders))
+	setHeaders = append(setHeaders,
+		&envoyCorev3.HeaderValueOption{
 			Header: &envoyCorev3.HeaderValue{
 				Key:      metadata.DestinationEndpointKey,
 				RawValue: []byte(destinationEndpoint),
 			},
 		},
-		{
+		&envoyCorev3.HeaderValueOption{
 			Header: &envoyCorev3.HeaderValue{
 				Key:      headerKeyContentLength,
 				RawValue: []byte(strconv.Itoa(len(rewrittenBody))),
 			},
-		},
-	}
+		})
 	setHeaders = append(setHeaders, otherHeaders...)
 
 	headerResponse := &extProcPb.ProcessingResponse{

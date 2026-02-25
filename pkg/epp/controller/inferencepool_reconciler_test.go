@@ -100,7 +100,8 @@ func TestInferencePoolReconciler(t *testing.T) {
 		_ = clientgoscheme.AddToScheme(scheme)
 		_ = v1alpha2.Install(scheme)
 		_ = v1.Install(scheme)
-		initialObjects := []client.Object{pool1, pool2}
+		initialObjects := make([]client.Object, 0, 2+len(pods))
+		initialObjects = append(initialObjects, pool1, pool2)
 		for i := range pods {
 			initialObjects = append(initialObjects, pods[i])
 		}
@@ -253,7 +254,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		_ = clientgoscheme.AddToScheme(scheme)
 		_ = v1alpha2.Install(scheme)
 		_ = v1.Install(scheme)
-		initialObjects := []client.Object{pool1, pool2}
+		initialObjects := make([]client.Object, 0, 2+len(pods))
+		initialObjects = append(initialObjects, pool1, pool2)
 		for i := range pods {
 			initialObjects = append(initialObjects, pods[i])
 		}
