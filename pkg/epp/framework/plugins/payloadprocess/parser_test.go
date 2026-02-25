@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	fwkpayload "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
 )
 
 func TestNewParserFromConfig(t *testing.T) {
@@ -27,7 +28,7 @@ func TestNewParserFromConfig(t *testing.T) {
 		name                  string
 		enablePluggableParser bool
 		customParserName      string
-		want                  *OpenAIParser
+		want                  fwkpayload.Parser
 	}{
 		{
 			name:                  "Enabled with correct name returns parser",
