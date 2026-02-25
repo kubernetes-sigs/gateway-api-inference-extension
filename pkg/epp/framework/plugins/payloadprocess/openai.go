@@ -28,17 +28,15 @@ import (
 )
 
 const (
-	//nolint:unused
-	streamingRespPrefix = "data: "
-	streamingEndMsg     = "data: [DONE]"
+	streamingRespPrefix = "data: "       //nolint:unused
+	streamingEndMsg     = "data: [DONE]" //nolint:unused
 
 	// OpenAI API object types
-	//nolint:unused
-	objectTypeResponse            = "response"
-	objectTypeConversation        = "conversation"
-	objectTypeChatCompletion      = "chat.completion"
-	objectTypeChatCompletionChunk = "chat.completion.chunk"
-	objectTypeTextCompletion      = "text_completion"
+	objectTypeResponse            = "response"              //nolint:unused
+	objectTypeConversation        = "conversation"          //nolint:unused
+	objectTypeChatCompletion      = "chat.completion"       //nolint:unused
+	objectTypeChatCompletionChunk = "chat.completion.chunk" //nolint:unused
+	objectTypeTextCompletion      = "text_completion"       //nolint:unused
 )
 
 const (

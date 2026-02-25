@@ -305,11 +305,10 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					reqCtx.ResponseSize = len(body)
 					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 
-					reqCtx.ResponseSize = len(body)
-					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+
 
 					var responseErr error
-					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
+
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
 					if responseErr != nil {
 						break
@@ -324,7 +323,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 						}
 						metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 					}
-					metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
@@ -398,8 +396,6 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	}
 	if r.RequestState == HeaderResponseResponseComplete {
 		loggerTrace.Info("Sending response body response(s)")
-	if r.RequestState == HeaderResponseResponseComplete {
-		loggerTrace.Info("Sending response body response(s)")
 		for _, response := range r.respBodyResp {
 			if err := srv.Send(response); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
@@ -409,12 +405,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			logger.V(1).Info("EPP sent response body back to proxy")
 			r.RequestState = BodyResponseResponsesComplete
 		}
-		if r.ResponseComplete {
-			r.RequestState = BodyResponseResponsesComplete
-		}
-		if r.ResponseComplete {
-			r.RequestState = BodyResponseResponsesComplete
-		}
+
 		// Dump the response so a new stream message can begin
 		r.respBodyResp = nil
 	}
