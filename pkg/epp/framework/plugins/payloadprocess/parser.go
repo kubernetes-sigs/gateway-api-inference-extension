@@ -16,9 +16,16 @@ limitations under the License.
 
 package payloadprocess
 
-func NewParserFromConfig(enablePluggableParser bool, customParserName string) *OpenAIParser {
-	if enablePluggableParser && customParserName == OpenAIParserName {
-		return NewOpenAIParser()
+import "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
+
+func NewParserFromConfig(enablePluggableParser bool, customParserName string) payloadprocess.Parser {
+	if enablePluggableParser {
+		switch customParserName {
+		case OpenAIParserName:
+			return NewOpenAIParser()
+		case VLLMGrpcParserName:
+			return NewVLLMGrpcParser()
+		}
 	}
 	return nil
 }
