@@ -47,6 +47,7 @@ var _ flowcontrol.OrderingPolicy = &CustomDataOrderingPolicy{}
 func newCustomDataOrderingPolicy(params *customOrderingParameters) *CustomDataOrderingPolicy {
 	if params == nil {
 		return &CustomDataOrderingPolicy{
+			name: CustomDataOrderingPolicyType,
 			keys: []orderingKey{},
 		}
 	}
@@ -63,6 +64,7 @@ func newCustomDataOrderingPolicy(params *customOrderingParameters) *CustomDataOr
 		})
 	}
 	return &CustomDataOrderingPolicy{
+		name: CustomDataOrderingPolicyType,
 		keys: keys,
 	}
 }
