@@ -49,6 +49,15 @@ func TestCustomPolicy_RequiredQueueCapabilities(t *testing.T) {
 
 func TestCustomPolicy_Less(t *testing.T) {
 	t.Parallel()
+	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+		Keys: []customOrderingParameter{
+			{
+				Key:        "score1",
+				Direction:  "asc",
+				DefaultVal: 2,
+			},
+		},
+	})
 
 	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
 	b := mocks.NewMockQueueItemAccessor(2, "b", testFlowKey)
@@ -63,6 +72,13 @@ func TestCustomPolicy_Less(t *testing.T) {
 	mc := c.OriginalRequest().GetMetadata()
 	mc["ordering.custom.score1"] = 3.2
 
+	assert.True(t, p.Less(a, b))  // 3.2 < 5.9
+	assert.False(t, p.Less(b, a)) // 5.9 not < 3.2
+	assert.False(t, p.Less(a, c)) // 3.2 not < 3.2
+}
+
+func TestCustomPolicy_Less_NilData(t *testing.T) {
+	t.Parallel()
 	p := newCustomDataOrderingPolicy(&customOrderingParameters{
 		Keys: []customOrderingParameter{
 			{
@@ -73,67 +89,93 @@ func TestCustomPolicy_Less(t *testing.T) {
 		},
 	})
 
-	assert.True(t, p.Less(a, b))
-	assert.False(t, p.Less(b, a))
-	assert.False(t, p.Less(a, c))
+	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
+	ma := a.OriginalRequest().GetMetadata()
+	ma["ordering.custom.score1"] = 3.2
+	nilItem := mocks.NewMockQueueItemAccessor(1, "nil-item", testFlowKey)
 
-	nilA := mocks.NewMockQueueItemAccessor(1, "nil-a", testFlowKey)
-
-	mnilA := nilA.OriginalRequest().GetMetadata()
-	mnilA["ordering.custom.score1"] = nil
-
-	assert.True(t, p.Less(nilA, a))
-	assert.False(t, p.Less(a, nilA))
-	assert.False(t, p.Less(nilA, nilA))
-
-	p = newCustomDataOrderingPolicy(&customOrderingParameters{
-		Keys: []customOrderingParameter{
-			{
-				Key:        "score1",
-				Direction:  "asc",
-				DefaultVal: 2,
-			},
-			{
-				Key:        "score2",
-				Direction:  "asc",
-				DefaultVal: 5,
-			},
-		},
-	})
-
-	ma["ordering.custom.score2"] = 4.9
-	mb["ordering.custom.score2"] = 2.9
-	mc["ordering.custom.score2"] = 6.3
-
-	assert.True(t, p.Less(a, b))
-	assert.False(t, p.Less(b, a))
-	assert.True(t, p.Less(a, c))
-
-	d := mocks.NewMockQueueItemAccessor(4, "d", testFlowKey)
-	md := d.OriginalRequest().GetMetadata()
-	md["ordering.custom.score1"] = 3.2
-	md["ordering.custom.score2"] = 4.9
-
-	assert.False(t, p.Less(a, d))
-
-	p = newCustomDataOrderingPolicy(&customOrderingParameters{
-		Keys: []customOrderingParameter{
-			{
-				Key:        "score1",
-				Direction:  "desc",
-				DefaultVal: 2,
-			},
-		},
-	})
-
-	assert.False(t, p.Less(a, b))
-	assert.True(t, p.Less(b, a))
-	assert.False(t, p.Less(a, c))
+	// nilItem will use the default value of 2 since no value was set in the metadata for ordering.custom.score1
+	assert.True(t, p.Less(nilItem, a))        // 2 < 3.2
+	assert.False(t, p.Less(a, nilItem))       // 3.2 not < 2
+	assert.False(t, p.Less(nilItem, nilItem)) // 2 not < 2
 }
 
 func TestCustomPolicy_Less_Desc(t *testing.T) {
 	t.Parallel()
+	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+		Keys: []customOrderingParameter{
+			{
+				Key:        "score1",
+				Direction:  "desc",
+				DefaultVal: 2,
+			},
+		},
+	})
 
+	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
+	b := mocks.NewMockQueueItemAccessor(2, "b", testFlowKey)
+	c := mocks.NewMockQueueItemAccessor(3, "c", testFlowKey)
+
+	ma := a.OriginalRequest().GetMetadata()
+	ma["ordering.custom.score1"] = 3.2
+
+	mb := b.OriginalRequest().GetMetadata()
+	mb["ordering.custom.score1"] = 5.9
+
+	mc := c.OriginalRequest().GetMetadata()
+	mc["ordering.custom.score1"] = 3.2
+
+	assert.False(t, p.Less(a, b)) // 3.2 not < 5.9 (in descending order)
+	assert.True(t, p.Less(b, a))  // 5.9 < 3.2 (in descending order)
+	assert.False(t, p.Less(a, c)) // 3.2 not < 3.2
+}
+
+func TestCustomPolicy_Less_MultipleKeys(t *testing.T) {
+	t.Parallel()
+	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+		Keys: []customOrderingParameter{
+			{
+				Key:        "score1",
+				Direction:  "asc",
+				DefaultVal: 2,
+			},
+			{
+				Key:        "score2",
+				Direction:  "asc",
+				DefaultVal: 5,
+			},
+		},
+	})
+
+	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
+	b := mocks.NewMockQueueItemAccessor(2, "b", testFlowKey)
+	c := mocks.NewMockQueueItemAccessor(3, "c", testFlowKey)
+	d := mocks.NewMockQueueItemAccessor(4, "d", testFlowKey)
+
+	ma := a.OriginalRequest().GetMetadata()
+	ma["ordering.custom.score1"] = 3.2
+	ma["ordering.custom.score2"] = 4.9
+
+	mb := b.OriginalRequest().GetMetadata()
+	mb["ordering.custom.score1"] = 5.9
+	mb["ordering.custom.score2"] = 2.9
+
+	mc := c.OriginalRequest().GetMetadata()
+	mc["ordering.custom.score1"] = 3.2
+	mc["ordering.custom.score2"] = 6.3
+
+	md := d.OriginalRequest().GetMetadata()
+	md["ordering.custom.score1"] = 3.2
+	md["ordering.custom.score2"] = 4.9
+
+	assert.True(t, p.Less(a, b))  // 3.2 < 5.9
+	assert.False(t, p.Less(b, a)) // 5.9 not < 3.2
+	assert.True(t, p.Less(a, c))  // 4.9 < 6.3 (checking score2 since score1 is the same for a and c)
+	assert.False(t, p.Less(a, d)) // 3.2 not < 3.2 and 4.9 not < 4.9
+}
+
+func TestCustomPolicy_Less_MultipleKeys_Desc(t *testing.T) {
+	t.Parallel()
 	p := newCustomDataOrderingPolicy(&customOrderingParameters{
 		Keys: []customOrderingParameter{
 			{
@@ -170,8 +212,8 @@ func TestCustomPolicy_Less_Desc(t *testing.T) {
 	md["ordering.custom.score1"] = 3.2
 	md["ordering.custom.score2"] = 4.9
 
-	assert.True(t, p.Less(a, b))
-	assert.False(t, p.Less(b, a))
-	assert.True(t, p.Less(c, a))
-	assert.False(t, p.Less(a, d))
+	assert.True(t, p.Less(a, b))  // 3.2 < 5.9
+	assert.False(t, p.Less(b, a)) // 5.9 not < 3.2
+	assert.True(t, p.Less(c, a))  // 6.3 > 4.9 (in descending order, checking score2 since score1 is the same for c and a)
+	assert.False(t, p.Less(a, d)) // 3.2 not < 3.2 and 4.9 not < 4.9
 }
