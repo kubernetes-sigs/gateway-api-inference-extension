@@ -206,6 +206,9 @@ func (d *Detector) ResponseComplete(
 	_ *requestcontrol.Response,
 	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
+	if targetEndpoint == nil {
+		return
+	}
 	eid := targetEndpoint.NamespacedName.String()
 	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
 		tokenCount, ok := d.tokenLedger.remove(request.RequestId)
