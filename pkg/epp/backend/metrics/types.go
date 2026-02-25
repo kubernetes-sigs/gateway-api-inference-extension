@@ -41,12 +41,20 @@ func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval time.Dura
 	return &PodMetricsFactory{
 		pmc:                    pmc,
 		refreshMetricsInterval: refreshMetricsInterval,
+		endpoints:              sync.Map{},
 	}
+}
+
+// endpointEntry stores an endpoint and its associated pod name for cleanup.
+type endpointEntry struct {
+	endpoint PodMetrics
+	podName  string
 }
 
 type PodMetricsFactory struct {
 	pmc                    PodMetricsClient
 	refreshMetricsInterval time.Duration
+	endpoints              sync.Map // key: types.NamespacedName, value: *endpointEntry
 }
 
 func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
@@ -54,6 +62,14 @@ func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
 }
 
 func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) fwkdl.Endpoint {
+	key := metadata.NamespacedName
+
+	// Check if endpoint already exists (e.g., unhealthy endpoint with running collector).
+	// Return nil to prevent duplicate goroutines and let the existing collector recover.
+	if _, ok := f.endpoints.Load(key); ok {
+		return nil
+	}
+
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -66,6 +82,16 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 	pm.metadata.Store(metadata)
 	pm.metrics.Store(fwkdl.NewMetrics())
 
+	// Track the endpoint for cleanup.
+	entry := &endpointEntry{
+		endpoint: pm,
+		podName:  metadata.PodName,
+	}
+	// Use LoadOrStore for atomic operation in case of concurrent calls.
+	if _, loaded := f.endpoints.LoadOrStore(key, entry); loaded {
+		return nil
+	}
+
 	pm.startRefreshLoop(parentCtx)
 	return pm
 }
@@ -73,7 +99,22 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
 	if pm, ok := ep.(*podMetrics); ok {
 		pm.stopRefreshLoop()
+		f.endpoints.Delete(pm.GetMetadata().NamespacedName)
 	}
+}
+
+// ReleaseEndpointsByPodName releases all endpoints associated with the given pod name.
+func (f *PodMetricsFactory) ReleaseEndpointsByPodName(podName string) {
+	f.endpoints.Range(func(key, value any) bool {
+		entry := value.(*endpointEntry)
+		if entry.podName == podName {
+			if pm, ok := entry.endpoint.(*podMetrics); ok {
+				pm.stopRefreshLoop()
+			}
+			f.endpoints.Delete(key)
+		}
+		return true
+	})
 }
 
 type PodMetrics = fwkdl.Endpoint

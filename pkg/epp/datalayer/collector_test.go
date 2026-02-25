@@ -52,7 +52,7 @@ var (
 )
 
 func TestCollectorCanStartOnlyOnce(t *testing.T) {
-	c := NewCollector()
+	c := NewCollector(nil)
 	ctx := context.Background()
 	ticker := mocks.NewTicker()
 
@@ -64,13 +64,13 @@ func TestCollectorCanStartOnlyOnce(t *testing.T) {
 }
 
 func TestCollectorStopBeforeStartIsAnError(t *testing.T) {
-	c := NewCollector()
+	c := NewCollector(nil)
 	err := c.Stop()
 	assert.Error(t, err, "collector stop called before start should error")
 }
 
 func TestCollectorCanStopOnlyOnce(t *testing.T) {
-	c := NewCollector()
+	c := NewCollector(nil)
 	ctx := context.Background()
 	ticker := mocks.NewTicker()
 
@@ -81,7 +81,7 @@ func TestCollectorCanStopOnlyOnce(t *testing.T) {
 
 func TestCollectorCollectsOnTicks(t *testing.T) {
 	source := &FakeDataSource{}
-	c := NewCollector()
+	c := NewCollector(nil)
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
 
@@ -99,7 +99,7 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 
 func TestCollectorStopCancelsContext(t *testing.T) {
 	source := &FakeDataSource{}
-	c := NewCollector()
+	c := NewCollector(nil)
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
 
