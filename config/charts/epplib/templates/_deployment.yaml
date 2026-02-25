@@ -70,7 +70,7 @@ spec:
         {{- end }}
         {{- end }}
         - name: epp
-          image: {{ .Values.inferenceExtension.image.hub }}/{{ .Values.inferenceExtension.image.name }}:{{ .Values.inferenceExtension.image.tag }}
+          image: {{ .Values.inferenceExtension.image.registry }}/{{ .Values.inferenceExtension.image.repository }}:{{ .Values.inferenceExtension.image.tag }}
           imagePullPolicy: {{ .Values.inferenceExtension.image.pullPolicy | default "IfNotPresent" }}
           args:
           {{- /* 1. Determine Model Server Type Logic */ -}}
