@@ -78,9 +78,10 @@ func init() {
 }
 
 var (
-	_ requestcontrol.PreRequest       = &Detector{}
-	_ requestcontrol.ResponseComplete = &Detector{}
-	_ framework.Filter                = &Detector{}
+	_ requestcontrol.PreRequest        = &Detector{}
+	_ requestcontrol.ResponseStreaming = &Detector{}
+	_ requestcontrol.ResponseComplete  = &Detector{}
+	_ framework.Filter                 = &Detector{}
 )
 
 // Detector implements a saturation detector and scheduling filter based on active request concurrency.
@@ -186,37 +187,73 @@ func (d *Detector) Filter(
 	return filtered
 }
 
-// PreRequest increments the atomic in-flight counter for the target endpoint.
-// We assume the scheduling result is valid based on the Director's contract.
+// PreRequest increments the atomic in-flight counter for all target endpoints.
 func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
-	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String()
-	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
-		tokens := d.tokenEstimator.Estimate(request)
-		d.tokenTracker.add(eid, tokens)
-		d.tokenLedger.add(request.RequestId, eid, tokens)
-	} else {
-		d.requestTracker.inc(eid)
+	if result == nil || len(result.ProfileResults) == 0 {
+		return
+	}
+
+	for profileName, profileResult := range result.ProfileResults {
+		if profileResult == nil {
+			continue
+		}
+		for _, endpoint := range profileResult.TargetEndpoints {
+			if endpoint == nil || endpoint.GetMetadata() == nil {
+				continue
+			}
+			eid := endpoint.GetMetadata().NamespacedName.String()
+			if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+				tokens := d.tokenEstimator.Estimate(request)
+				d.tokenTracker.add(eid, tokens)
+				d.tokenLedger.add(request.RequestId, eid, tokens, profileName)
+			} else {
+				d.requestTracker.inc(eid)
+			}
+		}
 	}
 }
 
-// ResponseComplete decrements the atomic in-flight counter for the target endpoint.
+// ResponseStreaming is called every time a chunk of response data is received.
+func (d *Detector) ResponseStreaming(ctx context.Context, request *framework.LLMRequest, response *requestcontrol.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+	d.PrefillComplete(ctx, request, response, targetEndpoint)
+}
+
+// PrefillComplete signals that the prefill stage is finished for a request.
+func (d *Detector) PrefillComplete(_ context.Context, request *framework.LLMRequest, _ *requestcontrol.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+	if targetEndpoint == nil || request == nil {
+		return
+	}
+
+	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+		// Specifically remove the "prefill" stage load for this request.
+		eid, tokenCount, ok := d.tokenLedger.removeStage(request.RequestId, "prefill")
+		if ok {
+			d.tokenTracker.add(eid, -tokenCount)
+		}
+	}
+}
+
+// ResponseComplete decrements the atomic in-flight counter for all remaining target endpoints.
 func (d *Detector) ResponseComplete(
 	_ context.Context,
 	request *framework.LLMRequest,
 	_ *requestcontrol.Response,
 	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
-	if targetEndpoint == nil {
+	if request == nil {
 		return
 	}
-	eid := targetEndpoint.NamespacedName.String()
+
 	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
-		tokenCount, ok := d.tokenLedger.remove(request.RequestId)
-		if ok {
-			d.tokenTracker.add(eid, -tokenCount)
+		// Clean up all remaining stages (usually just "decode").
+		for _, entry := range d.tokenLedger.removeAll(request.RequestId) {
+			d.tokenTracker.add(entry.endpointID, -entry.tokenCount)
 		}
 	} else {
-		d.requestTracker.dec(eid)
+		// Legacy request-based mode still relies on the primary targetEndpoint.
+		if targetEndpoint != nil {
+			d.requestTracker.dec(targetEndpoint.NamespacedName.String())
+		}
 	}
 }
 
