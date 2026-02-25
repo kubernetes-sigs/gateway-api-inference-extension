@@ -71,13 +71,13 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		TrainingURL:            "http://localhost:8000",
-		PredictionURLs:         []string{"http://localhost:8001"},
-		MaxSampleSize:          1000,
-		FlushInterval:          1 * time.Second,
-		MetricsRefreshInterval: 60 * time.Second,
-		UseNativeXGBoost:       true,
-		HTTPTimeout:            10 * time.Second,
+		TrainingURL:             "http://localhost:8000",
+		PredictionURLs:          []string{"http://localhost:8001"},
+		MaxSampleSize:           1000,
+		FlushInterval:           1 * time.Second,
+		MetricsRefreshInterval:  60 * time.Second,
+		UseNativeXGBoost:        true,
+		HTTPTimeout:             10 * time.Second,
 		MaxBulkSize:             100,
 		CoalesceWindow:          5 * time.Millisecond,
 		MaxCoalescedRows:        0,

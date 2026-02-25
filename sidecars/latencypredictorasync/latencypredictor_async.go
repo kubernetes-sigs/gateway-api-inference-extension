@@ -43,8 +43,8 @@ type Predictor struct {
 	bufferMu sync.Mutex
 	pending  []TrainingEntry
 
-	coalesceCh   chan *batchSubmission
-	dispatchSem  chan struct{} // semaphore limiting concurrent HTTP dispatches
+	coalesceCh  chan *batchSubmission
+	dispatchSem chan struct{} // semaphore limiting concurrent HTTP dispatches
 
 	wg   sync.WaitGroup
 	done chan struct{}
