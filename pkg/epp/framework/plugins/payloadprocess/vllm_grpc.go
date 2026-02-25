@@ -34,7 +34,7 @@ import (
 
 const (
 	VLLMGrpcParserName = "vllm-grpc-parser"
-	vllmMaxTokens     = 1024
+	vllmMaxTokens      = 1024
 )
 
 // compile-time type validation
@@ -74,7 +74,6 @@ type samplingParams struct {
 	Stop             any      `json:"stop,omitempty"`
 }
 
-
 // ParseRequest transforms an incoming OpenAI HTTP/JSON request into the vLLM gRPC GenerateRequest structure.
 // We intercept JSON, populate scheduling context, and prepare the protobuf payload.
 func (p *VLLMGrpcParser) ParseRequest(headers map[string]string, body []byte) (*scheduling.LLMRequestBody, error) {
@@ -98,8 +97,6 @@ func (p *VLLMGrpcParser) ParseRequest(headers map[string]string, body []byte) (*
 
 	return extractedBody, nil
 }
-
-
 
 // ParseResponse parses a standard unary vLLM gRPC response.
 func (p *VLLMGrpcParser) ParseResponse(body []byte) (*payloadprocess.ParsedResponse, error) {
