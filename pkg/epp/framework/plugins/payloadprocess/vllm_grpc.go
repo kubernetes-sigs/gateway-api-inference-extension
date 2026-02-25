@@ -194,7 +194,7 @@ func ExtractRequestID(headers map[string]string) string {
 
 func ExtractCombinedPrompt(extractedBody *scheduling.LLMRequestBody) (string, error) {
 	if extractedBody.ChatCompletions == nil {
-		return "", errors.New("Not implemented. vLLM gRPC parser expects a chat completions request")
+		return "", errors.New("not implemented: vLLM gRPC parser expects a chat completions request")
 	}
 
 	var combinedPrompt strings.Builder

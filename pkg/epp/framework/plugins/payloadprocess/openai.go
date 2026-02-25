@@ -19,7 +19,6 @@ package payloadprocess
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -29,10 +28,12 @@ import (
 )
 
 const (
+	//nolint:unused
 	streamingRespPrefix = "data: "
 	streamingEndMsg     = "data: [DONE]"
 
 	// OpenAI API object types
+	//nolint:unused
 	objectTypeResponse            = "response"
 	objectTypeConversation        = "conversation"
 	objectTypeChatCompletion      = "chat.completion"
@@ -71,7 +72,7 @@ func (p *OpenAIParser) TypedName() fwkplugin.TypedName {
 func (p *OpenAIParser) ParseRequest(headers map[string]string, body []byte) (*scheduling.LLMRequestBody, error) {
 	bodyMap := make(map[string]any)
 	if err := json.Unmarshal(body, &bodyMap); err != nil {
-		return nil, fmt.Errorf("Error unmarshal the bodyMap")
+		return nil, errors.New("error unmarshalling the bodyMap")
 	}
 	extractedBody, err := requtil.ExtractRequestBody(body, headers)
 	if err != nil {
