@@ -617,7 +617,7 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
 		} else if _, isPolling := src.(fwkdl.PollingDataSource); isPolling {
 			collectors = append(collectors, src)
 		} else {
-			setupLog.Info("skipping non-polling data source", "source", src.TypedName().String())
+			return fmt.Errorf("skipping unknown datasource plugin type %s", src.TypedName().String())
 		}
 	}
 
