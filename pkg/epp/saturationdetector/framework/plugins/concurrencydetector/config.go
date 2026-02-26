@@ -64,7 +64,6 @@ type Config struct {
 	//
 	// Defaults to 1000000 if unset.
 	MaxTokenConcurrency int64 `json:"maxTokenConcurrency"`
-
 }
 
 const (

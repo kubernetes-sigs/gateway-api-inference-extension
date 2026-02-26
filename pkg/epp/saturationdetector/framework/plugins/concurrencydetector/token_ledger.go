@@ -25,8 +25,7 @@ type tokenCountByEp struct {
 	tokenCount int64
 }
 
-
-// tokenLedger tracks the number of tokens added for each request. 
+// tokenLedger tracks the number of tokens added for each request.
 // This is required in the Post Request hook to decrement the token count for the endpoint.
 type tokenLedger struct {
 	mu sync.Mutex
