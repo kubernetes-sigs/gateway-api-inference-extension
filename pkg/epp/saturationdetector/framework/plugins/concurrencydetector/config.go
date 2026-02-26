@@ -53,12 +53,11 @@ type Config struct {
 	// Valid values are:
 	// - "requests": use request count for concurrency detection.
 	// - "tokens": use token count for concurrency detection.
-	// TODO: Should there be an option to check for both?
 	//
 	// Defaults to "requests" if unset.
 	ConcurrencyMode string `json:"concurrencyMode"`
 
-	// MaxTokenConcurrency defines the maximum number of tokens allowed for a request.
+	// MaxTokenConcurrency defines the maximum number of tokens allowed for an inference pool.
 	//
 	// This limit is used to prevent requests from consuming too many tokens.
 	//
@@ -71,7 +70,7 @@ const (
 	DefaultMaxConcurrency = 100
 	// DefaultHeadroom is the default burst allowance (0%).
 	DefaultHeadroom = 0.0
-	// DefaultConcurrencyMode is the default mode to check for concurency. We default to "requests"to retain existing behvaiour.
+	// DefaultConcurrencyMode is the default mode to check for concurency. We default to "requests"to retain existing behaviour.
 	DefaultConcurrencyMode = "requests"
 	// DefaultMaxTokenConcurrency is the maximum number of tokens allowed for a request.
 	DefaultMaxTokenConcurrency = 1000000

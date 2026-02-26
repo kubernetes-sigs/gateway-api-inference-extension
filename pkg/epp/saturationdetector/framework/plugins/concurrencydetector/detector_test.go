@@ -271,7 +271,7 @@ func TestDetector_TokenSaturation(t *testing.T) {
 			requests: func() []*schedulingtypes.LLMRequest {
 				// "1234567890123456" (16 chars) = 10 tokens. 5 requests = 50 tokens.
 				prompt := "1234567890123456"
-				var reqs []*schedulingtypes.LLMRequest
+				reqs := make([]*schedulingtypes.LLMRequest, 0, 5)
 				for i := range 5 {
 					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
 				}
@@ -285,7 +285,7 @@ func TestDetector_TokenSaturation(t *testing.T) {
 			requests: func() []*schedulingtypes.LLMRequest {
 				// 10 tokens per request * 10 requests = 100 tokens.
 				prompt := "1234567890123456"
-				var reqs []*schedulingtypes.LLMRequest
+				reqs := make([]*schedulingtypes.LLMRequest, 0, 10)
 				for i := range 10 {
 					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
 				}
@@ -299,7 +299,7 @@ func TestDetector_TokenSaturation(t *testing.T) {
 			requests: func() []*schedulingtypes.LLMRequest {
 				// endpoint-a: 50 tokens, endpoint-b: 0 (driveTokenLoad targets endpoint-a only)
 				prompt := "1234567890123456"
-				var reqs []*schedulingtypes.LLMRequest
+				reqs := make([]*schedulingtypes.LLMRequest, 0, 5)
 				for i := range 5 {
 					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
 				}

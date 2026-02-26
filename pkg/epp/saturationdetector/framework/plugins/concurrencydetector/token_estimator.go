@@ -44,16 +44,17 @@ func NewSimpleTokenEstimator() TokenEstimator {
 func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
 	if request == nil || request.Body == nil {
 		return 0
-	} // Todo: Should we return 0 or a small number?
+	}
 	var chars int
-	if request.Body.Completions != nil {
+	switch {
+	case request.Body.Completions != nil:
 		chars = len(request.Body.Completions.Prompt)
-	} else if request.Body.ChatCompletions != nil {
+	case request.Body.ChatCompletions != nil:
 		for _, m := range request.Body.ChatCompletions.Messages {
 			chars += len(m.Content.PlainText())
 		}
-	} else {
-		chars = 0 // TODO: Is this this right way to handle this?
+	default:
+		chars = 0
 	}
 	inputTokens := int64(math.Max(1, math.Round(float64(chars)/e.CharactersPerToken)))
 	outputTokens := int64(math.Round(float64(inputTokens) * e.OutputRatio))
