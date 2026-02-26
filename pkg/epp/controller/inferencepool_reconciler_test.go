@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -92,7 +93,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
 	}
 	for _, epf := range factories {
 		// Set up the scheme.
@@ -246,7 +247,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
 	}
 	for _, epf := range factories {
 		// Set up the scheme.

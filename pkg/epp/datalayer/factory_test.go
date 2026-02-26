@@ -27,10 +27,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
 func TestFactory(t *testing.T) {
-	source := &FakeDataSource{}
+	source := &dlmocks.DataSource{}
 	factory := NewEndpointFactory([]fwkdl.DataSource{source}, 100*time.Millisecond)
 
 	pod1 := &fwkdl.EndpointMetadata{
@@ -60,7 +61,7 @@ func TestFactory(t *testing.T) {
 
 	// use Eventually for async processing
 	require.Eventually(t, func() bool {
-		return atomic.LoadInt64(&source.callCount) == 2
+		return atomic.LoadInt64(&source.CallCount) == 2
 	}, 290*time.Millisecond, 2*time.Millisecond, "expected 2 collections")
 
 	factory.Shutdown()

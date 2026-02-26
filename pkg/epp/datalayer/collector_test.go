@@ -28,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
 // --- Test Stubs ---
@@ -48,7 +49,7 @@ func defaultEndpoint() fwkdl.Endpoint {
 
 var (
 	endpoint = defaultEndpoint()
-	sources  = []fwkdl.DataSource{&FakeDataSource{}}
+	sources  = []fwkdl.DataSource{&dlmocks.DataSource{}}
 )
 
 func TestCollectorCanStartOnlyOnce(t *testing.T) {
@@ -80,7 +81,7 @@ func TestCollectorCanStopOnlyOnce(t *testing.T) {
 }
 
 func TestCollectorCollectsOnTicks(t *testing.T) {
-	source := &FakeDataSource{}
+	source := &dlmocks.DataSource{}
 	c := NewCollector()
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
@@ -91,14 +92,14 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 
 	// use Eventually for async processing
 	require.Eventually(t, func() bool {
-		return atomic.LoadInt64(&source.callCount) == 2
+		return atomic.LoadInt64(&source.CallCount) == 2
 	}, 1*time.Second, 2*time.Millisecond, "expected 2 collections")
 
 	require.NoError(t, c.Stop())
 }
 
 func TestCollectorStopCancelsContext(t *testing.T) {
-	source := &FakeDataSource{}
+	source := &dlmocks.DataSource{}
 	c := NewCollector()
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
@@ -108,11 +109,11 @@ func TestCollectorStopCancelsContext(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	require.NoError(t, c.Stop())
-	before := atomic.LoadInt64(&source.callCount)
+	before := atomic.LoadInt64(&source.CallCount)
 
 	ticker.Tick()
 	time.Sleep(20 * time.Millisecond) // let collector run again
-	after := atomic.LoadInt64(&source.callCount)
+	after := atomic.LoadInt64(&source.CallCount)
 	assert.Equal(t, before, after, "call count changed after stop")
 }
 
@@ -134,7 +135,7 @@ func TestCollectorStartSourceValidation(t *testing.T) {
 		},
 		{
 			name:    "valid polling source succeeds",
-			sources: []fwkdl.DataSource{&FakeDataSource{}},
+			sources: []fwkdl.DataSource{&dlmocks.DataSource{}},
 			wantErr: false,
 		},
 	}
