@@ -6,11 +6,11 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
 const (
 	CustomDataOrderingPolicyType = "custom-data-ordering-policy"
-	namespacePrefix              = "ordering.custom."
 )
 
 type customOrderingParameters struct {
@@ -93,8 +93,8 @@ func (p *CustomDataOrderingPolicy) TypedName() plugin.TypedName {
 
 func (p *CustomDataOrderingPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
 	for _, k := range p.keys {
-		aVal := a.OriginalRequest().GetMetadata()[namespacePrefix+k.name]
-		bVal := b.OriginalRequest().GetMetadata()[namespacePrefix+k.name]
+		aVal := a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace+"."+k.name]
+		bVal := b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace+"."+k.name]
 
 		aValF, ok := aVal.(float64)
 		if !ok {
