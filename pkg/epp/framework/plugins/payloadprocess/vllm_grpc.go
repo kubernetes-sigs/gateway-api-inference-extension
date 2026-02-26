@@ -17,6 +17,7 @@ limitations under the License.
 package payloadprocess
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,7 +94,14 @@ func (p *VLLMGrpcParser) ParseRequest(headers map[string]string, body []byte) (*
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling proto: %v", err)
 	}
-	extractedBody.ParsedBody = protoBody
+
+	// gRPC framing: 1 byte for compression (0), 4 bytes for length (Big Endian)
+	grpcFrame := make([]byte, 5)
+	grpcFrame[0] = 0 // No compression
+	binary.BigEndian.PutUint32(grpcFrame[1:], uint32(len(protoBody)))
+
+	// Prepend the frame to the body
+	extractedBody.ParsedBody = append(grpcFrame, protoBody...)
 
 	return extractedBody, nil
 }
