@@ -65,7 +65,7 @@ type Config struct {
 	// Default 0 means no row cap (window-only dispatch).
 	MaxCoalescedRows int
 	// MaxConcurrentDispatches limits how many coalesced HTTP calls can be
-	// in-flight to the prediction server simultaneously. Defaults to 8.
+	// in-flight to the prediction server simultaneously. Defaults to 36.
 	MaxConcurrentDispatches int
 }
 
@@ -79,9 +79,9 @@ func DefaultConfig() *Config {
 		UseNativeXGBoost:        true,
 		HTTPTimeout:             10 * time.Second,
 		MaxBulkSize:             100,
-		CoalesceWindow:          5 * time.Millisecond,
+		CoalesceWindow:          1 * time.Millisecond,
 		MaxCoalescedRows:        0,
-		MaxConcurrentDispatches: 8,
+		MaxConcurrentDispatches: 36,
 	}
 }
 
