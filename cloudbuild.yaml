@@ -26,7 +26,7 @@ steps:
     args:
       - inferencepool-helm-chart-push
       - bbr-helm-chart-push
-      - epp-standalone-helm-chart-push
+      - standalone-helm-chart-push
     env:
     - EXTRA_TAG=$_PULL_BASE_REF
     - GOTOOLCHAIN=auto
@@ -34,6 +34,16 @@ steps:
     entrypoint: make
     args:
       - bbr-image-push
+    env:
+    - GIT_TAG=$_GIT_TAG
+    - EXTRA_TAG=$_PULL_BASE_REF
+    - DOCKER_BUILDX_CMD=/buildx-entrypoint
+  - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20240718-5ef92b5c36
+    entrypoint: make
+    args:
+      - latency-training-image-push
+      - latency-prediction-image-push
+      - latency-prediction-test-image-push
     env:
     - GIT_TAG=$_GIT_TAG
     - EXTRA_TAG=$_PULL_BASE_REF

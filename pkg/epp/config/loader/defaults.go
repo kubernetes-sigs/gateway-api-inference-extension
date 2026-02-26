@@ -19,18 +19,64 @@ package loader
 import (
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 )
 
 // DefaultScorerWeight is the weight used for scorers referenced in the configuration without explicit weights.
 const DefaultScorerWeight = 1.0
 
 var defaultScorerWeight = DefaultScorerWeight
+
+func loadDefaultConfig() *configapi.EndpointPickerConfig {
+	queueScorerWeight := 2.0
+	kvCacheUtilizationScorerWeight := 2.0
+	prefixCacheScorerWeight := 3.0
+	return &configapi.EndpointPickerConfig{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+			Kind:       "EndpointPickerConfig",
+		},
+		Plugins: []configapi.PluginSpec{
+			{
+				Type: scorer.QueueScorerType,
+			},
+			{
+				Type: scorer.KvCacheUtilizationScorerType,
+			},
+			{
+				Type: prefix.PrefixCachePluginType,
+			},
+		},
+		SchedulingProfiles: []configapi.SchedulingProfile{
+			{
+				Name: "default",
+				Plugins: []configapi.SchedulingPlugin{
+					{
+						PluginRef: scorer.QueueScorerType,
+						Weight:    &queueScorerWeight,
+					},
+					{
+						PluginRef: scorer.KvCacheUtilizationScorerType,
+						Weight:    &kvCacheUtilizationScorerWeight,
+					},
+					{
+						PluginRef: prefix.PrefixCachePluginType,
+						Weight:    &prefixCacheScorerWeight,
+					},
+				},
+			},
+		},
+	}
+}
 
 // applyStaticDefaults sanitizes the configuration object before plugin instantiation.
 // It handles "Static" defaults: simple structural changes to the API object that do not require access to the plugin

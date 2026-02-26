@@ -24,9 +24,18 @@ import (
 
 // PoolStatusApplyConfiguration represents a declarative configuration of the PoolStatus type for use
 // with apply.
+//
+// PoolStatus defines the observed state of InferencePool from a Gateway.
 type PoolStatusApplyConfiguration struct {
+	// GatewayRef indicates the gateway that observed state of InferencePool.
 	GatewayRef *ParentGatewayReferenceApplyConfiguration `json:"parentRef,omitempty"`
-	Conditions []v1.ConditionApplyConfiguration          `json:"conditions,omitempty"`
+	// Conditions track the state of the InferencePool.
+	//
+	// Known condition types are:
+	//
+	// * "Accepted"
+	// * "ResolvedRefs"
+	Conditions []v1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 
 // PoolStatusApplyConfiguration constructs a declarative configuration of the PoolStatus type for use with

@@ -24,11 +24,26 @@ import (
 
 // ParentReferenceApplyConfiguration represents a declarative configuration of the ParentReference type for use
 // with apply.
+//
+// ParentReference identifies an API object. It is used to associate the InferencePool with a
+// parent resource, such as a Gateway.
 type ParentReferenceApplyConfiguration struct {
-	Group     *apiv1.Group      `json:"group,omitempty"`
-	Kind      *apiv1.Kind       `json:"kind,omitempty"`
-	Name      *apiv1.ObjectName `json:"name,omitempty"`
-	Namespace *apiv1.Namespace  `json:"namespace,omitempty"`
+	// Group is the group of the referent API object. When unspecified, the referent is assumed
+	// to be in the "gateway.networking.k8s.io" API group.
+	Group *apiv1.Group `json:"group,omitempty"`
+	// Kind is the kind of the referent API object. When unspecified, the referent is assumed
+	// to be a "Gateway" kind.
+	Kind *apiv1.Kind `json:"kind,omitempty"`
+	// Name is the name of the referent API object.
+	Name *apiv1.ObjectName `json:"name,omitempty"`
+	// Namespace is the namespace of the referenced object. When unspecified, the local
+	// namespace is inferred.
+	//
+	// Note that when a namespace different than the local namespace is specified,
+	// a ReferenceGrant object is required in the referent namespace to allow that
+	// namespace's owner to accept the reference. See the ReferenceGrant
+	// documentation for details: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
+	Namespace *apiv1.Namespace `json:"namespace,omitempty"`
 }
 
 // ParentReferenceApplyConfiguration constructs a declarative configuration of the ParentReference type for use with

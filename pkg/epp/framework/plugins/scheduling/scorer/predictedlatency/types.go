@@ -17,12 +17,14 @@ limitations under the License.
 // Package requestcontrol contains helpers to decouple latency-predictor logic.
 package predictedlatency
 
-import schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+import (
+	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+)
 
 type headroomStrategy string
 
 type choice struct {
-	endpointName schedulingtypes.Endpoint
+	endpointName fwksched.Endpoint
 	weight       int
 }
 

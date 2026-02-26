@@ -20,6 +20,7 @@ package requestcontrol
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -29,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -125,41 +126,24 @@ func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.R
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 
-	// Parse Request, Resolve Target Models, and Determine Parameters
-	requestBodyMap := reqCtx.Request.Body
-	var ok bool
-	reqCtx.IncomingModelName, ok = requestBodyMap["model"].(string)
-
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
-	}
-	if reqCtx.TargetModelName == "" {
-		// Default to incoming model name
-		reqCtx.TargetModelName = reqCtx.IncomingModelName
-	}
-
-	d.applyWeightedModelRewrite(reqCtx)
-
-	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
-
-	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body, reqCtx.Request.Headers)
+	// Parse, mutate, and extract the request body
+	llmRequestBody, err := d.processRequestBody(ctx, reqCtx)
 	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+		return reqCtx, err
 	}
 
-	// Parse inference objective.
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
+	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
-	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
 		TargetModel: reqCtx.TargetModelName,
-		Body:        requestBody,
+		Body:        llmRequestBody,
 		Headers:     reqCtx.Request.Headers,
+		Objectives:  requestObjectives,
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
-
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
@@ -201,6 +185,62 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, err
 	}
 
+	return reqCtx, nil
+}
+
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext) (*fwksched.LLMRequestBody, error) {
+	bodyMap := make(map[string]any)
+	if err := json.Unmarshal(reqCtx.Request.RawBody, &bodyMap); err != nil {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body"}
+	}
+
+	if err := d.mutateAndRepackage(ctx, reqCtx, bodyMap); err != nil {
+		return nil, err
+	}
+
+	extractedBody, err := requtil.ExtractRequestBody(bodyMap, reqCtx.Request.Headers)
+	if err != nil {
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+	}
+	return extractedBody, nil
+}
+
+func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.RequestContext, bodyMap map[string]any) error {
+	logger := log.FromContext(ctx)
+
+	// Mutate the model name inside the map
+	_, err := d.mutateModel(reqCtx, bodyMap)
+	if err != nil {
+		return err
+	}
+
+	// Marshal back to bytes so downstream ExtProc filters see the updated model
+	requestBodyBytes, err := json.Marshal(bodyMap)
+	if err != nil {
+		logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+		return errutil.Error{Code: errutil.Internal, Msg: "Error marshalling request body"}
+	}
+
+	reqCtx.Request.RawBody = requestBodyBytes
+	reqCtx.RequestSize = len(requestBodyBytes)
+
+	return nil
+}
+
+func (d *Director) mutateModel(reqCtx *handlers.RequestContext, bodyMap map[string]any) (*handlers.RequestContext, error) {
+	var ok bool
+	reqCtx.IncomingModelName, ok = bodyMap["model"].(string)
+	if !ok {
+
+		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
+
+	}
+	if reqCtx.TargetModelName == "" {
+		// Default to incoming model name
+		reqCtx.TargetModelName = reqCtx.IncomingModelName
+	}
+	d.applyWeightedModelRewrite(reqCtx)
+	bodyMap["model"] = reqCtx.TargetModelName
 	return reqCtx, nil
 }
 

@@ -19,7 +19,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -27,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -91,15 +90,23 @@ func extractUsageByAPIType(usg map[string]any, objectType string) fwkrq.Usage {
 }
 
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
-func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, response map[string]any) (*RequestContext, error) {
+func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
-	responseBytes, err := json.Marshal(response)
-	if err != nil {
-		return reqCtx, fmt.Errorf("error marshalling responseBody - %w", err)
+	var responseErr error
+	var responseBody map[string]any
+	responseErr = json.Unmarshal(responseBytes, &responseBody)
+	if responseErr != nil {
+		if logger.V(logutil.DEBUG).Enabled() {
+			logger.V(logutil.DEBUG).Error(responseErr, "Error unmarshalling request body", "body", string(responseBytes))
+		} else {
+			logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(responseBytes))
+		}
+		return reqCtx, responseErr
 	}
-	if response["usage"] != nil {
-		usg := response["usage"].(map[string]any)
-		objectType, _ := response["object"].(string)
+
+	if responseBody["usage"] != nil {
+		usg := responseBody["usage"].(map[string]any)
+		objectType, _ := responseBody["object"].(string)
 		usage := extractUsageByAPIType(usg, objectType)
 		if usg["prompt_token_details"] != nil {
 			detailsMap := usg["prompt_token_details"].(map[string]any)
@@ -112,34 +119,25 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		reqCtx.Usage = usage
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
-	reqCtx.ResponseSize = len(responseBytes)
-	// ResponseComplete is to indicate the response is complete. In non-streaming
-	// case, it will be set to be true once the response is processed; in
-	// streaming case, it will be set to be true once the last chunk is processed.
-	// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/178)
-	// will add the processing for streaming case.
-	reqCtx.ResponseComplete = true
-
-	reqCtx.respBodyResp = generateResponseBodyResponses(responseBytes, true)
 
 	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseText string) {
+func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) {
 	logger := log.FromContext(ctx)
 	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
 	if err != nil {
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
 
+	responseText := string(responseBytes)
 	// Parse usage on EVERY chunk to catch split streams (where usage and [DONE] are in different chunks).
 	if resp := parseRespForUsage(ctx, responseText); resp.Usage.TotalTokens > 0 {
 		reqCtx.Usage = resp.Usage
 	}
 
 	if strings.Contains(responseText, streamingEndMsg) {
-		reqCtx.ResponseComplete = true
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
 		cachedToken := 0
@@ -176,7 +174,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 
 func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
 	commonResponses := common.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
-	responses := []*extProcPb.ProcessingResponse{}
+	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{
 			Response: &extProcPb.ProcessingResponse_ResponseBody{
@@ -218,7 +216,7 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 }
 
 // Example message if "stream_options": {"include_usage": "true"} is included in the request:
-// data: {"id":"...","object":"text_completion","created":1739400043,"model":"food-review-0","choices":[],
+// data: {"id":"...","object":"text_completion","created":1739400043,"model":"small-segment-lora-0","choices":[],
 // "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
 //
 // data: [DONE]

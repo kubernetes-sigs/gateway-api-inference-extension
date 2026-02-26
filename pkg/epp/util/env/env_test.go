@@ -7,11 +7,11 @@ import (
 
 	"github.com/go-logr/logr/testr"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
 func TestGetEnvFloat(t *testing.T) {
-	logger := testr.New(t)
+	logger := logutil.NewTestLogger()
 
 	tests := []struct {
 		name       string

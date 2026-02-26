@@ -21,8 +21,10 @@ import (
 	"fmt"
 	"math/rand"
 
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
@@ -95,4 +97,28 @@ func (s *PredictedLatency) selectEndpointBasedOnStrategy(
 		return nil
 	}
 	return selectedEndpoint
+}
+
+func (s *PredictedLatency) getRunningRequestList(endpointName types.NamespacedName) *requestPriorityQueue {
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		return value.(*requestPriorityQueue)
+	}
+	return nil
+}
+
+func (s *PredictedLatency) removeRequestFromEndpoint(endpointName types.NamespacedName, requestID string) {
+	if queue := s.getRunningRequestList(endpointName); queue != nil {
+		queue.Remove(requestID)
+	}
+}
+
+func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predictedLatencyCtx) {
+	if ctx == nil || ctx.targetMetadata == nil {
+		return
+	}
+	endpointName := types.NamespacedName{
+		Name:      ctx.targetMetadata.NamespacedName.Name,
+		Namespace: ctx.targetMetadata.NamespacedName.Namespace,
+	}
+	s.removeRequestFromEndpoint(endpointName, requestID)
 }

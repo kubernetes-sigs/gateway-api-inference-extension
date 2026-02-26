@@ -20,7 +20,11 @@ package v1alpha2
 
 // MatchApplyConfiguration represents a declarative configuration of the Match type for use
 // with apply.
+//
+// Match defines the criteria for matching the LLM requests.
 type MatchApplyConfiguration struct {
+	// Model specifies the criteria for matching the 'model' field
+	// within the JSON request body.
 	Model *ModelMatchApplyConfiguration `json:"model,omitempty"`
 }
 

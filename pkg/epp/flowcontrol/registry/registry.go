@@ -27,7 +27,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/utils/clock"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
@@ -376,7 +376,7 @@ func (fr *FlowRegistry) gcFlows() {
 	)
 
 	if len(deletedFlows) > 0 {
-		var keysToClean []flowcontrol.FlowKey
+		keysToClean := make([]flowcontrol.FlowKey, 0, len(deletedFlows))
 		for _, v := range deletedFlows {
 			fr.logger.V(logging.VERBOSE).Info("Garbage collecting flow", "flowKey", v.key, "becameIdleAt", v.becameIdleAt)
 			// Release the band lease.
@@ -415,7 +415,7 @@ func (fr *FlowRegistry) gcPriorityBands() {
 	)
 
 	if len(deletedBands) > 0 {
-		var keysToClean []int
+		keysToClean := make([]int, 0, len(deletedBands))
 		for _, v := range deletedBands {
 			fr.logger.V(logging.VERBOSE).Info("Garbage collecting priority band",
 				"priority", v.priority, "becameIdleAt", v.becameIdleAt)

@@ -12,7 +12,7 @@ This guide describes the current state of exposed metrics and how to scrape them
 
       ```
       curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-      "model": "food-review",
+      "model": "small-segment-lora",
       "prompt": "whats your fav movie?",
       "max_tokens": 10,
       "temperature": 0,
@@ -62,6 +62,9 @@ These metrics provide insights into the experimental flow control layer within t
 | inference_extension_flow_control_request_queue_duration_seconds | Distribution | Distribution of the total time requests spend in the flow control layer. This is measured from the moment a request enters the `EnqueueAndWait` function until it reaches a final outcome (e.g., Dispatched, Rejected, Evicted). | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_queue_size | Gauge | The current number of requests being actively managed by the flow control layer. This counts requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_queue_bytes | Gauge | The current size in bytes of all requests being actively managed by the flow control layer. This includes requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
+| inference_extension_flow_control_dispatch_cycle_duration_seconds | Histogram | The time taken for each dispatch cycle in the Flow Control layer. |  | ALPHA |
+| inference_extension_flow_control_request_enqueue_duration_seconds | Gauge | The time taken to enqueue requests by the EPP flow control layer. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
+
 
 ## Scrape Metrics & Pprof profiles
 
@@ -177,11 +180,9 @@ We currently have 2 types of prometheus deployments documented:
         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/observability/prometheus/rbac.yaml
      ```
 
-    Patch the metrics reader ClusterRoleBinding to reference the new ServiceAccount:
+    Create the metrics reader ClusterRoleBinding to reference the new ServiceAccount:
     ```bash
-       kubectl patch clusterrolebinding inference-gateway-sa-metrics-reader-role-binding \
-         --type='json' \
-         -p='[{"op": "replace", "path": "/subjects/0/namespace", "value": "monitoring"}]'
+    kubectl create clusterrolebinding inference-gateway-sa-metrics-reader-role-binding   --clusterrole=inference-gateway-metrics-reader   --serviceaccount=monitoring:default
     ```
 
     Add the prometheus-community helm repository:
@@ -198,7 +199,7 @@ We currently have 2 types of prometheus deployments documented:
      ```
 
     You can add the prometheus data source to grafana following [This Guide](https://grafana.com/docs/grafana/latest/administration/data-source-management/).
-    The prometheus server host is by default `http://prometheus-server`
+    Despite the URL reported from the previous step, the prometheus server host is by default `http://prometheus-server`.
 
     Notice that the given values file is very simple and will work directly after following the [Getting Started Guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/), you might need to modify it
 
@@ -210,7 +211,8 @@ We currently have 2 types of prometheus deployments documented:
 ## Load Inference Extension dashboard into Grafana
 
 Please follow [grafana instructions](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/import-dashboards/) to load the dashboard json.
-The dashboard can be found here [Grafana Dashboard](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/tools/dashboards/inference_gateway.json)
+The dashboard can be found here [Grafana Dashboard](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/tools/dashboards/inference_gateway.json). Note that you may need to copy and paste the json
+file rather than using the import URL option.
 
 ## Prometheus Alerts
 

@@ -25,7 +25,7 @@ import (
 	"net/http"
 	"time"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
 // AddTrainingDataBulk buffers entries for periodic flush.
@@ -139,7 +139,7 @@ func (p *Predictor) sampleFromSlice(entries []TrainingEntry, sampleSize int) []T
 }
 
 // flushTraining sends buffered entries to training server in one bulk POST, with error handling.
-func (p *Predictor) flushTraining() {
+func (p *Predictor) flushTraining(ctx context.Context) {
 	p.bufferMu.Lock()
 	if len(p.pending) == 0 {
 		p.bufferMu.Unlock()
@@ -166,7 +166,8 @@ func (p *Predictor) flushTraining() {
 
 	// Send training data to training server
 	url := p.config.TrainingURL + "/add_training_data_bulk"
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(data))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		p.logger.Error(err, "Failed to create bulk POST request", "url", url)
 		return
@@ -289,10 +290,7 @@ func (p *Predictor) refreshModelInfo(ctx context.Context) error {
 }
 
 // refreshMetrics GETs /metrics from training server and caches parsed coefficients or fetches XGBoost trees.
-func (p *Predictor) refreshMetrics() {
-	ctx, cancel := context.WithTimeout(context.Background(), p.config.HTTPTimeout)
-	defer cancel()
-
+func (p *Predictor) refreshMetrics(ctx context.Context) {
 	// Refresh model info first
 	if err := p.refreshModelInfo(ctx); err != nil {
 		p.logger.Error(err, "Failed to refresh model info during periodic refresh")

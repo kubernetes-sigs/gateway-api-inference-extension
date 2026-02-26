@@ -115,3 +115,43 @@ func TestCollectorStopCancelsContext(t *testing.T) {
 	after := atomic.LoadInt64(&source.callCount)
 	assert.Equal(t, before, after, "call count changed after stop")
 }
+
+func TestCollectorStartSourceValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		sources []fwkdl.DataSource
+		wantErr bool
+	}{
+		{
+			name:    "empty sources returns error",
+			sources: []fwkdl.DataSource{},
+			wantErr: true,
+		},
+		{
+			name:    "nil source returns error",
+			sources: []fwkdl.DataSource{nil},
+			wantErr: true,
+		},
+		{
+			name:    "valid polling source succeeds",
+			sources: []fwkdl.DataSource{&FakeDataSource{}},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCollector()
+			ticker := mocks.NewTicker()
+			ctx := context.Background()
+
+			err := c.Start(ctx, ticker, endpoint, tt.sources)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				require.NoError(t, c.Stop())
+			}
+		})
+	}
+}

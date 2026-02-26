@@ -24,7 +24,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -296,7 +297,8 @@ func (s *PredictedLatency) getEndpointMinTPOTSLO(endpoint schedulingtypes.Endpoi
 		Name:      endpoint.GetMetadata().NamespacedName.Name,
 		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
 	}
-	if runningReqs, ok := s.runningRequestLists[endpointName]; ok && runningReqs.GetSize() > 0 {
+
+	if runningReqs := s.getRunningRequestList(endpointName); runningReqs != nil && runningReqs.GetSize() > 0 {
 		if topReq := runningReqs.Peek(); topReq != nil {
 			return topReq.tpot
 		}
@@ -309,7 +311,8 @@ func (s *PredictedLatency) getEndpointRunningRequestCount(endpoint schedulingtyp
 		Name:      endpoint.GetMetadata().NamespacedName.Name,
 		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
 	}
-	if runningReqs, ok := s.runningRequestLists[endpointName]; ok {
+
+	if runningReqs := s.getRunningRequestList(endpointName); runningReqs != nil {
 		return runningReqs.GetSize()
 	}
 	return 0 // no running requests

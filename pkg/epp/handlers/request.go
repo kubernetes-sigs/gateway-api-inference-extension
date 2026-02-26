@@ -81,7 +81,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 
 func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) []*extProcPb.ProcessingResponse {
 	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
-	responses := []*extProcPb.ProcessingResponse{}
+	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{
 			Response: &extProcPb.ProcessingResponse_RequestBody{

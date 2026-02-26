@@ -22,22 +22,22 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/plugins/approximateprefix"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
 
 // PrepareRequestData prepares the SLO context for the request, including parsing SLO headers and gathering prefix cache scores abds generating predictions.
 func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
-	sloCtx := s.getOrMakePredictedLatencyContextForRequest(request)
+	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request)
 
-	s.parseSLOHeaders(ctx, request, sloCtx)
+	s.parseSLOHeaders(ctx, request, predictedLatencyCtx)
 	var prefixCacheScore float64
 	for _, endpoint := range endpoints {
 
-		if prefixCacheInfoRaw, ok := endpoint.Get(approximateprefix.PrefixCacheMatchInfoKey); ok {
-			prefixCacheInfo := prefixCacheInfoRaw.(*approximateprefix.PrefixCacheMatchInfo)
+		if prefixCacheInfoRaw, ok := endpoint.Get(attrprefix.PrefixCacheMatchInfoKey); ok {
+			prefixCacheInfo := prefixCacheInfoRaw.(*attrprefix.PrefixCacheMatchInfo)
 			prefixCacheScore = float64(prefixCacheInfo.MatchBlocks()) / float64(prefixCacheInfo.TotalBlocks())
 			if !math.IsNaN(prefixCacheScore) {
 				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", endpoint.GetMetadata().NamespacedName.Name, "score", prefixCacheScore)
@@ -49,9 +49,15 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
 			prefixCacheScore = 0.0
 		}
-		sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
+		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
 	}
-	s.setPredictedLatencyContextForRequest(request, sloCtx)
+	predictions, err := s.generatePredictions(ctx, request, predictedLatencyCtx, endpoints)
+	if err == nil && len(predictions) == len(endpoints) {
+		s.updateRequestContextWithPredictions(predictedLatencyCtx, predictions)
+		s.updateHasValidPod(ctx, predictedLatencyCtx, endpoints)
+	}
+
+	s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 	return nil
 }
 
@@ -60,5 +66,5 @@ func (p *PredictedLatency) Produces() map[string]any {
 }
 
 func (p *PredictedLatency) Consumes() map[string]any {
-	return map[string]any{approximateprefix.PrefixCacheMatchInfoKey: approximateprefix.PrefixCacheMatchInfo{}}
+	return map[string]any{attrprefix.PrefixCacheMatchInfoKey: attrprefix.PrefixCacheMatchInfo{}}
 }

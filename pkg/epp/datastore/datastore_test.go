@@ -441,6 +441,119 @@ func TestPods(t *testing.T) {
 	}
 }
 
+func TestTargetPortsChange(t *testing.T) {
+	// Create pods that are ready
+	readyPod1 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			PodIP: "10.0.0.1",
+		},
+	}
+
+	tests := []struct {
+		name                   string
+		initialTargetPorts     []v1.Port
+		updatedTargetPorts     []v1.Port
+		wantEndpointCountAfter int
+		wantEndpointNames      []string
+	}{
+		{
+			name:                   "Shrink from 2 ports to 1 port removes orphaned rank",
+			initialTargetPorts:     []v1.Port{{Number: 8000}, {Number: 8001}},
+			updatedTargetPorts:     []v1.Port{{Number: 8000}},
+			wantEndpointCountAfter: 1,
+			wantEndpointNames:      []string{"pod1-rank-0"},
+		},
+		{
+			name:                   "Shrink from 3 ports to 1 port removes multiple orphaned ranks",
+			initialTargetPorts:     []v1.Port{{Number: 8000}, {Number: 8001}, {Number: 8002}},
+			updatedTargetPorts:     []v1.Port{{Number: 8000}},
+			wantEndpointCountAfter: 1,
+			wantEndpointNames:      []string{"pod1-rank-0"},
+		},
+		{
+			name:                   "Expand from 1 port to 2 ports adds new rank",
+			initialTargetPorts:     []v1.Port{{Number: 8000}},
+			updatedTargetPorts:     []v1.Port{{Number: 8000}, {Number: 8001}},
+			wantEndpointCountAfter: 2,
+			wantEndpointNames:      []string{"pod1-rank-0", "pod1-rank-1"},
+		},
+	}
+
+	for _, test := range tests {
+		period := time.Second
+		factories := []datalayer.EndpointFactory{
+			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		}
+		for _, epf := range factories {
+			t.Run(test.name, func(t *testing.T) {
+				ctx := context.Background()
+				scheme := runtime.NewScheme()
+				_ = clientgoscheme.AddToScheme(scheme)
+				_ = corev1.AddToScheme(scheme)
+
+				// Create fake client with the pod
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(readyPod1).
+					Build()
+
+				ds := NewDatastore(ctx, epf, 0)
+
+				// Set initial pool with multiple target ports
+				initialPool := testutil.MakeInferencePool("test-pool").
+					Namespace("default").
+					Selector(map[string]string{"app": "vllm"}).ObjRef()
+				initialPool.Spec.TargetPorts = test.initialTargetPorts
+
+				if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(initialPool)); err != nil {
+					t.Fatalf("Failed to set initial pool: %v", err)
+				}
+
+				// Verify initial endpoint count
+				initialEndpoints := ds.PodList(AllPodsPredicate)
+				if len(initialEndpoints) != len(test.initialTargetPorts) {
+					t.Errorf("Initial endpoint count: got %d, want %d", len(initialEndpoints), len(test.initialTargetPorts))
+				}
+
+				// Update pool with different target ports
+				updatedPool := testutil.MakeInferencePool("test-pool").
+					Namespace("default").
+					Selector(map[string]string{"app": "vllm"}).ObjRef()
+				updatedPool.Spec.TargetPorts = test.updatedTargetPorts
+
+				if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(updatedPool)); err != nil {
+					t.Fatalf("Failed to set updated pool: %v", err)
+				}
+
+				// Verify orphaned ranks are removed
+				finalEndpoints := ds.PodList(AllPodsPredicate)
+				if len(finalEndpoints) != test.wantEndpointCountAfter {
+					t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCountAfter)
+				}
+
+				// Verify endpoint names
+				gotNames := make([]string, 0, len(finalEndpoints))
+				for _, ep := range finalEndpoints {
+					gotNames = append(gotNames, ep.GetMetadata().NamespacedName.Name)
+				}
+				if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+					t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)
+				}
+			})
+		}
+	}
+}
+
 func TestEndpointMetadata(t *testing.T) {
 	tests := []struct {
 		name              string

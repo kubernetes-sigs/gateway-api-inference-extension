@@ -75,7 +75,11 @@ func TestLatencyPredictorIntegration(t *testing.T) {
 
 	// Create predictor
 	predictor := New(config, logger)
-	defer predictor.Stop()
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		predictor.Stop(ctx) // ✅ Pass context to Stop()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -163,8 +167,8 @@ func testModelInfo(t *testing.T, ctx context.Context, predictor *Predictor) {
 		t.Fatalf("Failed to get model info: %v", err)
 	}
 
-	t.Logf("Model Info - Type: %s, Model Status: %v, Quantile: %.2f",
-		modelInfo.ModelType, modelInfo.ModelStatus, modelInfo.Quantile)
+	t.Logf("Model Info - Type: %s, ObjectiveType: %s, Model Status: %v, Quantile: %.2f",
+		modelInfo.ModelType, modelInfo.ObjectiveType, modelInfo.ModelStatus, modelInfo.Quantile)
 
 	if modelInfo.ModelType == "" {
 		t.Error("Model type should not be empty")
@@ -204,6 +208,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	// Log current predictor state
 	t.Logf("Predictor state:")
 	t.Logf("  Current model type: %s", predictor.GetCurrentModelType())
+	t.Logf("  Current objective type: %s", predictor.GetCurrentObjectiveType())
 	t.Logf("  Current quantile: %.2f", predictor.GetCurrentQuantile())
 	t.Logf("  Overall ready: %t", predictor.IsReady())
 	t.Logf("  XGBoost ready: %t", predictor.IsXGBoostReady())
@@ -250,6 +255,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 	t.Logf("  TTFT Bounds: [%.2f, %.2f]", response.TTFTPredictionBounds[0], response.TTFTPredictionBounds[1])
 	t.Logf("  TPOT Bounds: [%.2f, %.2f]", response.TPOTPredictionBounds[0], response.TPOTPredictionBounds[1])
 	t.Logf("  Model Type: %s", response.ModelType)
+	t.Logf("  Objective Type: %s", response.ObjectiveType)
 	t.Logf("  Quantile: %.2f", response.Quantile)
 	t.Logf("  Predicted At: %s", response.PredictedAt.Format(time.RFC3339))
 
@@ -814,7 +820,12 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
-	defer httpPredictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpPredictor.Stop(stopCtx)
+	}()
 
 	err = httpPredictor.Start(ctx)
 	if err != nil {
@@ -996,7 +1007,12 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 	}
 
 	httpPredictor := New(httpOnlyConfig, logger)
-	defer httpPredictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpPredictor.Stop(stopCtx)
+	}()
 
 	err = httpPredictor.Start(ctx)
 	if err != nil {
@@ -1607,7 +1623,12 @@ func BenchmarkPrediction(b *testing.B) {
 	}
 
 	predictor := New(config, logger)
-	defer predictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		predictor.Stop(stopCtx)
+	}()
 
 	ctx := context.Background()
 	err := predictor.Start(ctx)
@@ -1679,7 +1700,12 @@ func BenchmarkBulkPrediction(b *testing.B) {
 	}
 
 	predictor := New(config, logger)
-	defer predictor.Stop()
+	defer func() {
+		// ✅ Pass context to Stop()
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		predictor.Stop(stopCtx)
+	}()
 
 	ctx := context.Background()
 	err := predictor.Start(ctx)
@@ -2237,7 +2263,7 @@ func TestConfigurationHandling(t *testing.T) {
 			len(config.PredictionURLs), len(predictionURLs))
 	}
 
-	// Cleanup without starting background processes
+	// ✅ Properly cleanup
 	close(predictor.done)
 	predictor.wg.Wait()
 

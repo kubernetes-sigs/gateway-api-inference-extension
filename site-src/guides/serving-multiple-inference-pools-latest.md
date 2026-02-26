@@ -5,7 +5,7 @@ This guide assumes you completed the Getting Started guide before running the cu
 !!! warning "Unreleased/main branch"
     This guide tracks **main** and is intended for users who want the very latest features and fixes and are comfortable with potential breakage.
 
-A company may need to deploy multiple large language models (LLMs) in a cluster to support different workloads. For example, a Llama model could power a chatbot interface, while a DeepSeek model might serve a recommendation application. Additionally, each base model may have multiple Low-Rank Adaptations ([LoRAs](https://www.ibm.com/think/topics/lora)). LoRAs associated with the same base model are served by the same backend inference server that hosts the base model. A LoRA name is also provided as the model name in the request body.
+A company may need to deploy multiple large language models (LLMs) in a cluster to support different workloads. For example, a Qwen model could power a chatbot interface, while a DeepSeek model might serve a recommendation application. Additionally, each base model may have multiple Low-Rank Adaptations ([LoRAs](https://www.ibm.com/think/topics/lora)). LoRAs associated with the same base model are served by the same backend inference server that hosts the base model. A LoRA name is also provided as the model name in the request body.
 
 For serving multiple inference pools, the system needs to extract information such as the model name from the request body. This pattern of serving multiple models behind a single endpoint is common among providers and is generally expected by clients.
 
@@ -66,11 +66,11 @@ The BBR extracts the model name from the request body, does a lookup of the base
             - name: X-Gateway-Base-Model-Name
               value: |
                 {
-                  "meta-llama/Llama-3.1-8B-Instruct": "meta-llama/Llama-3.1-8B-Instruct",
-                  "food-review-1": "meta-llama/Llama-3.1-8B-Instruct",
-                  "deepseek/vllm-deepseek-r1": "deepseek/vllm-deepseek-r1",
-                  "ski-resorts": "deepseek/vllm-deepseek-r1",
-                  "movie-critique": "deepseek/vllm-deepseek-r1",
+                  "Qwen/Qwen3-32B": "Qwen/Qwen3-32B",
+                  "food-review-1": "Qwen/Qwen3-32B",
+                  "deepseek-ai/DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
+                  "ski-resorts": "deepseek-ai/DeepSeek-V3.2",
+                  "movie-critique": "deepseek-ai/DeepSeek-V3.2",
                 }[json(request.body).model]
     ```
 
@@ -85,7 +85,7 @@ The BBR extracts the model name from the request body, does a lookup of the base
 ### Serving a Second Model Server
 
 The example uses a vLLM simulator since this is the least common denominator configuration that can be run in every environment.
-The manifest uses `deepseek/vllm-deepseek-r1` as base model with two LoRA adapters `ski-resorts` and `movie-critique`.
+The manifest uses `deepseek-ai/DeepSeek-V3.2` as base model with two LoRA adapters `ski-resorts` and `movie-critique`.
 
 Deploy the second model server along with a mapping from LoRA adapters to the base model:
 
@@ -108,12 +108,12 @@ Set the Helm chart version (unless already set).
 
       ```bash
       export GATEWAY_PROVIDER=gke
-      helm install vllm-deepseek-r1 \
+      helm install vllm-deepseek-v3.2 \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
+      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-v3.2 \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=deepseek/vllm-deepseek-r1 \
+      --set experimentalHttpRoute.baseModel=deepseek-ai/DeepSeek-V3.2 \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -122,12 +122,12 @@ Set the Helm chart version (unless already set).
 
       ```bash
       export GATEWAY_PROVIDER=istio
-      helm install vllm-deepseek-r1 \
+      helm install vllm-deepseek-v3.2 \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
+      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-v3.2 \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=deepseek/vllm-deepseek-r1 \
+      --set experimentalHttpRoute.baseModel=deepseek-ai/DeepSeek-V3.2 \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -182,12 +182,12 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 
       ```bash
       export GATEWAY_PROVIDER=gke
-      helm upgrade vllm-llama3-8b-instruct oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=meta-llama/Llama-3.1-8B-Instruct \
+      --set experimentalHttpRoute.baseModel=Qwen/Qwen3-32B \
       --version $IGW_CHART_VERSION
       ```
 
@@ -195,12 +195,12 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 
       ```bash
       export GATEWAY_PROVIDER=istio
-      helm upgrade vllm-llama3-8b-instruct oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=meta-llama/Llama-3.1-8B-Instruct \
+      --set experimentalHttpRoute.baseModel=Qwen/Qwen3-32B \
       --version $IGW_CHART_VERSION
       ```
 
@@ -208,23 +208,23 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 
       ```bash
       export GATEWAY_PROVIDER=none
-      helm upgrade vllm-llama3-8b-instruct oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=meta-llama/Llama-3.1-8B-Instruct \
+      --set experimentalHttpRoute.baseModel=Qwen/Qwen3-32B \
       --version $IGW_CHART_VERSION
       ```
 
 === "Other"
 
       ```bash
-      helm upgrade vllm-llama3-8b-instruct oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=meta-llama/Llama-3.1-8B-Instruct \
+      --set experimentalHttpRoute.baseModel=Qwen/Qwen3-32B \
       --version $IGW_CHART_VERSION
       ```
 
@@ -236,13 +236,13 @@ First, make sure that the setup works as before by sending a request to the LoRA
 
 === "Chat Completions API"
 
-      1. Send a few requests to the Llama model directly:
+      1. Send a few requests to the Qwen model directly:
 
           ```bash
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
                -H "Content-Type: application/json" \
                -d '{
-                      "model": "meta-llama/Llama-3.1-8B-Instruct",
+                      "model": "Qwen/Qwen3-32B",
                       "max_tokens": 100,
                       "temperature": 0,
                       "messages": [
@@ -264,7 +264,7 @@ First, make sure that the setup works as before by sending a request to the LoRA
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
                -H "Content-Type: application/json" \
                -d '{
-                      "model": "deepseek/vllm-deepseek-r1",
+                      "model": "deepseek-ai/DeepSeek-V3.2",
                       "max_tokens": 100,
                       "temperature": 0,
                       "messages": [
@@ -279,7 +279,7 @@ First, make sure that the setup works as before by sending a request to the LoRA
                       ]
                    }'
           ```
-      1. Send a few requests to the LoRA of the Llama model as follows:
+      1. Send a few requests to the LoRA of the Qwen model as follows:
 
           ```bash
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
@@ -353,7 +353,7 @@ First, make sure that the setup works as before by sending a request to the LoRA
            curl -X POST -i ${IP}:${PORT}/v1/completions \
                 -H "Content-Type: application/json" \
                 -d '{
-                       "model": "deepseek/vllm-deepseek-r1",
+                       "model": "deepseek-ai/DeepSeek-V3.2",
                        "prompt": "What is the best ski resort in Austria?",
                        "max_tokens": 20,
                        "temperature": 0

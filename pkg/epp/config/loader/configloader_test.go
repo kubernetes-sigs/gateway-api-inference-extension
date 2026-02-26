@@ -30,7 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
@@ -43,6 +43,8 @@ import (
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -66,6 +68,10 @@ func TestLoadRawConfiguration(t *testing.T) {
 	// Register known feature gates for validation.
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
 	RegisterFeatureGate(flowcontrol.FeatureGate)
+
+	queueScorerWeight := 2.0
+	kvCacheUtilizationScorerWeight := 2.0
+	prefixCacheScorerWeight := 3.0
 
 	tests := []struct {
 		name       string
@@ -121,6 +127,51 @@ func TestLoadRawConfiguration(t *testing.T) {
 					{Name: "test1", Type: testPluginType, Parameters: json.RawMessage(`{"threshold":10}`)},
 				},
 				FeatureGates: configapi.FeatureGates{},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Success - Default configuration",
+			configText: "",
+			want: &configapi.EndpointPickerConfig{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+					Kind:       "EndpointPickerConfig",
+				},
+				FeatureGates: configapi.FeatureGates{},
+				Plugins: []configapi.PluginSpec{
+					{
+						Name: scorer.QueueScorerType,
+						Type: scorer.QueueScorerType,
+					},
+					{
+						Name: scorer.KvCacheUtilizationScorerType,
+						Type: scorer.KvCacheUtilizationScorerType,
+					},
+					{
+						Name: prefix.PrefixCachePluginType,
+						Type: prefix.PrefixCachePluginType,
+					},
+				},
+				SchedulingProfiles: []configapi.SchedulingProfile{
+					{
+						Name: "default",
+						Plugins: []configapi.SchedulingPlugin{
+							{
+								PluginRef: scorer.QueueScorerType,
+								Weight:    &queueScorerWeight,
+							},
+							{
+								PluginRef: scorer.KvCacheUtilizationScorerType,
+								Weight:    &kvCacheUtilizationScorerWeight,
+							},
+							{
+								PluginRef: prefix.PrefixCachePluginType,
+								Weight:    &prefixCacheScorerWeight,
+							},
+						},
+					},
+				},
 			},
 			wantErr: false,
 		},
@@ -556,6 +607,14 @@ func (m *mockSource) Collect(ctx context.Context, ep fwkdl.Endpoint) error {
 
 func (m *mockSource) Extractors() []string {
 	return []string{}
+}
+
+func (m *mockSource) OutputType() reflect.Type {
+	return fwkdl.NotificationEventType
+}
+
+func (m *mockSource) ExtractorType() reflect.Type {
+	return fwkdl.ExtractorType
 }
 
 // Mock Extractor

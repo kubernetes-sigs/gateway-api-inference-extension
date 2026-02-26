@@ -315,10 +315,10 @@ An Ordering Policy that implements Earliest Deadline First. It prioritizes reque
 ## Scheduling Profiles
 
 The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
-requests to pods. If one is not defined, a default one names `default` will be added and will reference all of
+requests to pods. If one is not defined, a default one named `default` will be added and will reference all of
 the instantiated plugins.
 
-The number of scheduling profiles one defines, depends on the use case. For simple
+The number of scheduling profiles depends on the use case. For simple
 serving of requests, one is enough. For disaggregated prefill, two profiles are required. Each entry
 in this section has the following form:
 

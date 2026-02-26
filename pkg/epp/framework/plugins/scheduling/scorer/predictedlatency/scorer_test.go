@@ -22,7 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -152,7 +154,7 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 
 	// If we have a predictor, generate predictions for each endpoint
 	if predictor != nil && predictor.err == nil {
-		predictions := make([]endpointPredictionResult, 0, len(endpoints))
+		predictions := make(map[string]endpointPredictionResult, len(endpoints))
 		for _, endpoint := range endpoints {
 			predReq := latencypredictor.PredictionRequest{
 				KVCachePercentage: endpoint.GetMetrics().KVCacheUsagePercent,
@@ -160,13 +162,13 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 
 			predResp, err := predictor.Predict(ctx, predReq)
 			if err == nil {
-				predictions = append(predictions, endpointPredictionResult{
+				predictions[endpoint.GetMetadata().NamespacedName.Name] = endpointPredictionResult{
 					Endpoint:         endpoint,
 					TTFT:             predResp.TTFT,
 					TPOT:             predResp.TPOT,
 					PrefixCacheScore: 0.0,
 					IsValid:          true,
-				})
+				}
 			}
 		}
 		predictedLatencyCtx.predictionsForScheduling = predictions
@@ -174,7 +176,7 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 
 	// Store the context using the request ID
 	reqID := request.Headers[requtil.RequestIdHeaderKey]
-	router.sloContextStore.Store(reqID, predictedLatencyCtx)
+	router.sloContextStore.Set(reqID, predictedLatencyCtx, ttlcache.DefaultTTL)
 }
 
 func TestPredictedLatency_Score(t *testing.T) {
@@ -443,8 +445,9 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = newRequestPriorityQueue()
-				r.runningRequestLists[podName].Add("req1", 0.04)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				r.runningRequestLists.Store(podName, queue)
 			},
 			expectedCount: 1,
 		},
@@ -455,10 +458,11 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
-				r.runningRequestLists[endpointName].Add("req1", 0.04)
-				r.runningRequestLists[endpointName].Add("req2", 0.03)
-				r.runningRequestLists[endpointName].Add("req3", 0.05)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				queue.Add("req2", 0.03)
+				queue.Add("req3", 0.05)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedCount: 3,
 		},
@@ -498,8 +502,9 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
-				r.runningRequestLists[endpointName].Add("req1", 0.04)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedSLO: 0.04,
 		},
@@ -510,11 +515,12 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
+				queue := newRequestPriorityQueue()
 				// Add in any order - heap will maintain minimum at top
-				r.runningRequestLists[endpointName].Add("req1", 0.05)
-				r.runningRequestLists[endpointName].Add("req2", 0.03) // This is the minimum
-				r.runningRequestLists[endpointName].Add("req3", 0.04)
+				queue.Add("req1", 0.05)
+				queue.Add("req2", 0.03) // This is the minimum
+				queue.Add("req3", 0.04)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedSLO: 0.03, // Minimum TPOT (heap guarantees this is at items[0])
 		},
@@ -619,9 +625,9 @@ func TestPredictedLatencyFactory(t *testing.T) {
 			expectErr:  true,
 		},
 		{
-			name:       "invalid maxSampledTokens <= 0",
+			name:       "invalid maxSampledTokens < 0",
 			pluginName: "bad-max-tokens",
-			jsonParams: `{"maxSampledTokens": 0}`,
+			jsonParams: `{"maxSampledTokens": -1}`,
 			expectErr:  true,
 		},
 		{
@@ -723,4 +729,42 @@ func TestPredictedLatencyFactoryInvalidJSON(t *testing.T) {
 			assert.Nil(t, plugin)
 		})
 	}
+}
+
+func TestSloContextStoreEviction(t *testing.T) {
+	config := DefaultConfig
+	config.ContextTTL = 100 * time.Millisecond
+	pl := NewPredictedLatency(config, nil)
+
+	requestID := "test-req-id"
+	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
+
+	req := &fwksched.LLMRequest{
+		Headers: map[string]string{
+			requtil.RequestIdHeaderKey: requestID,
+		},
+	}
+
+	metadata := &fwkdl.EndpointMetadata{
+		NamespacedName: endpointName,
+	}
+
+	sloCtx := newPredictedLatencyContext(req)
+	sloCtx.targetMetadata = metadata
+	sloCtx.avgTPOTSLO = 0.05
+
+	pl.setPredictedLatencyContextForRequest(req, sloCtx)
+
+	queue := newRequestPriorityQueue()
+	queue.Add(requestID, sloCtx.avgTPOTSLO)
+	pl.runningRequestLists.Store(endpointName, queue)
+
+	assert.True(t, queue.Contains(requestID), "Request should be in queue initially")
+	item := pl.sloContextStore.Get(requestID)
+	assert.NotNil(t, item, "Item should be in cache initially")
+
+	time.Sleep(300 * time.Millisecond)
+	item = pl.sloContextStore.Get(requestID)
+	assert.Nil(t, item, "Item should have been evicted from cache")
+	assert.False(t, queue.Contains(requestID), "Request should be removed from queue via OnEviction")
 }

@@ -31,14 +31,14 @@ import (
 	"google.golang.org/protobuf/proto"
 	"k8s.io/apimachinery/pkg/types"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // --- Test Helpers ---
 
 func makeMetric(labels map[string]string, value float64, timestampMs int64) *dto.Metric {
-	labelPairs := []*dto.LabelPair{}
+	labelPairs := make([]*dto.LabelPair, 0, len(labels))
 	for k, v := range labels {
 		labelPairs = append(labelPairs, &dto.LabelPair{Name: proto.String(k), Value: proto.String(v)})
 	}

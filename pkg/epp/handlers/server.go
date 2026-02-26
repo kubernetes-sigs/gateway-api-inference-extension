@@ -18,7 +18,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"strings"
 	"time"
@@ -32,11 +31,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -110,7 +109,7 @@ type RequestContext struct {
 
 type Request struct {
 	Headers  map[string]string
-	Body     map[string]any
+	RawBody  []byte // This field will be updated when request body is modified (e.g. model mutation in requestBody)
 	Metadata map[string]any
 }
 type Response struct {
@@ -148,7 +147,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		RequestState: RequestReceived,
 		Request: &Request{
 			Headers:  make(map[string]string),
-			Body:     make(map[string]any),
 			Metadata: make(map[string]any),
 		},
 		Response: &Response{
@@ -157,7 +155,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	}
 
 	var body []byte
-	var responseBody map[string]any
 
 	// Create error handling var as each request should only report once for
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
@@ -213,6 +210,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				reqCtx.Request.Headers[requtil.RequestIdHeaderKey] = requestID // update in headers so director can consume it
 			}
 			logger = logger.WithValues(requtil.RequestIdHeaderKey, requestID)
+			logger.V(1).Info("EPP received request") // Request ID will be logged too as part of logger context values.
 			loggerTrace = logger.V(logutil.TRACE)
 			ctx = log.IntoContext(ctx, logger)
 
@@ -225,16 +223,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Message is buffered, we can read and decode.
 			if v.RequestBody.EndOfStream {
 				loggerTrace.Info("decoding")
-				if errUnmarshal := json.Unmarshal(body, &reqCtx.Request.Body); errUnmarshal != nil {
-					if logger.V(logutil.DEBUG).Enabled() {
-						logger.Info("Error unmarshaling request body", "body", string(body), "err", errUnmarshal)
-					}
-					err = errutil.Error{
-						Code: errutil.BadRequest,
-						Msg:  "Error unmarshaling request body",
-					}
-					break
-				}
+				reqCtx.Request.RawBody = body
 
 				// Body stream complete. Capture raw size for flow control.
 				reqCtx.RequestSize = len(body)
@@ -242,21 +231,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error handling request")
+					logger.V(1).Error(err, "Error handling request")
 					break
 				}
 
-				// Marshal after HandleRequest to include modifications (e.g., model rewriting).
-				var requestBodyBytes []byte
-				requestBodyBytes, err = json.Marshal(reqCtx.Request.Body)
-				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
-					break
-				}
-				// Update RequestSize to match marshalled body for Content-Length header.
-				reqCtx.RequestSize = len(requestBodyBytes)
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
-				reqCtx.reqBodyResp = s.generateRequestBodyResponses(requestBodyBytes)
+				reqCtx.reqBodyResp = s.generateRequestBodyResponses(reqCtx.Request.RawBody)
 
 				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
 				metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
@@ -266,7 +246,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			for _, header := range v.ResponseHeaders.Headers.GetHeaders() {
 				value := string(header.RawValue)
-
 				loggerTrace.Info("header", "key", header.Key, "value", value)
 				if header.Key == "status" && value != "200" {
 					reqCtx.ResponseStatusCode = errutil.ModelServerError
@@ -283,71 +262,51 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				if logger.V(logutil.DEBUG).Enabled() {
 					logger.V(logutil.DEBUG).Error(responseErr, "Failed to process response headers", "request", req)
 				} else {
-					logger.V(logutil.DEFAULT).Error(responseErr, "Failed to process response headers")
+					logger.V(1).Error(responseErr, "Failed to process response headers")
 				}
 			}
 			reqCtx.respHeaderResp = s.generateResponseHeaderResponse(reqCtx)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
+			reqCtx.ResponseComplete = v.ResponseBody.EndOfStream
+			if reqCtx.ResponseComplete {
+				loggerTrace.Info("stream completed")
+				reqCtx.ResponseCompleteTimestamp = time.Now()
+			}
 			if reqCtx.modelServerStreaming {
 				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
-
-				responseText := string(v.ResponseBody.Body)
-				s.HandleResponseBodyModelStreaming(ctx, reqCtx, responseText)
+				s.HandleResponseBodyModelStreaming(ctx, reqCtx, v.ResponseBody.Body)
 				if v.ResponseBody.EndOfStream {
-					loggerTrace.Info("stream completed")
-					reqCtx.ResponseComplete = true
 					if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
 						logger.Error(err, "error in HandleResponseBodyComplete")
 					}
-
-					reqCtx.ResponseCompleteTimestamp = time.Now()
 					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 					metrics.RecordNormalizedTimePerOutputToken(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp, reqCtx.Usage.CompletionTokens)
 				}
-
 				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream)
 			} else {
 				body = append(body, v.ResponseBody.Body...)
 
 				// Message is buffered, we can read and decode.
 				if v.ResponseBody.EndOfStream {
-					loggerTrace.Info("stream completed")
-					// Don't send a 500 on a response error. Just let the message passthrough and log our error for debugging purposes.
-					// We assume the body is valid JSON, err messages are not guaranteed to be json, and so capturing and sending a 500 obfuscates the response message.
-					// Using the standard 'err' var will send an immediate error response back to the caller.
+					reqCtx.ResponseSize = len(body)
+					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+
 					var responseErr error
-					responseErr = json.Unmarshal(body, &responseBody)
+					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
 					if responseErr != nil {
-						if logger.V(logutil.DEBUG).Enabled() {
-							logger.V(logutil.DEBUG).Error(responseErr, "Error unmarshalling request body", "body", string(body))
-						} else {
-							logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(body))
-						}
-						reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 						break
 					}
-
-					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, responseBody)
-					if responseErr != nil {
-						if logger.V(logutil.DEBUG).Enabled() {
-							logger.V(logutil.DEBUG).Error(responseErr, "Failed to process response body", "request", req)
-						} else {
-							logger.V(logutil.DEFAULT).Error(responseErr, "Failed to process response body")
-						}
-					} else if reqCtx.ResponseComplete {
-						reqCtx.ResponseCompleteTimestamp = time.Now()
-						metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-						metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
-						metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
-						metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
-						cachedToken := 0
-						if reqCtx.Usage.PromptTokenDetails != nil {
-							cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
-						}
-						metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
+					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
+					metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
+					metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
+					cachedToken := 0
+					if reqCtx.Usage.PromptTokenDetails != nil {
+						cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
 					}
+					metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
@@ -359,14 +318,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			if logger.V(logutil.DEBUG).Enabled() {
 				logger.V(logutil.DEBUG).Error(err, "Failed to process request", "request", req)
 			} else {
-				logger.V(logutil.DEFAULT).Error(err, "Failed to process request")
+				logger.V(1).Error(err, "Failed to process request")
 			}
 			resp, err := buildErrResponse(err)
 			if err != nil {
 				return err
 			}
 			if err := srv.Send(resp); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Send failed")
+				logger.V(1).Error(err, "Send failed")
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 			return nil
@@ -386,7 +345,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	if r.RequestState == RequestReceived && r.reqHeaderResp != nil {
 		loggerTrace.Info("Sending request header response", "obj", r.reqHeaderResp)
 		if err := srv.Send(r.reqHeaderResp); err != nil {
-			logger.V(logutil.DEFAULT).Error(err, "error sending response")
+			logger.V(1).Error(err, "error sending response")
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 		r.RequestState = HeaderRequestResponseComplete
@@ -399,6 +358,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 		}
+		logger.V(1).Info("EPP sent request body response(s) to proxy", "modelName", r.IncomingModelName, "targetModelName", r.TargetModelName)
 		r.RequestState = BodyRequestResponsesComplete
 		metrics.IncRunningRequests(r.IncomingModelName)
 		r.RequestRunning = true
@@ -418,17 +378,16 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 		}
 		r.RequestState = HeaderResponseResponseComplete
 	}
-	if r.RequestState == HeaderResponseResponseComplete && r.respBodyResp != nil && len(r.respBodyResp) > 0 {
+	if r.RequestState == HeaderResponseResponseComplete {
 		loggerTrace.Info("Sending response body response(s)")
 		for _, response := range r.respBodyResp {
 			if err := srv.Send(response); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
-
-			body := response.Response.(*extProcPb.ProcessingResponse_ResponseBody)
-			if body.ResponseBody.Response.GetBodyMutation().GetStreamedResponse().GetEndOfStream() {
-				r.RequestState = BodyResponseResponsesComplete
-			}
+		}
+		if r.ResponseComplete {
+			logger.V(1).Info("EPP sent response body back to proxy")
+			r.RequestState = BodyResponseResponsesComplete
 		}
 		// Dump the response so a new stream message can begin
 		r.respBodyResp = nil

@@ -24,7 +24,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -83,8 +83,22 @@ func NewCollector() *Collector {
 }
 
 // Start initiates data source collection for the endpoint.
+// All sources must implement PollingDataSource. Validation is performed by the caller.
 // TODO: pass PoolInfo for backward compatibility
 func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, sources []fwkdl.DataSource) error {
+	// Validate sources slice is not empty
+	if len(sources) == 0 {
+		return errors.New("cannot start collector with empty sources")
+	}
+
+	pollers := make([]fwkdl.PollingDataSource, 0, len(sources))
+	for _, src := range sources {
+		if src == nil {
+			return errors.New("cannot add nil data source")
+		}
+		pollers = append(pollers, src.(fwkdl.PollingDataSource))
+	}
+
 	var ready chan struct{}
 	started := false
 
@@ -94,7 +108,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 		started = true
 		ready = make(chan struct{})
 
-		go func(endpoint fwkdl.Endpoint, sources []fwkdl.DataSource) {
+		go func(endpoint fwkdl.Endpoint, sources []fwkdl.PollingDataSource) {
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {
@@ -112,12 +126,12 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 					// TODO: do not collect if there's no pool specified?
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
-						_ = src.Collect(ctx, endpoint) // TODO: track errors per collector?
-						cancel()                       // release the ctx timeout resources
+						_ = src.Poll(ctx, endpoint) // TODO: track errors per collector?
+						cancel()                    // release the ctx timeout resources
 					}
 				}
 			}
-		}(ep, sources)
+		}(ep, pollers)
 	})
 
 	if !started {

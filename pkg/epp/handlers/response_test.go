@@ -18,13 +18,12 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
@@ -154,12 +153,7 @@ func TestHandleResponseBody(t *testing.T) {
 			if reqCtx == nil {
 				reqCtx = &RequestContext{}
 			}
-			var responseMap map[string]any
-			marshalErr := json.Unmarshal(test.body, &responseMap)
-			if marshalErr != nil {
-				t.Error(marshalErr, "Error unmarshaling request body")
-			}
-			_, err := server.HandleResponseBody(ctx, reqCtx, responseMap)
+			_, err := server.HandleResponseBody(ctx, reqCtx, test.body)
 			if err != nil {
 				if !test.wantErr {
 					t.Fatalf("HandleResponseBody returned unexpected error: %v, want %v", err, test.wantErr)
@@ -178,14 +172,14 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	tests := []struct {
 		name    string
-		body    string
+		body    []byte
 		reqCtx  *RequestContext
 		want    fwkrq.Usage
 		wantErr bool
 	}{
 		{
 			name: "streaming request without usage",
-			body: streamingBodyWithoutUsage,
+			body: []byte(streamingBodyWithoutUsage),
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
@@ -194,7 +188,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 		},
 		{
 			name: "streaming request with usage",
-			body: streamingBodyWithUsage,
+			body: []byte(streamingBodyWithUsage),
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
@@ -207,7 +201,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 		},
 		{
 			name: "streaming request with usage and cached tokens",
-			body: streamingBodyWithUsageAndCachedTokens,
+			body: []byte(streamingBodyWithUsageAndCachedTokens),
 			reqCtx: &RequestContext{
 				modelServerStreaming: true,
 			},
@@ -245,40 +239,40 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		chunks    []string
+		chunks    [][]byte
 		wantUsage fwkrq.Usage
 	}{
 		{
 			name: "Standard: Usage and DONE in same chunk",
-			chunks: []string{
-				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`,
+			chunks: [][]byte{
+				[]byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`),
 			},
 			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Split: Usage in Chunk 1, DONE in Chunk 2",
-			chunks: []string{
+			chunks: [][]byte{
 				// Chunk 1: Usage data arrives
-				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n",
+				[]byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n"),
 				// Chunk 2: Stream termination. Should NOT overwrite the usage from Chunk 1.
-				`data: [DONE]`,
+				[]byte(`data: [DONE]`),
 			},
 			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Fragmented: Content -> Usage -> DONE",
-			chunks: []string{
-				`data: {"choices":[{"text":"Hello"}]}` + "\n",
-				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n",
-				`data: [DONE]`,
+			chunks: [][]byte{
+				[]byte(`data: {"choices":[{"text":"Hello"}]}` + "\n"),
+				[]byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n"),
+				[]byte(`data: [DONE]`),
 			},
 			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "No Usage Data",
-			chunks: []string{
-				`data: {"choices":[{"text":"Hello"}]}` + "\n",
-				`data: [DONE]`,
+			chunks: [][]byte{
+				[]byte(`data: {"choices":[{"text":"Hello"}]}` + "\n"),
+				[]byte(`data: [DONE]`),
 			},
 			wantUsage: fwkrq.Usage{}, // Zero values
 		},
@@ -296,7 +290,6 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 			}
 
 			assert.Equal(t, tc.wantUsage, reqCtx.Usage, "Usage data should match expected accumulation")
-			assert.True(t, reqCtx.ResponseComplete, "Response should be marked complete after [DONE]")
 		})
 	}
 }

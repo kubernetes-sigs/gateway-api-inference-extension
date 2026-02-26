@@ -24,11 +24,20 @@ import (
 
 // ParentGatewayReferenceApplyConfiguration represents a declarative configuration of the ParentGatewayReference type for use
 // with apply.
+//
+// ParentGatewayReference identifies an API object including its namespace,
+// defaulting to Gateway.
 type ParentGatewayReferenceApplyConfiguration struct {
-	Group     *apixv1alpha2.Group      `json:"group,omitempty"`
-	Kind      *apixv1alpha2.Kind       `json:"kind,omitempty"`
-	Name      *apixv1alpha2.ObjectName `json:"name,omitempty"`
-	Namespace *apixv1alpha2.Namespace  `json:"namespace,omitempty"`
+	// Group is the group of the referent.
+	Group *apixv1alpha2.Group `json:"group,omitempty"`
+	// Kind is kind of the referent. For example "Gateway".
+	Kind *apixv1alpha2.Kind `json:"kind,omitempty"`
+	// Name is the name of the referent.
+	Name *apixv1alpha2.ObjectName `json:"name,omitempty"`
+	// Namespace is the namespace of the referent.  If not present,
+	// the namespace of the referent is assumed to be the same as
+	// the namespace of the referring object.
+	Namespace *apixv1alpha2.Namespace `json:"namespace,omitempty"`
 }
 
 // ParentGatewayReferenceApplyConfiguration constructs a declarative configuration of the ParentGatewayReference type for use with

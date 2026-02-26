@@ -24,7 +24,10 @@ import (
 
 // ExportingClusterApplyConfiguration represents a declarative configuration of the ExportingCluster type for use
 // with apply.
+//
+// ExportingCluster defines a cluster that exported the InferencePool that backs this InferencePoolImport.
 type ExportingClusterApplyConfiguration struct {
+	// Name of the exporting cluster (must be unique within the list).
 	Name *apixv1alpha1.ClusterName `json:"name,omitempty"`
 }
 

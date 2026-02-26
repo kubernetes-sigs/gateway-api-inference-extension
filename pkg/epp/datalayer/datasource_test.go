@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -102,4 +104,68 @@ func typeOf(v any) reflect.Type {
 		return t.Elem()
 	}
 	return t
+}
+
+func TestRegisterNotificationSourceDuplicateGVK(t *testing.T) {
+	reg := DataSourceRegistry{}
+	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+
+	// Create two notification sources with the same GVK but different names
+	src1 := &FakeNotificationSource{
+		typedName: fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher-1"},
+		gvk:       gvk,
+	}
+	src2 := &FakeNotificationSource{
+		typedName: fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher-2"},
+		gvk:       gvk,
+	}
+
+	err := reg.Register(src1)
+	require.NoError(t, err, "first notification source registration should succeed")
+	err = reg.Register(src2)
+	assert.Error(t, err, "second notification source with same GVK should fail")
+	assert.Contains(t, err.Error(), "duplicate notification source for GVK")
+	assert.Contains(t, err.Error(), gvk.String())
+
+	sources := reg.GetSources()
+	assert.Len(t, sources, 1, "only one source should be registered")
+}
+
+func TestRegisterNotificationSourceDifferentGVK(t *testing.T) {
+	reg := DataSourceRegistry{}
+	src1 := &FakeNotificationSource{
+		typedName: fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher"},
+		gvk:       schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+	}
+	src2 := &FakeNotificationSource{
+		typedName: fwkplugin.TypedName{Type: "k8s-notification-source", Name: "configmap-watcher"},
+		gvk:       schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
+	}
+
+	err := reg.Register(src1)
+	require.NoError(t, err, "first notification source registration should succeed")
+	err = reg.Register(src2)
+	require.NoError(t, err, "second notification source with different GVK should succeed")
+
+	sources := reg.GetSources()
+	assert.Len(t, sources, 2, "both sources should be registered")
+}
+
+func TestRegisterMixedSourceTypes(t *testing.T) {
+	reg := DataSourceRegistry{}
+	regularSource := &FakeDataSource{
+		typedName: &fwkplugin.TypedName{Type: "regular-source", Name: "regular-1"},
+	}
+	err := reg.Register(regularSource)
+	require.NoError(t, err, "regular source registration should succeed")
+
+	notificationSource := &FakeNotificationSource{
+		typedName: fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher"},
+		gvk:       schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
+	}
+	err = reg.Register(notificationSource)
+	require.NoError(t, err, "notification source registration should succeed")
+
+	sources := reg.GetSources()
+	assert.Len(t, sources, 2, "both sources should be registered")
 }

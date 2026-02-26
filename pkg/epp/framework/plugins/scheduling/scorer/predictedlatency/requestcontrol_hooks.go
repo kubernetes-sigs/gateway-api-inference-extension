@@ -23,10 +23,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/jellydator/ttlcache/v3"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"k8s.io/apimachinery/pkg/types"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -34,14 +35,24 @@ import (
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
+const (
+	// Experimental_DefaultPrefillProfile is the default profile name for prefill pods in disaggregated serving.
+	// This constant identifies prefill endpoints for load tracking and training data collection.
+	// This is hardcoded for now until we land on a canonical approach for plugins to identify
+	// prefill and decode endpoints (See https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2080)
+	Experimental_DefaultPrefillProfile = "prefill"
+)
+
 var _ requestcontrol.PreRequest = &PredictedLatency{}
 var _ requestcontrol.ResponseReceived = &PredictedLatency{}
 var _ requestcontrol.ResponseStreaming = &PredictedLatency{}
 var _ requestcontrol.ResponseComplete = &PredictedLatency{}
+var _ requestcontrol.AdmissionPlugin = &PredictedLatency{}
 
 type predictedLatencyCtx struct {
 	schedulingRequest         schedulingtypes.LLMRequest
 	targetMetadata            *fwkdl.EndpointMetadata
+	prefillTargetMetadata     *fwkdl.EndpointMetadata
 	schedulingResult          *schedulingtypes.SchedulingResult
 	lastSeenMetrics           map[string]*fwkdl.Metrics
 	lastTokenTimestamp        time.Time
@@ -64,7 +75,7 @@ type predictedLatencyCtx struct {
 	avgTPOTSLO float64
 
 	// predictedTTFTForScheduling is the map of pod names to predicted TTFT values for scheduling.
-	predictionsForScheduling []endpointPredictionResult
+	predictionsForScheduling map[string]endpointPredictionResult
 
 	// boolean set if request has valid endpoint based on predictions
 	hasValidEndpoint bool
@@ -75,22 +86,22 @@ func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedL
 		schedulingRequest:             *request,
 		lastSeenMetrics:               make(map[string]*fwkdl.Metrics),
 		prefixCacheScoresForEndpoints: make(map[string]float64),
-		predictionsForScheduling:      make([]endpointPredictionResult, 0),
+		predictionsForScheduling:      make(map[string]endpointPredictionResult),
 		hasValidEndpoint:              true,
 	}
 }
 
 func (s *PredictedLatency) getPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) (*predictedLatencyCtx, error) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	if ctx, exists := s.sloContextStore.Load(id); exists {
-		return ctx.(*predictedLatencyCtx), nil
+	if item := s.sloContextStore.Get(id); item != nil {
+		return item.Value(), nil
 	}
 	return nil, fmt.Errorf("SLO context not found for request ID: %s", id)
 }
 
 func (s *PredictedLatency) setPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest, ctx *predictedLatencyCtx) {
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	s.sloContextStore.Store(id, ctx)
+	s.sloContextStore.Set(id, ctx, ttlcache.DefaultTTL)
 }
 
 func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) {
@@ -129,16 +140,15 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	}
 
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	endpointRequestList, ok := t.runningRequestLists[endpointName]
-	if !ok {
-		endpointRequestList = newRequestPriorityQueue()
-		t.runningRequestLists[endpointName] = endpointRequestList
-	}
+
+	// Get or create queue for this endpoint using sync.Map
+	actual, _ := t.runningRequestLists.LoadOrStore(endpointName, newRequestPriorityQueue())
+	endpointRequestList := actual.(*requestPriorityQueue)
 
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		id := request.Headers[requtil.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency.PreRequest: Failed to get SLO context for request", "requestID", id)
+		logger.V(logutil.DEBUG).Info("PredictedLatency.PreRequest: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
 		return
 	}
 
@@ -149,14 +159,18 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 
 	// Set up SLO request context
 	predictedLatencyCtx.targetMetadata = targetMetadata
+	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil && len(prefillResult.TargetEndpoints) > 0 {
+		prefillMetadata := prefillResult.TargetEndpoints[0].GetMetadata()
+		predictedLatencyCtx.prefillTargetMetadata = prefillMetadata
+		logger.V(logutil.DEBUG).Info("Prefill target identified for request", "requestID", id, "prefillEndpoint", prefillMetadata.NamespacedName.String())
+	} else {
+		logger.V(logutil.DEBUG).Info("No prefill target identified for request", "requestID", id)
+	}
 	predictedLatencyCtx.schedulingResult = schedulingResult
 	predictedLatencyCtx.requestReceivedTimestamp = time.Now()
 	refreshLastSeenMetrics(ctx, predictedLatencyCtx)
-	t.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	if err := processPreRequestForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx); err != nil {
-		logger.V(logutil.DEBUG).Error(err, "Process PreRequest in latencypredictor failed")
-	}
+	processPreRequestForLatencyPrediction(ctx, predictedLatencyCtx)
 }
 
 func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
@@ -182,14 +196,14 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		id := request.Headers[requtil.RequestIdHeaderKey]
-		logger.V(logutil.TRACE).Error(err, "PredictedLatency.ResponseStreaming: Failed to get SLO context for request", "requestID", id)
+		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseStreaming: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
 		return
 	}
 
 	if predictedLatencyCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
@@ -208,12 +222,12 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		id := request.Headers[requtil.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency.ResponseComplete: Failed to get SLO context for request", "requestID", id)
+		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
 		return
 	}
 	now := time.Now()
 	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if predictedLatencyCtx.ttft > 0 {
@@ -234,23 +248,8 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 		}
 	}
 
-	endpointName := types.NamespacedName{
-		Name:      targetMetadata.NamespacedName.Name,
-		Namespace: targetMetadata.NamespacedName.Namespace,
-	}
-
 	id := request.Headers[requtil.RequestIdHeaderKey]
-	endpointRequestList, ok := t.runningRequestLists[endpointName]
-	if !ok {
-		err := fmt.Errorf("no running request list found for endpoint %s", endpointName.String())
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency: Failed to remove request from queue", "requestID", id)
-		return
-	}
-
-	_, removed := endpointRequestList.Remove(id)
-	if !removed {
-		logger.V(logutil.TRACE).Info("PredictedLatency: Item not found in queue", "endpointName", endpointName, "requestID", id)
-	}
+	t.removeRequestFromQueue(id, predictedLatencyCtx)
 	t.deletePredictedLatencyContextForRequest(request)
 }
 
@@ -264,4 +263,29 @@ func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *fwkdl.En
 		return false
 	}
 	return true
+}
+
+func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+	logger := log.FromContext(ctx)
+	if request == nil {
+		// This should not happen as the framework should not call AdmitRequest with a nil request, but we defensively check to avoid panics
+		logger.V(logutil.DEBUG).Info("PredictedLatency.AdmitRequest: request is nil, skipping")
+		return nil
+	}
+
+	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
+	if err != nil {
+		// If we can't find the predictedLatency context, we log the error but allow the request to proceed. This is a fail-open approach to avoid rejecting requests due to internal errors in our plugin.
+		id := request.Headers[requtil.RequestIdHeaderKey]
+		logger.V(logutil.DEBUG).Error(err, "PredictedLatency.AdmitRequest: Failed to get PredictedLatency context for request", "requestID", id)
+		return nil
+	}
+
+	// If there is no valid pod for the request, reject it
+	if !predictedLatencyCtx.hasValidEndpoint && request.Objectives.Priority < 0 {
+		logger.V(logutil.DEBUG).Info("PredictedLatency.AdmitRequest: Rejecting a sheddable request as no valid endpoint available due to slo violation", "requestID", request.Headers[requtil.RequestIdHeaderKey])
+		return errors.New("no valid endpoint available to serve the request")
+	}
+
+	return nil
 }

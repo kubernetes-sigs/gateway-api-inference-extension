@@ -383,11 +383,11 @@ func verifyTrafficRouting() {
 			}
 		}
 
-		var gotModel []string
+		gotModel := make([]string, 0, len(actualModel))
 		for m := range actualModel {
 			gotModel = append(gotModel, m)
 		}
-		var gotPort []int
+		gotPort := make([]int, 0, len(actualPort))
 		for p := range actualPort {
 			gotPort = append(gotPort, p)
 		}
@@ -403,23 +403,6 @@ func verifyTrafficRouting() {
 // verifyMetrics contains the logic for the "Should expose EPP metrics after generating traffic" test.
 func verifyMetrics() {
 	ginkgo.By("Verifying metrics exposure")
-	// Define the metrics we expect to see
-	expectedMetrics := []string{
-		"inference_objective_request_total",
-		"inference_objective_request_error_total",
-		"inference_objective_request_duration_seconds",
-		"inference_objective_normalized_time_per_output_token_seconds",
-		"inference_objective_request_sizes",
-		"inference_objective_response_sizes",
-		"inference_objective_input_tokens",
-		"inference_objective_output_tokens",
-		"inference_pool_average_kv_cache_utilization",
-		"inference_pool_average_queue_size",
-		"inference_pool_per_pod_queue_size",
-		"inference_objective_running_requests",
-		"inference_pool_ready_pods",
-		"inference_extension_info",
-	}
 
 	// Generate traffic by sending requests through the inference extension.
 	ginkgo.By("Generating traffic through the inference extension")
@@ -455,6 +438,26 @@ func verifyMetrics() {
 
 	modelServerPods, err := getPodsByLabel(testConfig.K8sClient, testConfig.Context, testConfig.NsName, "app", modelServerName)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Expected to find model server pods")
+
+	// Define the metrics we expect to see
+	preset := []string{ //nolint:prealloc
+		"inference_objective_request_total",
+		"inference_objective_request_error_total",
+		"inference_objective_request_duration_seconds",
+		"inference_objective_normalized_time_per_output_token_seconds",
+		"inference_objective_request_sizes",
+		"inference_objective_response_sizes",
+		"inference_objective_input_tokens",
+		"inference_objective_output_tokens",
+		"inference_pool_average_kv_cache_utilization",
+		"inference_pool_average_queue_size",
+		"inference_pool_per_pod_queue_size",
+		"inference_objective_running_requests",
+		"inference_pool_ready_pods",
+		"inference_extension_info",
+	}
+	expectedMetrics := make([]string, 0, len(preset)+len(modelServerPods)*numPorts)
+	expectedMetrics = append(expectedMetrics, preset...)
 
 	for _, modelServerPod := range modelServerPods {
 		for rank := range numPorts {

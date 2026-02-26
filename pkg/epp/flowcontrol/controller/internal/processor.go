@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,10 +28,11 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/utils/clock"
 
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
 // maxCleanupWorkers caps the number of concurrent workers for background cleanup tasks. This prevents a single shard
@@ -208,14 +210,27 @@ func (sp *ShardProcessor) Run(ctx context.Context) {
 // enqueue processes an item received from the enqueueChan.
 // It handles capacity checks, checks for external finalization, and either admits the item to a queue or rejects it.
 func (sp *ShardProcessor) enqueue(item *FlowItem) {
+
 	req := item.OriginalRequest()
 	key := req.FlowKey()
+	priorityStr := strconv.Itoa(key.Priority)
+	outcome := item.FinalState()
+
+	startTime := time.Now()
+
+	defer func() {
+		outcomeStr := "NotYetFinalized"
+		if fs := item.FinalState(); fs != nil {
+			outcomeStr = fs.Outcome.String()
+		}
+		metrics.RecordFlowControlRequestEnqueueDuration(priorityStr, outcomeStr, time.Since(startTime))
+	}()
 
 	// --- Optimistic External Finalization Check ---
 	// Check if the item was finalized by the Controller (due to TTL/cancellation) while it was buffered in enqueueChan.
 	// This is an optimistic check to avoid unnecessary processing on items already considered dead.
 	// The ultimate guarantee of cleanup for any races is the runCleanupSweep mechanism.
-	if finalState := item.FinalState(); finalState != nil {
+	if finalState := outcome; finalState != nil {
 		sp.logger.V(logutil.TRACE).Info("Item finalized externally before processing, discarding.",
 			"outcome", finalState.Outcome, "err", finalState.Err, "flowKey", key, "reqID", req.ID())
 		return
@@ -291,6 +306,11 @@ func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
 // blocking to respect the policy's decision and prevent priority inversion, where dispatching lower-priority work might
 // exacerbate the saturation affecting the high-priority item.
 func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
+	dispatchCycleStart := time.Now()
+	defer func() {
+		metrics.RecordFlowControlDispatchCycleDuration(time.Since(dispatchCycleStart))
+	}()
+
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {

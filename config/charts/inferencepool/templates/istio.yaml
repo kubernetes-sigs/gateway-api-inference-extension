@@ -1,8 +1,5 @@
 {{- if eq .Values.provider.name "istio" }}
-{{- /* Prefer .Values.provider.istio, fallback to legacy .Values.istio, then {} */ -}}
-{{- $provIstio := (index .Values "provider" "istio") -}}
-{{- $legacyIstio := .Values.istio -}}
-{{- $istio := coalesce $provIstio $legacyIstio (dict) -}}
+{{- $istio := (index .Values "provider" "istio") | default (dict) -}}
 {{- $dr := (index $istio "destinationRule") | default (dict) -}}
 
 apiVersion: networking.istio.io/v1beta1

@@ -33,35 +33,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	metricsutils "k8s.io/component-base/metrics/testutil"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	crconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
-	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/util/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+
+	eppRunner "sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	eppServer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -71,11 +56,29 @@ var (
 	k8sClient     client.Client
 	testEnv       *envtest.Environment
 	testScheme    = runtime.NewScheme()
-	logger        = zap.New(zap.UseDevMode(true), zap.Level(zapcore.Level(logutil.DEFAULT)))
+	logger        = zap.New(zap.UseDevMode(true), zap.Level(-1*zapcore.Level(logutil.DEFAULT)))
 	baseResources []*unstructured.Unstructured
 )
 
-const testPoolName = "vllm-llama3-8b-instruct-pool"
+const (
+	testPoolName = "vllm-llama3-8b-instruct-pool"
+	testConfig   = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: prefix-cache-scorer
+  - type: lora-affinity-scorer
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: queue-scorer
+      - pluginRef: kv-cache-utilization-scorer
+      - pluginRef: prefix-cache-scorer
+      - pluginRef: lora-affinity-scorer
+`
+)
 
 // HarnessConfig holds configuration options for the TestHarness.
 type HarnessConfig struct {
@@ -104,13 +107,13 @@ type TestHarness struct {
 	// --- Config State ---
 	StandaloneMode bool
 
-	Mgr          ctrl.Manager
-	ServerRunner *server.ExtProcServerRunner
-	Client       extProcPb.ExternalProcessor_ProcessClient
-	Datastore    datastore.Datastore
+	Client    extProcPb.ExternalProcessor_ProcessClient
+	Datastore datastore.Datastore
 
 	// Internal handles for cleanup
 	grpcConn *grpc.ClientConn
+
+	fakePmc *backendmetrics.FakePodMetricsClient
 }
 
 // NewTestHarness boots up a fully isolated test environment.
@@ -124,110 +127,21 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		opt(config)
 	}
 
-	// 1. Identity & Namespace Isolation
-	// We use a unique UUID to ensure that resources from this test do not collide with others.
+	// Create dedicated namespace for the whole test
 	uid := uuid.New().String()[:8]
-	nsName := "epp-test-" + uid
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
+	testNamespaceName := "epp-test-" + uid
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespaceName}}
 	require.NoError(t, k8sClient.Create(ctx, ns), "failed to create test namespace")
 
-	// 2. Free Port Allocation
-	grpcPort, err := integration.GetFreePort()
-	require.NoError(t, err, "failed to acquire free port")
-
-	// 3. Manager Scoped to Namespace
-	// Critical: We restrict the Manager's cache to the test namespace to avoid processing objects from other tests or
-	// previous runs.
-	skipValidation := true
-	mgrOpts := ctrl.Options{
-		Scheme: testScheme,
-		Cache: cache.Options{
-			DefaultNamespaces: map[string]cache.Config{
-				nsName: {}, // Implicitly filters all watches to this NS.
-			},
-		},
-		Controller: crconfig.Controller{
-			SkipNameValidation: &skipValidation,
-		},
-		Metrics: metricsserver.Options{
-			BindAddress: "0", // Disable metrics server binding or use ephemeral to avoid port conflicts.
-		},
-		HealthProbeBindAddress: "0",
-		LeaderElection:         false,
-	}
-	mgr, err := ctrl.NewManager(testEnv.Config, mgrOpts)
-	require.NoError(t, err, "failed to create manager")
-
-	// 4. EPP Server Configuration
-	runner := server.NewDefaultExtProcServerRunner()
-	// Overwrite default fields with test-specific configuration.
-	runner.GKNN = common.GKNN{
-		NamespacedName: types.NamespacedName{Namespace: nsName, Name: testPoolName},
-		GroupKind:      schema.GroupKind{Group: v1.GroupVersion.Group, Kind: "InferencePool"},
-	}
-	runner.GrpcPort = grpcPort
-	runner.SecureServing = false
-	runner.HealthChecking = false
-	runner.TestPodMetricsClient = &backendmetrics.FakePodMetricsClient{}
-	runner.RefreshPrometheusMetricsInterval = 50 * time.Millisecond
-	runner.MetricsStalenessThreshold = 2 * time.Second
-
-	// 5. Dependency Injection (Scheduler, Scorers, Datastore)
-	pmf := backendmetrics.NewPodMetricsFactory(runner.TestPodMetricsClient, 10*time.Millisecond)
-
-	// Configure Datastore based on mode.
-	// We disable periodic resync (0) to ensure deterministic test behavior.
+	eppOptions := defaultEppServerOptions(t, testNamespaceName)
 	if config.StandaloneMode {
-		// Disable CRD watching for Standalone mode.
-		runner.ControllerCfg = server.NewControllerConfig(false)
-
-		// Inject static Endpoint Pool.
-		// This replicates the manual pool construction that happens in runner.go CLI parsing.
-		// TODO(#2174): Refactor this to share logic with runner.go.
-		endpointPool := datalayer.NewEndpointPool(nsName, testPoolName)
-		endpointPool.Selector = map[string]string{"app": testPoolName}
-		endpointPool.TargetPorts = []int{epptestutil.DefaultTestPort}
-
-		runner.Datastore = datastore.NewDatastore(ctx, pmf, 0, datastore.WithEndpointPool(endpointPool))
-	} else {
-		runner.Datastore = datastore.NewDatastore(ctx, pmf, 0)
+		// Only standalone EPP need to set the EndpointSelector.
+		eppOptions.EndpointSelector = "app=" + testPoolName
 	}
 
-	prefixPlugin, err := prefix.New(ctx, prefix.DefaultConfig)
-	require.NoError(t, err)
-
-	defaultProfile := scheduling.NewSchedulerProfile().
-		WithScorers(
-			scheduling.NewWeightedScorer(scorer.NewKVCacheUtilizationScorer(), 1),
-			scheduling.NewWeightedScorer(scorer.NewQueueScorer(), 1),
-			scheduling.NewWeightedScorer(prefixPlugin, 1),
-			scheduling.NewWeightedScorer(scorer.NewLoraAffinityScorer(), 1),
-		).
-		WithPicker(picker.NewMaxScorePicker(picker.DefaultMaxNumOfEndpoints))
-
-	profileHandler := profile.NewSingleProfileHandler()
-	profiles := make(map[string]fwksched.SchedulerProfile)
-	profiles["default"] = defaultProfile
-	schedulerConfig := scheduling.NewSchedulerConfig(profileHandler, profiles)
-
-	sdConfig := &utilizationdetector.Config{
-		QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
-	}
-	runner.SaturationDetector = utilizationdetector.NewDetector(sdConfig, logger.WithName("sd"))
-	locator := requestcontrol.NewDatastorePodLocator(runner.Datastore)
-	runner.Director = requestcontrol.NewDirectorWithConfig(
-		runner.Datastore,
-		scheduling.NewSchedulerWithConfig(schedulerConfig),
-		requestcontrol.NewLegacyAdmissionController(runner.SaturationDetector, locator),
-		locator,
-		requestcontrol.NewConfig(),
-	)
-
-	require.NoError(t, runner.SetupWithManager(mgr), "failed to setup server runner")
-
-	// 6. Start Background Processes
+	fakePmc := &backendmetrics.FakePodMetricsClient{}
+	mgr, dataStore, err := eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc)
+	require.NoError(t, err, "failed to create manager")
 	mgrCtx, mgrCancel := context.WithCancel(ctx)
 
 	// Start Manager.
@@ -240,42 +154,58 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		}
 	}()
 
-	// Start ExtProc server.
-	serverCtx, serverCancel := context.WithCancel(ctx)
-	runnable := runner.AsRunnable(logger.WithName("server")).Start
-
-	client, conn := integration.StartExtProcServer(
+	client, conn := integration.ExtProcServerClient(
 		t,
-		serverCtx,
-		runnable,
-		grpcPort,
+		mgrCtx,
+		eppOptions.GRPCPort,
 		logger,
 	)
 
 	h := &TestHarness{
 		t:              t,
-		ctx:            serverCtx,
-		Namespace:      nsName,
+		ctx:            mgrCtx,
+		Namespace:      eppOptions.PoolNamespace,
 		StandaloneMode: config.StandaloneMode,
-		Mgr:            mgr,
-		ServerRunner:   runner,
 		Client:         client,
-		Datastore:      runner.Datastore,
+		Datastore:      dataStore,
 		grpcConn:       conn,
+		fakePmc:        fakePmc,
 	}
 
-	// 7. Register Cleanup
 	t.Cleanup(func() {
-		serverCancel()
 		mgrCancel()
 		_ = h.grpcConn.Close()
 		// Deleting the Namespace cascades to all contained resources.
-		_ = k8sClient.Delete(context.Background(), ns)
+		_ = k8sClient.Delete(context.Background(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: eppOptions.PoolNamespace}})
 		// Crucial: Reset global metrics registry to prevent pollution between serial tests.
 		metrics.Reset()
 	})
 
 	return h
+}
+
+func defaultEppServerOptions(t *testing.T, namespace string) *eppServer.Options {
+	t.Helper()
+
+	eppOptions := eppServer.NewOptions()
+	eppOptions.PoolName = testPoolName
+	eppOptions.PoolNamespace = namespace
+	eppOptions.ConfigText = testConfig
+
+	metricsPort, err := integration.GetFreePort()
+	require.NoError(t, err)
+	eppOptions.MetricsPort = metricsPort
+
+	grpcPort, err := integration.GetFreePort()
+	require.NoError(t, err)
+	eppOptions.GRPCPort = grpcPort
+
+	healthPort, err := integration.GetFreePort()
+	require.NoError(t, err)
+	eppOptions.GRPCHealthPort = healthPort
+	eppOptions.EndpointTargetPorts = []int{8000}
+	eppOptions.SecureServing = false
+	return eppOptions
 }
 
 // --- Fluent Builder API ---
@@ -312,7 +242,7 @@ func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 			WaitingModels:       make(map[string]int),
 		}
 	}
-	h.ServerRunner.TestPodMetricsClient.SetRes(metricsMap)
+	h.fakePmc.SetRes(metricsMap)
 
 	// Create K8s Objects.
 	for _, p := range pods {

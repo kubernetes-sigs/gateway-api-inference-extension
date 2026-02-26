@@ -20,7 +20,18 @@ package v1
 
 // InferencePoolStatusApplyConfiguration represents a declarative configuration of the InferencePoolStatus type for use
 // with apply.
+//
+// InferencePoolStatus defines the observed state of the InferencePool.
 type InferencePoolStatusApplyConfiguration struct {
+	// Parents is a list of parent resources, typically Gateways, that are associated with
+	// the InferencePool, and the status of the InferencePool with respect to each parent.
+	//
+	// A controller that manages the InferencePool, must add an entry for each parent it manages
+	// and remove the parent entry when the controller no longer considers the InferencePool to
+	// be associated with that parent.
+	//
+	// A maximum of 32 parents will be represented in this list. When the list is empty,
+	// it indicates that the InferencePool is not associated with any parents.
 	Parents []ParentStatusApplyConfiguration `json:"parents,omitempty"`
 }
 

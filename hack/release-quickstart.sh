@@ -78,14 +78,14 @@ sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-in
 #TODO: Put all helm values files into an array to loop over
 EPP_HELM="config/charts/inferencepool/values.yaml"
 BBR_HELM="config/charts/body-based-routing/values.yaml"
-EPP_STANDALONE_HELM="config/charts/epp-standalone/values.yaml"
+STANDALONE_HELM="config/charts/standalone/values.yaml"
 CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
-echo "Updating ${EPP_HELM}, ${BBR_HELM}, ${EPP_STANDALONE_HELM} and ${CONFORMANCE_MANIFESTS} ..."
+echo "Updating ${EPP_HELM}, ${BBR_HELM}, ${STANDALONE_HELM} and ${CONFORMANCE_MANIFESTS} ..."
 
 # Update the container tag.
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
-sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_STANDALONE_HELM"
+sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$STANDALONE_HELM"
 # Update epp
 sed -i.bak -E "s|(gateway-api-inference-extension/epp:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
 # Update the container image pull policy.
@@ -94,7 +94,7 @@ sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inferen
 # Update the container registry.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$BBR_HELM"
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP_STANDALONE_HELM"
+sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$STANDALONE_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$CONFORMANCE_MANIFESTS"
 
 # -----------------------------------------------------------------------------
@@ -138,8 +138,8 @@ sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $EPP_STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
-git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $EPP_STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
+git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

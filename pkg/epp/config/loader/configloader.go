@@ -55,11 +55,19 @@ func RegisterFeatureGate(gate string) {
 // LoadRawConfig parses the raw configuration bytes, applies initial defaults, and extracts feature gates.
 // It does not instantiate plugins.
 func LoadRawConfig(configBytes []byte, logger logr.Logger) (*configapi.EndpointPickerConfig, map[string]bool, error) {
-	rawConfig, err := decodeRawConfig(configBytes)
-	if err != nil {
-		return nil, nil, err
+	var rawConfig *configapi.EndpointPickerConfig
+	var err error
+	if len(configBytes) != 0 {
+		rawConfig, err = decodeRawConfig(configBytes)
+		if err != nil {
+			return nil, nil, err
+		}
+		logger.Info("Loaded raw configuration", "config", rawConfig.String())
+	} else {
+		logger.Info("A configuration wasn't specified. A default one is being used.")
+		rawConfig = loadDefaultConfig()
+		logger.Info("Default raw configuration used", "config", rawConfig.String())
 	}
-	logger.Info("Loaded raw configuration", "config", rawConfig)
 
 	applyStaticDefaults(rawConfig)
 

@@ -26,6 +26,8 @@ import (
 
 // InferenceObjectiveApplyConfiguration represents a declarative configuration of the InferenceObjective type for use
 // with apply.
+//
+// InferenceObjective is the Schema for the InferenceObjectives API.
 type InferenceObjectiveApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -43,6 +45,7 @@ func InferenceObjective(name, namespace string) *InferenceObjectiveApplyConfigur
 	b.WithAPIVersion("inference.networking.x-k8s.io/v1alpha2")
 	return b
 }
+
 func (b InferenceObjectiveApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

@@ -103,25 +103,23 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 		if prepareDataPlugin, ok := plugin.(fwk.PrepareDataPlugin); ok {
 			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)
 		}
+		if admissionPlugin, ok := plugin.(fwk.AdmissionPlugin); ok {
+			c.admissionPlugins = append(c.admissionPlugins, admissionPlugin)
+		}
 	}
 }
 
-// PrepareDataPluginGraph creates data dependency graph and sorts the plugins in topological order.
-// If a cycle is detected, it returns an error.
-func (c *Config) PrepareDataPluginGraph() error {
-	// TODO(#1988): Add all producer and consumer plugins to the graph.
-	if len(c.prepareDataPlugins) == 0 {
-		return nil
+// OrderPrepareDataPlugins reorders the prepareDataPlugins in the Config based on the given sorted plugin names.
+func (c *Config) OrderPrepareDataPlugins(sortedPluginNames []string) {
+	sortedPlugins := make([]fwk.PrepareDataPlugin, 0, len(sortedPluginNames))
+	nameToPlugin := make(map[string]fwk.PrepareDataPlugin)
+	for _, plugin := range c.prepareDataPlugins {
+		nameToPlugin[plugin.TypedName().String()] = plugin
 	}
-	dag, err := buildDAG(c.prepareDataPlugins)
-	if err != nil {
-		return err
+	for _, name := range sortedPluginNames {
+		if plugin, ok := nameToPlugin[name]; ok {
+			sortedPlugins = append(sortedPlugins, plugin)
+		}
 	}
-	plugins, err := sortPlugins(dag, c.prepareDataPlugins)
-	if err != nil {
-		return err
-	}
-	c.prepareDataPlugins = plugins
-
-	return nil
+	c.prepareDataPlugins = sortedPlugins
 }

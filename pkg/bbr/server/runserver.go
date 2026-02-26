@@ -32,15 +32,17 @@ import (
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
-	GrpcPort      int
-	Datastore     datastore.Datastore
-	SecureServing bool
-	Streaming     bool
+	GrpcPort       int
+	Datastore      datastore.Datastore
+	SecureServing  bool
+	Streaming      bool
+	RequestPlugins []framework.PayloadProcessor
 }
 
 func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunner {
@@ -75,13 +77,16 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			if err != nil {
 				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
-			creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
+			creds := credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+				NextProtos:   []string{"h2"},
+			})
 			srv = grpc.NewServer(grpc.Creds(creds))
 		} else {
 			srv = grpc.NewServer()
 		}
 
-		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore))
+		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore, r.RequestPlugins))
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
