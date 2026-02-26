@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
+	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -57,7 +58,7 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 
 		httpRouteNN := types.NamespacedName{Name: "httproute-for-failopen-pool-gw", Namespace: resources.AppBackendNamespace}
 		gatewayNN := resources.SecondaryGatewayNN
-		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
+		gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
 		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, resources.SecondaryInferencePoolNN, gatewayNN)
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 

@@ -34,9 +34,6 @@ type InferenceExtensionTimeoutConfig struct {
 	// InferencePoolMustHaveConditionInterval represents the polling interval for checking an InferencePool's condition.
 	InferencePoolMustHaveConditionInterval time.Duration
 
-	// GatewayObjectPollInterval is the polling interval used when waiting for a Gateway object to appear.
-	GatewayObjectPollInterval time.Duration
-
 	// HTTPRouteConditionTimeout represents the maximum time to wait for an HTTPRoute to have a specific condition.
 	HTTPRouteDeletionReconciliationTimeout time.Duration
 
@@ -51,11 +48,11 @@ func DefaultInferenceExtensionTimeoutConfig() InferenceExtensionTimeoutConfig {
 	config.RouteMustHaveParents = 200 * time.Second
 	config.MaxTimeToConsistency = 200 * time.Second
 	config.DefaultTestTimeout = 600 * time.Second
+	config.DefaultPollInterval = 1 * time.Second
 	return InferenceExtensionTimeoutConfig{
 		TimeoutConfig:                          config, // Initialize embedded struct
 		GeneralMustHaveConditionTimeout:        300 * time.Second,
 		InferencePoolMustHaveConditionInterval: 1 * time.Second,
-		GatewayObjectPollInterval:              1 * time.Second,
 		HTTPRouteDeletionReconciliationTimeout: 5 * time.Second,
 		ServiceUpdateTimeout:                   10 * time.Second,
 	}

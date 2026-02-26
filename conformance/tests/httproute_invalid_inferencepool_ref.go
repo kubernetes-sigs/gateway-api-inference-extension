@@ -19,9 +19,7 @@ package tests
 import (
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
@@ -46,19 +44,8 @@ var HTTPRouteInvalidInferencePoolRef = suite.ConformanceTest{
 		gatewayNN := resources.PrimaryGatewayNN
 
 		t.Run("HTTPRoute should have Accepted=True and ResolvedRefs=False for non-existent InferencePool", func(t *testing.T) {
-			acceptedCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionAccepted),
-				Status: metav1.ConditionTrue,
-				Reason: string(gatewayv1.RouteReasonAccepted),
-			}
-			kubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN, acceptedCondition)
-
-			resolvedRefsCondition := metav1.Condition{
-				Type:   string(gatewayv1.RouteConditionResolvedRefs),
-				Status: metav1.ConditionFalse,
-				Reason: string(gatewayv1.RouteReasonBackendNotFound),
-			}
-			kubernetes.HTTPRouteMustHaveCondition(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN, resolvedRefsCondition)
+			kubernetes.HTTPRouteMustHaveRouteAcceptedConditionsTrue(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
+			kubernetes.HTTPRouteMustHaveResolvedRefsMustHaveBackendsNotFound(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
 
 			t.Logf("Successfully verified HTTPRoute %s has conditions: Accepted=True and ResolvedRefs=False (Reason: BackendNotFound) for Gateway %s",
 				routeNN.String(), gatewayNN.String())
