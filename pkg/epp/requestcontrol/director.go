@@ -89,6 +89,7 @@ func NewDirectorWithConfig(
 		podLocator:            podLocator,
 		requestControlPlugins: *config,
 		defaultPriority:       0, // define default priority explicitly
+		parser:                parser,
 	}
 }
 

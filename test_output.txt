@@ -1,0 +1,479 @@
+=== RUN   TestLegacyAdmissionController_Admit
+=== PAUSE TestLegacyAdmissionController_Admit
+=== RUN   TestFlowControlRequestAdapter
+=== PAUSE TestFlowControlRequestAdapter
+=== RUN   TestFlowControlAdmissionController_Admit
+=== PAUSE TestFlowControlAdmissionController_Admit
+=== RUN   TestDirector_HandleRequest
+2026-02-26T18:19:05Z	LEVEL(-2)	datastore/datastore.go:152	Updating endpoints	{"selector": {"app":"inference"}, "targetPortsChanged": false}
+=== RUN   TestDirector_HandleRequest/successful_completions_request
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_request_with_model_rewrite
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": "food-review"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0, "objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModel": "food-review-rewritten", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+    director_test.go:717: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:717
+        	Error:      	Not equal: 
+        	            	expected: "food-review-rewritten"
+        	            	actual  : "food-review-to-be-rewritten"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-food-review-rewritten
+        	            	+food-review-to-be-rewritten
+        	Test:       	TestDirector_HandleRequest/successful_request_with_model_rewrite
+        	Messages:   	Mutated reqCtx.Request.Body model mismatch
+    director_test.go:720: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:720
+        	Error:      	Not equal: 
+        	            	expected: 62
+        	            	actual  : 56
+        	Test:       	TestDirector_HandleRequest/successful_request_with_model_rewrite
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "objectiveKey": "", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request_with_prepare_data_plugins
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "objectiveKey": "", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request_with_admit_request_plugins
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "objectiveKey": "", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/denied_request_by_admit_request_plugin
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:443	AdmitRequest plugin denied the request	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data", "reason": "denied by admit plugin"}
+2026-02-26T18:19:05Z	LEVEL(-2)	requestcontrol/director.go:177	Request cannot be admitted	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request_with_multiple_messages
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_request_with_target_model_resolution
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1, "objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModel": "resolved-target-model-A", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+    director_test.go:717: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:717
+        	Error:      	Not equal: 
+        	            	expected: "resolved-target-model-A"
+        	            	actual  : "food-review-resolve"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-resolved-target-model-A
+        	            	+food-review-resolve
+        	Test:       	TestDirector_HandleRequest/successful_request_with_target_model_resolution
+        	Messages:   	Mutated reqCtx.Request.Body model mismatch
+    director_test.go:720: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:720
+        	Error:      	Not equal: 
+        	            	expected: 71
+        	            	actual  : 75
+        	Test:       	TestDirector_HandleRequest/successful_request_with_target_model_resolution
+=== RUN   TestDirector_HandleRequest/nonexistent_target_defined,_use_default_inference_model
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": "food-review-1"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0, "objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModel": "food-review-1", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/request_rejected_by_admission_controller
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "imFoodReviewSheddable", "incomingModelName": "food-review-sheddable", "targetModelName": "food-review-sheddable", "priority": -1}
+2026-02-26T18:19:05Z	LEVEL(-2)	requestcontrol/director.go:157	Request rejected by admission control	{"objectiveKey": "imFoodReviewSheddable", "incomingModelName": "food-review-sheddable", "targetModelName": "food-review-sheddable", "priority": -1, "error": "inference gateway: InferencePoolResourceExhausted - simulated admission rejection"}
+=== RUN   TestDirector_HandleRequest/model_not_found,_expect_err
+=== RUN   TestDirector_HandleRequest/prompt_or_messages_not_found,_expect_err
+=== RUN   TestDirector_HandleRequest/empty_messages,_expect_err
+=== RUN   TestDirector_HandleRequest/scheduler_returns_error
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+=== RUN   TestDirector_HandleRequest/scheduler_returns_nil_result_and_nil_error
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-2)	datastore/datastore.go:152	Updating endpoints	{"selector": {"app":"inference"}, "targetPortsChanged": false}
+=== RUN   TestDirector_HandleRequest/successful_completions_request#01
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_request_with_model_rewrite#01
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": "food-review"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModelName": "food-review-rewritten", "priority": 0, "objectiveKey": "food-review", "incomingModelName": "food-review-to-be-rewritten", "targetModel": "food-review-rewritten", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+    director_test.go:717: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:717
+        	Error:      	Not equal: 
+        	            	expected: "food-review-rewritten"
+        	            	actual  : "food-review-to-be-rewritten"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-food-review-rewritten
+        	            	+food-review-to-be-rewritten
+        	Test:       	TestDirector_HandleRequest/successful_request_with_model_rewrite#01
+        	Messages:   	Mutated reqCtx.Request.Body model mismatch
+    director_test.go:720: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:720
+        	Error:      	Not equal: 
+        	            	expected: 62
+        	            	actual  : 56
+        	Test:       	TestDirector_HandleRequest/successful_request_with_model_rewrite#01
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request#01
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "objectiveKey": "", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request_with_prepare_data_plugins#01
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "objectiveKey": "", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request_with_admit_request_plugins#01
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "objectiveKey": "", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/denied_request_by_admit_request_plugin#01
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:443	AdmitRequest plugin denied the request	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data", "reason": "denied by admit plugin"}
+2026-02-26T18:19:05Z	LEVEL(-2)	requestcontrol/director.go:177	Request cannot be admitted	{"objectiveKey": "", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 0}
+=== RUN   TestDirector_HandleRequest/successful_chat_completions_request_with_multiple_messages#01
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModel": "food-review", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/successful_request_with_target_model_resolution#01
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModelName": "resolved-target-model-A", "priority": 1, "objectiveKey": "imFoodReviewResolve", "incomingModelName": "food-review-resolve", "targetModel": "resolved-target-model-A", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+    director_test.go:717: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:717
+        	Error:      	Not equal: 
+        	            	expected: "resolved-target-model-A"
+        	            	actual  : "food-review-resolve"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-resolved-target-model-A
+        	            	+food-review-resolve
+        	Test:       	TestDirector_HandleRequest/successful_request_with_target_model_resolution#01
+        	Messages:   	Mutated reqCtx.Request.Body model mismatch
+    director_test.go:720: 
+        	Error Trace:	/usr/local/google/home/ryanrosario/Code/gateway-api-inference-extension/pkg/epp/requestcontrol/director_test.go:720
+        	Error:      	Not equal: 
+        	            	expected: 71
+        	            	actual  : 75
+        	Test:       	TestDirector_HandleRequest/successful_request_with_target_model_resolution#01
+=== RUN   TestDirector_HandleRequest/nonexistent_target_defined,_use_default_inference_model#01
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:119	No associated InferenceObjective found, using default	{"objectiveKey": "food-review-1"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-3)	requestcontrol/director.go:342	Request handled	{"objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModelName": "food-review-1", "priority": 0, "objectiveKey": "food-review-1", "incomingModelName": "food-review-1", "targetModel": "food-review-1", "endpoint": "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000"}
+=== RUN   TestDirector_HandleRequest/request_rejected_by_admission_controller#01
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "imFoodReviewSheddable", "incomingModelName": "food-review-sheddable", "targetModelName": "food-review-sheddable", "priority": -1}
+2026-02-26T18:19:05Z	LEVEL(-2)	requestcontrol/director.go:157	Request rejected by admission control	{"objectiveKey": "imFoodReviewSheddable", "incomingModelName": "food-review-sheddable", "targetModelName": "food-review-sheddable", "priority": -1, "error": "inference gateway: InferencePoolResourceExhausted - simulated admission rejection"}
+=== RUN   TestDirector_HandleRequest/model_not_found,_expect_err#01
+=== RUN   TestDirector_HandleRequest/prompt_or_messages_not_found,_expect_err#01
+=== RUN   TestDirector_HandleRequest/empty_messages,_expect_err#01
+=== RUN   TestDirector_HandleRequest/scheduler_returns_error#01
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+=== RUN   TestDirector_HandleRequest/scheduler_returns_nil_result_and_nil_error#01
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:154	LLM request assembled	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:441	Running AdmitRequest plugin	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:446	Completed running AdmitRequest plugin successfully	{"objectiveKey": "ioFoodReview", "incomingModelName": "food-review", "targetModelName": "food-review", "priority": 2, "plugin": "test-admit-plugin/mock-admit-data"}
+--- FAIL: TestDirector_HandleRequest (0.15s)
+    --- PASS: TestDirector_HandleRequest/successful_completions_request (0.00s)
+    --- FAIL: TestDirector_HandleRequest/successful_request_with_model_rewrite (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request_with_prepare_data_plugins (0.01s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request_with_admit_request_plugins (0.00s)
+    --- PASS: TestDirector_HandleRequest/denied_request_by_admit_request_plugin (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request_with_multiple_messages (0.00s)
+    --- FAIL: TestDirector_HandleRequest/successful_request_with_target_model_resolution (0.00s)
+    --- PASS: TestDirector_HandleRequest/nonexistent_target_defined,_use_default_inference_model (0.00s)
+    --- PASS: TestDirector_HandleRequest/request_rejected_by_admission_controller (0.00s)
+    --- PASS: TestDirector_HandleRequest/model_not_found,_expect_err (0.00s)
+    --- PASS: TestDirector_HandleRequest/prompt_or_messages_not_found,_expect_err (0.00s)
+    --- PASS: TestDirector_HandleRequest/empty_messages,_expect_err (0.00s)
+    --- PASS: TestDirector_HandleRequest/scheduler_returns_error (0.00s)
+    --- PASS: TestDirector_HandleRequest/scheduler_returns_nil_result_and_nil_error (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_completions_request#01 (0.00s)
+    --- FAIL: TestDirector_HandleRequest/successful_request_with_model_rewrite#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request_with_prepare_data_plugins#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request_with_admit_request_plugins#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/denied_request_by_admit_request_plugin#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/successful_chat_completions_request_with_multiple_messages#01 (0.00s)
+    --- FAIL: TestDirector_HandleRequest/successful_request_with_target_model_resolution#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/nonexistent_target_defined,_use_default_inference_model#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/request_rejected_by_admission_controller#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/model_not_found,_expect_err#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/prompt_or_messages_not_found,_expect_err#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/empty_messages,_expect_err#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/scheduler_returns_error#01 (0.00s)
+    --- PASS: TestDirector_HandleRequest/scheduler_returns_nil_result_and_nil_error#01 (0.00s)
+=== RUN   TestGetRandomEndpoint
+=== RUN   TestGetRandomEndpoint/No_pods_available
+=== RUN   TestGetRandomEndpoint/No_pods_available#01
+=== RUN   TestGetRandomEndpoint/Single_pod_available
+=== RUN   TestGetRandomEndpoint/Single_pod_available#01
+=== RUN   TestGetRandomEndpoint/Multiple_pods_available
+=== RUN   TestGetRandomEndpoint/Multiple_pods_available#01
+--- PASS: TestGetRandomEndpoint (0.01s)
+    --- PASS: TestGetRandomEndpoint/No_pods_available (0.00s)
+    --- PASS: TestGetRandomEndpoint/No_pods_available#01 (0.00s)
+    --- PASS: TestGetRandomEndpoint/Single_pod_available (0.00s)
+    --- PASS: TestGetRandomEndpoint/Single_pod_available#01 (0.00s)
+    --- PASS: TestGetRandomEndpoint/Multiple_pods_available (0.00s)
+    --- PASS: TestGetRandomEndpoint/Multiple_pods_available#01 (0.00s)
+=== RUN   TestDirector_ApplyWeightedModelRewrite
+=== RUN   TestDirector_ApplyWeightedModelRewrite/no_rewrites
+=== RUN   TestDirector_ApplyWeightedModelRewrite/single_matching_rewrite
+=== RUN   TestDirector_ApplyWeightedModelRewrite/no_matching_rewrite
+=== RUN   TestDirector_ApplyWeightedModelRewrite/oldest_rewrite_wins_for_duplicate_model
+=== RUN   TestDirector_ApplyWeightedModelRewrite/weighted_rewrite_applied_(probabilistic_check)
+=== RUN   TestDirector_ApplyWeightedModelRewrite/initial_TargetModelName_is_respected_if_no_rewrite_matches
+--- PASS: TestDirector_ApplyWeightedModelRewrite (0.00s)
+    --- PASS: TestDirector_ApplyWeightedModelRewrite/no_rewrites (0.00s)
+    --- PASS: TestDirector_ApplyWeightedModelRewrite/single_matching_rewrite (0.00s)
+    --- PASS: TestDirector_ApplyWeightedModelRewrite/no_matching_rewrite (0.00s)
+    --- PASS: TestDirector_ApplyWeightedModelRewrite/oldest_rewrite_wins_for_duplicate_model (0.00s)
+    --- PASS: TestDirector_ApplyWeightedModelRewrite/weighted_rewrite_applied_(probabilistic_check) (0.00s)
+    --- PASS: TestDirector_ApplyWeightedModelRewrite/initial_TargetModelName_is_respected_if_no_rewrite_matches (0.00s)
+=== RUN   TestDirector_SelectWeightedModel
+=== RUN   TestDirector_SelectWeightedModel/single_target
+=== RUN   TestDirector_SelectWeightedModel/multiple_targets,_equal_weight
+=== RUN   TestDirector_SelectWeightedModel/multiple_targets,_different_weights
+=== RUN   TestDirector_SelectWeightedModel/zero_total_weight,_distribute_evenly
+--- PASS: TestDirector_SelectWeightedModel (0.00s)
+    --- PASS: TestDirector_SelectWeightedModel/single_target (0.00s)
+    --- PASS: TestDirector_SelectWeightedModel/multiple_targets,_equal_weight (0.00s)
+    --- PASS: TestDirector_SelectWeightedModel/multiple_targets,_different_weights (0.00s)
+    --- PASS: TestDirector_SelectWeightedModel/zero_total_weight,_distribute_evenly (0.00s)
+=== RUN   TestDirector_HandleResponseReceived
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:454	Running ResponseReceived plugin	{"plugin": "pr1/test-response-received"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:458	Completed running ResponseReceived plugin successfully	{"plugin": "pr1/test-response-received"}
+--- PASS: TestDirector_HandleResponseReceived (0.00s)
+=== RUN   TestDirector_HandleResponseStreaming
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/director.go:378	Entering HandleResponseBodyChunk	{"stage": "bodyChunk"}
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/director.go:465	Running ResponseStreaming plugin	{"plugin": "ps1/test-response-streaming"}
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/director.go:469	Completed running ResponseStreaming plugin successfully	{"plugin": "ps1/test-response-streaming"}
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/director.go:386	Exiting HandleResponseBodyChunk	{"stage": "bodyChunk"}
+--- PASS: TestDirector_HandleResponseStreaming (0.00s)
+=== RUN   TestDirector_HandleResponseComplete
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:393	Entering HandleResponseBodyComplete	{"stage": "bodyChunk"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:476	Running ResponseComplete plugin	{"plugin": "pc1/test-response-complete"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:480	Completed running ResponseComplete plugin successfully	{"plugin": "pc1/test-response-complete"}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/director.go:403	Exiting HandleResponseBodyComplete	{"stage": "bodyChunk"}
+--- PASS: TestDirector_HandleResponseComplete (0.00s)
+=== RUN   TestDatastorePodLocator_Locate
+=== PAUSE TestDatastorePodLocator_Locate
+=== RUN   TestCachedPodLocator_CachingBehavior
+=== PAUSE TestCachedPodLocator_CachingBehavior
+=== RUN   TestCachedPodLocator_CacheKeyDeterminism
+=== PAUSE TestCachedPodLocator_CacheKeyDeterminism
+=== RUN   TestCachedPodLocator_Concurrency_ThunderingHerd
+=== PAUSE TestCachedPodLocator_Concurrency_ThunderingHerd
+=== RUN   TestCachedPodLocator_DifferentSubsetsAreIsolated
+=== PAUSE TestCachedPodLocator_DifferentSubsetsAreIsolated
+=== RUN   TestCachedPodLocator_CacheIsolation_EmptyVsDefault
+=== PAUSE TestCachedPodLocator_CacheIsolation_EmptyVsDefault
+=== RUN   TestPrepareDataPluginsWithTimeout
+=== RUN   TestPrepareDataPluginsWithTimeout/success_with_one_plugin
+=== RUN   TestPrepareDataPluginsWithTimeout/plugin_returns_error
+=== RUN   TestPrepareDataPluginsWithTimeout/plugins_time_out
+=== RUN   TestPrepareDataPluginsWithTimeout/context_cancelled
+=== RUN   TestPrepareDataPluginsWithTimeout/multiple_plugins_success
+--- PASS: TestPrepareDataPluginsWithTimeout (0.10s)
+    --- PASS: TestPrepareDataPluginsWithTimeout/success_with_one_plugin (0.00s)
+    --- PASS: TestPrepareDataPluginsWithTimeout/plugin_returns_error (0.00s)
+    --- PASS: TestPrepareDataPluginsWithTimeout/plugins_time_out (0.05s)
+    --- PASS: TestPrepareDataPluginsWithTimeout/context_cancelled (0.05s)
+    --- PASS: TestPrepareDataPluginsWithTimeout/multiple_plugins_success (0.00s)
+=== RUN   TestExecutePluginsAsDAG
+=== RUN   TestExecutePluginsAsDAG/no_plugins
+=== RUN   TestExecutePluginsAsDAG/simple_linear_dependency_(A_->_B_->_C)
+=== RUN   TestExecutePluginsAsDAG/DAG_with_multiple_dependencies_(A_->_B,_A_->_D)_and_one_independent_(E)
+=== RUN   TestExecutePluginsAsDAG/dependency_fails
+--- PASS: TestExecutePluginsAsDAG (0.04s)
+    --- PASS: TestExecutePluginsAsDAG/no_plugins (0.00s)
+    --- PASS: TestExecutePluginsAsDAG/simple_linear_dependency_(A_->_B_->_C) (0.02s)
+    --- PASS: TestExecutePluginsAsDAG/DAG_with_multiple_dependencies_(A_->_B,_A_->_D)_and_one_independent_(E) (0.02s)
+    --- PASS: TestExecutePluginsAsDAG/dependency_fails (0.00s)
+=== CONT  TestLegacyAdmissionController_Admit
+=== CONT  TestCachedPodLocator_CacheKeyDeterminism
+=== RUN   TestLegacyAdmissionController_Admit/non_sheddable_saturated_admit
+=== PAUSE TestLegacyAdmissionController_Admit/non_sheddable_saturated_admit
+--- PASS: TestCachedPodLocator_CacheKeyDeterminism (0.00s)
+=== CONT  TestCachedPodLocator_DifferentSubsetsAreIsolated
+--- PASS: TestCachedPodLocator_DifferentSubsetsAreIsolated (0.00s)
+=== CONT  TestCachedPodLocator_Concurrency_ThunderingHerd
+=== RUN   TestLegacyAdmissionController_Admit/sheddable_not_saturated_admit
+=== PAUSE TestLegacyAdmissionController_Admit/sheddable_not_saturated_admit
+=== RUN   TestLegacyAdmissionController_Admit/sheddable_saturated_reject
+=== PAUSE TestLegacyAdmissionController_Admit/sheddable_saturated_reject
+=== RUN   TestLegacyAdmissionController_Admit/sheddable_no_pods_reject
+=== PAUSE TestLegacyAdmissionController_Admit/sheddable_no_pods_reject
+=== CONT  TestLegacyAdmissionController_Admit/non_sheddable_saturated_admit
+=== CONT  TestCachedPodLocator_CachingBehavior
+=== CONT  TestDatastorePodLocator_Locate
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:114	Executing LegacyAdmissionController	{"priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:125	Request admitted	{"requestID": "test-req"}
+=== CONT  TestLegacyAdmissionController_Admit/sheddable_no_pods_reject
+=== RUN   TestDatastorePodLocator_Locate/Nil_metadata_returns_all_pods
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:114	Executing LegacyAdmissionController	{"priority": -1, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:74	Request rejected: system saturated and request is sheddable	{"requestID": "test-req"}
+=== PAUSE TestDatastorePodLocator_Locate/Nil_metadata_returns_all_pods
+=== RUN   TestDatastorePodLocator_Locate/Empty_metadata_returns_all_pods
+=== PAUSE TestDatastorePodLocator_Locate/Empty_metadata_returns_all_pods
+=== RUN   TestDatastorePodLocator_Locate/Metadata_without_subset_namespace_returns_all_pods
+=== CONT  TestLegacyAdmissionController_Admit/sheddable_not_saturated_admit
+=== PAUSE TestDatastorePodLocator_Locate/Metadata_without_subset_namespace_returns_all_pods
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:114	Executing LegacyAdmissionController	{"priority": -1, "fairnessID": ""}
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_with_single_match
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:125	Request admitted	{"requestID": "test-req"}
+=== CONT  TestLegacyAdmissionController_Admit/sheddable_saturated_reject
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:114	Executing LegacyAdmissionController	{"priority": -1, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:74	Request rejected: system saturated and request is sheddable	{"requestID": "test-req"}
+--- PASS: TestLegacyAdmissionController_Admit (0.00s)
+    --- PASS: TestLegacyAdmissionController_Admit/non_sheddable_saturated_admit (0.00s)
+    --- PASS: TestLegacyAdmissionController_Admit/sheddable_no_pods_reject (0.00s)
+    --- PASS: TestLegacyAdmissionController_Admit/sheddable_not_saturated_admit (0.00s)
+    --- PASS: TestLegacyAdmissionController_Admit/sheddable_saturated_reject (0.00s)
+=== CONT  TestFlowControlAdmissionController_Admit
+=== RUN   TestFlowControlAdmissionController_Admit/sheddable_dispatched
+=== PAUSE TestFlowControlAdmissionController_Admit/sheddable_dispatched
+=== RUN   TestFlowControlAdmissionController_Admit/non_sheddable_dispatched
+=== PAUSE TestFlowControlAdmissionController_Admit/non_sheddable_dispatched
+=== RUN   TestFlowControlAdmissionController_Admit/fc_reject_capacity
+=== PAUSE TestFlowControlAdmissionController_Admit/fc_reject_capacity
+=== RUN   TestFlowControlAdmissionController_Admit/fc_evict_ttl
+=== PAUSE TestFlowControlAdmissionController_Admit/fc_evict_ttl
+=== RUN   TestFlowControlAdmissionController_Admit/fc_evict_context_cancelled
+=== PAUSE TestFlowControlAdmissionController_Admit/fc_evict_context_cancelled
+=== RUN   TestFlowControlAdmissionController_Admit/fc_reject_other
+=== PAUSE TestFlowControlAdmissionController_Admit/fc_reject_other
+=== RUN   TestFlowControlAdmissionController_Admit/fc_evict_other
+=== PAUSE TestFlowControlAdmissionController_Admit/fc_evict_other
+=== RUN   TestFlowControlAdmissionController_Admit/fc_unhandled_outcome
+=== PAUSE TestFlowControlAdmissionController_Admit/fc_unhandled_outcome
+=== CONT  TestFlowControlAdmissionController_Admit/sheddable_dispatched
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": -1, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "Dispatched", "error": null}
+=== CONT  TestFlowControlRequestAdapter
+=== RUN   TestFlowControlRequestAdapter/simple
+=== PAUSE TestFlowControlRequestAdapter/simple
+=== CONT  TestFlowControlRequestAdapter/simple
+--- PASS: TestFlowControlRequestAdapter (0.00s)
+    --- PASS: TestFlowControlRequestAdapter/simple (0.00s)
+=== CONT  TestFlowControlAdmissionController_Admit/fc_unhandled_outcome
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "NotYetFinalized", "error": null}
+=== CONT  TestFlowControlAdmissionController_Admit/fc_evict_other
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "EvictedOther", "error": "internal error"}
+=== CONT  TestFlowControlAdmissionController_Admit/fc_reject_other
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "RejectedOther", "error": null}
+=== CONT  TestFlowControlAdmissionController_Admit/fc_evict_context_cancelled
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "EvictedContextCancelled", "error": null}
+=== CONT  TestFlowControlAdmissionController_Admit/fc_evict_ttl
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "EvictedTTL", "error": "timeout"}
+=== CONT  TestFlowControlAdmissionController_Admit/fc_reject_capacity
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "RejectedCapacity", "error": null}
+=== CONT  TestFlowControlAdmissionController_Admit/non_sheddable_dispatched
+2026-02-26T18:19:05Z	LEVEL(-5)	requestcontrol/admission.go:154	Executing FlowControlAdmissionController	{"requestID": "test-req", "priority": 0, "fairnessID": ""}
+2026-02-26T18:19:05Z	LEVEL(-4)	requestcontrol/admission.go:169	Flow control outcome	{"requestID": "test-req", "outcome": "Dispatched", "error": null}
+--- PASS: TestFlowControlAdmissionController_Admit (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/sheddable_dispatched (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/fc_unhandled_outcome (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/fc_evict_other (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/fc_reject_other (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/fc_evict_context_cancelled (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/fc_evict_ttl (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/fc_reject_capacity (0.00s)
+    --- PASS: TestFlowControlAdmissionController_Admit/non_sheddable_dispatched (0.00s)
+=== CONT  TestCachedPodLocator_CacheIsolation_EmptyVsDefault
+--- PASS: TestCachedPodLocator_CacheIsolation_EmptyVsDefault (0.00s)
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_with_single_match
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_with_multiple_matches
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_with_multiple_matches
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(Scale-from-Zero_scenario)
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(Scale-from-Zero_scenario)
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_contains_malformed_data_(non-string)
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_contains_malformed_data_(non-string)
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_with_match_(filter_disabled)
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_with_match_(filter_disabled)
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty_(filter_disabled)
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty_(filter_disabled)
+=== RUN   TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(filter_disabled)
+=== PAUSE TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(filter_disabled)
+=== CONT  TestDatastorePodLocator_Locate/Nil_metadata_returns_all_pods
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(filter_disabled)
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty_(filter_disabled)
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_with_match_(filter_disabled)
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_contains_malformed_data_(non-string)
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(Scale-from-Zero_scenario)
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_with_multiple_matches
+=== CONT  TestDatastorePodLocator_Locate/Subset_filter_with_single_match
+=== CONT  TestDatastorePodLocator_Locate/Metadata_without_subset_namespace_returns_all_pods
+=== CONT  TestDatastorePodLocator_Locate/Empty_metadata_returns_all_pods
+--- PASS: TestDatastorePodLocator_Locate (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Nil_metadata_returns_all_pods (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(filter_disabled) (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty_(filter_disabled) (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_with_match_(filter_disabled) (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_contains_malformed_data_(non-string) (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_is_present_but_list_is_empty (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_with_no_matches_(Scale-from-Zero_scenario) (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_with_multiple_matches (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Subset_filter_with_single_match (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Metadata_without_subset_namespace_returns_all_pods (0.00s)
+    --- PASS: TestDatastorePodLocator_Locate/Empty_metadata_returns_all_pods (0.00s)
+--- PASS: TestCachedPodLocator_Concurrency_ThunderingHerd (0.01s)
+--- PASS: TestCachedPodLocator_CachingBehavior (0.04s)
+FAIL
+FAIL	sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol	0.440s
+FAIL
