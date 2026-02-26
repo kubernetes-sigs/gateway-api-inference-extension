@@ -126,7 +126,11 @@ func (p *Predictor) coalesceDispatcher() {
 // the results back to each individual caller.
 func (p *Predictor) dispatchBatch(submissions []*batchSubmission) {
 	// Merge all requests and track each caller's slice boundaries
-	var allRequests []PredictionRequest
+	var totalReqs int
+	for _, sub := range submissions {
+		totalReqs += len(sub.requests)
+	}
+	allRequests := make([]PredictionRequest, 0, totalReqs)
 	offsets := make([]int, len(submissions))
 	counts := make([]int, len(submissions))
 
