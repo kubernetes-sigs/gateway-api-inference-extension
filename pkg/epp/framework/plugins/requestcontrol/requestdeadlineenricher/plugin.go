@@ -9,6 +9,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
 const (
@@ -67,6 +68,6 @@ func (p *Plugin) EnrichRequest(ctx context.Context, request *scheduling.LLMReque
 	if key == "" {
 		key = defaultDeadlineKey
 	}
-	reqMetadata["ordering.custom"] = map[string]float64{key: float64(deadline.UnixNano())}
+	reqMetadata[metadata.CustomOrderingNamespace] = map[string]float64{key: float64(deadline.UnixNano())}
 	return nil
 }
