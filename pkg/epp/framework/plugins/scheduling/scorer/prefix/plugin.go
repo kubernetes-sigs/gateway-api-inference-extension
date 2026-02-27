@@ -106,11 +106,11 @@ type Plugin struct {
 	wg          sync.WaitGroup
 }
 
-// podSet holds an pods servers that may have a specific prefix hash.
-type podSet map[ServerID]struct{}
+// PodSet holds an pods servers that may have a specific prefix hash.
+type PodSet map[ServerID]struct{}
 
 type Indexer interface {
-	Get(hash BlockHash) podSet
+	Get(hash BlockHash) PodSet
 	Add(hashes []BlockHash, server Server)
 	RemovePod(server ServerID)
 	Pods() []ServerID
@@ -245,8 +245,8 @@ func (p *Plugin) Consumes() map[string]any {
 
 // PrepareRequestData hashes prompt, finds longest prefix match and stores it in endpoint as attribute.
 func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMRequest, endpoints []framework.Endpoint) error {
-	blockSize := getBlockSize(endpoints, p.config)
-	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
+	blockSize := GetBlockSize(endpoints, p.config)
+	hashes := HashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
@@ -266,8 +266,8 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMR
 // Score returns the scoring result for the given list of pods based on context.
 func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
-	blockSize := getBlockSize(endpoints, p.config)
-	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
+	blockSize := GetBlockSize(endpoints, p.config)
+	hashes := HashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
 		PrefixHashes:       hashes,
 		PrefixCacheServers: p.matchLongestPrefix(ctx, hashes),
@@ -329,7 +329,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
 
-	blockSize := getBlockSize(primaryProfileResult.TargetEndpoints, p.config)
+	blockSize := GetBlockSize(primaryProfileResult.TargetEndpoints, p.config)
 	// report matched and total prefix length in chars
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize*averageCharactersPerToken, total*blockSize*averageCharactersPerToken)
 }
@@ -393,10 +393,10 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 	}
 }
 
-// hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
+// HashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *framework.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
+func HashPrompt(ctx context.Context, request *framework.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
@@ -493,9 +493,9 @@ func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
 	}
 }
 
-// getBlockSize returns the block size in tokens.
+// GetBlockSize returns the block size in tokens.
 // In case of auto-tune uses the block size from the first endpoint, otherwise uses the block size from the configuration
-func getBlockSize(endpoints []framework.Endpoint, config Config) int {
+func GetBlockSize(endpoints []framework.Endpoint, config Config) int {
 	if !config.AutoTune {
 		return config.BlockSizeTokens
 	}
