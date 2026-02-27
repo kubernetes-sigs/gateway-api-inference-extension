@@ -1,17 +1,31 @@
 # Priority and Capacity
 
-The InferenceObjective creates the definition of `Priority` which describes how requests interact with each other, this naturally interacts with total pool capacity, and properly understanding and configuring these behaviors is important in allowing a pool to handle requests of different priority.
+The `InferenceObjective` API resource allows users to define the priority of their inference requests. This priority heavily influences how the EPP handles requests under load, with behavior changing significantly depending on whether the [Flow Control layer](../guides/flow-control.md) is enabled.
 
-## Priority (in flow control)
+## Defining Priority
 
-It should be noted that priority is currently only used in [Capacity](#capacity), and that the description below is how Priority will be consumed in the `Flow Control` model.
+Priority is an integer value defined in the `InferenceObjective.spec.priority` field.
+* **Higher values** indicate higher priority.
+* **Negative values** are allowed and designate requests as "sheddable" (safe to drop under heavy load).
+* If a request does not have an associated `InferenceObjective` or the priority field is unset, it defaults to `0`.
 
-Priority is a simple stack rank; the higher the number, the higher the priority. Should no priority for a request be specified, the default value is zero. Requests of higher priority are _always_ selected first when requests are queued. Requests of equal priority currently operate on a FCFS basis. 
+## Admission Control Behaviors
 
-## Capacity
+The Endpoint Picker (EPP) employs a **Saturation Detector** to assess the load on the InferencePool (monitoring aggregate metrics like KV cache utilization and local queue depth).
 
-The current capacity model uses configurable [thresholds](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/35b14a10a9830d1a9e3850913539066ebc8fb317/pkg/epp/saturationdetector/saturationdetector.go#L49) to determine if the entire pool is saturated. The calculation is to simply iterate through each endpoint in the pool, and if all are above all thresholds, the pool is considered `saturated`. In the event of saturation, all requests with a negative priority will be rejected, and other requests will be scheduled and queued on the model servers. 
+How Priority interacts with Capacity depends on your EPP configuration:
 
-## Future work
+### 1. With Flow Control Enabled
+*Recommended Approach.* Enable Flow Control by adding the `flowControl` feature gate to your `EndpointPickerConfig`. Details are covered in the [Flow Control Layer User Guide](../guides/flow-control.md).
 
-The Flow Control system is nearing completion and will add more nuance to the Priority and Capacity model: proper priority enforcement, more articulate capacity tracking, queuing at the Inference Gateway level, etc. This documentation will be updated when the Flow Control has finished implementation.
+* **Intelligent Queuing:** All requests, including those with negative priority, are admitted into the Flow Control layer's internal queues, subject to dynamic priority bands and global HTTP payload capacity limits. If an inbound request would exceed these configured payload capacities, it is immediately rejected (HTTP 503). This enables efficient load shedding by limiting the aggregate backlog size before it impacts the proxy's memory.
+* **Strict Priority Dispatch:** The Flow Control layer dispatches requests from its queues with strict priority. Higher-priority requests are *always* dispatched before lower-priority ones.
+* **Flow Control Backpressure:** When the pool is saturated, the EPP enforces **Strict Priority Preservation**. The dispatch cycle is paused, holding the highest-priority request safely in memory until the pool recovers. Lower-priority requests are intentionally held back to guarantee they do not steal the exact GPU cycles the high-priority request is waiting for.
+* **Fairness:** Among requests of the same priority, fairness policies ensure equitable access to resources during contention.
+
+### 2. With Flow Control Disabled (Legacy Admission)
+*Default Behavior.*
+
+* **Load Shedding:** If the pool is saturated, requests with **negative priority** are immediately rejected (HTTP 503). Requests with a default priority (>= 0) are *not* shed by the EPP.
+* **No EPP-Level Queuing:** All non-sheddable requests are passed directly to the Scheduling layer. Any necessary queuing happens directly on the model server backends, which are generally unaware of global priority.
+* **Limited Priority Enforcement:** Priority is only used for the binary sheddable/non-sheddable decision. There is no EPP-level mechanism to enforce finer-grained priority ordering.
