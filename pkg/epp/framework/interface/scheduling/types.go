@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
@@ -46,6 +47,8 @@ type LLMRequest struct {
 	Headers map[string]string
 	// Request Objective
 	Objectives RequestObjectives
+	// ReceivedAt is the time when the request was received by the streaming server.
+	ReceivedAt time.Time
 }
 
 func (r *LLMRequest) String() string {

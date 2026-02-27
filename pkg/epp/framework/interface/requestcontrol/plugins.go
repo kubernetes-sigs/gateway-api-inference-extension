@@ -82,3 +82,10 @@ type AdmissionPlugin interface {
 	// If the request is allowed, it returns nil.
 	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
 }
+
+// RequestEnrichmentPlugin is called by the director before the request is admitted by the admission controller.
+// This plugin is used to enrich the request with additional metadata.
+type RequestEnrichmentPlugin interface {
+	plugin.Plugin
+	EnrichRequest(ctx context.Context, request *types.LLMRequest, reqMetadata map[string]any) error
+}

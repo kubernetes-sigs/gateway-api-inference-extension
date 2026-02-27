@@ -141,11 +141,17 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		Body:        llmRequestBody,
 		Headers:     reqCtx.Request.Headers,
 		Objectives:  requestObjectives,
+		ReceivedAt:  reqCtx.RequestReceivedTimestamp,
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
+
+	// Run RequestEnrichment plugins
+	if err := d.runRequestEnrichmentPlugins(ctx, reqCtx.SchedulingRequest, reqCtx.Request.Metadata); err != nil {
+		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Errorf("failed to enrich request: %w", err).Error()}
+	}
 
 	if err := d.admissionController.Admit(ctx, reqCtx, *infObjective.Spec.Priority); err != nil {
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
@@ -407,6 +413,18 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 		loggerDebug.Info("Completed running AdmitRequest plugin successfully", "plugin", plugin.TypedName())
 	}
 	return true
+}
+
+func (d *Director) runRequestEnrichmentPlugins(ctx context.Context, request *fwksched.LLMRequest, reqMetadata map[string]any) error {
+	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
+	for _, plugin := range d.requestControlPlugins.requestEnrichmentPlugins {
+		loggerDebug.Info("Running RequestEnrichment plugin", "plugin", plugin.TypedName())
+		if err := plugin.EnrichRequest(ctx, request, reqMetadata); err != nil {
+			return err
+		}
+		loggerDebug.Info("Completed running RequestEnrichment plugin successfully", "plugin", plugin.TypedName())
+	}
+	return nil
 }
 
 func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {

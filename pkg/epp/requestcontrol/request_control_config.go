@@ -30,6 +30,7 @@ func NewConfig() *Config {
 		responseReceivedPlugins:  []fwk.ResponseReceived{},
 		responseStreamingPlugins: []fwk.ResponseStreaming{},
 		responseCompletePlugins:  []fwk.ResponseComplete{},
+		requestEnrichmentPlugins: []fwk.RequestEnrichmentPlugin{},
 	}
 }
 
@@ -41,6 +42,7 @@ type Config struct {
 	responseReceivedPlugins  []fwk.ResponseReceived
 	responseStreamingPlugins []fwk.ResponseStreaming
 	responseCompletePlugins  []fwk.ResponseComplete
+	requestEnrichmentPlugins []fwk.RequestEnrichmentPlugin
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -83,6 +85,13 @@ func (c *Config) WithAdmissionPlugins(plugins ...fwk.AdmissionPlugin) *Config {
 	return c
 }
 
+// WithRequestEnrichmentPlugins sets the given plugins as the RequestEnrichment plugins.
+// If the Config has RequestEnrichment plugins already, this call replaces the existing plugins with the given ones.
+func (c *Config) WithRequestEnrichmentPlugins(plugins ...fwk.RequestEnrichmentPlugin) *Config {
+	c.requestEnrichmentPlugins = plugins
+	return c
+}
+
 // AddPlugins adds the given plugins to the Config.
 // The type of each plugin is checked and added to the corresponding list of plugins in the Config.
 // If a plugin implements multiple plugin interfaces, it will be added to each corresponding list.
@@ -105,6 +114,9 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 		}
 		if admissionPlugin, ok := plugin.(fwk.AdmissionPlugin); ok {
 			c.admissionPlugins = append(c.admissionPlugins, admissionPlugin)
+		}
+		if requestEnrichmentPlugin, ok := plugin.(fwk.RequestEnrichmentPlugin); ok {
+			c.requestEnrichmentPlugins = append(c.requestEnrichmentPlugins, requestEnrichmentPlugin)
 		}
 	}
 }
