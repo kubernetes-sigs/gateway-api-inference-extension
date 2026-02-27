@@ -711,15 +711,13 @@ func RecordPromptCachedTokens(modelName, targetModelName string, size int) {
 
 // RecordNormalizedTimePerOutputToken (NTPOT) records the normalized time per output token.
 func RecordNormalizedTimePerOutputToken(ctx context.Context, modelName, targetModelName string, received time.Time, complete time.Time, outputTokenCount int) bool {
-	if !complete.After(received) {
-		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NTPOT calculation",
-			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
+	if outputTokenCount <= 0 {
 		return false
 	}
 
-	if outputTokenCount <= 0 {
-		log.FromContext(ctx).Error(nil, "Output token count must be positive for NTPOT calculation",
-			"modelName", modelName, "targetModelName", targetModelName, "outputTokenCount", outputTokenCount)
+	if !complete.After(received) {
+		log.FromContext(ctx).Error(nil, "Request latency values are invalid for NTPOT calculation",
+			"modelName", modelName, "targetModelName", targetModelName, "completeTime", complete, "receivedTime", received)
 		return false
 	}
 
