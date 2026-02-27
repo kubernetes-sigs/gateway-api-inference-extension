@@ -64,13 +64,19 @@ func TestCustomPolicy_Less(t *testing.T) {
 	c := mocks.NewMockQueueItemAccessor(3, "c", testFlowKey)
 
 	ma := a.OriginalRequest().GetMetadata()
-	ma["ordering.custom.score1"] = 3.2
+	ma["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+	}
 
 	mb := b.OriginalRequest().GetMetadata()
-	mb["ordering.custom.score1"] = 5.9
+	mb["ordering.custom"] = map[string]float64{
+		"score1": 5.9,
+	}
 
 	mc := c.OriginalRequest().GetMetadata()
-	mc["ordering.custom.score1"] = 3.2
+	mc["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+	}
 
 	assert.True(t, p.Less(a, b))  // 3.2 < 5.9
 	assert.False(t, p.Less(b, a)) // 5.9 not < 3.2
@@ -91,7 +97,9 @@ func TestCustomPolicy_Less_NilData(t *testing.T) {
 
 	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
 	ma := a.OriginalRequest().GetMetadata()
-	ma["ordering.custom.score1"] = 3.2
+	ma["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+	}
 	nilItem := mocks.NewMockQueueItemAccessor(1, "nil-item", testFlowKey)
 
 	// nilItem will use the default value of 2 since no value was set in the metadata for ordering.custom.score1
@@ -117,13 +125,19 @@ func TestCustomPolicy_Less_Desc(t *testing.T) {
 	c := mocks.NewMockQueueItemAccessor(3, "c", testFlowKey)
 
 	ma := a.OriginalRequest().GetMetadata()
-	ma["ordering.custom.score1"] = 3.2
+	ma["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+	}
 
 	mb := b.OriginalRequest().GetMetadata()
-	mb["ordering.custom.score1"] = 5.9
+	mb["ordering.custom"] = map[string]float64{
+		"score1": 5.9,
+	}
 
 	mc := c.OriginalRequest().GetMetadata()
-	mc["ordering.custom.score1"] = 3.2
+	mc["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+	}
 
 	assert.False(t, p.Less(a, b)) // 3.2 not < 5.9 (in descending order)
 	assert.True(t, p.Less(b, a))  // 5.9 < 3.2 (in descending order)
@@ -153,20 +167,28 @@ func TestCustomPolicy_Less_MultipleKeys(t *testing.T) {
 	d := mocks.NewMockQueueItemAccessor(4, "d", testFlowKey)
 
 	ma := a.OriginalRequest().GetMetadata()
-	ma["ordering.custom.score1"] = 3.2
-	ma["ordering.custom.score2"] = 4.9
+	ma["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+		"score2": 4.9,
+	}
 
 	mb := b.OriginalRequest().GetMetadata()
-	mb["ordering.custom.score1"] = 5.9
-	mb["ordering.custom.score2"] = 2.9
+	mb["ordering.custom"] = map[string]float64{
+		"score1": 5.9,
+		"score2": 2.9,
+	}
 
 	mc := c.OriginalRequest().GetMetadata()
-	mc["ordering.custom.score1"] = 3.2
-	mc["ordering.custom.score2"] = 6.3
+	mc["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+		"score2": 6.3,
+	}
 
 	md := d.OriginalRequest().GetMetadata()
-	md["ordering.custom.score1"] = 3.2
-	md["ordering.custom.score2"] = 4.9
+	md["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+		"score2": 4.9,
+	}
 
 	assert.True(t, p.Less(a, b))  // 3.2 < 5.9
 	assert.False(t, p.Less(b, a)) // 5.9 not < 3.2
@@ -197,20 +219,28 @@ func TestCustomPolicy_Less_MultipleKeys_Desc(t *testing.T) {
 	d := mocks.NewMockQueueItemAccessor(4, "d", testFlowKey)
 
 	ma := a.OriginalRequest().GetMetadata()
-	ma["ordering.custom.score1"] = 3.2
-	ma["ordering.custom.score2"] = 4.9
+	ma["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+		"score2": 4.9,
+	}
 
 	mb := b.OriginalRequest().GetMetadata()
-	mb["ordering.custom.score1"] = 5.9
-	mb["ordering.custom.score2"] = 2.9
+	mb["ordering.custom"] = map[string]float64{
+		"score1": 5.9,
+		"score2": 2.9,
+	}
 
 	mc := c.OriginalRequest().GetMetadata()
-	mc["ordering.custom.score1"] = 3.2
-	mc["ordering.custom.score2"] = 6.3
+	mc["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+		"score2": 6.3,
+	}
 
 	md := d.OriginalRequest().GetMetadata()
-	md["ordering.custom.score1"] = 3.2
-	md["ordering.custom.score2"] = 4.9
+	md["ordering.custom"] = map[string]float64{
+		"score1": 3.2,
+		"score2": 4.9,
+	}
 
 	assert.True(t, p.Less(a, b))  // 3.2 < 5.9
 	assert.False(t, p.Less(b, a)) // 5.9 not < 3.2

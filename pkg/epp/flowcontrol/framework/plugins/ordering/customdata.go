@@ -93,21 +93,29 @@ func (p *CustomDataOrderingPolicy) TypedName() plugin.TypedName {
 
 func (p *CustomDataOrderingPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
 	for _, k := range p.keys {
-		aVal := a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace+"."+k.name]
-		bVal := b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace+"."+k.name]
+		aVal := k.defaultv
+		bVal := k.defaultv
+		var ok bool
 
-		aValF, ok := aVal.(float64)
-		if !ok {
-			aValF = k.defaultv
+		mda := a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace]
+		if mda != nil {
+			aVal, ok = mda.(map[string]float64)[k.name]
+			if !ok {
+				aVal = k.defaultv
+			}
 		}
-		bValF, ok := bVal.(float64)
-		if !ok {
-			bValF = k.defaultv
+		mdb := b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace]
+		if mdb != nil {
+			bVal, ok = mdb.(map[string]float64)[k.name]
+			if !ok {
+				bVal = k.defaultv
+			}
 		}
-		if aValF == bValF {
+
+		if aVal == bVal {
 			continue
 		}
-		return aValF*float64(k.direction) < bValF*float64(k.direction)
+		return aVal*float64(k.direction) < bVal*float64(k.direction)
 
 	}
 	return false
