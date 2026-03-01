@@ -27,28 +27,22 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-const (
-	mockSource = "mock-data-source"
-)
-
 var _ fwkdl.DataSource = (*DataSource)(nil)
 var _ fwkdl.PollingDataSource = (*DataSource)(nil)
 
 type DataSource struct {
-	Name      *plugin.TypedName
+	typedName plugin.TypedName
 	CallCount int64
 	Metrics   map[types.NamespacedName]*fwkdl.Metrics
 	Errors    map[types.NamespacedName]error
 }
 
+func NewDataSource(typedName plugin.TypedName) *DataSource {
+	return &DataSource{typedName: typedName}
+}
+
 func (fds *DataSource) TypedName() plugin.TypedName {
-	if fds.Name != nil {
-		return *fds.Name
-	}
-	return plugin.TypedName{
-		Type: mockSource,
-		Name: mockSource,
-	}
+	return fds.typedName
 }
 
 func (fds *DataSource) OutputType() reflect.Type {
@@ -74,12 +68,16 @@ func (fds *DataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
 
 // NotificationSource implements both DataSource and NotificationSource for testing.
 type NotificationSource struct {
-	Name             plugin.TypedName
-	GroupVersionKind schema.GroupVersionKind
+	typedName plugin.TypedName
+	gvk       schema.GroupVersionKind
+}
+
+func NewNotificationSource(typedName plugin.TypedName, gvk schema.GroupVersionKind) *NotificationSource {
+	return &NotificationSource{typedName: typedName, gvk: gvk}
 }
 
 func (m *NotificationSource) TypedName() plugin.TypedName {
-	return m.Name
+	return m.typedName
 }
 
 func (m *NotificationSource) OutputType() reflect.Type {
@@ -91,7 +89,7 @@ func (m *NotificationSource) ExtractorType() reflect.Type {
 }
 
 func (m *NotificationSource) GVK() schema.GroupVersionKind {
-	return m.GroupVersionKind
+	return m.gvk
 }
 
 func (m *NotificationSource) Notify(_ context.Context, _ fwkdl.NotificationEvent) error {

@@ -863,7 +863,7 @@ func TestActivePortFiltering(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -1016,7 +1016,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {

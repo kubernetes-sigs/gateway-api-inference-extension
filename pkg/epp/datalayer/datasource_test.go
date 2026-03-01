@@ -34,7 +34,7 @@ const (
 
 func TestRegisterAndGetSource(t *testing.T) {
 	reg := DataSourceRegistry{}
-	ds := &dlmocks.DataSource{Name: &fwkplugin.TypedName{Type: testType, Name: testType}}
+	ds := dlmocks.NewDataSource(fwkplugin.TypedName{Type: testType, Name: testType})
 
 	err := reg.Register(ds)
 	assert.NoError(t, err, "expected no error on first registration")
@@ -112,14 +112,8 @@ func TestRegisterNotificationSourceDuplicateGVK(t *testing.T) {
 	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 
 	// Create two notification sources with the same GVK but different names
-	src1 := &dlmocks.NotificationSource{
-		Name:             fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher-1"},
-		GroupVersionKind: gvk,
-	}
-	src2 := &dlmocks.NotificationSource{
-		Name:             fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher-2"},
-		GroupVersionKind: gvk,
-	}
+	src1 := dlmocks.NewNotificationSource(fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher-1"}, gvk)
+	src2 := dlmocks.NewNotificationSource(fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher-2"}, gvk)
 
 	err := reg.Register(src1)
 	require.NoError(t, err, "first notification source registration should succeed")
@@ -134,14 +128,8 @@ func TestRegisterNotificationSourceDuplicateGVK(t *testing.T) {
 
 func TestRegisterNotificationSourceDifferentGVK(t *testing.T) {
 	reg := DataSourceRegistry{}
-	src1 := &dlmocks.NotificationSource{
-		Name:             fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher"},
-		GroupVersionKind: schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
-	}
-	src2 := &dlmocks.NotificationSource{
-		Name:             fwkplugin.TypedName{Type: "k8s-notification-source", Name: "configmap-watcher"},
-		GroupVersionKind: schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
-	}
+	src1 := dlmocks.NewNotificationSource(fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher"}, schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"})
+	src2 := dlmocks.NewNotificationSource(fwkplugin.TypedName{Type: "k8s-notification-source", Name: "configmap-watcher"}, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 
 	err := reg.Register(src1)
 	require.NoError(t, err, "first notification source registration should succeed")
@@ -154,16 +142,11 @@ func TestRegisterNotificationSourceDifferentGVK(t *testing.T) {
 
 func TestRegisterMixedSourceTypes(t *testing.T) {
 	reg := DataSourceRegistry{}
-	regularSource := &dlmocks.DataSource{
-		Name: &fwkplugin.TypedName{Type: "regular-source", Name: "regular-1"},
-	}
+	regularSource := dlmocks.NewDataSource(fwkplugin.TypedName{Type: "regular-source", Name: "regular-1"})
 	err := reg.Register(regularSource)
 	require.NoError(t, err, "regular source registration should succeed")
 
-	notificationSource := &dlmocks.NotificationSource{
-		Name:             fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher"},
-		GroupVersionKind: schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"},
-	}
+	notificationSource := dlmocks.NewNotificationSource(fwkplugin.TypedName{Type: "k8s-notification-source", Name: "deployment-watcher"}, schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"})
 	err = reg.Register(notificationSource)
 	require.NoError(t, err, "notification source registration should succeed")
 
