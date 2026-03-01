@@ -51,7 +51,9 @@ import (
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/router"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -725,6 +727,59 @@ func TestDirector_HandleRequest(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestDirector_HandleRequest_Multipart(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	ds := &mockDatastore{
+		pods: []backendmetrics.PodMetrics{
+			&backendmetrics.FakePodMetrics{
+				Metadata:   &fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "8000", NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"}},
+				Attributes: &fwkdl.Attributes{},
+			},
+		},
+	}
+	locator := NewCachedPodLocator(ctx, NewDatastorePodLocator(ds), time.Minute)
+	mockSched := &mockScheduler{
+		scheduleResults: &fwksched.SchedulingResult{
+			ProfileResults: map[string]*fwksched.ProfileRunResult{
+				"default": {
+					TargetEndpoints: []fwksched.Endpoint{
+						&fwksched.ScoredEndpoint{
+							Endpoint: fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
+								Address: "10.0.0.1", Port: "8000",
+								NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "default"},
+							}, nil, nil),
+						},
+					},
+				},
+			},
+			PrimaryProfileName: "default",
+		},
+	}
+	director := NewDirectorWithConfig(ds, mockSched, &mockAdmissionController{}, router.NewRouterParser(openai.NewOpenAIParser()), locator, NewConfig())
+
+	reqCtx := &handlers.RequestContext{
+		Request: &handlers.Request{
+			Headers: map[string]string{
+				reqcommon.RequestIdHeaderKey: "req-1",
+				"content-type":                "multipart/form-data; boundary=----boundary",
+				":path":                       metadata.AudioTranscriptionsPathPrefix,
+				metadata.ModelNameKey:         "whisper-1",
+			},
+			RawBody:  []byte("raw multipart body"),
+			Metadata: map[string]any{},
+		},
+	}
+	reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+
+	got, err := director.HandleRequest(ctx, reqCtx)
+	assert.NoError(t, err)
+	assert.Equal(t, "whisper-1", got.IncomingModelName)
+	assert.Equal(t, "whisper-1", got.TargetModelName)
+	assert.NotEmpty(t, got.TargetEndpoint)
+	assert.NotNil(t, got.SchedulingRequest)
+	assert.Nil(t, got.SchedulingRequest.Body, "multipart request should have nil Body for plugins")
 }
 
 func TestGetRandomEndpoint(t *testing.T) {

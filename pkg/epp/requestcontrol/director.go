@@ -199,6 +199,19 @@ func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.Requ
 	if err != nil {
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
 	}
+	if llmRequestBody == nil {
+		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "parser returned nil body"}
+	}
+
+	if llmRequestBody.AudioTranscriptions != nil {
+		model := llmRequestBody.AudioTranscriptions.ModelName
+		reqCtx.IncomingModelName = model
+		if reqCtx.TargetModelName == "" {
+			reqCtx.TargetModelName = reqCtx.IncomingModelName
+		}
+		d.applyWeightedModelRewrite(reqCtx)
+		return nil, nil
+	}
 
 	switch v := llmRequestBody.ParsedBody.(type) {
 	case proto.Message:

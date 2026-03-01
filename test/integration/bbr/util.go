@@ -54,6 +54,26 @@ func ExpectBBRHeader(modelName string) *extProcPb.ProcessingResponse {
 	}
 }
 
+// ExpectBBRBodyPassThroughRaw expects BBR to pass body through unchanged.
+func ExpectBBRBodyPassThroughRaw(body []byte) *extProcPb.ProcessingResponse {
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_RequestBody{
+			RequestBody: &extProcPb.BodyResponse{
+				Response: &extProcPb.CommonResponse{
+					BodyMutation: &extProcPb.BodyMutation{
+						Mutation: &extProcPb.BodyMutation_StreamedResponse{
+							StreamedResponse: &extProcPb.StreamedBodyResponse{
+								Body:        body,
+								EndOfStream: true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // ExpectBBRBodyPassThrough asserts that BBR reconstructs and passes the body through.
 // BBR buffers the body to inspect it, then sends it downstream as a single chunk (usually).
 func ExpectBBRBodyPassThrough(prompt, model string) *extProcPb.ProcessingResponse {

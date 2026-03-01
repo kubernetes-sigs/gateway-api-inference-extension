@@ -59,7 +59,7 @@ func (r *LLMRequest) String() string {
 
 // LLMRequestBody contains the request-body fields that we parse out as user input,
 // to be used in forming scheduling decisions.
-// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, or ConversationsRequest.
+// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, ConversationsRequest, or AudioTranscriptionsRequest.
 type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
@@ -69,6 +69,8 @@ type LLMRequestBody struct {
 	Responses *ResponsesRequest `json:"responses,omitempty"`
 	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
+	// AudioTranscriptionsRequest is used for header-only flows. When set, the Director uses ModelName for IncomingModelName/TargetModelName and returns nil body.
+	AudioTranscriptions *AudioTranscriptionsRequest `json:"audio_transcriptions,omitempty"`
 
 	// ParsedBody contains the unmarshaled request payload.
 	// Note: Because this handles multiple protocols, this field is strictly expected
@@ -189,6 +191,11 @@ func (r *ResponsesRequest) String() string {
 		return nilString
 	}
 	return fmt.Sprintf("{InputType: %T, InstructionsType: %T}", r.Input, r.Instructions)
+}
+
+// AudioTranscriptionsRequest represents a header-only request. ModelName is set from the header; body is not parsed.
+type AudioTranscriptionsRequest struct {
+	ModelName string `json:"-"`
 }
 
 // ConversationsRequest represents the OpenAI /v1/conversations request body structure

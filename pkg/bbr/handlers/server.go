@@ -104,9 +104,19 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		var err error
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
+			if v.RequestHeaders != nil && v.RequestHeaders.Headers != nil {
+				for _, header := range v.RequestHeaders.Headers.Headers {
+					reqCtx.Request.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+				}
+			}
+			// If streaming and the body is not empty, then headers are handled when processing request body.
 			if s.streaming && !v.RequestHeaders.GetEndOfStream() {
-				// If streaming and the body is not empty, then headers are handled when processing request body.
 				loggerVerbose.Info("Received headers, passing off header processing until body arrives...")
+				responses = []*extProcPb.ProcessingResponse{{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{},
+					},
+				}}
 			} else {
 				if requestId := reqenvoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey); len(requestId) > 0 {
 					logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestId)
@@ -167,7 +177,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 }
 
 type streamedBody struct {
-	body []byte
+	body        []byte
+	contentType string
 }
 
 func (s *Server) processResponseBody(ctx context.Context, reqCtx *RequestContext, body *extProcPb.HttpBody, streamedRespBody *streamedBody) ([]*extProcPb.ProcessingResponse, error) {
