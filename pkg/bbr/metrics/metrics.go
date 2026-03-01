@@ -30,6 +30,16 @@ import (
 const component = "bbr"
 
 var (
+	// --- Info Metrics ---
+	bbrInfo = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: component,
+			Name:      "info",
+			Help:      metricsutil.HelpMsgWithStability("General information of the current build of BBR.", compbasemetrics.ALPHA),
+		},
+		[]string{"commit", "build_ref"},
+	)
+
 	successCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: component,
@@ -66,31 +76,26 @@ var (
 		},
 		[]string{"extension_point", "plugin_type", "plugin_name"},
 	)
-
-	// TODO: Uncomment and use this metrics once the core server implementation has handling to skip body parsing if header exists.
-	/*
-		modelAlreadyPresentInHeaderCounter = prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Subsystem:      component,
-				Name:           "model_already_present_in_header_total",
-				Help:           "Count of times the model was already present in request headers.",
-			},
-			[]string{},
-		)
-	*/
 )
 
 var registerMetrics sync.Once
 
 // Register all metrics.
-func Register() {
+func Register(customCollectors ...prometheus.Collector) {
 	registerMetrics.Do(func() {
+		metrics.Registry.MustRegister(bbrInfo)
 		metrics.Registry.MustRegister(successCounter)
 		metrics.Registry.MustRegister(modelNotInBodyCounter)
 		metrics.Registry.MustRegister(modelNotParsedCounter)
 		metrics.Registry.MustRegister(pluginProcessingLatencies)
-		// metrics.Registry.MustRegister(modelAlreadyPresentInHeaderCounter)
+		for _, collector := range customCollectors {
+			metrics.Registry.MustRegister(collector)
+		}
 	})
+}
+
+func RecordBBRInfo(commitSha, buildRef string) {
+	bbrInfo.WithLabelValues(commitSha, buildRef).Set(1)
 }
 
 // RecordSuccessCounter records the number of successful requests to inject the model name into request headers.
@@ -112,10 +117,3 @@ func RecordModelNotParsedCounter() {
 func RecordPluginProcessingLatency(extensionPoint, pluginType, pluginName string, duration time.Duration) {
 	pluginProcessingLatencies.WithLabelValues(extensionPoint, pluginType, pluginName).Observe(duration.Seconds())
 }
-
-/*
-// RecordModelAlreadyInHeaderCounter records the number of times the model was already found in the request headers.
-func RecordModelAlreadyInHeaderCounter() {
-	modelAlreadyPresentInHeaderCounter.WithLabelValues().Inc()
-}
-*/
