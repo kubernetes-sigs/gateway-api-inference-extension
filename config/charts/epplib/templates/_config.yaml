@@ -12,6 +12,12 @@ data:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
+    - type: metrics-data-source
+      parameters:
+        scheme: {{ .Values.inferenceExtension.metricsDataSource.scheme | default "http" | quote }}
+        path: {{ .Values.inferenceExtension.metricsDataSource.path | default "/metrics" | quote }}
+        insecureSkipVerify: {{ .Values.inferenceExtension.metricsDataSource.insecureSkipVerify | default true }}
+    - type: model-server-protocol-metrics
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
     - type: predicted-latency-scorer
       parameters:

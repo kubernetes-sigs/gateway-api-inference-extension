@@ -32,7 +32,15 @@ import (
 
 const MetricsDataSourceType = "metrics-data-source"
 
-// Data source configuration parameters
+// Default values for the metrics data source configuration.
+const (
+	defaultMetricsScheme             = "http"
+	defaultMetricsPath               = "/metrics"
+	defaultMetricsInsecureSkipVerify = true
+)
+
+// metricsDatasourceParams holds the configuration parameters for the metrics data source plugin.
+// These values can be specified in the EndpointPickerConfig under the plugin's `parameters` field.
 type metricsDatasourceParams struct {
 	// Scheme defines the protocol scheme used in metrics retrieval (e.g., "http").
 	Scheme string `json:"scheme"`
@@ -45,9 +53,10 @@ type metricsDatasourceParams struct {
 // MetricsDataSourceFactory is a factory function used to instantiate data layer's
 // metrics data source plugins specified in a configuration.
 func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	cfg, err := defaultDataSourceConfigParams()
-	if err != nil {
-		return nil, err
+	cfg := &metricsDatasourceParams{
+		Scheme:             defaultMetricsScheme,
+		Path:               defaultMetricsPath,
+		InsecureSkipVerify: defaultMetricsInsecureSkipVerify,
 	}
 
 	if parameters != nil { // overlay the defaults with configured values
