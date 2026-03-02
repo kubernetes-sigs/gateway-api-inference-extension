@@ -139,6 +139,36 @@ func TestBulkPredictWithMetrics_WithPredictedLatencyCtx(t *testing.T) {
 	assert.Equal(t, 0.03, results[0].TPOT)
 }
 
+func TestBulkPredictWithMetrics_ChatCompletionsPrompt(t *testing.T) {
+	mp := &mockPredictor{
+		predictions: map[string]*latencypredictor.PredictionResponse{
+			"0.5": {TTFT: 0.5, TPOT: 0.03},
+		},
+	}
+
+	metricsStates := []*fwkdl.Metrics{{KVCacheUsagePercent: 0.5}}
+	pods := []*fwkdl.EndpointMetadata{
+		{NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"}},
+	}
+
+	chatBody := &schedulingtypes.LLMRequestBody{
+		ChatCompletions: &schedulingtypes.ChatCompletionsRequest{
+			Messages: []schedulingtypes.Message{
+				{Role: "user", Content: schedulingtypes.Content{Raw: "Hello world"}},
+			},
+		},
+	}
+	prompts := []string{chatBody.PromptText()}
+	generatedTokenCounts := []int{1}
+	prefixCacheScores := []float64{0.0}
+
+	results, err := bulkPredictWithMetrics(context.Background(), nil, mp, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores)
+
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, 0.5, results[0].TTFT)
+}
+
 func TestBulkPredictWithMetrics_NilMetricsState(t *testing.T) {
 	mockPredictor := &mockPredictor{}
 	metricsStates := []*fwkdl.Metrics{nil} // Nil metrics state

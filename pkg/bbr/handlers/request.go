@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
@@ -189,8 +190,17 @@ func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBy
 	return responses
 }
 
-// HandleRequestHeaders handles request headers.
-func (s *Server) HandleRequestHeaders(headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+// HandleRequestHeaders extracts request headers into reqCtx and returns
+// the ext-proc header response.
+func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+	reqCtx.RequestReceivedTimestamp = time.Now()
+
+	if headers != nil && headers.Headers != nil {
+		for _, header := range headers.Headers.Headers {
+			reqCtx.Request.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+		}
+	}
+
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_RequestHeaders{

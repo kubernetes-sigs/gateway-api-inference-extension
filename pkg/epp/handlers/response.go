@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -150,7 +151,7 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
 	for _, header := range resp.ResponseHeaders.Headers.Headers {
-		reqCtx.Response.Headers[header.Key] = request.GetHeaderValue(header)
+		reqCtx.Response.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
 	}
 
 	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)

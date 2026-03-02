@@ -27,9 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -203,7 +203,7 @@ func processFirstTokenForLatencyPrediction(
 func initializeSampler(ctx context.Context, predictedLatencyCtx *predictedLatencyCtx, samplingMean float64, maxSampledTokens int) {
 	if predictedLatencyCtx.tokenSampler == nil {
 		logger := log.FromContext(ctx)
-		requestID := predictedLatencyCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
+		requestID := predictedLatencyCtx.schedulingRequest.Headers[reqcommon.RequestIdHeaderKey]
 		predictedLatencyCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", predictedLatencyCtx.tokenSampler.getNextSampleToken())
 	}
@@ -224,7 +224,7 @@ func recordTTFTTrainingData(
 		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		predictedLatencyCtx.promptText,
 		predictedLatencyCtx.ttft,
 		0, // TTFT training
 		now,
@@ -268,7 +268,7 @@ func processTokenForLatencyPrediction(
 
 	// Initialize sampler if not yet
 	if predictedLatencyCtx.tokenSampler == nil {
-		requestID := predictedLatencyCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
+		requestID := predictedLatencyCtx.schedulingRequest.Headers[reqcommon.RequestIdHeaderKey]
 		predictedLatencyCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", predictedLatencyCtx.tokenSampler.getNextSampleToken())
 	}
@@ -299,7 +299,7 @@ func processTokenForLatencyPrediction(
 		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		predictedLatencyCtx.promptText,
 		0, // TTFT not recorded for TPOT
 		latencyMs,
 		now,
@@ -316,7 +316,7 @@ func processTokenForLatencyPrediction(
 			endpointRoleLabel,
 			targetEndpointMetadata,
 			m,
-			predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+			predictedLatencyCtx.promptText,
 			predictedLatencyCtx.generatedTokenCount,
 			0, // TPOT does not use prefix cache score
 		)

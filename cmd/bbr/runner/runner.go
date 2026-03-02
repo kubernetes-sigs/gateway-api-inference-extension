@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
@@ -51,6 +52,8 @@ var setupLog = ctrl.Log.WithName("setup")
 func NewRunner() *Runner {
 	return &Runner{
 		bbrExecutableName: "BBR",
+		requestPlugins:    []framework.PayloadProcessor{},
+		customCollectors:  []prometheus.Collector{},
 	}
 }
 
@@ -60,12 +63,19 @@ type Runner struct {
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
 	requestPlugins []framework.PayloadProcessor
+
+	customCollectors []prometheus.Collector
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
 // The name is used in the version log upon startup and is otherwise opaque.
 func (r *Runner) WithExecutableName(exeName string) *Runner {
 	r.bbrExecutableName = exeName
+	return r
+}
+
+func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runner {
+	r.customCollectors = collectors
 	return r
 }
 
@@ -105,7 +115,9 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	ds := datastore.NewDatastore()
 
-	metrics.Register()
+	// --- Setup Metrics Server ---
+	metrics.Register(r.customCollectors...)
+	metrics.RecordBBRInfo(version.CommitSHA, version.BuildRef)
 	// Register metrics handler.
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
@@ -224,6 +236,7 @@ func (r *Runner) Run(ctx context.Context) error {
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
 	framework.Register(plugins.DefaultPluginType, plugins.DefaultPluginFactory)
+	framework.Register(plugins.BodyFieldToHeaderPluginType, plugins.BodyFieldToHeaderPluginFactory)
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.

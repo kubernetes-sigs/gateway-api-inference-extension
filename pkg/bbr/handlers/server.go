@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
@@ -28,8 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 )
 
 type Datastore interface {
@@ -52,12 +54,36 @@ type Server struct {
 	requestPlugins []framework.PayloadProcessor
 }
 
+// RequestContext stores context information during the lifetime of an HTTP request.
+type RequestContext struct {
+	RequestReceivedTimestamp  time.Time
+	ResponseCompleteTimestamp time.Time
+	Request                   *Request
+	Response                  *Response
+}
+
+// Request holds the parsed request headers and body.
+type Request struct {
+	Headers map[string]string
+	Body    map[string]any
+}
+
+// Response holds the parsed response headers and body.
+type Response struct {
+	Headers map[string]string
+	Body    map[string]any
+}
+
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	loggerVerbose.Info("Processing")
 
+	reqCtx := &RequestContext{
+		Request:  &Request{Headers: make(map[string]string)},
+		Response: &Response{Headers: make(map[string]string)},
+	}
 	streamedBody := &streamedBody{}
 
 	for {
@@ -79,16 +105,16 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		var err error
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			if s.streaming && !req.GetRequestHeaders().GetEndOfStream() {
+			if s.streaming && !v.RequestHeaders.GetEndOfStream() {
 				// If streaming and the body is not empty, then headers are handled when processing request body.
 				loggerVerbose.Info("Received headers, passing off header processing until body arrives...")
 			} else {
-				if requestId := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey); len(requestId) > 0 {
-					logger = logger.WithValues(requtil.RequestIdHeaderKey, requestId)
+				if requestId := reqenvoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey); len(requestId) > 0 {
+					logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestId)
 					loggerVerbose = logger.V(logutil.VERBOSE)
 					ctx = log.IntoContext(ctx, logger)
 				}
-				responses, err = s.HandleRequestHeaders(req.GetRequestHeaders())
+				responses, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
 			}
 		case *extProcPb.ProcessingRequest_RequestBody:
 			if logger.V(logutil.DEBUG).Enabled() {

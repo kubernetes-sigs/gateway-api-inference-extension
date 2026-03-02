@@ -24,7 +24,7 @@ import (
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
@@ -83,7 +83,7 @@ func ExpectRouteTo(endpoint, targetModel, prompt string) []*extProcPb.Processing
 		endpoint, string(j),
 		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
 		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-			Key:      requtil.RequestIdHeaderKey,
+			Key:      reqcommon.RequestIdHeaderKey,
 			RawValue: []byte("test-request-id"),
 		}},
 	)
