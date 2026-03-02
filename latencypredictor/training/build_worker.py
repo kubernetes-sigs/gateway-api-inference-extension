@@ -217,11 +217,8 @@ class BuildWorker:
 
         logging.debug(f"Created bundle directory: {bundle_path}")
 
-        # Copy non-model artifacts first
+        # Copy all artifacts (conformal, schema, mapping, AND native models)
         for artifact_name, artifact_info in fit_manifest["artifacts"].items():
-            if artifact_name in ["ttft_model", "tpot_model"]:
-                continue  # Handle models separately (need compilation)
-
             src_path = run_dir / artifact_info["path"]
             dst_path = bundle_path / artifact_info["path"]
 
@@ -365,6 +362,7 @@ class BuildWorker:
             "quantile": fit_manifest["quantile"],
             "training_samples": fit_manifest["training_samples"],
             "test_samples": fit_manifest["test_samples"],
+            "validation_metrics": fit_manifest.get("validation_metrics"),
             "state": "published",  # Bundle state - always "published" after build completes
             "files": {},
             "toolchain": {

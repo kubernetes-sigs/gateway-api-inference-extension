@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import random
+import shutil
 import threading
 import time
 from collections import deque
@@ -277,6 +278,11 @@ class LatencyPredictor:
         # Test data storage with configurable max size
         self.ttft_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
         self.tpot_test_data = deque(maxlen=settings.MAX_TEST_DATA_SIZE)
+
+        # Bundle gating state (last decision)
+        self._last_gating_decision = None  # True/False/None
+        self._last_gating_reason = None  # str or None
+        self._last_gating_timestamp = None  # ISO string or None
 
         # Quantile-specific metric tracking (store last 5 scores)
         self.ttft_quantile_loss_scores = deque(maxlen=5)
@@ -956,6 +962,98 @@ class LatencyPredictor:
                     # log & continue on individual failures
                     logging.exception("Failed to add one sample in bulk ingestion")
 
+    def _compute_validation_metrics(self, conformal, y_pred_mean, y_actual, metric_name):
+        """Compute validation metrics for bundle gating.
+
+        Returns dict with:
+          - coverage_error: abs(observed_coverage - target_coverage) as fraction
+          - observed_coverage: actual coverage fraction
+          - under_rate: P(y_actual > y_pred_upper) as fraction
+          - mean_offset: mean(y_pred_upper - y_pred_mean)
+          - calibration_samples: int
+        """
+        stats = conformal.get_coverage_stats(y_pred_mean, y_actual)
+        observed_cov = stats["coverage_percent"] / 100.0
+        target_cov = conformal.quantile
+
+        return {
+            "coverage_error": abs(observed_cov - target_cov),
+            "observed_coverage": observed_cov,
+            "under_rate": stats["violation_rate_percent"] / 100.0,
+            "mean_offset": float(stats["average_interval_width"]),
+            "calibration_samples": int(stats["calibration_samples"]),
+        }
+
+    def _load_active_bundle_metrics(self):
+        """Load validation_metrics from currently active bundle manifest.
+        Returns None if no active bundle or no metrics in manifest."""
+        from pathlib import Path
+
+        manifest_path = Path(settings.BUNDLE_CURRENT_SYMLINK) / "manifest.json"
+        if not manifest_path.exists():
+            return None
+        try:
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            return manifest.get("validation_metrics")
+        except Exception as e:
+            logging.warning(f"Could not read active bundle metrics: {e}")
+            return None
+
+    def _should_publish_bundle(self, candidate_metrics, active_metrics):
+        """Decide whether candidate bundle should replace active bundle.
+
+        Rules:
+        1. No active bundle → always publish (bootstrap)
+        2. Candidate has lower coverage_error by >= epsilon_coverage → publish
+        3. Equal coverage_error (within tolerance), candidate has lower
+           mean_offset by >= epsilon_offset_frac → publish
+        4. Otherwise → reject
+        """
+        EPSILON_COVERAGE = 0.01  # 1% absolute
+        EPSILON_OFFSET_FRAC = 0.05  # 5% relative
+
+        if active_metrics is None:
+            return True, "bootstrap: no active bundle"
+
+        # Check both metrics are present
+        for metric in ["ttft", "tpot"]:
+            if metric not in candidate_metrics or metric not in active_metrics:
+                return True, f"bootstrap: missing {metric} in active metrics"
+
+        cand_ttft = candidate_metrics["ttft"]
+        cand_tpot = candidate_metrics["tpot"]
+        act_ttft = active_metrics["ttft"]
+        act_tpot = active_metrics["tpot"]
+
+        # Rule 2: Coverage error improvement
+        cand_max_ce = max(cand_ttft["coverage_error"], cand_tpot["coverage_error"])
+        act_max_ce = max(act_ttft["coverage_error"], act_tpot["coverage_error"])
+
+        if act_max_ce - cand_max_ce >= EPSILON_COVERAGE:
+            return True, (
+                f"coverage improvement: candidate={cand_max_ce:.3f} vs "
+                f"active={act_max_ce:.3f} (delta={act_max_ce - cand_max_ce:.3f})"
+            )
+
+        # Rule 3: Equal coverage, sharper offset
+        cand_avg_offset = (cand_ttft["mean_offset"] + cand_tpot["mean_offset"]) / 2
+        act_avg_offset = (act_ttft["mean_offset"] + act_tpot["mean_offset"]) / 2
+
+        if abs(cand_max_ce - act_max_ce) < EPSILON_COVERAGE:
+            if act_avg_offset > 0 and (act_avg_offset - cand_avg_offset) / act_avg_offset >= EPSILON_OFFSET_FRAC:
+                return True, (
+                    f"sharper offset: candidate={cand_avg_offset:.2f} vs "
+                    f"active={act_avg_offset:.2f} (delta={act_avg_offset - cand_avg_offset:.2f})"
+                )
+
+        # Rule 4: Reject
+        return False, (
+            f"no improvement: candidate coverage_error={cand_max_ce:.3f} vs "
+            f"active={act_max_ce:.3f}, candidate offset={cand_avg_offset:.2f} vs "
+            f"active={act_avg_offset:.2f}"
+        )
+
     def _compute_file_hash(self, file_path) -> str:
         """Compute SHA256 hash of a file."""
         import hashlib
@@ -1046,6 +1144,13 @@ class LatencyPredictor:
 
         # Create conformal predictors using test data (Fit phase responsibility)
         # Build phase will use these conformal weights with compiled .so files
+        ttft_conformal = None
+        tpot_conformal = None
+        y_pred_mean_ttft = None
+        y_test_ttft = None
+        y_pred_mean_tpot = None
+        y_test_tpot = None
+
         if ttft_model and self.ttft_test_data:
             test_df_ttft = pd.DataFrame(list(self.ttft_test_data))
             X_test_ttft = self._prepare_features_with_interaction(test_df_ttft, "ttft")
@@ -1103,6 +1208,32 @@ class LatencyPredictor:
                 f"TPOT conformal: coverage={stats['coverage_percent']:.1f}%, "
                 f"calibrated_alpha={cal_alpha_str}, adjustment=+{adj:.2f}ms"
             )
+
+        # --- Bundle gating ---
+        candidate_metrics = {}
+        if ttft_conformal and y_pred_mean_ttft is not None and y_test_ttft is not None:
+            candidate_metrics["ttft"] = self._compute_validation_metrics(
+                ttft_conformal, y_pred_mean_ttft, y_test_ttft.values, "ttft"
+            )
+        if tpot_conformal and y_pred_mean_tpot is not None and y_test_tpot is not None:
+            candidate_metrics["tpot"] = self._compute_validation_metrics(
+                tpot_conformal, y_pred_mean_tpot, y_test_tpot.values, "tpot"
+            )
+
+        active_metrics = self._load_active_bundle_metrics()
+        should_publish, reason = self._should_publish_bundle(candidate_metrics, active_metrics)
+
+        # Record gating decision for observability
+        self._last_gating_decision = should_publish
+        self._last_gating_reason = reason
+        self._last_gating_timestamp = datetime.now(UTC).isoformat()
+
+        if not should_publish:
+            logging.info(f"Bundle REJECTED (gating): {reason}")
+            shutil.rmtree(staging_dir, ignore_errors=True)
+            return
+
+        logging.info(f"Bundle ACCEPTED (gating): {reason}")
 
         # Create feature schema (ensures training/inference consistency)
         feature_schema = {
@@ -1178,6 +1309,7 @@ class LatencyPredictor:
             "training_samples": training_samples,
             "test_samples": test_samples,
             "artifacts": artifacts,
+            "validation_metrics": candidate_metrics,
         }
 
         fit_manifest_path = staging_dir / "fit_manifest.json"
@@ -2020,7 +2152,30 @@ async def get_current_bundle_info():
         "created_at": bundle.manifest.created_at,  # Already ISO format string
         "model_type": bundle.manifest.model_type,
         "quantile": bundle.manifest.quantile,
+        "validation_metrics": bundle.manifest.validation_metrics,
         "lifecycle": lifecycle,
+    }
+
+
+@app.get("/bundle/gating/last")
+async def get_last_gating_decision():
+    """
+    Get the last bundle gating decision.
+
+    Returns whether the most recent bundle candidate was accepted or rejected,
+    along with the reason and timestamp.
+    """
+    if predictor._last_gating_decision is None:
+        decision = None
+    elif predictor._last_gating_decision:
+        decision = "accepted"
+    else:
+        decision = "rejected"
+
+    return {
+        "decision": decision,
+        "reason": predictor._last_gating_reason,
+        "timestamp": predictor._last_gating_timestamp,
     }
 
 

@@ -14,6 +14,7 @@
 import json
 import logging
 import os
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -230,17 +231,27 @@ class ModelSyncer:
                 try:
                     file_r = requests.get(file_url, timeout=settings.HTTP_TIMEOUT, stream=True)
                     if file_r.status_code == 200:
-                        # Write to temp file first, then atomic rename
-                        temp_dest = file_dest + ".tmp"
-                        with open(temp_dest, "wb") as f:
-                            for chunk in file_r.iter_content(8192):
-                                if chunk:
-                                    f.write(chunk)
+                        # Write to a unique temp file, then atomic rename.
+                        # Using a unique name avoids collisions when multiple
+                        # prediction pods share the same volume.
+                        fd, temp_dest = tempfile.mkstemp(dir=bundle_dir, suffix=f".{file_name}.tmp")
+                        try:
+                            with os.fdopen(fd, "wb") as f:
+                                for chunk in file_r.iter_content(8192):
+                                    if chunk:
+                                        f.write(chunk)
 
-                        # Atomic rename
-                        os.replace(temp_dest, file_dest)
-                        files_downloaded += 1
-                        logging.debug(f"  ✓ Downloaded {file_name} ({os.path.getsize(file_dest)} bytes)")
+                            # Atomic rename
+                            os.replace(temp_dest, file_dest)
+                            files_downloaded += 1
+                            logging.debug(f"  ✓ Downloaded {file_name} ({os.path.getsize(file_dest)} bytes)")
+                        except BaseException:
+                            # Clean up temp file on any failure
+                            try:
+                                os.unlink(temp_dest)
+                            except OSError:
+                                pass
+                            raise
                     else:
                         logging.warning(f"  ✗ Failed to download {file_name}: HTTP {file_r.status_code}")
                 except Exception as e:

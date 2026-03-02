@@ -98,6 +98,9 @@ class BundleManifest:
     test_samples: dict[str, int] = field(default_factory=dict)
     toolchain: dict[str, str] = field(default_factory=dict)  # Python version, platform, library versions
 
+    # Validation metrics for bundle gating (coverage_error, mean_offset, etc.)
+    validation_metrics: dict | None = field(default=None)
+
     # State transition history
     state_history: list[dict[str, str]] = field(default_factory=list)
 
@@ -116,7 +119,7 @@ class BundleManifest:
 
     def add_file(self, name: str, path: str):
         """Add a file to the manifest with its checksum."""
-        if not os.path.exists(path):
+        if not Path.exists(path):
             raise FileNotFoundError(f"File not found: {path}")
 
         # Compute SHA256 checksum
@@ -132,7 +135,7 @@ class BundleManifest:
         if name not in self.files:
             return False
 
-        if not os.path.exists(path):
+        if not Path.exists(path):
             return False
 
         # Compute SHA256 and compare
@@ -277,7 +280,7 @@ class ModelBundle:
         if name in self.manifest.files:
             raise ValueError(f"File already exists in bundle: {name}")
 
-        if not os.path.exists(source_path):
+        if not Path.exists(source_path):
             raise FileNotFoundError(f"Source file not found: {source_path}")
 
         # Destination path

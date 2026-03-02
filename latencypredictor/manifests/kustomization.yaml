@@ -20,14 +20,14 @@ labels:
 images:
   - name: training-server
     newName: quay.io/grpereir/slo-predicter-trainer
-    newTag: v0.0.262
+    newTag: v0.0.267
   - name: prediction-server
     newName: quay.io/grpereir/slo-predicter
-    newTag: v0.0.262
+    newTag: v0.0.267
   # If using test deployment
   - name: test-runner
     newName: quay.io/grpereir/slo-predicter-tester
-    newTag: v0.0.262
+    newTag: v0.0.267
 # ConfigMap generator (optional - use this to override config values)
 # Uncomment and modify to override specific configuration values
 # configMapGenerator:

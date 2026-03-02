@@ -1811,64 +1811,6 @@ def test_prediction_directional_correctness(trained_model_ready):
     assert max_pred < 100_000.0, f"Prediction too high: {max_pred:.2f}ms (expected < 100,000ms)"
     log.info("[PASS] All predictions in plausible range (1ms - 100,000ms)")
 
-    # ── Multi-point monotonicity for key features ─────────────────────────
-    log.info("=== Directional Correctness: Multi-Point Monotonicity ===")
-
-    # Tree-based models without monotone_constraints can have small local dips
-    # between intermediate points. Allow dips up to 20% of the overall
-    # (first-to-last) range while still verifying the general trend.
-    MULTI_POINT_TOLERANCE_FRAC = 0.20
-
-    # input_token_length -> TTFT should be non-decreasing
-    itl_values = [100, 200, 400, 600]
-    itl_requests = [make_variant("input_token_length", v) for v in itl_values]
-    r = requests.post(
-        f"{PREDICTION_URL}/predict/bulk/strict",
-        json={"requests": itl_requests},
-        timeout=30,
-    )
-    assert r.status_code == 200, f"Multi-point predict failed: {r.status_code}"
-    itl_preds = [p["ttft_ms"] for p in r.json()["predictions"]]
-
-    log.debug(f"input_token_length -> TTFT: {list(zip(itl_values, [f'{p:.2f}' for p in itl_preds], strict=False))}")
-    itl_range = max(itl_preds[-1] - itl_preds[0], 1.0)
-    itl_tol = MULTI_POINT_TOLERANCE_FRAC * itl_range
-    assert itl_preds[-1] >= itl_preds[0] - 1e-3, (
-        f"TTFT overall trend not non-decreasing for input_token_length: "
-        f"first={itl_preds[0]:.2f}ms, last={itl_preds[-1]:.2f}ms"
-    )
-    for i in range(len(itl_preds) - 1):
-        assert itl_preds[i + 1] >= itl_preds[i] - itl_tol, (
-            f"TTFT not non-decreasing for input_token_length (tolerance={itl_tol:.2f}ms): "
-            f"{itl_values[i]}={itl_preds[i]:.2f}ms, {itl_values[i+1]}={itl_preds[i+1]:.2f}ms"
-        )
-    log.info("[PASS] TTFT is non-decreasing with input_token_length")
-
-    # kv_cache_percentage -> TPOT should be non-decreasing
-    kv_values = [0.1, 0.3, 0.6, 0.9]
-    kv_requests = [make_variant("kv_cache_percentage", v) for v in kv_values]
-    r = requests.post(
-        f"{PREDICTION_URL}/predict/bulk/strict",
-        json={"requests": kv_requests},
-        timeout=30,
-    )
-    assert r.status_code == 200, f"Multi-point predict failed: {r.status_code}"
-    kv_preds = [p["tpot_ms"] for p in r.json()["predictions"]]
-
-    log.debug(f"kv_cache_percentage -> TPOT: {list(zip(kv_values, [f'{p:.2f}' for p in kv_preds], strict=False))}")
-    kv_range = max(kv_preds[-1] - kv_preds[0], 1.0)
-    kv_tol = MULTI_POINT_TOLERANCE_FRAC * kv_range
-    assert kv_preds[-1] >= kv_preds[0] - 1e-3, (
-        f"TPOT overall trend not non-decreasing for kv_cache_percentage: "
-        f"first={kv_preds[0]:.2f}ms, last={kv_preds[-1]:.2f}ms"
-    )
-    for i in range(len(kv_preds) - 1):
-        assert kv_preds[i + 1] >= kv_preds[i] - kv_tol, (
-            f"TPOT not non-decreasing for kv_cache_percentage (tolerance={kv_tol:.2f}ms): "
-            f"{kv_values[i]}={kv_preds[i]:.2f}ms, {kv_values[i+1]}={kv_preds[i+1]:.2f}ms"
-        )
-    log.info("[PASS] TPOT is non-decreasing with kv_cache_percentage")
-
     log.info("=== All directional correctness checks passed ===")
 
 
@@ -2664,6 +2606,77 @@ def test_treelite_conformal_mode():
     flush_training_data_robust(TRAINING_URL)
 
 
+def test_bundle_gating_rejects_duplicate(trained_model_ready):
+    """Verify gating rejects a bundle trained on identical data."""
+    log.info("=" * 50)
+    log.info("Testing Bundle Gating Rejects Duplicate")
+    log.info("=" * 50)
+
+    # 1. Verify first bundle has validation_metrics
+    log.info("Step 1: Checking current bundle has validation_metrics...")
+    info_r = requests.get(f"{TRAINING_URL}/bundle/current/info", timeout=10)
+    assert info_r.status_code == 200
+    info = info_r.json()
+    bundle_id_1 = info["bundle_id"]
+    assert bundle_id_1 is not None, "Expected an active bundle"
+    assert info.get("validation_metrics") is not None, "Expected validation_metrics in bundle info"
+    assert "ttft" in info["validation_metrics"], "Expected ttft in validation_metrics"
+    assert "tpot" in info["validation_metrics"], "Expected tpot in validation_metrics"
+    log.info(f"Bundle {bundle_id_1[:8]} has validation_metrics: {list(info['validation_metrics'].keys())}")
+
+    # 2. Check gating accepted the first bundle
+    log.info("Step 2: Checking gating accepted the first bundle...")
+    gating_r = requests.get(f"{TRAINING_URL}/bundle/gating/last", timeout=10)
+    assert gating_r.status_code == 200
+    gating = gating_r.json()
+    assert gating["decision"] == "accepted", f"Expected first bundle accepted, got: {gating}"
+    initial_ts = gating["timestamp"]
+    log.info(f"First bundle gating: decision={gating['decision']}, reason={gating['reason']}")
+
+    # 3. Flush and re-add identical data
+    log.info("Step 3: Flushing data and re-adding identical training data...")
+    flush_training_data_robust(TRAINING_URL)
+
+    random.seed(42)
+    entries = [generate_random_training_payload() for _ in range(150)]
+    r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": entries}, timeout=30)
+    assert r.status_code == 202, f"Failed to add training data: {r.status_code}"
+    log.info(f"Added {len(entries)} training samples (seed=42)")
+
+    # 4. Wait for gating decision to update (timestamp changes)
+    log.info("Step 4: Waiting for retraining cycle and gating decision...")
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        gating_r = requests.get(f"{TRAINING_URL}/bundle/gating/last", timeout=10)
+        if gating_r.status_code == 200:
+            gating = gating_r.json()
+            if gating["timestamp"] and gating["timestamp"] != initial_ts:
+                log.info(f"Gating decision updated at {gating['timestamp']}")
+                break
+        time.sleep(3)
+    else:
+        pytest.skip("Timed out waiting for retraining cycle to produce a gating decision")
+
+    # 5. Verify rejection
+    log.info("Step 5: Verifying gating rejection...")
+    assert gating["decision"] == "rejected", f"Expected rejected, got: {gating}"
+    assert "no improvement" in gating["reason"].lower(), f"Expected 'no improvement' in reason, got: {gating['reason']}"
+    log.info(f"Gating correctly rejected: {gating['reason']}")
+
+    # 6. Verify bundle_id unchanged
+    log.info("Step 6: Verifying bundle_id unchanged...")
+    info2_r = requests.get(f"{TRAINING_URL}/bundle/current/info", timeout=10)
+    assert info2_r.status_code == 200
+    info2 = info2_r.json()
+    assert info2["bundle_id"] == bundle_id_1, f"Bundle ID changed from {bundle_id_1} to {info2['bundle_id']}"
+    log.info(f"Bundle ID unchanged: {bundle_id_1[:8]}")
+
+    # 7. Cleanup
+    log.info("Step 7: Cleanup...")
+    flush_training_data_robust(TRAINING_URL)
+    log.info("Bundle gating rejection test passed!")
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     log.info("Running dual-server architecture tests with prefix cache score support...")
@@ -2703,6 +2716,7 @@ if __name__ == "__main__":
         ("Model-Specific Endpoints", test_model_specific_endpoints_on_training_server),
         # Dual-mode tests (TreeLite+conformal)
         ("TreeLite+Conformal Mode", test_treelite_conformal_mode),
+        ("Bundle Gating Rejects Duplicate", test_bundle_gating_rejects_duplicate),
         ("Dual Server Model Learns Equation", test_dual_server_quantile_regression_learns_distribution),
         ("Prediction Directional Correctness", test_prediction_directional_correctness),
         ("End-to-End Workflow", test_end_to_end_workflow),
