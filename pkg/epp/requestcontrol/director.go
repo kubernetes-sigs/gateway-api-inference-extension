@@ -31,6 +31,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -136,7 +137,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		TargetModel: reqCtx.TargetModelName,
 		Body:        llmRequestBody,
 		Headers:     reqCtx.Request.Headers,
@@ -322,7 +323,7 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []fwk
 // HandleResponseReceived is called when the response headers are received.
 func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	response := &fwk.Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
 		ReqMetadata: reqCtx.Request.Metadata,
 	}
@@ -338,7 +339,7 @@ func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *hand
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
 	response := &fwk.Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
 		EndOfStream: reqCtx.ResponseComplete,
 	}
@@ -353,7 +354,7 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyComplete")
 	response := &fwk.Response{
-		RequestId:       reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:       reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:         reqCtx.Response.Headers,
 		DynamicMetadata: reqCtx.Response.DynamicMetadata,
 		Usage:           reqCtx.Usage,

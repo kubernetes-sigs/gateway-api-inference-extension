@@ -29,16 +29,10 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
-)
-
-const (
-	// defaultFairnessID is the default fairness ID used when no ID is provided in the request.
-	// This ensures that requests without explicit fairness identifiers are still grouped and managed by the Flow Control
-	// system.
-	defaultFairnessID = "default-flow"
 )
 
 func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
@@ -61,7 +55,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	for _, header := range req.RequestHeaders.Headers.Headers {
-		reqCtx.Request.Headers[header.Key] = request.GetHeaderValue(header)
+		reqCtx.Request.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
 		switch header.Key {
 		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
@@ -73,7 +67,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	if reqCtx.FairnessID == "" {
-		reqCtx.FairnessID = defaultFairnessID
+		reqCtx.FairnessID = metadata.DefaultFairnessID
 	}
 
 	return nil

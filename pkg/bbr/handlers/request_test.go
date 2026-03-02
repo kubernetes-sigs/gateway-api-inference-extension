@@ -35,6 +35,106 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
+func TestHandleRequestHeaders(t *testing.T) {
+	tests := []struct {
+		name        string
+		headers     *extProcPb.HttpHeaders
+		wantHeaders map[string]string
+	}{
+		{
+			name: "extracts headers",
+			headers: &extProcPb.HttpHeaders{
+				Headers: &basepb.HeaderMap{
+					Headers: []*basepb.HeaderValue{
+						{Key: "content-type", RawValue: []byte("application/json")},
+						{Key: "x-request-id", RawValue: []byte("abc-123")},
+					},
+				},
+			},
+			wantHeaders: map[string]string{
+				"content-type": "application/json",
+				"x-request-id": "abc-123",
+			},
+		},
+		{
+			name: "prefers RawValue over Value",
+			headers: &extProcPb.HttpHeaders{
+				Headers: &basepb.HeaderMap{
+					Headers: []*basepb.HeaderValue{
+						{Key: "x-test", RawValue: []byte("raw"), Value: "plain"},
+					},
+				},
+			},
+			wantHeaders: map[string]string{
+				"x-test": "raw",
+			},
+		},
+		{
+			name: "falls back to Value when RawValue is empty",
+			headers: &extProcPb.HttpHeaders{
+				Headers: &basepb.HeaderMap{
+					Headers: []*basepb.HeaderValue{
+						{Key: "x-test", Value: "plain"},
+					},
+				},
+			},
+			wantHeaders: map[string]string{
+				"x-test": "plain",
+			},
+		},
+		{
+			name:        "nil headers",
+			headers:     nil,
+			wantHeaders: map[string]string{},
+		},
+		{
+			name:        "nil header map",
+			headers:     &extProcPb.HttpHeaders{},
+			wantHeaders: map[string]string{},
+		},
+		{
+			name: "empty header map",
+			headers: &extProcPb.HttpHeaders{
+				Headers: &basepb.HeaderMap{
+					Headers: []*basepb.HeaderValue{},
+				},
+			},
+			wantHeaders: map[string]string{},
+		},
+	}
+
+	wantResp := []*extProcPb.ProcessingResponse{
+		{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{})
+			reqCtx := &RequestContext{
+				Request:  &Request{Headers: make(map[string]string)},
+				Response: &Response{Headers: make(map[string]string)},
+			}
+
+			resp, err := server.HandleRequestHeaders(reqCtx, tc.headers)
+			if err != nil {
+				t.Fatalf("HandleRequestHeaders returned unexpected error: %v", err)
+			}
+
+			if reqCtx.RequestReceivedTimestamp.IsZero() {
+				t.Error("RequestReceivedTimestamp was not set")
+			}
+
+			if diff := cmp.Diff(wantResp, resp, protocmp.Transform()); diff != "" {
+				t.Errorf("HandleRequestHeaders response diff(-want, +got): %v", diff)
+			}
+
+			if diff := cmp.Diff(tc.wantHeaders, reqCtx.Request.Headers); diff != "" {
+				t.Errorf("Extracted headers diff (-want, +got): %v", diff)
+			}
+		})
+	}
+}
+
 func TestHandleRequestBody(t *testing.T) {
 	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())

@@ -39,6 +39,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
@@ -49,7 +50,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
@@ -666,7 +666,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				reqCtx := &handlers.RequestContext{
 					Request: &handlers.Request{
 						Headers: map[string]string{
-							requtil.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
+							reqcommon.RequestIdHeaderKey: "test-req-id-" + test.name, // Ensure a default request ID
 						},
 					},
 					ObjectiveKey:    test.inferenceObjectiveName,
@@ -1077,7 +1077,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
 			Headers: map[string]string{
-				requtil.RequestIdHeaderKey: "test-req-id-for-response",
+				reqcommon.RequestIdHeaderKey: "test-req-id-for-response",
 			},
 		},
 		Response: &handlers.Response{ // Simulate some response headers
@@ -1115,7 +1115,7 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
 			Headers: map[string]string{
-				requtil.RequestIdHeaderKey: "test-req-id-for-streaming",
+				reqcommon.RequestIdHeaderKey: "test-req-id-for-streaming",
 			},
 		},
 		Response: &handlers.Response{
@@ -1152,7 +1152,7 @@ func TestDirector_HandleResponseComplete(t *testing.T) {
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
 			Headers: map[string]string{
-				requtil.RequestIdHeaderKey: "test-req-id-for-complete",
+				reqcommon.RequestIdHeaderKey: "test-req-id-for-complete",
 			},
 		},
 		Response: &handlers.Response{

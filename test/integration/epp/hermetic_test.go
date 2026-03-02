@@ -41,9 +41,9 @@ import (
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
@@ -193,7 +193,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					"hi":                         "mom",
 					metadata.ObjectiveKey:        modelSheddable,
 					metadata.ModelNameRewriteKey: modelSheddableTarget,
-					requtil.RequestIdHeaderKey:   "test-request-id",
+					reqcommon.RequestIdHeaderKey: "test-request-id",
 				},
 				`{"max_tokens":100,"model":"sql-lo`,
 				`ra-sheddable","prompt":"test6","temperature":0}`,
@@ -266,7 +266,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					"hi":                         "mom",
 					metadata.ObjectiveKey:        modelDirect,
 					metadata.ModelNameRewriteKey: modelDirect,
-					requtil.RequestIdHeaderKey:   "test-request-id",
+					reqcommon.RequestIdHeaderKey: "test-request-id",
 				},
 				`{"max_tokens":100,"model":"direct-`,
 				`model","prompt":"test6","temperature":0}`,

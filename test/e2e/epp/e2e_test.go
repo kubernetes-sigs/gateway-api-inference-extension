@@ -533,7 +533,7 @@ func findReadyPod() *corev1.Pod {
 // getMetricsScrapeCommand returns the command to scrape the /metrics endpoint.
 func getMetricsScrapeCommand(podIP, token string) []string {
 	return []string{
-		"curl", "-i", "--max-time", strconv.Itoa((int)(4 * curlTimeout.Seconds())),
+		"curl", "-i", "--max-time", strconv.Itoa((int)(6 * curlTimeout.Seconds())),
 		"-H", "Authorization: Bearer " + token, fmt.Sprintf("http://%s:%d/metrics", podIP, 9090),
 	}
 }

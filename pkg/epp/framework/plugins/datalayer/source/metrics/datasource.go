@@ -24,7 +24,7 @@ import (
 
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
-	flag "github.com/spf13/pflag"
+	"github.com/spf13/pflag"
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/http"
@@ -105,7 +105,7 @@ func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 }
 
 func fromStringFlag(name string) (string, error) {
-	f := flag.Lookup(name)
+	f := pflag.Lookup(name)
 	if f == nil {
 		return "", fmt.Errorf("flag not found: %s", name)
 	}
@@ -113,7 +113,7 @@ func fromStringFlag(name string) (string, error) {
 }
 
 func fromBoolFlag(name string) (bool, error) {
-	f := flag.Lookup(name)
+	f := pflag.Lookup(name)
 	if f == nil {
 		return false, fmt.Errorf("flag not found: %s", name)
 	}

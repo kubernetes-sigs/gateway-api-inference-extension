@@ -42,8 +42,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 // --- Request Builders (Protocol Level) ---
@@ -165,7 +165,7 @@ func GenerateStreamedRequestSet(
 	// Headers
 	headers := []*envoyCorev3.HeaderValue{
 		{Key: "hi", Value: "mom"},
-		{Key: requtil.RequestIdHeaderKey, Value: "test-request-id"},
+		{Key: reqcommon.RequestIdHeaderKey, Value: "test-request-id"},
 	}
 	if model != "" {
 		headers = append(headers, &envoyCorev3.HeaderValue{Key: metadata.ObjectiveKey, Value: model})

@@ -33,14 +33,15 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 func NewStreamingServer(datastore Datastore, director Director) *StreamingServer {
@@ -197,19 +198,19 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
-		reqCtx.Request.Metadata = requtil.ExtractMetadataValues(req)
+		reqCtx.Request.Metadata = reqenvoy.ExtractMetadataValues(req)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			requestID := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey)
+			requestID := reqenvoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey)
 			// request ID is a must for maintaining a state per request in plugins that hold internal state and use PluginState.
 			// if request id was not supplied as a header, we generate it ourselves.
 			if len(requestID) == 0 {
 				requestID = uuid.NewString()
 				loggerTrace.Info("RequestID header is not found in the request, generated a request id")
-				reqCtx.Request.Headers[requtil.RequestIdHeaderKey] = requestID // update in headers so director can consume it
+				reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey] = requestID // update in headers so director can consume it
 			}
-			logger = logger.WithValues(requtil.RequestIdHeaderKey, requestID)
+			logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestID)
 			logger.V(1).Info("EPP received request") // Request ID will be logged too as part of logger context values.
 			loggerTrace = logger.V(logutil.TRACE)
 			ctx = log.IntoContext(ctx, logger)

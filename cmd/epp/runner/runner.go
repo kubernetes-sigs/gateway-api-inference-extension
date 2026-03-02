@@ -19,7 +19,6 @@ package runner
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -164,7 +163,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// Print all flag values
 	flags := make(map[string]any)
-	flag.VisitAll(func(f *flag.Flag) {
+	pflag.VisitAll(func(f *pflag.Flag) {
 		flags[f.Name] = f.Value
 	})
 	setupLog.Info("Flags processed", "flags", flags)

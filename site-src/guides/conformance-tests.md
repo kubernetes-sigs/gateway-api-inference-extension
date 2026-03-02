@@ -1,4 +1,3 @@
-
 # Test Setup and Execution
 
 This document provides steps to run the Gateway API Inference Extension conformance tests.
