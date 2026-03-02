@@ -101,7 +101,8 @@ func (p *VLLMGrpcParser) ParseRequest(headers map[string]string, body []byte) (*
 	binary.BigEndian.PutUint32(grpcFrame[1:], uint32(len(protoBody)))
 
 	// Prepend the frame to the body
-	extractedBody.ParsedBody = append(grpcFrame, protoBody...)
+	fullBody := append(grpcFrame, protoBody...) //nolint:gocritic,makezero // This is intentional slice construction
+	extractedBody.ParsedBody = fullBody
 
 	return extractedBody, nil
 }
@@ -194,7 +195,7 @@ func (p *VLLMGrpcParser) TranscodeJsonToGrpc(headers map[string]string, body []b
 }
 
 func ExtractRequestID(headers map[string]string) string {
-	if reqId, ok := headers[requtil.RequestIdHeaderKey]; ok {
+	if reqId, ok := headers["x-request-id"]; ok {
 		return reqId
 	}
 	return uuid.NewString()

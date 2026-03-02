@@ -305,8 +305,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					reqCtx.ResponseSize = len(body)
 					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 
-
-
 					var responseErr error
 
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
