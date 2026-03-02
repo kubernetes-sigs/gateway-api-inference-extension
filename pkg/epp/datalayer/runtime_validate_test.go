@@ -21,6 +21,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+)
+
+var (
+	extractorType             = reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
+	notificationextractorType = reflect.TypeOf((*fwkdl.NotificationExtractor)(nil)).Elem()
+	notificationEventType     = reflect.TypeOf(fwkdl.NotificationEvent{})
 )
 
 func TestValidateInputTypeCompatible(t *testing.T) {
@@ -62,7 +69,7 @@ func TestValidateExtractorCompatible(t *testing.T) {
 		{
 			name:         "nil extractor type",
 			extType:      nil,
-			expectedType: ExtractorType,
+			expectedType: extractorType,
 			valid:        false,
 			errContains:  "can't be nil",
 		},
@@ -83,7 +90,7 @@ func TestValidateExtractorCompatible(t *testing.T) {
 		{
 			name:         "does not implement interface",
 			extType:      reflect.TypeOf(&notExtractor{}),
-			expectedType: ExtractorType,
+			expectedType: extractorType,
 			valid:        false,
 			errContains:  "does not implement interface",
 		},
@@ -103,8 +110,8 @@ func TestValidateExtractorCompatible(t *testing.T) {
 }
 
 func TestTypeConstants(t *testing.T) {
-	assert.True(t, ExtractorType.Kind() == reflect.Interface, "ExtractorType should be an interface")
-	assert.True(t, NotificationExtractorType.Kind() == reflect.Interface, "NotificationExtractorType should be an interface")
+	assert.True(t, extractorType.Kind() == reflect.Interface, "extractorType should be an interface")
+	assert.True(t, notificationextractorType.Kind() == reflect.Interface, "notificationextractorType should be an interface")
 }
 
 func typeOfT(v any) reflect.Type {
