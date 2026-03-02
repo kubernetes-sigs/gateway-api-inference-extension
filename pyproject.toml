@@ -20,63 +20,31 @@ extend-exclude = [
 line-length = 120
 
 [tool.ruff.lint]
-# Enable specific rule sets
+# Minimal rule set: catch real bugs, not style preferences
 select = [
     "E",      # pycodestyle errors
     "W",      # pycodestyle warnings
-    "F",      # pyflakes
+    "F",      # pyflakes (unused imports, undefined names, etc.)
     "I",      # isort (import sorting)
-    "N",      # pep8-naming
-    "UP",     # pyupgrade (modern Python syntax)
     "B",      # flake8-bugbear (common bugs)
-    "C4",     # flake8-comprehensions
-    "T20",    # flake8-print (catch print statements)
-    "SIM",    # flake8-simplify
-    "PTH",    # flake8-use-pathlib
-    "RUF",    # Ruff-specific rules
 ]
 
-# Ignore specific rules that are too strict or not applicable
 ignore = [
     "E501",   # Line too long (handled by formatter)
+    "E402",   # Module-level import not at top (common for conditional imports)
+    "E712",   # Comparison to True/False (fine in test assertions)
+    "B007",   # Unused loop variable (minor, use _ convention if you want)
     "B008",   # Do not perform function call in argument defaults (common in FastAPI)
-    "B904",   # Use `raise from` to chain exceptions (can be overly strict)
-    "PTH123", # Use Path.open() instead of open() (too strict for simple cases)
-    "PTH118", # Use Path.joinpath() instead of os.path.join() (gradual migration)
-    "SIM108", # Use ternary operator (sometimes less readable)
+    "B011",   # Do not assert False (valid in test code)
+    "B904",   # raise X from err in except (standard FastAPI HTTPException pattern)
 ]
 
-# Allow specific print statements in test files
-[tool.ruff.lint.per-file-ignores]
-"latencypredictor/test/*.py" = ["T201"]  # Allow print in test files (for now)
-"latencypredictor/*/test_*.py" = ["T201"]  # Allow print in test files
-
-# Allow print in __main__ blocks for CLI tools
-"latencypredictor/common/conformal_quantile.py" = ["T201"]  # Has __main__ validation block
-
 [tool.ruff.lint.isort]
-# Import sorting configuration
 known-first-party = ["training", "prediction", "common"]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
 
 [tool.ruff.format]
-# Use double quotes for strings
 quote-style = "double"
-
-# Indent with spaces
 indent-style = "space"
-
-# Respect magic trailing comma
 skip-magic-trailing-comma = false
-
-# Auto-detect line ending
 line-ending = "auto"
-
-[tool.bandit]
-# Security linter configuration (minimal, non-invasive)
-exclude_dirs = ["latencypredictor/venv", "latencypredictor/.venv", "latencypredictor/test"]
-skips = [
-    "B101",  # Use of assert (common in tests, not security issue)
-    "B104",  # Binding to 0.0.0.0 (expected in containers)
-    "B601",  # Parameterized shell calls (we validate inputs)
-]

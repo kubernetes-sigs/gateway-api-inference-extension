@@ -31,6 +31,7 @@ References:
 """
 
 import logging
+import math
 from collections import deque
 
 import numpy as np
@@ -44,7 +45,7 @@ class ConformalQuantilePredictor:
     Usage:
         # Training
         model = train_xgboost_model(X_train, y_train)  # Standard regression
-        cqp = ConformalQuantilePredictor(quantile=0.85)
+        cqp = ConformalQuantilePredictor(quantile=0.90)
         cqp.calibrate(model, X_calibration, y_calibration)
 
         # Prediction
@@ -52,21 +53,27 @@ class ConformalQuantilePredictor:
         quantile_pred = cqp.conformalize(mean_pred)
     """
 
-    def __init__(self, quantile: float = 0.85, max_calibration_samples: int = 5000):
+    def __init__(self, quantile: float = 0.90, max_calibration_samples: int = 5000):
         """
         Args:
-            quantile: Target quantile to predict (e.g., 0.85 for P85)
+            quantile: Target quantile to predict (e.g., 0.90 for P90)
             max_calibration_samples: Maximum calibration samples to keep
         """
         self.quantile = quantile
         self.max_calibration_samples = max_calibration_samples
 
-        # Store calibration residuals (absolute errors)
+        # Store calibration residuals (signed: actual - predicted)
         self.calibration_residuals = deque(maxlen=max_calibration_samples)
 
         # Cached quantile value (updated when calibration changes)
         self._cached_quantile_value: float | None = None
         self._cache_dirty = True
+
+        # Auto-calibrated alpha (set by _auto_calibrate)
+        self._calibrated_alpha: float | None = None
+
+        # Track original sample count (used by v3 compact format where residuals are empty)
+        self._calibration_samples_count = 0
 
         # Track whether we've logged "no calibration data" warning (to avoid spam)
         self._logged_no_calibration_warning = False
@@ -85,14 +92,15 @@ class ConformalQuantilePredictor:
         if len(predictions) != len(actuals):
             raise ValueError("Predictions and actuals must have same length")
 
-        # Compute absolute residuals
-        residuals = np.abs(actuals - predictions)
+        # Compute signed residuals (actual - predicted) for one-sided upper bound
+        residuals = actuals - predictions
 
         # Add to calibration set
         for r in residuals:
             self.calibration_residuals.append(float(r))
 
         self._cache_dirty = True
+        self._calibration_samples_count = len(self.calibration_residuals)
 
         # Reset warning flag now that we have calibration data
         self._logged_no_calibration_warning = False
@@ -103,6 +111,41 @@ class ConformalQuantilePredictor:
                 f"Total calibration samples: {len(self.calibration_residuals)}"
             )
 
+        # Auto-calibrate alpha for accurate coverage
+        self._auto_calibrate()
+
+    def _auto_calibrate(self):
+        """
+        Compute conformal quantile level using the standard order statistic formula.
+
+        For n calibration residuals and target coverage c, the conformal index is:
+            k = ceil(c * (n + 1))
+        clamped to [1, n]. Setting alpha = k / (n + 1) makes np.quantile()
+        select approximately the k-th order statistic, providing a finite-sample
+        coverage guarantee >= c on exchangeable future data.
+
+        Reference: "A Gentle Introduction to Conformal Prediction and
+        Distribution-Free Uncertainty Quantification" (Angelopoulos & Bates, 2021)
+        """
+        n = len(self.calibration_residuals)
+        if n < 2:
+            self._calibrated_alpha = self.quantile
+            self._cache_dirty = True
+            logging.debug(f"Auto-calibration: using raw quantile {self.quantile} as alpha ({n} samples < 2)")
+            return
+
+        k = math.ceil(self.quantile * (n + 1))
+        k = max(1, min(k, n))  # clamp to [1, n]
+
+        self._calibrated_alpha = k / (n + 1)
+        self._cache_dirty = True
+
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(
+                f"Auto-calibrated alpha: {self._calibrated_alpha:.4f} "
+                f"(conformal index k={k}/{n}, target coverage: {self.quantile:.0%})"
+            )
+
     def add_online_sample(self, prediction: float, actual: float):
         """
         Add a single sample for online calibration.
@@ -111,7 +154,7 @@ class ConformalQuantilePredictor:
             prediction: Model prediction (mean)
             actual: Actual observed value
         """
-        residual = abs(actual - prediction)
+        residual = actual - prediction
         self.calibration_residuals.append(residual)
         self._cache_dirty = True
 
@@ -125,7 +168,7 @@ class ConformalQuantilePredictor:
         Returns:
             Quantile prediction (mean + appropriate residual quantile)
         """
-        if len(self.calibration_residuals) == 0:
+        if len(self.calibration_residuals) == 0 and self._cached_quantile_value is None:
             if not self._logged_no_calibration_warning:
                 logging.debug("No calibration data available. Returning mean prediction (bootstrap phase).")
                 self._logged_no_calibration_warning = True
@@ -148,7 +191,7 @@ class ConformalQuantilePredictor:
         Returns:
             Array of quantile predictions
         """
-        if len(self.calibration_residuals) == 0:
+        if len(self.calibration_residuals) == 0 and self._cached_quantile_value is None:
             if not self._logged_no_calibration_warning:
                 logging.debug("No calibration data available. Returning mean predictions (bootstrap phase).")
                 self._logged_no_calibration_warning = True
@@ -167,7 +210,8 @@ class ConformalQuantilePredictor:
             self._cached_quantile_value = 0.0
         else:
             residuals_array = np.array(list(self.calibration_residuals))
-            self._cached_quantile_value = float(np.quantile(residuals_array, self.quantile))
+            effective_alpha = self._calibrated_alpha if self._calibrated_alpha is not None else self.quantile
+            self._cached_quantile_value = float(np.quantile(residuals_array, effective_alpha))
 
         self._cache_dirty = False
 
@@ -207,22 +251,73 @@ class ConformalQuantilePredictor:
             "average_interval_width": avg_width,
             "calibration_samples": len(self.calibration_residuals),
             "quantile_adjustment": self._cached_quantile_value,
+            "calibrated_alpha": self._calibrated_alpha,
         }
 
-    def get_state(self) -> dict:
-        """Get current state for serialization."""
+    @property
+    def calibration_sample_count(self) -> int:
+        """Number of calibration samples (works for both full and compact formats)."""
+        return len(self.calibration_residuals) or self._calibration_samples_count
+
+    def get_state(self, compact: bool = False) -> dict:
+        """Get current state for serialization.
+
+        Args:
+            compact: If True, save only precomputed offset (v3 format).
+                     Suitable for inference-only bundles where residuals
+                     aren't needed. ~200 bytes vs ~50KB.
+        """
+        if compact:
+            # Ensure cache is fresh before saving
+            if self._cache_dirty:
+                self._update_quantile_cache()
+            return {
+                "version": 3,
+                "quantile": self.quantile,
+                "max_calibration_samples": self.max_calibration_samples,
+                "calibrated_alpha": self._calibrated_alpha,
+                "cached_quantile_value": self._cached_quantile_value,
+                "calibration_samples": len(self.calibration_residuals),
+            }
         return {
+            "version": 2,
             "quantile": self.quantile,
             "calibration_residuals": list(self.calibration_residuals),
             "max_calibration_samples": self.max_calibration_samples,
+            "calibrated_alpha": self._calibrated_alpha,
         }
 
     @classmethod
     def from_state(cls, state: dict) -> "ConformalQuantilePredictor":
         """Restore from serialized state."""
+        version = state.get("version", 1)
+
+        if version == 3:
+            # Compact format: no residuals, just precomputed offset
+            cqp = cls(quantile=state["quantile"], max_calibration_samples=state["max_calibration_samples"])
+            cqp._calibrated_alpha = state.get("calibrated_alpha")
+            cqp._cached_quantile_value = state.get("cached_quantile_value", 0.0)
+            cqp._cache_dirty = False  # Cache is already set
+            cqp._calibration_samples_count = state.get("calibration_samples", 0)
+            # calibration_residuals stays empty — conformalize() will use cached value
+            return cqp
+
         cqp = cls(quantile=state["quantile"], max_calibration_samples=state["max_calibration_samples"])
         cqp.calibration_residuals = deque(state["calibration_residuals"], maxlen=state["max_calibration_samples"])
         cqp._cache_dirty = True
+        cqp._calibration_samples_count = len(cqp.calibration_residuals)
+
+        if version == 1:
+            # v1 used absolute residuals — keep them but leave _calibrated_alpha=None
+            # so we fall back to self.quantile. Conservative (over-coverage) until
+            # next training cycle produces v2 with signed residuals.
+            logging.warning(
+                "Loading v1 conformal state (absolute residuals). "
+                "Coverage may be conservative until next training cycle."
+            )
+        else:
+            cqp._calibrated_alpha = state.get("calibrated_alpha")
+
         return cqp
 
 
@@ -257,23 +352,24 @@ if __name__ == "__main__":
     y_pred_test = y_pred_mean[split:]
     y_true_test = y_true[split:]
 
-    # Create and calibrate conformal predictor for P85
-    cqp = ConformalQuantilePredictor(quantile=0.85)
+    # Create and calibrate conformal predictor for P90
+    cqp = ConformalQuantilePredictor(quantile=0.90)
     cqp.calibrate(y_pred_cal, y_true_cal)
 
-    # Get P85 predictions on test set
-    y_pred_p85 = cqp.conformalize_batch(y_pred_test)
+    # Get P90 predictions on test set
+    y_pred_p90 = cqp.conformalize_batch(y_pred_test)
 
     # Evaluate coverage
     stats = cqp.get_coverage_stats(y_pred_test, y_true_test)
 
     logger.info("Conformal Quantile Regression Results:")
-    logger.info("  Target: P85 (85% coverage)")
+    logger.info("  Target: P90 (90% coverage)")
     logger.info(f"  Actual coverage: {stats['coverage_percent']:.1f}%")
     logger.info(f"  Violation rate: {stats['violation_rate_percent']:.1f}%")
     logger.info(f"  Quantile adjustment: +{stats['quantile_adjustment']:.2f}")
+    logger.info(f"  Calibrated alpha: {stats['calibrated_alpha']:.4f}")
     logger.info(f"  Calibration samples: {stats['calibration_samples']}")
 
-    # Should be close to 85% coverage (allow ±10% tolerance for small sample sizes)
-    assert 75 <= stats["coverage_percent"] <= 95, "Coverage should be close to 85%"
+    # Should be close to 90% coverage (allow ±5% tolerance with auto-calibration)
+    assert 85 <= stats["coverage_percent"] <= 95, "Coverage should be close to 90%"
     logger.info("\n✓ Conformal prediction working correctly!")

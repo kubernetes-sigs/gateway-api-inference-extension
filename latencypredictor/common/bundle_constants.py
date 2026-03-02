@@ -30,11 +30,6 @@ TPOT_TREELITE_FILENAME = "tpot_treelite.so"  # compiled shared library
 TTFT_CONFORMAL_FILENAME = "ttft_conformal.json"  # JSON conformal calibration
 TPOT_CONFORMAL_FILENAME = "tpot_conformal.json"  # JSON conformal calibration
 
-# Legacy: DEPRECATED - Use get_model_filename() instead
-# These are kept for backward compatibility but should not be used in new code
-TTFT_MODEL_FILENAME = "ttft_model.joblib"  # DEPRECATED
-TPOT_MODEL_FILENAME = "tpot_model.joblib"  # DEPRECATED
-
 
 def get_model_filename(model_type: str, model_name: str) -> str:
     """

@@ -43,7 +43,7 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
 # Use entrypoint to handle warmup logic
-ENTRYPOINT ["/app/test/test_entrypoint.sh"]
+ENTRYPOINT ["/app/test/entrypoint.sh"]
 
 # Default command runs the specific test
-CMD ["pytest", "-v", "-s", "test/test_dual_server_client.py"]
+CMD ["pytest", "-v", "--log-cli-level=INFO", "--log-cli-format=%(levelname)s %(message)s", "--no-header", "test/test_dual_server_client.py"]

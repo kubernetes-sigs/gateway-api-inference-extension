@@ -35,6 +35,7 @@ logging.basicConfig(
 # Import bundle infrastructure
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from common.bundle_constants import TPOT_TREELITE_FILENAME, TTFT_TREELITE_FILENAME
+from common.lifecycle_state import LifecycleState, write_lifecycle_state
 from training.bundle_integration import BundleModelManager
 
 
@@ -63,6 +64,8 @@ class BuildWorker:
         self.bundle_manager = BundleModelManager(
             bundle_dir=bundle_dir, current_symlink=current_symlink, max_bundles=max_bundles
         )
+
+        self.lifecycle_state_path = os.getenv("LIFECYCLE_STATE_PATH", "/work/lifecycle_state.json")
 
         logging.info("BuildWorker initialized:")
         logging.info(f"  Staging: {self.staging_dir}")
@@ -115,12 +118,43 @@ class BuildWorker:
                             published_path = run_dir / "PUBLISHED"
                             with open(published_path, "w") as f:
                                 f.write(f"{datetime.now(UTC).isoformat()}\n")
-                            logging.info(f"✅ Published bundle for run_id={run_id[:8]}")
+                            write_lifecycle_state(
+                                LifecycleState.READY,
+                                reason=f"Bundle published for run_id={run_id[:8]}",
+                                bundle_id=run_id,
+                                path=self.lifecycle_state_path,
+                            )
+                            logging.info(f"Published bundle for run_id={run_id[:8]}")
                         else:
-                            logging.error(f"❌ Build failed for run_id={run_id[:8]}")
+                            # Write FAILED marker
+                            failed_path = run_dir / "FAILED"
+                            with open(failed_path, "w") as f:
+                                f.write(f"{datetime.now(UTC).isoformat()}\n")
+                            write_lifecycle_state(
+                                LifecycleState.ERROR,
+                                reason=f"Build failed for run_id={run_id[:8]}",
+                                bundle_id=run_id,
+                                last_error="Build returned failure",
+                                path=self.lifecycle_state_path,
+                            )
+                            logging.error(f"Build failed for run_id={run_id[:8]}")
 
                     except Exception as e:
                         logging.error(f"Error building run_id={run_id[:8]}: {e}", exc_info=True)
+                        # Write FAILED marker
+                        failed_path = run_dir / "FAILED"
+                        try:
+                            with open(failed_path, "w") as f:
+                                f.write(f"{datetime.now(UTC).isoformat()}\n{e}\n")
+                        except OSError:
+                            pass
+                        write_lifecycle_state(
+                            LifecycleState.ERROR,
+                            reason=f"Build exception for run_id={run_id[:8]}",
+                            bundle_id=run_id,
+                            last_error=str(e),
+                            path=self.lifecycle_state_path,
+                        )
 
                     finally:
                         # Release lock
@@ -153,7 +187,14 @@ class BuildWorker:
             True if successful, False otherwise
         """
         run_id = run_dir.name
-        logging.info(f"Building bundle for run_id={run_id[:8]}")
+        logging.debug(f"Building bundle for run_id={run_id[:8]}")
+
+        write_lifecycle_state(
+            LifecycleState.COMPILING,
+            reason=f"Compiling TreeLite bundle for run_id={run_id[:8]}",
+            bundle_id=run_id,
+            path=self.lifecycle_state_path,
+        )
 
         # Load fit manifest
         fit_manifest_path = run_dir / "fit_manifest.json"
@@ -174,7 +215,7 @@ class BuildWorker:
         bundle_path = Path(self.bundle_manager.bundle_dir) / bundle_id
         bundle_path.mkdir(parents=True, exist_ok=True)
 
-        logging.info(f"Created bundle directory: {bundle_path}")
+        logging.debug(f"Created bundle directory: {bundle_path}")
 
         # Copy non-model artifacts first
         for artifact_name, artifact_info in fit_manifest["artifacts"].items():
@@ -185,10 +226,10 @@ class BuildWorker:
             dst_path = bundle_path / artifact_info["path"]
 
             shutil.copy2(src_path, dst_path)
-            logging.info(f"Copied {artifact_name}: {artifact_info['path']}")
+            logging.debug(f"Copied {artifact_name}: {artifact_info['path']}")
 
         # Compile models to TreeLite (always required for XGBoost and LightGBM)
-        logging.info(f"Starting TreeLite compilation for {fit_manifest['model_type']}")
+        logging.debug(f"Starting TreeLite compilation for {fit_manifest['model_type']}")
 
         if not self.compile_models(run_dir, bundle_path, fit_manifest):
             logging.error(f"TreeLite compilation failed for run_id={run_id[:8]}")
@@ -201,7 +242,7 @@ class BuildWorker:
         with open(bundle_manifest_path, "w") as f:
             json.dump(bundle_manifest, f, indent=2)
 
-        logging.info(f"Created bundle manifest: {bundle_manifest_path}")
+        logging.debug(f"Created bundle manifest: {bundle_manifest_path}")
 
         # Publish bundle (atomic symlink update)
         self.publish_bundle(bundle_id, bundle_path)
@@ -272,19 +313,19 @@ class BuildWorker:
         import tl2cgen
         import treelite
 
-        logging.info(f"Compiling {model_name} from {model_path}")
+        logging.debug(f"Compiling {model_name} from {model_path}")
 
         try:
             # Load model based on type
             if model_type == "xgboost":
                 # Load XGBoost JSON
                 tl_model = treelite.frontend.load_xgboost_model(str(model_path))
-                logging.info(f"Loaded XGBoost model: {tl_model.num_tree} trees")
+                logging.debug(f"Loaded XGBoost model: {tl_model.num_tree} trees")
 
             elif model_type == "lightgbm":
                 # Load LightGBM txt
                 tl_model = treelite.frontend.load_lightgbm_model(str(model_path))
-                logging.info(f"Loaded LightGBM model: {tl_model.num_tree} trees")
+                logging.debug(f"Loaded LightGBM model: {tl_model.num_tree} trees")
 
             else:
                 logging.error(f"Unsupported model type for TreeLite: {model_type}")
@@ -295,7 +336,7 @@ class BuildWorker:
             with tempfile.NamedTemporaryFile(suffix=".so", delete=False, dir=output_path.parent) as tmp:
                 tmp_path = tmp.name
 
-            logging.info(f"Compiling {model_name} to {tmp_path}")
+            logging.debug(f"Compiling {model_name} to {tmp_path}")
             tl2cgen.export_lib(
                 model=tl_model, toolchain="gcc", libpath=tmp_path, params={"parallel_comp": 8}, verbose=True
             )
@@ -304,7 +345,7 @@ class BuildWorker:
             os.replace(tmp_path, output_path)
 
             file_size = output_path.stat().st_size
-            logging.info(f"✓ Compiled {model_name}: {output_path} ({file_size:,} bytes)")
+            logging.debug(f"Compiled {model_name}: {output_path} ({file_size:,} bytes)")
 
             return True
 

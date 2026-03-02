@@ -28,6 +28,8 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 try:
     import xgboost as xgb
 
@@ -48,6 +50,7 @@ except ImportError:
 from common.bundle_constants import TPOT_CONFORMAL_FILENAME, TTFT_CONFORMAL_FILENAME, get_model_filename
 from common.conformal_quantile import ConformalQuantilePredictor
 from common.feature_encoder import FeatureEncoder
+from common.lifecycle_state import LifecycleState, read_lifecycle_state, write_lifecycle_state
 
 from .bundle_integration import BundleModelManager
 
@@ -96,7 +99,7 @@ class Settings:
 
     # Model Configuration
     MODEL_TYPE: str = os.getenv("LATENCY_MODEL_TYPE", "xgboost")  # xgboost or lightgbm
-    QUANTILE_ALPHA: float = float(os.getenv("LATENCY_QUANTILE_ALPHA", "0.85"))  # p85 quantile by default
+    QUANTILE_ALPHA: float = float(os.getenv("LATENCY_QUANTILE_ALPHA", "0.90"))  # p90 quantile by default
 
     # Training Parameters
     RETRAINING_INTERVAL_SEC: int = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", 1800))  # 30 minutes
@@ -122,9 +125,11 @@ class Settings:
     BUNDLE_CURRENT_SYMLINK: str = os.getenv("BUNDLE_CURRENT_SYMLINK", "/models/current")
     MAX_BUNDLES_TO_KEEP: int = int(os.getenv("MAX_BUNDLES_TO_KEEP", "5"))
 
+    # Lifecycle State
+    LIFECYCLE_STATE_PATH: str = os.getenv("LIFECYCLE_STATE_PATH", "/work/lifecycle_state.json")
+
 
 settings = Settings()
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 # Add this to your Pydantic models section
@@ -189,7 +194,7 @@ def quantile_coverage(y_true, y_pred, quantile):
     """
     Calculate quantile coverage - the proportion of actual values that fall below the predicted quantile.
 
-    For a well-calibrated p85 model, this should be close to 0.85 (85%).
+    For a well-calibrated model, this should be close to the target quantile.
 
     Args:
         y_true: actual values
@@ -208,7 +213,7 @@ def quantile_violation_rate(y_true, y_pred, quantile):
     """
     Calculate quantile violation rate - the proportion of times actual values exceed the predicted quantile.
 
-    For a well-calibrated p85 model, this should be close to 0.15 (15%).
+    For a well-calibrated model, this should be close to (1 - quantile).
 
     Args:
         y_true: actual values
@@ -297,6 +302,10 @@ class LatencyPredictor:
         self._shutdown_event = threading.Event()
         self._training_thread: threading.Thread = None
 
+        # Lifecycle tracking
+        self._lifecycle_state = LifecycleState.ABSENT
+        self._sample_count = 0
+
     def _get_prefix_bucket(self, prefix_score: float) -> int:
         """Map prefix cache score to bucket index."""
         score = max(0.0, min(1.0, prefix_score))
@@ -374,6 +383,27 @@ class LatencyPredictor:
         self._shutdown_event.set()
         if self._training_thread is not None:
             self._training_thread.join()
+
+    def _update_lifecycle_state(
+        self,
+        state: LifecycleState,
+        reason: str = None,
+        bundle_id: str = None,
+        last_error: str = None,
+    ):
+        """Update lifecycle state in shared file and local attribute."""
+        old_state = self._lifecycle_state
+        self._lifecycle_state = state
+        write_lifecycle_state(
+            state=state,
+            reason=reason,
+            bundle_id=bundle_id,
+            last_error=last_error,
+            sample_count=self._sample_count,
+            path=settings.LIFECYCLE_STATE_PATH,
+        )
+        if old_state != state:
+            logging.info(f"Lifecycle: {old_state.value} -> {state.value} (reason={reason})")
 
     @property
     def is_ready(self) -> bool:
@@ -591,56 +621,6 @@ class LatencyPredictor:
             logging.error(f"Error calculating quantile metrics: {e}", exc_info=True)
             return None, None, None
 
-    def _create_default_model(self, model_type: str) -> xgb.XGBRegressor | lgb.LGBMRegressor:
-        """Creates and trains a simple default model with initial priors."""
-        try:
-            logging.info(f"Creating default '{model_type}' model with priors.")
-            if model_type == "ttft":
-                features = pd.DataFrame(
-                    {
-                        "kv_cache_percentage": [
-                            0.0,
-                        ],
-                        "input_token_length": [
-                            1,
-                        ],
-                        "num_request_waiting": [
-                            0,
-                        ],
-                        "num_request_running": [
-                            0,
-                        ],
-                        "prefix_cache_score": [
-                            0.0,
-                        ],  # Added prefix_cache_score
-                    }
-                )
-                features = self._prepare_features_with_interaction(features, "ttft")
-                target = pd.Series([10.0])
-
-            else:
-                features = pd.DataFrame(
-                    {
-                        "kv_cache_percentage": [0.0],
-                        "input_token_length": [1],  # Added input_token_length
-                        "num_request_waiting": [
-                            0,
-                        ],
-                        "num_request_running": [
-                            0,
-                        ],
-                        "num_tokens_generated": [
-                            1,
-                        ],
-                    }
-                )
-                features = self._prepare_features_with_interaction(features, "tpot")
-                target = pd.Series([10.0])
-            return self._train_model_with_scaling(features, target, model_name=model_type)
-        except Exception as e:
-            logging.error(f"Error creating default model for {model_type}: {e}", exc_info=True)
-            raise
-
     def train(self):
         try:
             # Create snapshots and validate sample count
@@ -650,6 +630,11 @@ class LatencyPredictor:
                 total = len(ttft_snap) + len(tpot_snap)
                 if total < settings.MIN_SAMPLES_FOR_RETRAIN:
                     logging.info(f"Skipping training: only {total} samples (< {settings.MIN_SAMPLES_FOR_RETRAIN}).")
+                    if self._lifecycle_state in (LifecycleState.ABSENT, LifecycleState.WAITING_FOR_SAMPLES):
+                        self._update_lifecycle_state(
+                            LifecycleState.WAITING_FOR_SAMPLES,
+                            reason=f"Need {settings.MIN_SAMPLES_FOR_RETRAIN} samples, have {total}",
+                        )
                     return
                 logging.info(
                     f"Initiating training with {total} samples using {self.model_type} for quantile {self.quantile}."
@@ -662,6 +647,11 @@ class LatencyPredictor:
                     quantile=self.quantile,
                 )
                 logging.info(f"Started training session: bundle_id={bundle.manifest.bundle_id[:8]}")
+                self._update_lifecycle_state(
+                    LifecycleState.TRAINING,
+                    reason=f"Training with {total} samples",
+                    bundle_id=bundle.manifest.bundle_id,
+                )
 
             new_ttft_model = None
             new_tpot_model = None
@@ -740,8 +730,13 @@ class LatencyPredictor:
                             logging.info(
                                 f"TTFT model trained on {len(df_ttft)} samples. "
                                 f"Quantile Loss = {ql:.4f}, "
-                                f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)"
+                                f"Coverage = {coverage:.2f}% (target: ~50%), "
+                                f"Violation Rate = {violation_rate:.2f}% (target: ~50%)"
+                            )
+                            logging.debug(
+                                f"TTFT raw model uses mean regression (reg:squarederror), so ~50% coverage is expected. "
+                                f"Right-skewed latency distributions may shift coverage above 50%. "
+                                f"Conformal calibration (separate step) adjusts to the system quantile target of p{self.quantile*100:.0f}."
                             )
                         else:
                             logging.info(
@@ -778,8 +773,13 @@ class LatencyPredictor:
                             logging.info(
                                 f"TPOT model trained on {len(df_tpot)} samples. "
                                 f"Quantile Loss = {ql:.4f}, "
-                                f"Coverage = {coverage:.2f}% (target: {self.quantile*100:.0f}%), "
-                                f"Violation Rate = {violation_rate:.2f}% (target: {(1-self.quantile)*100:.0f}%)"
+                                f"Coverage = {coverage:.2f}% (target: ~50%), "
+                                f"Violation Rate = {violation_rate:.2f}% (target: ~50%)"
+                            )
+                            logging.debug(
+                                f"TPOT raw model uses mean regression (reg:squarederror), so ~50% coverage is expected. "
+                                f"Right-skewed latency distributions may shift coverage above 50%. "
+                                f"Conformal calibration (separate step) adjusts to the system quantile target of p{self.quantile*100:.0f}."
                             )
                         else:
                             logging.info(
@@ -807,6 +807,11 @@ class LatencyPredictor:
                         logging.error("Error saving models to staging after training.", exc_info=True)
         except Exception as e:
             logging.error(f"Critical error in train(): {e}", exc_info=True)
+            self._update_lifecycle_state(
+                LifecycleState.ERROR,
+                reason="Training failed",
+                last_error=str(e),
+            )
 
     def predict(self, features: dict) -> tuple[float, float, float, float]:
         try:
@@ -929,6 +934,14 @@ class LatencyPredictor:
                 if tpot_valid:
                     self.tpot_data_buckets[bucket_key].append(sample)
 
+            # Track sample count and transition from ABSENT -> WAITING_FOR_SAMPLES
+            self._sample_count += 1
+            if self._lifecycle_state == LifecycleState.ABSENT:
+                self._update_lifecycle_state(
+                    LifecycleState.WAITING_FOR_SAMPLES,
+                    reason="First training sample received",
+                )
+
         except Exception as e:
             logging.error(f"Error adding training sample: {e}", exc_info=True)
 
@@ -1045,14 +1058,22 @@ class LatencyPredictor:
             # Save to staging
             ttft_conformal_path = staging_dir / TTFT_CONFORMAL_FILENAME
             with open(ttft_conformal_path, "w") as f:
-                json.dump(ttft_conformal.get_state(), f, indent=2)
+                json.dump(ttft_conformal.get_state(compact=True), f, indent=2)
 
             artifacts["ttft_conformal"] = {
                 "path": TTFT_CONFORMAL_FILENAME,
                 "format": "conformal_json",
                 "hash": self._compute_file_hash(ttft_conformal_path),
             }
-            logging.info(f"Created TTFT conformal predictor (quantile={self.quantile})")
+            stats = ttft_conformal.get_coverage_stats(y_pred_mean_ttft, y_test_ttft.values)
+            cal_alpha_str = (
+                f"{ttft_conformal._calibrated_alpha:.4f}" if ttft_conformal._calibrated_alpha is not None else "N/A"
+            )
+            adj = stats["quantile_adjustment"] or 0
+            logging.debug(
+                f"TTFT conformal: coverage={stats['coverage_percent']:.1f}%, "
+                f"calibrated_alpha={cal_alpha_str}, adjustment=+{adj:.2f}ms"
+            )
 
         # TPOT conformal
         if tpot_model and self.tpot_test_data:
@@ -1066,14 +1087,22 @@ class LatencyPredictor:
 
             tpot_conformal_path = staging_dir / TPOT_CONFORMAL_FILENAME
             with open(tpot_conformal_path, "w") as f:
-                json.dump(tpot_conformal.get_state(), f, indent=2)
+                json.dump(tpot_conformal.get_state(compact=True), f, indent=2)
 
             artifacts["tpot_conformal"] = {
                 "path": TPOT_CONFORMAL_FILENAME,
                 "format": "conformal_json",
                 "hash": self._compute_file_hash(tpot_conformal_path),
             }
-            logging.info(f"Created TPOT conformal predictor (quantile={self.quantile})")
+            stats = tpot_conformal.get_coverage_stats(y_pred_mean_tpot, y_test_tpot.values)
+            cal_alpha_str = (
+                f"{tpot_conformal._calibrated_alpha:.4f}" if tpot_conformal._calibrated_alpha is not None else "N/A"
+            )
+            adj = stats["quantile_adjustment"] or 0
+            logging.debug(
+                f"TPOT conformal: coverage={stats['coverage_percent']:.1f}%, "
+                f"calibrated_alpha={cal_alpha_str}, adjustment=+{adj:.2f}ms"
+            )
 
         # Create feature schema (ensures training/inference consistency)
         feature_schema = {
@@ -1238,30 +1267,96 @@ class LatencyPredictor:
             logging.error(f"Error flushing data: {e}", exc_info=True)
             raise
 
+    def _load_models_from_bundle(self, bundle_dir: str) -> bool:
+        """
+        Load XGBoost JSON or LightGBM txt models from a bundle directory.
+
+        Args:
+            bundle_dir: Path to the bundle directory containing model files.
+
+        Returns:
+            True if at least one model was loaded, False otherwise.
+        """
+        from pathlib import Path
+
+        bundle_path = Path(bundle_dir)
+        loaded = False
+
+        for model_name in ("ttft", "tpot"):
+            model_filename = get_model_filename(self.model_type.value, model_name)
+            model_path = bundle_path / model_filename
+
+            if not model_path.exists():
+                logging.info(f"No {model_name} model file at {model_path}")
+                continue
+
+            try:
+                if self.model_type == ModelType.XGBOOST:
+                    booster = xgb.Booster()
+                    booster.load_model(str(model_path))
+                    model = xgb.XGBRegressor()
+                    model._Booster = booster
+                elif self.model_type == ModelType.LIGHTGBM:
+                    model = lgb.Booster(model_file=str(model_path))
+                else:
+                    continue
+
+                if model_name == "ttft":
+                    self.ttft_model = model
+                else:
+                    self.tpot_model = model
+
+                loaded = True
+                logging.info(f"Loaded {model_name} {self.model_type.value} model from seed bundle: {model_path}")
+            except Exception as e:
+                logging.error(f"Failed to load {model_name} model from {model_path}: {e}", exc_info=True)
+
+        return loaded
+
     def load_models(self):
         """
-        Initialize fresh models on startup.
+        Initialize models on startup.
 
-        Training server uses bundle system - models are created fresh on startup
-        and will be trained/published via bundles as training data accumulates.
+        Checks for an existing seed bundle via BUNDLE_CURRENT_SYMLINK.
+        If found, loads models from it (READY state).
+        If not found, starts with no models (ABSENT state) and waits for training.
         """
         try:
             with self.lock:
-                # Always create fresh default models (bundle system handles persistence)
-                logging.info("Initializing fresh models (bundle system)")
-                self.ttft_model = self._create_default_model("ttft")
-                self.tpot_model = self._create_default_model("tpot")
-
-                # Use fresh sample threshold since we're starting with default models
+                # Use fresh sample threshold on cold start
                 settings.MIN_SAMPLES_FOR_RETRAIN = settings.MIN_SAMPLES_FOR_RETRAIN_FRESH
 
-                if not self.is_ready:
-                    raise RuntimeError("Failed to initialize models")
+                # Check for existing seed bundle
+                seed_path = settings.BUNDLE_CURRENT_SYMLINK
+                if os.path.exists(seed_path) and os.path.isdir(seed_path):
+                    logging.info(f"Found seed bundle at {seed_path}, loading models...")
+                    loaded = self._load_models_from_bundle(seed_path)
+                    if loaded and self.is_ready:
+                        self._update_lifecycle_state(
+                            LifecycleState.READY,
+                            reason="Loaded from seed bundle",
+                        )
+                        logging.info("Models initialized from seed bundle (READY)")
+                        return
 
-                logging.info("✓ Models initialized successfully")
+                # No seed bundle or loading failed: start with no models
+                self.ttft_model = None
+                self.tpot_model = None
+                self._update_lifecycle_state(
+                    LifecycleState.ABSENT,
+                    reason="Cold start, no seed bundle available",
+                )
+                logging.info(
+                    "No seed bundle found. Starting with no models (ABSENT). "
+                    "Models will be trained once enough samples are collected."
+                )
         except Exception as e:
-            logging.error(f"Critical error in load_models: {e}", exc_info=True)
-            raise
+            logging.error(f"Error in load_models: {e}", exc_info=True)
+            self._update_lifecycle_state(
+                LifecycleState.ERROR,
+                reason="Failed to initialize models",
+                last_error=str(e),
+            )
 
     def get_metrics(self) -> str:
         """Render Prometheus-style metrics: model, coefficients/importances, bucket counts, and quantile-specific scores."""
@@ -1275,13 +1370,12 @@ class LatencyPredictor:
             lines.append(f"model_quantile{{}} {self.quantile}")
 
             # Helper: emit linear‐model coefs or tree importances
-            def emit_metrics(model, coefficients, feats, prefix):
+            def emit_metrics(model, feats, prefix):
                 if model is None:
                     # placeholders
                     lines.append(f"{prefix}_intercept{{}} 0.0")
-                    kind = "importance"
                     for f in feats:
-                        lines.append(f'{prefix}_{kind}{{feature="{f}"}} 0.0')
+                        lines.append(f'{prefix}_importance{{feature="{f}"}} 0.0')
                     return
 
                 # XGBoost/LightGBM importances
@@ -1311,8 +1405,8 @@ class LatencyPredictor:
                 "num_tokens_generated",
                 "pod_type_cat",
             ]
-            emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
-            emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
+            emit_metrics(ttft_model, ttft_feats, "ttft")
+            emit_metrics(tpot_model, tpot_feats, "tpot")
 
             # 3) Multi-dimensional bucket counts with 3D keys
             for (queue_bucket, cache_bucket, prefix_bucket), bucket_deque in self.ttft_data_buckets.items():
@@ -1571,9 +1665,18 @@ async def health_check():
 
 @app.get("/readyz", status_code=status.HTTP_200_OK)
 async def readiness_check():
-    if not predictor.is_ready:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Models are not ready.")
-    return {"status": "ready"}
+    """
+    Readiness check — always returns 200.
+
+    Readiness means the training system is operational and can accept data.
+    Models may not be loaded yet (cold start is expected).
+    Callers that need model-gated readiness should check `models_loaded` in the response.
+    """
+    return {
+        "status": "ready",
+        "models_loaded": predictor.is_ready,
+        "lifecycle_state": predictor._lifecycle_state.value,
+    }
 
 
 @app.get("/metrics", status_code=status.HTTP_200_OK)
@@ -1776,86 +1879,36 @@ async def tpot_xgb_json():
         raise HTTPException(status_code=500, detail="Error dumping TPOT XGBoost trees")
 
 
-# REMOVED: Legacy file-based model endpoints (replaced by bundle system)
-# - /model/{model_name}/info → Use /bundle/current/info
-# - /model/{model_name}/download → Use /bundle/{bundle_id}/file/{filename}
-# - /model/{ttft|tpot}/lgb/txt → Models available in bundle as native format
-# - /model/{ttft|tpot}/lgb/importances → Feature importances can be computed from loaded models
-
-
 @app.get("/models/list")
 async def models_list():
     """
-    List available models in the current bundle.
-
-    This endpoint provides backward compatibility with tests that expect
-    the old /models/list format. It maps bundle files to model entries.
+    List available artifacts in the current bundle.
 
     Returns:
-        Dictionary with models, model_type, and server_time
+        Dictionary with models (TreeLite .so + conformal .json), model_type, and server_time
     """
     bundle = predictor.bundle_manager.get_active_bundle()
 
     if not bundle:
-        # No bundle available yet
         return {
             "models": {},
             "model_type": predictor.model_type.value,
             "server_time": datetime.now(UTC).isoformat(),
         }
 
-    # Map bundle files to model entries
     models = {}
+    files = bundle.manifest.files
 
-    # TreeLite models (always present in TreeLite mode)
-    if "ttft_treelite.so" in bundle.manifest.files:
-        file_info = bundle.manifest.files["ttft_treelite.so"]
-        models["ttft_treelite"] = {
-            "exists": True,
-            "size_bytes": file_info.get("size_bytes", 0),
-        }
-        # For backward compatibility, also report as "ttft" model
-        models["ttft"] = {
-            "exists": True,
-            "size_bytes": file_info.get("size_bytes", 0),
-        }
-    else:
-        models["ttft_treelite"] = {"exists": False, "size_bytes": 0}
-        models["ttft"] = {"exists": False, "size_bytes": 0}
-
-    if "tpot_treelite.so" in bundle.manifest.files:
-        file_info = bundle.manifest.files["tpot_treelite.so"]
-        models["tpot_treelite"] = {
-            "exists": True,
-            "size_bytes": file_info.get("size_bytes", 0),
-        }
-        # For backward compatibility, also report as "tpot" model
-        models["tpot"] = {
-            "exists": True,
-            "size_bytes": file_info.get("size_bytes", 0),
-        }
-    else:
-        models["tpot_treelite"] = {"exists": False, "size_bytes": 0}
-        models["tpot"] = {"exists": False, "size_bytes": 0}
-
-    # Conformal calibration files (.json, not .pkl)
-    if "ttft_conformal.json" in bundle.manifest.files:
-        file_info = bundle.manifest.files["ttft_conformal.json"]
-        models["ttft_conformal"] = {
-            "exists": True,
-            "size_bytes": file_info.get("size_bytes", 0),
-        }
-    else:
-        models["ttft_conformal"] = {"exists": False, "size_bytes": 0}
-
-    if "tpot_conformal.json" in bundle.manifest.files:
-        file_info = bundle.manifest.files["tpot_conformal.json"]
-        models["tpot_conformal"] = {
-            "exists": True,
-            "size_bytes": file_info.get("size_bytes", 0),
-        }
-    else:
-        models["tpot_conformal"] = {"exists": False, "size_bytes": 0}
+    for name, filename in [
+        ("ttft_treelite", "ttft_treelite.so"),
+        ("tpot_treelite", "tpot_treelite.so"),
+        ("ttft_conformal", "ttft_conformal.json"),
+        ("tpot_conformal", "tpot_conformal.json"),
+    ]:
+        if filename in files:
+            models[name] = {"exists": True, "size_bytes": files[filename].get("size_bytes", 0)}
+        else:
+            models[name] = {"exists": False, "size_bytes": 0}
 
     return {
         "models": models,
@@ -1942,6 +1995,8 @@ async def get_current_bundle_info():
     """
     bundle = predictor.bundle_manager.get_active_bundle()
 
+    lifecycle = read_lifecycle_state(settings.LIFECYCLE_STATE_PATH)
+
     if not bundle:
         # Bootstrap case: No bundles published yet (expected during startup)
         return {
@@ -1952,6 +2007,7 @@ async def get_current_bundle_info():
             "files": {},
             "training_samples": {},
             "test_samples": {},
+            "lifecycle": lifecycle,
         }
 
     return {
@@ -1964,6 +2020,7 @@ async def get_current_bundle_info():
         "created_at": bundle.manifest.created_at,  # Already ISO format string
         "model_type": bundle.manifest.model_type,
         "quantile": bundle.manifest.quantile,
+        "lifecycle": lifecycle,
     }
 
 

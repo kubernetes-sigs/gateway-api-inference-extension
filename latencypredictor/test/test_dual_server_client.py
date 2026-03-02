@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import asyncio
+import logging
 import os
 import random
 import time
@@ -21,6 +22,8 @@ import aiohttp
 import numpy as np
 import pytest
 import requests
+
+log = logging.getLogger(__name__)
 
 # Base URLs for the dual-server architecture
 
@@ -56,20 +59,20 @@ def wait_for_ready(url: str, timeout: float = 120.0, interval: float = 2.0):
             r = requests.get(f"{url}/readyz", timeout=5.0)
 
             if r.status_code == 200:
-                print(f"✓ Server at {url} is ready (after {elapsed:.1f}s, {attempts} attempts)")
+                log.info(f"✓ Server at {url} is ready (after {elapsed:.1f}s, {attempts} attempts)")
                 return
             else:
                 # Server responded but not ready
                 last_error = f"HTTP {r.status_code}: {r.text[:200]}"
-                print(f"  Attempt {attempts}: Server responded with {r.status_code} (elapsed: {elapsed:.1f}s)")
+                log.debug(f"  Attempt {attempts}: Server responded with {r.status_code} (elapsed: {elapsed:.1f}s)")
 
         except requests.exceptions.ConnectionError as e:
             last_error = f"Connection error: {e}"
-            print(f"  Attempt {attempts}: Connection failed (elapsed: {elapsed:.1f}s)")
+            log.debug(f"  Attempt {attempts}: Connection failed (elapsed: {elapsed:.1f}s)")
 
         except requests.RequestException as e:
             last_error = f"Request failed: {e}"
-            print(f"  Attempt {attempts}: Request error - {type(e).__name__} (elapsed: {elapsed:.1f}s)")
+            log.debug(f"  Attempt {attempts}: Request error - {type(e).__name__} (elapsed: {elapsed:.1f}s)")
 
         if elapsed > timeout:
             error_msg = (
@@ -95,28 +98,81 @@ def ensure_servers_ready():
     This fixture runs automatically before any tests in this module.
     If servers don't become ready, all tests are skipped with diagnostic info.
     """
-    print("\n" + "=" * 70)
-    print("PRE-TEST SERVER READINESS CHECK")
-    print("=" * 70)
-    print(f"Prediction server URL: {PREDICTION_URL}")
-    print(f"Training server URL:   {TRAINING_URL}")
-    print("Timeout: 120 seconds per server")
-    print("=" * 70 + "\n")
+    log.info("\n" + "=" * 70)
+    log.info("PRE-TEST SERVER READINESS CHECK")
+    log.info("=" * 70)
+    log.info(f"Prediction server URL: {PREDICTION_URL}")
+    log.info(f"Training server URL:   {TRAINING_URL}")
+    log.info("Timeout: 120 seconds per server")
+    log.info("=" * 70 + "\n")
 
-    print("Waiting for prediction server...")
+    log.info("Waiting for prediction server...")
     wait_for_ready(PREDICTION_URL)
 
-    print("\nWaiting for training server...")
+    log.info("\nWaiting for training server...")
     wait_for_ready(TRAINING_URL)
 
-    print("\n" + "=" * 70)
-    print("✓ ALL SERVERS READY - Starting tests")
-    print("=" * 70 + "\n")
+    log.info("\n" + "=" * 70)
+    log.info("✓ ALL SERVERS READY - Starting tests")
+    log.info("=" * 70 + "\n")
+
+
+@pytest.fixture(scope="module")
+def trained_model_ready(ensure_servers_ready):
+    """Ensure a trained model bundle is loaded on the prediction server.
+
+    Idempotent: checks /readyz for models_loaded + bundle_id first.
+    If models are already loaded, returns immediately.
+    Otherwise: flushes old data, adds training samples, waits for bundle,
+    and calls /reload to force sync.
+
+    Module-scoped so training happens at most once per test run.
+    """
+    # Check if models are already loaded
+    try:
+        readyz_r = requests.get(f"{PREDICTION_URL}/readyz", timeout=5)
+        if readyz_r.status_code == 200:
+            body = readyz_r.json()
+            if body.get("models_loaded") and body.get("bundle_id"):
+                log.info(
+                    f"trained_model_ready: models already loaded " f"(bundle={body['bundle_id']}), skipping training"
+                )
+                return body
+    except requests.RequestException as e:
+        log.warning(f"trained_model_ready: readyz check failed ({e}), will trigger training")
+
+    # Models not loaded — trigger training
+    log.info("trained_model_ready: no models loaded, triggering training...")
+
+    flush_training_data_robust(TRAINING_URL)
+
+    entries = [generate_random_training_payload() for _ in range(150)]
+    r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": entries})
+    assert r.status_code == 202, f"Failed to add training data: {r.status_code}"
+    log.info(f"trained_model_ready: added {len(entries)} training samples")
+
+    test_train_ratio = float(os.getenv("LATENCY_TEST_TRAIN_RATIO", "0.1"))
+    expected_training = int(len(entries) * (1 - test_train_ratio))
+    min_samples = int(expected_training * 0.8)
+
+    bundle_info = wait_for_bundle_with_min_samples(
+        PREDICTION_URL, min_ttft_samples=min_samples, min_tpot_samples=min_samples
+    )
+
+    # Force sync in case background loop hasn't picked it up yet
+    try:
+        requests.post(f"{PREDICTION_URL}/reload", timeout=20)
+    except requests.RequestException:
+        pass  # Background sync will handle it
+
+    log.info(f"trained_model_ready: models loaded " f"(bundle={bundle_info.get('bundle_id', '?')[:8]})")
+    return bundle_info
 
 
 def test_prediction_server_healthz():
     """Test prediction server health endpoint."""
     r = requests.get(f"{PREDICTION_URL}/healthz")
+    log.info(f"GET {PREDICTION_URL}/healthz -> {r.status_code}: {r.json()}")
     assert r.status_code == 200
     assert r.json().get("status") == "ok"
 
@@ -124,6 +180,7 @@ def test_prediction_server_healthz():
 def test_training_server_healthz():
     """Test training server health endpoint."""
     r = requests.get(f"{TRAINING_URL}/healthz")
+    log.info(f"GET {TRAINING_URL}/healthz -> {r.status_code}: {r.json()}")
     assert r.status_code == 200
     assert r.json().get("status") == "ok"
 
@@ -131,6 +188,7 @@ def test_training_server_healthz():
 def test_prediction_server_readyz():
     """Test prediction server readiness."""
     r = requests.get(f"{PREDICTION_URL}/readyz")
+    log.info(f"GET {PREDICTION_URL}/readyz -> {r.status_code}: {r.json()}")
     assert r.status_code == 200
     assert r.json().get("status") == "ready"
 
@@ -138,6 +196,7 @@ def test_prediction_server_readyz():
 def test_training_server_readyz():
     """Test training server readiness."""
     r = requests.get(f"{TRAINING_URL}/readyz")
+    log.info(f"GET {TRAINING_URL}/readyz -> {r.status_code}: {r.json()}")
     assert r.status_code == 200
     assert r.json().get("status") == "ready"
 
@@ -155,10 +214,10 @@ def test_prediction_server_status():
     assert data["model_type"] in ["xgboost", "lightgbm"]
     assert 0 < data["quantile"] <= 1.0
 
-    print(f"Prediction server using model type: {data['model_type']}")
-    print(f"Models exist: {data['models_exist']}")
-    print(f"Quantile: {data['quantile']}")
-    print(f"Models ready: {data['is_ready']}")
+    log.info(f"Prediction server using model type: {data['model_type']}")
+    log.info(f"Models exist: {data['models_exist']}")
+    log.info(f"Quantile: {data['quantile']}")
+    log.info(f"Models ready: {data['is_ready']}")
 
 
 def test_training_server_model_info():
@@ -171,7 +230,7 @@ def test_training_server_model_info():
     assert "available_endpoints" in data
     assert data["model_type"] in ["xgboost", "lightgbm"]
 
-    print(f"Training server using model type: {data['model_type']}")
+    log.info(f"Training server using model type: {data['model_type']}")
 
 
 def test_training_server_models_list():
@@ -183,145 +242,145 @@ def test_training_server_models_list():
     assert "models" in data
     assert "model_type" in data
     assert "server_time" in data
+    log.info(f"GET {TRAINING_URL}/models/list -> model_type={data['model_type']}")
 
     models = data["models"]
-    expected_models = ["ttft", "tpot"]
+    if not models:
+        # Cold start: no bundle exists yet (test runs before training)
+        log.info("No models available yet (pre-training) — endpoint structure validated")
+        return
 
-    # Note: TreeLite models are NOT compatible with quantile regression
-    # They will only be available if using standard regression objectives
-    # For quantile regression, native XGBoost/LightGBM prediction is used instead
-    print("Note: TreeLite mode enabled but incompatible with quantile regression")
-    print("TreeLite models will be listed but may not exist when using quantile regression")
-
-    for model_name in expected_models:
-        assert model_name in models, f"Model {model_name} should be listed"
-        print(
-            f"Model {model_name}: exists={models[model_name]['exists']}, size={models[model_name]['size_bytes']} bytes"
+    # If models exist, verify expected artifacts are listed
+    expected_artifacts = ["ttft_treelite", "tpot_treelite", "ttft_conformal", "tpot_conformal"]
+    for artifact_name in expected_artifacts:
+        assert artifact_name in models, f"Artifact {artifact_name} should be listed"
+        log.info(
+            f"Artifact {artifact_name}: exists={models[artifact_name]['exists']}, size={models[artifact_name]['size_bytes']} bytes"
         )
 
 
 def test_model_download_from_training_server():
-    """Test downloading models from training server."""
-    # First check what models are available
+    """Test downloading TreeLite models from training server via bundle system."""
+    # Check what artifacts are available
     models_r = requests.get(f"{TRAINING_URL}/models/list")
     models_data = models_r.json()
 
-    # Test basic models (ttft, tpot)
-    for model_name in ["ttft", "tpot"]:
-        if models_data["models"][model_name]["exists"]:
-            # Test model info endpoint
+    # Test TreeLite artifacts (the only inference artifacts)
+    for model_name in ["ttft_treelite", "tpot_treelite"]:
+        if models_data["models"].get(model_name, {}).get("exists"):
             info_r = requests.get(f"{TRAINING_URL}/model/{model_name}/info")
             assert info_r.status_code == 200
             info_data = info_r.json()
-            # Check ready status instead of exists (new API)
             assert info_data["ready"] == True, f"Model {model_name} not ready: {info_data}"
             assert info_data["size_bytes"] > 0
 
-            # Test model download with retry and streaming
+            # Test model download with retry
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    download_r = requests.get(
-                        f"{TRAINING_URL}/model/{model_name}/download",
-                        timeout=30,
-                        stream=True,  # Use streaming to handle large files better
-                    )
+                    download_r = requests.get(f"{TRAINING_URL}/model/{model_name}/download", timeout=30, stream=True)
                     if download_r.status_code == 200:
-                        # Read content in chunks to avoid memory issues
                         content_length = 0
                         for chunk in download_r.iter_content(chunk_size=8192):
                             content_length += len(chunk)
-
-                        assert content_length > 0, f"Downloaded {model_name} model is empty"
-                        print(f"Successfully downloaded {model_name} model ({content_length} bytes)")
+                        assert content_length > 0, f"Downloaded {model_name} is empty"
+                        log.info(f"Successfully downloaded {model_name} ({content_length} bytes)")
                         break
                 except requests.exceptions.ChunkedEncodingError as e:
-                    print(f"Download attempt {attempt + 1}/{max_retries} failed for {model_name}: {e}")
+                    log.error(f"Download attempt {attempt + 1}/{max_retries} failed for {model_name}: {e}")
                     if attempt == max_retries - 1:
-                        print(f"⚠️ Model download test skipped for {model_name} due to connection issues")
-                        # Don't fail the test - this might be a network/server issue
+                        log.warning(f"TreeLite download test skipped for {model_name} due to connection issues")
                         continue
-                    time.sleep(2)  # Wait before retry
-
-    # Test TreeLite models for XGBoost and LightGBM
-    model_type = models_data["model_type"]
-    if model_type in ["xgboost", "lightgbm"]:
-        for model_name in ["ttft_treelite", "tpot_treelite"]:
-            if models_data["models"].get(model_name, {}).get("exists"):
-                # Test model info endpoint
-                info_r = requests.get(f"{TRAINING_URL}/model/{model_name}/info")
-                assert info_r.status_code == 200
-                info_data = info_r.json()
-                # Check ready status instead of exists (new API)
-                assert info_data["ready"] == True, f"Model {model_name} not ready: {info_data}"
-                assert info_data["size_bytes"] > 0
-
-                # Test model download with retry and streaming
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        download_r = requests.get(
-                            f"{TRAINING_URL}/model/{model_name}/download", timeout=30, stream=True
-                        )
-                        if download_r.status_code == 200:
-                            # Read content in chunks to avoid memory issues
-                            content_length = 0
-                            for chunk in download_r.iter_content(chunk_size=8192):
-                                content_length += len(chunk)
-
-                            assert content_length > 0, f"Downloaded {model_name} model is empty"
-                            print(f"Successfully downloaded {model_name} TreeLite model ({content_length} bytes)")
-                            break
-                    except requests.exceptions.ChunkedEncodingError as e:
-                        print(f"Download attempt {attempt + 1}/{max_retries} failed for {model_name}: {e}")
-                        if attempt == max_retries - 1:
-                            print(f"⚠️ TreeLite model download test skipped for {model_name} due to connection issues")
-                            continue
-                        time.sleep(2)  # Wait before retry
+                    time.sleep(2)
 
 
 def test_treelite_models_on_training_server():
-    """Test TreeLite model endpoints on training server for XGBoost and LightGBM.
+    """Test lifecycle state and bundle info on training server.
 
-    NOTE: This test is designed to pass even when TreeLite models are missing,
-    because TreeLite compilation happens asynchronously during bundle creation.
-    The test just verifies the API endpoints work correctly.
-
-    The actual TreeLite functionality is tested by test_treelite_conformal_mode,
-    which waits for training to complete and verifies full end-to-end behavior.
+    Verifies that /bundle/current/info includes lifecycle state, and
+    that /readyz always returns 200 with lifecycle_state in the body.
     """
-
-    # Check if TreeLite mode is enabled via shared ConfigMap
     model_type = os.getenv("LATENCY_MODEL_TYPE", "xgboost")
-    print(f"Testing TreeLite model endpoints for {model_type}...")
+    log.info(f"Testing lifecycle state and bundle info for {model_type}...")
 
-    # Test TTFT TreeLite model endpoint
-    ttft_info_r = requests.get(f"{TRAINING_URL}/model/ttft_treelite/info")
-    assert ttft_info_r.status_code in [200, 404], f"Expected 200 or 404, got {ttft_info_r.status_code}"
+    # Check /bundle/current/info for lifecycle state
+    bundle_info_r = requests.get(f"{TRAINING_URL}/bundle/current/info")
+    assert bundle_info_r.status_code == 200, f"Expected 200, got {bundle_info_r.status_code}"
+    bundle_info = bundle_info_r.json()
 
-    if ttft_info_r.status_code == 200:
-        ttft_info = ttft_info_r.json()
-        if ttft_info.get("exists") or ttft_info.get("ready"):
-            print(f"✓ TTFT TreeLite model available ({ttft_info.get('size_bytes', 0)} bytes)")
-            assert ttft_info.get("size_bytes", 0) > 0, "TTFT TreeLite model should have non-zero size"
-        else:
-            print("⚠️  TTFT TreeLite model not yet compiled (this is expected if no training has occurred)")
+    # Lifecycle field should always be present
+    assert "lifecycle" in bundle_info, "Expected 'lifecycle' key in /bundle/current/info response"
+    lifecycle = bundle_info["lifecycle"]
+    assert "state" in lifecycle, "Expected 'state' key in lifecycle"
+
+    valid_states = ["ABSENT", "WAITING_FOR_SAMPLES", "TRAINING", "COMPILING", "READY", "ERROR"]
+    assert lifecycle["state"] in valid_states, f"Unexpected lifecycle state: {lifecycle['state']}"
+    log.info(f"  Lifecycle state: {lifecycle['state']}")
+
+    # Check /readyz always returns 200
+    readyz_r = requests.get(f"{TRAINING_URL}/readyz")
+    assert readyz_r.status_code == 200, f"Expected /readyz to return 200, got {readyz_r.status_code}"
+    readyz_body = readyz_r.json()
+    assert "models_loaded" in readyz_body, "Expected 'models_loaded' in /readyz response"
+    assert "lifecycle_state" in readyz_body, "Expected 'lifecycle_state' in /readyz response"
+    log.info(
+        f"  /readyz: models_loaded={readyz_body['models_loaded']}, lifecycle_state={readyz_body['lifecycle_state']}"
+    )
+
+
+def test_lifecycle_state_transitions():
+    """Test lifecycle state transitions on the training server.
+
+    Verifies:
+    - Initial state is ABSENT or WAITING_FOR_SAMPLES (or READY if seed bundle)
+    - /predict returns 503 when no models are loaded
+    - /bundle/current/info lifecycle field has required keys
+    """
+    log.info("Testing lifecycle state transitions...")
+
+    # Check initial lifecycle state
+    bundle_info_r = requests.get(f"{TRAINING_URL}/bundle/current/info")
+    assert bundle_info_r.status_code == 200
+    bundle_info = bundle_info_r.json()
+    lifecycle = bundle_info.get("lifecycle", {})
+
+    state = lifecycle.get("state")
+    valid_initial_states = ["ABSENT", "WAITING_FOR_SAMPLES", "READY"]
+    assert state in valid_initial_states, f"Expected initial state in {valid_initial_states}, got {state}"
+    log.info(f"  Initial lifecycle state: {state}")
+
+    # Verify lifecycle has required fields
+    required_fields = ["state", "bundle_id", "reason", "last_error", "sample_count", "timestamp"]
+    for field in required_fields:
+        assert field in lifecycle, f"Missing required lifecycle field: {field}"
+    log.info(f"  All required lifecycle fields present: {required_fields}")
+
+    # Check /readyz always returns 200 regardless of model state
+    readyz_r = requests.get(f"{TRAINING_URL}/readyz")
+    assert readyz_r.status_code == 200, f"Expected /readyz to always return 200, got {readyz_r.status_code}"
+
+    # If models are not loaded, /predict should return 503
+    readyz_body = readyz_r.json()
+    if not readyz_body.get("models_loaded", False):
+        predict_r = requests.post(
+            f"{TRAINING_URL}/predict",
+            json={
+                "kv_cache_percentage": 0.5,
+                "input_token_length": 100,
+                "num_request_waiting": 1,
+                "num_request_running": 1,
+                "num_tokens_generated": 10,
+                "prefix_cache_score": 0.5,
+            },
+        )
+        assert (
+            predict_r.status_code == 503
+        ), f"Expected /predict to return 503 when models not loaded, got {predict_r.status_code}"
+        log.info("  /predict correctly returns 503 when models not loaded")
     else:
-        print("⚠️  TTFT TreeLite model endpoint returned 404 (model not yet created)")
+        log.info("  Models already loaded, skipping /predict 503 check")
 
-    # Test TPOT TreeLite model endpoint
-    tpot_info_r = requests.get(f"{TRAINING_URL}/model/tpot_treelite/info")
-    assert tpot_info_r.status_code in [200, 404], f"Expected 200 or 404, got {tpot_info_r.status_code}"
-
-    if tpot_info_r.status_code == 200:
-        tpot_info = tpot_info_r.json()
-        if tpot_info.get("exists") or tpot_info.get("ready"):
-            print(f"✓ TPOT TreeLite model available ({tpot_info.get('size_bytes', 0)} bytes)")
-            assert tpot_info.get("size_bytes", 0) > 0, "TPOT TreeLite model should have non-zero size"
-        else:
-            print("⚠️  TPOT TreeLite model not yet compiled (this is expected if no training has occurred)")
-    else:
-        print("⚠️  TPOT TreeLite model endpoint returned 404 (model not yet created)")
+    log.info("Lifecycle state transitions test passed!")
 
 
 def test_add_training_data_to_training_server():
@@ -359,7 +418,7 @@ def test_add_training_data_to_training_server():
     assert r.status_code == 202, f"Expected 202, got {r.status_code}"
     assert r.json().get("message") == "Accepted 50 training samples."
 
-    print("Successfully sent training data to training server")
+    log.info("Successfully sent training data to training server")
 
     # Clean up: Flush the data we just added to avoid polluting other tests
     # (especially important for conformal prediction tests that need clean data)
@@ -369,7 +428,7 @@ def test_add_training_data_to_training_server():
         timeout=10,
     )
     if flush_r.status_code == 200:
-        print(f"  Cleaned up test data: {flush_r.json().get('message', 'OK')}")
+        log.info(f"  Cleaned up test data: {flush_r.json().get('message', 'OK')}")
 
 
 def test_prediction_server_model_sync():
@@ -380,13 +439,13 @@ def test_prediction_server_model_sync():
     MIN_TRAINING_SAMPLES = 100  # Need ≥100 samples to trigger training
 
     # 1. Flush old data to ensure clean state
-    print("Flushing old training data...")
+    log.info("Flushing old training data...")
     flush_training_data_robust(TRAINING_URL)
 
     # 2. Add training data (need ≥100 samples to trigger training)
-    print(f"Adding {MIN_TRAINING_SAMPLES + 50} training samples...")
+    log.info(f"Adding {MIN_TRAINING_SAMPLES + 50} training samples...")
     entries = []
-    for i in range(MIN_TRAINING_SAMPLES + 50):  # Add 150 samples
+    for _ in range(MIN_TRAINING_SAMPLES + 50):  # Add 150 samples
         entries.append(
             {
                 "kv_cache_percentage": random.uniform(0.1, 0.9),
@@ -403,7 +462,7 @@ def test_prediction_server_model_sync():
     payload = {"entries": entries}
     r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json=payload)
     assert r.status_code == 202
-    print(f"✓ Added {len(entries)} training samples")
+    log.info(f"✓ Added {len(entries)} training samples")
 
     # 3. Wait for bundle with expected samples (outcome-based, not cycle-based)
     # We added 150 samples, expect ~135 in training (test_train_ratio=0.1)
@@ -419,13 +478,13 @@ def test_prediction_server_model_sync():
     ttft_samples = bundle_info.get("training_samples", {}).get("ttft", 0)
     tpot_samples = bundle_info.get("training_samples", {}).get("tpot", 0)
 
-    print(f"✓ Prediction server models are trained! (TTFT: {ttft_samples}, TPOT: {tpot_samples} samples)")
+    log.info(f"✓ Prediction server models are trained! (TTFT: {ttft_samples}, TPOT: {tpot_samples} samples)")
 
     # 5. Cleanup: flush data for next test
     flush_training_data_robust(TRAINING_URL)
 
 
-def test_prediction_endpoint_response_format():
+def test_prediction_endpoint_response_format(trained_model_ready):
     """Test prediction endpoint response format and required fields (model-agnostic)."""
     features = {
         "kv_cache_percentage": 0.5,
@@ -459,21 +518,25 @@ def test_prediction_endpoint_response_format():
         tpot_samples = bundle_info.get("training_samples", {}).get("tpot", 0)
 
         if ttft_samples >= 100 and tpot_samples >= 100:
-            print(f"✓ Prediction using TRAINED models: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
-            print(f"  Trained on {ttft_samples} TTFT samples, {tpot_samples} TPOT samples")
+            log.info(f"✓ Prediction using TRAINED models: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
+            log.info(f"  Trained on {ttft_samples} TTFT samples, {tpot_samples} TPOT samples")
         else:
-            print(f"⚠️  Prediction using DEFAULT models: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
-            print(f"  Only {ttft_samples} TTFT samples, {tpot_samples} TPOT samples (default models are synthetic)")
+            log.warning(
+                f"⚠️  Prediction using DEFAULT models: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms"
+            )
+            log.warning(
+                f"  Only {ttft_samples} TTFT samples, {tpot_samples} TPOT samples (default models are synthetic)"
+            )
     else:
-        print("⚠️  No bundle info available - cannot determine if using defaults")
-        print(f"  Prediction: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
+        log.warning("⚠️  No bundle info available - cannot determine if using defaults")
+        log.info(f"  Prediction: TTFT={data['ttft_ms']:.2f}ms, TPOT={data['tpot_ms']:.2f}ms")
 
-    print(f"  Model type: {data['model_type']}")
+    log.info(f"  Model type: {data['model_type']}")
 
 
-def test_bulk_prediction_strict():
+def test_bulk_prediction_strict(trained_model_ready):
     """Test bulk predictions with strict error handling."""
-    print("Testing bulk prediction strict endpoint...")
+    log.info("Testing bulk prediction strict endpoint...")
 
     requests_data = [
         {
@@ -525,12 +588,12 @@ def test_bulk_prediction_strict():
         assert "model_type" in prediction
         assert "quantile" in prediction
 
-    print("✓ Bulk prediction strict endpoint test passed")
+    log.info("✓ Bulk prediction strict endpoint test passed")
 
 
 def test_bulk_prediction_with_validation_errors():
     """Test that bulk predictions fail completely when any request has validation errors."""
-    print("Testing bulk prediction validation error handling...")
+    log.info("Testing bulk prediction validation error handling...")
 
     requests_data = [
         # Valid request
@@ -562,12 +625,12 @@ def test_bulk_prediction_with_validation_errors():
     error_data = r.json()
     assert "detail" in error_data
 
-    print("✓ Bulk prediction correctly failed when any request had validation errors")
+    log.info("✓ Bulk prediction correctly failed when any request had validation errors")
 
 
-def test_bulk_prediction_all_valid():
+def test_bulk_prediction_all_valid(trained_model_ready):
     """Test bulk predictions when all requests are valid."""
-    print("Testing bulk prediction with all valid requests...")
+    log.info("Testing bulk prediction with all valid requests...")
 
     requests_data = [
         {
@@ -594,11 +657,17 @@ def test_bulk_prediction_all_valid():
     assert r.status_code == 200
 
     data = r.json()
+    log.info(
+        f"Bulk response: total={data['total_requests']}, success={data['successful_predictions']}, failed={data['failed_predictions']}"
+    )
+    if data.get("errors"):
+        for err in data["errors"]:
+            log.error(f"  Bulk prediction error at index {err.get('index')}: {err.get('error')}")
     assert data["total_requests"] == 2
     assert data["successful_predictions"] == 2
     assert data["failed_predictions"] == 0
 
-    print("✓ Bulk prediction succeeded with all valid requests")
+    log.info("✓ Bulk prediction succeeded with all valid requests")
 
 
 def test_prediction_missing_prefix_cache_score():
@@ -615,7 +684,7 @@ def test_prediction_missing_prefix_cache_score():
     r = requests.post(f"{PREDICTION_URL}/predict", json=features)
     assert r.status_code == 422  # Should fail validation
 
-    print("✓ Prediction correctly failed when prefix_cache_score was missing")
+    log.info("✓ Prediction correctly failed when prefix_cache_score was missing")
 
 
 def test_training_server_metrics():
@@ -643,8 +712,8 @@ def test_training_server_metrics():
     if has_importance:
         assert 'feature="prefix_cache_score"' in content, "Should have prefix_cache_score importance for TTFT model"
 
-    print("Training server metrics endpoint working correctly")
-    print("✓ Prefix cache score feature found in metrics")
+    log.info("Training server metrics endpoint working correctly")
+    log.info("✓ Prefix cache score feature found in metrics")
 
 
 def test_model_consistency_between_servers():
@@ -661,7 +730,7 @@ def test_model_consistency_between_servers():
         training_model_type == prediction_model_type
     ), f"Model type mismatch: training={training_model_type}, prediction={prediction_model_type}"
 
-    print(f"Model type consistent across servers: {training_model_type}")
+    log.info(f"Model type consistent across servers: {training_model_type}")
 
 
 def test_model_specific_endpoints_on_training_server():
@@ -669,44 +738,44 @@ def test_model_specific_endpoints_on_training_server():
     model_type = os.getenv("LATENCY_MODEL_TYPE", "xgboost")
 
     if model_type == "xgboost":
-        print("Testing XGBoost tree endpoints on training server...")
+        log.info("Testing XGBoost tree endpoints on training server...")
 
         # Test TTFT trees
         ttft_response = requests.get(f"{TRAINING_URL}/model/ttft/xgb/json")
         if ttft_response.status_code == 200:
             ttft_trees = ttft_response.json()
             assert isinstance(ttft_trees, list), "TTFT trees should be a list"
-            print(f"✓ TTFT XGBoost trees available: {len(ttft_trees)} trees")
+            log.info(f"✓ TTFT XGBoost trees available: {len(ttft_trees)} trees")
         else:
-            print(f"TTFT XGBoost trees not yet available (status: {ttft_response.status_code})")
+            log.info(f"TTFT XGBoost trees not yet available (status: {ttft_response.status_code})")
 
         # Test TPOT trees
         tpot_response = requests.get(f"{TRAINING_URL}/model/tpot/xgb/json")
         if tpot_response.status_code == 200:
             tpot_trees = tpot_response.json()
             assert isinstance(tpot_trees, list), "TPOT trees should be a list"
-            print(f"✓ TPOT XGBoost trees available: {len(tpot_trees)} trees")
+            log.info(f"✓ TPOT XGBoost trees available: {len(tpot_trees)} trees")
         else:
-            print(f"TPOT XGBoost trees not yet available (status: {tpot_response.status_code})")
+            log.info(f"TPOT XGBoost trees not yet available (status: {tpot_response.status_code})")
 
     elif model_type == "lightgbm":
-        print("Testing LightGBM endpoints on training server...")
+        log.info("Testing LightGBM endpoints on training server...")
 
         # Test TTFT model text format
         ttft_txt_response = requests.get(f"{TRAINING_URL}/model/ttft/lgb/txt")
         if ttft_txt_response.status_code == 200:
-            print("✓ TTFT LightGBM text model available")
+            log.info("✓ TTFT LightGBM text model available")
             assert ttft_txt_response.headers.get("content-type") == "text/plain; charset=utf-8"
         else:
-            print(f"TTFT LightGBM text model not yet available (status: {ttft_txt_response.status_code})")
+            log.info(f"TTFT LightGBM text model not yet available (status: {ttft_txt_response.status_code})")
 
         # Test TPOT model text format
         tpot_txt_response = requests.get(f"{TRAINING_URL}/model/tpot/lgb/txt")
         if tpot_txt_response.status_code == 200:
-            print("✓ TPOT LightGBM text model available")
+            log.info("✓ TPOT LightGBM text model available")
             assert tpot_txt_response.headers.get("content-type") == "text/plain; charset=utf-8"
         else:
-            print(f"TPOT LightGBM text model not yet available (status: {tpot_txt_response.status_code})")
+            log.info(f"TPOT LightGBM text model not yet available (status: {tpot_txt_response.status_code})")
 
         # Test TTFT feature importances
         ttft_imp_response = requests.get(f"{TRAINING_URL}/model/ttft/lgb/importances")
@@ -725,9 +794,9 @@ def test_model_specific_endpoints_on_training_server():
             for feature in expected_features:
                 assert feature in ttft_importances, f"Missing feature importance: {feature}"
 
-            print(f"✓ TTFT LightGBM importances available with {len(ttft_importances)} features")
+            log.info(f"✓ TTFT LightGBM importances available with {len(ttft_importances)} features")
         else:
-            print(f"TTFT LightGBM importances not yet available (status: {ttft_imp_response.status_code})")
+            log.info(f"TTFT LightGBM importances not yet available (status: {ttft_imp_response.status_code})")
 
         # Test TPOT feature importances
         tpot_imp_response = requests.get(f"{TRAINING_URL}/model/tpot/lgb/importances")
@@ -746,9 +815,9 @@ def test_model_specific_endpoints_on_training_server():
             for feature in expected_features:
                 assert feature in tpot_importances, f"Missing feature importance: {feature}"
 
-            print(f"✓ TPOT LightGBM importances available with {len(tpot_importances)} features")
+            log.info(f"✓ TPOT LightGBM importances available with {len(tpot_importances)} features")
         else:
-            print(f"TPOT LightGBM importances not yet available (status: {tpot_imp_response.status_code})")
+            log.info(f"TPOT LightGBM importances not yet available (status: {tpot_imp_response.status_code})")
 
     else:
         pytest.skip(f"No model-specific endpoints to test for {model_type}")
@@ -924,16 +993,16 @@ def flush_training_data_robust(training_url: str, max_attempts: int = 2, timeout
                     status = status_r.json()
                     total = status["training_data"]["total_samples"] + status["test_data"]["total_samples"]
                     if total == 0:
-                        print(f"  ✓ Training data flushed: {flush_r.json().get('message', 'OK')}")
+                        log.info(f"Training data flushed: {flush_r.json().get('message', 'OK')}")
                         return flush_r.json()
                     else:
                         # Should never happen with atomic flush, but retry once
-                        print(f"  ⚠️  Flush succeeded but {total} samples remain (attempt {attempt+1}/{max_attempts})")
+                        log.warning(f"Flush succeeded but {total} samples remain (attempt {attempt+1}/{max_attempts})")
             else:
-                print(f"  ⚠️  Flush returned {flush_r.status_code} (attempt {attempt+1}/{max_attempts})")
+                log.warning(f"Flush returned {flush_r.status_code} (attempt {attempt+1}/{max_attempts})")
 
         except requests.RequestException as e:
-            print(f"  ⚠️  Flush request failed: {e} (attempt {attempt+1}/{max_attempts})")
+            log.warning(f"Flush request failed: {e} (attempt {attempt+1}/{max_attempts})")
 
         if attempt < max_attempts - 1:
             time.sleep(1)  # Brief wait before retry
@@ -960,8 +1029,8 @@ def wait_for_training_cycles(prediction_url: str, training_url: str, num_cycles:
     status_r = requests.get(f"{prediction_url}/status", timeout=10)
     initial_last_load = status_r.json().get("last_model_load")
 
-    print(f"Waiting for {num_cycles} training cycles to complete...")
-    print(f"  Initial last_load timestamp: {initial_last_load}")
+    log.info(f"Waiting for {num_cycles} training cycles to complete...")
+    log.debug(f"Initial last_load timestamp: {initial_last_load}")
 
     timestamps = [initial_last_load]
     for cycle in range(num_cycles):
@@ -984,8 +1053,8 @@ def wait_for_training_cycles(prediction_url: str, training_url: str, num_cycles:
                         if reload_data.get("synced") and cycle == num_cycles - 1:
                             synced = True
 
-                        print(
-                            f"  ✓ Cycle {cycle+1}/{num_cycles} completed after {elapsed:.0f}s (synced: {reload_data.get('synced', False)})"
+                        log.info(
+                            f"Cycle {cycle+1}/{num_cycles} completed after {elapsed:.0f}s (synced: {reload_data.get('synced', False)})"
                         )
                         break
         else:
@@ -994,7 +1063,7 @@ def wait_for_training_cycles(prediction_url: str, training_url: str, num_cycles:
     if num_cycles > 1 and not synced:
         raise RuntimeError(f"Models were not synced after {num_cycles} training cycles (hash may not have changed)")
 
-    print(f"✓ All {num_cycles} training cycles completed")
+    log.info(f"All {num_cycles} training cycles completed")
 
 
 def wait_for_bundle_with_min_samples(
@@ -1025,68 +1094,116 @@ def wait_for_bundle_with_min_samples(
         # Auto-calculate timeout based on config
         retraining_interval = int(os.getenv("LATENCY_RETRAINING_INTERVAL_SEC", "1"))
         sync_interval = int(os.getenv("MODEL_SYNC_INTERVAL_SEC", "10"))
+        build_poll = 5  # build worker poll interval
+        compile_time = 5  # TreeLite compilation estimate
 
-        # Allow time for 2 full cycles (training + sync) plus buffer
-        # Example: (1 + 10) * 2 + 10 = 32 seconds with defaults
-        timeout = (retraining_interval + sync_interval) * 2 + 10
+        # Full pipeline: train + build_poll + compile + sync + buffer
+        timeout = retraining_interval + build_poll + compile_time + sync_interval * 2 + 15
 
-    print(
-        f"Waiting for bundle with ≥{min_ttft_samples} TTFT and ≥{min_tpot_samples} TPOT samples (timeout: {timeout}s)..."
+    log.info(
+        f"Waiting for bundle with >={min_ttft_samples} TTFT and >={min_tpot_samples} TPOT samples (timeout: {timeout}s)..."
     )
+
+    # Also get training server URL for diagnostics
+    training_url = os.getenv("TRAINING_SERVER_URL", "")
 
     start_time = time.time()
     last_check_time = 0
+    poll_count = 0
 
     while time.time() - start_time < timeout:
         try:
-            # Check status every 1 second
-            if time.time() - last_check_time >= 1:
+            # Check status every 2 seconds
+            if time.time() - last_check_time >= 2:
                 last_check_time = time.time()
+                poll_count += 1
+                elapsed = int(time.time() - start_time)
 
                 status_r = requests.get(f"{prediction_url}/status", timeout=5)
                 if status_r.status_code == 200:
                     status_data = status_r.json()
                     bundle_info = status_data.get("bundle_info")
+                    lifecycle = status_data.get("training_lifecycle")
 
                     if bundle_info:
                         ttft_samples = bundle_info.get("training_samples", {}).get("ttft", 0)
                         tpot_samples = bundle_info.get("training_samples", {}).get("tpot", 0)
+                        bundle_id = bundle_info.get("bundle_id", "?")
+                        is_ready = status_data.get("is_ready", False)
 
-                        if ttft_samples >= min_ttft_samples and tpot_samples >= min_tpot_samples:
-                            elapsed = time.time() - start_time
-                            print(
-                                f"  ✓ Bundle found after {elapsed:.0f}s: TTFT={ttft_samples}, TPOT={tpot_samples} samples"
+                        if ttft_samples >= min_ttft_samples and tpot_samples >= min_tpot_samples and is_ready:
+                            log.info(
+                                f"Bundle found after {elapsed}s: {bundle_id} TTFT={ttft_samples}, TPOT={tpot_samples} samples (is_ready=True)"
                             )
                             return bundle_info
                         else:
-                            # Log progress every 5 seconds
-                            if int(time.time() - start_time) % 5 == 0:
-                                print(
-                                    f"  Waiting... current: TTFT={ttft_samples}, TPOT={tpot_samples} (need: ≥{min_ttft_samples}, ≥{min_tpot_samples})"
-                                )
+                            lifecycle_state = lifecycle.get("state", "?") if lifecycle else "?"
+                            log.debug(
+                                f"[{elapsed}s] pred: bundle={bundle_id} TTFT={ttft_samples} TPOT={tpot_samples} | is_ready={is_ready} | lifecycle={lifecycle_state}"
+                            )
+                    else:
+                        lifecycle_state = lifecycle.get("state", "?") if lifecycle else "?"
+                        is_ready = status_data.get("is_ready", "?")
+                        log.debug(
+                            f"[{elapsed}s] pred: no bundle_info | is_ready={is_ready} | lifecycle={lifecycle_state}"
+                        )
+                else:
+                    log.debug(f"[{elapsed}s] pred: /status returned HTTP {status_r.status_code}")
 
-        except requests.RequestException:
-            # Ignore transient network errors
-            pass
+                # Also check training server directly for diagnostics (every 10s)
+                if training_url and poll_count % 5 == 0:
+                    try:
+                        tr = requests.get(f"{training_url}/bundle/current/info", timeout=5)
+                        if tr.status_code == 200:
+                            ti = tr.json()
+                            ts = ti.get("training_samples", {})
+                            tl = ti.get("lifecycle", {})
+                            log.debug(
+                                f"  train: status={ti.get('status')} bundle={ti.get('bundle_id', '?')[:8] if ti.get('bundle_id') else 'none'} "
+                                f"TTFT={ts.get('ttft', 0)} TPOT={ts.get('tpot', 0)} lifecycle={tl.get('state', '?')}"
+                            )
+                    except requests.RequestException:
+                        pass
+
+        except requests.RequestException as e:
+            elapsed = int(time.time() - start_time)
+            log.debug(f"[{elapsed}s] pred: request failed: {e}")
 
         time.sleep(0.5)
 
     # Timeout - get final status for diagnostic message
+    diag_parts = [f"Timeout after {timeout}s."]
     try:
         status_r = requests.get(f"{prediction_url}/status", timeout=5)
         if status_r.status_code == 200:
-            bundle_info = status_r.json().get("bundle_info", {})
-            ttft_samples = bundle_info.get("training_samples", {}).get("ttft", 0)
-            tpot_samples = bundle_info.get("training_samples", {}).get("tpot", 0)
-            raise TimeoutError(
-                f"Timeout after {timeout}s waiting for bundle with sufficient samples. "
-                f"Current: TTFT={ttft_samples}, TPOT={tpot_samples}. "
-                f"Expected: TTFT≥{min_ttft_samples}, TPOT≥{min_tpot_samples}"
+            sd = status_r.json()
+            bundle_info = sd.get("bundle_info", {})
+            ttft_samples = bundle_info.get("training_samples", {}).get("ttft", 0) if bundle_info else 0
+            tpot_samples = bundle_info.get("training_samples", {}).get("tpot", 0) if bundle_info else 0
+            lifecycle = sd.get("training_lifecycle", {})
+            diag_parts.append(
+                f"Pred: bundle_info={'present' if bundle_info else 'None'} TTFT={ttft_samples} TPOT={tpot_samples} "
+                f"is_ready={sd.get('is_ready')} lifecycle={lifecycle.get('state') if lifecycle else 'None'}"
             )
     except requests.RequestException:
-        pass
+        diag_parts.append("Pred: /status unreachable")
 
-    raise TimeoutError(f"Timeout after {timeout}s waiting for bundle (prediction server not responding)")
+    if training_url:
+        try:
+            tr = requests.get(f"{training_url}/bundle/current/info", timeout=5)
+            if tr.status_code == 200:
+                ti = tr.json()
+                ts = ti.get("training_samples", {})
+                tl = ti.get("lifecycle", {})
+                diag_parts.append(
+                    f"Train: status={ti.get('status')} TTFT={ts.get('ttft', 0)} TPOT={ts.get('tpot', 0)} "
+                    f"lifecycle={tl.get('state', '?')}"
+                )
+        except requests.RequestException:
+            diag_parts.append("Train: /bundle/current/info unreachable")
+
+    diag_parts.append(f"Expected: TTFT≥{min_ttft_samples}, TPOT≥{min_tpot_samples}")
+    raise TimeoutError(" | ".join(diag_parts))
 
 
 def wait_for_pod_sync(prediction_url: str, min_calibration_samples: int = None, timeout: int = 120) -> None:
@@ -1113,7 +1230,7 @@ def wait_for_pod_sync(prediction_url: str, min_calibration_samples: int = None, 
     POD_SYNC_MIN_STD_DEV_MS = 1.0  # Predictions must vary with input
 
     mode_desc = "good models (including TreeLite)"
-    print(f"Waiting for all prediction server pods to sync {mode_desc}...")
+    log.info(f"Waiting for all prediction server pods to sync {mode_desc}...")
 
     all_pods_synced = False
     for sync_attempt in range(timeout):
@@ -1219,12 +1336,12 @@ def wait_for_pod_sync(prediction_url: str, min_calibration_samples: int = None, 
                     if len(unique_bundles) > 1:
                         # Multiple bundles detected - pods not in sync
                         if sync_attempt % 5 == 0:
-                            print(f"  Attempt {sync_attempt+1}: Pods have different bundles: {unique_bundles}")
+                            log.debug(f"Attempt {sync_attempt+1}: Pods have different bundles: {unique_bundles}")
                         continue  # Keep waiting
                 else:
                     # No successful status checks - keep waiting
                     if sync_attempt % 5 == 0:
-                        print(f"  Attempt {sync_attempt+1}: Could not get bundle status from pods")
+                        log.debug(f"Attempt {sync_attempt+1}: Could not get bundle status from pods")
                     continue
 
                 # Verify calibration data is loaded across pods
@@ -1249,24 +1366,24 @@ def wait_for_pod_sync(prediction_url: str, min_calibration_samples: int = None, 
 
                         if min_ttft_cal < min_calibration_samples or min_tpot_cal < min_calibration_samples:
                             if sync_attempt % 5 == 0:
-                                print(
-                                    f"  Attempt {sync_attempt+1}: Bundle synced but calibration not ready (min: TTFT={min_ttft_cal}, TPOT={min_tpot_cal}, need ≥{min_calibration_samples})"
+                                log.debug(
+                                    f"Attempt {sync_attempt+1}: Bundle synced but calibration not ready (min: TTFT={min_ttft_cal}, TPOT={min_tpot_cal}, need >={min_calibration_samples})"
                                 )
                             continue  # Keep waiting
                     else:
                         # No successful calibration checks - keep waiting
                         if sync_attempt % 5 == 0:
-                            print(f"  Attempt {sync_attempt+1}: Could not get calibration stats")
+                            log.debug(f"Attempt {sync_attempt+1}: Could not get calibration stats")
                         continue
 
                 # All checks passed - pods are synced
                 synced_bundle = list(unique_bundles)[0] if unique_bundles else "unknown"
-                print(f"✓ All pods synced after {sync_attempt+1} seconds (bundle: {synced_bundle})")
-                print(
-                    f"  TTFT: input_len=100: {avg_ttft[0]:.2f}ms, 400: {avg_ttft[1]:.2f}ms, 600: {avg_ttft[2]:.2f}ms (std: {ttft_std:.2f})"
+                log.info(f"All pods synced after {sync_attempt+1} seconds (bundle: {synced_bundle})")
+                log.info(
+                    f"TTFT: input_len=100: {avg_ttft[0]:.2f}ms, 400: {avg_ttft[1]:.2f}ms, 600: {avg_ttft[2]:.2f}ms (std: {ttft_std:.2f})"
                 )
-                print(
-                    f"  TPOT: input_len=100: {avg_tpot[0]:.2f}ms, 400: {avg_tpot[1]:.2f}ms, 600: {avg_tpot[2]:.2f}ms (std: {tpot_std:.2f})"
+                log.info(
+                    f"TPOT: input_len=100: {avg_tpot[0]:.2f}ms, 400: {avg_tpot[1]:.2f}ms, 600: {avg_tpot[2]:.2f}ms (std: {tpot_std:.2f})"
                 )
                 all_pods_synced = True
                 break
@@ -1278,7 +1395,7 @@ def wait_for_pod_sync(prediction_url: str, min_calibration_samples: int = None, 
                         reason = f"not monotonic (TTFT: {ttft_monotonic}, TPOT: {tpot_monotonic})"
                     else:
                         reason = f"not varying (TTFT std: {ttft_std:.2f}, TPOT std: {tpot_std:.2f})"
-                    print(f"  Attempt {sync_attempt+1}: Predictions {reason} - waiting for good models...")
+                    log.debug(f"Attempt {sync_attempt+1}: Predictions {reason} - waiting for good models...")
 
     if not all_pods_synced:
         raise TimeoutError(f"Not all prediction server pods synced {mode_desc} within {timeout}s")
@@ -1302,7 +1419,7 @@ def verify_calibration_consistency(
     Note: Only needed in TreeLite mode (native quantile doesn't use conformal prediction)
     See: summaries/TEST_AUDIT.md - "Pattern 9: Calibration Verification Pattern"
     """
-    print("Verifying all pods have correct calibration data...")
+    log.info("Verifying all pods have correct calibration data...")
     calibration_samples_seen = {"ttft": [], "tpot": []}
 
     for _ in range(20):  # Hit 20 different pods to ensure good coverage
@@ -1324,8 +1441,8 @@ def verify_calibration_consistency(
     ttft_avg = sum(calibration_samples_seen["ttft"]) / len(calibration_samples_seen["ttft"])
     tpot_avg = sum(calibration_samples_seen["tpot"]) / len(calibration_samples_seen["tpot"])
 
-    print(f"  TTFT calibration: min={ttft_min}, max={ttft_max}, avg={ttft_avg:.0f}")
-    print(f"  TPOT calibration: min={tpot_min}, max={tpot_max}, avg={tpot_avg:.0f}")
+    log.info(f"TTFT calibration: min={ttft_min}, max={ttft_max}, avg={ttft_avg:.0f}")
+    log.info(f"TPOT calibration: min={tpot_min}, max={tpot_max}, avg={tpot_avg:.0f}")
 
     # Verify minimum calibration samples
     assert (
@@ -1345,7 +1462,7 @@ def verify_calibration_consistency(
         tpot_variance < max_variance
     ), f"TPOT calibration data inconsistent across pods (variance={tpot_variance:.2%})"
 
-    print("✓ All pods have consistent calibration data")
+    log.info("All pods have consistent calibration data")
 
 
 def test_dual_server_quantile_regression_learns_distribution():
@@ -1370,23 +1487,22 @@ def test_dual_server_quantile_regression_learns_distribution():
     RNG_SEED = int(time.time() * 1000) % 100000
     random.seed(RNG_SEED)
     np.random.seed(RNG_SEED)
-    print(f"Using random seed: {RNG_SEED}")
+    log.info(f"Using random seed: {RNG_SEED}")
 
     # Config
     TRAIN_N = 5000  # Increased from 3000 for more stable calibration (500 samples vs 300)
     TEST_N = 500  # Increased from 200 for more stable coverage estimate
     TTFT_STD, TPOT_STD = 20.0, 10.0
     REL_ERR_TOL = 0.15  # 15%
-    # Note: TreeLite mode uses wider tolerance because conformal prediction with absolute
-    # residuals gives ~95% coverage for P90 quantile (this is expected behavior)
+    # Signed residuals + auto-calibration give accurate coverage for both modes
     COVERAGE_TOL_NATIVE = 0.05  # ±5% for native quantile mode (85-95% range)
-    COVERAGE_TOL_TREELITE = 0.065  # ±6.5% for TreeLite mode (83.5-96.5% range)
+    COVERAGE_TOL_TREELITE = 0.05  # ±5% for TreeLite mode (85-95% range)
     MAX_WAIT_S = 180
     POLL_INTERVAL_S = 3
 
     # 0) Flush old training data to ensure clean test
     # Note: With bundle architecture, flush is atomic and doesn't require complex retry logic
-    print("Flushing old training data...")
+    log.info("Flushing old training data...")
     flush_training_data_robust(TRAINING_URL)
 
     # 1) Confirm server mode and detect TreeLite usage
@@ -1412,12 +1528,12 @@ def test_dual_server_quantile_regression_learns_distribution():
     # Use 80% of expected as minimum threshold to allow for some variance
     expected_test_samples = int(TRAIN_N * test_train_ratio)
     min_calibration_samples = int(expected_test_samples * 0.8)
-    print(f"Expected calibration samples: {expected_test_samples} (min threshold: {min_calibration_samples})")
+    log.info(f"Expected calibration samples: {expected_test_samples} (min threshold: {min_calibration_samples})")
 
     # Check if TreeLite mode is enabled (affects coverage tolerance)
     COVERAGE_TOL = COVERAGE_TOL_TREELITE
     mode_str = "TreeLite+conformal"
-    print(f"Detected mode: {mode_str} (coverage tolerance: ±{COVERAGE_TOL*100:.1f}%)")
+    log.info(f"Detected mode: {mode_str} (coverage tolerance: +/-{COVERAGE_TOL*100:.1f}%)")
 
     z = norm.ppf(target_quantile)
 
@@ -1451,18 +1567,18 @@ def test_dual_server_quantile_regression_learns_distribution():
 
     # 3) Submit training data (with a couple retries)
     # Note: No need for final flush - bundle architecture ensures atomic operations
-    print(f"Submitting {TRAIN_N} training samples...")
+    log.info(f"Submitting {TRAIN_N} training samples...")
     submission_attempts = 0
     for attempt in range(3):
         submission_attempts += 1
-        print(f"  Attempt {attempt+1}: POSTing {len(entries)} entries to {TRAINING_URL}/add_training_data_bulk")
+        log.debug(f"Attempt {attempt+1}: POSTing {len(entries)} entries to {TRAINING_URL}/add_training_data_bulk")
         tr = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": entries}, timeout=60)
-        print(f"  Response: {tr.status_code} - {tr.json() if tr.status_code == 202 else 'ERROR'}")
+        log.debug(f"Response: {tr.status_code} - {tr.json() if tr.status_code == 202 else 'ERROR'}")
         if tr.status_code == 202:
             break
         time.sleep(2)
     assert tr.status_code == 202, f"training submit failed: {tr.status_code}"
-    print(f"✓ Training data submitted successfully after {submission_attempts} attempt(s)")
+    log.info(f"Training data submitted successfully after {submission_attempts} attempt(s)")
 
     # Verify data was added by checking data status
     data_status = requests.get(f"{TRAINING_URL}/data/status", timeout=10).json()
@@ -1477,14 +1593,11 @@ def test_dual_server_quantile_regression_learns_distribution():
     # 3. Background training is adding synthetic data (shouldn't happen)
     expected_total = 2 * TRAIN_N
     if abs(total_samples - expected_total) > 20:
-        print("ERROR: Sample count mismatch!")
-        print(f"  Expected: ~{expected_total} (2x {TRAIN_N} because each sample goes into TTFT + TPOT)")
-        print(f"  Found: {total_samples}")
-        print(f"  Difference: {abs(total_samples - expected_total)}")
-        print("  This suggests:")
-        print("    - Flush API may not be working properly")
-        print("    - Another test may be running concurrently")
-        print("    - Background training may be adding synthetic data")
+        log.error("Sample count mismatch!")
+        log.error(f"Expected: ~{expected_total} (2x {TRAIN_N} because each sample goes into TTFT + TPOT)")
+        log.error(f"Found: {total_samples}")
+        log.error(f"Difference: {abs(total_samples - expected_total)}")
+        log.error("This suggests: Flush API not working, concurrent test, or synthetic data")
         assert False, f"Sample count validation failed: expected ~{expected_total}, found {total_samples}"
 
     # 5) Wait for bundle trained on our data
@@ -1492,7 +1605,7 @@ def test_dual_server_quantile_regression_learns_distribution():
     # Use 80% of expected training samples as minimum threshold
     expected_training_samples = int(TRAIN_N * (1 - test_train_ratio))
     min_training_samples = int(expected_training_samples * 0.8)
-    print(f"Expected training samples: {expected_training_samples} (min threshold: {min_training_samples})")
+    log.info(f"Expected training samples: {expected_training_samples} (min threshold: {min_training_samples})")
 
     bundle_info = wait_for_bundle_with_min_samples(
         PREDICTION_URL, min_ttft_samples=min_training_samples, min_tpot_samples=min_training_samples
@@ -1502,7 +1615,7 @@ def test_dual_server_quantile_regression_learns_distribution():
     # This eliminates the "moving target" problem where training server creates new bundles
     # faster than prediction pods can download them (1s retrain interval vs 10-20s download time)
     # Note: Models are already trained and frozen in the bundle - flushing doesn't affect test integrity
-    print("Flushing training data to stabilize bundle for pod sync...")
+    log.info("Flushing training data to stabilize bundle for pod sync...")
     flush_training_data_robust(TRAINING_URL)
 
     # 6) Wait for all pods to sync and verify calibration (if TreeLite mode)
@@ -1541,11 +1654,15 @@ def test_dual_server_quantile_regression_learns_distribution():
     cal_check = requests.get(f"{PREDICTION_URL}/calibration/stats", timeout=10)
     if cal_check.status_code == 200:
         cal_data = cal_check.json()
-        print("DEBUG: Pre-prediction calibration check:")
-        print(f"  TTFT calibration samples: {cal_data.get('ttft_conformal', {}).get('calibration_samples', 0)}")
-        print(f"  TPOT calibration samples: {cal_data.get('tpot_conformal', {}).get('calibration_samples', 0)}")
-        print(f"  TTFT quantile adjustment: {cal_data.get('ttft_conformal', {}).get('quantile_adjustment_ms', 'N/A')}")
-        print(f"  TPOT quantile adjustment: {cal_data.get('tpot_conformal', {}).get('quantile_adjustment_ms', 'N/A')}")
+        log.debug("Pre-prediction calibration check:")
+        log.debug(f"TTFT calibration samples: {cal_data.get('ttft_conformal', {}).get('calibration_samples', 0)}")
+        log.debug(f"TPOT calibration samples: {cal_data.get('tpot_conformal', {}).get('calibration_samples', 0)}")
+        log.debug(
+            f"TTFT quantile adjustment: {cal_data.get('ttft_conformal', {}).get('quantile_adjustment_ms', 'N/A')}"
+        )
+        log.debug(
+            f"TPOT quantile adjustment: {cal_data.get('tpot_conformal', {}).get('quantile_adjustment_ms', 'N/A')}"
+        )
 
     # 7) Predict (bulk)
     pr = requests.post(f"{PREDICTION_URL}/predict/bulk/strict", json={"requests": test_cases}, timeout=60)
@@ -1562,7 +1679,7 @@ def test_dual_server_quantile_regression_learns_distribution():
     tpot_rel_err = np.abs(tpot_pred - tpot_q_exp) / tpot_q_exp
     acc_mask = (ttft_rel_err <= REL_ERR_TOL) & (tpot_rel_err <= REL_ERR_TOL)
     rel_accuracy = acc_mask.mean()
-    print(f"Relative-err accuracy (≤{int(REL_ERR_TOL*100)}%): {rel_accuracy*100:.1f}%")
+    log.info(f"Relative-err accuracy (<={int(REL_ERR_TOL*100)}%): {rel_accuracy*100:.1f}%")
 
     # 9) Coverage calibration (simulate actuals for the same test X)
     # Generate fresh noise so it's an *unseen* draw from the same D|X:
@@ -1571,7 +1688,7 @@ def test_dual_server_quantile_regression_learns_distribution():
 
     ttft_cov = (ttft_actual <= ttft_pred).mean()
     tpot_cov = (tpot_actual <= tpot_pred).mean()
-    print(f"Coverage: TTFT={ttft_cov:.3f}, TPOT={tpot_cov:.3f} (target {target_quantile:.3f} ± {COVERAGE_TOL})")
+    log.info(f"Coverage: TTFT={ttft_cov:.3f}, TPOT={tpot_cov:.3f} (target {target_quantile:.3f} +/- {COVERAGE_TOL})")
 
     # 10) Monotonic sanity checks on a few random pairs (no hard fail, just helpful asserts)
     # pick one sample index and perturb input_token_length upward
@@ -1598,6 +1715,163 @@ def test_dual_server_quantile_regression_learns_distribution():
     ), f"TPOT coverage {tpot_cov:.3f} not within ±{TPOT_COVERAGE_TOL} of {target_quantile:.3f}"
 
 
+def test_prediction_directional_correctness(trained_model_ready):
+    """
+    Validate that trained models respond correctly to feature changes.
+
+    For each input feature, verify that increasing it moves TTFT/TPOT
+    predictions in the expected direction. This catches:
+    - Feature ordering bugs
+    - Encoding mismatches between training and inference
+    - Corrupt model loads
+    """
+    import requests
+
+    # Check model type - only XGBoost and LightGBM support quantile regression
+    model_type = os.getenv("LATENCY_MODEL_TYPE", "xgboost")
+    if model_type not in ["xgboost", "lightgbm"]:
+        pytest.skip(f"Quantile regression not supported for {model_type}")
+
+    # Verify prediction server is ready with a trained model
+    s = requests.get(f"{PREDICTION_URL}/status", timeout=10)
+    assert s.status_code == 200, "Prediction server not ready"
+
+    # Baseline feature values (mid-range)
+    baseline = dict(
+        kv_cache_percentage=0.5,
+        input_token_length=300,
+        num_request_waiting=4,
+        num_request_running=2,
+        num_tokens_generated=10,
+        prefix_cache_score=0.5,
+    )
+
+    def predict_pair(low_features, high_features):
+        """Send a pair of feature sets and return (low_pred, high_pred) dicts."""
+        r = requests.post(
+            f"{PREDICTION_URL}/predict/bulk/strict",
+            json={"requests": [low_features, high_features]},
+            timeout=30,
+        )
+        assert r.status_code == 200, f"Bulk predict failed: {r.status_code} - {r.text}"
+        preds = r.json()["predictions"]
+        assert len(preds) == 2, f"Expected 2 predictions, got {len(preds)}"
+        return preds[0], preds[1]
+
+    def make_variant(feature_name, value):
+        """Create a copy of baseline with one feature changed."""
+        v = baseline.copy()
+        v[feature_name] = value
+        return v
+
+    # ── Monotonicity checks ──────────────────────────────────────────────
+    # Each tuple: (feature_name, low_val, high_val, metric, description)
+    monotonicity_cases = [
+        ("input_token_length", 100, 600, "ttft_ms", "TTFT should increase with input length"),
+        ("num_request_waiting", 0, 8, "ttft_ms", "TTFT should increase with waiting requests"),
+        ("num_request_running", 1, 4, "ttft_ms", "TTFT should increase with running requests"),
+        ("kv_cache_percentage", 0.1, 0.9, "ttft_ms", "TTFT should increase with KV cache usage"),
+        ("kv_cache_percentage", 0.1, 0.9, "tpot_ms", "TPOT should increase with KV cache usage"),
+        ("num_tokens_generated", 1, 25, "tpot_ms", "TPOT should increase with tokens generated"),
+        ("num_request_running", 1, 4, "tpot_ms", "TPOT should increase with running requests"),
+    ]
+
+    log.info("=== Directional Correctness: Monotonicity Checks ===")
+    all_predictions = []  # collect for magnitude checks
+
+    for feature, low_val, high_val, metric, desc in monotonicity_cases:
+        low_features = make_variant(feature, low_val)
+        high_features = make_variant(feature, high_val)
+        low_pred, high_pred = predict_pair(low_features, high_features)
+
+        low_metric = low_pred[metric]
+        high_metric = high_pred[metric]
+        all_predictions.extend([low_metric, high_metric])
+
+        passed = high_metric >= low_metric - 1e-3
+        status = "PASS" if passed else "FAIL"
+        log.info(
+            f"[{status}] {desc}: {feature}={low_val} -> {low_metric:.2f}ms, "
+            f"{feature}={high_val} -> {high_metric:.2f}ms (delta={high_metric - low_metric:.2f})"
+        )
+
+        assert passed, (
+            f"Monotonicity violation: {desc}. "
+            f"{feature}={low_val} gave {metric}={low_metric:.2f}ms, "
+            f"{feature}={high_val} gave {metric}={high_metric:.2f}ms"
+        )
+
+    # ── Magnitude checks ─────────────────────────────────────────────────
+    log.info("=== Directional Correctness: Magnitude Checks ===")
+    min_pred = min(all_predictions)
+    max_pred = max(all_predictions)
+    log.info(f"Prediction range: {min_pred:.2f}ms - {max_pred:.2f}ms")
+
+    assert min_pred > 1.0, f"Prediction too low: {min_pred:.2f}ms (expected > 1ms)"
+    assert max_pred < 100_000.0, f"Prediction too high: {max_pred:.2f}ms (expected < 100,000ms)"
+    log.info("[PASS] All predictions in plausible range (1ms - 100,000ms)")
+
+    # ── Multi-point monotonicity for key features ─────────────────────────
+    log.info("=== Directional Correctness: Multi-Point Monotonicity ===")
+
+    # Tree-based models without monotone_constraints can have small local dips
+    # between intermediate points. Allow dips up to 20% of the overall
+    # (first-to-last) range while still verifying the general trend.
+    MULTI_POINT_TOLERANCE_FRAC = 0.20
+
+    # input_token_length -> TTFT should be non-decreasing
+    itl_values = [100, 200, 400, 600]
+    itl_requests = [make_variant("input_token_length", v) for v in itl_values]
+    r = requests.post(
+        f"{PREDICTION_URL}/predict/bulk/strict",
+        json={"requests": itl_requests},
+        timeout=30,
+    )
+    assert r.status_code == 200, f"Multi-point predict failed: {r.status_code}"
+    itl_preds = [p["ttft_ms"] for p in r.json()["predictions"]]
+
+    log.debug(f"input_token_length -> TTFT: {list(zip(itl_values, [f'{p:.2f}' for p in itl_preds], strict=False))}")
+    itl_range = max(itl_preds[-1] - itl_preds[0], 1.0)
+    itl_tol = MULTI_POINT_TOLERANCE_FRAC * itl_range
+    assert itl_preds[-1] >= itl_preds[0] - 1e-3, (
+        f"TTFT overall trend not non-decreasing for input_token_length: "
+        f"first={itl_preds[0]:.2f}ms, last={itl_preds[-1]:.2f}ms"
+    )
+    for i in range(len(itl_preds) - 1):
+        assert itl_preds[i + 1] >= itl_preds[i] - itl_tol, (
+            f"TTFT not non-decreasing for input_token_length (tolerance={itl_tol:.2f}ms): "
+            f"{itl_values[i]}={itl_preds[i]:.2f}ms, {itl_values[i+1]}={itl_preds[i+1]:.2f}ms"
+        )
+    log.info("[PASS] TTFT is non-decreasing with input_token_length")
+
+    # kv_cache_percentage -> TPOT should be non-decreasing
+    kv_values = [0.1, 0.3, 0.6, 0.9]
+    kv_requests = [make_variant("kv_cache_percentage", v) for v in kv_values]
+    r = requests.post(
+        f"{PREDICTION_URL}/predict/bulk/strict",
+        json={"requests": kv_requests},
+        timeout=30,
+    )
+    assert r.status_code == 200, f"Multi-point predict failed: {r.status_code}"
+    kv_preds = [p["tpot_ms"] for p in r.json()["predictions"]]
+
+    log.debug(f"kv_cache_percentage -> TPOT: {list(zip(kv_values, [f'{p:.2f}' for p in kv_preds], strict=False))}")
+    kv_range = max(kv_preds[-1] - kv_preds[0], 1.0)
+    kv_tol = MULTI_POINT_TOLERANCE_FRAC * kv_range
+    assert kv_preds[-1] >= kv_preds[0] - 1e-3, (
+        f"TPOT overall trend not non-decreasing for kv_cache_percentage: "
+        f"first={kv_preds[0]:.2f}ms, last={kv_preds[-1]:.2f}ms"
+    )
+    for i in range(len(kv_preds) - 1):
+        assert kv_preds[i + 1] >= kv_preds[i] - kv_tol, (
+            f"TPOT not non-decreasing for kv_cache_percentage (tolerance={kv_tol:.2f}ms): "
+            f"{kv_values[i]}={kv_preds[i]:.2f}ms, {kv_values[i+1]}={kv_preds[i+1]:.2f}ms"
+        )
+    log.info("[PASS] TPOT is non-decreasing with kv_cache_percentage")
+
+    log.info("=== All directional correctness checks passed ===")
+
+
 async def run_prediction_stress_test(duration_seconds=30, target_qps=1000):
     """Run stress test against the prediction server only."""
     interval = 1.0 / target_qps
@@ -1619,13 +1893,13 @@ async def run_prediction_stress_test(duration_seconds=30, target_qps=1000):
 
             await asyncio.sleep(0.001)
 
-        print(f"Waiting for {len(tasks)} prediction requests to complete...")
+        log.info(f"Waiting for {len(tasks)} prediction requests to complete...")
         results = await asyncio.gather(*tasks, return_exceptions=True)
         valid_results = [r for r in results if isinstance(r, dict)]
 
         if valid_results:
             actual_qps = len(valid_results) / duration_seconds
-            print(f"Target QPS: {target_qps}, Actual QPS: {actual_qps:.1f}")
+            log.info(f"Target QPS: {target_qps}, Actual QPS: {actual_qps:.1f}")
 
         return valid_results
 
@@ -1651,7 +1925,7 @@ async def run_bulk_prediction_stress_test(duration_seconds=30, target_rps=100, b
 
             await asyncio.sleep(0.01)  # Slightly longer sleep for bulk requests
 
-        print(f"Waiting for {len(tasks)} bulk prediction requests to complete...")
+        log.info(f"Waiting for {len(tasks)} bulk prediction requests to complete...")
         results = await asyncio.gather(*tasks, return_exceptions=True)
         valid_results = [r for r in results if isinstance(r, dict)]
 
@@ -1659,8 +1933,8 @@ async def run_bulk_prediction_stress_test(duration_seconds=30, target_rps=100, b
             actual_rps = len(valid_results) / duration_seconds
             total_predictions = sum(r.get("predictions_count", 0) for r in valid_results)
             actual_pps = total_predictions / duration_seconds  # predictions per second
-            print(f"Target RPS: {target_rps}, Actual RPS: {actual_rps:.1f}")
-            print(f"Total Predictions: {total_predictions}, Predictions/sec: {actual_pps:.1f}")
+            log.info(f"Target RPS: {target_rps}, Actual RPS: {actual_rps:.1f}")
+            log.info(f"Total Predictions: {total_predictions}, Predictions/sec: {actual_pps:.1f}")
 
         return valid_results
 
@@ -1668,7 +1942,7 @@ async def run_bulk_prediction_stress_test(duration_seconds=30, target_rps=100, b
 def analyze_prediction_stress_results(results):
     """Analyze prediction stress test results."""
     if not results:
-        print("No results to analyze")
+        log.warning("No results to analyze")
         return
 
     total_requests = len(results)
@@ -1687,38 +1961,38 @@ def analyze_prediction_stress_results(results):
         if r.get("model_type"):
             model_types[r["model_type"]] += 1
 
-    print(f"\n{'='*50}")
-    print("PREDICTION SERVER STRESS TEST RESULTS")
-    print(f"{'='*50}")
-    print(f"Total Requests: {total_requests}")
-    print(f"Successful: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
-    print(f"Failed: {failed_requests} ({failed_requests/total_requests*100:.1f}%)")
-    print(f"Average Response Time: {avg_response_time*1000:.2f}ms")
+    log.info(f"\n{'='*50}")
+    log.info("PREDICTION SERVER STRESS TEST RESULTS")
+    log.info(f"{'='*50}")
+    log.info(f"Total Requests: {total_requests}")
+    log.info(f"Successful: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
+    log.info(f"Failed: {failed_requests} ({failed_requests/total_requests*100:.1f}%)")
+    log.info(f"Average Response Time: {avg_response_time*1000:.2f}ms")
 
     if model_types:
-        print("\nModel Types in Predictions:")
+        log.info("\nModel Types in Predictions:")
         for model_type, count in model_types.items():
-            print(f"  {model_type}: {count}")
+            log.info(f"  {model_type}: {count}")
 
-    print("\nStatus Code Distribution:")
+    log.info("\nStatus Code Distribution:")
     for status, count in status_codes.items():
-        print(f"  {status}: {count}")
+        log.info(f"  {status}: {count}")
 
     if response_times:
         sorted_times = sorted(response_times)
         p50 = sorted_times[int(len(sorted_times) * 0.5)] * 1000
         p95 = sorted_times[int(len(sorted_times) * 0.95)] * 1000
         p99 = sorted_times[int(len(sorted_times) * 0.99)] * 1000
-        print("\nResponse Time Percentiles:")
-        print(f"  P50: {p50:.2f}ms")
-        print(f"  P95: {p95:.2f}ms")
-        print(f"  P99: {p99:.2f}ms")
+        log.info("\nResponse Time Percentiles:")
+        log.info(f"  P50: {p50:.2f}ms")
+        log.info(f"  P95: {p95:.2f}ms")
+        log.info(f"  P99: {p99:.2f}ms")
 
 
 def analyze_bulk_prediction_stress_results(results):
     """Analyze bulk prediction stress test results."""
     if not results:
-        print("No results to analyze")
+        log.warning("No results to analyze")
         return
 
     total_requests = len(results)
@@ -1735,38 +2009,38 @@ def analyze_bulk_prediction_stress_results(results):
     for r in results:
         status_codes[r.get("status_code", 0)] += 1
 
-    print(f"\n{'='*50}")
-    print("BULK PREDICTION STRESS TEST RESULTS")
-    print(f"{'='*50}")
-    print(f"Total Bulk Requests: {total_requests}")
-    print(f"Successful: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
-    print(f"Failed: {failed_requests} ({failed_requests/total_requests*100:.1f}%)")
-    print(f"Total Individual Predictions: {total_predictions}")
-    print(f"Total Batch Size: {total_batch_size}")
-    print(f"Average Response Time: {avg_response_time*1000:.2f}ms")
+    log.info(f"\n{'='*50}")
+    log.info("BULK PREDICTION STRESS TEST RESULTS")
+    log.info(f"{'='*50}")
+    log.info(f"Total Bulk Requests: {total_requests}")
+    log.info(f"Successful: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
+    log.info(f"Failed: {failed_requests} ({failed_requests/total_requests*100:.1f}%)")
+    log.info(f"Total Individual Predictions: {total_predictions}")
+    log.info(f"Total Batch Size: {total_batch_size}")
+    log.info(f"Average Response Time: {avg_response_time*1000:.2f}ms")
 
     if total_batch_size > 0:
-        print(f"Average Batch Size: {total_batch_size/total_requests:.1f}")
-        print(f"Prediction Success Rate: {total_predictions/total_batch_size*100:.1f}%")
+        log.info(f"Average Batch Size: {total_batch_size/total_requests:.1f}")
+        log.info(f"Prediction Success Rate: {total_predictions/total_batch_size*100:.1f}%")
 
-    print("\nStatus Code Distribution:")
+    log.info("\nStatus Code Distribution:")
     for status, count in status_codes.items():
-        print(f"  {status}: {count}")
+        log.info(f"  {status}: {count}")
 
     if response_times:
         sorted_times = sorted(response_times)
         p50 = sorted_times[int(len(sorted_times) * 0.5)] * 1000
         p95 = sorted_times[int(len(sorted_times) * 0.95)] * 1000
         p99 = sorted_times[int(len(sorted_times) * 0.99)] * 1000
-        print("\nResponse Time Percentiles:")
-        print(f"  P50: {p50:.2f}ms")
-        print(f"  P95: {p95:.2f}ms")
-        print(f"  P99: {p99:.2f}ms")
+        log.info("\nResponse Time Percentiles:")
+        log.info(f"  P50: {p50:.2f}ms")
+        log.info(f"  P95: {p95:.2f}ms")
+        log.info(f"  P99: {p99:.2f}ms")
 
 
 def test_prediction_server_stress_test():
     """Stress test the prediction server."""
-    print("Running prediction server stress test...")
+    log.info("Running prediction server stress test...")
 
     results = asyncio.run(run_prediction_stress_test(duration_seconds=100, target_qps=TARGET_QPS))
 
@@ -1779,17 +2053,17 @@ def test_prediction_server_stress_test():
 
     assert success_rate > 0.8, f"Success rate too low: {success_rate*100:.1f}%"
 
-    print(f"Prediction server stress test completed with {success_rate*100:.1f}% success rate")
+    log.info(f"Prediction server stress test completed with {success_rate*100:.1f}% success rate")
 
 
 def test_bulk_prediction_stress_test():
     """Stress test the bulk prediction endpoint."""
-    print("Running bulk prediction stress test...")
+    log.info("Running bulk prediction stress test...")
 
     # Test with different batch sizes
     batch_sizes = [5, 10, 25]
     for batch_size in batch_sizes:
-        print(f"\nTesting with batch size {batch_size}...")
+        log.info(f"\nTesting with batch size {batch_size}...")
         results = asyncio.run(
             run_bulk_prediction_stress_test(
                 duration_seconds=100,
@@ -1807,19 +2081,19 @@ def test_bulk_prediction_stress_test():
 
         assert success_rate > 0.7, f"Bulk success rate too low for batch size {batch_size}: {success_rate*100:.1f}%"
 
-        print(
+        log.info(
             f"Bulk prediction stress test (batch size {batch_size}) completed with {success_rate*100:.1f}% success rate"
         )
 
 
 def test_large_batch_prediction_stress_test():
     """Stress test the bulk prediction endpoint."""
-    print("Running bulk prediction stress test...")
+    log.info("Running bulk prediction stress test...")
 
     # Test with different batch sizes
     batch_sizes = [1000]
     for batch_size in batch_sizes:
-        print(f"\nTesting with batch size {batch_size}...")
+        log.info(f"\nTesting with batch size {batch_size}...")
         results = asyncio.run(
             run_bulk_prediction_stress_test(
                 duration_seconds=100,
@@ -1837,17 +2111,17 @@ def test_large_batch_prediction_stress_test():
 
         assert success_rate > 0.7, f"Bulk success rate too low for batch size {batch_size}: {success_rate*100:.1f}%"
 
-        print(
+        log.info(
             f"Bulk prediction stress test (batch size {batch_size}) completed with {success_rate*100:.1f}% success rate"
         )
 
 
 def test_end_to_end_workflow():
     """Test the complete end-to-end workflow with robust error handling."""
-    print("Testing end-to-end workflow...")
+    log.info("Testing end-to-end workflow...")
 
     # 1. Send training data to training server
-    print("Step 1: Sending training data to training server...")
+    log.info("Step 1: Sending training data to training server...")
     training_payload = {"entries": [generate_random_training_payload() for _ in range(20)]}
 
     try:
@@ -1857,11 +2131,11 @@ def test_end_to_end_workflow():
         pytest.skip(f"Training server not accessible: {e}")
 
     # 2. Wait a bit for training
-    print("Step 2: Waiting for training...")
+    log.info("Step 2: Waiting for training...")
     time.sleep(10)
 
     # 3. Trigger model sync on prediction server
-    print("Step 3: Syncing models to prediction server...")
+    log.info("Step 3: Syncing models to prediction server...")
     try:
         reload_r = requests.post(f"{PREDICTION_URL}/reload", timeout=30)
         assert reload_r.status_code == 200
@@ -1870,7 +2144,7 @@ def test_end_to_end_workflow():
         pytest.skip(f"Prediction server not accessible for reload: {e}")
 
     # 4. Make predictions with retry logic
-    print("Step 4: Making predictions...")
+    log.info("Step 4: Making predictions...")
     successful_predictions = 0
 
     for i in range(5):
@@ -1883,29 +2157,29 @@ def test_end_to_end_workflow():
                 if pred_r.status_code == 200:
                     successful_predictions += 1
                     pred_data = pred_r.json()
-                    print(
+                    log.info(
                         f"  Prediction {i+1}: TTFT={pred_data['ttft_ms']:.2f}ms, TPOT={pred_data['tpot_ms']:.2f}ms (prefix_cache={payload['prefix_cache_score']:.2f})"
                     )
                     break
                 else:
-                    print(f"  Prediction {i+1} attempt {attempt+1} failed with status {pred_r.status_code}")
+                    log.error(f"  Prediction {i+1} attempt {attempt+1} failed with status {pred_r.status_code}")
             except requests.exceptions.ConnectTimeout:
-                print(f"  Prediction {i+1} attempt {attempt+1} timed out")
+                log.error(f"  Prediction {i+1} attempt {attempt+1} timed out")
                 if attempt < max_retries - 1:
                     time.sleep(2)  # Wait before retry
                 else:
-                    print(f"  Prediction {i+1} failed after {max_retries} attempts")
+                    log.error(f"  Prediction {i+1} failed after {max_retries} attempts")
             except requests.exceptions.RequestException as e:
-                print(f"  Prediction {i+1} attempt {attempt+1} failed: {e}")
+                log.error(f"  Prediction {i+1} attempt {attempt+1} failed: {e}")
                 break
 
     # Accept partial success if servers are having issues
     if successful_predictions == 0:
         pytest.skip("All prediction requests failed - servers may be down")
     elif successful_predictions < 5:
-        print(f"⚠️ Partial success: {successful_predictions}/5 predictions succeeded")
+        log.warning(f"⚠️ Partial success: {successful_predictions}/5 predictions succeeded")
     else:
-        print("✓ End-to-end workflow completed successfully!")
+        log.info("✓ End-to-end workflow completed successfully!")
 
     # 5. Cleanup: flush data for next test
     flush_training_data_robust(TRAINING_URL)
@@ -1913,59 +2187,59 @@ def test_end_to_end_workflow():
 
 def test_server_configuration():
     """Test server configuration and setup."""
-    print("Testing server configuration...")
+    log.info("Testing server configuration...")
 
     # Test prediction server root endpoint
     pred_root_r = requests.get(f"{PREDICTION_URL}/")
     assert pred_root_r.status_code == 200
     pred_root_data = pred_root_r.json()
-    print(f"Prediction server: {pred_root_data.get('message')}")
-    print(f"  Model type: {pred_root_data.get('model_type')}")
-    print(f"  Is ready: {pred_root_data.get('is_ready')}")
-    print(f"  Sync interval: {pred_root_data.get('sync_interval')}s")
-    print(f"  Training server URL: {pred_root_data.get('training_server')}")
+    log.info(f"Prediction server: {pred_root_data.get('message')}")
+    log.info(f"  Model type: {pred_root_data.get('model_type')}")
+    log.info(f"  Is ready: {pred_root_data.get('is_ready')}")
+    log.info(f"  Sync interval: {pred_root_data.get('sync_interval')}s")
+    log.info(f"  Training server URL: {pred_root_data.get('training_server')}")
 
     # Test training server root endpoint
     train_root_r = requests.get(f"{TRAINING_URL}/")
     assert train_root_r.status_code == 200
     train_root_data = train_root_r.json()
-    print(f"Training server: {train_root_data.get('message')}")
-    print(f"  Model type: {train_root_data.get('model_type')}")
+    log.info(f"Training server: {train_root_data.get('message')}")
+    log.info(f"  Model type: {train_root_data.get('model_type')}")
 
 
 def test_training_server_flush_api():
     """Test the training server flush API and data status endpoint."""
-    print("Testing training server flush API...")
+    log.info("Testing training server flush API...")
 
     # 1. Check initial data status
-    print("Step 1: Checking initial data status...")
+    log.info("Step 1: Checking initial data status...")
     initial_status_r = requests.get(f"{TRAINING_URL}/data/status")
     assert initial_status_r.status_code == 200
     initial_status = initial_status_r.json()
 
-    print(
+    log.info(
         f"  Initial training samples: TTFT={initial_status['training_data']['ttft_samples']}, "
         f"TPOT={initial_status['training_data']['tpot_samples']}"
     )
-    print(
+    log.info(
         f"  Initial test samples: TTFT={initial_status['test_data']['ttft_samples']}, "
         f"TPOT={initial_status['test_data']['tpot_samples']}"
     )
 
     # 2. Add training data
-    print("Step 2: Adding training data...")
+    log.info("Step 2: Adding training data...")
     training_entries = [generate_random_training_payload() for _ in range(100)]
     training_payload = {"entries": training_entries}
 
     add_r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json=training_payload)
     assert add_r.status_code == 202
-    print("  Added 100 training samples")
+    log.info("  Added 100 training samples")
 
     # Wait a bit for data to be processed
     time.sleep(2)
 
     # 3. Verify data was added
-    print("Step 3: Verifying data was added...")
+    log.info("Step 3: Verifying data was added...")
     after_add_status_r = requests.get(f"{TRAINING_URL}/data/status")
     assert after_add_status_r.status_code == 200
     after_add_status = after_add_status_r.json()
@@ -1973,8 +2247,8 @@ def test_training_server_flush_api():
     total_samples_after = (
         after_add_status["training_data"]["total_samples"] + after_add_status["test_data"]["total_samples"]
     )
-    print(
-        f"  After adding - Training: {after_add_status['training_data']['total_samples']}, "
+    log.debug(
+        f"After adding - Training: {after_add_status['training_data']['total_samples']}, "
         f"Test: {after_add_status['test_data']['total_samples']}, Total: {total_samples_after}"
     )
 
@@ -1982,7 +2256,7 @@ def test_training_server_flush_api():
     assert total_samples_after > 0, "No samples were added"
 
     # 4. Test flush with only training data
-    print("Step 4: Testing flush with only training data...")
+    log.info("Step 4: Testing flush with only training data...")
     flush_training_only = {
         "flush_training_data": True,
         "flush_test_data": False,
@@ -1998,10 +2272,10 @@ def test_training_server_flush_api():
     assert flush_response["metrics_cleared"] == False
     assert flush_response["reason"] == "Test flush training data only"
 
-    print(f"  Flushed {flush_response['ttft_training_samples_flushed']} TTFT training samples")
-    print(f"  Flushed {flush_response['tpot_training_samples_flushed']} TPOT training samples")
-    print(
-        f"  Test samples flushed: {flush_response['ttft_test_samples_flushed']} TTFT, "
+    log.debug(f"Flushed {flush_response['ttft_training_samples_flushed']} TTFT training samples")
+    log.debug(f"Flushed {flush_response['tpot_training_samples_flushed']} TPOT training samples")
+    log.debug(
+        f"Test samples flushed: {flush_response['ttft_test_samples_flushed']} TTFT, "
         f"{flush_response['tpot_test_samples_flushed']} TPOT (should be 0)"
     )
 
@@ -2011,19 +2285,19 @@ def test_training_server_flush_api():
 
     assert after_flush_training["training_data"]["total_samples"] == 0, "Training data should be empty"
     # Test data should still exist if any was added
-    print(
-        f"  After training flush - Training: {after_flush_training['training_data']['total_samples']}, "
+    log.debug(
+        f"After training flush - Training: {after_flush_training['training_data']['total_samples']}, "
         f"Test: {after_flush_training['test_data']['total_samples']}"
     )
 
     # 5. Add more data
-    print("Step 5: Adding more training data...")
+    log.info("Step 5: Adding more training data...")
     more_entries = [generate_random_training_payload() for _ in range(50)]
     requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": more_entries})
     time.sleep(2)
 
     # 6. Test flush everything
-    print("Step 6: Testing flush everything...")
+    log.info("Step 6: Testing flush everything...")
     flush_all = {
         "flush_training_data": True,
         "flush_test_data": True,
@@ -2039,7 +2313,7 @@ def test_training_server_flush_api():
     assert flush_all_response["metrics_cleared"] == True
     assert "Successfully flushed" in flush_all_response["message"]
 
-    print(f"  Complete flush message: {flush_all_response['message']}")
+    log.debug(f"Complete flush message: {flush_all_response['message']}")
 
     # Verify everything was flushed
     after_flush_all_r = requests.get(f"{TRAINING_URL}/data/status")
@@ -2048,13 +2322,13 @@ def test_training_server_flush_api():
     assert after_flush_all["training_data"]["total_samples"] == 0, "Training data should be empty"
     assert after_flush_all["test_data"]["total_samples"] == 0, "Test data should be empty"
 
-    print(
-        f"  After complete flush - Training: {after_flush_all['training_data']['total_samples']}, "
+    log.debug(
+        f"After complete flush - Training: {after_flush_all['training_data']['total_samples']}, "
         f"Test: {after_flush_all['test_data']['total_samples']}"
     )
 
     # 7. Test flush with default parameters (should flush everything)
-    print("Step 7: Testing default flush (no body)...")
+    log.info("Step 7: Testing default flush (no body)...")
 
     # Add some data first
     requests.post(
@@ -2069,10 +2343,10 @@ def test_training_server_flush_api():
     default_flush_response = default_flush_r.json()
 
     assert default_flush_response["success"] == True
-    print(f"  Default flush result: {default_flush_response['message']}")
+    log.debug(f"Default flush result: {default_flush_response['message']}")
 
     # 8. Test flush with only test data
-    print("Step 8: Testing flush with only test data...")
+    log.info("Step 8: Testing flush with only test data...")
 
     # Add data
     requests.post(
@@ -2097,8 +2371,8 @@ def test_training_server_flush_api():
     assert flush_test_r.status_code == 200
     flush_test_response = flush_test_r.json()
 
-    print(
-        f"  Test data flush: {flush_test_response['ttft_test_samples_flushed']} TTFT, "
+    log.debug(
+        f"Test data flush: {flush_test_response['ttft_test_samples_flushed']} TTFT, "
         f"{flush_test_response['tpot_test_samples_flushed']} TPOT"
     )
 
@@ -2108,24 +2382,24 @@ def test_training_server_flush_api():
 
     assert after_test_flush["test_data"]["total_samples"] == 0, "Test data should be empty"
     # Training data should still exist
-    print(
-        f"  After test flush - Training: {after_test_flush['training_data']['total_samples']}, "
+    log.debug(
+        f"After test flush - Training: {after_test_flush['training_data']['total_samples']}, "
         f"Test: {after_test_flush['test_data']['total_samples']}"
     )
 
     # 9. Test bucket distribution in status
-    print("Step 9: Testing bucket distribution in status...")
+    log.info("Step 9: Testing bucket distribution in status...")
     if "bucket_distribution" in after_flush_all:
-        print(
-            f"  Bucket distribution available: {len(after_flush_all.get('bucket_distribution', {}))} buckets with data"
+        log.debug(
+            f"Bucket distribution available: {len(after_flush_all.get('bucket_distribution', {}))} buckets with data"
         )
 
-    print("✓ Flush API tests passed!")
+    log.info("Flush API tests passed!")
 
 
 def test_training_server_flush_error_handling():
     """Test error handling in flush API."""
-    print("Testing flush API error handling...")
+    log.info("Testing flush API error handling...")
 
     # Test with invalid JSON
     invalid_json = '{"flush_training_data": "not_a_boolean"}'
@@ -2135,9 +2409,9 @@ def test_training_server_flush_error_handling():
         r = requests.post(f"{TRAINING_URL}/flush", data=invalid_json, headers=headers)
         # Should get validation error
         assert r.status_code in [400, 422], f"Expected 400 or 422, got {r.status_code}"
-        print("✓ Invalid JSON handled correctly")
+        log.info("Invalid JSON handled correctly")
     except Exception as e:
-        print(f"⚠️ Error handling test skipped: {e}")
+        log.warning(f"Error handling test skipped: {e}")
 
     # Test with valid parameters
     valid_flush = {
@@ -2154,7 +2428,7 @@ def test_training_server_flush_error_handling():
     assert response["ttft_training_samples_flushed"] == 0
     assert response["tpot_training_samples_flushed"] == 0
 
-    print("✓ Flush error handling tests passed!")
+    log.info("Flush error handling tests passed!")
 
 
 def test_treelite_conformal_mode():
@@ -2167,12 +2441,12 @@ def test_treelite_conformal_mode():
     4. Prediction server loads conformal calibration
     5. Coverage is within expected range (85-95% for P90)
     """
-    print("\n" + "=" * 50)
-    print("Testing TreeLite + Conformal Mode")
-    print("=" * 50)
+    log.info("=" * 50)
+    log.info("Testing TreeLite + Conformal Mode")
+    log.info("=" * 50)
 
     # 1. Check server configuration
-    print("Step 1: Checking server configuration...")
+    log.info("Step 1: Checking server configuration...")
     model_info_r = requests.get(f"{TRAINING_URL}/model/download/info", timeout=10)
     assert model_info_r.status_code == 200
     model_info = model_info_r.json()
@@ -2184,11 +2458,11 @@ def test_treelite_conformal_mode():
     server_model_type = model_info.get("model_type")
     quantile = prediction_status.get("quantile", 0.9)
 
-    print(f"  Model type: {server_model_type}")
-    print(f"  Quantile: {quantile}")
+    log.debug(f"Model type: {server_model_type}")
+    log.debug(f"Quantile: {quantile}")
 
     # 2. Verify TreeLite models ARE created (sanity check)
-    print("Step 2: Verifying TreeLite models are created...")
+    log.info("Step 2: Verifying TreeLite models are created...")
     models_list_r = requests.get(f"{TRAINING_URL}/models/list", timeout=10)
     models_list = models_list_r.json()
 
@@ -2196,31 +2470,31 @@ def test_treelite_conformal_mode():
     tpot_treelite_exists = models_list["models"].get("tpot_treelite", {}).get("exists", False)
 
     if not (ttft_treelite_exists and tpot_treelite_exists):
-        print("  ⚠️  WARNING: TreeLite models NOT created.")
-        print(f"  TTFT TreeLite exists: {ttft_treelite_exists}")
-        print(f"  TPOT TreeLite exists: {tpot_treelite_exists}")
+        log.warning("WARNING: TreeLite models NOT created.")
+        log.warning(f"TTFT TreeLite exists: {ttft_treelite_exists}")
+        log.warning(f"TPOT TreeLite exists: {tpot_treelite_exists}")
         return
     else:
-        print(f"  ✓ TTFT TreeLite model exists ({models_list['models']['ttft_treelite']['size_bytes']} bytes)")
-        print(f"  ✓ TPOT TreeLite model exists ({models_list['models']['tpot_treelite']['size_bytes']} bytes)")
+        log.info(f"TTFT TreeLite model exists ({models_list['models']['ttft_treelite']['size_bytes']} bytes)")
+        log.info(f"TPOT TreeLite model exists ({models_list['models']['tpot_treelite']['size_bytes']} bytes)")
 
     # 3. Check conformal calibration files exist
-    print("Step 3: Verifying conformal calibration files...")
+    log.info("Step 3: Verifying conformal calibration files...")
     ttft_conformal_exists = models_list["models"].get("ttft_conformal", {}).get("exists", False)
     tpot_conformal_exists = models_list["models"].get("tpot_conformal", {}).get("exists", False)
 
     if ttft_conformal_exists:
-        print(f"  ✓ TTFT conformal calibration exists ({models_list['models']['ttft_conformal']['size_bytes']} bytes)")
+        log.info(f"TTFT conformal calibration exists ({models_list['models']['ttft_conformal']['size_bytes']} bytes)")
     else:
-        print("  ⚠️  TTFT conformal calibration NOT found")
+        log.warning("TTFT conformal calibration NOT found")
 
     if tpot_conformal_exists:
-        print(f"  ✓ TPOT conformal calibration exists ({models_list['models']['tpot_conformal']['size_bytes']} bytes)")
+        log.info(f"TPOT conformal calibration exists ({models_list['models']['tpot_conformal']['size_bytes']} bytes)")
     else:
-        print("  ⚠️  TPOT conformal calibration NOT found")
+        log.warning("TPOT conformal calibration NOT found")
 
     # 4. Check prediction server calibration stats
-    print("Step 4: Checking prediction server conformal calibration...")
+    log.info("Step 4: Checking prediction server conformal calibration...")
     try:
         calibration_r = requests.get(f"{PREDICTION_URL}/calibration/stats", timeout=10)
         if calibration_r.status_code == 200:
@@ -2229,24 +2503,28 @@ def test_treelite_conformal_mode():
             # TreeLite is now the only mode - always check conformal stats
             ttft_conf = calibration_stats.get("ttft_conformal", {})
             if "calibration_samples" in ttft_conf:
-                print(f"  ✓ TTFT conformal loaded with {ttft_conf['calibration_samples']} samples")
-                print(f"    Quantile adjustment: +{ttft_conf.get('quantile_adjustment_ms', 0):.2f}ms")
+                log.info(f"TTFT conformal loaded with {ttft_conf['calibration_samples']} samples")
+                log.debug(f"Quantile adjustment: +{ttft_conf.get('quantile_adjustment_ms', 0):.2f}ms")
+                if ttft_conf.get("calibrated_alpha") is not None:
+                    log.debug(f"Calibrated alpha: {ttft_conf['calibrated_alpha']:.4f}")
             else:
-                print(f"  ⚠️  TTFT conformal error: {ttft_conf.get('error', 'unknown')}")
+                log.warning(f"TTFT conformal error: {ttft_conf.get('error', 'unknown')}")
 
             tpot_conf = calibration_stats.get("tpot_conformal", {})
             if "calibration_samples" in tpot_conf:
-                print(f"  ✓ TPOT conformal loaded with {tpot_conf['calibration_samples']} samples")
-                print(f"    Quantile adjustment: +{tpot_conf.get('quantile_adjustment_ms', 0):.2f}ms")
+                log.info(f"TPOT conformal loaded with {tpot_conf['calibration_samples']} samples")
+                log.debug(f"Quantile adjustment: +{tpot_conf.get('quantile_adjustment_ms', 0):.2f}ms")
+                if tpot_conf.get("calibrated_alpha") is not None:
+                    log.debug(f"Calibrated alpha: {tpot_conf['calibrated_alpha']:.4f}")
             else:
-                print(f"  ⚠️  TPOT conformal error: {tpot_conf.get('error', 'unknown')}")
+                log.warning(f"TPOT conformal error: {tpot_conf.get('error', 'unknown')}")
         else:
-            print(f"  ⚠️  Calibration stats endpoint returned {calibration_r.status_code}")
+            log.warning(f"Calibration stats endpoint returned {calibration_r.status_code}")
     except Exception as e:
-        print(f"  ⚠️  Error checking calibration stats: {e}")
+        log.warning(f"Error checking calibration stats: {e}")
 
     # 5. Send training data for coverage test
-    print("Step 5: Sending training data...")
+    log.info("Step 5: Sending training data...")
     np.random.seed(123)
     training_entries = []
 
@@ -2260,9 +2538,9 @@ def test_treelite_conformal_mode():
     # Calculate expected minimum calibration samples
     expected_test_samples = int(TRAIN_N * test_train_ratio)
     min_calibration_samples = int(expected_test_samples * 0.8)
-    print(f"  Expected calibration samples: {expected_test_samples} (min threshold: {min_calibration_samples})")
+    log.debug(f"Expected calibration samples: {expected_test_samples} (min threshold: {min_calibration_samples})")
 
-    for i in range(TRAIN_N):
+    for _ in range(TRAIN_N):
         kv = np.random.uniform(0.1, 0.9)
         input_len = np.random.randint(50, 800)
         waiting = np.random.randint(0, 8)
@@ -2289,15 +2567,15 @@ def test_treelite_conformal_mode():
 
     training_r = requests.post(f"{TRAINING_URL}/add_training_data_bulk", json={"entries": training_entries}, timeout=60)
     assert training_r.status_code == 202
-    print(f"  ✓ Sent {len(training_entries)} training samples")
+    log.info(f"Sent {len(training_entries)} training samples")
 
     # 6. Wait for bundle with expected samples (outcome-based, not cycle-based)
     # We added TRAIN_N samples, expect ~90% in training (test_train_ratio=0.1)
     # Use 80% of expected training samples as minimum threshold
-    print("Step 6: Waiting for training to complete...")
+    log.info("Step 6: Waiting for training to complete...")
     expected_training_samples = int(TRAIN_N * (1 - test_train_ratio))
     min_training_samples = int(expected_training_samples * 0.8)
-    print(f"  Expected training samples: {expected_training_samples} (min threshold: {min_training_samples})")
+    log.debug(f"Expected training samples: {expected_training_samples} (min threshold: {min_training_samples})")
 
     bundle_info = wait_for_bundle_with_min_samples(
         PREDICTION_URL, min_ttft_samples=min_training_samples, min_tpot_samples=min_training_samples
@@ -2305,24 +2583,24 @@ def test_treelite_conformal_mode():
 
     ttft_samples = bundle_info.get("training_samples", {}).get("ttft", 0)
     tpot_samples = bundle_info.get("training_samples", {}).get("tpot", 0)
-    print(f"  ✓ Bundle trained on {ttft_samples} TTFT, {tpot_samples} TPOT samples")
+    log.info(f"Bundle trained on {ttft_samples} TTFT, {tpot_samples} TPOT samples")
 
     # 6.5. Flush training data to prevent continuous retraining during pod sync
     # This eliminates the "moving target" problem where training server creates new bundles
     # faster than prediction pods can download them (1s retrain interval vs 10-20s download time)
     # Note: Models are already trained and frozen in the bundle - flushing doesn't affect test integrity
-    print("Flushing training data to stabilize bundle for pod sync...")
+    log.info("Flushing training data to stabilize bundle for pod sync...")
     flush_training_data_robust(TRAINING_URL)
 
     # 7. Wait for all pods to sync and verify calibration (TreeLite mode)
-    print("Step 7: Syncing models to prediction server (including TreeLite compilation)...")
+    log.info("Step 7: Syncing models to prediction server (including TreeLite compilation)...")
     wait_for_pod_sync(PREDICTION_URL, min_calibration_samples=min_calibration_samples, timeout=120)
 
     # 8. Verify calibration consistency across all pods
     verify_calibration_consistency(PREDICTION_URL, min_calibration_samples)
 
     # 8. Make predictions and check coverage
-    print("Step 9: Testing predictions and coverage...")
+    log.info("Step 9: Testing predictions and coverage...")
 
     # Use same random seed for consistent test data
     np.random.seed(456)  # Different from training (123) but consistent
@@ -2331,7 +2609,7 @@ def test_treelite_conformal_mode():
     expected_ttft = []
     expected_tpot = []
 
-    for i in range(500):  # Increased from 200 to 500 for stable coverage estimate
+    for _ in range(500):  # Increased from 200 to 500 for stable coverage estimate
         kv = np.random.uniform(0.1, 0.9)
         input_len = np.random.randint(100, 600)
         waiting = np.random.randint(1, 8)
@@ -2368,35 +2646,40 @@ def test_treelite_conformal_mode():
     ttft_coverage = np.mean(np.array(expected_ttft) <= ttft_preds) * 100
     tpot_coverage = np.mean(np.array(expected_tpot) <= tpot_preds) * 100
 
-    print(f"  Coverage: TTFT={ttft_coverage:.1f}%, TPOT={tpot_coverage:.1f}% (target: {quantile*100:.0f}%)")
+    log.info(f"Coverage: TTFT={ttft_coverage:.1f}%, TPOT={tpot_coverage:.1f}% (target: {quantile*100:.0f}%)")
 
-    # For conformal mode, coverage should be 85-95% for P90 (slightly wider tolerance)
+    # With signed residuals + auto-calibration, coverage should be close to target
     target_pct = quantile * 100
-    assert 80 <= ttft_coverage <= 100, f"TTFT coverage {ttft_coverage:.1f}% outside acceptable range (80-100%)"
-    assert 80 <= tpot_coverage <= 100, f"TPOT coverage {tpot_coverage:.1f}% outside acceptable range (80-100%)"
+    assert (
+        (target_pct - 5) <= ttft_coverage <= (target_pct + 5)
+    ), f"TTFT coverage {ttft_coverage:.1f}% outside acceptable range ({target_pct-5:.0f}-{target_pct+5:.0f}%)"
+    assert (
+        (target_pct - 5) <= tpot_coverage <= (target_pct + 5)
+    ), f"TPOT coverage {tpot_coverage:.1f}% outside acceptable range ({target_pct-5:.0f}-{target_pct+5:.0f}%)"
 
-    print("✓ TreeLite + conformal mode test passed!")
-    print("  Note: Coverage within acceptable range for conformal prediction")
+    log.info("TreeLite + conformal mode test passed!")
+    log.info("Note: Coverage within acceptable range for conformal prediction")
 
     # 10. Cleanup: flush data for next test
     flush_training_data_robust(TRAINING_URL)
 
 
 if __name__ == "__main__":
-    print("Running dual-server architecture tests with prefix cache score support...")
-    print(f"Prediction server: {PREDICTION_URL}")
-    print(f"Training server: {TRAINING_URL}")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    log.info("Running dual-server architecture tests with prefix cache score support...")
+    log.info(f"Prediction server: {PREDICTION_URL}")
+    log.info(f"Training server: {TRAINING_URL}")
 
     # Update these URLs before running!
     if "<PREDICTION_EXTERNAL_IP>" in PREDICTION_URL or "<TRAINING_EXTERNAL_IP>" in TRAINING_URL:
-        print("\n❌ ERROR: Please update the server URLs at the top of this file!")
-        print("Get external IPs with: kubectl get services")
+        log.error("ERROR: Please update the server URLs at the top of this file!")
+        log.error("Get external IPs with: kubectl get services")
         exit(1)
 
     # Run individual tests
-    print("\n" + "=" * 50)
-    print("RUNNING DUAL-SERVER TESTS WITH PREFIX CACHE SCORE")
-    print("=" * 50)
+    log.info("=" * 50)
+    log.info("RUNNING DUAL-SERVER TESTS WITH PREFIX CACHE SCORE")
+    log.info("=" * 50)
 
     tests = [
         ("Server Health Checks", lambda: (test_prediction_server_healthz(), test_training_server_healthz())),
@@ -2407,6 +2690,7 @@ if __name__ == "__main__":
         ("Training Server Models List", test_training_server_models_list),
         ("Model Download", test_model_download_from_training_server),
         ("TreeLite Models", test_treelite_models_on_training_server),
+        ("Lifecycle State Transitions", test_lifecycle_state_transitions),
         ("Send Training Data", test_add_training_data_to_training_server),
         ("Model Sync", test_prediction_server_model_sync),
         ("Prediction Endpoint Format", test_prediction_endpoint_response_format),
@@ -2420,9 +2704,10 @@ if __name__ == "__main__":
         # Dual-mode tests (TreeLite+conformal)
         ("TreeLite+Conformal Mode", test_treelite_conformal_mode),
         ("Dual Server Model Learns Equation", test_dual_server_quantile_regression_learns_distribution),
+        ("Prediction Directional Correctness", test_prediction_directional_correctness),
         ("End-to-End Workflow", test_end_to_end_workflow),
         # Flush tests run LAST to avoid interfering with distribution tests
-        ("Flush API", test_zzz_training_server_flush_api),
+        ("Flush API", test_training_server_flush_api),
         ("Flush Error Handling", test_training_server_flush_error_handling),
         # Stress tests (run after all functional tests)
         ("Prediction Stress Test", test_prediction_server_stress_test),
@@ -2436,17 +2721,17 @@ if __name__ == "__main__":
     for test_name, test_func in tests:
         try:
             test_func()
-            print(f"✓ {test_name} passed")
+            log.info(f"PASSED: {test_name}")
             passed += 1
         except Exception as e:
-            print(f"✗ {test_name} failed: {e}")
+            log.error(f"FAILED: {test_name}: {e}")
             failed += 1
 
-    print(f"\n{'='*50}")
-    print(f"FINAL RESULTS: {passed} passed, {failed} failed")
-    print(f"{'='*50}")
+    log.info(f"{'='*50}")
+    log.info(f"FINAL RESULTS: {passed} passed, {failed} failed")
+    log.info(f"{'='*50}")
 
     if failed == 0:
-        print("🎉 All tests passed! Your dual-server architecture with prefix cache score is working correctly.")
+        log.info("All tests passed! Your dual-server architecture with prefix cache score is working correctly.")
     else:
-        print(f"⚠️  {failed} tests failed. Check the issues above.")
+        log.warning(f"{failed} tests failed. Check the issues above.")

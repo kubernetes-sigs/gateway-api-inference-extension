@@ -2,70 +2,38 @@
 # See https://pre-commit.com for more information
 # Install: pre-commit install
 # Run manually: pre-commit run --all-files
+#
+# Philosophy: never block commits. Auto-fix what we can, warn on the rest.
+# You can always amend later to clean up lint warnings.
 
 repos:
-#   # Ruff - Fast Python linter and formatter
-#   - repo: https://github.com/astral-sh/ruff-pre-commit
-#     rev: v0.8.4  # Latest stable version as of Feb 2026
-#     hooks:
-#       # Run the linter
-#       - id: ruff
-#         name: ruff lint (Python only)
-#         args: [--fix]  # Auto-fix issues when possible
-#         files: ^latencypredictor/.*\.py$  # Only latencypredictor/ directory
-#         exclude: ^latencypredictor/(venv|\.venv)/
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      # Linter: warn-only (never blocks commits)
+      - id: ruff
+        name: ruff lint (warn only)
+        args: [--fix, --exit-zero]
+        files: ^latencypredictor/.*\.py$
+        exclude: ^latencypredictor/(venv|\.venv)/
+        verbose: true
 
-#       # Run the formatter
-#       - id: ruff-format
-#         name: ruff format (Python only)
-#         files: ^latencypredictor/.*\.py$  # Only latencypredictor/ directory
-#         exclude: ^latencypredictor/(venv|\.venv)/
+      # Formatter: auto-fixes in place (never blocks because it just reformats)
+      - id: ruff-format
+        name: ruff format
+        files: ^latencypredictor/.*\.py$
+        exclude: ^latencypredictor/(venv|\.venv)/
 
-#   # Security checks - Minimal and non-invasive
-#   - repo: https://github.com/PyCQA/bandit
-#     rev: 1.8.0
-#     hooks:
-#       - id: bandit
-#         name: bandit security check
-#         args: [-ll, --skip, B101]  # Low severity, skip asserts
-#         files: ^latencypredictor/.*\.py$
-#         exclude: ^latencypredictor/(venv|\.venv)/
-
-#   # Additional useful hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      # Check for merge conflicts
       - id: check-merge-conflict
+      - id: check-ast
+        files: ^latencypredictor/.*\.py$
+      - id: end-of-file-fixer
+        files: ^latencypredictor/.*\.py$
 
-      # Check YAML files are valid (for K8s manifests)
-      - id: check-yaml
-        args: [--unsafe]  # Allow custom YAML tags (Kubernetes)
-        files: ^latencypredictor/manifests/.*\.yaml$
+default_language_version:
+  python: python3.11
 
-#       # Check JSON files are valid
-#       - id: check-json
-#         files: ^latencypredictor/.*\.json$
-
-#       # Detect private keys
-#       - id: detect-private-key
-#         files: ^latencypredictor/
-
-#       # Ensure files end with newline
-#       - id: end-of-file-fixer
-#         files: ^latencypredictor/.*\.py$
-
-#       # Check Python syntax
-#       - id: check-ast
-#         files: ^latencypredictor/.*\.py$
-
-#       # Check for debugger imports (pdb, ipdb, etc.)
-#       - id: debug-statements
-#         files: ^latencypredictor/.*\.py$
-
-# # Global settings
-# default_language_version:
-#   python: python3.11
-
-# # Performance: run hooks in parallel when possible
-# fail_fast: false
+fail_fast: false

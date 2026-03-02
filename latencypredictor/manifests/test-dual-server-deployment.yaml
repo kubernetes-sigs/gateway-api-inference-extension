@@ -29,8 +29,6 @@ spec:
             memory: "8Gi"
         env:
         # Point to your internal services
-        - name: LOG_LEVEL
-          value: DEBUG
         - name: TRAINING_SERVER_URL
           value: "http://training-service:8000"
         - name: PREDICTION_SERVER_URL
@@ -50,7 +48,9 @@ spec:
         command: ["pytest"]
         args:
           - "-v"
-          - "-s"
+          - "--log-cli-level=INFO"
+          - "--log-cli-format=%(levelname)s %(message)s"
+          - "--no-header"
           - "test/test_dual_server_client.py"
           - "-k"
           - "not stress"  # Exclude all *_stress_test functions
@@ -99,8 +99,6 @@ spec:
 #             memory: "6Gi"
 #         env:
 #         # Point to your internal services
-#         - name: LOG_LEVEL
-#           value: DEBUG
 #         - name: TRAINING_SERVER_URL
 #           value: "http://training-service:8000"
 #         - name: PREDICTION_SERVER_URL
@@ -129,7 +127,7 @@ spec:
 #         args:
 #           - "pytest"
 #           - "-v"
-#           - "-s"
+#           - "--log-cli-level=INFO"
 #           - "test/test_dual_server_client.py"
 #           - "-k"
 #           - "stress"

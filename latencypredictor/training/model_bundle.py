@@ -205,7 +205,7 @@ class ModelBundle:
                 created_at=datetime.now(UTC).isoformat(),
                 state=BundleState.TRAINING,
                 model_type="",  # Set by caller
-                quantile=0.85,  # Default quantile (p85)
+                quantile=0.90,  # Default quantile (p90)
             )
 
         # Bundle path
