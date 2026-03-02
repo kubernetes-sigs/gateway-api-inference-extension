@@ -23,6 +23,7 @@ import (
 	"net"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -277,9 +278,9 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*fwkdl.EndpointMetadata{}
-	activePorts, activePortsDeclared := podutil.ExtractActivePorts(pod)
+	activePorts := extractActivePorts(pod, ds.pool.TargetPorts)
 	for idx, port := range ds.pool.TargetPorts {
-		if activePortsDeclared && !activePorts.Has(port) {
+		if !activePorts.Has(port) {
 			continue
 		}
 		metricsPort := modelServerMetricsPort
@@ -315,17 +316,15 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	// remove endpoints that are no longer active in the pool
-	if activePortsDeclared {
-		for idx, port := range ds.pool.TargetPorts {
-			if activePorts.Has(port) {
-				continue
-			}
+	for idx, port := range ds.pool.TargetPorts {
+		if activePorts.Has(port) {
+			continue
+		}
 
-			namespacedName := createEndpointNamespacedName(pod, idx)
-			if ep, ok := ds.pods.Load(namespacedName); ok {
-				ds.pods.Delete(namespacedName)
-				ds.epf.ReleaseEndpoint(ep.(fwkdl.Endpoint))
-			}
+		namespacedName := createEndpointNamespacedName(pod, idx)
+		if ep, ok := ds.pods.Load(namespacedName); ok {
+			ds.pods.Delete(namespacedName)
+			ds.epf.ReleaseEndpoint(ep.(fwkdl.Endpoint))
 		}
 	}
 
@@ -401,5 +400,30 @@ func createEndpointNamespacedName(pod *corev1.Pod, idx int) types.NamespacedName
 	return types.NamespacedName{
 		Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
 		Namespace: pod.Namespace,
+	}
+}
+
+// activePortsAnnotation is used to specify which ports on a pod should be considered
+// as active for inference traffic. The value should be a comma-separated list of port numbers.
+// Example: "8000,8001,8002"
+const activePortsAnnotation = "inference.networking.k8s.io/active-ports"
+
+// extractActivePorts extracts the active ports from a pod's annotations.
+func extractActivePorts(pod *corev1.Pod, validPorts []int) sets.Set[int] {
+	activePorts := sets.New[int]()
+	allPorts := sets.New(validPorts...)
+	annotations := pod.GetAnnotations()
+	if portsAnnotation, ok := annotations[activePortsAnnotation]; ok {
+		portStrs := strings.Split(portsAnnotation, ",")
+		for _, portStr := range portStrs {
+			var portNum int
+			_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
+			if err == nil && portNum > 0 && allPorts.Has(portNum) {
+				activePorts.Insert(portNum)
+			}
+		}
+		return activePorts
+	} else {
+		return allPorts
 	}
 }

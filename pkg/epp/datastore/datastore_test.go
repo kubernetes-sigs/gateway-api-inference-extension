@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1060,5 +1062,133 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestExtractActivePorts(t *testing.T) {
+	tests := []struct {
+		name          string
+		pod           *corev1.Pod
+		validPorts    []int
+		expectedPorts sets.Set[int]
+	}{
+		{
+			name: "Pod without active ports annotation",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000, 8001, 8002),
+		},
+		{
+			name: "Pod with empty active ports annotation",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: ""},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New[int](),
+		},
+		{
+			name: "Pod with single port in annotation",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000),
+		},
+		{
+			name: "Pod with multiple ports in annotation",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000,8001,8002"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000, 8001, 8002),
+		},
+		{
+			name: "Pod with multiple ports with spaces in annotation",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000, 8001 , 8002"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000, 8001, 8002),
+		},
+		{
+			name: "Pod with invalid port in annotation (non-numeric)",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000,invalid,8002"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000, 8002),
+		},
+		{
+			name: "Pod with invalid port in annotation (negative number)",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000,-1,8002"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000, 8002),
+		},
+		{
+			name: "Pod with duplicate ports in annotation",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000,8001,8000"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000, 8001),
+		},
+		{
+			name: "Pod with port not in validPorts",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000,9000"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8000),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ports := extractActivePorts(tt.pod, tt.validPorts)
+
+			if !reflect.DeepEqual(ports, tt.expectedPorts) {
+				t.Errorf("ExtractActivePorts() ports = %v, want %v", ports, tt.expectedPorts)
+			}
+		})
 	}
 }
