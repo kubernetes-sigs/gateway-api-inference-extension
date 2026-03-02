@@ -677,11 +677,6 @@ func TestDirector_HandleRequest(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Error parsing the reqBodyMap, err is %v", err)
 				}
-				var err error
-				reqCtx.Request.RawBody, err = json.Marshal(test.reqBodyMap)
-				if err != nil {
-					t.Fatalf("Error parsing the reqBodyMap, err is %v", err)
-				}
 
 				// Add appropriate path header based on request body content for path-based API detection
 				if _, hasPrompt := test.reqBodyMap["prompt"]; hasPrompt {

@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -197,14 +196,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser Parser) (*scheduling.LLMRequestBody, error) {
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser Parser) (*fwksched.LLMRequestBody, error) {
 	if parser != nil {
 		return d.parseWithParser(ctx, reqCtx, parser)
 	}
 	return d.parseLegacy(ctx, reqCtx)
 }
 
-func (d *Director) parseWithParser(ctx context.Context, reqCtx *handlers.RequestContext, parser Parser) (*scheduling.LLMRequestBody, error) {
+func (d *Director) parseWithParser(ctx context.Context, reqCtx *handlers.RequestContext, parser Parser) (*fwksched.LLMRequestBody, error) {
 	llmRequestBody, err := parser.ParseRequest(reqCtx.Request.Headers, reqCtx.Request.RawBody)
 	if err != nil {
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "failed to parse the request"}
@@ -226,7 +225,7 @@ func (d *Director) parseWithParser(ctx context.Context, reqCtx *handlers.Request
 }
 
 // parseLegacy handles the original JSON unmarshaling flow.
-func (d *Director) parseLegacy(ctx context.Context, reqCtx *handlers.RequestContext) (*scheduling.LLMRequestBody, error) {
+func (d *Director) parseLegacy(ctx context.Context, reqCtx *handlers.RequestContext) (*fwksched.LLMRequestBody, error) {
 	bodyMap := make(map[string]any)
 	if err := json.Unmarshal(reqCtx.Request.RawBody, &bodyMap); err != nil {
 		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body"}
