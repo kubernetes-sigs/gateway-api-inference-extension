@@ -24,7 +24,7 @@ import (
 
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
-	flag "github.com/spf13/pflag"
+	"github.com/spf13/pflag"
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/http"
@@ -114,7 +114,7 @@ func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 // fromStringFlag returns the value of a registered pflag string flag.
 // The second return value is false when the flag is not registered; no error is returned in that case.
 func fromStringFlag(name string) (string, bool) {
-	f := flag.Lookup(name)
+	f := pflag.Lookup(name)
 	if f == nil {
 		return "", false
 	}
@@ -125,7 +125,7 @@ func fromStringFlag(name string) (string, bool) {
 // The second return value is false when the flag is not registered; no error is returned in that case.
 // An error is returned only when the flag exists but its value cannot be parsed as a bool.
 func fromBoolFlag(name string) (bool, bool, error) {
-	f := flag.Lookup(name)
+	f := pflag.Lookup(name)
 	if f == nil {
 		return false, false, nil
 	}
