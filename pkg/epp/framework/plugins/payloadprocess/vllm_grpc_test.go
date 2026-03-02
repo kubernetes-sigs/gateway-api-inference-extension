@@ -51,7 +51,7 @@ func TestParseRequest(t *testing.T) {
 			},
 			want: &vllm.GenerateRequest{
 				Input: &vllm.GenerateRequest_Text{
-					Text: "Hello\n",
+					Text: "user: Hello\nassistant: ",
 				},
 				SamplingParams: &vllm.SamplingParams{
 					MaxTokens: ptrUint32(100),
@@ -80,7 +80,7 @@ func TestParseRequest(t *testing.T) {
 			},
 			want: &vllm.GenerateRequest{
 				Input: &vllm.GenerateRequest_Text{
-					Text: "Hello\n",
+					Text: "user: Hello\nassistant: ",
 				},
 				SamplingParams: &vllm.SamplingParams{
 					MaxTokens:        ptrUint32(50),
@@ -107,7 +107,7 @@ func TestParseRequest(t *testing.T) {
 			},
 			want: &vllm.GenerateRequest{
 				Input: &vllm.GenerateRequest_Text{
-					Text: "Hello World!\n",
+					Text: "user: Hello World!\nassistant: ",
 				},
 				SamplingParams: &vllm.SamplingParams{
 					MaxTokens: ptrUint32(1024), // Default
@@ -149,7 +149,7 @@ func TestParseRequest(t *testing.T) {
 				t.Fatalf("ParseRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			// We need to unmarshal the ParsedBody proto to check it
+			// Unmarshal the ParsedBody proto to check it
 			gotProto := &vllm.GenerateRequest{}
 			if err := startProtoUnmarshal(got.ParsedBody.([]byte), gotProto); err != nil {
 				t.Fatalf("Failed to unmarshal parsed body: %v", err)
@@ -224,11 +224,9 @@ func ptrFloat32(v float32) *float32 { return &v }
 func ptrInt32(v int32) *int32       { return &v }
 
 func startProtoUnmarshal(b []byte, m *vllm.GenerateRequest) error {
-	// The ParsedBody is []byte (marshalled proto)
-	// But in the code: `extractedBody.ParsedBody = protoBody` where protoBody is []byte.
-	// `extractedBody.ParsedBody` is interface{}.
-	// We cast it in the test.
-	// But wait, `extractedBody.ParsedBody` is `any`. In `vllm_grpc.go`, we define it as `protoBody`.
-	// Check `startProtoUnmarshal` usage.
-	return (proto.UnmarshalOptions{}).Unmarshal(b, m)
+	// The ParsedBody has a 5-byte gRPC header. Strip it before unmarshalling.
+	if len(b) < 5 {
+		return (proto.UnmarshalOptions{}).Unmarshal(b, m)
+	}
+	return (proto.UnmarshalOptions{}).Unmarshal(b[5:], m)
 }
