@@ -207,8 +207,11 @@ func ExtractCombinedPrompt(extractedBody *scheduling.LLMRequestBody) (string, er
 
 	var combinedPrompt strings.Builder
 	for _, msg := range extractedBody.ChatCompletions.Messages {
-		combinedPrompt.WriteString(msg.Content.PlainText() + "\n")
+		// "Role: Content" format.
+		combinedPrompt.WriteString(msg.Role + ": " + msg.Content.PlainText() + "\n")
 	}
+
+	combinedPrompt.WriteString("assistant: ")
 	return combinedPrompt.String(), nil
 }
 
