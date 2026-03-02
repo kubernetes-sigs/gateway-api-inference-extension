@@ -70,11 +70,6 @@ type Collector struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Sources and extractors for data collection
-	// TODO: remove. Only used in Start
-	pollers    []fwkdl.PollingDataSource
-	extractors []fwkdl.Extractor
-
 	// goroutine management
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -87,47 +82,24 @@ func NewCollector() *Collector {
 	return &Collector{}
 }
 
-// NewCollectorWithExtractors returns a new collector with the given sources and extractors.
-func NewCollectorWithExtractors(pollers []fwkdl.PollingDataSource, extractors []fwkdl.Extractor) *Collector {
-	return &Collector{
-		pollers:    pollers,
-		extractors: extractors,
-	}
-}
-
 // Start initiates data source collection for the endpoint.
 // All sources must implement PollingDataSource. Validation is performed by the caller.
-// If sources is provided, uses them; otherwise uses pollers/extractors from struct (set via NewCollectorWithExtractors).
-// TODO: pass in collectors and for each set of extractors (for example: sources []fwkdl.DataSource, extractors map[string][]fwkdl.Extractor)
-func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, sources ...[]fwkdl.DataSource) error {
-	// Determine pollers to use
-	var pollers []fwkdl.PollingDataSource
-
-	switch { // TODO always use passed in sources and extractors, there is no fields on struct after removal.
-	case len(sources) > 0 && sources[0] != nil && len(sources[0]) > 0:
-		// Use provided sources
-		for _, src := range sources[0] {
-			if src == nil {
-				return errors.New("cannot add nil data source")
-			}
-			pollers = append(pollers, src.(fwkdl.PollingDataSource))
-		}
-	case len(c.pollers) > 0:
-		// Use struct's pollers
-		pollers = c.pollers
-	default:
-		return errors.New("cannot start collector with no pollers")
+func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, pollers []fwkdl.PollingDataSource, extractors map[string][]fwkdl.Extractor) error {
+	// Validate sources slice is not empty
+	if len(pollers) == 0 {
+		return errors.New("cannot start collector with empty sources")
 	}
 
-	var extractors []fwkdl.Extractor
-	if len(c.extractors) > 0 {
-		extractors = c.extractors
+	for _, src := range pollers {
+		if src == nil {
+			return errors.New("cannot add nil data source")
+		}
 	}
 
 	return c.startCollection(ctx, ticker, ep, pollers, extractors)
 }
 
-func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, pollers []fwkdl.PollingDataSource, extractors []fwkdl.Extractor) error {
+func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, pollers []fwkdl.PollingDataSource, extractors map[string][]fwkdl.Extractor) error {
 	var ready chan struct{}
 	started := false
 
@@ -137,7 +109,7 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 		started = true
 		ready = make(chan struct{})
 
-		go func(endpoint fwkdl.Endpoint, sources []fwkdl.PollingDataSource, exts []fwkdl.Extractor) {
+		go func(endpoint fwkdl.Endpoint, sources []fwkdl.PollingDataSource, exts map[string][]fwkdl.Extractor) {
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {
@@ -152,7 +124,6 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 				case <-c.ctx.Done(): // per endpoint context cancelled
 					return
 				case <-ticker.Channel():
-					// TODO: do not collect if there's no pool specified?
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
 						data, err := src.Poll(ctx, endpoint)
@@ -162,9 +133,9 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 							continue
 						}
 						cancel()
-						// If extractors provided, call them with the data
-						if exts != nil && data != nil {
-							for _, ext := range exts {
+						srcName := src.TypedName().Name
+						if srcExtractors, ok := exts[srcName]; ok && data != nil {
+							for _, ext := range srcExtractors {
 								if err := ext.Extract(ctx, data, endpoint); err != nil {
 									logger.Error(err, "extract failed", "extractor", ext.TypedName())
 								}

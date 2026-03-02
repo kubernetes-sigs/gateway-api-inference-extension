@@ -58,7 +58,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
@@ -322,7 +321,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
-	if err := r.setupDataLayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, epf, mgr); err != nil {
+	if err := r.setupDataLayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
 	}
@@ -596,70 +595,26 @@ func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	}
 }
 
-func (r *Runner) setupDataLayer(ctx context.Context, enableNewMetrics bool, cfg *datalayer.Config,
-	epf datalayer.EndpointFactory, mgr ctrl.Manager) error {
-	disallowedMetricsExtractor := ""
-	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
-		disallowedMetricsExtractor = extractormetrics.MetricsExtractorType
-	}
-
-	if err := datalayer.WithConfig(cfg, disallowedMetricsExtractor); err != nil {
-		return err
-	}
-
-	allSources := datalayer.GetSources()
-	if enableNewMetrics && len(allSources) == 0 {
-		return errors.New("data layer enabled but no data sources configured")
-	}
-
-	// Partition sources: poll-based go to the endpoint factory, notification
-	// sources get bound to the manager's watch/reconciliation loops.
-	var collectors []fwkdl.DataSource
-	for _, src := range allSources {
-		if notifySrc, ok := src.(fwkdl.NotificationSource); ok {
-			if err := datalayer.BindNotificationSource(notifySrc, mgr); err != nil {
-				return fmt.Errorf("failed to bind notification source %s: %w", notifySrc.TypedName(), err)
-			}
-			setupLog.Info("notification source bound", "source", notifySrc.TypedName().String(), "gvk", notifySrc.GVK())
-		} else if _, isPolling := src.(fwkdl.PollingDataSource); isPolling {
-			collectors = append(collectors, src)
-		} else {
-			return fmt.Errorf("skipping unknown datasource plugin type %s", src.TypedName().String())
-		}
-	}
-
-	epf.SetSources(collectors)
-
-	for _, src := range allSources { // log data layer configuration
-		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
-	}
-
-	logger := ctrl.Log.WithName("datalayer-runtime")
-	disallowedExtractor := ""
+func (r *Runner) setupDataLayer(ctx context.Context, enableNewMetrics bool, cfg *datalayer.Config, mgr ctrl.Manager) error {
+	disallowedExtractorType := ""
 	if !enableNewMetrics {
-		disallowedExtractor = extractormetrics.MetricsExtractorType
+		disallowedExtractorType = extractormetrics.MetricsExtractorType
 	}
-	if err := r.dlRuntime.Configure(cfg, enableNewMetrics, disallowedExtractor, logger); err != nil {
+
+	if err := r.dlRuntime.Configure(cfg, enableNewMetrics, disallowedExtractorType, setupLog); err != nil {
 		return err
 	}
+
 	if err := r.dlRuntime.Start(ctx, mgr); err != nil {
-		return fmt.Errorf("failed to start runtime: %w", err)
+		return err
 	}
-	setupLog.Info("datalayer runtime started")
 	return nil
 }
 
 func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) datalayer.EndpointFactory {
-	// TODO (after Runtime implements EndpointFactory):
-	// r.dlRuntime = datalayer.NewRuntime(opts.RefreshMetricsInterval)
-	// if enableNewMetrics {
-	//	return r.dlRuntime
-	// }
-	// for now just create the dlRuntime here
-
 	r.dlRuntime = datalayer.NewRuntime(opts.RefreshMetricsInterval)
 	if enableNewMetrics {
-		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval)
+		return r.dlRuntime
 	}
 	return backendmetrics.NewPodMetricsFactory(pmc, opts.RefreshMetricsInterval)
 }

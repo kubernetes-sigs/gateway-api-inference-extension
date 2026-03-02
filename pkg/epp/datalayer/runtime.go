@@ -31,7 +31,7 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
-// Runtime manages data sources, extractors, and endpoint lifecycle.
+// Runtime manages data sources, extractors, their mapping, and endpoint lifecycle.
 type Runtime struct {
 	pollingInterval time.Duration // used for polling sources
 	state           atomic.Int64  // stores RuntimeState
@@ -60,10 +60,12 @@ func NewRuntime(pollingInterval time.Duration) *Runtime {
 	}
 }
 
+// Configure is called to transform the configuration information into the Runtime's
+// internal fields.
 func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtractorType string, logger logr.Logger) error {
 	var err error
 
-	defer func() {
+	defer func() { // set the state to error on any failure
 		if err != nil {
 			r.setError()
 		}
@@ -92,7 +94,6 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 		srcName := src.TypedName().Name
 
 		logger.V(1).Info("Processing source", "source", srcName, "numExtractors", len(srcCfg.Extractors))
-
 		if err = r.validateSourceExtractors(src, srcCfg.Extractors, disallowedExtractorType); err != nil {
 			return err
 		}
@@ -111,7 +112,7 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 			gvkToSource[gvk] = srcName
 			notifiersCount++
 		} else {
-			err = fmt.Errorf("invalid source %s", src.TypedName().String())
+			err = fmt.Errorf("skipping unknown datasource plugin type %s", src.TypedName().String())
 			return err
 		}
 
@@ -127,11 +128,12 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 	}
 
 	logger.Info("Datalayer runtime configured", "pollers", pollersCount, "notifiers", notifiersCount)
-
 	err = r.transition(StateConfiguring, StateConfigured)
 	return err
 }
 
+// Start is called to enable the Runtime to start processing data collection. It wires
+// Kubernetes notifications into the manager.
 func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) error {
 	var err error
 
@@ -161,6 +163,8 @@ func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) error {
 	return err
 }
 
+// Stop is called to terminate the Runtime's data collection. It terminates all
+// go routines used for polling data sources.
 func (r *Runtime) Stop() error {
 	var err error
 
@@ -202,11 +206,14 @@ func (r *Runtime) setError() {
 	r.state.Store(int64(StateError))
 }
 
-func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.EndpointMetadata, poolInfo PoolInfo) fwkdl.Endpoint {
+// NewEndpoint sets up data polling on the provided endpoint.
+func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.EndpointMetadata, _ PoolInfo) fwkdl.Endpoint {
+	// TODO: should we cache the sources and map after Configure? Or just replace with maps and Mutex?
+	// The code could be simpler and also would benefit from using RLock mutex for concurrent access
+	// (no change expected) instead of using sync.Map (avoid use of Range just to count, more idiomatic code, etc.).
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithValues("endpoint", endpointMetadata.GetNamespacedName())
 
-	// Collect all polling sources
 	var pollers []fwkdl.PollingDataSource
 	r.pollers.Range(func(_, val any) bool {
 		if poller, ok := val.(fwkdl.PollingDataSource); ok {
@@ -215,20 +222,21 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 		return true
 	})
 
-	// Collect all extractors
-	var extractors []fwkdl.Extractor
-	r.sourceExtractors.Range(func(_, val any) bool {
-		extractors = append(extractors, val.([]fwkdl.Extractor)...)
-		return true
-	})
-
 	if len(pollers) == 0 {
 		logger.Info("No polling sources configured, creating endpoint without collector")
 		return fwkdl.NewEndpoint(endpointMetadata, nil)
 	}
 
+	extractors := make(map[string][]fwkdl.Extractor, len(pollers))
+	r.sourceExtractors.Range(func(key, val any) bool {
+		srcName := key.(string)
+		exts := val.([]fwkdl.Extractor)
+		extractors[srcName] = exts
+		return true
+	})
+
 	endpoint := fwkdl.NewEndpoint(endpointMetadata, nil)
-	collector := NewCollectorWithExtractors(pollers, extractors)
+	collector := NewCollector()
 
 	key := endpointMetadata.GetNamespacedName()
 	if _, loaded := r.collectors.LoadOrStore(key, collector); loaded {
@@ -237,7 +245,7 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 	}
 
 	ticker := NewTimeTicker(r.pollingInterval)
-	if err := collector.Start(ctx, ticker, endpoint); err != nil {
+	if err := collector.Start(ctx, ticker, endpoint, pollers, extractors); err != nil {
 		logger.Error(err, "failed to start collector for endpoint", "endpoint", key)
 		r.collectors.Delete(key)
 		return nil
@@ -246,6 +254,7 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 	return endpoint
 }
 
+// ReleaseEndpoint terminates polling for data on the given endpoint.
 func (r *Runtime) ReleaseEndpoint(ep fwkdl.Endpoint) {
 	key := ep.GetMetadata().GetNamespacedName()
 
@@ -255,6 +264,9 @@ func (r *Runtime) ReleaseEndpoint(ep fwkdl.Endpoint) {
 	}
 }
 
+// validates the compatibility of data source and configured extractors. This includes
+// expected Extractor type, source output and extractor input type compatibility and
+// optionally source specific validation.
 func (r *Runtime) validateSourceExtractors(src fwkdl.DataSource, extractors []fwkdl.Extractor, disallowedExtractorType string) error {
 	for _, ext := range extractors {
 		// check if disallowed extractor type
@@ -295,6 +307,7 @@ func (r *Runtime) validateSourceExtractors(src fwkdl.DataSource, extractors []fw
 	return nil
 }
 
+// validate input/output type compatibility.
 func validateInputTypeCompatible(dataSourceOutput, extractorInput reflect.Type) error {
 	if dataSourceOutput == nil || extractorInput == nil {
 		return errors.New("data source output type or extractor input type can't be nil")
@@ -308,6 +321,7 @@ func validateInputTypeCompatible(dataSourceOutput, extractorInput reflect.Type) 
 		extractorInput, dataSourceOutput)
 }
 
+// validate extractor compatibility.
 func validateExtractorCompatible(extractorType reflect.Type, expectedInterfaceType reflect.Type) error {
 	if extractorType == nil || expectedInterfaceType == nil {
 		return errors.New("extractor type or expected interface type can't be nil")

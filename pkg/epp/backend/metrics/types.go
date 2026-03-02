@@ -49,10 +49,6 @@ type PodMetricsFactory struct {
 	refreshMetricsInterval time.Duration
 }
 
-func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
-	// no-op
-}
-
 func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) fwkdl.Endpoint {
 	pm := &podMetrics{
 		pmc:       f.pmc,
