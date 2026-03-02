@@ -87,7 +87,7 @@ const (
 	modeStandard    runMode            = "standard"
 	modeStandalone  runMode            = "standalone"
 	strategyNoCRD   standaloneStrategy = "no_crd"   // Pure standalone
-	strategyWithCRD standaloneStrategy = "with_crd" // standaloneStrategy but watching CRDs
+	strategyWithCRD standaloneStrategy = "with_crd" // Standalone but watching CRDs
 )
 
 // HarnessConfig holds configuration options for the TestHarness.
