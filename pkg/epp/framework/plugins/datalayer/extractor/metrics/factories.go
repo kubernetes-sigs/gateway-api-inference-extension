@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	MetricsExtractorType = "model-server-protocol-metrics"
+	MetricsExtractorType = "core-metrics-extractor"
 )
 
 // Configuration parameters for metrics data source and extractor.

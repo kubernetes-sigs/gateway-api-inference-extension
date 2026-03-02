@@ -17,7 +17,7 @@ data:
         scheme: {{ .Values.inferenceExtension.metricsDataSource.scheme | default "http" | quote }}
         path: {{ .Values.inferenceExtension.metricsDataSource.path | default "/metrics" | quote }}
         insecureSkipVerify: {{ .Values.inferenceExtension.metricsDataSource.insecureSkipVerify | default true }}
-    - type: model-server-protocol-metrics
+    - type: core-metrics-extractor
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
     - type: predicted-latency-scorer
       parameters:

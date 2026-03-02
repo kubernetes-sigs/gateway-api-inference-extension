@@ -80,8 +80,8 @@ kind: EndpointPickerConfig
 featureGates:
 - dataLayer
 plugins:
-- name: model-server-protocol-metrics
-  type: model-server-protocol-metrics
+- name: core-metrics-extractor
+  type: core-metrics-extractor
   parameters:
     defaultEngine: "sglang"  # Pods without engine label will use SGLang metrics
 ```
@@ -96,8 +96,8 @@ kind: EndpointPickerConfig
 featureGates:
 - dataLayer
 plugins:
-- name: model-server-protocol-metrics
-  type: model-server-protocol-metrics
+- name: core-metrics-extractor
+  type: core-metrics-extractor
   parameters:
     engineLabelKey: "inference.networking.k8s.io/engine-type"  # Pod label key (optional, this is the default)
     defaultEngine: "vllm"  # Which engine to use for Pods without engine label
