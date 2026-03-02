@@ -31,90 +31,54 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
-var (
-	ExtractorType             = reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
-	NotificationExtractorType = reflect.TypeOf((*fwkdl.NotificationExtractor)(nil)).Elem()
-	NotificationEventType     = reflect.TypeOf(fwkdl.NotificationEvent{})
-)
-
-func validateInputTypeCompatible(dataSourceOutput, extractorInput reflect.Type) error {
-	if dataSourceOutput == nil || extractorInput == nil {
-		return errors.New("data source output type or extractor input type can't be nil")
-	}
-	if dataSourceOutput == extractorInput ||
-		(extractorInput.Kind() == reflect.Interface && extractorInput.NumMethod() == 0) ||
-		(extractorInput.Kind() == reflect.Interface && dataSourceOutput.Implements(extractorInput)) {
-		return nil
-	}
-	return fmt.Errorf("extractor input type %v is not compatible with data source output type %v",
-		extractorInput, dataSourceOutput)
-}
-
-func validateExtractorCompatible(extractorType reflect.Type, expectedInterfaceType reflect.Type) error {
-	if extractorType == nil || expectedInterfaceType == nil {
-		return errors.New("extractor type or expected interface type can't be nil")
-	}
-	if expectedInterfaceType.Kind() != reflect.Interface {
-		return fmt.Errorf("expected type must be an interface, got %v", expectedInterfaceType.Kind())
-	}
-	if !extractorType.Implements(expectedInterfaceType) {
-		return fmt.Errorf("extractor type %v does not implement interface %v",
-			extractorType, expectedInterfaceType)
-	}
-	return nil
-}
-
 // Runtime manages data sources, extractors, and endpoint lifecycle.
 type Runtime struct {
-	pollingInterval time.Duration
-	state           atomic.Int64 // stores RuntimeState
+	pollingInterval time.Duration // used for polling sources
+	state           atomic.Int64  // stores RuntimeState
 
-	// sync.Map[string]PollingDataSource
-	pollers sync.Map
+	pollers          sync.Map // Map of polling sources (key=source name, value=PollingDataSource)
+	notifiers        sync.Map // Map of k8s notification sources (key=source name, value=NotificationSource)
+	sourceExtractors sync.Map // Map sources to extractors (key=source name. value=[]Extractor)
 
-	// sync.Map[string]NotificationSource
-	notifiers sync.Map
-
-	// sync.Map[string][]fwkdl.Extractor - source name to extractors
-	sourceExtractors sync.Map
-
-	// Per-endpoint collectors: key=namespaced name, value=*Collector
-	collectors sync.Map
-
-	ctx    context.Context
-	cancel context.CancelFunc
+	collectors sync.Map // Per-endpoint poller (key=namespaced name, value=*Collector)
 }
+
+const (
+	defaultRefreshInterval = 50 * time.Millisecond
+)
 
 // NewRuntime creates a new Runtime with the given polling interval.
+// If duration is <= 0, uses the defaultRefreshInterval.
 func NewRuntime(pollingInterval time.Duration) *Runtime {
-	r := &Runtime{
-		pollingInterval: pollingInterval,
-		state:           atomic.Int64{},
+	interval := defaultRefreshInterval
+	if pollingInterval > 0 {
+		interval = pollingInterval
 	}
-	r.state.Store(int64(StateInitial))
-	return r
+	return &Runtime{
+		pollingInterval: interval,
+		// state defaults to 0 (i.e., StateInitial via iota)
+	}
 }
 
-// State returns the current state of the Runtime.
-func (r *Runtime) State() RuntimeState {
-	return RuntimeState(r.state.Load())
-}
+func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtractorType string, logger logr.Logger) error {
+	var err error
 
-func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtractorType string, logger logr.Logger) (err error) {
-	// Check state: must be initial
+	defer func() {
+		if err != nil {
+			r.setError()
+		}
+	}()
+
 	if err = r.transition(StateInitial, StateConfiguring); err != nil {
 		return err
 	}
 
-	// Ensure we transition to error state if there's any error
-	defer func() {
-		if err != nil {
-			_ = r.transition(StateConfiguring, StateError)
+	if cfg == nil || len(cfg.Sources) == 0 {
+		if enableNewMetrics {
+			err = errors.New("data layer enabled but no data sources configured")
+			return err
 		}
-	}()
-
-	if cfg == nil {
-		return errors.New("config cannot be nil")
+		return r.transition(StateConfiguring, StateConfigured)
 	}
 
 	logger.Info("Configuring datalayer runtime", "numSources", len(cfg.Sources))
@@ -129,7 +93,7 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 
 		logger.V(1).Info("Processing source", "source", srcName, "numExtractors", len(srcCfg.Extractors))
 
-		if err := r.validateSourceExtractors(src, srcCfg.Extractors, disallowedExtractorType); err != nil {
+		if err = r.validateSourceExtractors(src, srcCfg.Extractors, disallowedExtractorType); err != nil {
 			return err
 		}
 
@@ -138,11 +102,17 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 			pollersCount++
 		} else if notifier, ok := src.(fwkdl.NotificationSource); ok {
 			gvk := notifier.GVK().String()
+			if existingSource, exists := gvkToSource[gvk]; exists {
+				err = fmt.Errorf("duplicate notification source GVK %s: already used by source %s, cannot add %s",
+					gvk, existingSource, src.TypedName().String())
+				return err
+			}
 			r.notifiers.Store(srcName, notifier)
 			gvkToSource[gvk] = srcName
 			notifiersCount++
 		} else {
-			return fmt.Errorf("invalid source %s", src.TypedName().String())
+			err = fmt.Errorf("invalid source %s", src.TypedName().String())
+			return err
 		}
 
 		if len(srcCfg.Extractors) > 0 { // Store extractors mapped to source
@@ -158,86 +128,50 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 
 	logger.Info("Datalayer runtime configured", "pollers", pollersCount, "notifiers", notifiersCount)
 
-	return r.transition(StateConfiguring, StateConfigured)
+	err = r.transition(StateConfiguring, StateConfigured)
+	return err
 }
 
-func (r *Runtime) validateSourceExtractors(src fwkdl.DataSource, extractors []fwkdl.Extractor, disallowedExtractorType string) error {
-	// Get GVK if source is a NotificationSource
-	var srcGVK string
-	if ns, ok := src.(fwkdl.NotificationSource); ok {
-		srcGVK = ns.GVK().String()
-	}
+func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) error {
+	var err error
 
-	for _, ext := range extractors {
-		// Check disallowed extractor type
-		if disallowedExtractorType != "" && ext.TypedName().Type == disallowedExtractorType {
-			return fmt.Errorf("disallowed Extractor %s is configured for source %s",
-				ext.TypedName().String(), src.TypedName().String())
+	defer func() {
+		if err != nil {
+			r.setError()
 		}
-		// Validate GVK match for notification source/extractor
-		if srcGVK != "" {
-			if ne, ok := ext.(fwkdl.NotificationExtractor); ok {
-				if ne.GVK().String() != srcGVK {
-					return fmt.Errorf("extractor %s GVK %s does not match source %s GVK %s",
-						ext.TypedName(), ne.GVK().String(), src.TypedName(), srcGVK)
-				}
-			}
-		}
-		// Validate extractor type compatibility first
-		extractorType := reflect.TypeOf(ext)
-		if err := validateExtractorCompatible(extractorType, src.ExtractorType()); err != nil {
-			return fmt.Errorf("extractor %s type incompatible with datasource %s: %w",
-				ext.TypedName(), src.TypedName(), err)
-		}
-		// Validate input type compatibility
-		if err := validateInputTypeCompatible(src.OutputType(), ext.ExpectedInputType()); err != nil {
-			return fmt.Errorf("extractor %s input type incompatible with datasource %s: %w",
-				ext.TypedName(), src.TypedName(), err)
-		}
-		// Allow datasource custom validation
-		if validator, ok := src.(fwkdl.ValidatingDataSource); ok {
-			if err := validator.ValidateExtractor(ext); err != nil {
-				return fmt.Errorf("extractor %s failed custom validation for datasource %s: %w",
-					ext.TypedName(), src.TypedName(), err)
-			}
-		}
-	}
-	return nil
-}
+	}()
 
-func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) (err error) {
-	// Check state: must be configured
 	if err = r.transition(StateConfigured, StateStarting); err != nil {
 		return err
 	}
 
-	// Ensure we transition to error state if there's any error
-	defer func() {
-		if err != nil {
-			_ = r.transition(StateStarting, StateError)
+	r.notifiers.Range(func(key, val any) bool { // bind notification sources to the manager
+		ns := val.(fwkdl.NotificationSource)
+		if bindErr := BindNotificationSource(ns, mgr); bindErr != nil {
+			err = fmt.Errorf("failed to bind notification source %s: %w", ns.TypedName(), bindErr)
+			return false
 		}
-	}()
-
-	r.ctx, r.cancel = context.WithCancel(ctx)
-
-	return r.transition(StateStarting, StateStarted)
-}
-
-func (r *Runtime) Stop() (err error) {
-	// Check state: must be started
-	if err = r.transition(StateStarted, StateStopping); err != nil {
+		return true
+	})
+	if err != nil {
 		return err
 	}
 
-	// Ensure we transition to error state if there's any error
+	err = r.transition(StateStarting, StateStarted)
+	return err
+}
+
+func (r *Runtime) Stop() error {
+	var err error
+
 	defer func() {
 		if err != nil {
-			_ = r.transition(StateStopping, StateError)
+			r.setError()
 		}
 	}()
 
-	if r.cancel != nil {
-		r.cancel()
+	if err = r.transition(StateStarted, StateStopping); err != nil {
+		return err
 	}
 
 	r.collectors.Range(func(_, val any) bool {
@@ -247,7 +181,25 @@ func (r *Runtime) Stop() (err error) {
 		return true
 	})
 
-	return r.transition(StateStopping, StateStopped)
+	err = r.transition(StateStopping, StateStopped)
+	return err
+}
+
+// transition attempts to atomically transition from expectedState to newState.
+// Returns nil on success, or an error if the transition fails.
+// If the transition fails, sets the state to StateError.
+func (r *Runtime) transition(expectedState, newState RuntimeState) error {
+	if r.state.CompareAndSwap(int64(expectedState), int64(newState)) {
+		return nil
+	}
+	r.setError()
+	current := RuntimeState(r.state.Load())
+	return fmt.Errorf("%w: cannot transition from %s to %s", errInvalidRuntimeState, current, newState)
+}
+
+// setError sets the state to StateError atomically.
+func (r *Runtime) setError() {
+	r.state.Store(int64(StateError))
 }
 
 func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.EndpointMetadata, poolInfo PoolInfo) fwkdl.Endpoint {
@@ -301,4 +253,71 @@ func (r *Runtime) ReleaseEndpoint(ep fwkdl.Endpoint) {
 		collector := value.(*Collector)
 		_ = collector.Stop()
 	}
+}
+
+func (r *Runtime) validateSourceExtractors(src fwkdl.DataSource, extractors []fwkdl.Extractor, disallowedExtractorType string) error {
+	for _, ext := range extractors {
+		// check if disallowed extractor type
+		if disallowedExtractorType != "" && ext.TypedName().Type == disallowedExtractorType {
+			return fmt.Errorf("disallowed Extractor %s is configured for source %s",
+				ext.TypedName().String(), src.TypedName().String())
+		}
+
+		// validate extractor type
+		extractorType := reflect.TypeOf(ext)
+		if err := validateExtractorCompatible(extractorType, src.ExtractorType()); err != nil {
+			return fmt.Errorf("extractor %s type incompatible with datasource %s: %w",
+				ext.TypedName(), src.TypedName(), err)
+		}
+
+		// validate input/output types match
+		if err := validateInputTypeCompatible(src.OutputType(), ext.ExpectedInputType()); err != nil {
+			return fmt.Errorf("extractor %s input type incompatible with datasource %s: %w",
+				ext.TypedName(), src.TypedName(), err)
+		}
+		if notifySrc, ok := src.(fwkdl.NotificationSource); ok {
+			if notifyExt, ok := ext.(fwkdl.NotificationExtractor); ok {
+				if notifySrc.GVK().String() != notifyExt.GVK().String() {
+					return fmt.Errorf("extractor %s GVK %s does not match source %s GVK %s",
+						ext.TypedName(), notifyExt.GVK().String(), src.TypedName(), notifySrc.GVK().String())
+				}
+			}
+		}
+
+		// allow datasource custom validation
+		if validator, ok := src.(fwkdl.ValidatingDataSource); ok {
+			if err := validator.ValidateExtractor(ext); err != nil {
+				return fmt.Errorf("extractor %s failed custom validation for datasource %s: %w",
+					ext.TypedName(), src.TypedName(), err)
+			}
+		}
+	}
+	return nil
+}
+
+func validateInputTypeCompatible(dataSourceOutput, extractorInput reflect.Type) error {
+	if dataSourceOutput == nil || extractorInput == nil {
+		return errors.New("data source output type or extractor input type can't be nil")
+	}
+	if dataSourceOutput == extractorInput ||
+		(extractorInput.Kind() == reflect.Interface && extractorInput.NumMethod() == 0) ||
+		(extractorInput.Kind() == reflect.Interface && dataSourceOutput.Implements(extractorInput)) {
+		return nil
+	}
+	return fmt.Errorf("extractor input type %v is not compatible with data source output type %v",
+		extractorInput, dataSourceOutput)
+}
+
+func validateExtractorCompatible(extractorType reflect.Type, expectedInterfaceType reflect.Type) error {
+	if extractorType == nil || expectedInterfaceType == nil {
+		return errors.New("extractor type or expected interface type can't be nil")
+	}
+	if expectedInterfaceType.Kind() != reflect.Interface {
+		return fmt.Errorf("expected type must be an interface, got %v", expectedInterfaceType.Kind())
+	}
+	if !extractorType.Implements(expectedInterfaceType) {
+		return fmt.Errorf("extractor type %v does not implement interface %v",
+			extractorType, expectedInterfaceType)
+	}
+	return nil
 }

@@ -18,10 +18,11 @@ package datalayer
 
 import (
 	"errors"
-	"fmt"
 )
 
-var errInvalidRuntimeState = errors.New("invalid datalayer runtime state")
+var (
+	errInvalidRuntimeState = errors.New("invalid datalayer runtime state")
+)
 
 // RuntimeState represents the lifecycle state of Runtime.
 type RuntimeState int64
@@ -67,21 +68,4 @@ func (s RuntimeState) String() string {
 	default:
 		return "unknown"
 	}
-}
-
-// transition attempts to atomically transition from expectedState to newState.
-// Returns nil on success, or an error if the transition fails.
-// If the transition fails, sets the state to StateError.
-func (r *Runtime) transition(expectedState, newState RuntimeState) error {
-	if r.state.CompareAndSwap(int64(expectedState), int64(newState)) {
-		return nil
-	}
-	r.setError()
-	current := r.State()
-	return fmt.Errorf("%w: cannot transition from %s to %s", errInvalidRuntimeState, current, newState)
-}
-
-// setError sets the state to StateError atomically.
-func (r *Runtime) setError() {
-	r.state.Store(int64(StateError))
 }
