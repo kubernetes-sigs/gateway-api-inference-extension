@@ -605,7 +605,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		datalayer.NewTestRuntime(t, period),
 	}
 	for _, epf := range factories {
 		// Datastore setup
@@ -771,7 +771,7 @@ func TestGetRandomEndpoint(t *testing.T) {
 		period := time.Millisecond
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewTestRuntime(t, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {

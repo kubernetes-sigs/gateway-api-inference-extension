@@ -48,7 +48,7 @@ func defaultEndpoint() fwkdl.Endpoint {
 
 var (
 	endpoint = defaultEndpoint()
-	sources  = []fwkdl.DataSource{&FakeDataSource{}}
+	sources  = []fwkdl.PollingDataSource{&FakeDataSource{}}
 )
 
 func TestCollectorCanStartOnlyOnce(t *testing.T) {
@@ -56,10 +56,10 @@ func TestCollectorCanStartOnlyOnce(t *testing.T) {
 	ctx := context.Background()
 	ticker := mocks.NewTicker()
 
-	err := c.Start(ctx, ticker, endpoint, sources)
+	err := c.Start(ctx, ticker, endpoint, sources, nil)
 	require.NoError(t, err, "first Start call should succeed")
 
-	err = c.Start(ctx, ticker, endpoint, sources)
+	err = c.Start(ctx, ticker, endpoint, sources, nil)
 	assert.Error(t, err, "multiple collector start should error")
 }
 
@@ -74,7 +74,7 @@ func TestCollectorCanStopOnlyOnce(t *testing.T) {
 	ctx := context.Background()
 	ticker := mocks.NewTicker()
 
-	require.NoError(t, c.Start(ctx, ticker, endpoint, sources))
+	require.NoError(t, c.Start(ctx, ticker, endpoint, sources, nil))
 	require.NoError(t, c.Stop(), "first Stop should succeed")
 	assert.Error(t, c.Stop(), "second Stop should fail")
 }
@@ -85,7 +85,7 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
 
-	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.DataSource{source}))
+	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.PollingDataSource{source}, nil))
 	ticker.Tick()
 	ticker.Tick()
 
@@ -103,7 +103,7 @@ func TestCollectorStopCancelsContext(t *testing.T) {
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
 
-	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.DataSource{source}))
+	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.PollingDataSource{source}, nil))
 	ticker.Tick() // should be processed
 	time.Sleep(20 * time.Millisecond)
 
@@ -119,22 +119,22 @@ func TestCollectorStopCancelsContext(t *testing.T) {
 func TestCollectorStartSourceValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		sources []fwkdl.DataSource
+		sources []fwkdl.PollingDataSource
 		wantErr bool
 	}{
 		{
 			name:    "empty sources returns error",
-			sources: []fwkdl.DataSource{},
+			sources: []fwkdl.PollingDataSource{},
 			wantErr: true,
 		},
 		{
 			name:    "nil source returns error",
-			sources: []fwkdl.DataSource{nil},
+			sources: []fwkdl.PollingDataSource{nil},
 			wantErr: true,
 		},
 		{
 			name:    "valid polling source succeeds",
-			sources: []fwkdl.DataSource{&FakeDataSource{}},
+			sources: []fwkdl.PollingDataSource{&FakeDataSource{}},
 			wantErr: false,
 		},
 	}
@@ -145,7 +145,7 @@ func TestCollectorStartSourceValidation(t *testing.T) {
 			ticker := mocks.NewTicker()
 			ctx := context.Background()
 
-			err := c.Start(ctx, ticker, endpoint, tt.sources)
+			err := c.Start(ctx, ticker, endpoint, tt.sources, nil)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

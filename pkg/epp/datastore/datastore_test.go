@@ -84,7 +84,7 @@ func TestPool(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewTestRuntime(t, period),
 		}
 		for _, epf := range factories {
 			t.Run(tt.name, func(t *testing.T) {
@@ -204,7 +204,7 @@ func TestObjective(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewTestRuntime(t, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -330,12 +330,18 @@ func TestMetrics(t *testing.T) {
 
 	for _, test := range tests {
 		period := time.Millisecond
-		factories := []datalayer.EndpointFactory{
-			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: test.metrics, Err: test.err}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{Metrics: test.metrics, Errors: test.err}}, period),
-		}
-		for _, epf := range factories {
-			t.Run(test.name, func(t *testing.T) {
+		// Create the datalayer factory with config inside t.Run to get access to t
+		var datalayerFactory datalayer.EndpointFactory
+		t.Run(test.name, func(t *testing.T) {
+			datalayerFactory = datalayer.NewTestRuntimeWithConfig(t, period, &datalayer.Config{
+				Sources: []datalayer.DataSourceConfig{
+					{Plugin: &datalayer.FakeDataSource{Metrics: test.metrics, Errors: test.err}},
+				},
+			})
+			backendFactory := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: test.metrics, Err: test.err}, period)
+			factories := []datalayer.EndpointFactory{backendFactory, datalayerFactory}
+
+			for _, epf := range factories {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				// Set up the scheme.
@@ -364,8 +370,8 @@ func TestMetrics(t *testing.T) {
 					}))
 					assert.Equal(t, "", diff, "Unexpected diff (+got/-want)")
 				}, 5*time.Second, time.Millisecond)
-			})
-		}
+			}
+		})
 	}
 }
 
@@ -413,7 +419,7 @@ func TestPods(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewTestRuntime(t, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -492,7 +498,7 @@ func TestTargetPortsChange(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewTestRuntime(t, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -716,7 +722,7 @@ func TestEndpointMetadata(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewTestRuntime(t, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {

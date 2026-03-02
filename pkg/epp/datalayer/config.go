@@ -17,9 +17,6 @@ limitations under the License.
 package datalayer
 
 import (
-	"fmt"
-	"reflect"
-
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -35,52 +32,4 @@ type Config struct {
 type DataSourceConfig struct {
 	Plugin     fwkdl.DataSource  // the data source plugin instance
 	Extractors []fwkdl.Extractor // extractors defined for the data source
-}
-
-// WithConfig sets up the data layer based on the provided configuration.
-//
-// To allow running new data sources with backend.PodMetrics collection,
-// the code validates that the new and the existing metrics collection are not both
-// configured. This is done by passing in the new metrics extractor as "disallowed"
-// when the new metrics collection is not enabled in the runner (otherwise it passes
-// an empty string).
-// Note that it is still possible to configure the new metrics data source with different
-// extractors beyond model-server-protocol.
-// Referring to the "type" directly here would create an import cycle.
-// @TODO: This should be removed once PodMetrics is deprecated.
-func WithConfig(cfg *Config, disallowedExtractorType string) error {
-	for _, srcCfg := range cfg.Sources {
-		for _, extractor := range srcCfg.Extractors {
-			if disallowedExtractorType != "" && extractor.TypedName().Type == disallowedExtractorType {
-				return fmt.Errorf("disallowed Extractor %s is configured for source %s",
-					extractor.TypedName().String(), srcCfg.Plugin.TypedName().String())
-			}
-			// Validate extractor input type is compatible with datasource output type
-			if err := validateInputTypeCompatible(srcCfg.Plugin.OutputType(), extractor.ExpectedInputType()); err != nil {
-				return fmt.Errorf("extractor %s input type incompatible with datasource %s: %w",
-					extractor.TypedName(), srcCfg.Plugin.TypedName(), err)
-			}
-			// Validate extractor type is compatible with datasource expected extractor type
-			extractorType := reflect.TypeOf(extractor)
-			if err := validateExtractorCompatible(extractorType, srcCfg.Plugin.ExtractorType()); err != nil {
-				return fmt.Errorf("extractor %s type incompatible with datasource %s: %w",
-					extractor.TypedName(), srcCfg.Plugin.TypedName(), err)
-			}
-			// Allow datasource to perform additional custom validation
-			if validator, ok := srcCfg.Plugin.(fwkdl.ValidatingDataSource); ok {
-				if err := validator.ValidateExtractor(extractor); err != nil {
-					return fmt.Errorf("extractor %s failed custom validation for datasource %s: %w",
-						extractor.TypedName(), srcCfg.Plugin.TypedName(), err)
-				}
-			}
-			if err := srcCfg.Plugin.AddExtractor(extractor); err != nil {
-				return fmt.Errorf("failed to add Extractor %s to DataSource %s: %w", extractor.TypedName(),
-					srcCfg.Plugin.TypedName(), err)
-			}
-		}
-		if err := RegisterSource(srcCfg.Plugin); err != nil {
-			return fmt.Errorf("failed to register DataSource %s: %w", srcCfg.Plugin.TypedName(), err)
-		}
-	}
-	return nil
 }

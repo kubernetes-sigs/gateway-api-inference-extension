@@ -27,7 +27,6 @@ import (
 var (
 	extractorType             = reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
 	notificationextractorType = reflect.TypeOf((*fwkdl.NotificationExtractor)(nil)).Elem()
-	notificationEventType     = reflect.TypeOf(fwkdl.NotificationEvent{})
 )
 
 func TestValidateInputTypeCompatible(t *testing.T) {
