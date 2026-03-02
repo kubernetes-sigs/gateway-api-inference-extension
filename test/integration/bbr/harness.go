@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
@@ -42,9 +43,22 @@ type BBRHarness struct {
 	grpcConn *grpc.ClientConn
 }
 
-// NewBBRHarness boots up an isolated BBR server on a random port.
+// NewBBRHarness boots up an isolated BBR server on a random port with no plugins.
 // streaming: determines if the BBR server runs in streaming mode or unary/buffered mode.
 func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarness {
+	t.Helper()
+	return NewBBRHarnessWithPlugins(t, ctx, streaming, nil, nil)
+}
+
+// NewBBRHarnessWithPlugins boots up an isolated BBR server on a random port
+// with the given request and response plugins.
+func NewBBRHarnessWithPlugins(
+	t *testing.T,
+	ctx context.Context,
+	streaming bool,
+	requestPlugins []framework.PayloadProcessor,
+	responsePlugins []framework.PayloadProcessor,
+) *BBRHarness {
 	t.Helper()
 
 	// 1. Allocate Free Port
@@ -56,6 +70,8 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 	runner.SecureServing = false
 	runner.Streaming = streaming
 	runner.Datastore = datastore.NewDatastore()
+	runner.RequestPlugins = requestPlugins
+	runner.ResponsePlugins = responsePlugins
 
 	// 3. Start Server in Background
 	serverCtx, serverCancel := context.WithCancel(ctx)
