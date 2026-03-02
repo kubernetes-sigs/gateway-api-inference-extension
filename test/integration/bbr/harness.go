@@ -45,9 +45,24 @@ type BBRHarness struct {
 	grpcConn *grpc.ClientConn
 }
 
-// NewBBRHarness boots up an isolated BBR server on a random port.
+// NewBBRHarness boots up an isolated BBR server on a random port with default
+// request plugins (model-to-header) and no response plugins.
 // streaming: determines if the BBR server runs in streaming mode or unary/buffered mode.
 func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarness {
+	t.Helper()
+	return NewBBRHarnessWithPlugins(t, ctx, streaming, nil, nil)
+}
+
+// NewBBRHarnessWithPlugins boots up an isolated BBR server on a random port
+// with the given request and response plugins.
+// If requestPlugins is nil, the default model-to-header plugin is used.
+func NewBBRHarnessWithPlugins(
+	t *testing.T,
+	ctx context.Context,
+	streaming bool,
+	requestPlugins []framework.RequestProcessor,
+	responsePlugins []framework.ResponseProcessor,
+) *BBRHarness {
 	t.Helper()
 
 	// 1. Allocate Free Port
@@ -59,9 +74,14 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 	runner.SecureServing = false
 	runner.Streaming = streaming
 	runner.Datastore = datastore.NewDatastore()
-	modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
-	require.NoError(t, err, "failed to create body-field-to-header plugin")
-	runner.RequestPlugins = []framework.RequestProcessor{modelToHeaderPlugin}
+
+	if requestPlugins == nil {
+		modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
+		require.NoError(t, err, "failed to create body-field-to-header plugin")
+		requestPlugins = []framework.RequestProcessor{modelToHeaderPlugin}
+	}
+	runner.RequestPlugins = requestPlugins
+	runner.ResponsePlugins = responsePlugins
 
 	// 3. Start Server in Background
 	serverCtx, serverCancel := context.WithCancel(ctx)
