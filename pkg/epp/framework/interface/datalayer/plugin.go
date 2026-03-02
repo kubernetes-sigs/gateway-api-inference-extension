@@ -20,6 +20,9 @@ import (
 	"context"
 	"reflect"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -55,16 +58,15 @@ type DataSource interface {
 // PollingDataSource is a poll-based DataSource that fetches data at regular intervals.
 type PollingDataSource interface {
 	DataSource
-	// Poll is triggered by the data layer framework to fetch potentially new
-	// data for an endpoint. Poll calls registered Extractors to convert the
-	// raw data into structured attributes.
-	Poll(ctx context.Context, ep Endpoint) error
+	// Poll fetches data for an endpoint and returns it.
+	// The Runtime handles calling extractors with the returned data.
+	Poll(ctx context.Context, ep Endpoint) (any, error)
 }
 
 // Extractor transforms raw data into structured attributes.
 type Extractor interface {
 	plugin.Plugin
-	// ExpectedType defines the type expected by the extractor.
+	// ExpectedInputType defines the type expected by the extractor.
 	ExpectedInputType() reflect.Type
 	// Extract transforms the raw data source output into a concrete structured
 	// attribute, stored on the given endpoint.
@@ -77,4 +79,51 @@ type ValidatingDataSource interface {
 	// ValidateExtractor allows the DataSource to perform additional validation
 	// beyond the standard type compatibility checks. Return an error if validation fails.
 	ValidateExtractor(extractor Extractor) error
+}
+
+// EventType identifies the type of mutation that triggered the notification.
+type EventType int
+
+const (
+	// EventAddOrUpdate is fired when a k8s object is created or updated.
+	EventAddOrUpdate EventType = iota
+	// EventDelete is fired when a k8s object is deleted.
+	EventDelete
+)
+
+// NotificationEvent carries the event type and the affected object.
+// Object is deep-copied by the framework core before delivery.
+type NotificationEvent struct {
+	// Type is the mutation type.
+	Type EventType
+	// Object is the current state of the object (for add/update) or the
+	// last known state (for delete). Note that for delete notifications
+	// only the object's name and namespace can be relied on.
+	Object *unstructured.Unstructured
+}
+
+// NotificationSource is an event-driven DataSource for a single k8s GVK.
+// The framework core owns the k8s notification mechanisms (e.g., watches,
+// caches, informers) and calls the source's Notify on events.
+type NotificationSource interface {
+	DataSource
+	// GVK returns the GroupVersionKind this source watches.
+	GVK() schema.GroupVersionKind
+	// Notify is called by the framework core when a mutation event fires.
+	// The event object is already deep-copied.
+	// Returns the event (possibly modified) for Runtime to dispatch to extractors.
+	// Returns nil event to signal Runtime to skip extractor dispatch.
+	// TODO: ahy accept event but return *event?
+	Notify(ctx context.Context, event NotificationEvent) (*NotificationEvent, error)
+}
+
+// NotificationExtractor processes k8s object events pushed from a
+// NotificationSource.
+type NotificationExtractor interface {
+	Extractor
+	// GVK returns the GroupVersionKind this extractor handles.
+	GVK() schema.GroupVersionKind
+	// ExtractNotification processes a notification event. Called synchronously
+	// by the source in event order.
+	ExtractNotification(ctx context.Context, event NotificationEvent) error
 }

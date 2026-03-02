@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -60,6 +61,10 @@ func (m *NotificationExtractor) ExpectedInputType() reflect.Type {
 // Extract is the Extractor interface method — no-op for notification extractors.
 func (m *NotificationExtractor) Extract(_ context.Context, _ any, _ fwkdl.Endpoint) error {
 	return nil
+}
+
+func (m *NotificationExtractor) GVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
 }
 
 // ExtractNotification is the NotificationExtractor method — records the event.

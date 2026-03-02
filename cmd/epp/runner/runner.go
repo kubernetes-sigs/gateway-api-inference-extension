@@ -121,6 +121,7 @@ type Runner struct {
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
 	parser               fwkrh.Parser
+	dlRuntime            *datalayer.Runtime // datalayer's runtime
 
 	testOverrideSkipNameValidation bool
 }
@@ -321,7 +322,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
-	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, mgr); err != nil {
+	if err := r.setupDataLayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, epf, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
 	}
@@ -595,7 +596,7 @@ func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	}
 }
 
-func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
+func (r *Runner) setupDataLayer(ctx context.Context, enableNewMetrics bool, cfg *datalayer.Config,
 	epf datalayer.EndpointFactory, mgr ctrl.Manager) error {
 	disallowedMetricsExtractor := ""
 	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
@@ -632,10 +633,31 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
 	for _, src := range allSources { // log data layer configuration
 		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
 	}
+
+	logger := ctrl.Log.WithName("datalayer-runtime")
+	disallowedExtractor := ""
+	if !enableNewMetrics {
+		disallowedExtractor = extractormetrics.MetricsExtractorType
+	}
+	if err := r.dlRuntime.Configure(cfg, enableNewMetrics, disallowedExtractor, logger); err != nil {
+		return err
+	}
+	if err := r.dlRuntime.Start(ctx, mgr); err != nil {
+		return fmt.Errorf("failed to start runtime: %w", err)
+	}
+	setupLog.Info("datalayer runtime started")
 	return nil
 }
 
 func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) datalayer.EndpointFactory {
+	// TODO (after Runtime implements EndpointFactory):
+	// r.dlRuntime = datalayer.NewRuntime(opts.RefreshMetricsInterval)
+	// if enableNewMetrics {
+	//	return r.dlRuntime
+	// }
+	// for now just create the dlRuntime here
+
+	r.dlRuntime = datalayer.NewRuntime(opts.RefreshMetricsInterval)
 	if enableNewMetrics {
 		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval)
 	}

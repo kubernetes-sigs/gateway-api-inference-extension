@@ -56,13 +56,13 @@ func WithConfig(cfg *Config, disallowedExtractorType string) error {
 					extractor.TypedName().String(), srcCfg.Plugin.TypedName().String())
 			}
 			// Validate extractor input type is compatible with datasource output type
-			if err := ValidateInputTypeCompatible(srcCfg.Plugin.OutputType(), extractor.ExpectedInputType()); err != nil {
+			if err := validateInputTypeCompatible(srcCfg.Plugin.OutputType(), extractor.ExpectedInputType()); err != nil {
 				return fmt.Errorf("extractor %s input type incompatible with datasource %s: %w",
 					extractor.TypedName(), srcCfg.Plugin.TypedName(), err)
 			}
 			// Validate extractor type is compatible with datasource expected extractor type
 			extractorType := reflect.TypeOf(extractor)
-			if err := ValidateExtractorCompatible(extractorType, srcCfg.Plugin.ExtractorType()); err != nil {
+			if err := validateExtractorCompatible(extractorType, srcCfg.Plugin.ExtractorType()); err != nil {
 				return fmt.Errorf("extractor %s type incompatible with datasource %s: %w",
 					extractor.TypedName(), srcCfg.Plugin.TypedName(), err)
 			}
