@@ -18,6 +18,7 @@ package latencypredictorasync
 
 import (
 	"context"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -143,6 +144,8 @@ func ConfigFromEnv() *Config {
 	if s := os.Getenv("LATENCY_MAX_CONCURRENT_DISPATCHES"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			cfg.MaxConcurrentDispatches = n
+		} else {
+			log.Printf("WARNING: LATENCY_MAX_CONCURRENT_DISPATCHES=%q is invalid (must be > 0), using default %d", s, cfg.MaxConcurrentDispatches)
 		}
 	}
 	return cfg

@@ -55,9 +55,6 @@ func New(config *Config, logger logr.Logger) *Predictor {
 		config = ConfigFromEnv()
 	}
 	maxDispatches := config.MaxConcurrentDispatches
-	if maxDispatches <= 0 {
-		maxDispatches = 8
-	}
 	sem := make(chan struct{}, maxDispatches)
 	for i := 0; i < maxDispatches; i++ {
 		sem <- struct{}{}
