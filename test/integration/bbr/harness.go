@@ -52,7 +52,7 @@ type BBRHarness struct {
 }
 
 // NewBBRHarness boots up an isolated BBR server on a random port with the default
-// BodyFieldToHeaderPlugin for model extraction.
+// BodyFieldToHeaderPlugin for model extraction and no response plugins.
 func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarness {
 	t.Helper()
 	modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
@@ -94,11 +94,18 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 
 	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: store}
 
-	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin})
+	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, nil)
 }
 
-// NewBBRHarnessWithPlugins boots up an isolated BBR server with custom request plugins.
-func NewBBRHarnessWithPlugins(t *testing.T, ctx context.Context, streaming bool, requestPlugins []framework.RequestProcessor) *BBRHarness {
+// NewBBRHarnessWithPlugins boots up an isolated BBR server on a random port
+// with the given request and response plugins.
+func NewBBRHarnessWithPlugins(
+	t *testing.T,
+	ctx context.Context,
+	streaming bool,
+	requestPlugins []framework.RequestProcessor,
+	responsePlugins []framework.ResponseProcessor,
+) *BBRHarness {
 	t.Helper()
 
 	// 1. Allocate Free Port
@@ -109,7 +116,15 @@ func NewBBRHarnessWithPlugins(t *testing.T, ctx context.Context, streaming bool,
 	runner := runserver.NewDefaultExtProcServerRunner(port, false)
 	runner.SecureServing = false
 	runner.Streaming = streaming
+	if requestPlugins == nil {
+		modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
+		require.NoError(t, err, "failed to create body-field-to-header plugin")
+
+		baseModelPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
+		requestPlugins = []framework.RequestProcessor{modelToHeaderPlugin, baseModelPlugin}
+	}
 	runner.RequestPlugins = requestPlugins
+	runner.ResponsePlugins = responsePlugins
 
 	// 3. Start Server in Background
 	serverCtx, serverCancel := context.WithCancel(ctx)
