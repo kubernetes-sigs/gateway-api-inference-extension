@@ -98,13 +98,13 @@ func TestMain(m *testing.M) {
 func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 	// executionModes defines the permutations of EPP deployment modes to test.
 	executionModes := []struct {
-		name          string
-		mode          runMode
-		standaloneCfg *standaloneConfig
+		name               string
+		mode               runMode
+		standaloneStrategy standaloneStrategy
 	}{
 		{name: "Standard", mode: modeStandard},
-		{name: "Standalone-NoCRD", mode: modeStandalone, standaloneCfg: &standaloneConfig{strategyNoCRD}},
-		{name: "Standalone-WithCRD", mode: modeStandalone, standaloneCfg: &standaloneConfig{strategyWithCRD}},
+		{name: "Standalone-NoCRD", mode: modeStandalone, standaloneStrategy: strategyNoCRD},
+		{name: "Standalone-WithCRD", mode: modeStandalone, standaloneStrategy: strategyWithCRD},
 	}
 
 	tests := []struct {
@@ -115,7 +115,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		wantMetrics   map[string]string
 		waitForModel  string
 		// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
-		// InferenceModelRewrite) which are not available in Standalone mode without CRD.
+		// InferenceModelRewrite) which are not available in Standalone runMode without CRD.
 		requiresCRDs bool
 	}{
 		// --- Standard Routing Logic ---
@@ -390,7 +390,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		t.Run(executionMode.name, func(t *testing.T) {
 			for _, tc := range tests {
 				t.Run(tc.name, func(t *testing.T) {
-					if executionMode.mode == modeStandalone && executionMode.standaloneCfg.strategy == strategyNoCRD && tc.requiresCRDs {
+					if executionMode.mode == modeStandalone && executionMode.standaloneStrategy == strategyNoCRD && tc.requiresCRDs {
 						t.Skipf("Skipping test %q: requires CRDs, but running in standalone without crd executionMode", tc.name)
 					}
 
@@ -399,15 +399,15 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 
 					var h *TestHarness
 					if executionMode.mode == modeStandalone {
-						h = NewTestHarness(t, ctx, WithStandaloneMode(executionMode.standaloneCfg))
+						h = NewTestHarness(t, ctx, WithStandaloneMode(executionMode.standaloneStrategy))
 					} else {
 						h = NewTestHarness(t, ctx, WithStandardMode())
 					}
-					if executionMode.mode == modeStandard || executionMode.standaloneCfg.strategy == strategyWithCRD {
+					if executionMode.mode == modeStandard || executionMode.standaloneStrategy == strategyWithCRD {
 						h = h.WithBaseResources()
 					}
 
-					// In standalone mode without crd, we cannot wait for an Objective CRD to sync as it doesn't exist.
+					// In standalone runMode without crd, we cannot wait for an Objective CRD to sync as it doesn't exist.
 					// We only wait for Pod discovery.
 					modelToSync := tc.waitForModel
 					if modelToSync == "" {
