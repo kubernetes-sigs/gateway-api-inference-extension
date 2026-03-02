@@ -40,7 +40,7 @@ func TestValidateInputTypeCompatible(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := ValidateInputTypeCompatible(tt.output, tt.input)
+		err := validateInputTypeCompatible(tt.output, tt.input)
 		if tt.valid {
 			assert.NoError(t, err, "%s: expected valid extractor type", tt.name)
 		} else {
@@ -90,7 +90,7 @@ func TestValidateExtractorCompatible(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := ValidateExtractorCompatible(tt.extType, tt.expectedType)
+		err := validateExtractorCompatible(tt.extType, tt.expectedType)
 		if tt.valid {
 			assert.NoError(t, err, "%s: expected valid", tt.name)
 		} else {

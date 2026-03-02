@@ -34,6 +34,7 @@ import (
 // BindNotificationSource registers a watcher/reconciler for the source's GVK.
 // The framework core owns the cache and reconciliation; the source only receives
 // deep-copied events via Notify.
+// TODO: future: when called from Runtime.Start, pass in the []Extractors so they can be stored on the reconciler.
 func BindNotificationSource(src fwkdl.NotificationSource, mgr ctrl.Manager) error {
 	gvk := src.GVK()
 	log := mgr.GetLogger().WithName("notification-controller").WithValues("gvk", gvk.Kind)
@@ -90,7 +91,8 @@ func (r *notificationReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			log.V(1).Info("sending delete notification")
 			event.Type = fwkdl.EventDelete
 			event.Object = u
-			return ctrl.Result{}, r.src.Notify(ctx, event)
+			_, err = r.src.Notify(ctx, event)
+			return ctrl.Result{}, err
 		}
 		log.Error(err, "failed to fetch resource from cache")
 		return ctrl.Result{}, err
@@ -99,7 +101,7 @@ func (r *notificationReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	log.V(1).Info("sending add/update notification")
 	event.Type = fwkdl.EventAddOrUpdate
 	event.Object = u
-	if err := r.src.Notify(ctx, event); err != nil {
+	if _, err := r.src.Notify(ctx, event); err != nil {
 		log.Error(err, "notification source failed to process event")
 		return ctrl.Result{}, err // Requeue on failure
 	}

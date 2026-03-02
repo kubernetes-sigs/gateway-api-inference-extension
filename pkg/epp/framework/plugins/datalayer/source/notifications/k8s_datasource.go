@@ -94,16 +94,17 @@ func (s *K8sNotificationSource) AddExtractor(ext fwkdl.Extractor) error {
 	return nil
 }
 
-// Notify dispatches a notification event to all registered extractors
-// synchronously, preserving event ordering.
-func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.NotificationEvent) error {
+// Notify processes a notification event and returns it for Runtime to dispatch.
+// Returns the event (possibly modified) for Runtime to dispatch to extractors.
+// Returns nil event to signal Runtime to skip extractor dispatch.
+func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
 	logger := log.FromContext(ctx).WithValues("gvk", s.gvk, "eventType", event.Type)
 
 	var errs []error
 	s.extractors.Range(func(_, val any) bool {
 		ext, ok := val.(fwkdl.NotificationExtractor)
-		if !ok {
-			errs = append(errs, fmt.Errorf("extractor %s does not implement NotificationExtractor", ext.TypedName()))
+		if !ok || ext == nil {
+			errs = append(errs, errors.New("extractor does not implement NotificationExtractor"))
 			return true
 		}
 		if err := ext.ExtractNotification(ctx, event); err != nil {
@@ -115,5 +116,6 @@ func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.Notifica
 	if len(errs) > 0 {
 		logger.Error(errors.Join(errs...), "extractor(s) failed processing notification")
 	}
-	return nil
+	// Return the event for Runtime to also handle extractor dispatch
+	return &event, nil
 }

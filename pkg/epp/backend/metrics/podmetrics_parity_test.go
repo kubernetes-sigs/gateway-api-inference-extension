@@ -374,7 +374,7 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 	}
 	endpoint := fwkdl.NewEndpoint(metadata, fwkdl.NewMetrics())
 
-	if err := dataSource.Poll(ctx, endpoint); err != nil {
+	if _, err := dataSource.Poll(ctx, endpoint); err != nil {
 		return endpoint.GetMetrics(), err
 	}
 

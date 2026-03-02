@@ -71,7 +71,7 @@ func TestNotify(t *testing.T) {
 	obj.SetNamespace("default")
 
 	// test AddOrUpdate mutation
-	err := src.Notify(ctx, fwkdl.NotificationEvent{
+	_, err := src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventAddOrUpdate,
 		Object: obj.DeepCopy(),
 	})
@@ -86,7 +86,7 @@ func TestNotify(t *testing.T) {
 	assert.Equal(t, "test-cm", obj.GetName())
 
 	// test Delete event.
-	err = src.Notify(ctx, fwkdl.NotificationEvent{
+	_, err = src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventDelete,
 		Object: obj.DeepCopy(),
 	})
@@ -107,7 +107,7 @@ func TestNotifyMultipleExtractors(t *testing.T) {
 	obj := &unstructured.Unstructured{}
 	obj.SetName("cm1")
 
-	err := src.Notify(context.Background(), fwkdl.NotificationEvent{
+	_, err := src.Notify(context.Background(), fwkdl.NotificationEvent{
 		Type:   fwkdl.EventAddOrUpdate,
 		Object: obj,
 	})
