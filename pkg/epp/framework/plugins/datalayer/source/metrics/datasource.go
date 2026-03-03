@@ -115,7 +115,7 @@ func defaultDataSourceConfigParams() (*metricsDatasourceParams, error) {
 // The second return value is false when the flag is not registered; no error is returned in that case.
 func fromStringFlag(name string) (string, bool) {
 	f := pflag.Lookup(name)
-	if f == nil {
+	if f == nil || !f.Changed {
 		return "", false
 	}
 	return f.Value.String(), true
@@ -128,6 +128,9 @@ func fromBoolFlag(name string) (bool, bool, error) {
 	f := pflag.Lookup(name)
 	if f == nil {
 		return false, false, nil
+	}
+	if !f.Changed {
+		return false, false, nil // user did NOT provide it
 	}
 	b, err := strconv.ParseBool(f.Value.String())
 	if err != nil {
