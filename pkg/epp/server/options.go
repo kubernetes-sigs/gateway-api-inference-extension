@@ -91,6 +91,10 @@ type Options struct {
 	ConfigFile string // The path to the configuration file.
 	ConfigText string // The configuration specified as text, in lieu of a file.
 
+	// CustomParser speicifeid the custom parser. It can be assigned to the following values.
+	// "openai-parser": using the openai-parser to parse http/json request/response.
+	CustomParser string
+
 	// internal
 	fs *pflag.FlagSet // FlagSet used in AddFlags() and consulted in Complete()
 }
@@ -195,6 +199,7 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"Enables authentication and authorization of the metrics endpoint.")
 	fs.StringVar(&opts.ConfigFile, "config-file", opts.ConfigFile, "The path to the configuration file.")
 	fs.StringVar(&opts.ConfigText, "config-text", opts.ConfigText, "The configuration specified as text, in lieu of a file.")
+	fs.StringVar(&opts.CustomParser, "custom-parser", opts.CustomParser, "The custom parser to process different request resposne payload.")
 }
 
 func (opts *Options) Complete() error {

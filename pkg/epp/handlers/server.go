@@ -38,16 +38,18 @@ import (
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkpp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
-func NewStreamingServer(datastore Datastore, director Director) *StreamingServer {
+func NewStreamingServer(datastore Datastore, director Director, parser Parser) *StreamingServer {
 	return &StreamingServer{
 		director:  director,
 		datastore: datastore,
+		parser:    parser,
 	}
 }
 
@@ -63,11 +65,17 @@ type Datastore interface {
 	PoolGet() (*datalayer.EndpointPool, error)
 }
 
+type Parser interface {
+	ParseResponse(body []byte) (*fwkpp.ParsedResponse, error)
+	ParseStreamResponse(chunk []byte) (*fwkpp.ParsedResponse, error)
+}
+
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type StreamingServer struct {
 	datastore Datastore
 	director  Director
+	parser    Parser
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
@@ -109,9 +117,11 @@ type RequestContext struct {
 }
 
 type Request struct {
-	Headers  map[string]string
-	RawBody  []byte // This field will be updated when request body is modified (e.g. model mutation in requestBody)
-	Metadata map[string]any
+	Headers map[string]string
+	// Body     map[string]any
+	RawBody     []byte
+	UpdatedBody []byte // This is the request body mutated and will be sent to ext_proc.
+	Metadata    map[string]any
 }
 type Response struct {
 	Headers         map[string]string
@@ -147,7 +157,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	reqCtx := &RequestContext{
 		RequestState: RequestReceived,
 		Request: &Request{
-			Headers:  make(map[string]string),
+			Headers: make(map[string]string),
+			// Body:     make(map[string]any),
 			Metadata: make(map[string]any),
 		},
 		Response: &Response{
@@ -237,7 +248,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
-				reqCtx.reqBodyResp = s.generateRequestBodyResponses(reqCtx.Request.RawBody)
+				reqCtx.reqBodyResp = s.generateRequestBodyResponses(reqCtx.Request.UpdatedBody)
 
 				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
 				metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
@@ -271,7 +282,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			reqCtx.ResponseComplete = v.ResponseBody.EndOfStream
 			if reqCtx.ResponseComplete {
-				loggerTrace.Info("stream completed")
 				reqCtx.ResponseCompleteTimestamp = time.Now()
 			}
 			if reqCtx.modelServerStreaming {
@@ -291,23 +301,26 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				// Message is buffered, we can read and decode.
 				if v.ResponseBody.EndOfStream {
+					loggerTrace.Info("stream completed")
 					reqCtx.ResponseSize = len(body)
 					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
 
 					var responseErr error
+
 					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
 					if responseErr != nil {
 						break
+					} else if reqCtx.ResponseComplete {
+						metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+						metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
+						metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
+						metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
+						cachedToken := 0
+						if reqCtx.Usage.PromptTokenDetails != nil {
+							cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
+						}
+						metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 					}
-					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
-					metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
-					metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
-					cachedToken := 0
-					if reqCtx.Usage.PromptTokenDetails != nil {
-						cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
-					}
-					metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
@@ -390,6 +403,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			logger.V(1).Info("EPP sent response body back to proxy")
 			r.RequestState = BodyResponseResponsesComplete
 		}
+
 		// Dump the response so a new stream message can begin
 		r.respBodyResp = nil
 	}
