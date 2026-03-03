@@ -72,11 +72,11 @@ func (p *Plugin) EnrichRequest(ctx context.Context, request *scheduling.LLMReque
 	if key == "" {
 		key = defaultDeadlineKey
 	}
-	custMetadata, ok := reqMetadata[metadata.CustomOrderingNamespace].(map[string]float64)
+	custMetadata, ok := reqMetadata[metadata.CustomOrderingNamespace].(map[string]any)
 	if !ok {
-		custMetadata = make(map[string]float64)
+		custMetadata = make(map[string]any)
 		reqMetadata[metadata.CustomOrderingNamespace] = custMetadata
 	}
-	custMetadata[key] = float64(deadline.UnixNano())
+	custMetadata[key] = deadline.UnixNano()
 	return nil
 }
