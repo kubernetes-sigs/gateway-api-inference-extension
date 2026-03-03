@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai:v0.15.1"
-          imagePullPolicy: Always
+          image: "vllm/vllm-openai:v0.10.0"
+          imagePullPolicy: IfNotPresent
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
           - "--model"
@@ -156,8 +156,8 @@ spec:
         - name: lora-adapter-syncer
           tty: true
           stdin: true 
-          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
-          restartPolicy: Always
+          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.4.0
+          restartPolicy: IfNotPresent
           imagePullPolicy: Always
           env: 
             - name: DYNAMIC_LORA_ROLLOUT_CONFIG

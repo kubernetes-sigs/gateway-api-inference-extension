@@ -30,5 +30,5 @@ const (
 	BundleVersionAnnotation = "inference.networking.k8s.io/bundle-version"
 
 	// BundleVersion is the value used for labeling the version of the gateway-api-inference-extension.
-	BundleVersion = "main-dev"
+	BundleVersion = "v1.4.0"
 )
