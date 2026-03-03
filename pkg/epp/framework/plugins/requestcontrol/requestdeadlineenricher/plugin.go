@@ -59,7 +59,11 @@ func (p *Plugin) TypedName() plugin.TypedName {
 }
 
 func (p *Plugin) EnrichRequest(ctx context.Context, request *scheduling.LLMRequest, reqMetadata map[string]any) error {
-	slo, err := strconv.Atoi(request.Headers["x-slo-ttft"])
+	val, ok := request.Headers["x-slo-ttft"]
+	if !ok || val == "" {
+		return nil
+	}
+	slo, err := strconv.Atoi(val)
 	if err != nil {
 		return fmt.Errorf("failed to create deadline from x-slo-ttft header: %w", err)
 	}
@@ -68,6 +72,11 @@ func (p *Plugin) EnrichRequest(ctx context.Context, request *scheduling.LLMReque
 	if key == "" {
 		key = defaultDeadlineKey
 	}
-	reqMetadata[metadata.CustomOrderingNamespace] = map[string]float64{key: float64(deadline.UnixNano())}
+	custMetadata, ok := reqMetadata[metadata.CustomOrderingNamespace].(map[string]float64)
+	if !ok {
+		custMetadata = make(map[string]float64)
+		reqMetadata[metadata.CustomOrderingNamespace] = custMetadata
+	}
+	custMetadata[key] = float64(deadline.UnixNano())
 	return nil
 }

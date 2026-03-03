@@ -149,7 +149,6 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
-	// Run RequestEnrichment plugins
 	if err := d.runRequestEnrichmentPlugins(ctx, reqCtx.SchedulingRequest, reqCtx.Request.Metadata); err != nil {
 		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: fmt.Errorf("failed to enrich request: %w", err).Error()}
 	}
