@@ -159,6 +159,8 @@ func (fcac *FlowControlAdmissionController) Admit(
 		fairnessID:        reqCtx.FairnessID,
 		priority:          priority,
 		requestByteSize:   uint64(reqCtx.RequestSize),
+		reqHeaders:        reqCtx.Request.Headers,
+		receivedTimestamp: reqCtx.RequestReceivedTimestamp,
 		reqMetadata:       reqCtx.Request.Metadata,
 		inferencePoolName: fcac.poolName,
 		modelName:         reqCtx.IncomingModelName,
@@ -177,6 +179,8 @@ type flowControlRequest struct {
 	fairnessID        string
 	priority          int
 	requestByteSize   uint64
+	reqHeaders        map[string]string
+	receivedTimestamp time.Time
 	reqMetadata       map[string]any
 	inferencePoolName string
 	modelName         string
@@ -188,6 +192,8 @@ var _ flowcontrol.FlowControlRequest = &flowControlRequest{}
 func (r *flowControlRequest) ID() string                         { return r.requestID }
 func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
 func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
+func (r *flowControlRequest) Headers() map[string]string         { return r.reqHeaders }
+func (r *flowControlRequest) ReceivedTimestamp() time.Time       { return r.receivedTimestamp }
 func (r *flowControlRequest) GetMetadata() map[string]any        { return r.reqMetadata }
 func (r *flowControlRequest) InferencePoolName() string          { return r.inferencePoolName }
 func (r *flowControlRequest) ModelName() string                  { return r.modelName }

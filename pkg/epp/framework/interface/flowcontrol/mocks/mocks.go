@@ -28,6 +28,8 @@ import (
 type MockFlowControlRequest struct {
 	FlowKeyV             flowcontrol.FlowKey
 	ByteSizeV            uint64
+	HeadersV             map[string]string
+	ReceivedTimestampV   time.Time
 	InitialEffectiveTTLV time.Duration
 	IDV                  string
 	MetadataV            map[string]any
@@ -83,6 +85,8 @@ func NewMockFlowControlRequest(
 
 func (m *MockFlowControlRequest) FlowKey() flowcontrol.FlowKey       { return m.FlowKeyV }
 func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.ByteSizeV }
+func (m *MockFlowControlRequest) Headers() map[string]string         { return m.HeadersV }
+func (m *MockFlowControlRequest) ReceivedTimestamp() time.Time       { return m.ReceivedTimestampV }
 func (m *MockFlowControlRequest) InitialEffectiveTTL() time.Duration { return m.InitialEffectiveTTLV }
 func (m *MockFlowControlRequest) ID() string                         { return m.IDV }
 func (m *MockFlowControlRequest) GetMetadata() map[string]any        { return m.MetadataV }
