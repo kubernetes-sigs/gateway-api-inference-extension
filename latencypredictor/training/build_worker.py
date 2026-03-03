@@ -160,7 +160,8 @@ class BuildWorker:
                         # Release lock
                         try:
                             os.unlink(lock_path)
-                        except:
+                        except OSError as lock_cleanup_err:
+                            logging.debug(f"Lock file cleanup failed (non-fatal): {lock_cleanup_err}")
                             pass
 
                 time.sleep(poll_interval)
@@ -277,8 +278,8 @@ class BuildWorker:
 
         # Import TreeLite libraries
         try:
-            import tl2cgen
-            import treelite
+            import tl2cgen  # noqa: F401
+            import treelite  # noqa: F401
         except ImportError as e:
             logging.error(f"TreeLite not available: {e}")
             return False
@@ -363,6 +364,9 @@ class BuildWorker:
             "training_samples": fit_manifest["training_samples"],
             "test_samples": fit_manifest["test_samples"],
             "validation_metrics": fit_manifest.get("validation_metrics"),
+            "feature_schema_version": fit_manifest.get("feature_schema_version"),
+            "feature_schema_hash": fit_manifest.get("feature_schema_hash"),
+            "feature_schema": fit_manifest.get("feature_schema"),
             "state": "published",  # Bundle state - always "published" after build completes
             "files": {},
             "toolchain": {
@@ -378,8 +382,8 @@ class BuildWorker:
 
             manifest["toolchain"]["treelite_version"] = treelite.__version__
             manifest["toolchain"]["tl2cgen_version"] = tl2cgen.__version__
-        except:
-            pass
+        except (ImportError, AttributeError) as version_lookup_err:
+            logging.debug(f"TreeLite version lookup skipped: {version_lookup_err}")
 
         # Compute hashes for all files in bundle
         for file_path in bundle_path.glob("*"):

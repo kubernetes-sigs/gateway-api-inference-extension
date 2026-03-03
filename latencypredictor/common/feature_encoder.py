@@ -62,31 +62,50 @@ class FeatureEncoder:
     - Scalar interface: encode_value() for single values
     - Batch interface: encode_batch() for numpy arrays
 
-    All encoding mappings are defined in __init__() as a single source of truth.
+    Encoding definitions are driven by a schema dict (see feature_schema.py).
     """
 
-    def __init__(self):
-        """Initialize encoder with all categorical and binned feature definitions."""
-        # Define all categorical features
-        self.categorical_features: dict[str, CategoricalFeature] = {
-            "pod_type": CategoricalFeature(
-                name="pod_type",
-                encoded_name="pod_type_cat",
-                mapping={"": 0, "prefill": 1, "decode": 2},
-                default_value=0,
-            )
-        }
+    def __init__(self, schema: dict):
+        """Initialize encoder from a schema dict.
 
-        # Define all binned features
-        self.binned_features: dict[str, BinnedFeature] = {
-            "prefix_cache_score": BinnedFeature(
-                name="prefix_cache_score",
-                encoded_name="prefill_score_bucket",
-                num_bins=4,
-                min_value=0.0,
-                max_value=1.0,
+        Args:
+            schema: Dict with 'categorical_features' and 'binned_features' keys.
+                    See FEATURE_SCHEMA in feature_schema.py for the canonical format.
+        """
+        # Build categorical features from schema
+        self.categorical_features: dict[str, CategoricalFeature] = {}
+        for name, cfg in schema.get("categorical_features", {}).items():
+            self.categorical_features[name] = CategoricalFeature(
+                name=name,
+                encoded_name=cfg["encoded_name"],
+                mapping=cfg["mapping"],
+                default_value=cfg["default_value"],
+                dtype=cfg.get("dtype", "int32"),
             )
-        }
+
+        # Build binned features from schema
+        self.binned_features: dict[str, BinnedFeature] = {}
+        for name, cfg in schema.get("binned_features", {}).items():
+            self.binned_features[name] = BinnedFeature(
+                name=name,
+                encoded_name=cfg["encoded_name"],
+                num_bins=cfg["num_bins"],
+                min_value=cfg.get("min_value", 0.0),
+                max_value=cfg.get("max_value", 1.0),
+                dtype=cfg.get("dtype", "int32"),
+            )
+
+    @classmethod
+    def from_default_schema(cls) -> "FeatureEncoder":
+        """Create encoder from the built-in default schema."""
+        from .feature_schema import FEATURE_SCHEMA
+
+        return cls(FEATURE_SCHEMA)
+
+    @classmethod
+    def from_dict(cls, schema_dict: dict) -> "FeatureEncoder":
+        """Create encoder from an arbitrary schema dict (e.g. loaded from a bundle)."""
+        return cls(schema_dict)
 
     def encode_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Encode all categorical and binned features in a DataFrame (in-place).
@@ -105,11 +124,9 @@ class FeatureEncoder:
         # Encode categorical features
         for feature_name, config in self.categorical_features.items():
             if feature_name in df.columns:
-                # Fill NaN with empty string, then map to integer codes
-                df[feature_name] = df[feature_name].fillna("")
-                df[config.encoded_name] = (
-                    df[feature_name].map(config.mapping).fillna(config.default_value).astype(config.dtype)
-                )
+                # Map from a local copy so we never overwrite the raw column
+                raw = df[feature_name].fillna("")
+                df[config.encoded_name] = raw.map(config.mapping).fillna(config.default_value).astype(config.dtype)
             else:
                 # Feature missing - use default value for all rows
                 df[config.encoded_name] = np.full(len(df), config.default_value, dtype=config.dtype)
@@ -187,8 +204,9 @@ class FeatureEncoder:
         # Try binned features
         if feature_name in self.binned_features:
             config = self.binned_features[feature_name]
-            # Vectorized binning
-            clipped = np.clip(values, config.min_value, config.max_value)
+            # Replace NaN with min_value before clipping to avoid undefined int cast
+            safe_values = np.nan_to_num(values.astype(np.float64), nan=config.min_value)
+            clipped = np.clip(safe_values, config.min_value, config.max_value)
             bins = (clipped * config.num_bins).astype(np.int32)
             bins = np.clip(bins, 0, config.num_bins - 1)
             return bins.astype(config.dtype)

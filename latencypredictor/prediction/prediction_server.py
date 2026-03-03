@@ -41,6 +41,7 @@ from common.bundle_constants import (
 )
 from common.conformal_quantile import ConformalQuantilePredictor
 from common.feature_encoder import FeatureEncoder
+from common.feature_schema import FEATURE_SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
@@ -344,8 +345,8 @@ class LightweightPredictor:
         self.quantile = settings.QUANTILE_ALPHA
         self.prefix_buckets = 4
 
-        # Initialize feature encoder for categorical encoding
-        self.feature_encoder = FeatureEncoder()
+        # Initialize feature encoder for categorical encoding (default until bundle loads)
+        self.feature_encoder = FeatureEncoder.from_default_schema()
 
         # Initialize with empty ModelBundle (will be populated by load_models)
         self.models = ModelBundle(
@@ -437,9 +438,28 @@ class LightweightPredictor:
                 last_load=datetime.now(UTC),
             )
 
+            # Load feature encoder from bundle schema (if available)
+            bundle_info = model_syncer.current_bundle_info
+            remote_schema = bundle_info.get("feature_schema") if bundle_info else None
+            remote_version = bundle_info.get("feature_schema_version") if bundle_info else None
+
+            if remote_version is not None and remote_schema is not None:
+                if remote_version != FEATURE_SCHEMA_VERSION:
+                    logging.error(
+                        f"Feature schema version mismatch: bundle={remote_version}, "
+                        f"server={FEATURE_SCHEMA_VERSION}. Refusing to load."
+                    )
+                    return False
+                new_encoder = FeatureEncoder.from_dict(remote_schema)
+                logging.info(f"Feature encoder loaded from bundle schema v{remote_version}")
+            else:
+                logging.warning("Bundle has no feature_schema — using built-in default")
+                new_encoder = FeatureEncoder.from_default_schema()
+
             # Atomic swap
             with self.lock:
                 self.models = new_bundle
+                self.feature_encoder = new_encoder
 
             bundle_id_short = model_syncer.current_bundle_id[:8] if model_syncer.current_bundle_id else "unknown"
             logging.info(f"Bundle {bundle_id_short} loaded: TreeLite + conformal (ready)")

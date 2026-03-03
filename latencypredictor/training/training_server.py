@@ -51,6 +51,7 @@ except ImportError:
 from common.bundle_constants import TPOT_CONFORMAL_FILENAME, TTFT_CONFORMAL_FILENAME, get_model_filename
 from common.conformal_quantile import ConformalQuantilePredictor
 from common.feature_encoder import FeatureEncoder
+from common.feature_schema import FEATURE_SCHEMA, FEATURE_SCHEMA_VERSION, compute_schema_hash
 from common.lifecycle_state import LifecycleState, read_lifecycle_state, write_lifecycle_state
 
 from .bundle_integration import BundleModelManager
@@ -253,7 +254,7 @@ class LatencyPredictor:
         logging.info(f"Initialized LatencyPredictor with model type: {self.model_type}, quantile: {self.quantile}")
 
         # Initialize feature encoder for categorical encoding
-        self.feature_encoder = FeatureEncoder()
+        self.feature_encoder = FeatureEncoder.from_default_schema()
 
         # Data buckets for sampling
         self.cache_buckets = int(1.0 / 0.05)  # 20 buckets for cache percentage (0-100% in 5% increments)
@@ -680,15 +681,6 @@ class LatencyPredictor:
                         "prefill_score_bucket",
                         "pod_type_cat",
                     ]
-                    ttft_feature_cols_br = [
-                        "kv_cache_percentage",
-                        "input_token_length",
-                        "num_request_waiting",
-                        "num_request_running",
-                        "prefix_cache_score",
-                        "effective_input_tokens",
-                    ]
-
                     # Build X_ttft for all model types, then trim for BR
                     X_ttft = df_ttft[ttft_feature_cols_tree]
 
@@ -1310,6 +1302,9 @@ class LatencyPredictor:
             "test_samples": test_samples,
             "artifacts": artifacts,
             "validation_metrics": candidate_metrics,
+            "feature_schema_version": FEATURE_SCHEMA_VERSION,
+            "feature_schema_hash": compute_schema_hash(),
+            "feature_schema": FEATURE_SCHEMA,
         }
 
         fit_manifest_path = staging_dir / "fit_manifest.json"
@@ -1856,13 +1851,6 @@ async def flush_data(request: FlushRequest = FlushRequest()):
             reason=request.reason,
         )
 
-        total_flushed = (
-            result["ttft_training_samples_flushed"]
-            + result["tpot_training_samples_flushed"]
-            + result["ttft_test_samples_flushed"]
-            + result["tpot_test_samples_flushed"]
-        )
-
         message_parts = []
         if request.flush_training_data:
             message_parts.append(
@@ -2153,6 +2141,9 @@ async def get_current_bundle_info():
         "model_type": bundle.manifest.model_type,
         "quantile": bundle.manifest.quantile,
         "validation_metrics": bundle.manifest.validation_metrics,
+        "feature_schema_version": bundle.manifest.feature_schema_version,
+        "feature_schema_hash": bundle.manifest.feature_schema_hash,
+        "feature_schema": bundle.manifest.feature_schema,
         "lifecycle": lifecycle,
     }
 

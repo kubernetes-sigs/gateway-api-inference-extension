@@ -18,6 +18,8 @@ from .bundle_constants import (
     TTFT_TREELITE_FILENAME,
 )
 from .conformal_quantile import ConformalQuantilePredictor
+from .feature_encoder import FeatureEncoder
+from .feature_schema import FEATURE_SCHEMA, FEATURE_SCHEMA_VERSION, compute_schema_hash
 from .lifecycle_state import LifecycleState, read_lifecycle_state, write_lifecycle_state
 
 __all__ = [
@@ -28,6 +30,11 @@ __all__ = [
     "TPOT_CONFORMAL_FILENAME",
     # Conformal prediction
     "ConformalQuantilePredictor",
+    # Feature encoding
+    "FeatureEncoder",
+    "FEATURE_SCHEMA",
+    "FEATURE_SCHEMA_VERSION",
+    "compute_schema_hash",
     # Lifecycle state
     "LifecycleState",
     "read_lifecycle_state",

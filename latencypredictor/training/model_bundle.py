@@ -101,6 +101,11 @@ class BundleManifest:
     # Validation metrics for bundle gating (coverage_error, mean_offset, etc.)
     validation_metrics: dict | None = field(default=None)
 
+    # Feature encoding schema (for train-inference parity)
+    feature_schema_version: int | None = field(default=None)
+    feature_schema_hash: str | None = field(default=None)
+    feature_schema: dict | None = field(default=None)
+
     # State transition history
     state_history: list[dict[str, str]] = field(default_factory=list)
 
