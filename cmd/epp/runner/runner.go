@@ -462,7 +462,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
 	// register datalayer metrics collection plugins
 	fwkplugin.Register(sourcemetrics.MetricsDataSourceType, sourcemetrics.MetricsDataSourceFactory)
-	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.ModelServerExtractorFactory)
+	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.CoreMetricsExtractorFactory)
 	// register datalayer k8s notification source plugin
 	fwkplugin.Register(sourcenotifications.NotificationSourceType, sourcenotifications.NotificationSourceFactory)
 	// register request control pluigns

@@ -341,7 +341,7 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 		return nil, fmt.Errorf("failed to register mapping: %w", err)
 	}
 
-	extractor, err := metricextractor.NewModelServerExtractor(registry, metricextractor.DefaultEngineTypeLabelKey)
+	extractor, err := metricextractor.NewCoreMetricsExtractor(registry, metricextractor.DefaultEngineTypeLabelKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extractor: %w", err)
 	}

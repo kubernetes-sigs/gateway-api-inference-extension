@@ -83,9 +83,9 @@ var defaultEngineConfigs = []engineConfigParams{
 // defaultEngineName is the default engine used when defaultEngine is not specified.
 const defaultEngineName = "vllm"
 
-// ModelServerExtractorFactory is a factory function used to instantiate data layer's metrics
+// CoreMetricsExtractorFactory is a factory function used to instantiate data layer's metrics
 // Extractor plugins specified in a configuration.
-func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
+func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	cfg := defaultExtractorConfigParams()
 
 	if parameters != nil { // overlay the defaults with configured values
@@ -157,7 +157,7 @@ func ModelServerExtractorFactory(name string, parameters json.RawMessage, handle
 		return nil, fmt.Errorf("failed to register default mapping: %w", err)
 	}
 
-	extractor, err := NewModelServerExtractor(registry, cfg.EngineLabelKey)
+	extractor, err := NewCoreMetricsExtractor(registry, cfg.EngineLabelKey)
 	if err != nil {
 		return nil, err
 	}
