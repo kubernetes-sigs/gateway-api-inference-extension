@@ -61,9 +61,6 @@ func (fds *FakeDataSource) ExtractorType() reflect.Type {
 	return reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
 }
 
-func (fds *FakeDataSource) Extractors() []string                 { return []string{} }
-func (fds *FakeDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
-
 func (fds *FakeDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.callCount, 1)
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
@@ -98,14 +95,6 @@ func (m *FakeNotificationSource) GVK() schema.GroupVersionKind {
 
 func (m *FakeNotificationSource) Notify(_ context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
 	return &event, nil
-}
-
-func (m *FakeNotificationSource) Extractors() []string {
-	return []string{}
-}
-
-func (m *FakeNotificationSource) AddExtractor(_ fwkdl.Extractor) error {
-	return nil
 }
 
 func (m *FakeNotificationSource) Collect(_ context.Context, _ fwkdl.Endpoint) error {
