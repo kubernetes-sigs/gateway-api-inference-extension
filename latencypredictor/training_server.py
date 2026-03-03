@@ -515,20 +515,23 @@ class LatencyPredictor:
 
                         
                         xgb_params = dict(
-                            n_estimators=200,
-                            max_depth=6,
-                            learning_rate=0.05,
-                            subsample=0.8,
-                            colsample_bytree=0.8,
-                            min_child_weight=5,
-                            gamma=0.2,
-                            reg_alpha=0.01,
-                            reg_lambda=0.1,
-                            tree_method="hist",
-                            n_jobs=-1,
-                            random_state=42,
+                            n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
+                            max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
+                            learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
+                            subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
+                            colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
+                            # Key parameters for accurate regression:
+                            min_child_weight=5,          # Low value allows fine-grained splits near boundary (prevents overprediction)
+                            gamma=0.2,                   # Low gamma allows splits with small loss reduction (critical for quantile accuracy)
+                            # Regularization to prevent overfitting:
+                            reg_alpha=0.01,              # L1 regularization (Lasso) - encourages sparsity
+                            reg_lambda=0.1,              # L2 regularization (Ridge) - prevents large coefficients
+                            # Performance optimization:
+                            tree_method="hist",          # Efficient histogram algorithm; optimal for large datasets
+                            n_jobs=-1,                   # Utilize all CPU cores for parallel training
+                            random_state=42,             # Ensures reproducible results
                             verbosity=1,
-                            enable_categorical=True,
+                            enable_categorical=True,     # Enable categorical feature support
                         )
                         if self.objective_type == ObjectiveType.MEAN:
                             xgb_params["objective"] = "reg:squarederror"
@@ -551,20 +554,23 @@ class LatencyPredictor:
                         except Exception as _:
                             raise ValueError(f"TPOT features must be exactly {tpot_order}; got {list(features.columns)}")
                 xgb_params = dict(
-                    n_estimators=200,
-                    max_depth=6,
-                    learning_rate=0.05,
-                    subsample=0.8,
-                    colsample_bytree=0.8,
-                    min_child_weight=5,
-                    gamma=0.2,
-                    reg_alpha=0.01,
-                    reg_lambda=0.1,
-                    tree_method='hist',
-                    n_jobs=-1,
-                    random_state=42,
+                    n_estimators=200,            # Number of trees to build (moderate value for balanced accuracy and speed)
+                    max_depth=6,                 # Depth of trees; 6 is typically a sweet spot balancing bias/variance
+                    learning_rate=0.05,          # Smaller learning rate to achieve stable convergence
+                    subsample=0.8,               # Use 80% of data per tree (adds regularization & reduces overfitting)
+                    colsample_bytree=0.8,        # Use 80% of features per tree (improves generalization)
+                    # Key parameters for accurate regression:
+                    min_child_weight=5,          # Low value allows fine-grained splits near boundary (prevents overprediction)
+                    gamma=0.2,                   # Low gamma allows splits with small loss reduction (critical for quantile accuracy)
+                    # Regularization to prevent overfitting:
+                    reg_alpha=0.01,              # L1 regularization (Lasso) - encourages sparsity
+                    reg_lambda=0.1,              # L2 regularization (Ridge) - prevents large coefficients
+                    # Performance optimization:
+                    tree_method='hist',          # Efficient histogram algorithm; optimal for large datasets
+                    n_jobs=-1,                   # Utilize all CPU cores for parallel training
+                    random_state=42,             # Ensures reproducible results
                     verbosity=1,
-                    enable_categorical=True,
+                    enable_categorical=True,     # Enable categorical feature support
                 )
                 if self.objective_type == ObjectiveType.MEAN:
                     xgb_params["objective"] = "reg:squarederror"
