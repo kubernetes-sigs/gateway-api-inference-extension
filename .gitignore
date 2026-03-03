@@ -7,7 +7,6 @@
 bin/*
 Dockerfile.cross
 artifacts
-latencypredictor/__pycache__
 
 # Test binary, built with `go test -c`
 *.test
@@ -39,3 +38,13 @@ config/charts/**/Chart.lock
 
 # Ignore all .tgz files anywhere under config/charts
 config/charts/**/*.tgz
+
+# pytest files for latencypredictor
+**/__pycache__
+**/.pytest_cache
+
+# ruff caching
+**/.ruff_cache
+
+# Local development tests (not committed)
+latencypredictor/local_tests/

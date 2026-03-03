@@ -1,0 +1,4 @@
+console_output_style = "classic"
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(levelname)s %(message)s"

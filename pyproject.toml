@@ -1,0 +1,50 @@
+[tool.ruff]
+# Target Python 3.11
+target-version = "py311"
+
+# Only apply to latencypredictor directory (rest of repo is Go)
+include = ["latencypredictor/**/*.py"]
+
+# Exclude common directories
+extend-exclude = [
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    ".git",
+    "__pycache__",
+    "*.egg-info",
+]
+
+# Line length to match common Python style
+line-length = 120
+
+[tool.ruff.lint]
+# Minimal rule set: catch real bugs, not style preferences
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes (unused imports, undefined names, etc.)
+    "I",      # isort (import sorting)
+    "B",      # flake8-bugbear (common bugs)
+]
+
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "E402",   # Module-level import not at top (common for conditional imports)
+    "E712",   # Comparison to True/False (fine in test assertions)
+    "B007",   # Unused loop variable (minor, use _ convention if you want)
+    "B008",   # Do not perform function call in argument defaults (common in FastAPI)
+    "B011",   # Do not assert False (valid in test code)
+    "B904",   # raise X from err in except (standard FastAPI HTTPException pattern)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["training", "prediction", "common"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

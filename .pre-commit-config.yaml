@@ -1,0 +1,39 @@
+# Pre-commit hooks for latencypredictor (Python code only)
+# See https://pre-commit.com for more information
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+#
+# Philosophy: never block commits. Auto-fix what we can, warn on the rest.
+# You can always amend later to clean up lint warnings.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      # Linter: warn-only (never blocks commits)
+      - id: ruff
+        name: ruff lint (warn only)
+        args: [--fix, --exit-zero]
+        files: ^latencypredictor/.*\.py$
+        exclude: ^latencypredictor/(venv|\.venv)/
+        verbose: true
+
+      # Formatter: auto-fixes in place (never blocks because it just reformats)
+      - id: ruff-format
+        name: ruff format
+        files: ^latencypredictor/.*\.py$
+        exclude: ^latencypredictor/(venv|\.venv)/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-ast
+        files: ^latencypredictor/.*\.py$
+      - id: end-of-file-fixer
+        files: ^latencypredictor/.*\.py$
+
+default_language_version:
+  python: python3.11
+
+fail_fast: false
