@@ -32,7 +32,7 @@ type InferencePoolSpecApplyConfiguration struct {
 	// In some cases, implementations may translate this field to a Service selector, so this matches the simple
 	// map used for Service selectors instead of the full Kubernetes LabelSelector type.
 	// If specified, it will be applied to match the model server pods in the same namespace as the InferencePool.
-	// Cross namesoace selector is not supported.
+	// Cross namespace selector is not supported.
 	Selector map[apixv1alpha2.LabelKey]apixv1alpha2.LabelValue `json:"selector,omitempty"`
 	// TargetPortNumber defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
