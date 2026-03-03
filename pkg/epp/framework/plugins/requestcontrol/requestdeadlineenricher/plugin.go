@@ -17,6 +17,8 @@ const (
 	RequestDeadlineEnricherType = "request-deadline-enricher"
 	// defaultDeadlineKey is the default key for the deadline in the metadata.
 	defaultDeadlineKey = "deadline"
+	// defaultSloTtftHeader is the default name of the header for the SLO TTFT.
+	defaultSloTtftHeader = "x-slo-ttft-ms"
 )
 
 type Plugin struct {
@@ -25,7 +27,8 @@ type Plugin struct {
 }
 
 type config struct {
-	DeadlineKey string `json:"deadline_key"`
+	DeadlineKey   string `json:"deadline_key"`
+	SloTtftHeader string `json:"slo_ttft_header"`
 }
 
 func RequestDeadlineEnricherPluginFactory(name string, params json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
@@ -59,13 +62,17 @@ func (p *Plugin) TypedName() plugin.TypedName {
 }
 
 func (p *Plugin) EnrichRequest(ctx context.Context, request *scheduling.LLMRequest, reqMetadata map[string]any) error {
-	val, ok := request.Headers["x-slo-ttft"]
+	header := p.cfg.SloTtftHeader
+	if header == "" {
+		header = defaultSloTtftHeader
+	}
+	val, ok := request.Headers[header]
 	if !ok || val == "" {
 		return nil
 	}
 	slo, err := strconv.Atoi(val)
 	if err != nil {
-		return fmt.Errorf("failed to create deadline from x-slo-ttft header: %w", err)
+		return fmt.Errorf("failed to create deadline from %s header: %w", header, err)
 	}
 	deadline := request.ReceivedAt.Add(time.Duration(slo) * time.Millisecond)
 	key := p.cfg.DeadlineKey
