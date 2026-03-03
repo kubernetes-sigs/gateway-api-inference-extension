@@ -23,7 +23,6 @@ import (
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -38,20 +37,22 @@ type Datastore interface {
 	GetBaseModel(modelName string) string
 }
 
-func NewServer(streaming bool, ds Datastore, requestPlugins []framework.PayloadProcessor) *Server {
+func NewServer(streaming bool, ds Datastore, requestPlugins []framework.PayloadProcessor, responsePlugins []framework.PayloadProcessor) *Server {
 	return &Server{
-		streaming:      streaming,
-		ds:             ds,
-		requestPlugins: requestPlugins,
+		streaming:       streaming,
+		ds:              ds,
+		requestPlugins:  requestPlugins,
+		responsePlugins: responsePlugins,
 	}
 }
 
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
-	streaming      bool
-	ds             Datastore
-	requestPlugins []framework.PayloadProcessor
+	streaming       bool
+	ds              Datastore
+	requestPlugins  []framework.PayloadProcessor
+	responsePlugins []framework.PayloadProcessor
 }
 
 // RequestContext stores context information during the lifetime of an HTTP request.
@@ -84,7 +85,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		Request:  &Request{Headers: make(map[string]string)},
 		Response: &Response{Headers: make(map[string]string)},
 	}
-	streamedBody := &streamedBody{}
+	reqStreamedBody := &streamedBody{}
+	respStreamedBody := &streamedBody{}
 
 	for {
 		select {
@@ -122,13 +124,18 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			} else {
 				loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			}
-			responses, err = s.processRequestBody(ctx, req.GetRequestBody(), streamedBody, logger)
+			responses, err = s.processRequestBody(ctx, req.GetRequestBody(), reqStreamedBody)
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			responses, err = s.HandleRequestTrailers(req.GetRequestTrailers())
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
-			responses, err = s.HandleResponseHeaders(req.GetResponseHeaders())
+			responses, err = s.HandleResponseHeaders(reqCtx, req.GetResponseHeaders())
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			responses, err = s.HandleResponseBody(req.GetResponseBody())
+			if logger.V(logutil.DEBUG).Enabled() {
+				logger.V(logutil.DEBUG).Info("Incoming response body chunk", "body", string(v.ResponseBody.Body), "EoS", v.ResponseBody.EndOfStream)
+			} else {
+				loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
+			}
+			responses, err = s.processResponseBody(ctx, reqCtx, req.GetResponseBody(), respStreamedBody)
 		default:
 			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")
@@ -161,8 +168,8 @@ type streamedBody struct {
 	body []byte
 }
 
-func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody *streamedBody, logger logr.Logger) ([]*extProcPb.ProcessingResponse, error) {
-	loggerVerbose := logger.V(logutil.VERBOSE)
+func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody *streamedBody) ([]*extProcPb.ProcessingResponse, error) {
+	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
 
 	var requestBodyBytes []byte
 	if s.streaming {
@@ -179,4 +186,24 @@ func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBod
 	}
 
 	return s.HandleRequestBody(ctx, requestBodyBytes)
+}
+
+func (s *Server) processResponseBody(ctx context.Context, reqCtx *RequestContext, body *extProcPb.HttpBody, streamedRespBody *streamedBody) ([]*extProcPb.ProcessingResponse, error) {
+	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
+
+	var responseBodyBytes []byte
+	if s.streaming {
+		streamedRespBody.body = append(streamedRespBody.body, body.Body...)
+		// In the stream case, we can receive multiple response bodies.
+		if body.EndOfStream {
+			loggerVerbose.Info("Flushing response stream buffer")
+			responseBodyBytes = streamedRespBody.body
+		} else {
+			return nil, nil
+		}
+	} else {
+		responseBodyBytes = body.GetBody()
+	}
+
+	return s.HandleResponseBody(ctx, reqCtx, responseBodyBytes)
 }
