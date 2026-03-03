@@ -37,8 +37,6 @@ var (
 // For event-driven sources, use NotificationSource.
 type DataSource interface {
 	plugin.Plugin
-	// Extractors returns a list of registered Extractor names.
-	Extractors() []string
 	// OutputType returns the type of data this DataSource produces.
 	// Used for validating extractor compatibility.
 	OutputType() reflect.Type
@@ -46,13 +44,6 @@ type DataSource interface {
 	// For poll-based sources, this is the base Extractor interface.
 	// For notification sources, this is the NotificationExtractor interface.
 	ExtractorType() reflect.Type
-	// AddExtractor adds an extractor to the data source. Multiple
-	// Extractors can be registered.
-	// The extractor will be called whenever the DataSource might
-	// have some new raw information regarding an endpoint.
-	// The Extractor's expected input type should be validated against
-	// the data source's output type upon registration.
-	AddExtractor(extractor Extractor) error
 }
 
 // PollingDataSource is a poll-based DataSource that fetches data at regular intervals.

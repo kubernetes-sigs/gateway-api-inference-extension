@@ -18,13 +18,9 @@ package notifications
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"reflect"
-	"sync"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -38,9 +34,8 @@ var (
 // K8sNotificationSource watches a single GVK and dispatches events to
 // registered NotificationExtractors.
 type K8sNotificationSource struct {
-	typedName  fwkplugin.TypedName
-	gvk        schema.GroupVersionKind
-	extractors sync.Map // key: name (string), value: fwkdl.NotificationExtractor
+	typedName fwkplugin.TypedName
+	gvk       schema.GroupVersionKind
 }
 
 // NewK8sNotificationSource returns a new notification source for the given GVK.
@@ -72,50 +67,9 @@ func (s *K8sNotificationSource) ExtractorType() reflect.Type {
 	return fwkdl.NotificationExtractorType
 }
 
-// Extractors returns names of registered extractors.
-func (s *K8sNotificationSource) Extractors() []string {
-	var names []string
-	s.extractors.Range(func(_, val any) bool {
-		if ext, ok := val.(fwkdl.NotificationExtractor); ok {
-			names = append(names, ext.TypedName().String())
-		}
-		return true
-	})
-	return names
-}
-
-// AddExtractor registers an extractor.
-// Validation of extractor compatibility is done by the runtime via datalayer.WithConfig.
-func (s *K8sNotificationSource) AddExtractor(ext fwkdl.Extractor) error {
-	if _, loaded := s.extractors.LoadOrStore(ext.TypedName().Name, ext); loaded {
-		return fmt.Errorf("duplicate extractor %s on notification source %s",
-			ext.TypedName(), s.TypedName())
-	}
-	return nil
-}
-
 // Notify processes a notification event and returns it for Runtime to dispatch.
 // Returns the event (possibly modified) for Runtime to dispatch to extractors.
 // Returns nil event to signal Runtime to skip extractor dispatch.
 func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
-	logger := log.FromContext(ctx).WithValues("gvk", s.gvk, "eventType", event.Type)
-
-	var errs []error
-	s.extractors.Range(func(_, val any) bool {
-		ext, ok := val.(fwkdl.NotificationExtractor)
-		if !ok || ext == nil {
-			errs = append(errs, errors.New("extractor does not implement NotificationExtractor"))
-			return true
-		}
-		if err := ext.ExtractNotification(ctx, event); err != nil {
-			errs = append(errs, fmt.Errorf("extractor %s: %w", ext.TypedName(), err))
-		}
-		return true
-	})
-
-	if len(errs) > 0 {
-		logger.Error(errors.Join(errs...), "extractor(s) failed processing notification")
-	}
-	// Return the event for Runtime to also handle extractor dispatch
 	return &event, nil
 }

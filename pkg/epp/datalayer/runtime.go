@@ -149,7 +149,17 @@ func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) error {
 
 	r.notifiers.Range(func(key, val any) bool { // bind notification sources to the manager
 		ns := val.(fwkdl.NotificationSource)
-		if bindErr := BindNotificationSource(ns, mgr); bindErr != nil {
+		srcName := ns.TypedName().Name
+
+		// Extractors were validated during Configure() to ensure they implement
+		// the correct interface (NotificationExtractor for NotificationSource), so
+		// the type assertion is safe.
+		var extractors []fwkdl.NotificationExtractor
+		if rawExts, ok := r.sourceExtractors.Load(srcName); ok {
+			extractors = rawExts.([]fwkdl.NotificationExtractor)
+		}
+
+		if bindErr := BindNotificationSource(ns, extractors, mgr); bindErr != nil {
 			err = fmt.Errorf("failed to bind notification source %s: %w", ns.TypedName(), bindErr)
 			return false
 		}
