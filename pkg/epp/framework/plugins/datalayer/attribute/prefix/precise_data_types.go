@@ -1,0 +1,63 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package prefix
+
+import (
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+)
+
+const (
+	PrecisePrefixCacheMatchInfoKey = "PrecisePrefixCacheMatchInfoKey"
+)
+
+// PrecisePrefixCacheMatchInfo represents the score from the precise prefix cache scorer
+// which uses the llm-d-inference-scheduler's LongestPrefixScorer.
+// The score is based on the longest consecutive block match from the beginning of the prompt.
+// Unlike PrefixCacheMatchInfo (used by approximate scorer), this only tracks the weighted
+// score of consecutive matched blocks, not separate matchBlocks/totalBlocks counts.
+type PrecisePrefixCacheMatchInfo struct {
+	// weightedScore is the weighted sum of consecutive matched blocks from the start.
+	// The LongestPrefixScorer calculates this as: sum(weight_i) for i=0 to N-1,
+	// where N is the number of consecutive blocks matched from block 0,
+	// and weight_i is based on the device tier (e.g., HBM=1.0, SSD=0.5).
+	// The sequence breaks as soon as a block is not found, ensuring consecutive prefix matching.
+	weightedScore float64
+	// blockSizeTokens is the block size in tokens used for scoring
+	blockSizeTokens int
+}
+
+func NewPrecisePrefixCacheMatchInfo(weightedScore float64, blockSizeTokens int) *PrecisePrefixCacheMatchInfo {
+	return &PrecisePrefixCacheMatchInfo{
+		weightedScore:   weightedScore,
+		blockSizeTokens: blockSizeTokens,
+	}
+}
+
+func (p *PrecisePrefixCacheMatchInfo) WeightedScore() float64 {
+	return p.weightedScore
+}
+
+func (p *PrecisePrefixCacheMatchInfo) BlockSizeTokens() int {
+	return p.blockSizeTokens
+}
+
+func (p *PrecisePrefixCacheMatchInfo) Clone() fwkdl.Cloneable {
+	return &PrecisePrefixCacheMatchInfo{
+		weightedScore:   p.weightedScore,
+		blockSizeTokens: p.blockSizeTokens,
+	}
+}
