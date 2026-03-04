@@ -40,7 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
@@ -57,8 +56,10 @@ import (
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/usagelimits"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	flowcontrolplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
@@ -328,6 +329,8 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
+	usageLimitPolicy := r.setupFlowControlPlugins(eppConfig.FlowControlConfig.UsageLimitPolicyType, setupLog)
+
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
 	var locator contracts.PodLocator
@@ -344,7 +347,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 			opts.PoolName,
 			eppConfig.FlowControlConfig.Controller,
 			registry, saturationDetector,
-			locator,
+			locator, usageLimitPolicy,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
@@ -634,6 +637,26 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
 		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
 	}
 	return nil
+}
+
+func (r *Runner) setupFlowControlPlugins(policyType string, logger logr.Logger) flowcontrolplugins.UsageLimitPolicy {
+	if factory, ok := fwkplugin.Registry[policyType]; ok {
+		p, err := factory(policyType, nil, nil)
+		if err != nil {
+			logger.Info("Failed to instantiate usage limit policy plugin, using default", "type", policyType, "error", err)
+			return usagelimits.DefaultPolicy()
+		}
+		policy, ok := p.(flowcontrolplugins.UsageLimitPolicy)
+		if !ok {
+			logger.Info("Registered plugin does not implement UsageLimitPolicy, using default", "type", policyType)
+			return usagelimits.DefaultPolicy()
+		}
+		return policy
+	}
+	if policyType != "" {
+		logger.Info("No plugin registered for usage limit policy type, using default", "type", policyType)
+	}
+	return usagelimits.DefaultPolicy()
 }
 
 func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) datalayer.EndpointFactory {

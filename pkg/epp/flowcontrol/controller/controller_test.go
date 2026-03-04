@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/utils/clock"
 	testclock "k8s.io/utils/clock/testing"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/usagelimits"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
@@ -122,6 +123,8 @@ func newUnitHarness(
 		processors: make(map[string]*mockShardProcessor),
 	}
 
+	usageLimitPolicy := usagelimits.DefaultPolicy()
+
 	// Default the registry if nil, simplifying tests that don't focus on registry interaction.
 	if registry == nil {
 		registry = &mockRegistryClient{}
@@ -132,7 +135,7 @@ func newUnitHarness(
 		withClock(harnessOpts.clock),
 		withShardProcessorFactory(mockProcessorFactory.new),
 	}
-	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, fcOpts...)
+	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, usageLimitPolicy, fcOpts...)
 	require.NoError(t, err, "failed to create FlowController for unit test harness")
 
 	h := &testHarness{
@@ -156,6 +159,7 @@ func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, regis
 	t.Helper()
 	mockDetector := &mocks.MockSaturationDetector{}
 	mockPodLocator := &mocks.MockPodLocator{}
+	usageLimitPolicy := usagelimits.DefaultPolicy()
 
 	// Align FakeClock with system time. See explanation in newUnitHarness.
 	mockClock := testclock.NewFakeClock(time.Now())
@@ -167,7 +171,7 @@ func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, regis
 		withRegistryClient(registry),
 		withClock(mockClock),
 	}
-	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, opts...)
+	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, usageLimitPolicy, opts...)
 	require.NoError(t, err, "failed to create FlowController for integration test harness")
 
 	h := &testHarness{
@@ -278,6 +282,7 @@ func (f *mockShardProcessorFactory) new(
 	shard contracts.RegistryShard,
 	_ contracts.SaturationDetector,
 	_ contracts.PodLocator,
+	_ flowcontrol.UsageLimitPolicy,
 	_ clock.WithTicker,
 	_ time.Duration,
 	_ int,
@@ -1142,6 +1147,7 @@ func TestFlowController_WorkerManagement(t *testing.T) {
 			shard contracts.RegistryShard,
 			_ contracts.SaturationDetector,
 			_ contracts.PodLocator,
+			_ flowcontrol.UsageLimitPolicy,
 			_ clock.WithTicker,
 			_ time.Duration,
 			_ int,

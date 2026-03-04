@@ -115,3 +115,42 @@ type OrderingPolicy interface {
 	//     correctly.
 	RequiredQueueCapabilities() []QueueCapability
 }
+
+// UsageLimitPolicy computes the usage limit of a priority band dynamically.
+//
+// The goal of this policy is to enable adaptive capacity management by gating low-priority traffic
+// when a request target approaches saturation, reserving capacity for higher-priority requests.
+//
+// Saturation represents resource usage as a fraction of total capacity (0.0 = idle, 1.0 = fully saturated)
+// as described in [/pkg/epp/flowcontrol/contracts.SaturationDetector]
+//
+// Architecture (Singleton with Internal State):
+// UsageLimitPolicy plugins are Singletons. A single instance handles limit computation for all priority bands
+// across all shards. The plugin maintains internal state (saturation history, trend derivatives, per-priority
+// limits) to enable trend-based decisions and smooth limit adjustments over time.
+//
+// Integration:
+// This policy is called during dispatch decision-making, before a request is allowed to proceed. The returned
+// limit is compared against the request's projected saturation impact. If saturation + request > limit, the
+// request is gated (not dispatched).
+//
+// Conformance: Implementations MUST ensure all methods are goroutine-safe.
+type UsageLimitPolicy interface {
+	plugin.Plugin
+
+	// ComputeLimit calculates the dynamic usage limit for a given priority level based on current saturation
+	// and historical trends.
+	//
+	// Parameters:
+	//   - ctx: Request context for logging, tracing, etc.
+	//   - priority: The priority level for which to compute the limit (higher numbers = higher priority)
+	//   - saturation: Current resource saturation as a fraction [0.0, 1.0]
+	//
+	// Returns:
+	//   - limit: The maximum saturation threshold at which this priority can dispatch
+	//     - 0.0 = fully gated (cannot dispatch regardless of current saturation)
+	//     - 1.0 = no gating (can dispatch until fully saturated)
+	//     - Values between 0.0 and 1.0 reserve capacity headroom
+	//
+	ComputeLimit(ctx context.Context, priority int, saturation float64) (limit float64)
+}

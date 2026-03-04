@@ -78,6 +78,15 @@ func TestNewConfigFromAPI(t *testing.T) {
 					"MaxBytes should be correctly translated from int64 in API to uint64 in internal config")
 			},
 		},
+		{
+			name: "Success - UsageLimitPolicyType is translated",
+			apiConfig: &configapi.FlowControlConfig{
+				UsageLimitPolicyType: "my-usage-limit-policy",
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "my-usage-limit-policy", cfg.UsageLimitPolicyType)
+			},
+		},
 	}
 
 	for _, tc := range testCases {

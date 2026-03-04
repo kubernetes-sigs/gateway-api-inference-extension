@@ -300,11 +300,17 @@ type FlowControlConfig struct {
 	// priority levels. Traffic matching these priorities will be handled according to these rules.
 	// If a priority band is not specified, it uses specific defaults.
 	PriorityBands []PriorityBandConfig `json:"priorityBands,omitempty"`
+
+	// +optional
+	// UsageLimitPolicyType is the plugin type name for the UsageLimitPolicy.
+	// The named plugin must be registered in the plugin registry before the runner starts.
+	// If omitted or the plugin is not found, a default no-op policy (limit=1.0) is used.
+	UsageLimitPolicyType string `json:"usageLimitPolicyType,omitempty"`
 }
 
 func (fcc *FlowControlConfig) String() string {
-	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
-		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands)
+	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v, UsageLimitPolicyType: %v}",
+		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands, fcc.UsageLimitPolicyType)
 }
 
 // PriorityBandConfig configures a single priority band.

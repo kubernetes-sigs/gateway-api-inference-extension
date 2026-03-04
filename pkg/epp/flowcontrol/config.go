@@ -33,6 +33,10 @@ const FeatureGate = "flowControl"
 type Config struct {
 	Controller *controller.Config
 	Registry   *registry.Config
+
+	// UsageLimitPolicyType is the plugin type name used to resolve a UsageLimitPolicy from the plugin registry.
+	// Optional: Defaults to empty string (uses the default no-op policy).
+	UsageLimitPolicyType string
 }
 
 // NewConfigFromAPI creates a new Config by translating the top-level API configuration.
@@ -45,8 +49,12 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller config: %w", err)
 	}
-	return &Config{
+	cfg := &Config{
 		Controller: ctrlCfg,
 		Registry:   registryConfig,
-	}, nil
+	}
+	if apiConfig != nil {
+		cfg.UsageLimitPolicyType = apiConfig.UsageLimitPolicyType
+	}
+	return cfg, nil
 }
