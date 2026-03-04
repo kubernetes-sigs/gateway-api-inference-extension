@@ -18,9 +18,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
 
+	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -96,17 +99,24 @@ func TestHandleResponseBody_SinglePlugin(t *testing.T) {
 		t.Fatalf("HandleResponseBody returned unexpected error: %v", err)
 	}
 
-	// Plugins are executed but mutations are not yet applied to the response.
-	want := []*extProcPb.ProcessingResponse{
-		{
-			Response: &extProcPb.ProcessingResponse_ResponseBody{
-				ResponseBody: &extProcPb.BodyResponse{},
-			},
-		},
+	if len(resp) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(resp))
 	}
-	if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
-		t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+	bodyResp := resp[0].GetResponseBody()
+	if bodyResp == nil {
+		t.Fatal("Expected ResponseBody response")
 	}
+
+	mutatedBytes := bodyResp.GetResponse().GetBodyMutation().GetBody()
+	var got map[string]any
+	if err := json.Unmarshal(mutatedBytes, &got); err != nil {
+		t.Fatalf("Failed to unmarshal mutated body: %v", err)
+	}
+	if got["mutated"] != true {
+		t.Errorf("Expected mutated=true in body, got: %v", got)
+	}
+
+	assertContentLengthHeader(t, bodyResp.GetResponse().GetHeaderMutation().GetSetHeaders(), len(mutatedBytes))
 }
 
 func TestHandleResponseBody_MultiplePlugins(t *testing.T) {
@@ -134,17 +144,30 @@ func TestHandleResponseBody_MultiplePlugins(t *testing.T) {
 		t.Fatalf("HandleResponseBody returned unexpected error: %v", err)
 	}
 
-	// Plugins are executed but mutations are not yet applied to the response.
-	want := []*extProcPb.ProcessingResponse{
-		{
-			Response: &extProcPb.ProcessingResponse_ResponseBody{
-				ResponseBody: &extProcPb.BodyResponse{},
-			},
-		},
+	if len(resp) != 1 {
+		t.Fatalf("Expected 1 response, got %d", len(resp))
 	}
-	if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
-		t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+	bodyResp := resp[0].GetResponseBody()
+	if bodyResp == nil {
+		t.Fatal("Expected ResponseBody response")
 	}
+
+	mutatedBytes := bodyResp.GetResponse().GetBodyMutation().GetBody()
+	var got map[string]any
+	if err := json.Unmarshal(mutatedBytes, &got); err != nil {
+		t.Fatalf("Failed to unmarshal mutated body: %v", err)
+	}
+	if got["p1"] != testPluginValue {
+		t.Errorf("Expected p1=%q in body, got: %v", testPluginValue, got)
+	}
+	if got["p2"] != testPluginValue {
+		t.Errorf("Expected p2=%q in body, got: %v", testPluginValue, got)
+	}
+	if got["original"] != true {
+		t.Errorf("Expected original=true in body, got: %v", got)
+	}
+
+	assertContentLengthHeader(t, bodyResp.GetResponse().GetHeaderMutation().GetSetHeaders(), len(mutatedBytes))
 }
 
 func TestHandleResponseBody_PluginError(t *testing.T) {
@@ -172,31 +195,50 @@ func TestHandleResponseBody_PluginError(t *testing.T) {
 func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	noopPlugin := &fakeResponsePlugin{
-		name: "noop",
+	mutatePlugin := &fakeResponsePlugin{
+		name: "mutator",
 		mutateFn: func(_ context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
+			body["mutated"] = true
 			return headers, body, nil
 		},
 	}
 
-	server := NewServer(true, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{noopPlugin})
+	server := NewServer(true, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{mutatePlugin})
 	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
 		t.Fatalf("HandleResponseBody returned unexpected error: %v", err)
 	}
 
-	// Plugins are executed but mutations are not yet applied to the response.
-	want := []*extProcPb.ProcessingResponse{
-		{
-			Response: &extProcPb.ProcessingResponse_ResponseBody{
-				ResponseBody: &extProcPb.BodyResponse{},
-			},
-		},
+	if len(resp) == 0 {
+		t.Fatal("Expected at least one response")
 	}
-	if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
-		t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+
+	// Collect all streamed body bytes.
+	allBytes := make([]byte, 0, len(resp))
+	for _, r := range resp {
+		bodyResp := r.GetResponseBody()
+		if bodyResp == nil {
+			t.Fatal("Expected ResponseBody response in streaming mode")
+		}
+		streamed := bodyResp.GetResponse().GetBodyMutation().GetStreamedResponse()
+		if streamed == nil {
+			t.Fatal("Expected StreamedBodyResponse in streaming mode")
+		}
+		allBytes = append(allBytes, streamed.GetBody()...)
 	}
+
+	var got map[string]any
+	if err := json.Unmarshal(allBytes, &got); err != nil {
+		t.Fatalf("Failed to unmarshal streamed body: %v", err)
+	}
+	if got["mutated"] != true {
+		t.Errorf("Expected mutated=true in streamed body, got: %v", got)
+	}
+
+	// Verify header mutation is attached to the first chunk.
+	firstBodyResp := resp[0].GetResponseBody()
+	assertContentLengthHeader(t, firstBodyResp.GetResponse().GetHeaderMutation().GetSetHeaders(), len(allBytes))
 }
 
 func TestProcessResponseBody_Streaming(t *testing.T) {
@@ -230,4 +272,18 @@ func TestProcessResponseBody_Streaming(t *testing.T) {
 	if resp2 == nil {
 		t.Fatal("processResponseBody chunk2 should return a response on EoS")
 	}
+}
+
+func assertContentLengthHeader(t *testing.T, headers []*basepb.HeaderValueOption, expectedLen int) {
+	t.Helper()
+	expected := strconv.Itoa(expectedLen)
+	for _, h := range headers {
+		if h.GetHeader().GetKey() == "content-length" {
+			if got := string(h.GetHeader().GetRawValue()); got != expected {
+				t.Errorf("content-length header = %q, want %q", got, expected)
+			}
+			return
+		}
+	}
+	t.Error("content-length header not found in response")
 }

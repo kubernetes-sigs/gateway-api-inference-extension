@@ -20,10 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 )
 
@@ -70,19 +73,80 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 		}, nil
 	}
 
-	if err := s.executePlugins(ctx, reqCtx.Response.Headers, responseBody, s.responsePlugins); err != nil {
+	updatedHeaders, updatedBody, err := s.executePlugins(ctx, reqCtx.Response.Headers, responseBody, s.responsePlugins)
+	if err != nil {
 		logger.Error(err, "Response plugin execution failed")
 		return nil, fmt.Errorf("failed to execute response plugins - %w", err)
 	}
 
-	// TODO: apply mutated body/headers to the response (see #2449 follow-ups).
+	mutatedBytes, err := json.Marshal(updatedBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal mutated response body - %w", err)
+	}
+
+	headerMutation := buildResponseHeaderMutation(updatedHeaders, len(mutatedBytes))
+
+	if s.streaming {
+		return addStreamedResponseBodyResponse(mutatedBytes, headerMutation), nil
+	}
+
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_ResponseBody{
-				ResponseBody: &eppb.BodyResponse{},
+				ResponseBody: &eppb.BodyResponse{
+					Response: &eppb.CommonResponse{
+						HeaderMutation: headerMutation,
+						BodyMutation: &eppb.BodyMutation{
+							Mutation: &eppb.BodyMutation_Body{
+								Body: mutatedBytes,
+							},
+						},
+					},
+				},
 			},
 		},
 	}, nil
+}
+
+// buildResponseHeaderMutation creates a HeaderMutation from the plugin-updated
+// headers and sets Content-Length to match the new body size.
+func buildResponseHeaderMutation(headers map[string]string, bodyLen int) *eppb.HeaderMutation {
+	setHeaders := make([]*basepb.HeaderValueOption, 0, len(headers)+1)
+	for k, v := range headers {
+		setHeaders = append(setHeaders, &basepb.HeaderValueOption{
+			Header: &basepb.HeaderValue{
+				Key:      k,
+				RawValue: []byte(v),
+			},
+		})
+	}
+	setHeaders = append(setHeaders, &basepb.HeaderValueOption{
+		Header: &basepb.HeaderValue{
+			Key:      "content-length",
+			RawValue: []byte(strconv.Itoa(bodyLen)),
+		},
+	})
+	return &eppb.HeaderMutation{SetHeaders: setHeaders}
+}
+
+// addStreamedResponseBodyResponse builds chunked streaming responses for
+// the response body path, attaching header mutations to the first chunk.
+func addStreamedResponseBodyResponse(bodyBytes []byte, headerMutation *eppb.HeaderMutation) []*eppb.ProcessingResponse {
+	commonResponses := common.BuildChunkedBodyResponses(bodyBytes, true)
+	responses := make([]*eppb.ProcessingResponse, 0, len(commonResponses))
+	for i, commonResp := range commonResponses {
+		if i == 0 {
+			commonResp.HeaderMutation = headerMutation
+		}
+		responses = append(responses, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_ResponseBody{
+				ResponseBody: &eppb.BodyResponse{
+					Response: commonResp,
+				},
+			},
+		})
+	}
+	return responses
 }
 
 // HandleResponseTrailers handles response trailers.
