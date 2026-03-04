@@ -55,7 +55,7 @@ This guide describes the current state of exposed metrics and how to scrape them
 
 ### Flow Control Metrics
 
-These metrics provide insights into the [Flow Control layer](flow-control.md) within the EPP.
+These metrics provide insights into the [Flow Control layer](flow-control.md) within the EPP when enabled.
 
 | **Metric name** | **Metric Type**  | <div style="width:200px">**Description**</div>  | <div style="width:250px">**Labels**</div> | **Status**  |
 |:---|:---|:---|:---|:---|

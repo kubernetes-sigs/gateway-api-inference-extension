@@ -5,9 +5,11 @@ The Flow Control layer in the Endpoint Picker (EPP) is a pool defense and multi-
 ## The Elevator Pitch
 
 By shifting intelligent queuing into the EPP, the Flow Control layer provides three critical benefits:
-1. **Fairness & Prioritization:** Prevents "noisy neighbors" from monopolizing GPUs. High-priority requests strictly bypass lower-priority traffic, and resources are shared equitably among tenants during spikes.
+
+1. **Fairness & Prioritization:** Prevents "noisy neighbors" from monopolizing GPUs. High-priority requests strictly bypass lower-priority traffic, and resources are shared equitably among tenants from the same priority during spikes.
 2. **Resource Efficiency & Late Binding:** Prevents "scheduling regret." By keeping endpoint queues small and holding requests centrally, the EPP delays routing decisions until the last possible moment. This late-binding approach allows the EPP to dispatch requests to the most optimal candidate that is not currently saturated (e.g., the endpoint with the highest Prefix Cache affinity), rather than locking it prematurely into a suboptimal endpoint's local queue.
 3. **Operational Stability:** Smooths out traffic spikes, hides endpoint cold-start times from clients (by queuing requests instead of dropping them), and provides clearer signals for pool autoscaling.
+4. **Centralized Backpressure & Observability:** Model servers protect their hardware during spikes by queuing requests locally. However, requests trapped inside isolated, local queues cannot be dynamically re-routed or preempted by higher-priority traffic, and they do not automatically expose tenant-specific backpressure metrics. By actively monitoring backend saturation signals, the EPP intercepts this backpressure at the proxy layer. Buffering excess load centrally empowers the gateway to enforce global priority, maintain fairness, make optimal late-binding routing decisions, and surface tenant-specific queue metrics that individual downstream endpoints cannot.
 
 ## Why Flow Control? (The LLM Queuing Problem)
 
@@ -23,13 +25,13 @@ Without Flow Control, a sudden burst of traffic piles up directly inside the mod
 
 ## Core Concepts
 
-Traffic is organized into streams called **Flows**. When a request arrives, the EPP assigns it a `FlowKey` consisting of two parts:
+Traffic is organized into **Flows**. When a request arrives, the EPP assigns it a `FlowKey` consisting of two parts:
 
 1. **Fairness ID:** An identifier extracted from the `x-gateway-inference-fairness-id` HTTP header (e.g., a tenant ID, a user tier, or an API key). If absent, it defaults to a global bucket.
 2. **Priority:** An integer value derived from the `InferenceObjective` Kubernetes resource targeting the pool. Negative values are permissible and explicitly define background/low-priority traffic.
 
 ### Priority (Strict Ordering)
-Priority provides a hard guarantee for service order. The Flow Controller will **always** dispatch all buffered requests from higher-priority queues before servicing any requests from lower-priority queues. Unlike the default admission mode (when Flow Control is disabled), negative-priority requests are not immediately rejected upon saturation but are held in their own dynamically provisioned queues until dispatched, until they expire, or until configured capacity limits are exceeded. This means operators can control load shedding by strictly limiting the capacity applied to lower-priority levels.
+Priority provides a hard guarantee for service order. The Flow Controller will **always** dispatch all buffered requests from higher-priority queues before servicing any requests from lower-priority queues. Unlike the default admission mode (when Flow Control is disabled), negative-priority requests are not immediately rejected upon saturation but are held in their own dynamically provisioned queues until dispatched, until they expire, or until configured [capacity limits](epp-configuration/config-text.md#priority-band-configuration) are exceeded. This means operators can control load shedding by strictly limiting the capacity applied to lower-priority levels.
 
 ### Fairness (Equitable Sharing)
 Fairness policies determine how to share resources between different flows that exist *within the same Priority level*.

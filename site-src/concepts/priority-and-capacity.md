@@ -5,9 +5,9 @@ The `InferenceObjective` API resource allows users to define the priority of the
 ## Defining Priority
 
 Priority is an integer value defined in the `InferenceObjective.spec.priority` field.
-* **Higher values** indicate higher priority.
-* **Negative values** are allowed and designate requests as "sheddable" (safe to drop under heavy load).
-* If a request does not have an associated `InferenceObjective` or the priority field is unset, it defaults to `0`.
+- **Higher values** indicate higher priority.
+- **Negative values** are allowed and designate requests as "sheddable" (safe to drop under heavy load).
+- If a request does not have an associated `InferenceObjective` or the priority field is unset, it defaults to `0`.
 
 ## Admission Control Behaviors
 
@@ -26,6 +26,6 @@ How Priority interacts with Capacity depends on your EPP configuration:
 ### 2. With Flow Control Disabled (Legacy Admission)
 *Default Behavior.*
 
-* **Load Shedding:** If the pool is saturated, requests with **negative priority** are immediately rejected (HTTP 503). Requests with a default priority (>= 0) are *not* shed by the EPP.
+* **Load Shedding:** If the pool is saturated, requests with **negative priority** are immediately rejected (HTTP 503). Requests with a priority >= 0 are *not* shed by the EPP.
 * **No EPP-Level Queuing:** All non-sheddable requests are passed directly to the Scheduling layer. Any necessary queuing happens directly on the model server backends, which are generally unaware of global priority.
-* **Limited Priority Enforcement:** Priority is only used for the binary sheddable/non-sheddable decision. There is no EPP-level mechanism to enforce finer-grained priority ordering.
+* **Limited Priority Enforcement:** Priority is only used for the binary sheddable/non-sheddable decision. There is no EPP-level mechanism to enforce finer-grained priority ordering or fairness. All non-sheddable requests are handled strictly first-come, first-served (FCFS).

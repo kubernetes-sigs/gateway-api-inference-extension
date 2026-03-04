@@ -379,6 +379,7 @@ predictable performance. By shifting Head-of-Line blocking left, it buffers requ
 enabling the Scheduler to dispatch work only when capacity is available.
 
 It manages traffic through a **3-Tier Dispatch Hierarchy**:
+
 1.  **Priority (Band Selection)**: High-priority traffic is served first.
 2.  **Fairness (Flow Selection)**: Requests are distributed fairly between tenants/models within a priority level
     (e.g., Round Robin).
