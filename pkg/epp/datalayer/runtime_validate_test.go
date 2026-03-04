@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -122,4 +124,46 @@ func typeOfT(v any) reflect.Type {
 		return t.Elem()
 	}
 	return t
+}
+
+func TestRuntimeConfigureWithNilExtractor(t *testing.T) {
+	logger := newTestLogger(t)
+	r := NewRuntime(1)
+
+	cfg := &Config{
+		Sources: []DataSourceConfig{
+			{
+				Plugin:     &FakeDataSource{},
+				Extractors: nil, // nil extractors should be allowed
+			},
+		},
+	}
+
+	err := r.Configure(cfg, false, "", logger)
+	assert.NoError(t, err, "Configure should succeed with nil extractors")
+}
+
+func TestRuntimeConfigureDuplicateGVKFails(t *testing.T) {
+	logger := newTestLogger(t)
+	r := NewRuntime(1)
+
+	// Create two notification sources with the same GVK
+	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	src1 := &FakeNotificationSource{
+		gvk: gvk,
+	}
+	src2 := &FakeNotificationSource{
+		gvk: gvk,
+	}
+
+	cfg := &Config{
+		Sources: []DataSourceConfig{
+			{Plugin: src1, Extractors: nil},
+			{Plugin: src2, Extractors: nil},
+		},
+	}
+
+	err := r.Configure(cfg, false, "", logger)
+	assert.Error(t, err, "Configure should fail with duplicate GVK")
+	assert.Contains(t, err.Error(), "duplicate", "Error should mention duplicate GVK")
 }

@@ -252,18 +252,6 @@ func updatePod(ctx context.Context, c client.Client, pod *corev1.Pod) error {
 	return c.Update(ctx, current)
 }
 
-// updatePodSpec updates a pod's spec by modifying the container image.
-func updatePodSpec(ctx context.Context, c client.Client, pod *corev1.Pod) error {
-	current := &corev1.Pod{}
-	if err := c.Get(ctx, client.ObjectKey{Name: pod.Name, Namespace: pod.Namespace}, current); err != nil {
-		return err
-	}
-	if len(current.Spec.Containers) > 0 {
-		current.Spec.Containers[0].Image = "nginx:alpine"
-	}
-	return c.Update(ctx, current)
-}
-
 // assertEventAndReconcile verifies extractor received event and reconciler was called.
 func assertEventAndReconcile(t *testing.T, extractor *mocks.NotificationExtractor,
 	reconciler *testPodReconciler, eventType fwkdl.EventType, podName string,
