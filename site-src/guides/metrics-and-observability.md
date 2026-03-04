@@ -64,6 +64,7 @@ These metrics provide insights into the experimental flow control layer within t
 | inference_extension_flow_control_queue_bytes | Gauge | The current size in bytes of all requests being actively managed by the flow control layer. This includes requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_dispatch_cycle_duration_seconds | Histogram | The time taken for each dispatch cycle in the Flow Control layer. |  | ALPHA |
 | inference_extension_flow_control_request_enqueue_duration_seconds | Gauge | The time taken to enqueue requests by the EPP flow control layer. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
+| inference_extension_flow_control_pool_saturation | Gauge | Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated). | `inference_pool`=&lt;pool-name&gt; | ALPHA |
 
 
 ## Scrape Metrics & Pprof profiles
