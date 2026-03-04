@@ -53,6 +53,14 @@ type Config struct {
 	// serial execution loop and allowing the system to handle short bursts of traffic without blocking.
 	// Optional: Defaults to `defaultEnqueueChannelBufferSize` (100).
 	EnqueueChannelBufferSize int
+
+	// UsageLimitPolicyType is the plugin type for the usage limit policy.
+	// Optional: Defaults to empty string (uses noop-usage-policy).
+	UsageLimitPolicyType string
+
+	// EvictorType is the plugin type for the evictor.
+	// Optional: Defaults to empty string (uses noop-evictor).
+	EvictorType string
 }
 
 // ConfigOption is a functional option for configuring the FlowController.
@@ -112,6 +120,20 @@ func WithProcessorReconciliationInterval(d time.Duration) ConfigOption {
 func WithEnqueueChannelBufferSize(size int) ConfigOption {
 	return func(c *Config) {
 		c.EnqueueChannelBufferSize = size
+	}
+}
+
+// WithUsageLimitPolicyType sets the usage limit policy type.
+func WithUsageLimitPolicyType(policyType string) ConfigOption {
+	return func(c *Config) {
+		c.UsageLimitPolicyType = policyType
+	}
+}
+
+// WithEvictorType sets the evictor type.
+func WithEvictorType(evictorType string) ConfigOption {
+	return func(c *Config) {
+		c.EvictorType = evictorType
 	}
 }
 

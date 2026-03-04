@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	flowcontrolplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
@@ -57,14 +58,17 @@ import (
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/saturation"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test/responsereceived"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
@@ -328,6 +332,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	var admissionController requestcontrol.AdmissionController
 	var locator contracts.PodLocator
 	locator = requestcontrol.NewDatastorePodLocator(ds, requestcontrol.WithDisableEndpointSubsetFilter(opts.DisableEndpointSubsetFilter))
+
 	if r.featureGates[flowcontrol.FeatureGate] {
 		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
@@ -335,11 +340,19 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Flow Registry: %w", err)
 		}
+
+		usageLimitPolicy, evictor := r.setupFlowControlPlugins(
+			eppConfig.FlowControlConfig.Controller.UsageLimitPolicyType,
+			eppConfig.FlowControlConfig.Controller.EvictorType,
+			setupLog)
+
 		fc, err := fccontroller.NewFlowController(
 			ctx,
 			eppConfig.FlowControlConfig.Controller,
 			registry, saturationDetector,
 			locator,
+			usageLimitPolicy,
+			evictor,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
@@ -454,6 +467,10 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
 	fwkplugin.Register(ordering.FCFSOrderingPolicyType, ordering.FCFSOrderingPolicyFactory)
 	fwkplugin.Register(ordering.EDFOrderingPolicyType, ordering.EDFOrderingPolicyFactory)
+	fwkplugin.Register(saturation.NoOpUsagePolicyType, saturation.NoOpUsagePolicyFactory)
+	fwkplugin.Register(saturation.DynamicUsageLimitPolicyType, saturation.DynamicUsagePolicyFactory)
+	fwkplugin.Register(saturation.NoOpEvictorType, saturation.NoOpEvictorFactory)
+	fwkplugin.Register(saturation.BatchEvictorType, saturation.BatchEvictorFactory)
 	// Latency predictor plugins
 	fwkplugin.Register(predictedlatency.PredictedLatencyPluginType, predictedlatency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
@@ -633,6 +650,39 @@ func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.O
 		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval)
 	}
 	return backendmetrics.NewPodMetricsFactory(pmc, opts.RefreshMetricsInterval)
+}
+
+func (r *Runner) setupFlowControlPlugins(policyType, evictorType string, logger logr.Logger) (flowcontrolplugins.UsageLimitPolicy, flowcontrolplugins.Evictor) {
+	var usageLimitPolicy flowcontrolplugins.UsageLimitPolicy
+	var evictor flowcontrolplugins.Evictor
+
+	// Resolve usage limit policy
+	if factory, ok := plugin.Registry[policyType]; ok {
+		if p, err := factory(policyType, nil, nil); err == nil {
+			usageLimitPolicy, _ = p.(flowcontrolplugins.UsageLimitPolicy)
+		}
+	}
+	if usageLimitPolicy == nil {
+		if policyType != "" {
+			logger.Info("Failed to resolve usage limit policy, using default", "type", policyType)
+		}
+		usageLimitPolicy = saturation.NewNoOpUsagePolicy()
+	}
+
+	// Resolve evictor
+	if factory, ok := plugin.Registry[evictorType]; ok {
+		if p, err := factory(evictorType, nil, nil); err == nil {
+			evictor, _ = p.(flowcontrolplugins.Evictor)
+		}
+	}
+	if evictor == nil {
+		if evictorType != "" {
+			logger.Info("Failed to resolve evictor, using default", "type", evictorType)
+		}
+		evictor = saturation.NewNoOpEvictor()
+	}
+
+	return usageLimitPolicy, evictor
 }
 
 // registerExtProcServer adds the ExtProcServerRunner as a Runnable to the manager.
