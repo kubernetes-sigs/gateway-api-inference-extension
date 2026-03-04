@@ -521,8 +521,18 @@ artifacts: kustomize yq
 	$(YQ) -P 'select(.spec.versions[].name != "v1")' artifacts/manifests.yaml > artifacts/experimental-manifests.yaml
 	@$(call clean-manifests)
 
+.PHONY: release-staging-digests
+release-staging-digests: ## Print staging digests for k8s.io promotion when available.
+	@if [ -z "$(MAJOR)" ] || [ -z "$(MINOR)" ] || [ -z "$(PATCH)" ]; then \
+		echo "Skipping release-staging-digests. Set MAJOR/MINOR/PATCH (and RC for release candidates)."; \
+		exit 0; \
+	fi
+	@./hack/release-staging-digests.sh || { \
+		echo "Release digests are not available yet. Re-run 'make release-staging-digests' after the tag is pushed and images publish."; \
+	}
+
 .PHONY: release
-release: artifacts release-quickstart verify test # Create a release.
+release: artifacts release-quickstart verify test release-staging-digests # Create a release.
 
 ##@ Dependencies
 
