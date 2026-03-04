@@ -360,10 +360,6 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 		return nil, errors.New("plugin is not a PollingDataSource")
 	}
 
-	if err := dataSource.AddExtractor(extractor); err != nil {
-		return nil, fmt.Errorf("failed to add extractor: %w", err)
-	}
-
 	metadata := &fwkdl.EndpointMetadata{
 		MetricsHost: parsedURL.Host,
 		Labels: map[string]string{
@@ -372,8 +368,16 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 	}
 	endpoint := fwkdl.NewEndpoint(metadata, fwkdl.NewMetrics())
 
-	if _, err := dataSource.Poll(ctx, endpoint); err != nil {
+	// Poll source to get data, then manually extract (Runtime handles this now)
+	data, err := dataSource.Poll(ctx, endpoint)
+	if err != nil {
 		return endpoint.GetMetrics(), err
+	}
+	if data != nil {
+		err = extractor.Extract(ctx, data, endpoint)
+		if err != nil {
+			return endpoint.GetMetrics(), err
+		}
 	}
 
 	return endpoint.GetMetrics(), nil

@@ -64,7 +64,7 @@ func (m *NotificationExtractor) Extract(_ context.Context, _ any, _ fwkdl.Endpoi
 }
 
 func (m *NotificationExtractor) GVK() schema.GroupVersionKind {
-	return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
+	return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 }
 
 // ExtractNotification is the NotificationExtractor method — records the event.
