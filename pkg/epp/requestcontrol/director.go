@@ -132,6 +132,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err != nil {
 		return reqCtx, err
 	}
+	// Share the handler's body map so PreRequest plugins can mutate the forwarded body
+	requestBody.ParsedBody = reqCtx.Request.Body
 
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
