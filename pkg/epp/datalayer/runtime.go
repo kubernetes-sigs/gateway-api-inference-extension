@@ -151,12 +151,13 @@ func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) error {
 		ns := val.(fwkdl.NotificationSource)
 		srcName := ns.TypedName().Name
 
-		// Extractors were validated during Configure() to ensure they implement
-		// the correct interface (NotificationExtractor for NotificationSource), so
-		// the type assertion is safe.
 		var extractors []fwkdl.NotificationExtractor
 		if rawExts, ok := r.sourceExtractors.Load(srcName); ok {
-			extractors = rawExts.([]fwkdl.NotificationExtractor)
+			raw := rawExts.([]fwkdl.Extractor)
+			extractors = make([]fwkdl.NotificationExtractor, len(raw))
+			for i, e := range raw {
+				extractors[i] = e.(fwkdl.NotificationExtractor)
+			}
 		}
 
 		if bindErr := BindNotificationSource(ns, extractors, mgr); bindErr != nil {

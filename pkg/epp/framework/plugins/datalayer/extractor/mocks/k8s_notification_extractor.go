@@ -21,7 +21,6 @@ import (
 	"reflect"
 	"sync"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
@@ -32,6 +31,7 @@ import (
 // It records all events it receives and provides helper methods for test assertions.
 type NotificationExtractor struct {
 	name       string
+	gvk        schema.GroupVersionKind
 	events     []fwkdl.NotificationEvent
 	mu         sync.Mutex
 	extractErr error
@@ -41,7 +41,14 @@ type NotificationExtractor struct {
 func NewNotificationExtractor(name string) *NotificationExtractor {
 	return &NotificationExtractor{
 		name: name,
+		gvk:  schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
 	}
+}
+
+// WithGVK sets the GVK for the mock extractor.
+func (m *NotificationExtractor) WithGVK(gvk schema.GroupVersionKind) *NotificationExtractor {
+	m.gvk = gvk
+	return m
 }
 
 // WithExtractError configures the extractor to return an error on ExtractNotification.
@@ -55,7 +62,7 @@ func (m *NotificationExtractor) TypedName() fwkplugin.TypedName {
 }
 
 func (m *NotificationExtractor) ExpectedInputType() reflect.Type {
-	return reflect.TypeOf(unstructured.Unstructured{})
+	return reflect.TypeOf(fwkdl.NotificationEvent{})
 }
 
 // Extract is the Extractor interface method — no-op for notification extractors.
@@ -64,7 +71,7 @@ func (m *NotificationExtractor) Extract(_ context.Context, _ any, _ fwkdl.Endpoi
 }
 
 func (m *NotificationExtractor) GVK() schema.GroupVersionKind {
-	return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	return m.gvk
 }
 
 // ExtractNotification is the NotificationExtractor method — records the event.
@@ -89,4 +96,81 @@ func (m *NotificationExtractor) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = nil
+}
+
+// Extractor is a generic mock for Extractor interface.
+// It records call counts and optionally updates endpoint metrics.
+type Extractor struct {
+	name            string
+	inputType       reflect.Type
+	callCount       int
+	mu              sync.Mutex
+	extractErr      error
+	updateMetrics   bool
+	metricsToUpdate *fwkdl.Metrics
+}
+
+// NewExtractor creates a new mock extractor with the given name and input type.
+func NewExtractor(name string, inputType reflect.Type) *Extractor {
+	return &Extractor{
+		name:      name,
+		inputType: inputType,
+	}
+}
+
+// NewPollingExtractor creates a mock extractor for polling data sources (Metrics type).
+func NewPollingExtractor(name string) *Extractor {
+	return NewExtractor(name, reflect.TypeOf(fwkdl.Metrics{}))
+}
+
+// WithExtractError configures the extractor to return an error.
+func (m *Extractor) WithExtractError(err error) *Extractor {
+	m.extractErr = err
+	return m
+}
+
+// WithMetricsUpdate configures the extractor to update endpoint metrics.
+func (m *Extractor) WithMetricsUpdate(metrics *fwkdl.Metrics) *Extractor {
+	m.updateMetrics = true
+	m.metricsToUpdate = metrics
+	return m
+}
+
+func (m *Extractor) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Type: "mock-extractor", Name: m.name}
+}
+
+func (m *Extractor) ExpectedInputType() reflect.Type {
+	return m.inputType
+}
+
+func (m *Extractor) Extract(_ context.Context, data any, ep fwkdl.Endpoint) error {
+	m.mu.Lock()
+	m.callCount++
+	m.mu.Unlock()
+
+	if m.updateMetrics && m.metricsToUpdate != nil {
+		ep.UpdateMetrics(m.metricsToUpdate)
+	}
+
+	return m.extractErr
+}
+
+// CallCount returns the number of times Extract was called.
+func (m *Extractor) CallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount
+}
+
+// GetCallCount returns call count (thread-safe).
+func (m *Extractor) GetCallCount() int {
+	return m.CallCount()
+}
+
+// Reset clears the call count.
+func (m *Extractor) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callCount = 0
 }
