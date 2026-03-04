@@ -434,7 +434,7 @@ var (
 
 	flowControlPoolSaturation = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Subsystem: InferenceExtension,
+			Subsystem: inferenceExtension,
 			Name:      "flow_control_pool_saturation",
 			Help:      metricsutil.HelpMsgWithStability("Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated).", compbasemetrics.ALPHA),
 		},
