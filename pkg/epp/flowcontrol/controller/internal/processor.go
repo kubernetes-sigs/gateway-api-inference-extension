@@ -320,6 +320,14 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	// Record pool saturation metric
 	metrics.RecordFlowControlPoolSaturation(sp.poolName, saturation)
 
+	// --- Viability Check (Pool-Wide Saturation) ---
+	if saturation >= 1.0 {
+		sp.logger.V(logutil.DEBUG).Info("Pool is saturated; enforcing HoL blocking.",
+			"poolName", sp.poolName)
+		// Short-circuit
+		return false
+	}
+
 	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
@@ -337,15 +345,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			continue
 		}
 
-		// --- Viability Check (Saturation/HoL Blocking) ---
 		req := item.OriginalRequest()
-		if saturation >= 1.0 {
-			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
-				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
-			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
-			// lower-priority work might exacerbate the saturation affecting high-priority work.
-			return false
-		}
 
 		// --- Dispatch ---
 		if err := sp.dispatchItem(item); err != nil {
