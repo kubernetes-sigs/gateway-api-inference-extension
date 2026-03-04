@@ -116,15 +116,6 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{name: "openai-parser", customParser: "openai-parser", pluggableParserEnabled: true},
 	}
 
-	parserConfigs := []struct {
-		name                   string
-		customParser           string
-		pluggableParserEnabled bool
-	}{
-		{name: "non-pluggable-parser"},
-		{name: "openai-parser", customParser: "openai-parser", pluggableParserEnabled: true},
-	}
-
 	tests := []struct {
 		name          string
 		requests      []*extProcPb.ProcessingRequest
@@ -410,7 +401,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				t.Run(mode.name, func(t *testing.T) {
 					for _, tc := range tests {
 						t.Run(tc.name, func(t *testing.T) {
-							if mode.standalone && tc.requiresCRDs {
+							if mode.mode == modeStandalone && tc.requiresCRDs {
 								t.Skipf("Skipping test %q: requires CRDs, but running in Standalone mode", tc.name)
 							}
 
@@ -419,8 +410,8 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 
 							var h *TestHarness
 							customParser := WithCustomParser(parserConfig.customParser, parserConfig.pluggableParserEnabled)
-							if mode.standalone {
-								h = NewTestHarness(t, ctx, WithStandaloneMode(), customParser)
+							if mode.mode == modeStandalone {
+								h = NewTestHarness(t, ctx, WithStandaloneMode(mode.standaloneStrategy), customParser)
 							} else {
 								h = NewTestHarness(t, ctx, customParser).WithBaseResources()
 							}

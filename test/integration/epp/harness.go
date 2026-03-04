@@ -112,9 +112,11 @@ const (
 // HarnessConfig holds configuration options for the TestHarness.
 type HarnessConfig struct {
 	// StandaloneMode indicates if the EPP should run without watching Gateway API CRDs.
-	StandaloneMode bool
-	CustomParser   string
-	ConfigOverride string
+	StandaloneMode     bool
+	CustomParser       string
+	ConfigOverride     string
+	runMode            runMode
+	standaloneStrategy standaloneStrategy
 }
 
 // HarnessOption is a functional option for configuring the TestHarness.
