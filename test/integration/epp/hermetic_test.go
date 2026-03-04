@@ -107,6 +107,15 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{name: "Standalone-WithCRD", mode: modeStandalone, standaloneStrategy: strategyWithCRD},
 	}
 
+	parserConfigs := []struct {
+		name                   string
+		customParser           string
+		pluggableParserEnabled bool
+	}{
+		{name: "non-pluggable-parser"},
+		{name: "openai-parser", customParser: "openai-parser", pluggableParserEnabled: true},
+	}
+
 	tests := []struct {
 		name          string
 		requests      []*extProcPb.ProcessingRequest
@@ -386,53 +395,55 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		},
 	}
 
-	for _, executionMode := range executionModes {
-		t.Run(executionMode.name, func(t *testing.T) {
-			for _, tc := range tests {
-				t.Run(tc.name, func(t *testing.T) {
-					if executionMode.mode == modeStandalone && executionMode.standaloneStrategy == strategyNoCRD && tc.requiresCRDs {
-						t.Skipf("Skipping test %q: requires CRDs, but running in standalone without crd executionMode", tc.name)
-					}
+	for _, parserConfig := range parserConfigs {
+		t.Run(parserConfig.name, func(t *testing.T) {
+			for _, mode := range executionModes {
+				t.Run(mode.name, func(t *testing.T) {
+					for _, tc := range tests {
+						t.Run(tc.name, func(t *testing.T) {
+							if mode.mode == modeStandalone && tc.requiresCRDs {
+								t.Skipf("Skipping test %q: requires CRDs, but running in Standalone mode", tc.name)
+							}
 
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
+							ctx, cancel := context.WithCancel(context.Background())
+							defer cancel()
 
-					var h *TestHarness
-					if executionMode.mode == modeStandalone {
-						h = NewTestHarness(t, ctx, WithStandaloneMode(executionMode.standaloneStrategy))
-					} else {
-						h = NewTestHarness(t, ctx, WithStandardMode())
-					}
-					if executionMode.mode == modeStandard || executionMode.standaloneStrategy == strategyWithCRD {
-						h = h.WithBaseResources()
-					}
+							var h *TestHarness
+							customParser := WithCustomParser(parserConfig.customParser, parserConfig.pluggableParserEnabled)
+							if mode.mode == modeStandalone {
+								h = NewTestHarness(t, ctx, WithStandaloneMode(mode.standaloneStrategy), customParser)
+							} else {
+								h = NewTestHarness(t, ctx, customParser).WithBaseResources()
+							}
 
-					// In standalone runMode without crd, we cannot wait for an Objective CRD to sync as it doesn't exist.
-					// We only wait for Pod discovery.
-					modelToSync := tc.waitForModel
-					if modelToSync == "" {
-						modelToSync = modelMyModel
-					}
+							// In Standalone mode, we cannot wait for an Objective CRD to sync as it doesn't exist.
+							// We only wait for Pod discovery.
+							modelToSync := tc.waitForModel
+							if modelToSync == "" {
+								modelToSync = modelMyModel
+							}
 
-					h.WithPods(tc.pods).WaitForSync(len(tc.pods), modelToSync)
-					if len(tc.pods) > 0 {
-						h.WaitForReadyPodsMetric(len(tc.pods))
-					}
+							h.WithPods(tc.pods).WaitForSync(len(tc.pods), modelToSync)
+							if len(tc.pods) > 0 {
+								h.WaitForReadyPodsMetric(len(tc.pods))
+							}
 
-					responses, err := integration.StreamedRequest(t, h.Client, tc.requests, len(tc.wantResponses))
-					require.NoError(t, err)
+							responses, err := integration.StreamedRequest(t, h.Client, tc.requests, len(tc.wantResponses))
+							require.NoError(t, err)
 
-					if diff := cmp.Diff(tc.wantResponses, responses,
-						protocmp.Transform(),
-						protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
-							return a.GetHeader().GetKey() < b.GetHeader().GetKey()
-						}),
-					); diff != "" {
-						t.Errorf("Response mismatch (-want +got): %v", diff)
-					}
+							if diff := cmp.Diff(tc.wantResponses, responses,
+								protocmp.Transform(),
+								protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
+									return a.GetHeader().GetKey() < b.GetHeader().GetKey()
+								}),
+							); diff != "" {
+								t.Errorf("Response mismatch (-want +got): %v", diff)
+							}
 
-					if len(tc.wantMetrics) > 0 {
-						h.ExpectMetrics(tc.wantMetrics)
+							if len(tc.wantMetrics) > 0 {
+								h.ExpectMetrics(tc.wantMetrics)
+							}
+						})
 					}
 				})
 			}

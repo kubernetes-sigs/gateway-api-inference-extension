@@ -17,6 +17,7 @@ limitations under the License.
 package request
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -470,7 +471,11 @@ func TestExtractRequestData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractRequestBody(tt.body, tt.headers)
+			jsonBytes, err := json.Marshal(tt.body)
+			if err != nil {
+				t.Errorf("tt.body cannot be marshalled to JSON bytes")
+			}
+			got, err := ExtractRequestBody(jsonBytes, tt.headers)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractRequestBody() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -496,7 +501,11 @@ func BenchmarkExtractRequestData_Completions(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = ExtractRequestBody(jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -514,7 +523,11 @@ func BenchmarkExtractRequestData_ChatCompletions(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = ExtractRequestBody(jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -539,7 +552,11 @@ func BenchmarkExtractRequestData_ChatCompletionsWithOptionals(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = ExtractRequestBody(jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -556,7 +573,11 @@ func BenchmarkExtractRequestData_Responses(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = ExtractRequestBody(jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -574,7 +595,11 @@ func BenchmarkExtractRequestData_Conversations(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = ExtractRequestBody(jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
