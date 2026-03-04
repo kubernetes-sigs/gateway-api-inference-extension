@@ -31,8 +31,10 @@ const (
 	fakeSource = "fake-data-source"
 )
 
-var _ fwkdl.DataSource = (*FakeDataSource)(nil)
-var _ fwkdl.PollingDataSource = (*FakeDataSource)(nil)
+var (
+	_ fwkdl.DataSource        = (*FakeDataSource)(nil)
+	_ fwkdl.PollingDataSource = (*FakeDataSource)(nil)
+)
 
 type FakeDataSource struct {
 	typedName *plugin.TypedName
@@ -59,17 +61,14 @@ func (fds *FakeDataSource) ExtractorType() reflect.Type {
 	return reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
 }
 
-func (fds *FakeDataSource) Extractors() []string                 { return []string{} }
-func (fds *FakeDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
-
-func (fds *FakeDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
+func (fds *FakeDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.callCount, 1)
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
 		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
 			ep.UpdateMetrics(metrics)
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // FakeNotificationSource implements both DataSource and NotificationSource for testing.
@@ -94,16 +93,8 @@ func (m *FakeNotificationSource) GVK() schema.GroupVersionKind {
 	return m.gvk
 }
 
-func (m *FakeNotificationSource) Notify(_ context.Context, _ fwkdl.NotificationEvent) error {
-	return nil
-}
-
-func (m *FakeNotificationSource) Extractors() []string {
-	return []string{}
-}
-
-func (m *FakeNotificationSource) AddExtractor(_ fwkdl.Extractor) error {
-	return nil
+func (m *FakeNotificationSource) Notify(_ context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
+	return &event, nil
 }
 
 func (m *FakeNotificationSource) Collect(_ context.Context, _ fwkdl.Endpoint) error {
