@@ -18,6 +18,8 @@ package flowcontrol
 
 import (
 	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // FlowControlRequest is the contract for an incoming request submitted to the `controller.FlowController`. It
@@ -37,10 +39,10 @@ type FlowControlRequest interface {
 	// for managing byte-based capacity limits and for `contracts.FlowRegistry` statistics.
 	ByteSize() uint64
 
-	// Headers returns the request's headers.
-	Headers() map[string]string
+	// InferenceRequest returns the inference request passed to the scheduling layer.
+	InferenceRequest() *scheduling.LLMRequest
 
-	// ReceivedTimestamp returns the timestamp when the request was received.
+	// ReceivedTimestamp returns the timestamp when the request was received by the server.
 	ReceivedTimestamp() time.Time
 
 	// InitialEffectiveTTL returns the suggested Time-To-Live for this request.
