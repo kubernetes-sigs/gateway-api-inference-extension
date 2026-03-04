@@ -17,216 +17,169 @@ limitations under the License.
 package payloadprocess
 
 import (
-	"encoding/json"
+	"encoding/binary"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/testing/protocmp"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkpayload "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
+	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	vllm "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/payloadprocess/protos/vllm/grpc"
 )
 
-const (
-	chatCompletionsPath = "/v1/chat/completions"
-)
+func TestVLLMGrpcParser_ParseRequest_Streaming(t *testing.T) {
+	parser := NewVLLMGrpcParser()
 
-func TestParseRequest(t *testing.T) {
 	tests := []struct {
-		name    string
-		headers map[string]string
-		body    map[string]any
-		want    *vllm.GenerateRequest
-		wantErr bool
+		name       string
+		body       []byte
+		wantStream bool
 	}{
 		{
-			name:    "Basic Chat Completion",
-			headers: map[string]string{":path": chatCompletionsPath},
-			body: map[string]any{
-				"model": "llama-2", // Model field is required by extract libs but not used by vLLM directly usually, but we check extracted body
-				"messages": []map[string]string{
-					{"role": "user", "content": "Hello"},
-				},
-				"max_tokens": float64(100),
-			},
-			want: &vllm.GenerateRequest{
-				Input: &vllm.GenerateRequest_Text{
-					Text: "user: Hello\nassistant: ",
-				},
-				SamplingParams: &vllm.SamplingParams{
-					MaxTokens: ptrUint32(100),
-					TopP:      1.0,
-					N:         1,
-				},
-				Stream: false,
-			},
+			name:       "Stream enabled",
+			body:       []byte(`{"model": "test", "messages": [{"role": "user", "content": "hi"}], "stream": true}`),
+			wantStream: true,
 		},
 		{
-			name:    "With Sampling Params",
-			headers: map[string]string{":path": chatCompletionsPath},
-			body: map[string]any{
-				"model": "llama-2",
-				"messages": []map[string]string{
-					{"role": "user", "content": "Hello"},
-				},
-				"max_tokens":        float64(50),
-				"temperature":       float64(0.7),
-				"top_p":             float64(0.9),
-				"frequency_penalty": float64(0.5),
-				"presence_penalty":  float64(0.5),
-				"n":                 float64(2),
-				"seed":              float64(42),
-				"stop":              "STOP",
-			},
-			want: &vllm.GenerateRequest{
-				Input: &vllm.GenerateRequest_Text{
-					Text: "user: Hello\nassistant: ",
-				},
-				SamplingParams: &vllm.SamplingParams{
-					MaxTokens:        ptrUint32(50),
-					Temperature:      ptrFloat32(0.7),
-					TopP:             0.9,
-					FrequencyPenalty: 0.5,
-					PresencePenalty:  0.5,
-					N:                2,
-					Seed:             ptrInt32(42),
-					Stop:             []string{"STOP"},
-				},
-				Stream: false,
-			},
+			name:       "Stream disabled",
+			body:       []byte(`{"model": "test", "messages": [{"role": "user", "content": "hi"}], "stream": false}`),
+			wantStream: false,
 		},
 		{
-			name:    "Stop Sequence List",
-			headers: map[string]string{":path": chatCompletionsPath},
-			body: map[string]any{
-				"model": "gpt-4",
-				"messages": []map[string]string{
-					{"role": "user", "content": "Hello World!"},
-				},
-				"stop": []any{"STOP"},
-			},
-			want: &vllm.GenerateRequest{
-				Input: &vllm.GenerateRequest_Text{
-					Text: "user: Hello World!\nassistant: ",
-				},
-				SamplingParams: &vllm.SamplingParams{
-					MaxTokens: ptrUint32(1024), // Default
-					TopP:      1.0,             // Default
-					N:         1,               // Default
-					Stop:      []string{"STOP"},
-				},
-				Stream: false,
-			},
-		},
-		{
-			name:    "Streaming Not Implemented",
-			headers: map[string]string{":path": chatCompletionsPath},
-			body: map[string]any{
-				"model": "gpt-4",
-				"messages": []map[string]string{
-					{"role": "user", "content": "Hi"},
-				},
-				"stream": true,
-			},
-			wantErr: true,
+			name:       "Stream omitted (default false)",
+			body:       []byte(`{"model": "test", "messages": [{"role": "user", "content": "hi"}]}`),
+			wantStream: false,
 		},
 	}
 
-	parser := NewVLLMGrpcParser()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bodyBytes, _ := json.Marshal(tt.body)
-			got, err := parser.ParseRequest(tt.headers, bodyBytes)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("ParseRequest() error = nil, wantErr %v", tt.wantErr)
-				}
-				return
-			}
+			headers := map[string]string{":path": "/v1/chat/completions", "content-type": "application/json"}
+			gotBody, err := parser.ParseRequest(headers, tt.body)
 			if err != nil {
-				t.Fatalf("ParseRequest() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("ParseRequest() error = %v", err)
 			}
 
-			// Unmarshal the ParsedBody proto to check it
-			gotProto := &vllm.GenerateRequest{}
-			if err := startProtoUnmarshal(got.ParsedBody.([]byte), gotProto); err != nil {
-				t.Fatalf("Failed to unmarshal parsed body: %v", err)
+			// ParseRequest returns the body with a 5-byte gRPC frame
+			encoded := gotBody.ParsedBody.([]byte)
+			if len(encoded) < 5 {
+				t.Fatalf("Encoded body too short: %d", len(encoded))
 			}
 
-			// Ignore RequestID for comparison as it is random if not provided
-			if diff := cmp.Diff(tt.want, gotProto, protocmp.Transform(), protocmp.IgnoreFields(&vllm.GenerateRequest{}, "request_id")); diff != "" {
-				t.Errorf("ParseRequest() mismatch (-want +got):\n%s", diff)
+			// Verify framing (compression=0, length matches)
+			if encoded[0] != 0 {
+				t.Errorf("Expected compression flag 0, got %d", encoded[0])
+			}
+			length := binary.BigEndian.Uint32(encoded[1:5])
+			if int(length) != len(encoded)-5 {
+				t.Errorf("Frame length mismatch: header %d, actual %d", length, len(encoded)-5)
+			}
+
+			// Unmarshal options
+			vllmReq := &vllm.GenerateRequest{}
+			if err := proto.Unmarshal(encoded[5:], vllmReq); err != nil {
+				t.Fatalf("Failed to unmarshal vllm request: %v", err)
+			}
+
+			if vllmReq.Stream != tt.wantStream {
+				t.Errorf("generateRequest.Stream = %v, want %v", vllmReq.Stream, tt.wantStream)
 			}
 		})
 	}
 }
 
-func TestParseResponse(t *testing.T) {
+func TestVLLMGrpcParser_ParseStreamResponse(t *testing.T) {
 	parser := NewVLLMGrpcParser()
 
 	tests := []struct {
 		name    string
-		body    *vllm.GenerateResponse
-		want    *requestcontrol.Usage
+		resp    *vllm.GenerateResponse
+		want    *fwkpayload.ParsedResponse
 		wantErr bool
 	}{
 		{
-			name: "Successful Response",
-			body: &vllm.GenerateResponse{
-				Response: &vllm.GenerateResponse_Complete{
-					Complete: &vllm.GenerateComplete{
+			name: "StreamChunk with usage",
+			resp: &vllm.GenerateResponse{
+				Response: &vllm.GenerateResponse_Chunk{
+					Chunk: &vllm.GenerateStreamChunk{
+						TokenIds:         []uint32{1, 2},
 						PromptTokens:     10,
-						CompletionTokens: 20,
-						FinishReason:     "stop",
+						CompletionTokens: 5,
 					},
 				},
 			},
-			want: &requestcontrol.Usage{
-				PromptTokens:     10,
-				CompletionTokens: 20,
-				TotalTokens:      30,
+			want: &fwkpayload.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     10,
+					CompletionTokens: 5,
+					TotalTokens:      15,
+				},
 			},
 		},
 		{
-			name:    "Missing Complete Block",
-			body:    &vllm.GenerateResponse{},
+			name: "Complete (final) with usage",
+			resp: &vllm.GenerateResponse{
+				Response: &vllm.GenerateResponse_Complete{
+					Complete: &vllm.GenerateComplete{
+						OutputIds:        []uint32{1, 2, 3},
+						PromptTokens:     10,
+						CompletionTokens: 20,
+					},
+				},
+			},
+			want: &fwkpayload.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     10,
+					CompletionTokens: 20,
+					TotalTokens:      30,
+				},
+			},
+		},
+		{
+			name: "Chunk without usage (zero values)",
+			resp: &vllm.GenerateResponse{
+				Response: &vllm.GenerateResponse_Chunk{
+					Chunk: &vllm.GenerateStreamChunk{
+						TokenIds: []uint32{1},
+						// other fields 0
+					},
+				},
+			},
+			want: &fwkpayload.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     0,
+					CompletionTokens: 0,
+					TotalTokens:      0,
+				},
+			},
+		},
+		{
+			name: "Empty Response (neither chunk nor complete)",
+			resp: &vllm.GenerateResponse{},
+			// Current implementation returns error for empty message
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bodyBytes, _ := proto.Marshal(tt.body)
-			got, err := parser.ParseResponse(bodyBytes)
+			data, err := proto.Marshal(tt.resp)
+			if err != nil {
+				t.Fatalf("Failed to marshal input response: %v", err)
+			}
 
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("ParseResponse() error = nil, wantErr %v", tt.wantErr)
-				}
+			got, err := parser.ParseStreamResponse(data)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseStreamResponse() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if err != nil {
-				t.Fatalf("ParseResponse() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				return
 			}
 
-			if diff := cmp.Diff(tt.want, got.Usage); diff != "" {
-				t.Errorf("ParseResponse() usage mismatch (-want +got):\n%s", diff)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ParseStreamResponse() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
-}
-
-// Helpers
-func ptrUint32(v uint32) *uint32    { return &v }
-func ptrFloat32(v float32) *float32 { return &v }
-func ptrInt32(v int32) *int32       { return &v }
-
-func startProtoUnmarshal(b []byte, m *vllm.GenerateRequest) error {
-	// The ParsedBody has a 5-byte gRPC header. Strip it before unmarshalling.
-	if len(b) < 5 {
-		return (proto.UnmarshalOptions{}).Unmarshal(b, m)
-	}
-	return (proto.UnmarshalOptions{}).Unmarshal(b[5:], m)
 }

@@ -19,6 +19,7 @@ package payloadprocess
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/payloadprocess"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -28,15 +29,7 @@ import (
 )
 
 const (
-	streamingRespPrefix = "data: "       //nolint:unused
-	streamingEndMsg     = "data: [DONE]" //nolint:unused
-
-	// OpenAI API object types
-	objectTypeResponse            = "response"              //nolint:unused
-	objectTypeConversation        = "conversation"          //nolint:unused
-	objectTypeChatCompletion      = "chat.completion"       //nolint:unused
-	objectTypeChatCompletionChunk = "chat.completion.chunk" //nolint:unused
-	objectTypeTextCompletion      = "text_completion"       //nolint:unused
+	streamingEndMsg = "data: [DONE]" //nolint:unused
 )
 
 const (
@@ -91,11 +84,15 @@ func (p *OpenAIParser) ParseResponse(body []byte) (*payloadprocess.ParsedRespons
 
 // ParseStreamResponse parses a chunk of the streaming response and returns a ParsedResponse
 func (p *OpenAIParser) ParseStreamResponse(chunk []byte) (*payloadprocess.ParsedResponse, error) {
-	responseBody := resputil.ExtractUsageStreaming(string(chunk))
-	if responseBody.Usage == nil {
+	chunkStr := string(chunk)
+	responseBody := resputil.ExtractUsageStreaming(chunkStr)
+	isFinal := strings.Contains(chunkStr, streamingEndMsg)
+
+	if responseBody.Usage == nil && !isFinal {
 		return nil, errors.New("unable to parse usage from stream response")
 	}
 	return &payloadprocess.ParsedResponse{
-		Usage: responseBody.Usage,
+		Usage:   responseBody.Usage,
+		IsFinal: isFinal,
 	}, nil
 }

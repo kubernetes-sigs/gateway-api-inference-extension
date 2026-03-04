@@ -145,7 +145,10 @@ func (p *VLLMGrpcParser) ParseStreamResponse(chunk []byte) (*payloadprocess.Pars
 			CompletionTokens: int(complete.CompletionTokens),
 			TotalTokens:      int(complete.PromptTokens + complete.CompletionTokens),
 		}
-		return &payloadprocess.ParsedResponse{Usage: usage}, nil
+		return &payloadprocess.ParsedResponse{
+			Usage:   usage,
+			IsFinal: true,
+		}, nil
 	}
 
 	if ch := resp.GetChunk(); ch != nil {
@@ -186,9 +189,6 @@ func (p *VLLMGrpcParser) TranscodeJsonToGrpc(headers map[string]string, body []b
 	}
 	vllmReq.SamplingParams = samplingParams
 
-	if stream {
-		return nil, errors.New("streaming is not yet implemented for vLLM gRPC")
-	}
 	vllmReq.Stream = stream
 
 	return vllmReq, nil

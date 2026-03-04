@@ -46,4 +46,6 @@ type Parser interface {
 type ParsedResponse struct {
 	// Usage is only populate when the raw response has usage.
 	Usage *requestcontrol.Usage
+	// IsFinal indicates if this is the final chunk of the stream.
+	IsFinal bool
 }

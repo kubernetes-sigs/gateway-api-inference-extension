@@ -34,8 +34,7 @@ import (
 )
 
 const (
-	streamingRespPrefix = "data: "
-	streamingEndMsg     = "data: [DONE]"
+	streamingEndMsg = "data: [DONE]"
 )
 
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
@@ -74,20 +73,28 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
 	responseText := string(responseBytes)
+
+	isFinal := false
 	if s.parser != nil {
 		parsedResp, err := s.parser.ParseStreamResponse(responseBytes)
-		if err != nil || parsedResp.Usage == nil {
+		if err != nil {
 			logger.Error(err, "error in HandleResponseBodyStreaming using parser")
 		} else {
-			reqCtx.Usage = *parsedResp.Usage
+			if parsedResp.Usage != nil {
+				reqCtx.Usage = *parsedResp.Usage
+			}
+			isFinal = parsedResp.IsFinal
 		}
 	} else {
 		// Parse usage on EVERY chunk to catch split streams (where usage and [DONE] are in different chunks).
 		if resp := resputil.ExtractUsageStreaming(responseText); resp.Usage != nil && resp.Usage.TotalTokens > 0 {
 			reqCtx.Usage = *resp.Usage
 		}
+		if strings.Contains(responseText, streamingEndMsg) {
+			isFinal = true
+		}
 	}
-	if strings.Contains(responseText, streamingEndMsg) {
+	if isFinal {
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
 		cachedToken := 0
