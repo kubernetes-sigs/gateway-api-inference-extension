@@ -82,7 +82,7 @@ func (rn *notificationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	u.SetGroupVersionKind(rn.gvk)
 
 	event := &fwkdl.NotificationEvent{
-		Type: fwkdl.EventAddOrUpdate, 
+		Type:   fwkdl.EventAddOrUpdate,
 		Object: u,
 	}
 
