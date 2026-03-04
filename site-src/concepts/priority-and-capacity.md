@@ -5,6 +5,7 @@ The `InferenceObjective` API resource allows users to define the priority of the
 ## Defining Priority
 
 Priority is an integer value defined in the `InferenceObjective.spec.priority` field.
+
 - **Higher values** indicate higher priority.
 - **Negative values** are allowed and designate requests as "sheddable" (safe to drop under heavy load).
 - If a request does not have an associated `InferenceObjective` or the priority field is unset, it defaults to `0`.

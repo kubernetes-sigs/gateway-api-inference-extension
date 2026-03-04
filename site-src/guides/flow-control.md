@@ -16,12 +16,13 @@ By shifting intelligent queuing into the EPP, the Flow Control layer provides th
 Model servers are highly optimized for a single, local goal: maximizing GPU throughput by building efficient continuous batches. However, they are entirely unaware of global, business-level objectives like tenant fairness or SLAs.
 
 Without Flow Control, a sudden burst of traffic piles up directly inside the model server's internal queues. This creates severe issues:
+
 * **The Noisy Neighbor:** A single user sending massive, complex prompts can monopolize the endpoint's queue and KV-cache, starving all other tenants.
 * **Scheduling Regret (Premature Routing):** Once a request is queued inside a specific model server, the EPP cannot move it. Dispatching early locks the request to a suboptimal routing candidate, preventing it from utilizing an endpoint that might soon free up and already hold the user's system prompt in its physical KV-cache.
 * **Priority Inversion:** Model servers batch based on sequence lengths or arrival times, not business priority. A critical real-time chat request might get stuck behind a massive offline batch job.
 * **Resource Asymmetry:** In traditional web services, connection count (RPS) is a reliable proxy for load. In LLM inference, resource consumption is predominantly driven by token counts (the total length of the sequence being processed) and the unpredictability of the autoregressive decode loop. A single request with a massive input context (such as a RAG prompt) or an unbounded max generation limit can consume vastly more KV cache capacity and GPU compute than hundreds of short chat requests. Standard API gateways rate-limit by RPS, which blindly allows heavy requests to saturate the available endpoint memory and fill the model server's local buffer. The EPP Flow Control layer is designed to govern this physical capacity (KV cache, queue saturation metrics), not just HTTP connection counts.
 
-**The Solution:** The Flow Control layer solves these issues by **shifting intelligent queuing "to the left"** of the model servers. By holding excess load inside the EPP's policy-aware queues, the EPP buffers these excess requests. It only dispatches requests to the model servers when they actually have the capacity to process them.
+**The Solution:** The Flow Control layer solves these issues by **shifting queuing to the gateway** instead of the model servers. By holding excess load inside the EPP's policy-aware queues, the EPP buffers these excess requests. It only dispatches requests to the model servers when they actually have the capacity to process them.
 
 ## Core Concepts
 
@@ -42,7 +43,7 @@ When a pool is under heavy load, operators must choose how the system degrades. 
 
 By enabling the Flow Control layer, you make the explicit choice to protect TPOT at the expense of queue time. During a spike, users will wait in the EPP queue.
 
-**The Late Binding Mechanism:** While requests wait in the queue, the EPP uses this delay to its advantage via Late Binding. By delaying the routing decision until the last possible moment, the EPP boosts the efficacy of its pluggable high-affinity scorers. Rather than routing prematurely to a suboptimal backend, the EPP can dynamically dispatch the request to the endpoint that scores the highest across its criteria. While the Flow Control layer intentionally trades mean TTFT for a protected TPOT, late-binding is designed to reduce latency variance (tail latency). By matching the request to an optimal high-affinity backend, the GPU can skip unnecessary compute and deliver a more consistent, predictable user experience.
+**The Late Binding Mechanism:** While requests wait in the queue, the EPP uses this delay to its advantage via Late Binding. By delaying the scheduling decision until the last possible moment, the EPP boosts the efficacy of its pluggable high-affinity scorers. Rather than scheduling prematurely to a suboptimal backend, the EPP can dynamically schedule the request to the endpoint that scores the highest across its criteria. While the Flow Control layer intentionally trades mean TTFT for a protected TPOT, late-binding is designed to reduce latency variance (tail latency). By matching the request to an optimal high-affinity backend, the GPU can skip unnecessary compute and deliver a more consistent, predictable user experience.
 
 ## How It Works: The Dispatch Loop
 
