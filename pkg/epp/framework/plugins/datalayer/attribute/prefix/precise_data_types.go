@@ -24,26 +24,24 @@ const (
 	PrecisePrefixCacheMatchInfoKey = "PrecisePrefixCacheMatchInfoKey"
 )
 
-// PrecisePrefixCacheMatchInfo represents the score from the precise prefix cache scorer
-// which uses the llm-d-inference-scheduler's LongestPrefixScorer.
-// The score is based on the longest consecutive block match from the beginning of the prompt.
-// Unlike PrefixCacheMatchInfo (used by approximate scorer), this only tracks the weighted
-// score of consecutive matched blocks, not separate matchBlocks/totalBlocks counts.
+// PrecisePrefixCacheMatchInfo extends PrefixCacheMatchInfo with weighted scoring information
+// from the llm-d-inference-scheduler's LongestPrefixScorer.
+// It inherits matchBlocks, totalBlocks, and blockSizeTokens from PrefixCacheMatchInfo,
+// and adds weightedScore which accounts for device tier weights (e.g., HBM=1.0, SSD=0.5).
 type PrecisePrefixCacheMatchInfo struct {
+	*PrefixCacheMatchInfo
 	// weightedScore is the weighted sum of consecutive matched blocks from the start.
 	// The LongestPrefixScorer calculates this as: sum(weight_i) for i=0 to N-1,
 	// where N is the number of consecutive blocks matched from block 0,
 	// and weight_i is based on the device tier (e.g., HBM=1.0, SSD=0.5).
 	// The sequence breaks as soon as a block is not found, ensuring consecutive prefix matching.
 	weightedScore float64
-	// blockSizeTokens is the block size in tokens used for scoring
-	blockSizeTokens int
 }
 
-func NewPrecisePrefixCacheMatchInfo(weightedScore float64, blockSizeTokens int) *PrecisePrefixCacheMatchInfo {
+func NewPrecisePrefixCacheMatchInfo(matchBlocks int, totalBlocks int, blockSizeTokens int, weightedScore float64) *PrecisePrefixCacheMatchInfo {
 	return &PrecisePrefixCacheMatchInfo{
-		weightedScore:   weightedScore,
-		blockSizeTokens: blockSizeTokens,
+		PrefixCacheMatchInfo: NewPrefixCacheMatchInfo(matchBlocks, totalBlocks, blockSizeTokens),
+		weightedScore:        weightedScore,
 	}
 }
 
@@ -51,13 +49,9 @@ func (p *PrecisePrefixCacheMatchInfo) WeightedScore() float64 {
 	return p.weightedScore
 }
 
-func (p *PrecisePrefixCacheMatchInfo) BlockSizeTokens() int {
-	return p.blockSizeTokens
-}
-
 func (p *PrecisePrefixCacheMatchInfo) Clone() fwkdl.Cloneable {
 	return &PrecisePrefixCacheMatchInfo{
-		weightedScore:   p.weightedScore,
-		blockSizeTokens: p.blockSizeTokens,
+		PrefixCacheMatchInfo: p.PrefixCacheMatchInfo.Clone().(*PrefixCacheMatchInfo),
+		weightedScore:        p.weightedScore,
 	}
 }
