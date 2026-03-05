@@ -29,27 +29,13 @@ import (
 
 // PrepareRequestData prepares the SLO context for the request, including parsing SLO headers and gathering prefix cache scores abds generating predictions.
 func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
-	logger := log.FromContext(ctx)
 	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request)
 
 	s.parseSLOHeaders(ctx, request, predictedLatencyCtx)
-	var prefixCacheScore float64
 	for _, endpoint := range endpoints {
-
-		if prefixCacheInfoRaw, ok := endpoint.Get(attrprefix.PrefixCacheMatchInfoKey); ok {
-			prefixCacheInfo := prefixCacheInfoRaw.(*attrprefix.PrefixCacheMatchInfo)
-			prefixCacheScore = float64(prefixCacheInfo.MatchBlocks()) / float64(prefixCacheInfo.TotalBlocks())
-			if !math.IsNaN(prefixCacheScore) {
-				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", endpoint.GetMetadata().NamespacedName.Name, "score", prefixCacheScore)
-			} else {
-				prefixCacheScore = 0.0
-				logger.V(logutil.DEBUG).Info("Prefix cache score is NaN, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
-			}
-		} else {
-			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
-			prefixCacheScore = 0.0
-		}
-		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
+		podName := endpoint.GetMetadata().NamespacedName.Name
+		prefixCacheScore := extractPrefixCacheScore(ctx, endpoint)
+		predictedLatencyCtx.prefixCacheScoresForEndpoints[podName] = prefixCacheScore
 	}
 	predictions, err := s.generatePredictions(ctx, predictedLatencyCtx, endpoints)
 	if err == nil && len(predictions) == len(endpoints) {
@@ -61,10 +47,46 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 	return nil
 }
 
+// extractPrefixCacheScore extracts the prefix cache score from endpoint attributes.
+// It prioritizes PrecisePrefixCacheMatchInfo (device-tier-aware weighted score) over
+// PrefixCacheMatchInfo (unweighted ratio). Returns 0.0 if no valid score is found.
+func extractPrefixCacheScore(ctx context.Context, endpoint schedulingtypes.Endpoint) float64 {
+	logger := log.FromContext(ctx)
+	podName := endpoint.GetMetadata().NamespacedName.Name
+
+	// Try precise prefix cache first (weighted score)
+	if precisePrefixCacheInfoRaw, ok := endpoint.Get(attrprefix.PrecisePrefixCacheMatchInfoKey); ok {
+		precisePrefixCacheInfo := precisePrefixCacheInfoRaw.(*attrprefix.PrecisePrefixCacheMatchInfo)
+		score := precisePrefixCacheInfo.WeightedScore()
+		if !math.IsNaN(score) {
+			logger.V(logutil.DEBUG).Info("Using precise prefix cache weighted score",
+				"pod", podName, "weightedScore", score)
+			return score
+		}
+	}
+
+	// Fall back to approximate prefix cache (unweighted ratio)
+	if prefixCacheInfoRaw, ok := endpoint.Get(attrprefix.PrefixCacheMatchInfoKey); ok {
+		prefixCacheInfo := prefixCacheInfoRaw.(*attrprefix.PrefixCacheMatchInfo)
+		score := float64(prefixCacheInfo.MatchBlocks()) / float64(prefixCacheInfo.TotalBlocks())
+		if !math.IsNaN(score) {
+			logger.V(logutil.DEBUG).Info("Using approximate prefix cache score",
+				"pod", podName, "score", score)
+			return score
+		}
+	}
+
+	logger.V(logutil.DEBUG).Info("No prefix cache score found, defaulting to 0", "pod", podName)
+	return 0.0
+}
+
 func (p *PredictedLatency) Produces() map[string]any {
 	return map[string]any{}
 }
 
 func (p *PredictedLatency) Consumes() map[string]any {
-	return map[string]any{attrprefix.PrefixCacheMatchInfoKey: attrprefix.PrefixCacheMatchInfo{}}
+	return map[string]any{
+		attrprefix.PrefixCacheMatchInfoKey:        attrprefix.PrefixCacheMatchInfo{},
+		attrprefix.PrecisePrefixCacheMatchInfoKey: attrprefix.PrecisePrefixCacheMatchInfo{},
+	}
 }
