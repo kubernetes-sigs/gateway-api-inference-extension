@@ -530,15 +530,21 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "ShouldSucceed_WithFullConfiguration",
 			apiConfig: &configapi.FlowControlConfig{
-				MaxBytes: ptr.To(resource.MustParse("100")),
+				Limits: &configapi.CapacityLimits{
+					MaxBytes: ptr.To(resource.MustParse("100")),
+				},
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(resource.MustParse("50")),
+						Limits: &configapi.CapacityLimits{
+							MaxBytes: ptr.To(resource.MustParse("50")),
+						},
 					},
 				},
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(resource.MustParse("10")),
+					Limits: &configapi.CapacityLimits{
+						MaxBytes: ptr.To(resource.MustParse("10")),
+					},
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
@@ -630,7 +636,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: nil, // Omitted
+						Limits:   nil, // Omitted
 					},
 				},
 			},
@@ -646,7 +652,9 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+						Limits: &configapi.CapacityLimits{
+							MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+						},
 					},
 				},
 			},
@@ -660,7 +668,9 @@ func TestNewConfigFromAPI(t *testing.T) {
 			name: "ShouldApplyDefault_WhenDefaultPriorityBandMaxBytesIsZero",
 			apiConfig: &configapi.FlowControlConfig{
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+					Limits: &configapi.CapacityLimits{
+						MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+					},
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
@@ -674,9 +684,11 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "ShouldError_WithNegativeGlobalMaxBytes",
 			apiConfig: &configapi.FlowControlConfig{
-				MaxBytes: ptr.To(resource.MustParse("-1")),
+				Limits: &configapi.CapacityLimits{
+					MaxBytes: ptr.To(resource.MustParse("-1")),
+				},
 			},
-			expectedErr: "global MaxBytes must be non-negative",
+			expectedErr: "global Limits.MaxBytes must be non-negative",
 		},
 		{
 			name: "ShouldError_WithNegativePriorityBandMaxBytes",
@@ -684,20 +696,24 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(resource.MustParse("-100")),
+						Limits: &configapi.CapacityLimits{
+							MaxBytes: ptr.To(resource.MustParse("-100")),
+						},
 					},
 				},
 			},
-			expectedErr: "priority band 1 MaxBytes must be non-negative",
+			expectedErr: "priority band 1 Limits.MaxBytes must be non-negative",
 		},
 		{
 			name: "ShouldError_WithNegativeDefaultPriorityBandMaxBytes",
 			apiConfig: &configapi.FlowControlConfig{
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(resource.MustParse("-5")),
+					Limits: &configapi.CapacityLimits{
+						MaxBytes: ptr.To(resource.MustParse("-5")),
+					},
 				},
 			},
-			expectedErr: "DefaultPriorityBand MaxBytes must be non-negative",
+			expectedErr: "DefaultPriorityBand Limits.MaxBytes must be non-negative",
 		},
 	}
 
