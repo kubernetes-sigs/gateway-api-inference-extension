@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // +kubebuilder:object:root=true
@@ -279,6 +280,10 @@ type FlowControlConfig struct {
 	// Default: 0 (unlimited).
 	MaxBytes *int64 `json:"maxBytes,omitempty"`
 
+    // +optional
+    // Limits defines the capacity boundaries for this band.
+    Limits *CapacityLimits `json:"limits,omitempty"`
+
 	// +optional
 	// DefaultRequestTTL serves as a fallback timeout for requests that do not specify their own
 	// deadline.
@@ -320,6 +325,10 @@ type PriorityBandConfig struct {
 	MaxBytes *int64 `json:"maxBytes,omitempty"`
 
 	// +optional
+	// Limits defines the capacity boundaries for this band
+	Limits *CapacityLimits `json:"limits,omitempty"`
+
+	// +optional
 	// FairnessPolicyRef specifies the name of the policy that governs flow selection.
 	// If omitted, the system default ("global-strict-fairness-policy") is used.
 	FairnessPolicyRef string `json:"fairnessPolicyRef,omitempty"`
@@ -333,4 +342,13 @@ type PriorityBandConfig struct {
 func (pbc PriorityBandConfig) String() string {
 	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
 		pbc.Priority, pbc.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+}
+
+// CapacityLimits defines capacity boundaries for a priority band.
+type CapacityLimits struct {
+    // +optional
+    // MaxBytes is the maximum number of bytes allowed.
+    // Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
+    // If omitted, the system default is used.
+	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
 }
