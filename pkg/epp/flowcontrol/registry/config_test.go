@@ -565,11 +565,15 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "ShouldSucceed_WithKubernetesQuantityFormat",
 			apiConfig: &configapi.FlowControlConfig{
-				MaxBytes: ptr.To(resource.MustParse("1Gi")),
+				Limits: &configapi.CapacityLimits{
+					MaxBytes: ptr.To(resource.MustParse("1Gi")),
+				},
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(resource.MustParse("500Mi")),
+						Limits: &configapi.CapacityLimits{
+							MaxBytes: ptr.To(resource.MustParse("500Mi")),
+						},
 					},
 				},
 			},
