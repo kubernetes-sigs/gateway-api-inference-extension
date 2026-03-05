@@ -355,11 +355,12 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 
 	opts := make([]ConfigOption, 0, len(apiConfig.PriorityBands)+3)
 
-	if apiConfig.MaxBytes != nil {
-		if *apiConfig.MaxBytes < 0 {
-			return nil, fmt.Errorf("MaxBytes must be non-negative, got %d", *apiConfig.MaxBytes)
+	if apiConfig.Limits.MaxBytes != nil {
+		maxBytesConfigValue := apiConfig.Limits.MaxBytes.Value()
+		if maxBytesConfigValue < 0 {
+			return nil, fmt.Errorf("Limits.MaxBytes must be non-negative, got %d", maxBytesConfigValue)
 		}
-		opts = append(opts, WithMaxBytes(uint64(*apiConfig.MaxBytes)))
+		opts = append(opts, WithMaxBytes(uint64(maxBytesConfigValue)))
 	}
 
 	if apiConfig.DefaultPriorityBand != nil {
