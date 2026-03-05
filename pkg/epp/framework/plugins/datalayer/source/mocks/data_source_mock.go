@@ -27,36 +27,36 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-var _ fwkdl.DataSource = (*DataSource)(nil)
-var _ fwkdl.PollingDataSource = (*DataSource)(nil)
+var _ fwkdl.DataSource = (*MetricsDataSource)(nil)
+var _ fwkdl.PollingDataSource = (*MetricsDataSource)(nil)
 
-type DataSource struct {
+type MetricsDataSource struct {
 	typedName plugin.TypedName
 	CallCount int64
 	Metrics   map[types.NamespacedName]*fwkdl.Metrics
 	Errors    map[types.NamespacedName]error
 }
 
-func NewDataSource(typedName plugin.TypedName) *DataSource {
-	return &DataSource{typedName: typedName}
+func NewDataSource(typedName plugin.TypedName) *MetricsDataSource {
+	return &MetricsDataSource{typedName: typedName}
 }
 
-func (fds *DataSource) TypedName() plugin.TypedName {
+func (fds *MetricsDataSource) TypedName() plugin.TypedName {
 	return fds.typedName
 }
 
-func (fds *DataSource) OutputType() reflect.Type {
+func (fds *MetricsDataSource) OutputType() reflect.Type {
 	return reflect.TypeOf(fwkdl.Metrics{})
 }
 
-func (fds *DataSource) ExtractorType() reflect.Type {
+func (fds *MetricsDataSource) ExtractorType() reflect.Type {
 	return reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
 }
 
-func (fds *DataSource) Extractors() []string                 { return []string{} }
-func (fds *DataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
+func (fds *MetricsDataSource) Extractors() []string                 { return []string{} }
+func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
 
-func (fds *DataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
+func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
 	atomic.AddInt64(&fds.CallCount, 1)
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
 		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
@@ -72,8 +72,11 @@ type NotificationSource struct {
 	gvk       schema.GroupVersionKind
 }
 
-func NewNotificationSource(typedName plugin.TypedName, gvk schema.GroupVersionKind) *NotificationSource {
-	return &NotificationSource{typedName: typedName, gvk: gvk}
+func NewNotificationSource(pluginType, name string, gvk schema.GroupVersionKind) *NotificationSource {
+	return &NotificationSource{
+		typedName: plugin.TypedName{Type: pluginType, Name: name},
+		gvk:       gvk,
+	}
 }
 
 func (m *NotificationSource) TypedName() plugin.TypedName {

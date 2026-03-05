@@ -28,7 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
+	datasourcemocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
 // --- Test Stubs ---
@@ -49,7 +49,7 @@ func defaultEndpoint() fwkdl.Endpoint {
 
 var (
 	endpoint = defaultEndpoint()
-	sources  = []fwkdl.DataSource{&dlmocks.DataSource{}}
+	sources  = []fwkdl.DataSource{&datasourcemocks.MetricsDataSource{}}
 )
 
 func TestCollectorCanStartOnlyOnce(t *testing.T) {
@@ -81,7 +81,7 @@ func TestCollectorCanStopOnlyOnce(t *testing.T) {
 }
 
 func TestCollectorCollectsOnTicks(t *testing.T) {
-	source := &dlmocks.DataSource{}
+	source := &datasourcemocks.MetricsDataSource{}
 	c := NewCollector()
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
@@ -99,7 +99,7 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 }
 
 func TestCollectorStopCancelsContext(t *testing.T) {
-	source := &dlmocks.DataSource{}
+	source := &datasourcemocks.MetricsDataSource{}
 	c := NewCollector()
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
@@ -135,7 +135,7 @@ func TestCollectorStartSourceValidation(t *testing.T) {
 		},
 		{
 			name:    "valid polling source succeeds",
-			sources: []fwkdl.DataSource{&dlmocks.DataSource{}},
+			sources: []fwkdl.DataSource{&datasourcemocks.MetricsDataSource{}},
 			wantErr: false,
 		},
 	}

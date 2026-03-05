@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
@@ -56,7 +56,7 @@ func TestNoMetricsCollected(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 	}
 	for _, epf := range factories {
 		ds := datastore.NewDatastore(context.Background(), epf, 0)
@@ -78,7 +78,7 @@ func TestMetricsCollected(t *testing.T) {
 	period := time.Millisecond
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: metrics}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{Metrics: metrics}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{Metrics: metrics}}, period),
 	}
 	for _, epf := range factories {
 		inferencePool := &v1.InferencePool{

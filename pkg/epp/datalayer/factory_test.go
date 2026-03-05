@@ -27,11 +27,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
 func TestFactory(t *testing.T) {
-	source := &dlmocks.DataSource{}
+	source := &mocks.MetricsDataSource{}
 	factory := NewEndpointFactory([]fwkdl.DataSource{source}, 100*time.Millisecond)
 
 	pod1 := &fwkdl.EndpointMetadata{

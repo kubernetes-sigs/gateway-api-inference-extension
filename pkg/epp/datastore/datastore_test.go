@@ -41,7 +41,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -87,7 +87,7 @@ func TestPool(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(tt.name, func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestObjective(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -335,7 +335,7 @@ func TestMetrics(t *testing.T) {
 		period := time.Millisecond
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: test.metrics, Err: test.err}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{Metrics: test.metrics, Errors: test.err}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{Metrics: test.metrics, Errors: test.err}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -416,7 +416,7 @@ func TestPods(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -495,7 +495,7 @@ func TestTargetPortsChange(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -719,7 +719,7 @@ func TestEndpointMetadata(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -863,7 +863,7 @@ func TestActivePortFiltering(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -1016,7 +1016,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&dlmocks.DataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
