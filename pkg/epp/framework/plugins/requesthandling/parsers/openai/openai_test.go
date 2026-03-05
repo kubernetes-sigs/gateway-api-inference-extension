@@ -611,9 +611,13 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": "The food was delicious and the waiter...",
 			},
-			want: &types.LLMRequestBody{
-				Embeddings: &types.EmbeddingsRequest{
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
 					Input: "The food was delicious and the waiter...",
+				},
+				ParsedBody: map[string]any{
+					"model": "text-embedding-3-small",
+					"input": "The food was delicious and the waiter...",
 				},
 			},
 		},
@@ -624,9 +628,13 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": []any{"First document", "Second document"},
 			},
-			want: &types.LLMRequestBody{
-				Embeddings: &types.EmbeddingsRequest{
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
 					Input: []any{"First document", "Second document"},
+				},
+				ParsedBody: map[string]any{
+					"model": "text-embedding-3-small",
+					"input": []any{"First document", "Second document"},
 				},
 			},
 		},
@@ -638,10 +646,15 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"input":      "embed this text",
 				"cache_salt": "embeddings-salt-123",
 			},
-			want: &types.LLMRequestBody{
-				Embeddings: &types.EmbeddingsRequest{
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
 					Input:     "embed this text",
 					CacheSalt: "embeddings-salt-123",
+				},
+				ParsedBody: map[string]any{
+					"model":      "text-embedding-3-small",
+					"input":      "embed this text",
+					"cache_salt": "embeddings-salt-123",
 				},
 			},
 		},
@@ -652,9 +665,13 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": "text to embed",
 			},
-			want: &types.LLMRequestBody{
-				Embeddings: &types.EmbeddingsRequest{
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
 					Input: "text to embed",
+				},
+				ParsedBody: map[string]any{
+					"model": "text-embedding-3-small",
+					"input": "text to embed",
 				},
 			},
 		},
@@ -1005,10 +1022,15 @@ func BenchmarkExtractRequestData_Embeddings(b *testing.B) {
 		"input": "The food was delicious and the waiter...",
 	}
 	headers := map[string]string{":path": "/v1/embeddings"}
+	jsonBytes, err := json.Marshal(body)
+	if err != nil {
+		b.Fatal(err)
+	}
+	parser := NewOpenAIParser()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
