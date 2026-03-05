@@ -303,8 +303,8 @@ type FlowControlConfig struct {
 }
 
 func (fcc *FlowControlConfig) String() string {
-	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
-		fcc.Limits.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands)
+	return fmt.Sprintf("{Limits: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
+		fcc.Limits, fcc.DefaultPriorityBand, fcc.PriorityBands)
 }
 
 // PriorityBandConfig configures a single priority band.
@@ -332,8 +332,8 @@ type PriorityBandConfig struct {
 }
 
 func (pbc PriorityBandConfig) String() string {
-	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
-		pbc.Priority, pbc.Limits.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+	return fmt.Sprintf("{Priority: %d, Limits: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
+		pbc.Priority, pbc.Limits, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
 }
 
 // CapacityLimits defines capacity boundaries for a priority band.
