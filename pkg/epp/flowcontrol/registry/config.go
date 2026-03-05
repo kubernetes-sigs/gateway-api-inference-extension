@@ -348,19 +348,6 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 
 // --- Constructors ---
 
-// resolveMaxBytes extracts and validates MaxBytes from a resource.Quantity pointer.
-// Returns 0 (use default) if maxBytes is nil.
-func resolveMaxBytes(maxBytes *resource.Quantity) (uint64, error) {
-	if maxBytes == nil {
-		return 0, nil
-	}
-	v := maxBytes.Value()
-	if v < 0 {
-		return 0, fmt.Errorf("MaxBytes must be non-negative, got %d", v)
-	}
-	return uint64(v), nil
-}
-
 // NewConfigFromAPI creates a new Config by translating the API configuration.
 func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Handle) (*Config, error) {
 	if apiConfig == nil {
@@ -369,12 +356,12 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 
 	opts := make([]ConfigOption, 0, len(apiConfig.PriorityBands)+3)
 
-	if apiConfig.Limits.MaxBytes != nil {
-		maxBytesConfigValue := apiConfig.Limits.MaxBytes.Value()
-		if maxBytesConfigValue < 0 {
-			return nil, fmt.Errorf("Limits.MaxBytes must be non-negative, got %d", maxBytesConfigValue)
-		}
-		opts = append(opts, WithMaxBytes(uint64(maxBytesConfigValue)))
+	maxBytes, err := resolveMaxBytes(apiConfig.Limits)
+	if err != nil {
+		return nil, fmt.Errorf("global %w", err)
+	}
+	if maxBytes > 0 {
+		opts = append(opts, WithMaxBytes(maxBytes))
 	}
 
 	if apiConfig.DefaultPriorityBand != nil {
@@ -401,12 +388,11 @@ func buildDefaultPriorityBandTemplate(
 	apiBand *configapi.PriorityBandConfig,
 ) (*PriorityBandConfig, error) {
 	bandOpts := make([]PriorityBandConfigOption, 0, 3)
-	maxBytes, err := resolveMaxBytes(apiBand.MaxBytes)
-	if err != nil {
-		return nil, fmt.Errorf("DefaultPriorityBand %w", err)
-	}
-	if maxBytes > 0 {
-		bandOpts = append(bandOpts, WithBandMaxBytes(maxBytes))
+	if apiBand.MaxBytes != nil {
+		if *apiBand.MaxBytes < 0 {
+			return nil, fmt.Errorf("DefaultPriorityBand MaxBytes must be non-negative, got %d", *apiBand.MaxBytes)
+		}
+		bandOpts = append(bandOpts, WithBandMaxBytes(uint64(*apiBand.MaxBytes)))
 	}
 	if apiBand.OrderingPolicyRef != "" {
 		bandOpts = append(bandOpts, WithOrderingPolicy(apiBand.OrderingPolicyRef, handle))
@@ -425,12 +411,11 @@ func buildDefaultPriorityBandTemplate(
 
 func buildPriorityBand(handle plugin.Handle, band configapi.PriorityBandConfig) (*PriorityBandConfig, error) {
 	bandOpts := make([]PriorityBandConfigOption, 0, 3)
-	maxBytes, err := resolveMaxBytes(band.MaxBytes)
-	if err != nil {
-		return nil, fmt.Errorf("priority band %d %w", band.Priority, err)
-	}
-	if maxBytes > 0 {
-		bandOpts = append(bandOpts, WithBandMaxBytes(maxBytes))
+	if band.MaxBytes != nil {
+		if *band.MaxBytes < 0 {
+			return nil, fmt.Errorf("priority band %d MaxBytes must be non-negative, got %d", band.Priority, *band.MaxBytes)
+		}
+		bandOpts = append(bandOpts, WithBandMaxBytes(uint64(*band.MaxBytes)))
 	}
 	if band.OrderingPolicyRef != "" {
 		bandOpts = append(bandOpts, WithOrderingPolicy(band.OrderingPolicyRef, handle))
