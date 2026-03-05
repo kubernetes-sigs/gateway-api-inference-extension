@@ -140,6 +140,8 @@ This document defines the process for releasing Gateway API Inference Extension.
        - `charts/standalone`
        - `epp`
        - `bbr`
+       - `latency-prediction-server`
+       - `latency-training-server`
     3. If an artifact does not yet have a section in `images.yaml` (for example a newly added chart), add a new section before adding the digest mapping.
     **Note:** Add a link to this issue when the PR is merged.
 11. Test the steps in the tagged quickstart guide after the PR merges, for example: `https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/v0.1.0-rc.1/pkg/README.md`.

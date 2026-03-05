@@ -41,6 +41,8 @@ images=(
   "charts/standalone"
   "epp"
   "bbr"
+  "latency-prediction-server"
+  "latency-training-server"
 )
 
 find_digest() {
