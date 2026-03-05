@@ -41,17 +41,16 @@ const (
 	executeExtensionPoint = "Request"
 )
 
-// HandleRequestBody handles request bodies.
-func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
+// HandleRequestBody parses the raw body bytes into reqCtx.Request.Body and processes the request.
+func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
 
-	var requestBody map[string]any
-	if err := json.Unmarshal(requestBodyBytes, &requestBody); err != nil {
+	if err := json.Unmarshal(requestBodyBytes, &reqCtx.Request.Body); err != nil {
 		return nil, err
 	}
 
-	targetModelAny, ok := requestBody["model"]
+	targetModelAny, ok := reqCtx.Request.Body["model"]
 	if !ok {
 		metrics.RecordModelNotParsedCounter()
 		targetModelAny = ""
@@ -86,9 +85,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, requestBodyBytes []byte)
 		return ret, nil
 	}
 
-	// TODO pass headers!
-	// TODO handle updated headers and body
-	if err := s.executePlugins(ctx, map[string]string{}, requestBody, s.requestPlugins); err != nil {
+	if err := s.executePlugins(ctx, reqCtx.Request.Headers, reqCtx.Request.Body, s.requestPlugins); err != nil {
 		return nil, fmt.Errorf("failed to execute request plugins - %w", err)
 	}
 

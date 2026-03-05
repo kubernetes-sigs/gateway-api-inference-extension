@@ -199,6 +199,52 @@ flowControl:
     fairnessPolicyRef: customFairness
 `
 
+// successParserConfigText tests that configuration with parser plugin is correctly loaded.
+const successParserConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- type: openai-parser
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+parser:
+  pluginRef: openai-parser
+`
+
+// successWithNoParserConfigText tests that a default openaiParser is injected when no parser is configured.
+const successWithNoParserConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+`
+
+// successParserConfigText tests that configuration with parser plugin with custom name is correctly loaded.
+const successParserWithNameConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: openaiParser
+  type: openai-parser
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+parser:
+  pluginRef: openaiParser
+`
+
 // --- Invalid Configurations (Syntax/Structure) ---
 
 // errorBadYamlText contains invalid YAML syntax.
@@ -520,4 +566,38 @@ flowControl:
   priorityBands:
   - priority: 100
     orderingPolicyRef: testScorer # Wrong type
+`
+
+// errorParserWrongPluginTypeText references a plugin of the wrong type (Scorer instead of Parser).
+const errorParserWrongPluginTypeText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: openaiParser
+  type: openai-parser
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+parser:
+  pluginRef: maxScore # Wrong name
+`
+
+// errorParserWrongPluginTypeName references a plugin of the wrong name.
+const errorParserWrongPluginNameText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: openaiParser
+  type: openai-parser
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+parser:
+  pluginRef: wrongParser # Wrong names
 `

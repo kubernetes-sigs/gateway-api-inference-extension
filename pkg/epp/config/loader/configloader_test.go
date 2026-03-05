@@ -41,6 +41,7 @@ import (
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
@@ -354,6 +355,36 @@ func TestInstantiateAndConfigure(t *testing.T) {
 					"Should be GlobalStrict type")
 			},
 		},
+		{
+			name:       "Success - Parser Config",
+			configText: successParserConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, cfg.ParserConfig, "Parser config should be loaded")
+				require.Equal(t, "openai-parser", cfg.ParserConfig.Parser.TypedName().Name, "Should have openai parser name")
+				require.Equal(t, openai.OpenAIParserType, cfg.ParserConfig.Parser.TypedName().Type, "Should contain openai parser type")
+			},
+		},
+		{
+			name:       "Success - Config without parser and a default openai parser is injected",
+			configText: successWithNoParserConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, cfg.ParserConfig, "Parser config should be loaded")
+				require.Equal(t, "openai-parser", cfg.ParserConfig.Parser.TypedName().Name, "Should have openai parser name")
+				require.Equal(t, openai.OpenAIParserType, cfg.ParserConfig.Parser.TypedName().Type, "Should contain openai parser type")
+			},
+		},
+		{
+			name:       "Success - Parser Config With Name",
+			configText: successParserWithNameConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, cfg.ParserConfig, "Parser config should be loaded")
+				require.Equal(t, "openaiParser", cfg.ParserConfig.Parser.TypedName().Name, "Should have openai parser name")
+				require.Equal(t, openai.OpenAIParserType, cfg.ParserConfig.Parser.TypedName().Type, "Should contain openai parser type")
+			},
+		},
 
 		// --- Instantiation Errors ---
 		{
@@ -447,6 +478,18 @@ func TestInstantiateAndConfigure(t *testing.T) {
 		{
 			name:       "Error (FlowControl) - Wrong Plugin Type",
 			configText: errorFlowControlWrongPluginTypeText,
+			wantErr:    true,
+		},
+
+		// --- Feature Parser: Custom Parser
+		{
+			name:       "Error (Parser) - Wrong Plugin Type",
+			configText: errorParserWrongPluginTypeText,
+			wantErr:    true,
+		},
+		{
+			name:       "Error (Parser) - Wrong Parser Name",
+			configText: errorParserWrongPluginNameText,
 			wantErr:    true,
 		},
 	}
@@ -688,4 +731,5 @@ func registerTestPlugins(t *testing.T) {
 	// Ensure system defaults are registered too.
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
+	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
 }

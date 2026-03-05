@@ -70,6 +70,7 @@ plugins:
   - type: kv-cache-utilization-scorer
   - type: prefix-cache-scorer
   - type: lora-affinity-scorer
+  - type: openai-parser
 schedulingProfiles:
   - name: default
     plugins:
@@ -77,6 +78,8 @@ schedulingProfiles:
       - pluginRef: kv-cache-utilization-scorer
       - pluginRef: prefix-cache-scorer
       - pluginRef: lora-affinity-scorer
+parser:
+  pluginRef: openai-parser
 `
 )
 

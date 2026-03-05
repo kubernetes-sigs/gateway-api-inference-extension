@@ -29,24 +29,20 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
-func TestProcessRequestBody(t *testing.T) {
+func TestHandleRequestBodyStreaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	cases := []struct {
 		desc      string
 		streaming bool
-		bodys     []*extProcPb.HttpBody
+		body      []byte
 		want      []*extProcPb.ProcessingResponse
 	}{
 		{
 			desc: "no-streaming",
-			bodys: []*extProcPb.HttpBody{
-				{
-					Body: mapToBytes(t, map[string]any{
-						"model": "foo",
-					}),
-				},
-			},
+			body: mapToBytes(t, map[string]any{
+				"model": "foo",
+			}),
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -79,16 +75,9 @@ func TestProcessRequestBody(t *testing.T) {
 		{
 			desc:      "streaming",
 			streaming: true,
-			bodys: []*extProcPb.HttpBody{
-				{
-					Body: mapToBytes(t, map[string]any{
-						"model": "foo",
-					}),
-				},
-				{
-					EndOfStream: true,
-				},
-			},
+			body: mapToBytes(t, map[string]any{
+				"model": "foo",
+			}),
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestHeaders{
@@ -140,18 +129,15 @@ func TestProcessRequestBody(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
 			srv := NewServer(tc.streaming, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
-			streamedBody := &streamedBody{}
-			for i, body := range tc.bodys {
-				got, err := srv.processRequestBody(ctx, body, streamedBody)
-				if err != nil {
-					t.Fatalf("processRequestBody(): %v", err)
-				}
-
-				if i == len(tc.bodys)-1 {
-					if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
-						t.Errorf("processRequestBody returned unexpected response, diff(-want, +got): %v", diff)
-					}
-				}
+			reqCtx := &RequestContext{
+				Request: &Request{Headers: make(map[string]string)},
+			}
+			got, err := srv.HandleRequestBody(ctx, reqCtx, tc.body)
+			if err != nil {
+				t.Fatalf("HandleRequestBody(): %v", err)
+			}
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
 			}
 		})
 	}

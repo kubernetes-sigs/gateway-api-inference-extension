@@ -94,6 +94,16 @@ inferenceExtension:
     # common latencyPredictor setting exists in config/charts/inference-extension/values.yaml
     enabled: false
 
+  # Metrics DataSource Configuration
+  # These values configure how the EPP scrapes metrics from model server pods.
+  metricsDataSource:
+    # scheme is the HTTP scheme used to scrape metrics (http or https).
+    scheme: "http"
+    # path is the URL path on the model server pod that exposes Prometheus metrics.
+    path: "/metrics"
+    # insecureSkipVerify disables TLS certificate verification when scheme is https.
+    insecureSkipVerify: true
+
 inferencePool:
   targetPorts:
     - number: 8000

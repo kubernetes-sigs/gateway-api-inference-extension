@@ -147,13 +147,16 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"Disables respecting the x-gateway-destination-endpoint-subset metadata for dispatching requests in EPP.")
 	fs.StringVar(&opts.ModelServerMetricsScheme, "model-server-metrics-scheme", opts.ModelServerMetricsScheme,
 		"Protocol scheme used in scraping metrics from endpoints.")
+	_ = fs.MarkDeprecated("model-server-metrics-scheme", "This flag is deprecated. Configure via EndpointPickerConfig data layer plugin parameters instead.")
 	fs.StringVar(&opts.ModelServerMetricsPath, "model-server-metrics-path", opts.ModelServerMetricsPath,
 		"URL path used in scraping metrics from endpoints.")
+	_ = fs.MarkDeprecated("model-server-metrics-path", "This flag is deprecated. Configure via EndpointPickerConfig data layer plugin parameters instead.")
 	fs.IntVar(&opts.ModelServerMetricsPort, "model-server-metrics-port", opts.ModelServerMetricsPort,
 		"Port to scrape metrics from endpoints. Set to the InferencePool.Spec.TargetPorts[0].Number if not defined.")
 	_ = fs.MarkDeprecated("model-server-metrics-port", "This flag is deprecated and will be removed in a future release.")
 	fs.BoolVar(&opts.ModelServerMetricsHTTPSInsecure, "model-server-metrics-https-insecure-skip-verify", opts.ModelServerMetricsHTTPSInsecure,
 		"Disable certificate verification when using 'https' scheme for 'model-server-metrics-scheme'.")
+	_ = fs.MarkDeprecated("model-server-metrics-https-insecure-skip-verify", "This flag is deprecated. Configure via EndpointPickerConfig data layer plugin parameters instead.")
 	fs.DurationVar(&opts.RefreshMetricsInterval, "refresh-metrics-interval", opts.RefreshMetricsInterval, "Interval to refresh metrics.")
 	fs.DurationVar(&opts.RefreshPrometheusMetricsInterval, "refresh-prometheus-metrics-interval", opts.RefreshPrometheusMetricsInterval,
 		"Interval to flush Prometheus metrics.")

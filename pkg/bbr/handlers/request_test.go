@@ -111,8 +111,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
 			reqCtx := &RequestContext{
-				Request:  &Request{Headers: make(map[string]string)},
-				Response: &Response{Headers: make(map[string]string)},
+				Request: &Request{Headers: make(map[string]string)},
 			}
 
 			resp, err := server.HandleRequestHeaders(reqCtx, tc.headers)
@@ -370,8 +369,11 @@ func TestHandleRequestBody(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			server := NewServer(test.streaming, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
+			reqCtx := &RequestContext{
+				Request: &Request{Headers: make(map[string]string)},
+			}
 			bodyBytes, _ := json.Marshal(test.body)
-			resp, err := server.HandleRequestBody(ctx, bodyBytes)
+			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
 			if err != nil {
 				if !test.wantErr {
 					t.Fatalf("HandleRequestBody returned unexpected error: %v, want %v", err, test.wantErr)
@@ -408,12 +410,15 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 
 	noopPlugin := plugins.NewDefaultPlugin()
 	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{noopPlugin}, []framework.PayloadProcessor{})
+	reqCtx := &RequestContext{
+		Request: &Request{Headers: make(map[string]string)},
+	}
 
 	bodyBytes, _ := json.Marshal(map[string]any{
 		"model":  "bar",
 		"prompt": "test",
 	})
-	_, err := server.HandleRequestBody(ctx, bodyBytes)
+	_, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
 	if err != nil {
 		t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
 	}

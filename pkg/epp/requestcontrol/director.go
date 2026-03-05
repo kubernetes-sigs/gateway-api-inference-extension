@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -38,11 +39,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -71,6 +72,7 @@ func NewDirectorWithConfig(
 	datastore Datastore,
 	scheduler Scheduler,
 	admissionController AdmissionController,
+	parser fwkrh.Parser,
 	podLocator contracts.PodLocator,
 	config *Config,
 ) *Director {
@@ -80,6 +82,7 @@ func NewDirectorWithConfig(
 		admissionController:   admissionController,
 		podLocator:            podLocator,
 		requestControlPlugins: *config,
+		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
 	}
 }
@@ -103,6 +106,7 @@ type Director struct {
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
 	defaultPriority int
+	parser          fwkrh.Parser
 }
 
 // getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
@@ -128,7 +132,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger := log.FromContext(ctx)
 
 	// Parse, mutate, and extract the request body
-	llmRequestBody, err := d.processRequestBody(ctx, reqCtx)
+	llmRequestBody, err := d.processRequestBody(ctx, reqCtx, d.parser)
 	if err != nil {
 		return reqCtx, err
 	}
@@ -189,21 +193,24 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext) (*fwksched.LLMRequestBody, error) {
-	bodyMap := make(map[string]any)
-	if err := json.Unmarshal(reqCtx.Request.RawBody, &bodyMap); err != nil {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body"}
-	}
-
-	if err := d.mutateAndRepackage(ctx, reqCtx, bodyMap); err != nil {
-		return nil, err
-	}
-
-	extractedBody, err := requtil.ExtractRequestBody(bodyMap, reqCtx.Request.Headers)
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwksched.LLMRequestBody, error) {
+	llmRequestBody, err := parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
 	if err != nil {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: err.Error()}
 	}
-	return extractedBody, nil
+
+	switch v := llmRequestBody.ParsedBody.(type) {
+	case proto.Message:
+		// Protos are not currently mutated, return as-is.
+		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+	case map[string]any:
+		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
+	}
+	return llmRequestBody, nil
 }
 
 func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.RequestContext, bodyMap map[string]any) error {
@@ -232,9 +239,7 @@ func (d *Director) mutateModel(reqCtx *handlers.RequestContext, bodyMap map[stri
 	var ok bool
 	reqCtx.IncomingModelName, ok = bodyMap["model"].(string)
 	if !ok {
-
 		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
-
 	}
 	if reqCtx.TargetModelName == "" {
 		// Default to incoming model name

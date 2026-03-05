@@ -59,6 +59,11 @@ type EndpointPickerConfig struct {
 	// FlowControl configures the Flow Control layer.
 	// This configuration is only respected if the "flowControl" FeatureGate is enabled.
 	FlowControl *FlowControlConfig `json:"flowControl,omitempty"`
+
+	// +optional
+	// Parser specifies the parsing logic used by the EPP to process protocol messages.
+	// If unspecified, default parsing behavior will be applied.
+	Parser *ParserConfig `json:"parser,omitempty"`
 }
 
 func (cfg EndpointPickerConfig) String() string {
@@ -250,6 +255,17 @@ type DataLayerExtractor struct {
 
 func (dle DataLayerExtractor) String() string {
 	return "{PluginRef: " + dle.PluginRef + "}"
+}
+
+// ParserConfig contains the configuration for a parser.
+type ParserConfig struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// PluginRef specifies a particular Plugin instance to be associated with
+	// this Parser. The reference is to the name of an entry of the Plugins
+	// defined in the configuration's Plugins section
+	// Default: openai-parser
+	PluginRef string `json:"pluginRef"`
 }
 
 // FlowControlConfig configures the Flow Control layer.

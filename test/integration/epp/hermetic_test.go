@@ -185,7 +185,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			},
 			wantResponses: ExpectReject(
 				envoyTypePb.StatusCode_BadRequest,
-				"inference gateway: BadRequest - Error unmarshaling request body",
+				"inference gateway: BadRequest - error unmarshaling request bodyMap",
 			),
 		},
 		{
@@ -220,7 +220,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			name: "request missing model field",
 			requests: integration.ReqRaw(
 				map[string]string{"content-type": "application/json"},
-				`{"hello":"world"}`,
+				`{"prompt":"hello world"}`,
 			),
 			wantResponses: ExpectReject(envoyTypePb.StatusCode_BadRequest,
 				"inference gateway: BadRequest - model not found in request body"),

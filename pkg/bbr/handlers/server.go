@@ -82,10 +82,16 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	loggerVerbose.Info("Processing")
 
 	reqCtx := &RequestContext{
-		Request:  &Request{Headers: make(map[string]string)},
-		Response: &Response{Headers: make(map[string]string)},
+		Request: &Request{
+			Headers: make(map[string]string),
+			Body:    make(map[string]any),
+		},
+		Response: &Response{
+			Headers: make(map[string]string),
+			Body:    make(map[string]any),
+		},
 	}
-	reqStreamedBody := &streamedBody{}
+	var body []byte
 	respStreamedBody := &streamedBody{}
 
 	for {
@@ -124,7 +130,12 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			} else {
 				loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			}
-			responses, err = s.processRequestBody(ctx, req.GetRequestBody(), reqStreamedBody)
+			body = append(body, v.RequestBody.Body...)
+			if s.streaming && !v.RequestBody.EndOfStream {
+				continue
+			}
+			responses, err = s.HandleRequestBody(ctx, reqCtx, body)
+			loggerVerbose.Info("Processing complete body")
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			responses, err = s.HandleRequestTrailers(req.GetRequestTrailers())
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
@@ -168,33 +179,12 @@ type streamedBody struct {
 	body []byte
 }
 
-func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody *streamedBody) ([]*extProcPb.ProcessingResponse, error) {
-	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
-
-	var requestBodyBytes []byte
-	if s.streaming {
-		streamedBody.body = append(streamedBody.body, body.Body...)
-		// In the stream case, we can receive multiple request bodies.
-		if body.EndOfStream {
-			loggerVerbose.Info("Flushing stream buffer")
-			requestBodyBytes = streamedBody.body
-		} else {
-			return nil, nil
-		}
-	} else {
-		requestBodyBytes = body.GetBody()
-	}
-
-	return s.HandleRequestBody(ctx, requestBodyBytes)
-}
-
 func (s *Server) processResponseBody(ctx context.Context, reqCtx *RequestContext, body *extProcPb.HttpBody, streamedRespBody *streamedBody) ([]*extProcPb.ProcessingResponse, error) {
 	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
 
 	var responseBodyBytes []byte
 	if s.streaming {
 		streamedRespBody.body = append(streamedRespBody.body, body.Body...)
-		// In the stream case, we can receive multiple response bodies.
 		if body.EndOfStream {
 			loggerVerbose.Info("Flushing response stream buffer")
 			responseBodyBytes = streamedRespBody.body
