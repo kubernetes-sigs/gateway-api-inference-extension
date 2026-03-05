@@ -563,6 +563,29 @@ func TestNewConfigFromAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "ShouldSucceed_WithKubernetesQuantityFormat",
+			apiConfig: &configapi.FlowControlConfig{
+				Limits: &configapi.CapacityLimits{
+					MaxBytes: ptr.To(resource.MustParse("1Gi")),
+				},
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+						Limits: &configapi.CapacityLimits{
+							MaxBytes: ptr.To(resource.MustParse("500Mi")),
+						},
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(1073741824), cfg.MaxBytes,
+					"1Gi should be correctly parsed as 1073741824 bytes")
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, uint64(524288000), cfg.PriorityBands[1].MaxBytes,
+					"500Mi should be correctly parsed as 524288000 bytes")
+			},
+		},
+		{
 			name: "ShouldSucceed_WithPolicyReferences",
 			apiConfig: &configapi.FlowControlConfig{
 				PriorityBands: []configapi.PriorityBandConfig{
