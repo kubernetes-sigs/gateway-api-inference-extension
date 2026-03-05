@@ -315,9 +315,13 @@ type FlowControlConfig struct {
 	// If not specified, no global limits are enforced.
 	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
 
-    // +optional
-    // Limits defines the capacity boundaries for this band.
-    Limits *CapacityLimits `json:"limits,omitempty"`
+	// +optional
+	// Limits defines the global capacity boundaries for the Flow Control system.
+	// These limits represent the maximum aggregate resource consumption across all priority
+	// levels. If any limit is exceeded, new requests will be rejected even if their specific
+	// priority band has capacity.
+	// If not specified, no global limits are enforced.
+	Limits *CapacityLimits `json:"limits,omitempty"`
 
 	// +optional
 	// DefaultRequestTTL serves as a fallback timeout for requests that do not specify their own
@@ -383,7 +387,10 @@ type PriorityBandConfig struct {
 	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
 
 	// +optional
-	// Limits defines the capacity boundaries for this band
+	// Limits defines the capacity boundaries for this priority band.
+	// These limits govern the maximum resource consumption allowed for requests at this
+	// priority level. If any limit is exceeded, new requests at this priority will be shed.
+	// If not specified, system defaults are used (e.g., MaxBytes defaults to 1 GB).
 	Limits *CapacityLimits `json:"limits,omitempty"`
 
 	// +optional
