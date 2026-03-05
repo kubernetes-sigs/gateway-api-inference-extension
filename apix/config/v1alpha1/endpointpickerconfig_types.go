@@ -272,15 +272,6 @@ type ParserConfig struct {
 // FlowControlConfig configures the Flow Control layer.
 type FlowControlConfig struct {
 	// +optional
-	// MaxBytes defines the global capacity limit for the Flow Control system.
-	// It represents the maximum aggregate byte size of all active requests across all priority
-	// levels. If this limit is exceeded, new requests will be rejected even if their specific
-	// priority band has capacity.
-	// If 0 or omitted, no global limit is enforced (unlimited).
-	// Default: 0 (unlimited).
-	MaxBytes *int64 `json:"maxBytes,omitempty"`
-
-	// +optional
 	// Limits defines the global capacity boundaries for the Flow Control system.
 	// These limits represent the maximum aggregate resource consumption across all priority
 	// levels. If any limit is exceeded, new requests will be rejected even if their specific
@@ -313,7 +304,7 @@ type FlowControlConfig struct {
 
 func (fcc *FlowControlConfig) String() string {
 	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
-		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands)
+		fcc.Limits.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands)
 }
 
 // PriorityBandConfig configures a single priority band.
@@ -321,12 +312,6 @@ type PriorityBandConfig struct {
 	// Priority is the integer priority level for this band.
 	// Higher values indicate higher priority.
 	Priority int `json:"priority"`
-
-	// +optional
-	// MaxBytes is the maximum number of bytes allowed for this priority band.
-	// If 0 or omitted, the system default is used.
-	// Default: 1 GB.
-	MaxBytes *int64 `json:"maxBytes,omitempty"`
 
 	// +optional
 	// Limits defines the capacity boundaries for this priority band.
@@ -348,7 +333,7 @@ type PriorityBandConfig struct {
 
 func (pbc PriorityBandConfig) String() string {
 	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
-		pbc.Priority, pbc.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+		pbc.Priority, pbc.Limits.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
 }
 
 // CapacityLimits defines capacity boundaries for a priority band.
