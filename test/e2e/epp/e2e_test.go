@@ -48,6 +48,7 @@ const (
 	maxRetries            = 5
 	backoff               = 5 * time.Second
 	batches               = 20
+	apiEmbeddings         = "/embeddings"
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
@@ -321,22 +322,22 @@ func verifyTrafficRouting() {
 			},
 		},
 		{
-			api:              "/embeddings",
+			api:              apiEmbeddings,
 			promptOrMessages: "The food was delicious and the service was great.",
 		},
 		{
-			api:              "/embeddings",
+			api:              apiEmbeddings,
 			promptOrMessages: []string{"First sentence to embed.", "Second sentence to embed."},
 		},
 	} {
 		ginkgo.By(fmt.Sprintf("Verifying connectivity through the inference extension with %s api and prompt/messages: %v", t.api, t.promptOrMessages))
 
-		// Skip /embeddings if server returns 404 (not all models support embeddings).
-		if t.api == "/embeddings" {
+		// Skip embeddings API if server returns 404 (not all models support embeddings).
+		if t.api == apiEmbeddings {
 			probeCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
 			probeResp, probeErr := testutils.ExecCommandInPod(testConfig, "curl", "curl", probeCmd)
 			if probeErr == nil && strings.Contains(probeResp, "404") {
-				ginkgo.Skip("Skipping /embeddings: server returned 404 (embeddings may not be supported by this model)")
+				ginkgo.Skip("Skipping " + apiEmbeddings + ": server returned 404 (embeddings may not be supported by this model)")
 			}
 		}
 
@@ -576,12 +577,12 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		body["prompt"] = promptOrMessages
 	case "/chat/completions":
 		body["messages"] = promptOrMessages
-	case "/embeddings":
+	case apiEmbeddings:
 		body["input"] = promptOrMessages
 		delete(body, "max_tokens")
 		delete(body, "temperature")
 	}
-	if streaming && api != "/embeddings" {
+	if streaming && api != apiEmbeddings {
 		body["stream"] = true
 		body["stream_options"] = map[string]any{
 			"include_usage": true,
