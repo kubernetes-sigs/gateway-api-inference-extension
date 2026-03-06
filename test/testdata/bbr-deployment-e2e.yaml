@@ -1,0 +1,213 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama3-8b-instruct
+  namespace: $E2E_NS
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-llama3-8b-instruct
+  template:
+    metadata:
+      labels:
+        app: vllm-llama3-8b-instruct
+    spec:
+      containers:
+      - name: vllm-sim
+        image: ghcr.io/llm-d/llm-d-inference-sim:v0.7.1
+        args:
+        - --model
+        - meta-llama/Llama-3.1-8B-Instruct
+        - --port
+        - "8000"
+        - --max-loras
+        - "2"
+        - --lora-modules
+        - '{"name": "food-review-1"}'
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 10m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama3-8b-instruct
+  namespace: $E2E_NS
+spec:
+  selector:
+    app: vllm-llama3-8b-instruct
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-llama3-8b-instruct-adapters-allowlist
+  namespace: $E2E_NS
+  labels:
+    inference.networking.k8s.io/bbr-managed: "true"
+data:
+  baseModel: meta-llama/Llama-3.1-8B-Instruct
+  adapters: |
+    - food-review-1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-deepseek-r1
+  namespace: $E2E_NS
+spec:
+  selector:
+    app: vllm-deepseek-r1
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bbr
+  namespace: $E2E_NS
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: bbr-configmap-reader
+  namespace: $E2E_NS
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: bbr-configmap-reader-binding
+  namespace: $E2E_NS
+subjects:
+- kind: ServiceAccount
+  name: bbr
+  namespace: $E2E_NS
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bbr-configmap-reader
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: bbr-auth-reviewer
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: bbr-auth-reviewer-binding
+subjects:
+- kind: ServiceAccount
+  name: bbr
+  namespace: $E2E_NS
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bbr-auth-reviewer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bbr
+  namespace: $E2E_NS
+  labels:
+    app: bbr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bbr
+  template:
+    metadata:
+      labels:
+        app: bbr
+    spec:
+      serviceAccountName: bbr
+      containers:
+      - name: bbr
+        image: $BBR_E2E_IMAGE
+        imagePullPolicy: IfNotPresent
+        args:
+        - "--streaming"
+        - "--grpc-port"
+        - "9004"
+        - "--grpc-health-port"
+        - "9005"
+        - "--v"
+        - "4"
+        - "--zap-encoder"
+        - "json"
+        - "--metrics-endpoint-auth=false"
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 9004
+        - containerPort: 9005
+        - name: metrics
+          containerPort: 9090
+        livenessProbe:
+          grpc:
+            port: 9005
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9005
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bbr
+  namespace: $E2E_NS
+spec:
+  selector:
+    app: bbr
+  ports:
+  - protocol: TCP
+    port: 9004
+    targetPort: 9004
+    appProtocol: http2
+  type: ClusterIP
