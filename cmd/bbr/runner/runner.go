@@ -173,7 +173,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
 		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
-		bodyToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin("model", "")
+		bodyToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin("model", "")
+		if err != nil {
+			setupLog.Error(err, "failed to initlialize 'BodyFieldToHeader' plugin")
+			return err
+		}
 		r.requestPlugins = append(r.requestPlugins, bodyToHeaderPlugin)
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
