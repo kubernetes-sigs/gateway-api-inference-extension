@@ -20,8 +20,6 @@
 
    ```bash
    MODEL_SERVER=vllm  # sglang is also supported.
-   INFERENCE_POOL_NAME=${MODEL_SERVER}-qwen3-32b
-   MODEL_NAME=Qwen/Qwen3-32B
    ```
 
 --8<-- "site-src/_includes/model-server-gpu.md"
