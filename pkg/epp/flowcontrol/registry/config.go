@@ -22,6 +22,7 @@ import (
 	"slices"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
@@ -347,15 +348,15 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 
 // --- Constructors ---
 
-// resolveMaxBytes extracts and validates MaxBytes from CapacityLimits.
-// Returns 0 (use default) if limits or MaxBytes is nil.
-func resolveMaxBytes(limits *configapi.CapacityLimits) (uint64, error) {
-	if limits == nil || limits.MaxBytes == nil {
+// resolveMaxBytes extracts and validates MaxBytes from a resource.Quantity pointer.
+// Returns 0 (use default) if maxBytes is nil.
+func resolveMaxBytes(maxBytes *resource.Quantity) (uint64, error) {
+	if maxBytes == nil {
 		return 0, nil
 	}
-	v := limits.MaxBytes.Value()
+	v := maxBytes.Value()
 	if v < 0 {
-		return 0, fmt.Errorf("Limits.MaxBytes must be non-negative, got %d", v)
+		return 0, fmt.Errorf("MaxBytes must be non-negative, got %d", v)
 	}
 	return uint64(v), nil
 }
@@ -368,7 +369,7 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 
 	opts := make([]ConfigOption, 0, len(apiConfig.PriorityBands)+3)
 
-	maxBytes, err := resolveMaxBytes(apiConfig.Limits)
+	maxBytes, err := resolveMaxBytes(apiConfig.MaxBytes)
 	if err != nil {
 		return nil, fmt.Errorf("global %w", err)
 	}
@@ -400,7 +401,7 @@ func buildDefaultPriorityBandTemplate(
 	apiBand *configapi.PriorityBandConfig,
 ) (*PriorityBandConfig, error) {
 	bandOpts := make([]PriorityBandConfigOption, 0, 3)
-	maxBytes, err := resolveMaxBytes(apiBand.Limits)
+	maxBytes, err := resolveMaxBytes(apiBand.MaxBytes)
 	if err != nil {
 		return nil, fmt.Errorf("DefaultPriorityBand %w", err)
 	}
@@ -424,7 +425,7 @@ func buildDefaultPriorityBandTemplate(
 
 func buildPriorityBand(handle plugin.Handle, band configapi.PriorityBandConfig) (*PriorityBandConfig, error) {
 	bandOpts := make([]PriorityBandConfigOption, 0, 3)
-	maxBytes, err := resolveMaxBytes(band.Limits)
+	maxBytes, err := resolveMaxBytes(band.MaxBytes)
 	if err != nil {
 		return nil, fmt.Errorf("priority band %d %w", band.Priority, err)
 	}

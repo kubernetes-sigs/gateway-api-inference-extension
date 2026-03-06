@@ -272,12 +272,11 @@ type ParserConfig struct {
 // FlowControlConfig configures the Flow Control layer.
 type FlowControlConfig struct {
 	// +optional
-	// Limits defines the global capacity boundaries for the Flow Control system.
-	// These limits represent the maximum aggregate resource consumption across all priority
-	// levels. If any limit is exceeded, new requests will be rejected even if their specific
-	// priority band has capacity.
+	// MaxBytes is the global maximum number of bytes allowed across all priority levels.
+	// If exceeded, new requests will be rejected even if their specific priority band has capacity.
+	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
 	// If not specified, no global limits are enforced.
-	Limits *CapacityLimits `json:"limits,omitempty"`
+	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
 
 	// +optional
 	// DefaultRequestTTL serves as a fallback timeout for requests that do not specify their own
@@ -303,8 +302,8 @@ type FlowControlConfig struct {
 }
 
 func (fcc *FlowControlConfig) String() string {
-	return fmt.Sprintf("{Limits: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
-		fcc.Limits, fcc.DefaultPriorityBand, fcc.PriorityBands)
+	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
+		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands)
 }
 
 // PriorityBandConfig configures a single priority band.
@@ -314,11 +313,11 @@ type PriorityBandConfig struct {
 	Priority int `json:"priority"`
 
 	// +optional
-	// Limits defines the capacity boundaries for this priority band.
-	// These limits govern the maximum resource consumption allowed for requests at this
-	// priority level. If any limit is exceeded, new requests at this priority will be shed.
-	// If not specified, system defaults are used (e.g., MaxBytes defaults to 1 GB).
-	Limits *CapacityLimits `json:"limits,omitempty"`
+	// MaxBytes is the maximum number of bytes allowed for this priority band.
+	// If exceeded, new requests at this priority will be shed.
+	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
+	// If not specified, the system default is used (e.g., 1 GB).
+	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
 
 	// +optional
 	// FairnessPolicyRef specifies the name of the policy that governs flow selection.
@@ -332,15 +331,7 @@ type PriorityBandConfig struct {
 }
 
 func (pbc PriorityBandConfig) String() string {
-	return fmt.Sprintf("{Priority: %d, Limits: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
-		pbc.Priority, pbc.Limits, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
+		pbc.Priority, pbc.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
 }
 
-// CapacityLimits defines capacity boundaries for a priority band.
-type CapacityLimits struct {
-    // +optional
-    // MaxBytes is the maximum number of bytes allowed.
-    // Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
-    // If omitted, the system default is used.
-	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
-}
