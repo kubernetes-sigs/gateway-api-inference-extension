@@ -21,7 +21,6 @@
    ```bash
    MODEL_SERVER=vllm  # sglang is also supported.
    INFERENCE_POOL_NAME=${MODEL_SERVER}-qwen3-32b
-   MODEL_SERVER_APP_LABEL=${MODEL_SERVER}-qwen3-32b
    MODEL_NAME=Qwen/Qwen3-32B
    ```
 
@@ -29,7 +28,6 @@
 
     ```bash
     export INFERENCE_POOL_NAME=${MODEL_SERVER}-qwen3-32b
-    export MODEL_SERVER_APP_LABEL=${MODEL_SERVER}-qwen3-32b
     export MODEL_NAME=Qwen/Qwen3-32B
     kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml
@@ -39,7 +37,6 @@
 
     ```bash
     export INFERENCE_POOL_NAME=vllm-qwen3-32b
-    export MODEL_SERVER_APP_LABEL=vllm-qwen3-32b
     export MODEL_NAME=Qwen/Qwen3-32B
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml
     ```
@@ -48,7 +45,6 @@
 
     ```bash
     export INFERENCE_POOL_NAME=vllm-llama3-8b-instruct
-    export MODEL_SERVER_APP_LABEL=vllm-llama3-8b-instruct
     export MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
     ```

@@ -4,7 +4,7 @@
       export GATEWAY_PROVIDER=gke
       helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
+      --set inferencePool.modelServers.matchLabels.app=${INFERENCE_POOL_NAME} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set inferencePool.modelServerType=${MODEL_SERVER} \
       --set experimentalHttpRoute.enabled=true \
@@ -18,7 +18,7 @@
       export GATEWAY_PROVIDER=istio
       helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
+      --set inferencePool.modelServers.matchLabels.app=${INFERENCE_POOL_NAME} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set inferencePool.modelServerType=${MODEL_SERVER} \
       --set experimentalHttpRoute.enabled=true \
@@ -32,7 +32,7 @@
       export GATEWAY_PROVIDER=none
       helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
+      --set inferencePool.modelServers.matchLabels.app=${INFERENCE_POOL_NAME} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set inferencePool.modelServerType=${MODEL_SERVER} \
       --set experimentalHttpRoute.enabled=true \
@@ -46,7 +46,7 @@
       export GATEWAY_PROVIDER=none
       helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
+      --set inferencePool.modelServers.matchLabels.app=${INFERENCE_POOL_NAME} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set inferencePool.modelServerType=${MODEL_SERVER} \
       --set experimentalHttpRoute.enabled=true \
