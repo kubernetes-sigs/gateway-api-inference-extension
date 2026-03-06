@@ -40,6 +40,9 @@ const (
 	defaultNamespace = "envoy.lb"
 )
 
+// Test interface satisfaction at compile time.
+var _ requestcontrol.ResponseStreaming = &Plugin{}
+
 // Plugin state
 type Plugin struct {
 	typedName      plugin.TypedName
@@ -147,9 +150,12 @@ func (c *Plugin) TypedName() plugin.TypedName {
 	return c.typedName
 }
 
-// ResponseComplete implements the requestcontrol.ResponseComplete interface.
-func (c *Plugin) ResponseComplete(ctx context.Context, request *scheduling.LLMRequest, response *requestcontrol.Response,
+// ResponseStreaming implements the requestcontrol.ResponseStreaming interface.
+func (c *Plugin) ResponseStreaming(ctx context.Context, request *scheduling.LLMRequest, response *requestcontrol.Response,
 	_ *datalayer.EndpointMetadata) {
+	if !response.EndOfStream {
+		return
+	}
 	// Convert the request usage Go struct into a protobuf struct so that it can be used as a CEL variable.
 	celData, err := c.getCelData(response)
 	if err != nil {
@@ -176,7 +182,6 @@ func (c *Plugin) ResponseComplete(ctx context.Context, request *scheduling.LLMRe
 	}
 
 	// Write the calculated value to dynamic metadata so it can be returned via the ext_proc response.
-
 	if response.DynamicMetadata == nil {
 		response.DynamicMetadata = &structpb.Struct{Fields: make(map[string]*structpb.Value)}
 	}
@@ -192,7 +197,6 @@ func (c *Plugin) ResponseComplete(ctx context.Context, request *scheduling.LLMRe
 		namespaceMap = &structpb.Value{Kind: &structpb.Value_StructValue{StructValue: &structpb.Struct{Fields: make(map[string]*structpb.Value)}}}
 		response.DynamicMetadata.Fields[attributeKey.Namespace] = namespaceMap
 	}
-
 	namespaceMap.GetStructValue().Fields[attributeKey.Name] = attributeValue
 
 	log.FromContext(ctx).V(logutil.VERBOSE).Info("Wrote dynamic metadata value to dynamic metadata", "value", intVal)

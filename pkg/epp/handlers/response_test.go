@@ -128,17 +128,11 @@ data: [DONE]
 
 type mockDirector struct{}
 
-func (m *mockDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
-	return reqCtx, nil
+func (m *mockDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) *RequestContext {
+	return reqCtx
 }
-func (m *mockDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
-	return reqCtx, nil
-}
-func (m *mockDirector) HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
-	return reqCtx, nil
-}
-func (m *mockDirector) HandlePreRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error) {
-	return reqCtx, nil
+func (m *mockDirector) HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) *RequestContext {
+	return reqCtx
 }
 func (m *mockDirector) GetRandomEndpoint() *fwkdl.EndpointMetadata {
 	return &fwkdl.EndpointMetadata{}
@@ -201,11 +195,7 @@ func TestHandleResponseBody(t *testing.T) {
 					Response: &Response{},
 				}
 			}
-			_, err := server.HandleResponseBody(ctx, reqCtx, test.body)
-			if err != nil {
-				t.Errorf("HandleResponseBody returned unexpected error: %v, want nil", err)
-			}
-
+			server.HandleResponseBodyStreaming(ctx, reqCtx, test.body, true)
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
 			}
@@ -265,7 +255,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 					},
 				},
 			}
-			server.HandleResponseBodyModelStreaming(ctx, reqCtx, test.body, true) // Hard coded to true since openAIParser does not endOfStream to switch logic.
+			server.HandleResponseBodyStreaming(ctx, reqCtx, test.body, true) // Hard coded to true since openAIParser does not endOfStream to switch logic.
 
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
@@ -338,7 +328,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 			}
 
 			for _, chunk := range tc.chunks {
-				server.HandleResponseBodyModelStreaming(context.Background(), reqCtx, chunk.body, chunk.endOfStream)
+				server.HandleResponseBodyStreaming(context.Background(), reqCtx, chunk.body, chunk.endOfStream)
 			}
 
 			assert.Equal(t, tc.wantUsage, reqCtx.Usage, "Usage data should match expected accumulation")

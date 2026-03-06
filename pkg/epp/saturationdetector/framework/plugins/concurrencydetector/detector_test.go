@@ -26,6 +26,7 @@ import (
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -221,7 +222,7 @@ func TestDetector_Lifecycle(t *testing.T) {
 
 	// 3. Decrement (Available)
 	targetEndpoint := newStubSchedulingEndpoint(endpointName)
-	detector.ResponseComplete(ctx, nil, nil, targetEndpoint.metadata)
+	detector.ResponseStreaming(ctx, nil, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected 0.0 after completion")
 
 	// 4. Increment again -> Delete -> Verify Reset
@@ -251,8 +252,8 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	// positive drift.
 	warmUpRes := makeSchedulingResult(endpointName)
 	warmUpEndpoint := newStubSchedulingEndpoint(endpointName)
-	detector.PreRequest(ctx, nil, warmUpRes)                          // Creates entry, count=1
-	detector.ResponseComplete(ctx, nil, nil, warmUpEndpoint.metadata) // Decrements, count=0
+	detector.PreRequest(ctx, nil, warmUpRes)                                                                   // Creates entry, count=1
+	detector.ResponseStreaming(ctx, nil, &requestcontrol.Response{EndOfStream: true}, warmUpEndpoint.metadata) // Decrements, count=0
 
 	const (
 		numGoroutines = 50
@@ -279,7 +280,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 			defer wg.Done()
 			targetEndpoint := newStubSchedulingEndpoint(endpointName)
 			for range opsPerRoutine {
-				detector.ResponseComplete(ctx, nil, nil, targetEndpoint.metadata)
+				detector.ResponseStreaming(ctx, nil, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
 			}
 		}()
 	}

@@ -326,7 +326,7 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []fwk
 }
 
 // HandleResponseReceived is called when the response headers are received.
-func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) *handlers.RequestContext {
 	response := &fwk.Response{
 		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
@@ -335,12 +335,12 @@ func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
 	d.runResponseReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
-
-	return reqCtx, nil
+	return reqCtx
 }
 
-// HandleResponseBodyStreaming is called every time a chunk of the response body is received.
-func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+// HandleResponseBodyStreaming is invoked by the director for every chunk received in a streaming
+// response, or exactly once for a non-streaming response.
+func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) *handlers.RequestContext {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
 	response := &fwk.Response{
@@ -348,27 +348,9 @@ func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *hand
 		Headers:     reqCtx.Response.Headers,
 		EndOfStream: reqCtx.ResponseComplete,
 	}
-
 	d.runResponseStreamingPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
-	return reqCtx, nil
-}
-
-// HandleResponseBodyComplete is called when the response body is fully received.
-func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
-	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyComplete")
-	response := &fwk.Response{
-		RequestId:       reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
-		Headers:         reqCtx.Response.Headers,
-		DynamicMetadata: reqCtx.Response.DynamicMetadata,
-		Usage:           reqCtx.Usage,
-	}
-
-	d.runResponseCompletePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
-
-	logger.V(logutil.DEBUG).Info("Exiting HandleResponseBodyComplete")
-	return reqCtx, nil
+	return reqCtx
 }
 
 func (d *Director) GetRandomEndpoint() *fwkdl.EndpointMetadata {
@@ -434,16 +416,5 @@ func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *fwk
 		plugin.ResponseStreaming(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(fwk.ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerTrace.Info("Completed running ResponseStreaming plugin successfully", "plugin", plugin.TypedName())
-	}
-}
-
-func (d *Director) runResponseCompletePlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
-	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	for _, plugin := range d.requestControlPlugins.responseCompletePlugins {
-		loggerDebug.Info("Running ResponseComplete plugin", "plugin", plugin.TypedName())
-		before := time.Now()
-		plugin.ResponseComplete(ctx, request, response, targetEndpoint)
-		metrics.RecordPluginProcessingLatency(fwk.ResponseCompleteExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
-		loggerDebug.Info("Completed running ResponseComplete plugin successfully", "plugin", plugin.TypedName())
 	}
 }

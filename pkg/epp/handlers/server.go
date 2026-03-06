@@ -55,9 +55,8 @@ func NewStreamingServer(datastore Datastore, director Director, parser fwkrh.Par
 
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) *RequestContext
+	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) *RequestContext
 	GetRandomEndpoint() *fwkdl.EndpointMetadata
 }
 
@@ -180,9 +179,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Use a fresh context as the request context might be canceled (Client Disconnect).
 			// We only need logging from the original context.
 			cleanupCtx := log.IntoContext(context.Background(), logger)
-			if _, err := s.director.HandleResponseBodyComplete(cleanupCtx, reqCtx); err != nil {
-				logger.Error(err, "error in HandleResponseBodyComplete")
-			}
+			s.director.HandleResponseBodyStreaming(cleanupCtx, reqCtx)
 		}
 	}(err, reqCtx)
 
@@ -259,16 +256,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}
 			reqCtx.RequestState = ResponseReceived
-
-			var responseErr error
-			reqCtx, responseErr = s.HandleResponseHeaders(ctx, reqCtx, v)
-			if responseErr != nil {
-				if logger.V(logutil.DEBUG).Enabled() {
-					logger.V(logutil.DEBUG).Error(responseErr, "Failed to process response headers", "request", req)
-				} else {
-					logger.V(1).Error(responseErr, "Failed to process response headers")
-				}
-			}
+			reqCtx = s.HandleResponseHeaders(ctx, reqCtx, v)
 			reqCtx.respHeaderResp = s.generateResponseHeaderResponse(reqCtx)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
@@ -278,37 +266,17 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				reqCtx.ResponseCompleteTimestamp = time.Now()
 			}
 			if reqCtx.modelServerStreaming {
-				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
-				s.HandleResponseBodyModelStreaming(ctx, reqCtx, v.ResponseBody.Body, v.ResponseBody.EndOfStream)
-				if v.ResponseBody.EndOfStream {
-					if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
-						logger.Error(err, "error in HandleResponseBodyComplete")
-					}
-					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
-					metrics.RecordNormalizedTimePerOutputToken(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp, reqCtx.Usage.CompletionTokens)
-				}
+				// Streaming: Process each chunk immediately as it arrives.
 				reqCtx.respBodyResp = generateResponseBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream)
+				reqCtx = s.HandleResponseBodyStreaming(ctx, reqCtx, v.ResponseBody.Body, v.ResponseBody.EndOfStream)
 			} else {
+				// Non-streaming: Buffer chunks and only invoke the HandleResponseBodyStreaming once
+				// the full response body is received.
 				body = append(body, v.ResponseBody.Body...)
-
-				// Message is buffered, we can read and decode.
 				if v.ResponseBody.EndOfStream {
 					reqCtx.ResponseSize = len(body)
 					reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
-
-					var responseErr error
-					reqCtx, responseErr = s.HandleResponseBody(ctx, reqCtx, body)
-					if responseErr != nil {
-						break
-					}
-					metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
-					metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
-					metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
-					if reqCtx.Usage.PromptTokenDetails != nil {
-						metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokenDetails.CachedTokens)
-					}
+					reqCtx = s.HandleResponseBodyStreaming(ctx, reqCtx, body, true)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:

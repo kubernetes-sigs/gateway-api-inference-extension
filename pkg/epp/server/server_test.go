@@ -192,18 +192,12 @@ func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.Requ
 	return reqCtx, nil
 }
 
-func (ts *testDirector) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	return reqCtx, nil
+func (ts *testDirector) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) *handlers.RequestContext {
+	return reqCtx
 }
-
-func (ts *testDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	return reqCtx, nil
+func (ts *testDirector) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) *handlers.RequestContext {
+	return reqCtx
 }
-
-func (ts *testDirector) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	return reqCtx, nil
-}
-
 func (ts *testDirector) GetRandomEndpoint() *fwkdl.EndpointMetadata {
 	return nil
 }

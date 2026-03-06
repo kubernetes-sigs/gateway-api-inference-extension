@@ -29,7 +29,6 @@ func NewConfig() *Config {
 		preRequestPlugins:        []fwk.PreRequest{},
 		responseReceivedPlugins:  []fwk.ResponseReceived{},
 		responseStreamingPlugins: []fwk.ResponseStreaming{},
-		responseCompletePlugins:  []fwk.ResponseComplete{},
 	}
 }
 
@@ -40,7 +39,6 @@ type Config struct {
 	preRequestPlugins        []fwk.PreRequest
 	responseReceivedPlugins  []fwk.ResponseReceived
 	responseStreamingPlugins []fwk.ResponseStreaming
-	responseCompletePlugins  []fwk.ResponseComplete
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -61,13 +59,6 @@ func (c *Config) WithResponseReceivedPlugins(plugins ...fwk.ResponseReceived) *C
 // If the Config has ResponseStreaming plugins already, this call replaces the existing plugins with the given ones.
 func (c *Config) WithResponseStreamingPlugins(plugins ...fwk.ResponseStreaming) *Config {
 	c.responseStreamingPlugins = plugins
-	return c
-}
-
-// WithResponseCompletePlugins sets the given plugins as the ResponseComplete plugins.
-// If the Config has ResponseComplete plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseCompletePlugins(plugins ...fwk.ResponseComplete) *Config {
-	c.responseCompletePlugins = plugins
 	return c
 }
 
@@ -96,9 +87,6 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 		}
 		if responseStreamingPlugin, ok := plugin.(fwk.ResponseStreaming); ok {
 			c.responseStreamingPlugins = append(c.responseStreamingPlugins, responseStreamingPlugin)
-		}
-		if responseCompletePlugin, ok := plugin.(fwk.ResponseComplete); ok {
-			c.responseCompletePlugins = append(c.responseCompletePlugins, responseCompletePlugin)
 		}
 		if prepareDataPlugin, ok := plugin.(fwk.PrepareDataPlugin); ok {
 			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)

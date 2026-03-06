@@ -46,23 +46,22 @@ type ResponseReceived interface {
 	ResponseReceived(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
-// ResponseStreaming is called by the director after each chunk of streaming response is sent.
-type ResponseStreaming interface {
-	plugin.Plugin
-	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
-}
-
-// ResponseComplete is called by the director when the request lifecycle terminates.
-// This occurs after a response is fully sent, OR if the request fails/disconnects after a pod was scheduled.
+// ResponseStreaming is the primary hook for processing response data.
+// It is called by the director for every data chunk in a streaming response, or exactly once
+// for non-streaming responses.
 //
-// Plugins should assume this is the final cleanup hook for a request.
+// Lifecycle & Termination:
+//   - For streams: Invoked multiple times. The final call will have response.EndOfStream set to true.
+//   - For non-streaming: Invoked once with response.EndOfStream set to true.
+//   - Plugins must treat the call where response.EndOfStream == true as the final lifecycle hook
+//     to perform cleanup or final logging.
 //
 // TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2079):
 // Update signature to pass error/termination state. This is a breaking change required for plugins to distinguish
 // between success, errors, and disconnects.
-type ResponseComplete interface {
+type ResponseStreaming interface {
 	plugin.Plugin
-	ResponseComplete(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
+	ResponseStreaming(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // PrepareRequestData is called by the director before scheduling requests.

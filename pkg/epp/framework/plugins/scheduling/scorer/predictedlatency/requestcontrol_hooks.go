@@ -46,7 +46,6 @@ const (
 var _ requestcontrol.PreRequest = &PredictedLatency{}
 var _ requestcontrol.ResponseReceived = &PredictedLatency{}
 var _ requestcontrol.ResponseStreaming = &PredictedLatency{}
-var _ requestcontrol.ResponseComplete = &PredictedLatency{}
 var _ requestcontrol.AdmissionPlugin = &PredictedLatency{}
 
 type predictedLatencyCtx struct {
@@ -196,7 +195,7 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseStreaming: request is nil, skipping")
 		return
 	}
-	if !t.checkPredictor(logger, targetMetadata) || response.EndOfStream || !t.config.StreamingMode {
+	if !t.checkPredictor(logger, targetMetadata) {
 		return
 	}
 
@@ -214,51 +213,29 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
-}
+	if response.EndOfStream {
+		if predictedLatencyCtx.ttft > 0 {
+			logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", predictedLatencyCtx.ttft, "avgPredictedTTFT", predictedLatencyCtx.predictedTTFT)
+			metrics.RecordRequestTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft/1000)
+			metrics.RecordRequestPredictedTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.predictedTTFT/1000)
+			if predictedLatencyCtx.ttftSLO > 0 {
+				metrics.RecordRequestTTFTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft, predictedLatencyCtx.ttftSLO)
+			}
+		}
 
-func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, metadata *fwkdl.EndpointMetadata) {
-	logger := log.FromContext(ctx)
-	if request == nil {
-		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: request is nil, skipping")
-		return
-	}
-	targetMetadata := metadata
-	if !t.checkPredictor(logger, targetMetadata) {
-		return
-	}
+		if predictedLatencyCtx.avgTPOT > 0 {
+			logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", predictedLatencyCtx.avgTPOT, "avgPredictedTPOT", predictedLatencyCtx.avgPredictedTPOT)
+			metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT/1000)
+			metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
+			if predictedLatencyCtx.avgTPOTSLO > 0 {
+				metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
+			}
+		}
 
-	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
-	if err != nil {
 		id := request.Headers[reqcommon.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
-		return
+		t.removeRequestFromQueue(id, predictedLatencyCtx)
+		t.deletePredictedLatencyContextForRequest(request)
 	}
-	now := time.Now()
-	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
-	}
-
-	if predictedLatencyCtx.ttft > 0 {
-		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", predictedLatencyCtx.ttft, "avgPredictedTTFT", predictedLatencyCtx.predictedTTFT)
-		metrics.RecordRequestTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft/1000)
-		metrics.RecordRequestPredictedTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.predictedTTFT/1000)
-		if predictedLatencyCtx.ttftSLO > 0 {
-			metrics.RecordRequestTTFTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft, predictedLatencyCtx.ttftSLO)
-		}
-	}
-
-	if predictedLatencyCtx.avgTPOT > 0 {
-		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", predictedLatencyCtx.avgTPOT, "avgPredictedTPOT", predictedLatencyCtx.avgPredictedTPOT)
-		metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT/1000)
-		metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
-		if predictedLatencyCtx.avgTPOTSLO > 0 {
-			metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
-		}
-	}
-
-	id := request.Headers[reqcommon.RequestIdHeaderKey]
-	t.removeRequestFromQueue(id, predictedLatencyCtx)
-	t.deletePredictedLatencyContextForRequest(request)
 }
 
 func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *fwkdl.EndpointMetadata) bool {
