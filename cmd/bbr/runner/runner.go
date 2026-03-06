@@ -172,15 +172,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Construct BBR plugin instances for the in tree plugins that are (1) registered and (2) requested via the --plugin flags
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
-
 		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
-		factory := framework.Registry[plugins.DefaultPluginType]
-		defaultPlugin, err := factory("", nil)
-		if err != nil {
-			setupLog.Error(err, "Failed to create default plugin")
-			return err
-		}
-		r.requestPlugins = append(r.requestPlugins, defaultPlugin)
+		bodyToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin("model", "")
+		r.requestPlugins = append(r.requestPlugins, bodyToHeaderPlugin)
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
@@ -235,7 +229,6 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
-	framework.Register(plugins.DefaultPluginType, plugins.DefaultPluginFactory)
 	framework.Register(plugins.BodyFieldToHeaderPluginType, plugins.BodyFieldToHeaderPluginFactory)
 }
 

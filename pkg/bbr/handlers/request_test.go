@@ -408,8 +408,8 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	noopPlugin := plugins.NewDefaultPlugin()
-	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{noopPlugin}, []framework.PayloadProcessor{})
+	plugin, _ := plugins.NewBodyFieldToHeaderPlugin("model", "")
+	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{plugin}, []framework.PayloadProcessor{})
 	reqCtx := &RequestContext{
 		Request: &Request{Headers: make(map[string]string)},
 	}
@@ -437,8 +437,8 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 					labels[lp.GetName()] = lp.GetValue()
 				}
 				if labels["extension_point"] == "Request" &&
-					labels["plugin_type"] == plugins.DefaultPluginType &&
-					labels["plugin_name"] == plugins.DefaultPluginType {
+					labels["plugin_type"] == plugins.BodyFieldToHeaderPluginType &&
+					labels["plugin_name"] == plugins.BodyFieldToHeaderPluginType {
 					if m.GetHistogram().GetSampleCount() > 0 {
 						found = true
 					}

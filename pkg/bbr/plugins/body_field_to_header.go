@@ -34,13 +34,6 @@ const (
 // compile-time type validation
 var _ framework.PayloadProcessor = &BodyFieldToHeaderPlugin{}
 
-// BodyFieldToHeaderPlugin extracts value from a given body field and sets it as HTTP header.
-type BodyFieldToHeaderPlugin struct {
-	typedName  plugin.TypedName
-	fieldName  string
-	headerName string
-}
-
 // BodyFieldToHeaderConfig defines the JSON configuration structure for the plugin.
 type BodyFieldToHeaderConfig struct {
 	// FieldName is the name of the body field to extract
@@ -49,30 +42,35 @@ type BodyFieldToHeaderConfig struct {
 	HeaderName string `json:"header_name"`
 }
 
-// BodyFieldToHeaderPluginFactory creates a new BodyFieldToHeaderPlugin instance from JSON configuration.
+// BodyFieldToHeaderPluginFactory defines the factory function for NewBodyFieldToHeaderPlugin.
 func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage) (framework.PayloadProcessor, error) {
 	var config BodyFieldToHeaderConfig
 
 	if len(rawParameters) > 0 {
 		if err := json.Unmarshal(rawParameters, &config); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal BodyFieldToHeader plugin configuration: %w", err)
+			return nil, fmt.Errorf("failed to parse the parameters of the '%s' plugin - %w", BodyFieldToHeaderPluginType, err)
 		}
 	}
 
-	if config.FieldName == "" {
-		return nil, errors.New("BodyFieldToHeader plugin requires field_name in configuration")
+	plugin, err := NewBodyFieldToHeaderPlugin(config.FieldName, config.HeaderName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create '%s' plugin - %w", BodyFieldToHeaderPluginType, err)
 	}
 
-	if config.HeaderName == "" {
-		// Create a default header name based on the field name
-		config.HeaderName = deafultHeaderPrefix + config.FieldName
-	}
-
-	return NewBodyFieldToHeaderPlugin(config.FieldName, config.HeaderName).WithName(name), nil
+	return plugin.WithName(name), nil
 }
 
-// NewBodyFieldToHeaderPlugin creates a new BodyFieldToHeaderPlugin with the given configuration.
-func NewBodyFieldToHeaderPlugin(fieldName, headerName string) *BodyFieldToHeaderPlugin {
+// NewBodyFieldToHeaderPlugin initializes a new BodyFieldToHeaderPlugin and returns its pointer.
+func NewBodyFieldToHeaderPlugin(fieldName, headerName string) (*BodyFieldToHeaderPlugin, error) {
+	if fieldName == "" {
+		return nil, errors.New("body fieldName is required in BodyFieldToHeader plugin")
+	}
+
+	if headerName == "" {
+		// Create a default header name based on the field name
+		headerName = deafultHeaderPrefix + fieldName
+	}
+
 	return &BodyFieldToHeaderPlugin{
 		typedName: plugin.TypedName{
 			Type: BodyFieldToHeaderPluginType,
@@ -80,7 +78,14 @@ func NewBodyFieldToHeaderPlugin(fieldName, headerName string) *BodyFieldToHeader
 		},
 		fieldName:  fieldName,
 		headerName: headerName,
-	}
+	}, nil
+}
+
+// BodyFieldToHeaderPlugin extracts value from a given body field and sets it as HTTP header.
+type BodyFieldToHeaderPlugin struct {
+	typedName  plugin.TypedName
+	fieldName  string
+	headerName string
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
