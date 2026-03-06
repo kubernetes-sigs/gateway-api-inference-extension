@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
 const (
@@ -247,12 +248,36 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 		}
 	}
 
+	// Compute avgTPOT as (e2e - ttft) / (tokens - 1) for a more accurate overall average
+	if predictedLatencyCtx.ttft > 0 && predictedLatencyCtx.generatedTokenCount > 1 {
+		e2eMs := float64(now.Sub(predictedLatencyCtx.requestReceivedTimestamp).Milliseconds())
+		predictedLatencyCtx.avgTPOT = (e2eMs - predictedLatencyCtx.ttft) / float64(predictedLatencyCtx.generatedTokenCount-1)
+	}
+
 	if predictedLatencyCtx.avgTPOT > 0 {
 		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", predictedLatencyCtx.avgTPOT, "avgPredictedTPOT", predictedLatencyCtx.avgPredictedTPOT)
 		metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT/1000)
 		metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
 		if predictedLatencyCtx.avgTPOTSLO > 0 {
 			metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
+		}
+
+		// Record one TPOT training entry per request using avgTPOT and dispatch-time metrics
+		if m, err := getLatestMetricsForProfile(predictedLatencyCtx, ""); err == nil {
+			entry := buildTrainingEntry(
+				t.config.EndpointRoleLabel,
+				targetMetadata,
+				m,
+				predictedLatencyCtx.promptText,
+				0, // TTFT not recorded for TPOT
+				predictedLatencyCtx.avgTPOT,
+				now,
+				0, // not used for TPOT prediction
+				0, // TPOT does not use prefix cache score
+			)
+			if err := t.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+				logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
+			}
 		}
 	}
 

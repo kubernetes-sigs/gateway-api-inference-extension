@@ -114,6 +114,7 @@ class Settings:
     SAMPLE_WEIGHTING_FOR_PREFIX_CACHE: bool = os.getenv("LATENCY_SAMPLE_WEIGHTING_FOR_PREFIX_CACHE", "false").lower() == "true"
     ENSEMBLE_MODE: bool = os.getenv("LATENCY_ENSEMBLE_MODE", "true").lower() == "true"
     MIN_SAMPLES_FOR_ENSEMBLE_SPLIT: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_ENSEMBLE_SPLIT", "200"))
+    TPOT_ZERO_TOKEN_COUNT: bool = os.getenv("LATENCY_TPOT_ZERO_TOKEN_COUNT", "true").lower() == "true"
 
     # Gated ensemble model paths (each wraps noqueue + queued sub-models)
     TTFT_GATED_MODEL_PATH: str = os.getenv("LATENCY_TTFT_GATED_MODEL_PATH", "/tmp/models/ttft_gated.joblib")
@@ -851,6 +852,8 @@ class LatencyPredictor:
             if tpot_snap:
                 df_tpot = pd.DataFrame(tpot_snap).dropna()
                 df_tpot = df_tpot[df_tpot['actual_tpot_ms'] > 0]
+                if settings.TPOT_ZERO_TOKEN_COUNT:
+                    df_tpot['num_tokens_generated'] = 0
                 if len(df_tpot) >= settings.MIN_SAMPLES_FOR_RETRAIN:
                     # TPOT features - use feature preparation to add pod_type_cat
                     X_tpot = self._prepare_features_with_interaction(df_tpot.copy(), model_type="tpot")

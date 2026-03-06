@@ -277,10 +277,9 @@ func processTokenForLatencyPrediction(
 	latencyMs := float64(now.Sub(predictedLatencyCtx.lastTokenTimestamp).Milliseconds())
 	predictedLatencyCtx.generatedTokenCount++
 
-	// log the inter-token latency for predicted samples
-	if predictedLatencyCtx.generatedTokenCount == 2 || predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) { // tricky logic, since next sample token is always +1 from current token
+	// record sampled TPOT observations (avgTPOT is computed in ResponseComplete from e2e latency)
+	if predictedLatencyCtx.generatedTokenCount == 2 || predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) {
 		predictedLatencyCtx.tpotObservations = append(predictedLatencyCtx.tpotObservations, latencyMs)
-		predictedLatencyCtx.avgTPOT = calculateRunningAverage(predictedLatencyCtx.avgTPOT, latencyMs, len(predictedLatencyCtx.tpotObservations))
 	}
 	if predictedLatencyCtx.generatedTokenCount == 2 {
 		// debug log actual and predicted tpot
@@ -289,25 +288,13 @@ func processTokenForLatencyPrediction(
 			"predicted_tpot_ms", predictedLatencyCtx.avgPredictedTPOT)
 	}
 
+	// TPOT training is now done once per request in ResponseComplete using avgTPOT
+
 	m, err := getLatestMetricsForProfile(predictedLatencyCtx, "")
 	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping TPOT training due to missing metrics or schedulingResult",
+		logger.V(logutil.DEBUG).Info("Skipping TPOT prediction due to missing metrics or schedulingResult",
 			"error", err)
 		return
-	}
-	entry := buildTrainingEntry(
-		endpointRoleLabel,
-		targetEndpointMetadata,
-		m,
-		predictedLatencyCtx.promptText,
-		0, // TTFT not recorded for TPOT
-		latencyMs,
-		now,
-		predictedLatencyCtx.generatedTokenCount-1,
-		0, // TPOT does not use prefix cache score
-	)
-	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
 	}
 
 	// Sampled predict
