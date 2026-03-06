@@ -24,7 +24,7 @@
       oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
-=== "Kgateway"
+=== "Agentgateway"
 
       ```bash
       export GATEWAY_PROVIDER=none

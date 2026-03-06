@@ -3,7 +3,7 @@ kind: Gateway
 metadata:
   name: inference-gateway
 spec:
-  gatewayClassName: kgateway
+  gatewayClassName: agentgateway
   listeners:
   - name: http
     port: 80

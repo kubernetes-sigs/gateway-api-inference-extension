@@ -93,23 +93,23 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          >
          > Istio v1.28.0 includes full support for InferencePool v1. This guide assumes you are using Istio v1.28.0 or later to ensure compatibility with the InferencePool API.
 
-=== "Kgateway"
+=== "Agentgateway"
 
       1. Requirements
 
          - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
-      1. Set the Kgateway version and install the Kgateway CRDs:
+      1. Set the Agentgateway version and install the Agentgateway CRDs:
 
          ```bash
-         KGTW_VERSION=v2.1.2
-         helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+         AGW_VERSION=v1.0.0-alpha.4
+         helm upgrade -i --create-namespace --namespace agentgateway-system --version $AGW_VERSION agentgateway-crds oci://cr.agentgateway.dev/charts/agentgateway-crds
          ```
 
-      1. Install Kgateway:
+      1. Install Agentgateway:
 
          ```bash
-         helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
+         helm upgrade -i --namespace agentgateway-system --version $AGW_VERSION agentgateway oci://cr.agentgateway.dev/charts/agentgateway --set inferenceExtension.enabled=true
          ```
 
 === "NGINX Gateway Fabric"
@@ -169,17 +169,15 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
 
-=== "Kgateway"
+=== "Agentgateway"
 
-      [Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
-      [conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway)
-      implementation. Kgateway supports Inference Gateway with the [kgateway](https://kgateway.dev/) GatewayClass. Follow these steps
-      to run Kgateway as an Inference Gateway:
+      [Agentgateway](https://agentgateway.dev/) is a Gateway API and Inference Gateway implementation. Follow these steps
+      to run Agentgateway as an Inference Gateway:
 
       1. Deploy the Inference Gateway:
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
+         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/agentgateway/gateway.yaml
          ```
 
       1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
@@ -290,30 +288,30 @@ If you wish to exercise that function, then retain the setup you have deployed s
          kubectl delete ns istio-system
          ```
 
-=== "Kgateway"
+=== "Agentgateway"
 
       ```bash
-      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml --ignore-not-found
+      kubectl delete gateway inference-gateway --ignore-not-found
       ```
 
-      The following steps assume you would like to cleanup ALL Kgateway resources that were created in this quickstart guide.
+      The following steps assume you would like to cleanup ALL Agentgateway resources that were created in this quickstart guide.
 
-      1. Uninstall Kgateway:
+      1. Uninstall Agentgateway:
 
          ```bash
-         helm uninstall kgateway -n kgateway-system
+         helm uninstall agentgateway -n agentgateway-system
          ```
 
-      1. Uninstall the Kgateway CRDs:
+      1. Uninstall the Agentgateway CRDs:
 
          ```bash
-         helm uninstall kgateway-crds -n kgateway-system
+         helm uninstall agentgateway-crds -n agentgateway-system
          ```
 
-      1. Remove the Kgateway namespace:
+      1. Remove the Agentgateway namespace:
 
          ```bash
-         kubectl delete ns kgateway-system
+         kubectl delete ns agentgateway-system
          ```
 
 === "NGINX Gateway Fabric"
