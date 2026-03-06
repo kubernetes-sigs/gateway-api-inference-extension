@@ -7,7 +7,7 @@
    PORT=80
 
    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-   "model": "Qwen/Qwen3-32B",
+   "model": "${MODEL_NAME}",
    "prompt": "Write as if you were a critic: San Francisco",
    "max_tokens": 100,
    "temperature": 0

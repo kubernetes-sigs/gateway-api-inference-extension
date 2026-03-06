@@ -24,6 +24,9 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
 --8<-- "site-src/_includes/vllm-gpu.md"
 
     ```bash
+    export INFERENCE_POOL_NAME=vllm-qwen3-32b
+    export MODEL_SERVER_APP_LABEL=vllm-qwen3-32b
+    export MODEL_NAME=Qwen/Qwen3-32B
     kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/gpu-deployment.yaml
     ```
@@ -31,12 +34,18 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
 --8<-- "site-src/_includes/model-server-cpu.md"
 
     ```bash
+    export INFERENCE_POOL_NAME=vllm-qwen3-32b
+    export MODEL_SERVER_APP_LABEL=vllm-qwen3-32b
+    export MODEL_NAME=Qwen/Qwen3-32B
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/cpu-deployment.yaml
     ```
 
 --8<-- "site-src/_includes/model-server-sim.md"
 
     ```bash
+    export INFERENCE_POOL_NAME=vllm-llama3-8b-instruct
+    export MODEL_SERVER_APP_LABEL=vllm-llama3-8b-instruct
+    export MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/sim-deployment.yaml
     ```
 
@@ -90,7 +99,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Set the Kgateway version and install the Kgateway CRDs:
 
          ```bash
-         KGTW_VERSION=v2.2.0-main
+         KGTW_VERSION=v2.1.2
          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
          ```
 
@@ -161,13 +170,13 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
       [Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
       [conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway)
-      implementation. Kgateway supports Inference Gateway with the [agentgateway](https://agentgateway.dev/) data plane. Follow these steps
+      implementation. Kgateway supports Inference Gateway with the [kgateway](https://kgateway.dev/) GatewayClass. Follow these steps
       to run Kgateway as an Inference Gateway:
 
       1. Deploy the Inference Gateway:
 
          ```bash
-         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/gateway/kgateway/gateway.yaml
+         curl -sL https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/gateway/kgateway/gateway.yaml | sed 's/gatewayClassName: agentgateway/gatewayClassName: kgateway/' | kubectl apply -f -
          ```
 
       1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
@@ -200,7 +209,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 ### Deploy the InferencePool and Endpoint Picker Extension
 
-   Install an InferencePool named `vllm-llama3-8b-instruct` that selects from endpoints with label `app: vllm-llama3-8b-instruct` and listening on port 8000. The Helm install command automatically installs the EPP, InferencePool along with provider specific resources.
+   Install an InferencePool that selects the endpoints from the sample model server you deployed and listens on port 8000. The Helm install command automatically installs the EPP, InferencePool along with provider specific resources.
 
    Set the chart version and then select a tab to follow the provider-specific instructions.
 
@@ -240,7 +249,7 @@ You have now deployed a basic Inference Gateway with a simple routing strategy. 
    1. Uninstall the InferencePool, InferenceObjective and model server resources:
 
       ```bash
-      helm uninstall vllm-qwen3-32b 
+      helm uninstall ${INFERENCE_POOL_NAME}
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/inferenceobjective.yaml --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/vllm/gpu-deployment.yaml --ignore-not-found

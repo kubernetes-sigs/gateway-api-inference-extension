@@ -2,9 +2,9 @@
 
       ```bash
       export GATEWAY_PROVIDER=gke
-      helm install vllm-qwen3-32b \
+      helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
+      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
@@ -15,9 +15,9 @@
 
       ```bash
       export GATEWAY_PROVIDER=istio
-      helm install vllm-qwen3-32b \
+      helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
+      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
@@ -28,9 +28,9 @@
 
       ```bash
       export GATEWAY_PROVIDER=none
-      helm install vllm-qwen3-32b \
+      helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
+      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
@@ -41,9 +41,9 @@
 
       ```bash
       export GATEWAY_PROVIDER=none
-      helm install vllm-qwen3-32b \
+      helm install ${INFERENCE_POOL_NAME} \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
+      --set inferencePool.modelServers.matchLabels.app=${MODEL_SERVER_APP_LABEL} \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
