@@ -72,9 +72,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "Success - Explicit Values",
 			apiConfig: &configapi.FlowControlConfig{
-				Limits: &configapi.CapacityLimits{
-					MaxBytes: ptr.To(resource.MustParse("2048")),
-				},
+				MaxBytes: ptr.To(resource.MustParse("2048")),
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, uint64(2048), cfg.Registry.MaxBytes,
