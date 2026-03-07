@@ -85,7 +85,8 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return ret, nil
 	}
 
-	if err := s.executePlugins(ctx, reqCtx.Request.Headers, reqCtx.Request.Body, s.requestPlugins); err != nil {
+	// TODO: apply updated headers/body to the request.
+	if _, _, err := s.executePlugins(ctx, reqCtx.Request.Headers, reqCtx.Request.Body, s.requestPlugins); err != nil {
 		return nil, fmt.Errorf("failed to execute request plugins - %w", err)
 	}
 
@@ -154,23 +155,24 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 	}, nil
 }
 
-// executePlugins executes BBR plugins in the order they were registered.
+// executePlugins executes BBR plugins in the order they were registered
+// and returns the final updated headers and body.
 func (s *Server) executePlugins(ctx context.Context, headers map[string]string, body map[string]any,
-	plugins []framework.PayloadProcessor) error {
+	plugins []framework.PayloadProcessor) (map[string]string, map[string]any, error) {
 	updatedHeaders := headers
 	updatedBody := body
 	var err error
 	for _, plugin := range plugins {
-		log.FromContext(ctx).Info("Executing request plugin", "plugin", plugin.TypedName())
+		log.FromContext(ctx).Info("Executing plugin", "plugin", plugin.TypedName())
 		before := time.Now()
 		updatedHeaders, updatedBody, err = plugin.Execute(ctx, updatedHeaders, updatedBody)
 		metrics.RecordPluginProcessingLatency(executeExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
-			return fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
+			return nil, nil, fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
 		}
 	}
 
-	return nil
+	return updatedHeaders, updatedBody, nil
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
