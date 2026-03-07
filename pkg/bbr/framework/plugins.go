@@ -43,7 +43,7 @@ type ResponseProcessor interface {
 // TODO guards are still not integrated into the code
 type RequestGuardrail interface {
 	BBRPlugin
-	// RequestGuard runs a request guardrail plugin
+	// GuardRequest runs a request guardrail plugin
 	// RequestGuardrail plugin can inspect the request, including headers and payload and decide
 	// whether the request should be blocked or not.
 	GuardRequest(ctx context.Context, request *InferenceRequest) (bool, error)
@@ -51,7 +51,7 @@ type RequestGuardrail interface {
 
 type ResponseGuardrail interface {
 	BBRPlugin
-	// ResponseGuard runs a response guardrail plugin
+	// GuardResponse runs a response guardrail plugin
 	// ResponseGuardrail plugin can inspect the response, including headers and payload and decide
 	// whether the response should be blocked or not.
 	GuardResponse(ctx context.Context, response *InferenceResponse) (bool, error)
