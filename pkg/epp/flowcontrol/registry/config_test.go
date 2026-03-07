@@ -708,8 +708,8 @@ func TestNewConfigFromAPI(t *testing.T) {
 				MaxRequests: ptr.To(resource.MustParse("5000")),
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
-						Priority: 100,
-						MaxBytes: ptr.To(resource.MustParse("1Gi")),
+						Priority:    100,
+						MaxBytes:    ptr.To(resource.MustParse("1Gi")),
 						MaxRequests: ptr.To(resource.MustParse("5000")),
 					},
 				},
@@ -730,7 +730,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				MaxRequests: ptr.To(resource.MustParse("1000")),
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
-						Priority: 1,
+						Priority:    1,
 						MaxRequests: ptr.To(resource.MustParse("500")),
 					},
 				},
@@ -781,7 +781,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			apiConfig: &configapi.FlowControlConfig{
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
-						Priority: 1,
+						Priority:    1,
 						MaxRequests: ptr.To(resource.MustParse("0")),
 					},
 				},
@@ -806,7 +806,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			apiConfig: &configapi.FlowControlConfig{
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
-						Priority: 1,
+						Priority:    1,
 						MaxRequests: ptr.To(resource.MustParse("-100")),
 					},
 				},
