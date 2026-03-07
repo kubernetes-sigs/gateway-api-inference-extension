@@ -14,6 +14,8 @@ This doc defines the protocol between the EPP and the proxy (e.g, Envoy).
 The EPP MUST implement the Envoy
 [external processing service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ext_proc/v3/ext_proc.proto) protocol.
 
+The EPP MUST support streaming mode for inference requests and responses. Streaming mode enables full-duplex communication between the Gateway (Envoy), EPP, and model servers, allowing real-time token-by-token response delivery for AI inference workloads.
+
 ## Version History
 
 | Version  | Date       | Changes                                          |
@@ -93,6 +95,51 @@ filterMetadata: {
 ```
 
 This metadata is required because the EPP provides a list of endpoints to the data plane (see [Destination Endpoint](#destination-endpoint)), and the data plane, according to retry configuration, will attempt each endpoint in order until the request is successful or no more endpoints are available.
+
+## Health Checking
+
+The EPP MUST implement health checking to enable monitoring, load balancing, and high availability. The EPP exposes health check endpoints following the [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md).
+
+### Health Check Services
+
+The EPP exposes the following health check services:
+
+**Liveness Check** (`liveness`): Determines if the EPP process is alive and responsive. Returns `SERVING` if the EPP process can respond to gRPC requests. This check does not depend on datastore sync status or leader election state.
+
+**Readiness Check** (`readiness`): Determines if the EPP is ready to accept and process inference requests. Returns `SERVING` if the EPP datastore has synced and the EPP is the elected leader (in multi-replica deployments). Returns `NOT_SERVING` if the datastore has not synced or the EPP is a follower.
+
+**External Processor Service Check** (`envoy.service.ext_proc.v3.ExternalProcessor`): Verifies the main ext_proc service is healthy. Returns `SERVING` if the EPP is ready to process ext_proc requests (same criteria as readiness check).
+
+### Health Check Protocol
+
+The EPP implements the standard gRPC Health Checking Protocol:
+
+```protobuf
+rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    SERVICE_UNKNOWN = 3;
+  }
+  ServingStatus status = 1;
+}
+```
+
+### Leader Election Support
+
+When leader election is enabled (multi-replica deployments):
+
+- **Leader Pod**: Liveness returns `SERVING`, Readiness returns `SERVING` (if datastore synced). Processes all inference requests.
+- **Follower Pods**: Liveness returns `SERVING`, Readiness returns `NOT_SERVING`. Do not process inference requests but remain alive for failover.
+
+This ensures only the leader pod receives traffic while follower pods remain alive for failover.
 
 ### Why envoy.lb namespace as a default?
 The `envoy.lb` namespace is a predefined namespace. One common way to use the selected endpoint returned from the server, is [envoy subsets](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/load_balancing/subsets)  where host metadata for subset load balancing must be placed under `envoy.lb`. Note that this is not related to the subsetting feature discussed above, this is an enovy implementation detail.
