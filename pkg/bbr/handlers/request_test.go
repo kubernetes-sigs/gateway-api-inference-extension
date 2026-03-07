@@ -408,7 +408,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	plugin, _ := plugins.NewBodyFieldToHeaderPlugin(modelHeader, modelHeader)
+	plugin, _ := plugins.NewBodyFieldToHeaderPlugin("model", modelHeader)
 	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{plugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
 		Request: framework.NewInferenceRequest(),
