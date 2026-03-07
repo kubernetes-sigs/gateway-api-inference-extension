@@ -280,18 +280,26 @@ func (sp *ShardProcessor) enqueue(item *FlowItem) {
 // This check reflects actual resource utilization, including "zombie" items (finalized but unswept), to prevent
 // physical resource overcommitment.
 func (sp *ShardProcessor) hasCapacity(priority int, itemByteSize uint64) bool {
-	if itemByteSize == 0 {
-		return true
-	}
 	stats := sp.shard.Stats()
 	if stats.TotalCapacityBytes > 0 && stats.TotalByteSize+itemByteSize > stats.TotalCapacityBytes {
 		return false
 	}
+	if stats.TotalCapacityRequests > 0 && stats.TotalLen+1 > stats.TotalCapacityRequests {
+		return false
+	}
+
 	bandStats, ok := stats.PerPriorityBandStats[priority]
 	if !ok {
-		return false // Fail closed if configuration is inconsistent.
+		return false
 	}
-	return bandStats.ByteSize+itemByteSize <= bandStats.CapacityBytes
+	if bandStats.CapacityBytes > 0 && bandStats.ByteSize+itemByteSize > bandStats.CapacityBytes {
+		return false
+	}
+	if bandStats.CapacityRequests > 0 && bandStats.Len+1 > bandStats.CapacityRequests {
+		return false
+	}
+
+	return true
 }
 
 // dispatchCycle attempts to dispatch a single item by iterating through priority bands from highest to lowest.
