@@ -173,6 +173,8 @@ type ManagedQueue interface {
 type AggregateStats struct {
 	// TotalCapacityBytes is the globally configured maximum total byte size limit across all priority bands and shards.
 	TotalCapacityBytes uint64
+	// TotalCapacityRequests is the globally configured maximum total request count limit across all priority bands and shards.
+	TotalCapacityRequests uint64
 	// TotalByteSize is the total byte size of all items currently queued across the entire system.
 	TotalByteSize uint64
 	// TotalLen is the total number of items currently queued across the entire system.
@@ -195,6 +197,11 @@ type ShardStats struct {
 	// The `controller.FlowController` enforces this limit in addition to any per-band capacity limits.
 	// A value of 0 signifies that this global limit is ignored, and only per-band limits apply.
 	TotalCapacityBytes uint64
+	// TotalCapacityRequests is the optional, maximum total request count limit aggregated across all priority bands within this
+	// shard. Its value represents the globally configured limit for the `FlowRegistry` partitioned for this shard.
+	// The `controller.FlowController` enforces this limit in addition to any per-band capacity limits.
+	// A value of 0 signifies that this global limit is ignored, and only per-band limits apply.
+	TotalCapacityRequests uint64
 	// TotalByteSize is the total byte size of all items currently queued across all priority bands within this shard.
 	TotalByteSize uint64
 	// TotalLen is the total number of items currently queued across all priority bands within this shard.
@@ -220,6 +227,8 @@ type PriorityBandStats struct {
 	// The `controller.FlowController` enforces this limit.
 	// A default non-zero value is guaranteed if not configured.
 	CapacityBytes uint64
+	// CapacityRequests is the configured maximum total request count for this priority band.
+	CapacityRequests uint64
 	// ByteSize is the total byte size of items currently queued in this priority band.
 	ByteSize uint64
 	// Len is the total number of items currently queued in this priority band.
