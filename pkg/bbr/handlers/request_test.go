@@ -109,9 +109,9 @@ func TestHandleRequestHeaders(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
+			server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: &Request{Headers: make(map[string]string)},
+				Request: framework.NewInferenceRequest(),
 			}
 
 			resp, err := server.HandleRequestHeaders(reqCtx, tc.headers)
@@ -368,9 +368,9 @@ func TestHandleRequestBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := NewServer(test.streaming, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
+			server := NewServer(test.streaming, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: &Request{Headers: make(map[string]string)},
+				Request: framework.NewInferenceRequest(),
 			}
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
@@ -408,10 +408,10 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	plugin, _ := plugins.NewBodyFieldToHeaderPlugin("model", "")
-	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{plugin}, []framework.PayloadProcessor{})
+	plugin, _ := plugins.NewBodyFieldToHeaderPlugin("model", modelHeader)
+	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{plugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
-		Request: &Request{Headers: make(map[string]string)},
+		Request: framework.NewInferenceRequest(),
 	}
 
 	bodyBytes, _ := json.Marshal(map[string]any{
@@ -436,7 +436,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 				for _, lp := range m.GetLabel() {
 					labels[lp.GetName()] = lp.GetValue()
 				}
-				if labels["extension_point"] == "Request" &&
+				if labels["extension_point"] == requestPluginExtensionPoint &&
 					labels["plugin_type"] == plugins.BodyFieldToHeaderPluginType &&
 					labels["plugin_name"] == plugins.BodyFieldToHeaderPluginType {
 					if m.GetHistogram().GetSampleCount() > 0 {
@@ -448,8 +448,8 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	}
 
 	if !found {
-		t.Error("Expected bbr_plugin_duration_seconds metric with extension_point=Request, " +
-			"plugin_type=no-op-plugin, plugin_name=no-op-plugin to have observations, but none found")
+		t.Error("Expected bbr_plugin_duration_seconds metric with extension_point=request, " +
+			"plugin_type=body-field-to-header, plugin_name=body-field-to-header to have observations, but none found")
 	}
 }
 

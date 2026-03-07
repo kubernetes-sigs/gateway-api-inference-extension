@@ -128,9 +128,9 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			srv := NewServer(tc.streaming, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
+			srv := NewServer(tc.streaming, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: &Request{Headers: make(map[string]string)},
+				Request: framework.NewInferenceRequest(),
 			}
 			got, err := srv.HandleRequestBody(ctx, reqCtx, tc.body)
 			if err != nil {

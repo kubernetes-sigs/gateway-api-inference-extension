@@ -28,11 +28,10 @@ import (
 
 const (
 	BodyFieldToHeaderPluginType = "body-field-to-header"
-	deafultHeaderPrefix         = "X-Gateway-"
 )
 
 // compile-time type validation
-var _ framework.PayloadProcessor = &BodyFieldToHeaderPlugin{}
+var _ framework.RequestProcessor = &BodyFieldToHeaderPlugin{}
 
 // BodyFieldToHeaderConfig defines the JSON configuration structure for the plugin.
 type BodyFieldToHeaderConfig struct {
@@ -43,7 +42,7 @@ type BodyFieldToHeaderConfig struct {
 }
 
 // BodyFieldToHeaderPluginFactory defines the factory function for NewBodyFieldToHeaderPlugin.
-func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage) (framework.PayloadProcessor, error) {
+func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage) (framework.BBRPlugin, error) {
 	var config BodyFieldToHeaderConfig
 
 	if len(rawParameters) > 0 {
@@ -67,8 +66,7 @@ func NewBodyFieldToHeaderPlugin(fieldName, headerName string) (*BodyFieldToHeade
 	}
 
 	if headerName == "" {
-		// Create a default header name based on the field name
-		headerName = deafultHeaderPrefix + fieldName
+		return nil, errors.New("headerName is required in BodyFieldToHeader plugin")
 	}
 
 	return &BodyFieldToHeaderPlugin{
@@ -100,22 +98,19 @@ func (p *BodyFieldToHeaderPlugin) WithName(name string) *BodyFieldToHeaderPlugin
 }
 
 // Execute extracts value from a given body field and sets it as HTTP header.
-func (p *BodyFieldToHeaderPlugin) Execute(ctx context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
-	if headers == nil {
-		return headers, body, errors.New("headers map is nil")
-	}
-	if body == nil {
-		return headers, body, errors.New("body map is nil")
+func (p *BodyFieldToHeaderPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) (*framework.InferenceRequest, error) {
+	if request == nil || request.Headers == nil || request.Body == nil {
+		return nil, nil // this shouldn't happen
 	}
 
-	// Extract field value from body
-	fieldValue, exists := body[p.fieldName]
+	// extract field value from body
+	fieldValue, exists := request.Body[p.fieldName]
 	if !exists {
-		// Field doesn't exist in body, return headers map unchanged
-		return headers, body, nil
+		// field doesn't exist in body, return headers map unchanged
+		return request, nil
 	}
 
-	headers[p.headerName] = fmt.Sprintf("%v", fieldValue)
+	request.Headers[p.headerName] = fmt.Sprintf("%v", fieldValue)
 
-	return headers, body, nil
+	return request, nil
 }

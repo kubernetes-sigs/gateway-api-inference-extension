@@ -26,17 +26,33 @@ import (
 // This interface should be embedded in all plugins across the code.
 type BBRPlugin plugin.Plugin // alias
 
-type PayloadProcessor interface {
+type RequestProcessor interface {
 	BBRPlugin
-	// Execute runs the payload processor plugin.
-	// Payload processor can mutate the headers and/or the body of the message.
-	Execute(ctx context.Context, headers map[string]string, body map[string]any) (updatedHeaders map[string]string, updatedBody map[string]any, err error)
+	// ProcessRequest runs the RequestProcessor plugin.
+	// RequestProcessor can mutate the headers and/or the body of the request.
+	ProcessRequest(ctx context.Context, request *InferenceRequest) (mutatedRequest *InferenceRequest, err error)
 }
 
-type Guardrail interface {
+type ResponseProcessor interface {
 	BBRPlugin
-	// Execute runs guardrail plugin
-	// Guardrail plugin can inspect the request, including headers and payload and decide
+	// ProcessResponse runs the ResponseProcessor plugin.
+	// ResponseProcessor can mutate the headers and/or the body of the response.
+	ProcessResponse(ctx context.Context, response *InferenceResponse) (mutatedResponse *InferenceResponse, err error)
+}
+
+// TODO guards are still not integrated into the code
+type RequestGuardrail interface {
+	BBRPlugin
+	// GuardRequest runs a request guardrail plugin
+	// RequestGuardrail plugin can inspect the request, including headers and payload and decide
 	// whether the request should be blocked or not.
-	Execute(ctx context.Context, headers map[string]string, body map[string]any) (bool, error)
+	GuardRequest(ctx context.Context, request *InferenceRequest) (bool, error)
+}
+
+type ResponseGuardrail interface {
+	BBRPlugin
+	// GuardResponse runs a response guardrail plugin
+	// ResponseGuardrail plugin can inspect the response, including headers and payload and decide
+	// whether the response should be blocked or not.
+	GuardResponse(ctx context.Context, response *InferenceResponse) (bool, error)
 }

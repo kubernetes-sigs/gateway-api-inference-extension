@@ -35,30 +35,30 @@ const testPluginValue = "done"
 // fakeResponsePlugin implements framework.PayloadProcessor for testing response plugin execution.
 type fakeResponsePlugin struct {
 	name     string
-	mutateFn func(ctx context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error)
+	mutateFn func(ctx context.Context, response *framework.InferenceResponse) (*framework.InferenceResponse, error)
 }
 
 func (p *fakeResponsePlugin) TypedName() epp.TypedName {
 	return epp.TypedName{Type: "fake", Name: p.name}
 }
 
-func (p *fakeResponsePlugin) Execute(ctx context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
-	return p.mutateFn(ctx, headers, body)
+func (p *fakeResponsePlugin) ProcessResponse(ctx context.Context, response *framework.InferenceResponse) (*framework.InferenceResponse, error) {
+	return p.mutateFn(ctx, response)
 }
 
-var _ framework.PayloadProcessor = &fakeResponsePlugin{}
+var _ framework.ResponseProcessor = &fakeResponsePlugin{}
 
 func newTestRequestContext() *RequestContext {
 	return &RequestContext{
-		Request:  &Request{Headers: make(map[string]string)},
-		Response: &Response{Headers: make(map[string]string)},
+		Request:  framework.NewInferenceRequest(),
+		Response: framework.NewInferenceResponse(),
 	}
 }
 
 func TestHandleResponseBody_NoPlugins(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
+	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -83,13 +83,13 @@ func TestHandleResponseBody_SinglePlugin(t *testing.T) {
 
 	mutatePlugin := &fakeResponsePlugin{
 		name: "mutator",
-		mutateFn: func(_ context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
-			body["mutated"] = true
-			return headers, body, nil
+		mutateFn: func(_ context.Context, response *framework.InferenceResponse) (*framework.InferenceResponse, error) {
+			response.Body["mutated"] = true
+			return response, nil
 		},
 	}
 
-	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{mutatePlugin})
+	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{mutatePlugin})
 	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -114,20 +114,20 @@ func TestHandleResponseBody_MultiplePlugins(t *testing.T) {
 
 	plugin1 := &fakeResponsePlugin{
 		name: "plugin1",
-		mutateFn: func(_ context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
-			body["p1"] = testPluginValue
-			return headers, body, nil
+		mutateFn: func(_ context.Context, response *framework.InferenceResponse) (*framework.InferenceResponse, error) {
+			response.Body["p1"] = testPluginValue
+			return response, nil
 		},
 	}
 	plugin2 := &fakeResponsePlugin{
 		name: "plugin2",
-		mutateFn: func(_ context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
-			body["p2"] = testPluginValue
-			return headers, body, nil
+		mutateFn: func(_ context.Context, response *framework.InferenceResponse) (*framework.InferenceResponse, error) {
+			response.Body["p2"] = testPluginValue
+			return response, nil
 		},
 	}
 
-	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{plugin1, plugin2})
+	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{plugin1, plugin2})
 	responseBody := []byte(`{"original":true}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -152,12 +152,12 @@ func TestHandleResponseBody_PluginError(t *testing.T) {
 
 	failingPlugin := &fakeResponsePlugin{
 		name: "failing",
-		mutateFn: func(_ context.Context, _ map[string]string, _ map[string]any) (map[string]string, map[string]any, error) {
-			return nil, nil, errors.New("failed to execute plugin")
+		mutateFn: func(_ context.Context, _ *framework.InferenceResponse) (*framework.InferenceResponse, error) {
+			return nil, errors.New("failed to execute plugin")
 		},
 	}
 
-	server := NewServer(false, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{failingPlugin})
+	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{failingPlugin})
 	responseBody := []byte(`{"choices":[{"text":"some response"}]}`)
 	_, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err == nil {
@@ -174,12 +174,12 @@ func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 
 	noopPlugin := &fakeResponsePlugin{
 		name: "noop",
-		mutateFn: func(_ context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
-			return headers, body, nil
+		mutateFn: func(_ context.Context, response *framework.InferenceResponse) (*framework.InferenceResponse, error) {
+			return response, nil
 		},
 	}
 
-	server := NewServer(true, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{noopPlugin})
+	server := NewServer(true, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{noopPlugin})
 	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -202,7 +202,7 @@ func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 func TestProcessResponseBody_Streaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	server := NewServer(true, &fakeDatastore{}, []framework.PayloadProcessor{}, []framework.PayloadProcessor{})
+	server := NewServer(true, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 
 	chunk1 := &extProcPb.HttpBody{
 		Body: []byte(`{"choices":[{"te`),
