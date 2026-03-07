@@ -46,7 +46,7 @@ type RequestGuardrail interface {
 	// RequestGuard runs a request guardrail plugin
 	// RequestGuardrail plugin can inspect the request, including headers and payload and decide
 	// whether the request should be blocked or not.
-	RequestGuard(ctx context.Context, request *InferenceRequest) (bool, error)
+	GuardRequest(ctx context.Context, request *InferenceRequest) (bool, error)
 }
 
 type ResponseGuardrail interface {
@@ -54,5 +54,5 @@ type ResponseGuardrail interface {
 	// ResponseGuard runs a response guardrail plugin
 	// ResponseGuardrail plugin can inspect the response, including headers and payload and decide
 	// whether the response should be blocked or not.
-	ResponseGuard(ctx context.Context, response *InferenceResponse) (bool, error)
+	GuardResponse(ctx context.Context, response *InferenceResponse) (bool, error)
 }
