@@ -312,7 +312,22 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
-			// This is currently unused.
+			if !reqCtx.ResponseComplete {
+				// In some case(e.g: gRPC): ResponseTrailers is used to determine whether the response is complete.
+				reqCtx.ResponseComplete = true
+				reqCtx.ResponseCompleteTimestamp = time.Now()
+				if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
+					logger.Error(err, "error in HandleResponseBodyComplete")
+				}
+				metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+				metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
+				metrics.RecordNormalizedTimePerOutputToken(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp, reqCtx.Usage.CompletionTokens)
+				reqCtx.respTrailerResp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ResponseTrailers{
+						ResponseTrailers: &extProcPb.TrailersResponse{},
+					},
+				}
+			}
 		}
 
 		// Handle the err and fire an immediate response.
