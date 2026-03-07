@@ -16,18 +16,26 @@ limitations under the License.
 
 package framework
 
-import (
-	"encoding/json"
-)
-
-// Factory is the definition of the factory functions that are used to instantiate plugins
-// specified in a configuration.
-type FactoryFunc func(name string, parameters json.RawMessage) (BBRPlugin, error)
-
-// Register is a static function that can be called to register plugin factory functions.
-func Register(pluginType string, factory FactoryFunc) {
-	Registry[pluginType] = factory
+func NewInferenceRequest() *InferenceRequest {
+	return &InferenceRequest{
+		Headers: make(map[string]string),
+		Body:    map[string]any{},
+	}
 }
 
-// Registry is a mapping from plugin name to Factory function
-var Registry map[string]FactoryFunc = map[string]FactoryFunc{}
+type InferenceRequest struct {
+	Headers map[string]string
+	Body    map[string]any
+}
+
+func NewInferenceResponse() *InferenceResponse {
+	return &InferenceResponse{
+		Headers: make(map[string]string),
+		Body:    make(map[string]any),
+	}
+}
+
+type InferenceResponse struct {
+	Headers map[string]string
+	Body    map[string]any
+}

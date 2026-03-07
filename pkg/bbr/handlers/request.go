@@ -37,8 +37,6 @@ import (
 const (
 	modelHeader     = "X-Gateway-Model-Name"
 	baseModelHeader = "X-Gateway-Base-Model-Name"
-
-	executeExtensionPoint = "Request"
 )
 
 // HandleRequestBody parses the raw body bytes into reqCtx.Request.Body and processes the request.
@@ -85,7 +83,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return ret, nil
 	}
 
-	if err := s.executePlugins(ctx, reqCtx.Request.Headers, reqCtx.Request.Body, s.requestPlugins); err != nil {
+	if _, err := s.runRequestPlugins(ctx, reqCtx.Request); err != nil {
 		return nil, fmt.Errorf("failed to execute request plugins - %w", err)
 	}
 
@@ -154,23 +152,21 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 	}, nil
 }
 
-// executePlugins executes BBR plugins in the order they were registered.
-func (s *Server) executePlugins(ctx context.Context, headers map[string]string, body map[string]any,
-	plugins []framework.PayloadProcessor) error {
-	updatedHeaders := headers
-	updatedBody := body
+// runRequestPlugins executes request plugins in the order they were registered.
+func (s *Server) runRequestPlugins(ctx context.Context, request *framework.InferenceRequest) (*framework.InferenceRequest, error) {
+	mutatedRequest := request
 	var err error
-	for _, plugin := range plugins {
-		log.FromContext(ctx).Info("Executing request plugin", "plugin", plugin.TypedName())
+	for _, plugin := range s.requestPlugins {
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("Executing request plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		updatedHeaders, updatedBody, err = plugin.Execute(ctx, updatedHeaders, updatedBody)
-		metrics.RecordPluginProcessingLatency(executeExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		mutatedRequest, err = plugin.ProcessRequest(ctx, request)
+		metrics.RecordPluginProcessingLatency(requestPluginExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
-			return fmt.Errorf("failed to execute payload processor %s - %w", plugin.TypedName(), err)
+			return nil, fmt.Errorf("failed to execute request plugin '%s' - %w", plugin.TypedName(), err)
 		}
 	}
 
-	return nil
+	return mutatedRequest, nil
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {

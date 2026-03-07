@@ -42,8 +42,8 @@ type ExtProcServerRunner struct {
 	Datastore       datastore.Datastore
 	SecureServing   bool
 	Streaming       bool
-	RequestPlugins  []framework.PayloadProcessor
-	ResponsePlugins []framework.PayloadProcessor
+	RequestPlugins  []framework.RequestProcessor
+	ResponsePlugins []framework.ResponseProcessor
 }
 
 func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunner {

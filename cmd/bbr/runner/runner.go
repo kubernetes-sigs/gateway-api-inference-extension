@@ -47,12 +47,17 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
+const (
+	modelHeader = "X-Gateway-Model-Name"
+	modelField  = "model"
+)
+
 var setupLog = ctrl.Log.WithName("setup")
 
 func NewRunner() *Runner {
 	return &Runner{
 		bbrExecutableName: "BBR",
-		requestPlugins:    []framework.PayloadProcessor{},
+		requestPlugins:    []framework.RequestProcessor{},
 		customCollectors:  []prometheus.Collector{},
 	}
 }
@@ -62,7 +67,7 @@ type Runner struct {
 	bbrExecutableName string
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
-	requestPlugins []framework.PayloadProcessor
+	requestPlugins []framework.RequestProcessor
 
 	customCollectors []prometheus.Collector
 }
@@ -173,7 +178,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
 		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
-		bodyToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin("model", "")
+		bodyToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(modelField, modelHeader)
 		if err != nil {
 			setupLog.Error(err, "failed to initlialize 'BodyFieldToHeader' plugin")
 			return err
@@ -193,7 +198,9 @@ func (r *Runner) Run(ctx context.Context) error {
 				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
 				return err
 			}
-			r.requestPlugins = append(r.requestPlugins, instance)
+			if requestProcessor, ok := instance.(framework.RequestProcessor); ok {
+				r.requestPlugins = append(r.requestPlugins, requestProcessor)
+			}
 		}
 	}
 

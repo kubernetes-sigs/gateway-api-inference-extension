@@ -33,11 +33,16 @@ import (
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 )
 
+const (
+	requestPluginExtensionPoint  = "request"
+	responsePluginExtensionPoint = "response"
+)
+
 type Datastore interface {
 	GetBaseModel(modelName string) string
 }
 
-func NewServer(streaming bool, ds Datastore, requestPlugins []framework.PayloadProcessor, responsePlugins []framework.PayloadProcessor) *Server {
+func NewServer(streaming bool, ds Datastore, requestPlugins []framework.RequestProcessor, responsePlugins []framework.ResponseProcessor) *Server {
 	return &Server{
 		streaming:       streaming,
 		ds:              ds,
@@ -51,28 +56,16 @@ func NewServer(streaming bool, ds Datastore, requestPlugins []framework.PayloadP
 type Server struct {
 	streaming       bool
 	ds              Datastore
-	requestPlugins  []framework.PayloadProcessor
-	responsePlugins []framework.PayloadProcessor
+	requestPlugins  []framework.RequestProcessor
+	responsePlugins []framework.ResponseProcessor
 }
 
 // RequestContext stores context information during the lifetime of an HTTP request.
 type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
-	Request                   *Request
-	Response                  *Response
-}
-
-// Request holds the parsed request headers and body.
-type Request struct {
-	Headers map[string]string
-	Body    map[string]any
-}
-
-// Response holds the parsed response headers and body.
-type Response struct {
-	Headers map[string]string
-	Body    map[string]any
+	Request                   *framework.InferenceRequest
+	Response                  *framework.InferenceResponse
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
@@ -82,14 +75,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	loggerVerbose.Info("Processing")
 
 	reqCtx := &RequestContext{
-		Request: &Request{
-			Headers: make(map[string]string),
-			Body:    make(map[string]any),
-		},
-		Response: &Response{
-			Headers: make(map[string]string),
-			Body:    make(map[string]any),
-		},
+		Request:  framework.NewInferenceRequest(),
+		Response: framework.NewInferenceResponse(),
 	}
 	var body []byte
 	respStreamedBody := &streamedBody{}
