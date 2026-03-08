@@ -300,11 +300,20 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 // PreRequest records in the plugin cache the result of the scheduling selection.
 func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, schedulingResult *framework.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
-	targetEndpoint := primaryProfileResult.TargetEndpoints[0] // get the first endpoint of the primary profile
-	servers := []Server{p.makeServer(targetEndpoint)}
 
+	var servers []Server
+	var reportingEndpoint framework.Endpoint
+
+	// In P/D disaggregation mode, track only the prefill pod which builds the KV cache
 	if pr, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && len(pr.TargetEndpoints) > 0 {
-		servers = append(servers, p.makeServer(pr.TargetEndpoints[0]))
+		prefillEndpoint := pr.TargetEndpoints[0]
+		servers = []Server{p.makeServer(prefillEndpoint)}
+		reportingEndpoint = prefillEndpoint
+	} else {
+		// Monolithic mode: track the primary endpoint
+		targetEndpoint := primaryProfileResult.TargetEndpoints[0]
+		servers = []Server{p.makeServer(targetEndpoint)}
+		reportingEndpoint = targetEndpoint
 	}
 
 	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(p.TypedName().String()))
@@ -327,9 +336,9 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 	}()
 
 	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
+	matchLen := state.PrefixCacheServers[ServerID(reportingEndpoint.GetMetadata().NamespacedName)]
 
-	blockSize := getBlockSize(primaryProfileResult.TargetEndpoints, p.config)
+	blockSize := getBlockSize([]framework.Endpoint{reportingEndpoint}, p.config)
 	// report matched and total prefix length in chars
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize*averageCharactersPerToken, total*blockSize*averageCharactersPerToken)
 }
