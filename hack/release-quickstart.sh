@@ -30,18 +30,64 @@ else
   RELEASE_TAG="v${MAJOR}.${MINOR}.0-rc.${RC}"
 fi
 
+# External quickstart images should track the versions already in use on main
+# unless they are explicitly overridden for a release.
+QUICKSTART_IMAGE_SOURCE_REF="${QUICKSTART_IMAGE_SOURCE_REF:-origin/main}"
+VLLM_GPU_DEPLOY="config/manifests/vllm/gpu-deployment.yaml"
+VLLM_CPU_DEPLOY="config/manifests/vllm/cpu-deployment.yaml"
+VLLM_SIM_DEPLOY="config/manifests/vllm/sim-deployment.yaml"
+
+extract_image_version() {
+  local repo="$1"
+  sed -n -E "s|.*image: \"?${repo}:v?([^\"[:space:]]+).*|\\1|p" | head -n1
+}
+
+extract_image_pull_policy() {
+  local repo="$1"
+  awk -v repo="$repo" '
+    index($0, repo) { found=1; next }
+    found && $1 == "imagePullPolicy:" { print $2; exit }
+  '
+}
+
+resolve_manifest_value() {
+  local ref="$1"
+  local manifest="$2"
+  local fallback="$3"
+  shift 3
+
+  local value=""
+  if git rev-parse --verify "${ref}^{commit}" >/dev/null 2>&1; then
+    value="$(git show "${ref}:${manifest}" 2>/dev/null | "$@" || true)"
+  fi
+  if [[ -z "$value" && -f "$manifest" ]]; then
+    value="$("$@" < "$manifest" || true)"
+  fi
+  if [[ -z "$value" ]]; then
+    value="$fallback"
+  fi
+  echo "$value"
+}
+
 # The vLLM image versions
 # The GPU image is from https://hub.docker.com/r/vllm/vllm-openai/tags
-VLLM_GPU="${VLLM_GPU:-0.10.0}"
+VLLM_GPU="${VLLM_GPU:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_GPU_DEPLOY" "0.10.0" extract_image_version "vllm/vllm-openai")}"
+VLLM_GPU_PULL_POLICY="${VLLM_GPU_PULL_POLICY:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_GPU_DEPLOY" "IfNotPresent" extract_image_pull_policy "vllm/vllm-openai")}"
 # The CPU image is from https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
-VLLM_CPU="${VLLM_CPU:-0.10.0}"
+VLLM_CPU="${VLLM_CPU:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_CPU_DEPLOY" "0.10.0" extract_image_version "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo")}"
+VLLM_CPU_PULL_POLICY="${VLLM_CPU_PULL_POLICY:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_CPU_DEPLOY" "IfNotPresent" extract_image_pull_policy "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo")}"
 # The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
-VLLM_SIM="${VLLM_SIM:-0.3.2-fix}"
+VLLM_SIM="${VLLM_SIM:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_SIM_DEPLOY" "0.3.2-fix" extract_image_version "ghcr.io/llm-d/llm-d-inference-sim")}"
+VLLM_SIM_PULL_POLICY="${VLLM_SIM_PULL_POLICY:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_SIM_DEPLOY" "IfNotPresent" extract_image_pull_policy "ghcr.io/llm-d/llm-d-inference-sim")}"
 
 echo "Using release tag: ${RELEASE_TAG}"
+echo "Using quickstart image source ref: ${QUICKSTART_IMAGE_SOURCE_REF}"
 echo "Using vLLM GPU image version: ${VLLM_GPU}"
+echo "Using vLLM GPU image pull policy: ${VLLM_GPU_PULL_POLICY}"
 echo "Using vLLM CPU image version: ${VLLM_CPU}"
+echo "Using vLLM CPU image pull policy: ${VLLM_CPU_PULL_POLICY}"
 echo "Using vLLM Simulator image version: ${VLLM_SIM}"
+echo "Using vLLM Simulator image pull policy: ${VLLM_SIM_PULL_POLICY}"
 
 # -----------------------------------------------------------------------------
 # Update version/version.go and generating CRDs with new version annotations
@@ -100,32 +146,29 @@ sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io
 # -----------------------------------------------------------------------------
 # Update vLLM deployment manifests
 # -----------------------------------------------------------------------------
-VLLM_GPU_DEPLOY="config/manifests/vllm/gpu-deployment.yaml"
 echo "Updating ${VLLM_GPU_DEPLOY} ..."
 
 # Update the vLLM GPU image version
 sed -i.bak -E "s|(vllm/vllm-openai:)[^\"[:space:]]+|\1v${VLLM_GPU}|g" "$VLLM_GPU_DEPLOY"
 
-# Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
-sed -i.bak '/vllm\/vllm-openai/{n;s/Always/IfNotPresent/;}' "$VLLM_GPU_DEPLOY"
+# Update the imagePullPolicy on the line following the vLLM image.
+sed -i.bak "/vllm\\/vllm-openai/{n;s|imagePullPolicy: .*|imagePullPolicy: ${VLLM_GPU_PULL_POLICY}|;}" "$VLLM_GPU_DEPLOY"
 
-VLLM_CPU_DEPLOY="config/manifests/vllm/cpu-deployment.yaml"
 echo "Updating ${VLLM_CPU_DEPLOY} ..."
 
 # Update the vLLM CPU image version
 sed -i.bak -E "s|(q9t5s3a7/vllm-cpu-release-repo:)[^\"[:space:]]+|\1v${VLLM_CPU}|g" "$VLLM_CPU_DEPLOY"
 
-# Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM CPU image.
-sed -i.bak '/q9t5s3a7\/vllm-cpu-release-repo/{n;s/Always/IfNotPresent/;}' "$VLLM_CPU_DEPLOY"
+# Update the imagePullPolicy on the line following the vLLM CPU image.
+sed -i.bak "/q9t5s3a7\\/vllm-cpu-release-repo/{n;s|imagePullPolicy: .*|imagePullPolicy: ${VLLM_CPU_PULL_POLICY}|;}" "$VLLM_CPU_DEPLOY"
 
-VLLM_SIM_DEPLOY="config/manifests/vllm/sim-deployment.yaml"
 echo "Updating ${VLLM_SIM_DEPLOY} ..."
 
 # Update the vLLM Simulator image version
 sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "$VLLM_SIM_DEPLOY"
 
-# Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
-sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
+# Update the imagePullPolicy on the line following the vLLM image.
+sed -i.bak "/llm-d\\/llm-d-inference-sim/{n;s|imagePullPolicy: .*|imagePullPolicy: ${VLLM_SIM_PULL_POLICY}|;}" "$VLLM_SIM_DEPLOY"
 
 # Update the container tag for lora-syncer in vLLM CPU and GPU deployment manifests.
 sed -i.bak -E "s|(gateway-api-inference-extension/lora-syncer:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"

@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai:v0.10.0"
-          imagePullPolicy: IfNotPresent
+          image: "vllm/vllm-openai:v0.15.1"
+          imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
           - "--model"
