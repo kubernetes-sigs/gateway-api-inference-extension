@@ -62,7 +62,7 @@ func newTestRequestContext() *RequestContext {
 func TestHandleResponseBody_NoPlugins(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+	server := NewServer(false, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -93,7 +93,7 @@ func TestHandleResponseBody_SinglePlugin(t *testing.T) {
 		},
 	}
 
-	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{mutatePlugin})
+	server := NewServer(false, []framework.RequestProcessor{}, []framework.ResponseProcessor{mutatePlugin})
 	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -133,7 +133,7 @@ func TestHandleResponseBody_MultiplePlugins(t *testing.T) {
 		},
 	}
 
-	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{plugin1, plugin2})
+	server := NewServer(false, []framework.RequestProcessor{}, []framework.ResponseProcessor{plugin1, plugin2})
 	responseBody := []byte(`{"original":true}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestHandleResponseBody_PluginError(t *testing.T) {
 		},
 	}
 
-	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{failingPlugin})
+	server := NewServer(false, []framework.RequestProcessor{}, []framework.ResponseProcessor{failingPlugin})
 	responseBody := []byte(`{"choices":[{"text":"some response"}]}`)
 	_, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err == nil {
@@ -189,7 +189,7 @@ func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 		},
 	}
 
-	server := NewServer(true, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{mutatePlugin})
+	server := NewServer(true, []framework.RequestProcessor{}, []framework.ResponseProcessor{mutatePlugin})
 	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 	if err != nil {
@@ -212,7 +212,7 @@ func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 func TestProcessResponseBody_Streaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	server := NewServer(true, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+	server := NewServer(true, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 
 	chunk1 := &extProcPb.HttpBody{
 		Body: []byte(`{"choices":[{"te`),
@@ -330,7 +330,7 @@ func TestHandleResponseBody_PluginNoBodyMutation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := NewServer(tc.streaming, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{headerOnlyPlugin})
+			server := NewServer(tc.streaming, []framework.RequestProcessor{}, []framework.ResponseProcessor{headerOnlyPlugin})
 			responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 			resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
 			if err != nil {

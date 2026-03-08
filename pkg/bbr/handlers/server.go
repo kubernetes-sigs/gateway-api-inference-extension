@@ -48,14 +48,9 @@ const (
 	responsePluginExtensionPoint = "response"
 )
 
-type Datastore interface {
-	GetBaseModel(modelName string) string
-}
-
-func NewServer(streaming bool, ds Datastore, requestPlugins []framework.RequestProcessor, responsePlugins []framework.ResponseProcessor) *Server {
+func NewServer(streaming bool, requestPlugins []framework.RequestProcessor, responsePlugins []framework.ResponseProcessor) *Server {
 	return &Server{
 		streaming:       streaming,
-		ds:              ds,
 		requestPlugins:  requestPlugins,
 		responsePlugins: responsePlugins,
 	}
@@ -65,7 +60,6 @@ func NewServer(streaming bool, ds Datastore, requestPlugins []framework.RequestP
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
 	streaming       bool
-	ds              Datastore
 	requestPlugins  []framework.RequestProcessor
 	responsePlugins []framework.ResponseProcessor
 }

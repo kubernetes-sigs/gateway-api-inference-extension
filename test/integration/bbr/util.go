@@ -26,7 +26,8 @@ import (
 // --- Response Expectations (Streaming) ---
 
 // ExpectBBRHeader asserts that BBR set the specific model header and cleared the route cache.
-func ExpectBBRHeader(modelName string) *extProcPb.ProcessingResponse {
+// baseModelName is the expected base model name (e.g., "llama" for both "llama" and "sql-lora-sheddable")
+func ExpectBBRHeader(modelName, baseModelName string, contentLength string) *extProcPb.ProcessingResponse {
 	return &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &extProcPb.HeadersResponse{
@@ -36,14 +37,20 @@ func ExpectBBRHeader(modelName string) *extProcPb.ProcessingResponse {
 						SetHeaders: []*envoyCorev3.HeaderValueOption{
 							{
 								Header: &envoyCorev3.HeaderValue{
-									Key:      "X-Gateway-Model-Name",
-									RawValue: []byte(modelName),
+									Key:      "Content-Length",
+									RawValue: []byte(contentLength),
 								},
 							},
 							{
 								Header: &envoyCorev3.HeaderValue{
 									Key:      "X-Gateway-Base-Model-Name",
-									RawValue: []byte(""),
+									RawValue: []byte(baseModelName),
+								},
+							},
+							{
+								Header: &envoyCorev3.HeaderValue{
+									Key:      "X-Gateway-Model-Name",
+									RawValue: []byte(modelName),
 								},
 							},
 						},
@@ -94,8 +101,9 @@ func ExpectBBRNoOpHeader() *extProcPb.ProcessingResponse {
 
 // --- Response Expectations (Unary) ---
 
-// ExpectBBRUnaryResponse creates expected response for unary tests.
-func ExpectBBRUnaryResponse(modelName string) *extProcPb.ProcessingResponse {
+// ExpectBBRUnaryResponse creates expected response for unary tests where the body is mutated directly.
+// baseModelName is the expected base model name (e.g., "llama" for both "llama" and "sql-lora-sheddable")
+func ExpectBBRUnaryResponse(modelName, baseModelName string, prompt string) *extProcPb.ProcessingResponse {
 	resp := &extProcPb.ProcessingResponse{}
 
 	if modelName != "" {
@@ -114,7 +122,7 @@ func ExpectBBRUnaryResponse(modelName string) *extProcPb.ProcessingResponse {
 							{
 								Header: &envoyCorev3.HeaderValue{
 									Key:      "X-Gateway-Base-Model-Name",
-									RawValue: []byte(""),
+									RawValue: []byte(baseModelName),
 								},
 							},
 						},

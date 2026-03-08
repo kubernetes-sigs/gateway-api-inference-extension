@@ -61,10 +61,6 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return ret, nil
 	}
 
-	// TODO temp until this is implemented as plugin
-	baseModel := s.ds.GetBaseModel(reqCtx.Request.Headers[ModelHeader])
-	reqCtx.Request.SetHeader(BaseModelHeader, baseModel)
-	logger.Info("Base model from datastore", "baseModel", baseModel)
 
 	bodyMutated := reqCtx.Request.BodyMutated()
 	var mutatedBodyBytes []byte
