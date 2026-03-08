@@ -70,6 +70,7 @@ nav:
       - Use Cases:
         - Serving Multiple Inference Pools (Latest/Main): guides/serving-multiple-inference-pools-latest.md
         - Deploy As a Standalone Request Scheduler: guides/standalone.md
+        - Multimodal Serving: guides/serving-multimodal-models.md
       - Rollout:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md
