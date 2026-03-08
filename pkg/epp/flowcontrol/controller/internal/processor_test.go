@@ -120,6 +120,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 
 	h.processor = NewShardProcessor(
 		h.ctx,
+		"test-pool",
 		h,
 		h.saturationDetector,
 		h.podLocator,
@@ -546,6 +547,7 @@ func TestShardProcessor(t *testing.T) {
 			// A successful test is one that completes without panicking.
 			time.Sleep(50 * time.Millisecond)
 		})
+
 	})
 
 	t.Run("Unit", func(t *testing.T) {
