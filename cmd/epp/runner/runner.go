@@ -438,8 +438,7 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 			setupLog.Error(err, "Failed to construct endpoint pool from options")
 			return nil, err
 		}
-		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
-		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
+		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort).WithEndpointPool(endpointPool), nil
 	}
 }
 

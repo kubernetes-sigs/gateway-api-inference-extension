@@ -30,9 +30,9 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -44,6 +44,13 @@ import (
 var (
 	errPoolNotSynced = errors.New("InferencePool is not initialized in data store")
 	AllPodsPredicate = func(_ fwkdl.Endpoint) bool { return true }
+)
+
+const (
+	// activePortsAnnotation is used to specify which ports on a pod should be considered
+	// as active for inference traffic. The value should be a comma-separated list of port numbers.
+	// Example: "8000,8001,8002"
+	activePortsAnnotation = "inference.networking.k8s.io/active-ports"
 )
 
 // The datastore is a local cache of relevant data for the given InferencePool (currently all pulled from k8s-api)
@@ -78,11 +85,14 @@ type Datastore interface {
 	Clear()
 }
 
+// compile-time type assertion
+var _ Datastore = &datastore{}
+
 // NewDatastore creates a new data store.
 // TODO: modelServerMetricsPort is being deprecated
-func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32, opts ...DatastoreOption) Datastore {
+func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory, modelServerMetricsPort int32) *datastore {
 	// Initialize with defaults
-	store := &datastore{
+	return &datastore{
 		parentCtx:              parentCtx,
 		pool:                   nil,
 		mu:                     sync.RWMutex{},
@@ -92,13 +102,6 @@ func NewDatastore(parentCtx context.Context, epFactory datalayer.EndpointFactory
 		modelServerMetricsPort: modelServerMetricsPort,
 		epf:                    epFactory,
 	}
-
-	// Apply options
-	for _, opt := range opts {
-		opt(store)
-	}
-
-	return store
 }
 
 type datastore struct {
@@ -117,6 +120,11 @@ type datastore struct {
 	// used only if there is only one inference engine per pod
 	modelServerMetricsPort int32 // TODO: deprecating
 	epf                    datalayer.EndpointFactory
+}
+
+func (ds *datastore) WithEndpointPool(pool *datalayer.EndpointPool) *datastore {
+	ds.pool = pool
+	return ds
 }
 
 func (ds *datastore) Clear() {
@@ -278,7 +286,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*fwkdl.EndpointMetadata{}
-	activePorts := extractActivePorts(pod, ds.pool.TargetPorts)
+	activePorts := ds.extractActivePorts(pod)
 	for idx, port := range ds.pool.TargetPorts {
 		if !activePorts.Has(port) {
 			continue
@@ -386,12 +394,25 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	return nil
 }
 
-type DatastoreOption func(*datastore)
-
-func WithEndpointPool(pool *datalayer.EndpointPool) DatastoreOption {
-	return func(d *datastore) {
-		d.pool = pool
+// extractActivePorts extracts the active ports from a pod's annotations.
+func (ds *datastore) extractActivePorts(pod *corev1.Pod) sets.Set[int] {
+	allPorts := sets.New(ds.pool.TargetPorts...)
+	annotations := pod.GetAnnotations()
+	portsAnnotation, ok := annotations[activePortsAnnotation]
+	if !ok {
+		return allPorts
 	}
+
+	activePorts := sets.New[int]()
+	portStrs := strings.Split(portsAnnotation, ",")
+	for _, portStr := range portStrs {
+		var portNum int
+		_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
+		if err == nil && portNum > 0 && allPorts.Has(portNum) {
+			activePorts.Insert(portNum)
+		}
+	}
+	return activePorts
 }
 
 // createEndpointNamespacedName creates a namespaced name for an endpoint based on pod and rank index.
@@ -400,30 +421,5 @@ func createEndpointNamespacedName(pod *corev1.Pod, idx int) types.NamespacedName
 	return types.NamespacedName{
 		Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
 		Namespace: pod.Namespace,
-	}
-}
-
-// activePortsAnnotation is used to specify which ports on a pod should be considered
-// as active for inference traffic. The value should be a comma-separated list of port numbers.
-// Example: "8000,8001,8002"
-const activePortsAnnotation = "inference.networking.k8s.io/active-ports"
-
-// extractActivePorts extracts the active ports from a pod's annotations.
-func extractActivePorts(pod *corev1.Pod, validPorts []int) sets.Set[int] {
-	activePorts := sets.New[int]()
-	allPorts := sets.New(validPorts...)
-	annotations := pod.GetAnnotations()
-	if portsAnnotation, ok := annotations[activePortsAnnotation]; ok {
-		portStrs := strings.Split(portsAnnotation, ",")
-		for _, portStr := range portStrs {
-			var portNum int
-			_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
-			if err == nil && portNum > 0 && allPorts.Has(portNum) {
-				activePorts.Insert(portNum)
-			}
-		}
-		return activePorts
-	} else {
-		return allPorts
 	}
 }
