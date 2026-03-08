@@ -170,8 +170,13 @@ func (in *FlowControlConfig) DeepCopyInto(out *FlowControlConfig) {
 	*out = *in
 	if in.MaxBytes != nil {
 		in, out := &in.MaxBytes, &out.MaxBytes
-		*out = new(int64)
-		**out = **in
+		x := (*in).DeepCopy()
+		*out = &x
+	}
+	if in.MaxRequests != nil {
+		in, out := &in.MaxRequests, &out.MaxRequests
+		x := (*in).DeepCopy()
+		*out = &x
 	}
 	if in.DefaultRequestTTL != nil {
 		in, out := &in.DefaultRequestTTL, &out.DefaultRequestTTL
@@ -242,8 +247,13 @@ func (in *PriorityBandConfig) DeepCopyInto(out *PriorityBandConfig) {
 	*out = *in
 	if in.MaxBytes != nil {
 		in, out := &in.MaxBytes, &out.MaxBytes
-		*out = new(int64)
-		**out = **in
+		x := (*in).DeepCopy()
+		*out = &x
+	}
+	if in.MaxRequests != nil {
+		in, out := &in.MaxRequests, &out.MaxRequests
+		x := (*in).DeepCopy()
+		*out = &x
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -271,13 +272,20 @@ type ParserConfig struct {
 // FlowControlConfig configures the Flow Control layer.
 type FlowControlConfig struct {
 	// +optional
-	// MaxBytes defines the global capacity limit for the Flow Control system.
-	// It represents the maximum aggregate byte size of all active requests across all priority
+	// MaxBytes defines the global maximum aggregate byte size of all active requests across all priority
 	// levels. If this limit is exceeded, new requests will be rejected even if their specific
 	// priority band has capacity.
-	// If 0 or omitted, no global limit is enforced (unlimited).
-	// Default: 0 (unlimited).
-	MaxBytes *int64 `json:"maxBytes,omitempty"`
+	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
+	// If omitted, no global byte limit is enforced.
+	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
+
+	// +optional
+	// MaxRequests defines the global maximum number of concurrent requests across all priority
+	// levels. If this limit is exceeded, new requests will be rejected even if their specific
+	// priority band has capacity.
+	// Accepts standard Kubernetes resource quantities (e.g., "100", "1k").
+	// If omitted, no global request limit is enforced.
+	MaxRequests *resource.Quantity `json:"maxRequests,omitempty"`
 
 	// +optional
 	// DefaultRequestTTL serves as a fallback timeout for requests that do not specify their own
@@ -303,8 +311,8 @@ type FlowControlConfig struct {
 }
 
 func (fcc *FlowControlConfig) String() string {
-	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
-		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands)
+	return fmt.Sprintf("{MaxBytes: %v, MaxRequests: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
+		fcc.MaxBytes, fcc.MaxRequests, fcc.DefaultPriorityBand, fcc.PriorityBands)
 }
 
 // PriorityBandConfig configures a single priority band.
@@ -315,9 +323,15 @@ type PriorityBandConfig struct {
 
 	// +optional
 	// MaxBytes is the maximum number of bytes allowed for this priority band.
-	// If 0 or omitted, the system default is used.
-	// Default: 1 GB.
-	MaxBytes *int64 `json:"maxBytes,omitempty"`
+	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
+	// If omitted, the system default is used.
+	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
+
+	// +optional
+	// MaxRequests is the maximum number of concurrent requests allowed for this priority band.
+	// Accepts standard Kubernetes resource quantities (e.g., "100", "1k").
+	// If omitted, no request limit is enforced.
+	MaxRequests *resource.Quantity `json:"maxRequests,omitempty"`
 
 	// +optional
 	// FairnessPolicyRef specifies the name of the policy that governs flow selection.
@@ -331,6 +345,6 @@ type PriorityBandConfig struct {
 }
 
 func (pbc PriorityBandConfig) String() string {
-	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
-		pbc.Priority, pbc.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, MaxRequests: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
+		pbc.Priority, pbc.MaxBytes, pbc.MaxRequests, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
 }
