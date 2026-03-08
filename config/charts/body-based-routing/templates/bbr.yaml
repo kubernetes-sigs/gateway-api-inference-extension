@@ -16,7 +16,7 @@ spec:
       serviceAccountName: {{ .Values.bbr.name }}-{{ .Release.Name }}
       containers:
       - name: bbr
-        image: {{ .Values.bbr.image.hub }}/{{ .Values.bbr.image.name }}:{{ .Values.bbr.image.tag }}
+        image: {{ .Values.bbr.image.registry }}/{{ .Values.bbr.image.repository }}:{{ .Values.bbr.image.tag }}
         imagePullPolicy: {{ .Values.bbr.image.pullPolicy }}
         args:
         - "--streaming"
