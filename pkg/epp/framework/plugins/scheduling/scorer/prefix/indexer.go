@@ -32,7 +32,7 @@ import (
 // prefix cached.
 type indexer struct {
 	mu             sync.RWMutex
-	hashToPods     map[BlockHash]podSet                         // the lookup data structure to find pods that have the BlockHash cached
+	hashToPods     map[BlockHash]PodSet                         // the lookup data structure to find pods that have the BlockHash cached
 	podToLRU       map[ServerID]*lru.Cache[BlockHash, struct{}] // key is pod namespacedName, value is an LRU cache
 	defaultLRUSize int
 }
@@ -40,7 +40,7 @@ type indexer struct {
 // newIndexer initializes an indexer with size limits and starts cache size reporting.
 func newIndexer(ctx context.Context, defaultLRUSize int) *indexer {
 	indexer := &indexer{
-		hashToPods:     make(map[BlockHash]podSet),
+		hashToPods:     make(map[BlockHash]PodSet),
 		podToLRU:       make(map[ServerID]*lru.Cache[BlockHash, struct{}]),
 		defaultLRUSize: defaultLRUSize,
 	}
@@ -76,7 +76,7 @@ func (i *indexer) Add(hashes []BlockHash, pod Server) {
 	for _, hash := range hashes {
 		podIDs := i.hashToPods[hash]
 		if podIDs == nil {
-			podIDs = make(podSet)
+			podIDs = make(PodSet)
 		}
 		podIDs[pod.ServerID] = struct{}{}
 		i.hashToPods[hash] = podIDs
@@ -86,12 +86,12 @@ func (i *indexer) Add(hashes []BlockHash, pod Server) {
 }
 
 // Get returns a set of servers that have the given prefix hash cached.
-func (i *indexer) Get(hash BlockHash) podSet {
+func (i *indexer) Get(hash BlockHash) PodSet {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
 	pods := i.hashToPods[hash]
-	res := make(podSet, len(pods))
+	res := make(PodSet, len(pods))
 	for pod := range pods {
 		// Deep copy to avoid race condition.
 		res[pod] = struct{}{}
@@ -106,9 +106,9 @@ func (i *indexer) makeEvictionFn(pod ServerID) func(BlockHash, struct{}) {
 		i.mu.Lock()
 		defer i.mu.Unlock()
 		// Remove the pod from the hash→pods map
-		if podSet, ok := i.hashToPods[hash]; ok {
-			delete(podSet, pod)
-			if len(podSet) == 0 {
+		if PodSet, ok := i.hashToPods[hash]; ok {
+			delete(PodSet, pod)
+			if len(PodSet) == 0 {
 				delete(i.hashToPods, hash)
 			}
 		}
