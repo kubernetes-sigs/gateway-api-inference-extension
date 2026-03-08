@@ -42,14 +42,6 @@ extract_image_version() {
   sed -n -E "s|.*image: \"?${repo}:v?([^\"[:space:]]+).*|\\1|p" | head -n1
 }
 
-extract_image_pull_policy() {
-  local repo="$1"
-  awk -v repo="$repo" '
-    index($0, repo) { found=1; next }
-    found && $1 == "imagePullPolicy:" { print $2; exit }
-  '
-}
-
 resolve_manifest_value() {
   local ref="$1"
   local manifest="$2"
@@ -72,13 +64,13 @@ resolve_manifest_value() {
 # The vLLM image versions
 # The GPU image is from https://hub.docker.com/r/vllm/vllm-openai/tags
 VLLM_GPU="${VLLM_GPU:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_GPU_DEPLOY" "0.10.0" extract_image_version "vllm/vllm-openai")}"
-VLLM_GPU_PULL_POLICY="${VLLM_GPU_PULL_POLICY:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_GPU_DEPLOY" "IfNotPresent" extract_image_pull_policy "vllm/vllm-openai")}"
+VLLM_GPU_PULL_POLICY="${VLLM_GPU_PULL_POLICY:-IfNotPresent}"
 # The CPU image is from https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
 VLLM_CPU="${VLLM_CPU:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_CPU_DEPLOY" "0.10.0" extract_image_version "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo")}"
-VLLM_CPU_PULL_POLICY="${VLLM_CPU_PULL_POLICY:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_CPU_DEPLOY" "IfNotPresent" extract_image_pull_policy "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo")}"
+VLLM_CPU_PULL_POLICY="${VLLM_CPU_PULL_POLICY:-IfNotPresent}"
 # The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
 VLLM_SIM="${VLLM_SIM:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_SIM_DEPLOY" "0.3.2-fix" extract_image_version "ghcr.io/llm-d/llm-d-inference-sim")}"
-VLLM_SIM_PULL_POLICY="${VLLM_SIM_PULL_POLICY:-$(resolve_manifest_value "$QUICKSTART_IMAGE_SOURCE_REF" "$VLLM_SIM_DEPLOY" "IfNotPresent" extract_image_pull_policy "ghcr.io/llm-d/llm-d-inference-sim")}"
+VLLM_SIM_PULL_POLICY="${VLLM_SIM_PULL_POLICY:-IfNotPresent}"
 
 echo "Using release tag: ${RELEASE_TAG}"
 echo "Using quickstart image source ref: ${QUICKSTART_IMAGE_SOURCE_REF}"
