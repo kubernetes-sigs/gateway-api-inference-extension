@@ -41,6 +41,7 @@ type Options struct {
 	// Diagnostics.
 	//
 	logging.LoggingOptions      // Logging configuration.
+	Tracing                bool // Enable emitting traces
 	MetricsPort            int  // The metrics port exposed by BBR.
 	GRPCHealthPort         int  // The port for gRPC liveness and readiness probes.
 	EnablePprof            bool // Enables pprof handlers.
@@ -61,6 +62,7 @@ func NewOptions() *Options {
 		GRPCPort:            DefaultGrpcPort,
 		GRPCHealthPort:      DefaultGrpcHealthPort,
 		LoggingOptions:      *logging.NewOptions(),
+		Tracing:             true,
 		MetricsPort:         9090,
 		EnablePprof:         true,
 		SecureServing:       true,
@@ -82,6 +84,7 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"The port used for gRPC liveness and readiness probes.")
 	fs.IntVar(&opts.MetricsPort, "metrics-port", opts.MetricsPort,
 		"The metrics port exposed by BBR.")
+	fs.BoolVar(&opts.Tracing, "tracing", opts.Tracing, "Enables emitting traces.")
 	fs.BoolVar(&opts.MetricsEndpointAuth, "metrics-endpoint-auth", opts.MetricsEndpointAuth,
 		"Enables authentication and authorization of the metrics endpoint.")
 	fs.BoolVar(&opts.Streaming, "streaming", opts.Streaming,

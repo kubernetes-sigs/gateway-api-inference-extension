@@ -14,6 +14,15 @@ bbr:
     # Log verbosity
     v: 3
 
+  tracing:
+    enabled: true
+    # Sets Custom service name for traces if left empty it will default to `gateway-api-inference-extension/bbr`
+    otelServiceName: ""
+    otelExporterEndpoint: "http://localhost:4317"
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "0.1"
+
 provider:
   name: none
 

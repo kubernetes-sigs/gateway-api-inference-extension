@@ -33,13 +33,42 @@ spec:
         - {{ printf "%s:%s" .type .name | quote }}
         {{- end }}
         {{- end }}
-        {{- if not .Values.bbr.multiNamespace }}
+        {{- if .Values.bbr.tracing.enabled}}
+        - --tracing=true
+        {{- else}}
+        - --tracing=false
+        {{- end}}
         env:
+        {{- if not .Values.bbr.multiNamespace }}
         - name: NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
         {{- end }}
+        {{- if .Values.bbr.tracing.enabled}}
+        - name: OTEL_SERVICE_NAME
+          value: {{ .Values.bbr.tracing.otelServiceName | default "gateway-api-inference-extension/bbr" }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.bbr.tracing.otelExporterEndpoint }}
+        - name: OTEL_RESOURCE_ATTRIBUTES_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_RESOURCE_ATTRIBUTES_POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: 'k8s.namespace.name=$(NAMESPACE),k8s.node.name=$(OTEL_RESOURCE_ATTRIBUTES_NODE_NAME),k8s.pod.name=$(OTEL_RESOURCE_ATTRIBUTES_POD_NAME)'
+        - name: OTEL_TRACES_SAMPLER
+          value: {{ .Values.bbr.tracing.sampling.sampler | quote }}
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: {{ .Values.bbr.tracing.sampling.samplerArg | quote }}
+        - name: OTEL_TRACES_EXPORTER
+          value: otlp
+        {{- end}}
         ports:
         - containerPort: {{ .Values.bbr.port }}
         # health check
