@@ -51,4 +51,10 @@ limitations under the License.
 //   - EDF ("Earliest Deadline First") ("edf-ordering-policy"): Orders requests by their absolute deadline
 //     (EnqueueTime + TTL).
 //     This maximizes the number of requests served before their deadlines expire.
+//
+//   - Custom Data ("custom-data-ordering-policy"): Orders requests by user-defined custom data (numeric values only).
+//     This allows for custom ordering of requests based on a list of keys and their directions (ascending or descending).
+//     The custom data is provided as key-value pairs in the request metadata.
+//     The keys and directions are defined in the configuration of the plugin. A default value for a key can be used
+//     if no value is present in the request metadata for that key.
 package ordering
