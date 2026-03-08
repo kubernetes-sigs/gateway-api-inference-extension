@@ -49,6 +49,9 @@ E2E_IMAGE ?= $(IMAGE_TAG)
 # it is possible though to run e2e tests against clusters other than kind. in such a case, it is the user's responsibility to load
 # the image into the cluster.
 E2E_USE_KIND ?= true
+# BBR E2E configuration
+BBR_E2E_MANIFEST_PATH ?= config/manifests/bbr/sim-deployment.yaml
+BBR_E2E_IMAGE ?= $(BBR_IMAGE_TAG)
 
 SYNCER_IMAGE_NAME := lora-syncer
 SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
@@ -176,7 +179,11 @@ test-integration: envtest ## Run integration tests.
 
 .PHONY: test-e2e
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster.
-	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) E2E_IMAGE=$(E2E_IMAGE) USE_KIND=$(E2E_USE_KIND) ./hack/test-e2e.sh
+	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) E2E_IMAGE=$(E2E_IMAGE) USE_KIND=$(E2E_USE_KIND) COMPONENT=epp ./hack/test-e2e.sh
+
+.PHONY: test-e2e-bbr
+test-e2e-bbr: ## Run BBR end-to-end tests against an existing Kubernetes cluster.
+	MANIFEST_PATH=$(PROJECT_DIR)/$(BBR_E2E_MANIFEST_PATH) BBR_E2E_IMAGE=$(BBR_E2E_IMAGE) USE_KIND=$(E2E_USE_KIND) COMPONENT=bbr ./hack/test-e2e.sh
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
