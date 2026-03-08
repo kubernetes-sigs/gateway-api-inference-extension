@@ -62,6 +62,8 @@ import (
 )
 
 const ConcurrencyDetectorType = "concurrency-detector"
+const ConcurrencyModeRequests = "requests"
+const ConcurrencyModeTokens = "tokens"
 
 func init() {
 	fwkplugin.Register(ConcurrencyDetectorType, func(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
@@ -76,15 +78,19 @@ func init() {
 }
 
 var (
-	_ requestcontrol.PreRequest       = &Detector{}
-	_ requestcontrol.ResponseComplete = &Detector{}
-	_ framework.Filter                = &Detector{}
+	_ requestcontrol.PreRequest        = &Detector{}
+	_ requestcontrol.ResponseStreaming = &Detector{}
+	_ requestcontrol.ResponseComplete  = &Detector{}
+	_ framework.Filter                 = &Detector{}
 )
 
 // Detector implements a saturation detector and scheduling filter based on active request concurrency.
 type Detector struct {
-	tracker *concurrencyTracker
-	config  Config
+	requestTracker *concurrencyTracker // requests in flight per endpoint
+	tokenTracker   *concurrencyTracker // tokens in flight per endpoint
+	tokenLedger    *tokenLedger        // requestID -> {endpointID -> tokensAdded}
+	tokenEstimator TokenEstimator      // SimpleTokenEstimator with CharactersPerToken
+	config         Config
 }
 
 // NewDetector creates a new instance of the Concurrency Detector.
@@ -97,10 +103,19 @@ func NewDetector(config Config) *Detector {
 	if config.Headroom < 0 {
 		config.Headroom = DefaultHeadroom
 	}
+	if config.ConcurrencyMode != ConcurrencyModeRequests && config.ConcurrencyMode != ConcurrencyModeTokens {
+		config.ConcurrencyMode = DefaultConcurrencyMode
+	}
+	if config.MaxTokenConcurrency < 0 {
+		config.MaxTokenConcurrency = DefaultMaxTokenConcurrency
+	}
 
 	return &Detector{
-		tracker: newConcurrencyTracker(),
-		config:  config,
+		requestTracker: newConcurrencyTracker(),
+		tokenTracker:   newConcurrencyTracker(),
+		tokenLedger:    newTokenLedger(),
+		tokenEstimator: NewSimpleTokenEstimator(),
+		config:         config,
 	}
 }
 
@@ -124,9 +139,16 @@ func (d *Detector) Saturation(_ context.Context, candidateEndpoints []metrics.Po
 			continue
 		}
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
-		inflight := d.tracker.get(endpointID)
-		totalInflight += inflight
-		totalCapacity += d.config.MaxConcurrency
+
+		if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+			tokenCount := d.tokenTracker.get(endpointID)
+			totalInflight += tokenCount
+			totalCapacity += d.config.MaxTokenConcurrency
+		} else {
+			inflight := d.requestTracker.get(endpointID)
+			totalInflight += inflight
+			totalCapacity += d.config.MaxConcurrency
+		}
 	}
 
 	if totalCapacity == 0 {
@@ -145,40 +167,116 @@ func (d *Detector) Filter(
 	_ *framework.LLMRequest,
 	endpoints []framework.Endpoint,
 ) []framework.Endpoint {
-	limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
-
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
 	filtered := make([]framework.Endpoint, 0, len(endpoints))
 
 	for _, endpoint := range endpoints {
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
-		if d.tracker.get(endpointID) < limit {
-			filtered = append(filtered, endpoint)
+		if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+			limit := int64(float64(d.config.MaxTokenConcurrency) * (1.0 + d.config.Headroom))
+			if d.tokenTracker.get(endpointID) < limit {
+				filtered = append(filtered, endpoint)
+			}
+		} else {
+			limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
+			if d.requestTracker.get(endpointID) < limit {
+				filtered = append(filtered, endpoint)
+			}
 		}
 	}
 	return filtered
 }
 
-// PreRequest increments the atomic in-flight counter for the target endpoint.
-// We assume the scheduling result is valid based on the Director's contract.
-func (d *Detector) PreRequest(_ context.Context, _ *framework.LLMRequest, result *framework.SchedulingResult) {
-	d.tracker.inc(result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String())
+// PreRequest increments the atomic in-flight counter for all target endpoints.
+func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
+	if result == nil || len(result.ProfileResults) == 0 {
+		return
+	}
+
+	for profileName, profileResult := range result.ProfileResults {
+		if profileResult == nil {
+			continue
+		}
+		for _, endpoint := range profileResult.TargetEndpoints {
+			if endpoint == nil || endpoint.GetMetadata() == nil {
+				continue
+			}
+			eid := endpoint.GetMetadata().NamespacedName.String()
+			if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+				tokens := d.tokenEstimator.Estimate(request)
+				d.tokenTracker.add(eid, tokens)
+				d.tokenLedger.add(request.RequestId, eid, tokens, profileName)
+			} else {
+				d.requestTracker.inc(eid)
+			}
+		}
+	}
 }
 
-// ResponseComplete decrements the atomic in-flight counter for the target endpoint.
+// ResponseStreaming is called every time a chunk of response data is received.
+func (d *Detector) ResponseStreaming(ctx context.Context, request *framework.LLMRequest, response *requestcontrol.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+	d.PrefillComplete(ctx, request, response, targetEndpoint)
+}
+
+// PrefillComplete signals that the prefill stage is finished for a request.
+func (d *Detector) PrefillComplete(_ context.Context, request *framework.LLMRequest, _ *requestcontrol.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+	if targetEndpoint == nil || request == nil {
+		return
+	}
+
+	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+		// Specifically remove the "prefill" stage load for this request.
+		eid, tokenCount, ok := d.tokenLedger.removeStage(request.RequestId, "prefill")
+		if ok {
+			d.tokenTracker.add(eid, -tokenCount)
+		}
+	}
+}
+
+// ResponseComplete decrements the atomic in-flight counter for all remaining target endpoints.
 func (d *Detector) ResponseComplete(
 	_ context.Context,
-	_ *framework.LLMRequest,
+	request *framework.LLMRequest,
 	_ *requestcontrol.Response,
 	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
-	d.tracker.dec(targetEndpoint.NamespacedName.String())
+	if request == nil {
+		return
+	}
+
+	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+		// Clean up all remaining stages (usually just "decode").
+		for _, entry := range d.tokenLedger.removeAll(request.RequestId) {
+			d.tokenTracker.add(entry.endpointID, -entry.tokenCount)
+		}
+	} else {
+		// Legacy request-based mode still relies on the primary targetEndpoint.
+		if targetEndpoint != nil {
+			d.requestTracker.dec(targetEndpoint.NamespacedName.String())
+		}
+	}
+}
+
+// GetInFlightTokens returns the current number of in-flight tokens for the given endpoint.
+func (d *Detector) GetInFlightTokens(endpointID string) int64 {
+	return d.tokenTracker.get(endpointID)
+}
+
+// GetInFlightRequests returns the current number of in-flight requests for the given endpoint.
+func (d *Detector) GetInFlightRequests(endpointID string) int64 {
+	return d.requestTracker.get(endpointID)
 }
 
 // DeleteEndpoint removes an endpoint from the concurrency tracker to prevent memory leaks.
 // This should be called by the controller when a backend is removed from the pool.
 func (d *Detector) DeleteEndpoint(endpointID string) {
-	d.tracker.delete(endpointID)
+	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+		for _, e := range d.tokenLedger.removeForEndpoint(endpointID) {
+			d.tokenTracker.add(endpointID, -e.tokenCount)
+		}
+	} else {
+		d.requestTracker.delete(endpointID)
+	}
 }
 
 // concurrencyTracker manages thread-safe counters for inflight requests.
@@ -212,13 +310,18 @@ func (ct *concurrencyTracker) get(endpointID string) int64 {
 // inc increments the inflight count for the given endpoint.
 // It creates the counter if it does not exist.
 func (ct *concurrencyTracker) inc(endpointID string) {
+	ct.add(endpointID, 1)
+}
+
+// Adds detla count for the given endpoint, creates if it doesnt exist
+func (ct *concurrencyTracker) add(endpointID string, delta int64) {
 	// Fast path: Try with read lock first.
 	ct.mu.RLock()
 	counter, exists := ct.counts[endpointID]
 	ct.mu.RUnlock()
 
 	if exists {
-		counter.Add(1)
+		counter.Add(delta)
 		return
 	}
 
@@ -228,12 +331,12 @@ func (ct *concurrencyTracker) inc(endpointID string) {
 
 	// Double-check existence to handle race conditions.
 	if counter, exists = ct.counts[endpointID]; exists {
-		counter.Add(1)
+		counter.Add(delta)
 		return
 	}
 
 	counter = &atomic.Int64{}
-	counter.Store(1)
+	counter.Store(delta)
 	ct.counts[endpointID] = counter
 }
 

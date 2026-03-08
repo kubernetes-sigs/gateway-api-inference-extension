@@ -18,6 +18,7 @@ package concurrencydetector
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -234,6 +235,194 @@ func TestDetector_Lifecycle(t *testing.T) {
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected clean state after DeleteEndpoint")
 }
 
+// TestDetector_TokenSaturation verifies saturation calculation in token mode.
+func TestDetector_TokenSaturation(t *testing.T) {
+	t.Parallel()
+
+	// MaxTokenConcurrency set to 100 for simple testing
+	const maxTokenConcurrency = 100
+	config := Config{
+		ConcurrencyMode:     ConcurrencyModeTokens,
+		MaxTokenConcurrency: maxTokenConcurrency,
+	}
+
+	tests := []struct {
+		name               string
+		requests           []*schedulingtypes.LLMRequest
+		candidateEndpoints []string
+		wantSaturation     float64
+	}{
+		{
+			name:               "empty_requests",
+			requests:           nil,
+			candidateEndpoints: []string{"endpoint-a"},
+			wantSaturation:     0.0,
+		},
+		{
+			name: "single_endpoint_partial_tokens",
+			requests: []*schedulingtypes.LLMRequest{
+				makeTokenRequest("r1", "1234"), // 3 tokens with default estimator
+			},
+			candidateEndpoints: []string{"endpoint-a"},
+			wantSaturation:     0.03, // 3/100
+		},
+		{
+			name: "single_endpoint_half_full",
+			requests: func() []*schedulingtypes.LLMRequest {
+				// "1234567890123456" (16 chars) = 10 tokens. 5 requests = 50 tokens.
+				prompt := "1234567890123456"
+				var reqs []*schedulingtypes.LLMRequest
+				for i := range 5 {
+					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
+				}
+				return reqs
+			}(),
+			candidateEndpoints: []string{"endpoint-a"},
+			wantSaturation:     0.5,
+		},
+		{
+			name: "single_endpoint_full",
+			requests: func() []*schedulingtypes.LLMRequest {
+				// 10 tokens per request * 10 requests = 100 tokens.
+				prompt := "1234567890123456"
+				var reqs []*schedulingtypes.LLMRequest
+				for i := range 10 {
+					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
+				}
+				return reqs
+			}(),
+			candidateEndpoints: []string{"endpoint-a"},
+			wantSaturation:     1.0,
+		},
+		{
+			name: "multiple_endpoints_mixed_token_load",
+			requests: func() []*schedulingtypes.LLMRequest {
+				// endpoint-a: 50 tokens, endpoint-b: 0 (driveTokenLoad targets endpoint-a only)
+				prompt := "1234567890123456"
+				var reqs []*schedulingtypes.LLMRequest
+				for i := range 5 {
+					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
+				}
+				return reqs
+			}(),
+			candidateEndpoints: []string{"endpoint-a", "endpoint-b"},
+			wantSaturation:     0.25, // 50 tokens / (100+100) capacity
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			detector := NewDetector(config)
+
+			driveTokenLoad(ctx, detector, "endpoint-a", tc.requests)
+
+			candidates := make([]backendmetrics.PodMetrics, 0, len(tc.candidateEndpoints))
+			for _, name := range tc.candidateEndpoints {
+				candidates = append(candidates, newFakePodMetric(name))
+			}
+
+			got := detector.Saturation(ctx, candidates)
+			require.InDelta(t, tc.wantSaturation, got, 1e-6, "Token saturation mismatch")
+		})
+	}
+}
+
+// TestDetector_TokenFilter verifies Filter behavior in token mode.
+func TestDetector_TokenFilter(t *testing.T) {
+	t.Parallel()
+
+	config := Config{
+		ConcurrencyMode:     ConcurrencyModeTokens,
+		MaxTokenConcurrency: 100,
+		Headroom:            0.2, // Burst limit = 100 * 1.2 = 120 tokens
+	}
+
+	ctx := context.Background()
+	detector := NewDetector(config)
+	endpointName := "token-filter-endpoint"
+	endpoints := []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)}
+
+	// Drive 110 tokens (just below 120 burst limit) -> endpoint should pass filter
+	// "1234567890123456" = 10 tokens. 11 requests = 110 tokens.
+	prompt := "1234567890123456"
+	reqs := make([]*schedulingtypes.LLMRequest, 0, 11)
+	for i := range 11 {
+		reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
+	}
+	driveTokenLoad(ctx, detector, endpointName, reqs)
+
+	kept := detector.Filter(ctx, nil, nil, endpoints)
+	require.Len(t, kept, 1, "endpoint should pass filter below burst limit")
+
+	// Add one more request to reach 120 tokens -> filtered out
+	driveTokenLoad(ctx, detector, endpointName, []*schedulingtypes.LLMRequest{
+		makeTokenRequest("r12", prompt),
+	})
+	kept = detector.Filter(ctx, nil, nil, endpoints)
+	require.Len(t, kept, 0, "endpoint should be filtered at burst limit")
+}
+
+// TestDetector_TokenLifecycle verifies PreRequest/ResponseComplete with token ledger.
+func TestDetector_TokenLifecycle(t *testing.T) {
+	t.Parallel()
+
+	config := Config{
+		ConcurrencyMode:     ConcurrencyModeTokens,
+		MaxTokenConcurrency: 100,
+	}
+	ctx := context.Background()
+	detector := NewDetector(config)
+	endpointName := "token-lifecycle-endpoint"
+	candidates := []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}
+	targetEndpoint := newStubSchedulingEndpoint(endpointName)
+
+	// PreRequest adds tokens ("1234567890123456" = 10 tokens)
+	req1 := makeTokenRequest("req1", "1234567890123456")
+	detector.PreRequest(ctx, req1, makeSchedulingResult(endpointName))
+	require.InDelta(t, 0.1, detector.Saturation(ctx, candidates), 1e-6, "saturation after 1 request (10 tokens)")
+
+	// ResponseComplete removes tokens
+	detector.ResponseComplete(ctx, req1, nil, targetEndpoint.metadata)
+	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "saturation after completion")
+
+	// Multiple requests, complete some
+	req2 := makeTokenRequest("req2", "1234")
+	req3 := makeTokenRequest("req3", "1234")
+	detector.PreRequest(ctx, req2, makeSchedulingResult(endpointName))
+	detector.PreRequest(ctx, req3, makeSchedulingResult(endpointName))
+	require.InDelta(t, 6.0/100.0, detector.Saturation(ctx, candidates), 1e-6, "6 tokens in flight")
+
+	detector.ResponseComplete(ctx, req2, nil, targetEndpoint.metadata)
+	require.InDelta(t, 3.0/100.0, detector.Saturation(ctx, candidates), 1e-6, "3 tokens after one completion")
+
+	detector.ResponseComplete(ctx, req3, nil, targetEndpoint.metadata)
+	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "empty after all completions")
+}
+
+// TestDetector_TokenDeleteEndpoint verifies DeleteEndpoint, clears token ledger for the endpoint.
+func TestDetector_TokenDeleteEndpoint(t *testing.T) {
+	t.Parallel()
+
+	config := Config{
+		ConcurrencyMode:     ConcurrencyModeTokens,
+		MaxTokenConcurrency: 100,
+	}
+	ctx := context.Background()
+	detector := NewDetector(config)
+	endpointName := "token-delete-endpoint"
+	candidates := []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}
+
+	req := makeTokenRequest("req1", "1234567890123456")
+	req.RequestId = "req1"
+	detector.PreRequest(ctx, req, makeSchedulingResult(endpointName))
+	require.InDelta(t, 0.1, detector.Saturation(ctx, candidates), 1e-6)
+
+	detector.DeleteEndpoint(fullEndpointName(endpointName))
+	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "tokens cleared after DeleteEndpoint")
+}
+
 // TestDetector_ConcurrencyStress performs a targeted race condition check.
 // It verifies that atomic counters remain accurate under heavy contention.
 func TestDetector_ConcurrencyStress(t *testing.T) {
@@ -287,7 +476,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	wg.Wait()
 
 	// Strict white-box check: Counter MUST be exactly 0.
-	finalCount := detector.tracker.get(fullID)
+	finalCount := detector.requestTracker.get(fullID)
 	require.Equal(t, int64(0), finalCount, "atomic counter drift detected; expected 0")
 }
 
@@ -336,3 +525,24 @@ func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
 }
 
 func (f *stubSchedulingEndpoint) GetMetadata() *fwkdl.EndpointMetadata { return f.metadata }
+
+// makeTokenRequest creates an LLMRequest with a prompt.
+func makeTokenRequest(requestID, prompt string) *schedulingtypes.LLMRequest {
+	return &schedulingtypes.LLMRequest{
+		RequestId: requestID,
+		Body: &schedulingtypes.LLMRequestBody{
+			Completions: &schedulingtypes.CompletionsRequest{Prompt: prompt},
+		},
+	}
+}
+
+// driveTokenLoad drives token based load by issuing PreRequest with the given requests.
+func driveTokenLoad(ctx context.Context, detector *Detector, endpointName string, requests []*schedulingtypes.LLMRequest) {
+	res := makeSchedulingResult(endpointName)
+	for i, req := range requests {
+		if req != nil && req.RequestId == "" {
+			req.RequestId = fmt.Sprintf("req%d", i+1)
+		}
+		detector.PreRequest(ctx, req, res)
+	}
+}
