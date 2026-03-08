@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
@@ -155,14 +156,14 @@ func (fcac *FlowControlAdmissionController) Admit(
 		"requestID", reqCtx.SchedulingRequest.RequestId, "priority", priority, "fairnessID", reqCtx.FairnessID)
 
 	fcReq := &flowControlRequest{
-		requestID:         reqCtx.SchedulingRequest.RequestId,
 		fairnessID:        reqCtx.FairnessID,
 		priority:          priority,
 		requestByteSize:   uint64(reqCtx.RequestSize),
+		inferenceRequest:  reqCtx.SchedulingRequest,
+		receivedTimestamp: reqCtx.RequestReceivedTimestamp,
 		reqMetadata:       reqCtx.Request.Metadata,
 		inferencePoolName: fcac.poolName,
 		modelName:         reqCtx.IncomingModelName,
-		targetModelName:   reqCtx.TargetModelName,
 	}
 
 	outcome, err := fcac.flowController.EnqueueAndWait(ctx, fcReq)
@@ -173,25 +174,37 @@ func (fcac *FlowControlAdmissionController) Admit(
 
 // flowControlRequest is an adapter that implements the FlowControlRequest interface.
 type flowControlRequest struct {
-	requestID         string
 	fairnessID        string
 	priority          int
 	requestByteSize   uint64
+	inferenceRequest  *scheduling.LLMRequest
+	receivedTimestamp time.Time
 	reqMetadata       map[string]any
 	inferencePoolName string
 	modelName         string
-	targetModelName   string
 }
 
 var _ flowcontrol.FlowControlRequest = &flowControlRequest{}
 
-func (r *flowControlRequest) ID() string                         { return r.requestID }
-func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
-func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
-func (r *flowControlRequest) GetMetadata() map[string]any        { return r.reqMetadata }
-func (r *flowControlRequest) InferencePoolName() string          { return r.inferencePoolName }
-func (r *flowControlRequest) ModelName() string                  { return r.modelName }
-func (r *flowControlRequest) TargetModelName() string            { return r.targetModelName }
+func (r *flowControlRequest) ID() string {
+	if r.inferenceRequest == nil {
+		return ""
+	}
+	return r.inferenceRequest.RequestId
+}
+func (r *flowControlRequest) InitialEffectiveTTL() time.Duration       { return 0 } // Use controller default.
+func (r *flowControlRequest) ByteSize() uint64                         { return r.requestByteSize }
+func (r *flowControlRequest) InferenceRequest() *scheduling.LLMRequest { return r.inferenceRequest }
+func (r *flowControlRequest) ReceivedTimestamp() time.Time             { return r.receivedTimestamp }
+func (r *flowControlRequest) GetMetadata() map[string]any              { return r.reqMetadata }
+func (r *flowControlRequest) InferencePoolName() string                { return r.inferencePoolName }
+func (r *flowControlRequest) ModelName() string                        { return r.modelName }
+func (r *flowControlRequest) TargetModelName() string {
+	if r.inferenceRequest == nil {
+		return ""
+	}
+	return r.inferenceRequest.TargetModel
+}
 func (r *flowControlRequest) FlowKey() flowcontrol.FlowKey {
 	return flowcontrol.FlowKey{ID: r.fairnessID, Priority: r.priority}
 }
