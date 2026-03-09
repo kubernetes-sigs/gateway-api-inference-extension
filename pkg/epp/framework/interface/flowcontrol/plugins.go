@@ -149,7 +149,7 @@ type UsageLimitPolicy interface {
 	//   - priorities: Ordered list of currently active priority levels (highest first)
 	//
 	// Returns:
-	//   - ceilings: Computed ceiling for each priority (parallel to priorities)
+	//   - ceilings: Computed ceiling for each given priority (n-th ceiling is assigned to the given n-th priority)
 	//     - 0.0 = fully gated (cannot dispatch regardless of current saturation)
 	//     - 1.0 = no gating (can dispatch until fully saturated)
 	//     - Values between 0.0 and 1.0 reserve capacity headroom
