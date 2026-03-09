@@ -13,10 +13,10 @@ func DefaultPolicy() flowcontrol.UsageLimitPolicy {
 	return NewConstPolicy("default-usage-limit-policy", 1.0)
 }
 
-// NewConstPolicy implements a UsageLimitPolicy that returns a fixed threshold
+// NewConstPolicy implements a UsageLimitPolicy that returns a fixed threshold for all priorities.
 func NewConstPolicy(usageLimitName string, threshold float64) flowcontrol.UsageLimitPolicy {
-	return NewPolicyFunc(usageLimitName, func(_ context.Context, _ float64, _ []int, ceilings []float64) []float64 {
-		result := make([]float64, len(ceilings))
+	return NewPolicyFunc(usageLimitName, func(_ context.Context, _ float64, priorities []int) []float64 {
+		result := make([]float64, len(priorities))
 		for i := range result {
 			result[i] = threshold
 		}
@@ -24,8 +24,8 @@ func NewConstPolicy(usageLimitName string, threshold float64) flowcontrol.UsageL
 	})
 }
 
-// NewPolicyFunc implements a UsageLimitPolicy with a single func
-func NewPolicyFunc(usageLimitName string, f func(ctx context.Context, saturation float64, priorities []int, ceilings []float64) (updatedCeilings []float64)) flowcontrol.UsageLimitPolicy {
+// NewPolicyFunc implements a UsageLimitPolicy with a single func.
+func NewPolicyFunc(usageLimitName string, f func(ctx context.Context, saturation float64, priorities []int) (ceilings []float64)) flowcontrol.UsageLimitPolicy {
 	return &usageLimitPolicyFunc{
 		tpe:  fmt.Sprint(usageLimitName, "-type"),
 		name: usageLimitName,
@@ -36,7 +36,7 @@ func NewPolicyFunc(usageLimitName string, f func(ctx context.Context, saturation
 type usageLimitPolicyFunc struct {
 	tpe  string
 	name string
-	f    func(ctx context.Context, saturation float64, priorities []int, ceilings []float64) (updatedCeilings []float64)
+	f    func(ctx context.Context, saturation float64, priorities []int) (ceilings []float64)
 }
 
 func (u usageLimitPolicyFunc) TypedName() plugin.TypedName {
@@ -46,6 +46,6 @@ func (u usageLimitPolicyFunc) TypedName() plugin.TypedName {
 	}
 }
 
-func (u usageLimitPolicyFunc) ComputeLimit(ctx context.Context, saturation float64, priorities []int, ceilings []float64) (updatedCeilings []float64) {
-	return u.f(ctx, saturation, priorities, ceilings)
+func (u usageLimitPolicyFunc) ComputeLimit(ctx context.Context, saturation float64, priorities []int) (ceilings []float64) {
+	return u.f(ctx, saturation, priorities)
 }
