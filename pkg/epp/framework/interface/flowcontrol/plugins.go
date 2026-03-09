@@ -130,27 +130,28 @@ type OrderingPolicy interface {
 // limits) to enable trend-based decisions and smooth limit adjustments over time.
 //
 // Integration:
-// This policy is called during dispatch decision-making, before a request is allowed to proceed. The returned
-// limit is compared against the request's projected saturation impact. If saturation + request > limit, the
-// request is gated (not dispatched).
+// This policy is called during dispatch decision-making, before a request is allowed to proceed. For each
+// priority band, the returned ceiling is compared against current saturation. If saturation exceeds the
+// ceiling for a given priority, requests at that priority are gated (not dispatched).
 //
 // Conformance: Implementations MUST ensure all methods are goroutine-safe.
 type UsageLimitPolicy interface {
 	plugin.Plugin
 
-	// ComputeLimit calculates the dynamic usage limit for a given priority level based on current saturation
+	// ComputeLimit calculates updated usage ceilings for all priority levels based on current saturation
 	// and historical trends.
 	//
 	// Parameters:
 	//   - ctx: Request context for logging, tracing, etc.
-	//   - priority: The priority level for which to compute the limit (higher numbers = higher priority)
-	//   - saturation: Current resource saturation as a fraction [0.0, 1.0]
+	//   - saturation: Current resource saturation as a float in [0.0, 1.0]
+	//   - priorities: Ordered list of priority levels (higher numbers = higher priority)
+	//   - ceilings: Current ceiling for each priority (parallel to priorities), each in [0.0, 1.0]
 	//
 	// Returns:
-	//   - limit: The maximum saturation threshold at which this priority can dispatch
+	//   - updatedCeilings: Adjusted ceilings for each priority (parallel to priorities)
 	//     - 0.0 = fully gated (cannot dispatch regardless of current saturation)
 	//     - 1.0 = no gating (can dispatch until fully saturated)
 	//     - Values between 0.0 and 1.0 reserve capacity headroom
 	//
-	ComputeLimit(ctx context.Context, priority int, saturation float64) (limit float64)
+	ComputeLimit(ctx context.Context, saturation float64, priorities []int, ceilings []float64) (updatedCeilings []float64)
 }

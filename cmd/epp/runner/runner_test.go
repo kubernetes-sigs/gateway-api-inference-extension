@@ -38,8 +38,12 @@ func TestSetupFlowControlPlugins(t *testing.T) {
 	// to the global registry map does not race with reads in sub-tests.
 	const pluginType = "func-plugin"
 	fwkplugin.Register(pluginType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
-		return usagelimits.NewPolicyFunc(name, func(_ context.Context, _ int, _ float64) float64 {
-			return 0.8
+		return usagelimits.NewPolicyFunc(name, func(_ context.Context, _ float64, _ []int, ceilings []float64) []float64 {
+			result := make([]float64, len(ceilings))
+			for i := range result {
+				result[i] = 0.8
+			}
+			return result
 		}), nil
 	})
 	t.Cleanup(func() {
@@ -66,7 +70,7 @@ func TestSetupFlowControlPlugins(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
-				assert.Equal(t, 0.8, policy.ComputeLimit(ctx, tc.priority, tc.saturation))
+				assert.Equal(t, []float64{0.8}, policy.ComputeLimit(ctx, tc.saturation, []int{tc.priority}, []float64{1.0}))
 			})
 		}
 	})
@@ -78,7 +82,7 @@ func TestSetupFlowControlPlugins(t *testing.T) {
 		require.NotNil(t, policy)
 
 		ctx := context.Background()
-		assert.Equal(t, 1.0, policy.ComputeLimit(ctx, 0, 0.5))
+		assert.Equal(t, []float64{1.0}, policy.ComputeLimit(ctx, 0.5, []int{0}, []float64{1.0}))
 	})
 
 	t.Run("falls back to default policy when type is unknown", func(t *testing.T) {
@@ -88,7 +92,7 @@ func TestSetupFlowControlPlugins(t *testing.T) {
 		require.NotNil(t, policy)
 
 		ctx := context.Background()
-		assert.Equal(t, 1.0, policy.ComputeLimit(ctx, 0, 0.5))
+		assert.Equal(t, []float64{1.0}, policy.ComputeLimit(ctx, 0.5, []int{0}, []float64{1.0}))
 	})
 }
 
@@ -106,8 +110,12 @@ func (p *constantPointEightPolicy) TypedName() fwkplugin.TypedName {
 	}
 }
 
-func (p *constantPointEightPolicy) ComputeLimit(_ context.Context, _ int, _ float64) float64 {
-	return 0.8
+func (p *constantPointEightPolicy) ComputeLimit(_ context.Context, _ float64, _ []int, ceilings []float64) []float64 {
+	result := make([]float64, len(ceilings))
+	for i := range result {
+		result[i] = 0.8
+	}
+	return result
 }
 
 // compile-time check that constantPointEightPolicy satisfies the interface.
@@ -132,7 +140,7 @@ func TestSetupFlowControlPlugins_WithUsageLimitPolicyType(t *testing.T) {
 	require.NotNil(t, policy)
 
 	ctx := context.Background()
-	assert.Equal(t, 0.8, policy.ComputeLimit(ctx, 0, 0.5))
+	assert.Equal(t, []float64{0.8}, policy.ComputeLimit(ctx, 0.5, []int{0}, []float64{1.0}))
 }
 
 // TestSetupFlowControlPlugins_StructPlugin verifies that a hand-rolled struct implementing
@@ -163,7 +171,7 @@ func TestSetupFlowControlPlugins_StructPlugin(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, 0.8, policy.ComputeLimit(ctx, tc.priority, tc.saturation))
+			assert.Equal(t, []float64{0.8}, policy.ComputeLimit(ctx, tc.saturation, []int{tc.priority}, []float64{1.0}))
 		})
 	}
 }

@@ -15,11 +15,17 @@ func DefaultPolicy() flowcontrol.UsageLimitPolicy {
 
 // NewConstPolicy implements a UsageLimitPolicy that returns a fixed threshold
 func NewConstPolicy(usageLimitName string, threshold float64) flowcontrol.UsageLimitPolicy {
-	return NewPolicyFunc(usageLimitName, func(_ context.Context, _ int, _ float64) float64 { return threshold })
+	return NewPolicyFunc(usageLimitName, func(_ context.Context, _ float64, _ []int, ceilings []float64) []float64 {
+		result := make([]float64, len(ceilings))
+		for i := range result {
+			result[i] = threshold
+		}
+		return result
+	})
 }
 
 // NewPolicyFunc implements a UsageLimitPolicy with a single func
-func NewPolicyFunc(usageLimitName string, f func(ctx context.Context, priority int, saturation float64) (limit float64)) flowcontrol.UsageLimitPolicy {
+func NewPolicyFunc(usageLimitName string, f func(ctx context.Context, saturation float64, priorities []int, ceilings []float64) (updatedCeilings []float64)) flowcontrol.UsageLimitPolicy {
 	return &usageLimitPolicyFunc{
 		tpe:  fmt.Sprint(usageLimitName, "-type"),
 		name: usageLimitName,
@@ -30,7 +36,7 @@ func NewPolicyFunc(usageLimitName string, f func(ctx context.Context, priority i
 type usageLimitPolicyFunc struct {
 	tpe  string
 	name string
-	f    func(ctx context.Context, priority int, saturation float64) (limit float64)
+	f    func(ctx context.Context, saturation float64, priorities []int, ceilings []float64) (updatedCeilings []float64)
 }
 
 func (u usageLimitPolicyFunc) TypedName() plugin.TypedName {
@@ -40,6 +46,6 @@ func (u usageLimitPolicyFunc) TypedName() plugin.TypedName {
 	}
 }
 
-func (u usageLimitPolicyFunc) ComputeLimit(ctx context.Context, priority int, saturation float64) (limit float64) {
-	return u.f(ctx, priority, saturation)
+func (u usageLimitPolicyFunc) ComputeLimit(ctx context.Context, saturation float64, priorities []int, ceilings []float64) (updatedCeilings []float64) {
+	return u.f(ctx, saturation, priorities, ceilings)
 }
