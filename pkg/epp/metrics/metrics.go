@@ -773,7 +773,7 @@ func RecordSchedulerE2ELatency(duration time.Duration) {
 }
 
 // RecordSchedulerAttempt records a scheduling attempt with status and endpoint information.
-func RecordSchedulerAttempt(err error, result *schedulingframework.SchedulingResult) {
+func RecordSchedulerAttempt(err error, modelName string, result *schedulingframework.SchedulingResult) {
 	if err != nil {
 		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusFailure).Inc()
 	}
@@ -784,7 +784,7 @@ func RecordSchedulerAttempt(err error, result *schedulingframework.SchedulingRes
 	if len(primaryResults.TargetEndpoints) > 0 {
 		metadata := primaryResults.TargetEndpoints[0].GetMetadata()
 
-		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port).Inc()
+		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port, modelName).Inc()
 		return
 	}
 
