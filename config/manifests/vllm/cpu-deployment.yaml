@@ -79,7 +79,6 @@ spec:
           tty: true
           stdin: true
           image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
-          restartPolicy: Always
           imagePullPolicy: Always
           env:
             - name: DYNAMIC_LORA_ROLLOUT_CONFIG
