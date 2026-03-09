@@ -30,8 +30,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
@@ -46,7 +46,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		// routed to a random upstream endpoint.
 		endpoint := s.director.GetRandomEndpoint()
 		if endpoint == nil {
-			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
+			return errcommon.Error{Code: errcommon.Internal, Msg: "no pods available in datastore"}
 		}
 		reqCtx.TargetEndpoint = endpoint.GetIPAddress() + ":" + endpoint.GetPort()
 		reqCtx.RequestSize = 0

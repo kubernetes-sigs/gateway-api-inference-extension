@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
@@ -52,7 +53,7 @@ var setupLog = ctrl.Log.WithName("setup")
 func NewRunner() *Runner {
 	return &Runner{
 		bbrExecutableName: "BBR",
-		requestPlugins:    []framework.PayloadProcessor{},
+		requestPlugins:    []framework.RequestProcessor{},
 		customCollectors:  []prometheus.Collector{},
 	}
 }
@@ -62,7 +63,7 @@ type Runner struct {
 	bbrExecutableName string
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
-	requestPlugins []framework.PayloadProcessor
+	requestPlugins []framework.RequestProcessor
 
 	customCollectors []prometheus.Collector
 }
@@ -172,15 +173,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Construct BBR plugin instances for the in tree plugins that are (1) registered and (2) requested via the --plugin flags
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
-
 		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
-		factory := framework.Registry[plugins.DefaultPluginType]
-		defaultPlugin, err := factory("", nil)
+		bodyToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
 		if err != nil {
-			setupLog.Error(err, "Failed to create default plugin")
+			setupLog.Error(err, "failed to initlialize 'BodyFieldToHeader' plugin")
 			return err
 		}
-		r.requestPlugins = append(r.requestPlugins, defaultPlugin)
+		r.requestPlugins = append(r.requestPlugins, bodyToHeaderPlugin)
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
@@ -195,7 +194,9 @@ func (r *Runner) Run(ctx context.Context) error {
 				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
 				return err
 			}
-			r.requestPlugins = append(r.requestPlugins, instance)
+			if requestProcessor, ok := instance.(framework.RequestProcessor); ok {
+				r.requestPlugins = append(r.requestPlugins, requestProcessor)
+			}
 		}
 	}
 
@@ -235,7 +236,6 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
-	framework.Register(plugins.DefaultPluginType, plugins.DefaultPluginFactory)
 	framework.Register(plugins.BodyFieldToHeaderPluginType, plugins.BodyFieldToHeaderPluginFactory)
 }
 

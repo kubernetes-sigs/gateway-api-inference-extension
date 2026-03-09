@@ -24,11 +24,11 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	errcommmon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
 // NewSchedulerProfile creates a new SchedulerProfile object and returns its pointer.
@@ -117,7 +117,7 @@ func (p *SchedulerProfile) String() string {
 func (p *SchedulerProfile) Run(ctx context.Context, request *fwksched.LLMRequest, cycleState *fwksched.CycleState, candidateEndpoints []fwksched.Endpoint) (*fwksched.ProfileRunResult, error) {
 	endpoints := p.runFilterPlugins(ctx, request, cycleState, candidateEndpoints)
 	if len(endpoints) == 0 {
-		return nil, errutil.Error{Code: errutil.Internal, Msg: "no endpoints available for the given request"}
+		return nil, errcommmon.Error{Code: errcommmon.Internal, Msg: "no endpoints available for the given request"}
 	}
 	// if we got here, there is at least one endpoint to score
 	weightedScorePerEndpoint := p.runScorerPlugins(ctx, request, cycleState, endpoints)

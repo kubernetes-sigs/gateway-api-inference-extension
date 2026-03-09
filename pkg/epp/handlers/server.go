@@ -34,20 +34,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
-func NewStreamingServer(datastore Datastore, director Director) *StreamingServer {
+func NewStreamingServer(datastore Datastore, director Director, parser fwkrh.Parser) *StreamingServer {
 	return &StreamingServer{
 		director:  director,
 		datastore: datastore,
+		parser:    parser,
 	}
 }
 
@@ -68,6 +70,7 @@ type Datastore interface {
 type StreamingServer struct {
 	datastore Datastore
 	director  Director
+	parser    fwkrh.Parser
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
@@ -165,7 +168,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		if reqCtx.ResponseStatusCode != "" {
 			metrics.RecordRequestErrCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseStatusCode)
 		} else if err != nil {
-			metrics.RecordRequestErrCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, errutil.CanonicalCode(err))
+			metrics.RecordRequestErrCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, errcommon.CanonicalCode(err))
 		}
 		if reqCtx.RequestRunning {
 			metrics.DecRunningRequests(reqCtx.IncomingModelName)
@@ -249,7 +252,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				value := string(header.RawValue)
 				loggerTrace.Info("header", "key", header.Key, "value", value)
 				if header.Key == "status" && value != "200" {
-					reqCtx.ResponseStatusCode = errutil.ModelServerError
+					reqCtx.ResponseStatusCode = errcommon.ModelServerError
 				} else if header.Key == "content-type" && strings.Contains(value, "text/event-stream") {
 					reqCtx.modelServerStreaming = true
 					loggerTrace.Info("model server is streaming response")
@@ -276,7 +279,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			}
 			if reqCtx.modelServerStreaming {
 				// Currently we punt on response parsing if the modelServer is streaming, and we just passthrough.
-				s.HandleResponseBodyModelStreaming(ctx, reqCtx, v.ResponseBody.Body)
+				s.HandleResponseBodyModelStreaming(ctx, reqCtx, v.ResponseBody.Body, v.ResponseBody.EndOfStream)
 				if v.ResponseBody.EndOfStream {
 					if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
 						logger.Error(err, "error in HandleResponseBodyComplete")
@@ -303,11 +306,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 					metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
 					metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
-					cachedToken := 0
 					if reqCtx.Usage.PromptTokenDetails != nil {
-						cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
+						metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokenDetails.CachedTokens)
 					}
-					metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
@@ -405,10 +406,10 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 	var resp *extProcPb.ProcessingResponse
 
-	switch errutil.CanonicalCode(err) {
+	switch errcommon.CanonicalCode(err) {
 	// This code can be returned by scheduler when there is no capacity for sheddable
 	// requests.
-	case errutil.InferencePoolResourceExhausted:
+	case errcommon.ResourceExhausted:
 		resp = &extProcPb.ProcessingResponse{
 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 				ImmediateResponse: &extProcPb.ImmediateResponse{
@@ -419,7 +420,7 @@ func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 			},
 		}
 	// This code can be returned by when EPP processes the request and run into server-side errors.
-	case errutil.Internal:
+	case errcommon.Internal:
 		resp = &extProcPb.ProcessingResponse{
 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 				ImmediateResponse: &extProcPb.ImmediateResponse{
@@ -430,7 +431,7 @@ func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 			},
 		}
 	// This code can be returned by the director when there are no candidate pods for the request scheduling.
-	case errutil.ServiceUnavailable:
+	case errcommon.ServiceUnavailable:
 		resp = &extProcPb.ProcessingResponse{
 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 				ImmediateResponse: &extProcPb.ImmediateResponse{
@@ -441,22 +442,12 @@ func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
 			},
 		}
 	// This code can be returned when users provide invalid json request.
-	case errutil.BadRequest:
+	case errcommon.BadRequest:
 		resp = &extProcPb.ProcessingResponse{
 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 				ImmediateResponse: &extProcPb.ImmediateResponse{
 					Status: &envoyTypePb.HttpStatus{
 						Code: envoyTypePb.StatusCode_BadRequest,
-					},
-				},
-			},
-		}
-	case errutil.BadConfiguration:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_NotFound,
 					},
 				},
 			},

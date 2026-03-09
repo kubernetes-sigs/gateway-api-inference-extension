@@ -29,8 +29,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
 const (
@@ -140,22 +140,22 @@ func TestRecordRequestErrorCounter(t *testing.T) {
 				{
 					modelName:       "m10",
 					targetModelName: "t10",
-					error:           errutil.Internal,
+					error:           errcommon.Internal,
 				},
 				{
 					modelName:       "m10",
 					targetModelName: "t10",
-					error:           errutil.Internal,
+					error:           errcommon.Internal,
 				},
 				{
 					modelName:       "m10",
 					targetModelName: "t11",
-					error:           errutil.ModelServerError,
+					error:           errcommon.ModelServerError,
 				},
 				{
 					modelName:       "m20",
 					targetModelName: "t20",
-					error:           errutil.InferencePoolResourceExhausted,
+					error:           errcommon.ResourceExhausted,
 				},
 			},
 		},

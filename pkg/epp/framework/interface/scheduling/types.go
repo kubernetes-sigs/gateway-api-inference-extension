@@ -69,6 +69,11 @@ type LLMRequestBody struct {
 	Responses *ResponsesRequest `json:"responses,omitempty"`
 	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
+
+	// ParsedBody contains the unmarshaled request payload.
+	// Note: Because this handles multiple protocols, this field is strictly expected
+	// to be either a map[string]any (for HTTP/JSON) or a proto.Message (for gRPC).
+	ParsedBody any `json:"-"`
 }
 
 // PromptText returns a plain-text representation of the prompt from whichever

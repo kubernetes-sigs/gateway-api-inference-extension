@@ -33,7 +33,7 @@ func TestError_Error(t *testing.T) {
 				Code: BadRequest,
 				Msg:  "invalid model name",
 			},
-			want: "inference gateway: BadRequest - invalid model name",
+			want: "inference error: BadRequest - invalid model name",
 		},
 		{
 			name: "Internal error",
@@ -41,7 +41,7 @@ func TestError_Error(t *testing.T) {
 				Code: Internal,
 				Msg:  "unexpected condition",
 			},
-			want: "inference gateway: Internal - unexpected condition",
+			want: "inference error: Internal - unexpected condition",
 		},
 		{
 			name: "ServiceUnavailable error",
@@ -49,7 +49,7 @@ func TestError_Error(t *testing.T) {
 				Code: ServiceUnavailable,
 				Msg:  "service unavailable",
 			},
-			want: "inference gateway: ServiceUnavailable - service unavailable",
+			want: "inference error: ServiceUnavailable - service unavailable",
 		},
 		{
 			name: "ModelServerError",
@@ -57,23 +57,15 @@ func TestError_Error(t *testing.T) {
 				Code: ModelServerError,
 				Msg:  "connection timeout",
 			},
-			want: "inference gateway: ModelServerError - connection timeout",
+			want: "inference error: ModelServerError - connection timeout",
 		},
 		{
-			name: "BadConfiguration error",
+			name: "ResourceExhausted error",
 			err: Error{
-				Code: BadConfiguration,
-				Msg:  "missing required field",
-			},
-			want: "inference gateway: BadConfiguration - missing required field",
-		},
-		{
-			name: "InferencePoolResourceExhausted error",
-			err: Error{
-				Code: InferencePoolResourceExhausted,
+				Code: ResourceExhausted,
 				Msg:  "no available pods",
 			},
-			want: "inference gateway: InferencePoolResourceExhausted - no available pods",
+			want: "inference error: ResourceExhausted - no available pods",
 		},
 		{
 			name: "Unknown error",
@@ -81,7 +73,7 @@ func TestError_Error(t *testing.T) {
 				Code: Unknown,
 				Msg:  "something went wrong",
 			},
-			want: "inference gateway: Unknown - something went wrong",
+			want: "inference error: Unknown - something went wrong",
 		},
 		{
 			name: "Empty message",
@@ -89,7 +81,7 @@ func TestError_Error(t *testing.T) {
 				Code: BadRequest,
 				Msg:  "",
 			},
-			want: "inference gateway: BadRequest - ",
+			want: "inference error: BadRequest - ",
 		},
 		{
 			name: "Empty code",
@@ -97,7 +89,7 @@ func TestError_Error(t *testing.T) {
 				Code: "",
 				Msg:  "error occurred",
 			},
-			want: "inference gateway:  - error occurred",
+			want: "inference error:  - error occurred",
 		},
 	}
 
@@ -149,20 +141,12 @@ func TestCanonicalCode(t *testing.T) {
 			want: ModelServerError,
 		},
 		{
-			name: "Error type with BadConfiguration code",
+			name: "Error type with ResourceExhausted code",
 			err: Error{
-				Code: BadConfiguration,
-				Msg:  "invalid config",
-			},
-			want: BadConfiguration,
-		},
-		{
-			name: "Error type with InferencePoolResourceExhausted code",
-			err: Error{
-				Code: InferencePoolResourceExhausted,
+				Code: ResourceExhausted,
 				Msg:  "no resources",
 			},
-			want: InferencePoolResourceExhausted,
+			want: ResourceExhausted,
 		},
 		{
 			name: "Error type with Unknown code",
@@ -218,13 +202,12 @@ func (e customError) Error() string {
 func TestErrorConstants(t *testing.T) {
 	// Verify that error constants match their expected string values
 	tests := map[string]string{
-		Unknown:                        "Unknown",
-		BadRequest:                     "BadRequest",
-		Internal:                       "Internal",
-		ServiceUnavailable:             "ServiceUnavailable",
-		ModelServerError:               "ModelServerError",
-		BadConfiguration:               "BadConfiguration",
-		InferencePoolResourceExhausted: "InferencePoolResourceExhausted",
+		Unknown:            "Unknown",
+		BadRequest:         "BadRequest",
+		Internal:           "Internal",
+		ServiceUnavailable: "ServiceUnavailable",
+		ModelServerError:   "ModelServerError",
+		ResourceExhausted:  "ResourceExhausted",
 	}
 
 	for constant, expected := range tests {

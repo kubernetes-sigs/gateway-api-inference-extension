@@ -24,30 +24,27 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
-func TestProcessRequestBody(t *testing.T) {
+func TestHandleRequestBodyStreaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	cases := []struct {
 		desc      string
 		streaming bool
-		bodys     []*extProcPb.HttpBody
+		body      []byte
 		want      []*extProcPb.ProcessingResponse
 	}{
 		{
 			desc: "no-streaming",
-			bodys: []*extProcPb.HttpBody{
-				{
-					Body: mapToBytes(t, map[string]any{
-						"model": "foo",
-					}),
-				},
-			},
+			body: mapToBytes(t, map[string]any{
+				"model": "foo",
+			}),
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -59,13 +56,13 @@ func TestProcessRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      modelHeader,
+												Key:      ModelHeader,
 												RawValue: []byte("foo"),
 											},
 										},
 										{
 											Header: &basepb.HeaderValue{
-												Key:      baseModelHeader,
+												Key:      BaseModelHeader,
 												RawValue: []byte(""),
 											},
 										},
@@ -80,16 +77,9 @@ func TestProcessRequestBody(t *testing.T) {
 		{
 			desc:      "streaming",
 			streaming: true,
-			bodys: []*extProcPb.HttpBody{
-				{
-					Body: mapToBytes(t, map[string]any{
-						"model": "foo",
-					}),
-				},
-				{
-					EndOfStream: true,
-				},
-			},
+			body: mapToBytes(t, map[string]any{
+				"model": "foo",
+			}),
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestHeaders{
@@ -100,13 +90,13 @@ func TestProcessRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      modelHeader,
+												Key:      ModelHeader,
 												RawValue: []byte("foo"),
 											},
 										},
 										{
 											Header: &basepb.HeaderValue{
-												Key:      baseModelHeader,
+												Key:      BaseModelHeader,
 												RawValue: []byte(""),
 											},
 										},
@@ -137,22 +127,23 @@ func TestProcessRequestBody(t *testing.T) {
 			},
 		},
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			srv := NewServer(tc.streaming, &fakeDatastore{}, []framework.PayloadProcessor{})
-			streamedBody := &streamedBody{}
-			for i, body := range tc.bodys {
-				got, err := srv.processRequestBody(context.Background(), body, streamedBody, log.FromContext(ctx))
-				if err != nil {
-					t.Fatalf("processRequestBody(): %v", err)
-				}
+			modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
+			srv := NewServer(tc.streaming, &fakeDatastore{}, []framework.RequestProcessor{modelToHeaderPlugin}, []framework.ResponseProcessor{})
+			reqCtx := &RequestContext{
+				Request: framework.NewInferenceRequest(),
+			}
+			got, err := srv.HandleRequestBody(ctx, reqCtx, tc.body)
+			if err != nil {
+				t.Fatalf("HandleRequestBody(): %v", err)
+			}
 
-				if i == len(tc.bodys)-1 {
-					if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
-						t.Errorf("processRequestBody returned unexpected response, diff(-want, +got): %v", diff)
-					}
-				}
+			// sort headers in responses for deterministic tests
+			envoytest.SortSetHeadersInResponses(tc.want)
+			envoytest.SortSetHeadersInResponses(got)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
 			}
 		})
 	}

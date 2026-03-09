@@ -22,24 +22,20 @@ import (
 	"errors"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 const (
 	BodyFieldToHeaderPluginType = "body-field-to-header"
-	deafultHeaderPrefix         = "X-Gateway-"
 )
 
 // compile-time type validation
-var _ framework.PayloadProcessor = &BodyFieldToHeaderPlugin{}
-
-// BodyFieldToHeaderPlugin extracts value from a given body field and sets it as HTTP header.
-type BodyFieldToHeaderPlugin struct {
-	typedName  plugin.TypedName
-	fieldName  string
-	headerName string
-}
+var _ framework.RequestProcessor = &BodyFieldToHeaderPlugin{}
 
 // BodyFieldToHeaderConfig defines the JSON configuration structure for the plugin.
 type BodyFieldToHeaderConfig struct {
@@ -49,30 +45,34 @@ type BodyFieldToHeaderConfig struct {
 	HeaderName string `json:"header_name"`
 }
 
-// BodyFieldToHeaderPluginFactory creates a new BodyFieldToHeaderPlugin instance from JSON configuration.
-func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage) (framework.PayloadProcessor, error) {
+// BodyFieldToHeaderPluginFactory defines the factory function for NewBodyFieldToHeaderPlugin.
+func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage) (framework.BBRPlugin, error) {
 	var config BodyFieldToHeaderConfig
 
 	if len(rawParameters) > 0 {
 		if err := json.Unmarshal(rawParameters, &config); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal BodyFieldToHeader plugin configuration: %w", err)
+			return nil, fmt.Errorf("failed to parse the parameters of the '%s' plugin - %w", BodyFieldToHeaderPluginType, err)
 		}
 	}
 
-	if config.FieldName == "" {
-		return nil, errors.New("BodyFieldToHeader plugin requires field_name in configuration")
+	plugin, err := NewBodyFieldToHeaderPlugin(config.FieldName, config.HeaderName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create '%s' plugin - %w", BodyFieldToHeaderPluginType, err)
 	}
 
-	if config.HeaderName == "" {
-		// Create a default header name based on the field name
-		config.HeaderName = deafultHeaderPrefix + config.FieldName
-	}
-
-	return NewBodyFieldToHeaderPlugin(config.FieldName, config.HeaderName).WithName(name), nil
+	return plugin.WithName(name), nil
 }
 
-// NewBodyFieldToHeaderPlugin creates a new BodyFieldToHeaderPlugin with the given configuration.
-func NewBodyFieldToHeaderPlugin(fieldName, headerName string) *BodyFieldToHeaderPlugin {
+// NewBodyFieldToHeaderPlugin initializes a new BodyFieldToHeaderPlugin and returns its pointer.
+func NewBodyFieldToHeaderPlugin(fieldName, headerName string) (*BodyFieldToHeaderPlugin, error) {
+	if fieldName == "" {
+		return nil, errors.New("body fieldName is required in BodyFieldToHeader plugin")
+	}
+
+	if headerName == "" {
+		return nil, errors.New("headerName is required in BodyFieldToHeader plugin")
+	}
+
 	return &BodyFieldToHeaderPlugin{
 		typedName: plugin.TypedName{
 			Type: BodyFieldToHeaderPluginType,
@@ -80,7 +80,14 @@ func NewBodyFieldToHeaderPlugin(fieldName, headerName string) *BodyFieldToHeader
 		},
 		fieldName:  fieldName,
 		headerName: headerName,
-	}
+	}, nil
+}
+
+// BodyFieldToHeaderPlugin extracts value from a given body field and sets it as HTTP header.
+type BodyFieldToHeaderPlugin struct {
+	typedName  plugin.TypedName
+	fieldName  string
+	headerName string
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
@@ -94,23 +101,27 @@ func (p *BodyFieldToHeaderPlugin) WithName(name string) *BodyFieldToHeaderPlugin
 	return p
 }
 
-// Execute extracts value from a given body field and sets it as HTTP header.
-func (p *BodyFieldToHeaderPlugin) Execute(ctx context.Context, headers map[string]string, body map[string]any) (map[string]string, map[string]any, error) {
-	if headers == nil {
-		return headers, body, errors.New("headers map is nil")
-	}
-	if body == nil {
-		return headers, body, errors.New("body map is nil")
+// ProcessRequest extracts value from a given body field and sets it as HTTP header.
+func (p *BodyFieldToHeaderPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) error {
+	if request == nil || request.Headers == nil || request.Body == nil {
+		return nil // this shouldn't happen
 	}
 
-	// Extract field value from body
-	fieldValue, exists := body[p.fieldName]
+	// extract raw field value from body
+	rawFieldValue, exists := request.Body[p.fieldName]
 	if !exists {
-		// Field doesn't exist in body, return headers map unchanged
-		return headers, body, nil
+		metrics.RecordBodyFieldNotFound(p.fieldName)
+		return fmt.Errorf("field '%s' not found in request body", p.fieldName)
 	}
 
-	headers[p.headerName] = fmt.Sprintf("%v", fieldValue)
+	fieldStr := fmt.Sprintf("%v", rawFieldValue) // convert any type to string
+	if fieldStr == "" {
+		metrics.RecordBodyFieldEmpty(p.fieldName)
+		return fmt.Errorf("field '%s' is empty and couldn't be processed", p.fieldName)
+	}
 
-	return headers, body, nil
+	log.FromContext(ctx).V(logutil.VERBOSE).Info("parsed field from body", "field", p.fieldName, "value", fieldStr)
+	request.SetHeader(p.headerName, fieldStr)
+
+	return nil
 }

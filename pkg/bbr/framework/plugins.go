@@ -23,20 +23,19 @@ import (
 )
 
 // BBRPlugin defines the interface for a plugin.
-// This interface should be embedded in all plugins across the code.
+// This interface should be embedded in all plugins across bbr code.
 type BBRPlugin plugin.Plugin // alias
 
-type PayloadProcessor interface {
+type RequestProcessor interface {
 	BBRPlugin
-	// Execute runs the payload processor plugin.
-	// Payload processor can mutate the headers and/or the body of the message.
-	Execute(ctx context.Context, headers map[string]string, body map[string]any) (updatedHeaders map[string]string, updatedBody map[string]any, err error)
+	// ProcessRequest runs the RequestProcessor plugin.
+	// RequestProcessor can mutate the headers and/or the body of the request.
+	ProcessRequest(ctx context.Context, request *InferenceRequest) error
 }
 
-type Guardrail interface {
+type ResponseProcessor interface {
 	BBRPlugin
-	// Execute runs guardrail plugin
-	// Guardrail plugin can inspect the request, including headers and payload and decide
-	// whether the request should be blocked or not.
-	Execute(ctx context.Context, headers map[string]string, body map[string]any) (bool, error)
+	// ProcessResponse runs the ResponseProcessor plugin.
+	// ResponseProcessor can mutate the headers and/or the body of the response.
+	ProcessResponse(ctx context.Context, response *InferenceResponse) error
 }

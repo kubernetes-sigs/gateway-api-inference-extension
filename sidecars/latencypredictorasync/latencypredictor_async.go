@@ -43,6 +43,9 @@ type Predictor struct {
 	bufferMu sync.Mutex
 	pending  []TrainingEntry
 
+	coalesceCh  chan *batchSubmission
+	dispatchSem chan struct{} // semaphore limiting concurrent HTTP dispatches
+
 	wg   sync.WaitGroup
 	done chan struct{}
 }
@@ -51,15 +54,24 @@ func New(config *Config, logger logr.Logger) *Predictor {
 	if config == nil {
 		config = ConfigFromEnv()
 	}
-	p := &Predictor{
-		config:     config,
-		httpClient: &http.Client{Timeout: config.HTTPTimeout},
-		logger:     logger.WithName("latency-predictor-client"),
-		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
-		done:       make(chan struct{}),
+	maxDispatches := config.MaxConcurrentDispatches
+	sem := make(chan struct{}, maxDispatches)
+	for i := 0; i < maxDispatches; i++ {
+		sem <- struct{}{}
 	}
-	p.wg.Add(1)
+
+	p := &Predictor{
+		config:      config,
+		httpClient:  &http.Client{Timeout: config.HTTPTimeout},
+		logger:      logger.WithName("latency-predictor-client"),
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
+		done:        make(chan struct{}),
+		coalesceCh:  make(chan *batchSubmission, 1024),
+		dispatchSem: sem,
+	}
+	p.wg.Add(2)
 	go p.backgroundLoop()
+	go p.coalesceDispatcher()
 	return p
 }
 

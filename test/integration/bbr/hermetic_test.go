@@ -25,6 +25,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
+
+	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
@@ -68,6 +70,9 @@ func TestBodyBasedRouting(t *testing.T) {
 				require.NoError(t, err, "unexpected error during request processing")
 			}
 
+			// sort headers in responses for deterministic tests
+			envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{tc.wantResponse})
+			envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{res})
 			if diff := cmp.Diff(tc.wantResponse, res, protocmp.Transform()); diff != "" {
 				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}
@@ -131,6 +136,9 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				require.NoError(t, err, "unexpected stream error")
 			}
 
+			// sort headers in responses for deterministic tests
+			envoytest.SortSetHeadersInResponses(tc.wantResponses)
+			envoytest.SortSetHeadersInResponses(responses)
 			if diff := cmp.Diff(tc.wantResponses, responses, protocmp.Transform()); diff != "" {
 				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}

@@ -18,6 +18,7 @@ package latencypredictorasync
 
 import (
 	"context"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -55,18 +56,33 @@ type Config struct {
 	MetricsRefreshInterval time.Duration
 	// MaxBulkSize is the maximum number of predictions to send in a single bulk request.
 	MaxBulkSize int
+	// CoalesceWindow is how long the coalescer waits to accumulate concurrent
+	// PredictBulkStrict callers before firing one mega-batch HTTP call.
+	// Set to 0 to disable coalescing (each caller gets its own HTTP call).
+	CoalesceWindow time.Duration
+	// MaxCoalescedRows caps the total number of rows in one coalesced mega-batch,
+	// causing an early dispatch before the window expires.
+	// This is separate from MaxBulkSize (the per-caller row limit).
+	// Default 0 means no row cap (window-only dispatch).
+	MaxCoalescedRows int
+	// MaxConcurrentDispatches limits how many coalesced HTTP calls can be
+	// in-flight to the prediction server simultaneously. Defaults to 36.
+	MaxConcurrentDispatches int
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		TrainingURL:            "http://localhost:8000",
-		PredictionURLs:         []string{"http://localhost:8001"},
-		MaxSampleSize:          1000,
-		FlushInterval:          1 * time.Second,
-		MetricsRefreshInterval: 60 * time.Second,
-		UseNativeXGBoost:       true,
-		HTTPTimeout:            10 * time.Second,
-		MaxBulkSize:            100,
+		TrainingURL:             "http://localhost:8000",
+		PredictionURLs:          []string{"http://localhost:8001"},
+		MaxSampleSize:           1000,
+		FlushInterval:           1 * time.Second,
+		MetricsRefreshInterval:  60 * time.Second,
+		UseNativeXGBoost:        true,
+		HTTPTimeout:             10 * time.Second,
+		MaxBulkSize:             100,
+		CoalesceWindow:          1 * time.Millisecond,
+		MaxCoalescedRows:        0,
+		MaxConcurrentDispatches: 36,
 	}
 }
 
@@ -113,6 +129,23 @@ func ConfigFromEnv() *Config {
 	if bulkStr := os.Getenv("LATENCY_MAX_BULK_SIZE"); bulkStr != "" {
 		if size, err := strconv.Atoi(bulkStr); err == nil && size > 0 && size <= 100 {
 			cfg.MaxBulkSize = size
+		}
+	}
+	if msStr := os.Getenv("LATENCY_COALESCE_WINDOW_MS"); msStr != "" {
+		if ms, err := strconv.Atoi(msStr); err == nil && ms >= 0 {
+			cfg.CoalesceWindow = time.Duration(ms) * time.Millisecond
+		}
+	}
+	if s := os.Getenv("LATENCY_MAX_COALESCED_ROWS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 0 {
+			cfg.MaxCoalescedRows = n
+		}
+	}
+	if s := os.Getenv("LATENCY_MAX_CONCURRENT_DISPATCHES"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			cfg.MaxConcurrentDispatches = n
+		} else {
+			log.Printf("WARNING: LATENCY_MAX_CONCURRENT_DISPATCHES=%q is invalid (must be > 0), using default %d", s, cfg.MaxConcurrentDispatches)
 		}
 	}
 	return cfg

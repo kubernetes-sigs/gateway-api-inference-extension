@@ -27,18 +27,17 @@ type Error struct {
 }
 
 const (
-	Unknown                        = "Unknown"
-	BadRequest                     = "BadRequest"
-	Internal                       = "Internal"
-	ServiceUnavailable             = "ServiceUnavailable"
-	ModelServerError               = "ModelServerError"
-	BadConfiguration               = "BadConfiguration"
-	InferencePoolResourceExhausted = "InferencePoolResourceExhausted"
+	Unknown            = "Unknown"
+	BadRequest         = "BadRequest"
+	Internal           = "Internal"
+	ServiceUnavailable = "ServiceUnavailable"
+	ModelServerError   = "ModelServerError"
+	ResourceExhausted  = "ResourceExhausted"
 )
 
 // Error returns a string version of the error.
 func (e Error) Error() string {
-	return fmt.Sprintf("inference gateway: %s - %s", e.Code, e.Msg)
+	return fmt.Sprintf("inference error: %s - %s", e.Code, e.Msg)
 }
 
 // CanonicalCode returns the error's ErrorCode.

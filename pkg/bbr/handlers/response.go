@@ -17,11 +17,29 @@ limitations under the License.
 package handlers
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
-// HandleResponseHeaders handles response headers.
-func (s *Server) HandleResponseHeaders(headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+// HandleResponseHeaders extracts response headers into reqCtx and returns
+// the ext-proc header response.
+func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+	if headers != nil && headers.Headers != nil {
+		for _, header := range headers.Headers.Headers {
+			reqCtx.Response.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+		}
+	}
+
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_ResponseHeaders{
@@ -31,8 +49,35 @@ func (s *Server) HandleResponseHeaders(headers *eppb.HttpHeaders) ([]*eppb.Proce
 	}, nil
 }
 
-// HandleResponseBody handles response bodies.
-func (s *Server) HandleResponseBody(body *eppb.HttpBody) ([]*eppb.ProcessingResponse, error) {
+// HandleResponseBody handles response bodies by executing response plugins in order.
+func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
+	logger := log.FromContext(ctx)
+	if len(s.responsePlugins) == 0 {
+		return []*eppb.ProcessingResponse{
+			{
+				Response: &eppb.ProcessingResponse_ResponseBody{
+					ResponseBody: &eppb.BodyResponse{},
+				},
+			},
+		}, nil
+	}
+
+	if err := json.Unmarshal(responseBodyBytes, &reqCtx.Response.Body); err != nil {
+		logger.Error(err, "Failed to parse response body as JSON, skipping response plugins")
+		return []*eppb.ProcessingResponse{
+			{
+				Response: &eppb.ProcessingResponse_ResponseBody{
+					ResponseBody: &eppb.BodyResponse{},
+				},
+			},
+		}, nil
+	}
+
+	if err := s.runResponsePlugins(ctx, reqCtx.Response); err != nil {
+		return nil, fmt.Errorf("failed to execute response plugins - %w", err)
+	}
+
+	// TODO: apply mutated body/headers to the response (see #2449 follow-ups).
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_ResponseBody{
@@ -51,4 +96,20 @@ func (s *Server) HandleResponseTrailers(trailers *eppb.HttpTrailers) ([]*eppb.Pr
 			},
 		},
 	}, nil
+}
+
+// runResponsePlugins executes response plugins in the order they were registered.
+func (s *Server) runResponsePlugins(ctx context.Context, response *framework.InferenceResponse) error {
+	var err error
+	for _, plugin := range s.responsePlugins {
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("Executing response plugin", "plugin", plugin.TypedName())
+		before := time.Now()
+		err = plugin.ProcessResponse(ctx, response)
+		metrics.RecordPluginProcessingLatency(responsePluginExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
+		if err != nil {
+			return fmt.Errorf("failed to execute response plugin '%s' - %w", plugin.TypedName(), err)
+		}
+	}
+
+	return nil
 }
