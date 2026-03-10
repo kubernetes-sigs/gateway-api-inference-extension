@@ -46,6 +46,8 @@ This guide describes the current state of exposed metrics and how to scrape them
 | inference_pool_per_pod_queue_size            | Gauge            | The total number of queue for each model server pod under the inference pool         | `model_server_pod`=&lt;model-server-pod-name&gt; <br> `name`=&lt;inference-pool-name&gt;                             | ALPHA       |
 | inference_pool_ready_pods                    | Gauge            | The number of ready pods for an inference server pool.            | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
 | inference_extension_info                     | Gauge            | The general information of the current build.                     | `commit`=&lt;hash-of-the-build&gt; <br> `build_ref`=&lt;ref-to-the-build&gt;        | ALPHA       |
+| inference_extension_scheduler_attempts_total | Counter          | Total number of scheduling attempts.                              | `status`=&lt;success\|failure&gt; <br> `target_model_name`=&lt;target-model-name&gt; <br> `pod_name`=&lt;pod-name&gt; <br> `namespace`=&lt;namespace&gt; <br> `port`=&lt;port&gt; | ALPHA       |
+
 
 ### Dynamic LoRA Adapter Sidecar
 
