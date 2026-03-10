@@ -242,6 +242,7 @@ image-build: ## Build the EPP image using Docker Buildx.
 		--platform=$(PLATFORMS) \
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		--build-arg TARGETARCH=$(TARGETARCH) \
 		--build-arg COMMIT_SHA=${GIT_COMMIT_SHA} \
 		--build-arg BUILD_REF=${BUILD_REF} \
 		$(PUSH) \
@@ -309,6 +310,7 @@ bbr-image-build: ## Build the image using Docker Buildx.
 		--platform=$(PLATFORMS) \
 		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		--build-arg TARGETARCH=$(TARGETARCH) \
 		$(PUSH) \
 		$(LOAD) \
 		$(BBR_IMAGE_BUILD_EXTRA_OPTS) ./
