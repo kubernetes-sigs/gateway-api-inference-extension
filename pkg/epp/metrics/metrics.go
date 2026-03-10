@@ -782,13 +782,14 @@ func RecordSchedulerAttempt(err error, targetModelName string, result *schedulin
 	if result != nil {
 		// Collect endpoint information for successful scheduling attempts
 		primaryResults := result.ProfileResults[result.PrimaryProfileName]
-
-		// prepareRequest (in director.go) selects the first endpoint. Do the same here.
-		if len(primaryResults.TargetEndpoints) > 0 {
-			metadata := primaryResults.TargetEndpoints[0].GetMetadata()
-			if metadata != nil {
-				schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port).Inc()
-				return
+		if primaryResults != nil {
+			// prepareRequest (in director.go) selects the first endpoint. Do the same here.
+			if len(primaryResults.TargetEndpoints) > 0 {
+				metadata := primaryResults.TargetEndpoints[0].GetMetadata()
+				if metadata != nil {
+					schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port).Inc()
+					return
+				}
 			}
 		}
 	}
