@@ -42,8 +42,8 @@
 --8<-- "site-src/_includes/model-server-sim.md"
 
     ```bash
-    export INFERENCE_POOL_NAME=vllm-llama3-8b-instruct
-    export MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
+    export INFERENCE_POOL_NAME=vllm-qwen3-32b
+    export MODEL_NAME=Qwen/Qwen3-32B
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
     ```
 
