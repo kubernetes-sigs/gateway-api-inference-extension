@@ -56,7 +56,7 @@ var (
 	modelLabels     = []string{"model_name", "target_model_name"}
 	modelTypeLabels = []string{"model_name", "target_model_name", "type"}
 	poolLabels      = []string{"name"}
-	enpointLabels   = []string{"pod_name", "namespace", "port"}
+	endpointLabels  = []string{"pod_name", "namespace", "port"}
 
 	// --- Common Buckets ---
 
@@ -322,7 +322,7 @@ var (
 			Name:      "scheduler_attempts_total",
 			Help:      metricsutil.HelpMsgWithStability("Total number of scheduling attempts.", compbasemetrics.ALPHA),
 		},
-		append([]string{"status", "target_model_name"}, enpointLabels...),
+		append([]string{"status", "target_model_name"}, endpointLabels...),
 	)
 
 	pluginProcessingLatencies = prometheus.NewHistogramVec(
