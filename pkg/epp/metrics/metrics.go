@@ -322,7 +322,7 @@ var (
 			Name:      "scheduler_attempts_total",
 			Help:      metricsutil.HelpMsgWithStability("Total number of scheduling attempts.", compbasemetrics.ALPHA),
 		},
-		append([]string{"status"}, enpointLabels...),
+		append([]string{"status", "target_model_name"}, enpointLabels...),
 	)
 
 	pluginProcessingLatencies = prometheus.NewHistogramVec(
@@ -773,23 +773,27 @@ func RecordSchedulerE2ELatency(duration time.Duration) {
 }
 
 // RecordSchedulerAttempt records a scheduling attempt with status and endpoint information.
-func RecordSchedulerAttempt(err error, modelName string, result *schedulingframework.SchedulingResult) {
+func RecordSchedulerAttempt(err error, targetModelName string, result *schedulingframework.SchedulingResult) {
 	if err != nil {
-		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusFailure).Inc()
-	}
-	// Collect endpoint information for successful scheduling attempts
-	primaryResults := result.ProfileResults[result.PrimaryProfileName]
-
-	// prepareRequest (in director.go) selects the first endpoint
-	if len(primaryResults.TargetEndpoints) > 0 {
-		metadata := primaryResults.TargetEndpoints[0].GetMetadata()
-
-		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port, modelName).Inc()
+		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusFailure, "", "", "", "").Inc()
 		return
 	}
 
-	schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess).Inc()
+	if result != nil {
+		// Collect endpoint information for successful scheduling attempts
+		primaryResults := result.ProfileResults[result.PrimaryProfileName]
 
+		// prepareRequest (in director.go) selects the first endpoint. Do the same here.
+		if len(primaryResults.TargetEndpoints) > 0 {
+			metadata := primaryResults.TargetEndpoints[0].GetMetadata()
+			if metadata != nil {
+				schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port).Inc()
+				return
+			}
+		}
+	}
+
+	schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, "", "", "").Inc()
 }
 
 const (
