@@ -47,7 +47,7 @@ spec:
         {{- end }}
         {{- if .Values.bbr.tracing.enabled}}
         - name: OTEL_SERVICE_NAME
-          value: {{ .Values.bbr.tracing.otelServiceName | default "gateway-api-inference-extension/bbr" }}
+          value: {{ .Values.bbr.tracing.otelServiceName }}
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: {{ .Values.bbr.tracing.otelExporterEndpoint }}
         - name: OTEL_RESOURCE_ATTRIBUTES_NODE_NAME
