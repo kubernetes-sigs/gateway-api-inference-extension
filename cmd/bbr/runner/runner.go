@@ -45,6 +45,7 @@ import (
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/tracing"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
@@ -103,6 +104,15 @@ func (r *Runner) Run(ctx context.Context) error {
 	pflag.VisitAll(func(f *pflag.Flag) {
 		flags[f.Name] = f.Value
 	})
+
+	if opts.Tracing {
+		err := tracing.InitTracing(ctx, setupLog, "gateway-api-inference-extension/bbr")
+		if err != nil {
+			setupLog.Error(err, "failed to initialize tracing")
+			return err
+		}
+	}
+
 	setupLog.Info("Flags processed", "flags", flags)
 
 	logutil.InitLogging(&opts.ZapOptions)

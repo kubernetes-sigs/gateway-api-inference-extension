@@ -14,6 +14,14 @@ bbr:
     # Log verbosity
     v: 3
 
+  tracing:
+    enabled: false
+    otelServiceName: "gateway-api-inference-extension/bbr"
+    otelExporterEndpoint: "http://localhost:4317"
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "0.1"
+
 provider:
   name: none
 

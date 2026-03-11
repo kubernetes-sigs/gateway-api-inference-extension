@@ -27,8 +27,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
@@ -75,7 +74,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 					Response: &eppb.CommonResponse{
 						ClearRouteCache: true,
 						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    reqenvoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
+							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
 							RemoveHeaders: reqCtx.Request.RemovedHeaders(),
 						},
 					},
@@ -94,7 +93,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 						// Necessary so that the new headers are used in the routing decision.
 						ClearRouteCache: true,
 						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    reqenvoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
+							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
 							RemoveHeaders: reqCtx.Request.RemovedHeaders(),
 						},
 					},
@@ -121,7 +120,7 @@ func (s *Server) runRequestPlugins(ctx context.Context, request *framework.Infer
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
+	commonResponses := envoy.BuildChunkedBodyResponses(requestBodyBytes, true)
 	for _, commonResp := range commonResponses {
 		responses = append(responses, &eppb.ProcessingResponse{
 			Response: &eppb.ProcessingResponse_RequestBody{
@@ -141,7 +140,7 @@ func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.Http
 
 	if headers != nil && headers.Headers != nil {
 		for _, header := range headers.Headers.Headers {
-			reqCtx.Request.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+			reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
 		}
 	}
 
