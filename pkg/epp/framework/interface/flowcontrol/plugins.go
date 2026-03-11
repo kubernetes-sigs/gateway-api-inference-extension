@@ -118,8 +118,8 @@ type OrderingPolicy interface {
 
 // UsageLimitPolicy computes the usage limit of a priority band dynamically.
 //
-// The goal of this policy is to enable adaptive capacity management by gating low-priority traffic
-// when a request target approaches saturation, reserving capacity for higher-priority requests.
+// The goal of this policy is to enable adaptive capacity management by gating lower-priority traffic
+// as the pool approaches saturation, reserving headroom for future higher-priority requests.
 //
 // Saturation represents resource usage as a fraction of total capacity (0.0 = idle, 1.0 = fully saturated)
 // as described in [/pkg/epp/flowcontrol/contracts.SaturationDetector]
