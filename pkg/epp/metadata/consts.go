@@ -16,6 +16,8 @@ limitations under the License.
 
 package metadata
 
+import "strings"
+
 const (
 	// SubsetFilterNamespace is the key for the outer namespace struct in the metadata field of the extproc request that is used to wrap the subset filter.
 	SubsetFilterNamespace = "envoy.lb.subset_hint"
@@ -39,4 +41,23 @@ const (
 	// This ensures that requests without explicit fairness identifiers are still grouped and managed by the Flow Control
 	// system.
 	DefaultFairnessID = "default-flow"
+	// ModelNameKey is the header BBR sets for routing.
+	ModelNameKey = "x-gateway-model-name"
+	// AudioTranscriptionsPathPrefix is the path prefix for /v1/audio/transcriptions.
+	AudioTranscriptionsPathPrefix = "/v1/audio/transcriptions"
 )
+
+// MultipartModelExtractionPathPrefixes lists path prefixes that get multipart model extraction.
+var MultipartModelExtractionPathPrefixes = []string{
+	AudioTranscriptionsPathPrefix,
+}
+
+// PathAllowedForMultipartModelExtraction returns true if path has a prefix in MultipartModelExtractionPathPrefixes.
+func PathAllowedForMultipartModelExtraction(path string) bool {
+	for _, prefix := range MultipartModelExtractionPathPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}

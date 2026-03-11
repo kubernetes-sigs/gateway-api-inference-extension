@@ -86,15 +86,17 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		reqs          []*extProcPb.ProcessingRequest
-		wantResponses []*extProcPb.ProcessingResponse
-		wantErr       bool
+		name             string
+		reqs             []*extProcPb.ProcessingRequest
+		wantResponses    []*extProcPb.ProcessingResponse
+		wantErr          bool
+		skipExactCompare bool
 	}{
 		{
 			name: "success: adds model header from simple body",
 			reqs: integration.ReqLLM(logger, "test", "foo", "bar"),
 			wantResponses: []*extProcPb.ProcessingResponse{
+				ExpectBBRNoOpHeader(),
 				ExpectBBRHeader("foo"),
 				ExpectBBRBodyPassThrough("test", "foo"),
 			},
@@ -107,6 +109,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				`ra-sheddable","prompt":"test","temperature":0}`,
 			),
 			wantResponses: []*extProcPb.ProcessingResponse{
+				ExpectBBRNoOpHeader(),
 				ExpectBBRHeader("sql-lora-sheddable"),
 				ExpectBBRBodyPassThrough("test", "sql-lora-sheddable"),
 			},
@@ -116,8 +119,25 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			reqs: integration.ReqLLM(logger, "test", "", ""),
 			wantResponses: []*extProcPb.ProcessingResponse{
 				ExpectBBRNoOpHeader(),
+				ExpectBBRNoOpHeader(),
 				ExpectBBRBodyPassThrough("test", ""),
 			},
+		},
+		{
+			name: "audio transcriptions: multipart form sets model header and passes body through",
+			reqs: func() []*extProcPb.ProcessingRequest {
+				headers, body := integration.BuildMultipartTranscriptionsRequest("whisper-1", "audio.mp3", []byte("test audio"))
+				return integration.ReqRaw(headers, string(body))
+			}(),
+			wantResponses: func() []*extProcPb.ProcessingResponse {
+				_, body := integration.BuildMultipartTranscriptionsRequest("whisper-1", "audio.mp3", []byte("test audio"))
+				return []*extProcPb.ProcessingResponse{
+					ExpectBBRNoOpHeader(),
+					ExpectBBRHeader("whisper-1"),
+					ExpectBBRBodyPassThroughRaw(body),
+				}
+			}(),
+			skipExactCompare: true,
 		},
 	}
 
@@ -139,7 +159,29 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			// sort headers in responses for deterministic tests
 			envoytest.SortSetHeadersInResponses(tc.wantResponses)
 			envoytest.SortSetHeadersInResponses(responses)
-			if diff := cmp.Diff(tc.wantResponses, responses, protocmp.Transform()); diff != "" {
+			if tc.skipExactCompare {
+				require.Len(t, responses, len(tc.wantResponses), "response count")
+				var gotModelHeader string
+				var gotBody []byte
+				for _, r := range responses {
+					if rh := r.GetRequestHeaders(); rh != nil && rh.Response != nil && rh.Response.HeaderMutation != nil {
+						for _, h := range rh.Response.HeaderMutation.SetHeaders {
+							if h.GetHeader().GetKey() == "X-Gateway-Model-Name" {
+								gotModelHeader = string(h.GetHeader().GetRawValue())
+								break
+							}
+						}
+					}
+					if rb := r.GetRequestBody(); rb != nil && rb.Response != nil && rb.Response.BodyMutation != nil {
+						if sr := rb.Response.BodyMutation.GetStreamedResponse(); sr != nil {
+							gotBody = sr.Body
+						}
+					}
+				}
+				require.Equal(t, "whisper-1", gotModelHeader, "X-Gateway-Model-Name")
+				_, wantBody := integration.BuildMultipartTranscriptionsRequest("whisper-1", "audio.mp3", []byte("test audio"))
+				require.Equal(t, wantBody, gotBody, "body pass-through")
+			} else if diff := cmp.Diff(tc.wantResponses, responses, protocmp.Transform()); diff != "" {
 				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}
 		})

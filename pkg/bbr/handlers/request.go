@@ -17,9 +17,13 @@ limitations under the License.
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime"
+	"mime/multipart"
+	"strings"
 	"time"
 
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -29,12 +33,30 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
 // HandleRequestBody parses the raw body bytes into reqCtx.Request.Body and processes the request.
 func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
+
+	contentType := getHeader(reqCtx.Request.Headers, "content-type")
+	path := getHeader(reqCtx.Request.Headers, ":path")
+	if strings.Contains(strings.ToLower(contentType), "multipart/form-data") {
+		if !metadata.PathAllowedForMultipartModelExtraction(path) {
+			return bodyOnlyResponse(s.streaming, requestBodyBytes, ret)
+		}
+		model, parseErr := parseModelFromMultipart(requestBodyBytes, contentType)
+		if parseErr != nil || model == "" {
+			metrics.RecordBodyFieldNotFound("model")
+			return bodyOnlyResponse(s.streaming, requestBodyBytes, ret)
+		}
+		metrics.RecordSuccessCounter()
+		reqCtx.Request.SetHeader(ModelHeader, model)
+		reqCtx.Request.SetHeader(BaseModelHeader, s.ds.GetBaseModel(model))
+		return buildHeaderAndBodyResponse(s.streaming, reqCtx, requestBodyBytes, ret)
+	}
 
 	if err := json.Unmarshal(requestBodyBytes, &reqCtx.Request.Body); err != nil {
 		return nil, err
@@ -101,6 +123,78 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 			},
 		},
 	}, nil
+}
+
+func getHeader(headers map[string]string, key string) string {
+	for k, v := range headers {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+	return ""
+}
+
+func bodyOnlyResponse(streaming bool, body []byte, ret []*eppb.ProcessingResponse) ([]*eppb.ProcessingResponse, error) {
+	if streaming {
+		ret = append(ret, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_RequestHeaders{RequestHeaders: &eppb.HeadersResponse{}},
+		})
+		return addStreamedBodyResponse(ret, body), nil
+	}
+	return []*eppb.ProcessingResponse{{Response: &eppb.ProcessingResponse_RequestBody{RequestBody: &eppb.BodyResponse{}}}}, nil
+}
+
+func buildHeaderAndBodyResponse(streaming bool, reqCtx *RequestContext, body []byte, ret []*eppb.ProcessingResponse) ([]*eppb.ProcessingResponse, error) {
+	removed := reqCtx.Request.RemovedHeaders()
+	headerMutation := &eppb.HeaderMutation{
+		SetHeaders: reqenvoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
+	}
+	if len(removed) > 0 {
+		headerMutation.RemoveHeaders = removed
+	}
+	if streaming {
+		ret = append(ret, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &eppb.HeadersResponse{
+					Response: &eppb.CommonResponse{ClearRouteCache: true, HeaderMutation: headerMutation},
+				},
+			},
+		})
+		return addStreamedBodyResponse(ret, body), nil
+	}
+	return []*eppb.ProcessingResponse{{
+		Response: &eppb.ProcessingResponse_RequestBody{
+			RequestBody: &eppb.BodyResponse{
+				Response: &eppb.CommonResponse{ClearRouteCache: true, HeaderMutation: headerMutation},
+			},
+		},
+	}}, nil
+}
+
+func parseModelFromMultipart(body []byte, contentType string) (string, error) {
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return "", err
+	}
+	boundary := params["boundary"]
+	if boundary == "" {
+		return "", nil
+	}
+	r := multipart.NewReader(bytes.NewReader(body), boundary)
+	for {
+		p, err := r.NextPart()
+		if err != nil {
+			break
+		}
+		if p.FormName() == "model" {
+			var buf bytes.Buffer
+			if _, err := buf.ReadFrom(p); err != nil {
+				return "", err
+			}
+			return strings.TrimSpace(buf.String()), nil
+		}
+	}
+	return "", nil
 }
 
 // runRequestPlugins executes request plugins in the order they were registered.

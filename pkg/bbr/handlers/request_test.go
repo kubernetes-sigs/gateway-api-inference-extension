@@ -17,8 +17,10 @@ limitations under the License.
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"strings"
 	"testing"
 
@@ -34,6 +36,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
 func TestHandleRequestHeaders(t *testing.T) {
@@ -508,4 +511,91 @@ func mapToBytes(t *testing.T, m map[string]any) []byte {
 		t.Fatalf("Marshal(): %v", err)
 	}
 	return bytes
+}
+
+func TestHandleRequestBody_Multipart(t *testing.T) {
+	metrics.Register()
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	boundary := "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+	body := buildMultipartBody(t, boundary, "whisper-1", "audio.mp3", []byte("test audio"))
+	contentType := "multipart/form-data; boundary=" + boundary
+
+	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+	reqCtx := &RequestContext{Request: framework.NewInferenceRequest()}
+	reqCtx.Request.Headers["content-type"] = contentType
+	reqCtx.Request.Headers[":path"] = metadata.AudioTranscriptionsPathPrefix
+
+	resp, err := server.HandleRequestBody(ctx, reqCtx, body)
+	if err != nil {
+		t.Fatalf("HandleRequestBody: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(resp))
+	}
+	br := resp[0].GetRequestBody()
+	if br == nil || br.Response == nil || br.Response.HeaderMutation == nil {
+		t.Fatal("expected header mutation")
+	}
+	var modelHeaderVal string
+	for _, h := range br.Response.HeaderMutation.SetHeaders {
+		if strings.EqualFold(h.Header.Key, ModelHeader) {
+			modelHeaderVal = string(h.Header.RawValue)
+			break
+		}
+	}
+	if modelHeaderVal != "whisper-1" {
+		t.Errorf("X-Gateway-Model-Name = %q, want whisper-1", modelHeaderVal)
+	}
+}
+
+func TestHandleRequestBody_MultipartWrongPath(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	boundary := "----boundary"
+	body := buildMultipartBody(t, boundary, "whisper-1", "audio.mp3", []byte("test audio"))
+	contentType := "multipart/form-data; boundary=" + boundary
+
+	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+	reqCtx := &RequestContext{Request: framework.NewInferenceRequest()}
+	reqCtx.Request.Headers["content-type"] = contentType
+	reqCtx.Request.Headers[":path"] = "/v1/video/something"
+
+	resp, err := server.HandleRequestBody(ctx, reqCtx, body)
+	if err != nil {
+		t.Fatalf("HandleRequestBody: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(resp))
+	}
+	br := resp[0].GetRequestBody()
+	if br != nil && br.Response != nil && br.Response.HeaderMutation != nil && len(br.Response.HeaderMutation.SetHeaders) > 0 {
+		t.Error("multipart on non-transcriptions path should not set model headers")
+	}
+}
+
+func buildMultipartBody(t *testing.T, boundary, model, filename string, fileContent []byte) []byte {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if boundary != "" {
+		if err := w.SetBoundary(boundary); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if model != "" {
+		if err := w.WriteField("model", model); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if filename != "" && fileContent != nil {
+		part, err := w.CreateFormFile("file", filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(fileContent); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

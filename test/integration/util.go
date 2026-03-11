@@ -23,11 +23,13 @@ limitations under the License.
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"strconv"
 	"testing"
@@ -65,6 +67,26 @@ func ReqLLM(logger logr.Logger, prompt, model, targetModel string) []*extProcPb.
 // Use this for tests where `streaming: false` or when testing legacy buffered behavior.
 func ReqLLMUnary(logger logr.Logger, prompt, model string) *extProcPb.ProcessingRequest {
 	return GenerateRequest(logger, prompt, model, nil)
+}
+
+// BuildMultipartTranscriptionsRequest builds multipart/form-data with model and file parts.
+func BuildMultipartTranscriptionsRequest(model, filename string, fileContent []byte) (headers map[string]string, body []byte) {
+	boundary := "----boundary"
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	_ = w.SetBoundary(boundary)
+	if model != "" {
+		_ = w.WriteField("model", model)
+	}
+	if filename != "" && fileContent != nil {
+		part, _ := w.CreateFormFile("file", filename)
+		_, _ = part.Write(fileContent)
+	}
+	_ = w.Close()
+	return map[string]string{
+		"content-type": "multipart/form-data; boundary=" + boundary,
+		":path":        "/v1/audio/transcriptions",
+	}, buf.Bytes()
 }
 
 // ReqRaw creates a custom sequence of gRPC messages with specific headers and arbitrary body chunks.
