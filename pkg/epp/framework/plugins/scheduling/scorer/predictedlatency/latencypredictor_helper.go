@@ -231,6 +231,8 @@ func recordTTFTTrainingData(
 		0,
 		prefixCacheScore,
 	)
+	entry.PrefillTokensInFlight = predictedLatencyCtx.prefillTokensAtDispatch
+	entry.DecodeTokensInFlight = predictedLatencyCtx.decodeTokensAtDispatch
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
 	}
@@ -342,6 +344,8 @@ func bulkPredictWithMetrics(
 	prompts []string,
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
+	prefillTokensInFlights []int64,
+	decodeTokensInFlights []int64,
 ) ([]*latencypredictor.PredictionResponse, error) {
 	logger := log.FromContext(ctx)
 
@@ -380,6 +384,12 @@ func bulkPredictWithMetrics(
 			generatedTokenCounts[i],
 			prefixCacheScores[i],
 		)
+		if i < len(prefillTokensInFlights) {
+			bulkRequests[i].PrefillTokensInFlight = prefillTokensInFlights[i]
+		}
+		if i < len(decodeTokensInFlights) {
+			bulkRequests[i].DecodeTokensInFlight = decodeTokensInFlights[i]
+		}
 	}
 
 	// Perform bulk prediction
