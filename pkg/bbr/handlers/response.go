@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -77,11 +78,49 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 		return nil, fmt.Errorf("failed to execute response plugins - %w", err)
 	}
 
-	// TODO: apply mutated body/headers to the response (see #2449 follow-ups).
+	mutatedBytes, err := json.Marshal(reqCtx.Response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal mutated response body - %w", err)
+	}
+
+	reqCtx.Response.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBytes)))
+
+	if s.streaming {
+		var ret []*eppb.ProcessingResponse
+		ret = append(ret, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{
+					Response: &eppb.CommonResponse{
+						ClearRouteCache: true,
+						HeaderMutation: &eppb.HeaderMutation{
+							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+							RemoveHeaders: reqCtx.Response.RemovedHeaders(),
+						},
+					},
+				},
+			},
+		})
+		ret = envoy.AddStreamedResponseBody(ret, mutatedBytes)
+		return ret, nil
+	}
+
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_ResponseBody{
-				ResponseBody: &eppb.BodyResponse{},
+				ResponseBody: &eppb.BodyResponse{
+					Response: &eppb.CommonResponse{
+						ClearRouteCache: true,
+						HeaderMutation: &eppb.HeaderMutation{
+							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+							RemoveHeaders: reqCtx.Response.RemovedHeaders(),
+						},
+						BodyMutation: &eppb.BodyMutation{
+							Mutation: &eppb.BodyMutation_Body{
+								Body: mutatedBytes,
+							},
+						},
+					},
+				},
 			},
 		},
 	}, nil
