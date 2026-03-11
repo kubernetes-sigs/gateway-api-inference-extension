@@ -38,6 +38,8 @@ const (
 	ModelHeader     = "X-Gateway-Model-Name"
 	BaseModelHeader = "X-Gateway-Base-Model-Name"
 
+	contentLengthHeader = "Content-Length"
+
 	requestPluginExtensionPoint  = "request"
 	responsePluginExtensionPoint = "response"
 )

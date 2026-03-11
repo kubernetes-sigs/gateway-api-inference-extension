@@ -18,6 +18,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"testing"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -34,6 +36,7 @@ import (
 func TestHandleRequestBodyStreaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
+	b, _ := json.Marshal(map[string]any{"model": "foo"})
 	cases := []struct {
 		desc      string
 		streaming bool
@@ -42,9 +45,7 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 	}{
 		{
 			desc: "no-streaming",
-			body: mapToBytes(t, map[string]any{
-				"model": "foo",
-			}),
+			body: b,
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestBody{
@@ -66,6 +67,17 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 												RawValue: []byte(""),
 											},
 										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      contentLengthHeader,
+												RawValue: []byte(strconv.Itoa(len(b))),
+											},
+										},
+									},
+								},
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_Body{
+										Body: b,
 									},
 								},
 							},
@@ -77,9 +89,7 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 		{
 			desc:      "streaming",
 			streaming: true,
-			body: mapToBytes(t, map[string]any{
-				"model": "foo",
-			}),
+			body:      b,
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestHeaders{
@@ -100,6 +110,12 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 												RawValue: []byte(""),
 											},
 										},
+										{
+											Header: &basepb.HeaderValue{
+												Key:      contentLengthHeader,
+												RawValue: []byte(strconv.Itoa(len(b))),
+											},
+										},
 									},
 								},
 							},
@@ -113,9 +129,7 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body: mapToBytes(t, map[string]any{
-												"model": "foo",
-											}),
+											Body:        b,
 											EndOfStream: true,
 										},
 									},

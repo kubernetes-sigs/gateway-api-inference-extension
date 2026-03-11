@@ -44,13 +44,13 @@ func TestBodyBasedRouting(t *testing.T) {
 		{
 			name:         "success: extracts model and sets header",
 			req:          integration.ReqLLMUnary(logger, "test", "llama"),
-			wantResponse: ExpectBBRUnaryResponse("llama"),
+			wantResponse: ExpectBBRUnaryResponse("llama", "test"),
 			wantErr:      false,
 		},
 		{
 			name:         "noop: no model parameter in body",
 			req:          integration.ReqLLMUnary(logger, "test1", ""),
-			wantResponse: ExpectBBRUnaryResponse(""), // Expect no headers.
+			wantResponse: ExpectBBRUnaryResponse("", ""), // Expect no headers.
 			wantErr:      false,
 		},
 	}
@@ -95,7 +95,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			name: "success: adds model header from simple body",
 			reqs: integration.ReqLLM(logger, "test", "foo", "bar"),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRHeader("foo"),
+				ExpectBBRHeader("foo", "test"),
 				ExpectBBRBodyPassThrough("test", "foo"),
 			},
 		},
@@ -107,7 +107,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				`ra-sheddable","prompt":"test","temperature":0}`,
 			),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRHeader("sql-lora-sheddable"),
+				ExpectBBRHeader("sql-lora-sheddable", "test"),
 				ExpectBBRBodyPassThrough("test", "sql-lora-sheddable"),
 			},
 		},

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -65,6 +66,13 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 	reqCtx.Request.SetHeader(BaseModelHeader, baseModel)
 	logger.Info("Base model from datastore", "baseModel", baseModel)
 
+	// TODO: check and do this only if the request body actually changed.
+	mutatedBodyBytes, err := json.Marshal(reqCtx.Request.Body)
+	if err != nil {
+		return nil, err
+	}
+	reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBodyBytes)))
+
 	metrics.RecordSuccessCounter()
 
 	if s.streaming {
@@ -81,7 +89,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 				},
 			},
 		})
-		ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		ret = addStreamedBodyResponse(ret, mutatedBodyBytes)
 		return ret, nil
 	}
 
@@ -95,6 +103,11 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 						HeaderMutation: &eppb.HeaderMutation{
 							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
 							RemoveHeaders: reqCtx.Request.RemovedHeaders(),
+						},
+						BodyMutation: &eppb.BodyMutation{
+							Mutation: &eppb.BodyMutation_Body{
+								Body: mutatedBodyBytes,
+							},
 						},
 					},
 				},

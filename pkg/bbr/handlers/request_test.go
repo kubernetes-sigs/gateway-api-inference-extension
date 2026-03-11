@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -211,34 +212,47 @@ func TestHandleRequestBody(t *testing.T) {
 				"model":  1,
 				"prompt": "Tell me a joke",
 			},
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								// Necessary so that the new headers are used in the routing decision.
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*basepb.HeaderValueOption{
-										{
-											Header: &basepb.HeaderValue{
-												Key:      ModelHeader,
-												RawValue: []byte("1"),
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"model": 1, "prompt": "Tell me a joke"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      ModelHeader,
+													RawValue: []byte("1"),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
 											},
 										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      BaseModelHeader,
-												RawValue: []byte(""),
-											},
+									},
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_Body{
+											Body: b,
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			},
+				}
+			}(),
 		},
 		{
 			name: "success",
@@ -246,34 +260,47 @@ func TestHandleRequestBody(t *testing.T) {
 				"model":  "foo",
 				"prompt": "Tell me a joke",
 			},
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								// Necessary so that the new headers are used in the routing decision.
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*basepb.HeaderValueOption{
-										{
-											Header: &basepb.HeaderValue{
-												Key:      ModelHeader,
-												RawValue: []byte("foo"),
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"model": "foo", "prompt": "Tell me a joke"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      ModelHeader,
+													RawValue: []byte("foo"),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
 											},
 										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      BaseModelHeader,
-												RawValue: []byte(""),
-											},
+									},
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_Body{
+											Body: b,
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			},
+				}
+			}(),
 		},
 		{
 			name: "success-with-streaming",
@@ -282,24 +309,33 @@ func TestHandleRequestBody(t *testing.T) {
 				"prompt": "Tell me a joke",
 			},
 			streaming: true,
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{
-							Response: &extProcPb.CommonResponse{
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*basepb.HeaderValueOption{
-										{
-											Header: &basepb.HeaderValue{
-												Key:      ModelHeader,
-												RawValue: []byte("foo"),
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"model": "foo", "prompt": "Tell me a joke"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{
+							RequestHeaders: &extProcPb.HeadersResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      ModelHeader,
+													RawValue: []byte("foo"),
+												},
 											},
-										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      BaseModelHeader,
-												RawValue: []byte(""),
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
 											},
 										},
 									},
@@ -307,27 +343,24 @@ func TestHandleRequestBody(t *testing.T) {
 							},
 						},
 					},
-				},
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body: mapToBytes(t, map[string]any{
-												"model":  "foo",
-												"prompt": "Tell me a joke",
-											}),
-											EndOfStream: true,
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_StreamedResponse{
+											StreamedResponse: &extProcPb.StreamedBodyResponse{
+												Body:        b,
+												EndOfStream: true,
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			},
+				}
+			}(),
 		},
 		{
 			name: "success-with-streaming-large-body",
@@ -363,6 +396,12 @@ func TestHandleRequestBody(t *testing.T) {
 												Header: &basepb.HeaderValue{
 													Key:      BaseModelHeader,
 													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
 												},
 											},
 										},
