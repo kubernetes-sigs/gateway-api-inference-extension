@@ -23,7 +23,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -66,7 +66,7 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
 	for _, header := range resp.ResponseHeaders.Headers.Headers {
-		reqCtx.Response.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+		reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
 	}
 
 	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)
@@ -89,7 +89,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 }
 
 func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
-	commonResponses := reqenvoy.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
+	commonResponses := envoy.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
 	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{

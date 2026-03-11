@@ -28,7 +28,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
@@ -54,7 +54,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	for _, header := range req.RequestHeaders.Headers.Headers {
-		reqCtx.Request.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+		reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
 		switch header.Key {
 		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
@@ -70,22 +70,6 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	return nil
-}
-
-func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) []*extProcPb.ProcessingResponse {
-	commonResponses := reqenvoy.BuildChunkedBodyResponses(requestBodyBytes, true)
-	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
-	for _, commonResp := range commonResponses {
-		resp := &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_RequestBody{
-				RequestBody: &extProcPb.BodyResponse{
-					Response: commonResp,
-				},
-			},
-		}
-		responses = append(responses, resp)
-	}
-	return responses
 }
 
 func (s *StreamingServer) generateRequestHeaderResponse(ctx context.Context, reqCtx *RequestContext) *extProcPb.ProcessingResponse {
