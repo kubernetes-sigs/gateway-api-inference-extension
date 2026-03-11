@@ -27,7 +27,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
@@ -121,7 +120,7 @@ func (s *Server) runRequestPlugins(ctx context.Context, request *framework.Infer
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
+	commonResponses := reqenvoy.BuildChunkedBodyResponses(requestBodyBytes, true)
 	for _, commonResp := range commonResponses {
 		responses = append(responses, &eppb.ProcessingResponse{
 			Response: &eppb.ProcessingResponse_RequestBody{

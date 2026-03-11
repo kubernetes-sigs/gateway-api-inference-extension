@@ -28,7 +28,6 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
@@ -74,7 +73,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 }
 
 func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) []*extProcPb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
+	commonResponses := reqenvoy.BuildChunkedBodyResponses(requestBodyBytes, true)
 	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{

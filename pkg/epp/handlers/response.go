@@ -23,7 +23,6 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -90,7 +89,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 }
 
 func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
+	commonResponses := reqenvoy.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
 	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{
