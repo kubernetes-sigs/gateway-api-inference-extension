@@ -88,8 +88,9 @@ type predictedLatencyCtx struct {
 
 	// Snapshots of per-pod token-in-flight counters captured at dispatch time (PreRequest).
 	// Used when building training entries so that training data reflects scheduling-time load.
-	prefillTokensAtDispatch int64
-	decodeTokensAtDispatch  int64
+	prefillTokensAtDispatch          int64 // snapshot from decode pod counter (used for TPOT training + prediction)
+	prefillTokensAtDispatchOnPrefill int64 // snapshot from prefill pod counter (used for TTFT training in disaggregated mode)
+	decodeTokensAtDispatch           int64
 }
 
 func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
@@ -195,6 +196,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	if predictedLatencyCtx.prefillTargetMetadata != nil {
 		prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
 		t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
+		predictedLatencyCtx.prefillTokensAtDispatchOnPrefill = t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Load()
 	}
 	t.podCounter(&t.prefillTokensInFlight, decodePodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
 	predictedLatencyCtx.prefillTokensAtDispatch = t.podCounter(&t.prefillTokensInFlight, decodePodKey).Load()
@@ -232,6 +234,15 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 
 	if predictedLatencyCtx.ttft == 0 {
 		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		// In disaggregated streaming mode the prefill pod's work is done once TTFT is observed.
+		// Decrement its counter here so it accurately reflects current prefill load.
+		// In non-streaming mode TTFT and completion coincide, so ResponseComplete handles it.
+		if t.config.StreamingMode && predictedLatencyCtx.prefillTargetMetadata != nil {
+			prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
+			if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
+				t.prefillTokensInFlight.Delete(prefillPodKey)
+			}
+		}
 	} else {
 		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
@@ -308,7 +319,9 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	// Also clean up the map entry if the counter reaches zero, preventing stale entries
 	// from accumulating when pods are removed.
 	decodePodKey := targetMetadata.NamespacedName.String()
-	if predictedLatencyCtx.prefillTargetMetadata != nil {
+	// In streaming mode the prefill pod counter was already decremented at first-token time
+	// (ResponseStreaming). In non-streaming mode, decrement it here at completion.
+	if !t.config.StreamingMode && predictedLatencyCtx.prefillTargetMetadata != nil {
 		prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
 		if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
 			t.prefillTokensInFlight.Delete(prefillPodKey)
