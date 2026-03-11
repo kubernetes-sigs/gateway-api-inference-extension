@@ -185,7 +185,26 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		if reason != ttlcache.EvictionReasonExpired {
 			return
 		}
-		predictedLatency.removeRequestFromQueue(item.Key(), item.Value())
+		plCtx := item.Value()
+		predictedLatency.removeRequestFromQueue(item.Key(), plCtx)
+		// If PreRequest ran (counter was incremented), decrement on TTL expiry to prevent
+		// the counter from staying inflated for hung requests.
+		if plCtx.prefillTokensAtDispatch > 0 || plCtx.prefillTokensAtDispatchOnPrefill > 0 {
+			// Prefill pod: only if not already decremented at TTFT (streaming disaggregated path).
+			if plCtx.prefillTargetMetadata != nil && plCtx.ttft == 0 {
+				prefillPodKey := plCtx.prefillTargetMetadata.NamespacedName.String()
+				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, prefillPodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
+					predictedLatency.prefillTokensInFlight.Delete(prefillPodKey)
+				}
+			}
+			// Decode pod.
+			if plCtx.targetMetadata != nil {
+				decodePodKey := plCtx.targetMetadata.NamespacedName.String()
+				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, decodePodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
+					predictedLatency.prefillTokensInFlight.Delete(decodePodKey)
+				}
+			}
+		}
 	})
 
 	go predictedLatency.sloContextStore.Start()
