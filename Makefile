@@ -41,7 +41,7 @@ IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 # The path to the E2E manifest file. It can be overridden by setting the
 # E2E_MANIFEST_PATH environment variable. Note that HF_TOKEN must be set when using the GPU-based manifest.
-E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
+E2E_MANIFEST_PATH ?= test/testdata/test-sim-deployment.yaml
 # E2E_IMAGE specifies the image to be used when running e2e tests using make test-e2e.
 # it defaults to current image tag, but can be overwritten to test specific tags, releases, etc.
 E2E_IMAGE ?= $(IMAGE_TAG)
