@@ -68,15 +68,29 @@ type EndpointPickerConfig struct {
 }
 
 func (cfg EndpointPickerConfig) String() string {
-	return fmt.Sprintf(
-		"{FeatureGates: %v, Plugins: %v, SchedulingProfiles: %v, Data: %v, SaturationDetector: %v, FlowControl: %v}",
-		cfg.FeatureGates,
-		cfg.Plugins,
-		cfg.SchedulingProfiles,
-		cfg.Data,
-		cfg.SaturationDetector,
-		cfg.FlowControl,
-	)
+	var parts []string
+	if len(cfg.FeatureGates) > 0 {
+		parts = append(parts, fmt.Sprintf("FeatureGates: %s", cfg.FeatureGates))
+	}
+	if len(cfg.Plugins) > 0 {
+		parts = append(parts, fmt.Sprintf("Plugins: %v", cfg.Plugins))
+	}
+	if len(cfg.SchedulingProfiles) > 0 {
+		parts = append(parts, fmt.Sprintf("SchedulingProfiles: %v", cfg.SchedulingProfiles))
+	}
+	if cfg.Data != nil {
+		parts = append(parts, fmt.Sprintf("Data: %v", cfg.Data))
+	}
+	if cfg.SaturationDetector != nil {
+		parts = append(parts, fmt.Sprintf("SaturationDetector: %v", cfg.SaturationDetector))
+	}
+	if cfg.FlowControl != nil {
+		parts = append(parts, fmt.Sprintf("FlowControl: %v", cfg.FlowControl))
+	}
+	if cfg.Parser != nil {
+		parts = append(parts, fmt.Sprintf("Parser: %v", cfg.Parser))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // PluginSpec contains the information that describes a plugin that
@@ -100,11 +114,15 @@ type PluginSpec struct {
 }
 
 func (ps PluginSpec) String() string {
-	var parameters string
-	if ps.Parameters != nil {
-		parameters = fmt.Sprintf(", Parameters: %s", ps.Parameters)
+	var parts []string
+	if ps.Name != "" {
+		parts = append(parts, fmt.Sprintf("Name: %s", ps.Name))
 	}
-	return fmt.Sprintf("{%s/%s%s}", ps.Name, ps.Type, parameters)
+	parts = append(parts, fmt.Sprintf("Type: %s", ps.Type))
+	if len(ps.Parameters) > 0 {
+		parts = append(parts, fmt.Sprintf("Parameters: %s", string(ps.Parameters)))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // SchedulingProfile contains the information to create a SchedulingProfile
@@ -122,7 +140,12 @@ type SchedulingProfile struct {
 }
 
 func (sp SchedulingProfile) String() string {
-	return fmt.Sprintf("{Name: %s, Plugins: %v}", sp.Name, sp.Plugins)
+	var parts []string
+	parts = append(parts, fmt.Sprintf("Name: %s", sp.Name))
+	if len(sp.Plugins) > 0 {
+		parts = append(parts, fmt.Sprintf("Plugins: %v", sp.Plugins))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // SchedulingPlugin describes a plugin that will be associated with a
@@ -142,11 +165,12 @@ type SchedulingPlugin struct {
 }
 
 func (sp SchedulingPlugin) String() string {
-	var weight string
+	var parts []string
+	parts = append(parts, fmt.Sprintf("PluginRef: %s", sp.PluginRef))
 	if sp.Weight != nil {
-		weight = fmt.Sprintf(", Weight: %f", *sp.Weight)
+		parts = append(parts, fmt.Sprintf("Weight: %.2f", *sp.Weight))
 	}
-	return fmt.Sprintf("{PluginRef: %s%s}", sp.PluginRef, weight)
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // FeatureGates is a set of flags that enable various experimental features with the EPP
@@ -190,25 +214,20 @@ type SaturationDetector struct {
 }
 
 func (sd *SaturationDetector) String() string {
-	result := ""
-	if sd != nil {
-		if sd.QueueDepthThreshold != 0 {
-			result += fmt.Sprintf("QueueDepthThreshold: %d", sd.QueueDepthThreshold)
-		}
-		if sd.KVCacheUtilThreshold != 0.0 {
-			if len(result) != 0 {
-				result += ", "
-			}
-			result += fmt.Sprintf("KVCacheUtilThreshold: %g", sd.KVCacheUtilThreshold)
-		}
-		if sd.MetricsStalenessThreshold.Duration != 0.0 {
-			if len(result) != 0 {
-				result += ", "
-			}
-			result += fmt.Sprintf("MetricsStalenessThreshold: %s", sd.MetricsStalenessThreshold)
-		}
+	if sd == nil {
+		return "<nil>"
 	}
-	return "{" + result + "}"
+	var parts []string
+	if sd.QueueDepthThreshold != 0 {
+		parts = append(parts, fmt.Sprintf("QueueDepthThreshold: %d", sd.QueueDepthThreshold))
+	}
+	if sd.KVCacheUtilThreshold != 0.0 {
+		parts = append(parts, fmt.Sprintf("KVCacheUtilThreshold: %.2f", sd.KVCacheUtilThreshold))
+	}
+	if sd.MetricsStalenessThreshold.Duration != 0 {
+		parts = append(parts, fmt.Sprintf("MetricsStalenessThreshold: %s", sd.MetricsStalenessThreshold.Duration))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // DataLayerConfig contains the configuration of the DataLayer feature
@@ -219,7 +238,10 @@ type DataLayerConfig struct {
 	Sources []DataLayerSource `json:"sources"`
 }
 
-func (dlc DataLayerConfig) String() string {
+func (dlc *DataLayerConfig) String() string {
+	if dlc == nil {
+		return "<nil>"
+	}
 	return fmt.Sprintf("{Sources: %v}", dlc.Sources)
 }
 
@@ -241,7 +263,12 @@ type DataLayerSource struct {
 }
 
 func (dls DataLayerSource) String() string {
-	return fmt.Sprintf("{PluginRef: %s, Extractors: %v}", dls.PluginRef, dls.Extractors)
+	var parts []string
+	parts = append(parts, fmt.Sprintf("PluginRef: %s", dls.PluginRef))
+	if len(dls.Extractors) > 0 {
+		parts = append(parts, fmt.Sprintf("Extractors: %v", dls.Extractors))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // DataLayerExtractor contains the configuration of an Extractor of the DataLayer feature
@@ -255,7 +282,14 @@ type DataLayerExtractor struct {
 }
 
 func (dle DataLayerExtractor) String() string {
-	return "{PluginRef: " + dle.PluginRef + "}"
+	return fmt.Sprintf("{PluginRef: %s}", dle.PluginRef)
+}
+
+func (pc *ParserConfig) String() string {
+	if pc == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("{PluginRef: %s}", pc.PluginRef)
 }
 
 // ParserConfig contains the configuration for a parser.
@@ -302,8 +336,30 @@ type FlowControlConfig struct {
 }
 
 func (fcc *FlowControlConfig) String() string {
-	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
-		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands)
+	if fcc == nil {
+		return "<nil>"
+	}
+
+	var parts []string
+	if fcc.MaxBytes != nil {
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", *fcc.MaxBytes))
+	} else {
+		parts = append(parts, "MaxBytes: unlimited")
+	}
+
+	if fcc.DefaultRequestTTL != nil {
+		parts = append(parts, fmt.Sprintf("DefaultRequestTTL: %s", fcc.DefaultRequestTTL.Duration))
+	}
+
+	if fcc.DefaultPriorityBand != nil {
+		parts = append(parts, fmt.Sprintf("DefaultPriorityBand: %v", fcc.DefaultPriorityBand))
+	}
+
+	if len(fcc.PriorityBands) > 0 {
+		parts = append(parts, fmt.Sprintf("PriorityBands: %v", fcc.PriorityBands))
+	}
+
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // PriorityBandConfig configures a single priority band.
@@ -331,6 +387,20 @@ type PriorityBandConfig struct {
 }
 
 func (pbc PriorityBandConfig) String() string {
-	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
-		pbc.Priority, pbc.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+	var parts []string
+	parts = append(parts, fmt.Sprintf("Priority: %d", pbc.Priority))
+
+	if pbc.MaxBytes != nil {
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", *pbc.MaxBytes))
+	}
+
+	if pbc.FairnessPolicyRef != "" {
+		parts = append(parts, fmt.Sprintf("FairnessPolicyRef: %s", pbc.FairnessPolicyRef))
+	}
+
+	if pbc.OrderingPolicyRef != "" {
+		parts = append(parts, fmt.Sprintf("OrderingPolicyRef: %s", pbc.OrderingPolicyRef))
+	}
+
+	return "{" + strings.Join(parts, ", ") + "}"
 }
