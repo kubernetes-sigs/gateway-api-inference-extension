@@ -59,7 +59,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/usagelimits"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	flowcontrolplugins "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
@@ -329,8 +328,6 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
 
-	usageLimitPolicy := r.setupFlowControlPlugins(eppConfig.FlowControlConfig.UsageLimitPolicyType, setupLog)
-
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
 	var locator contracts.PodLocator
@@ -347,7 +344,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 			opts.PoolName,
 			eppConfig.FlowControlConfig.Controller,
 			registry, saturationDetector,
-			locator, usageLimitPolicy,
+			locator, eppConfig.FlowControlConfig.UsageLimitPolicy,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
@@ -463,6 +460,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
 	fwkplugin.Register(ordering.FCFSOrderingPolicyType, ordering.FCFSOrderingPolicyFactory)
 	fwkplugin.Register(ordering.EDFOrderingPolicyType, ordering.EDFOrderingPolicyFactory)
+	fwkplugin.Register(usagelimits.NoopUsageLimitPolicyType, usagelimits.NoopPolicyFactory)
 	// Latency predictor plugins
 	fwkplugin.Register(predictedlatency.PredictedLatencyPluginType, predictedlatency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
@@ -637,26 +635,6 @@ func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
 		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
 	}
 	return nil
-}
-
-func (r *Runner) setupFlowControlPlugins(policyType string, logger logr.Logger) flowcontrolplugins.UsageLimitPolicy {
-	if factory, ok := fwkplugin.Registry[policyType]; ok {
-		p, err := factory(policyType, nil, nil)
-		if err != nil {
-			logger.Info("Failed to instantiate usage limit policy plugin, using default", "type", policyType, "error", err)
-			return usagelimits.DefaultPolicy()
-		}
-		policy, ok := p.(flowcontrolplugins.UsageLimitPolicy)
-		if !ok {
-			logger.Info("Registered plugin does not implement UsageLimitPolicy, using default", "type", policyType)
-			return usagelimits.DefaultPolicy()
-		}
-		return policy
-	}
-	if policyType != "" {
-		logger.Info("No plugin registered for usage limit policy type, using default", "type", policyType)
-	}
-	return usagelimits.DefaultPolicy()
 }
 
 func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) datalayer.EndpointFactory {

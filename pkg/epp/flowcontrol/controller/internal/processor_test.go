@@ -125,7 +125,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		h,
 		h.saturationDetector,
 		h.podLocator,
-		usagelimits.DefaultPolicy(),
+		usagelimits.NoopPolicy(),
 		h.clock,
 		expiryCleanupInterval,
 		100,

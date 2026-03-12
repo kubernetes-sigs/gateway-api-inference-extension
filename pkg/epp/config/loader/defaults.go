@@ -202,6 +202,9 @@ func ensureFlowControlLayer(
 	if _, ok := allPlugins[registry.DefaultFairnessPolicyRef]; !ok {
 		return registerDefaultPlugin(cfg, handle, registry.DefaultFairnessPolicyRef)
 	}
+	if _, ok := allPlugins[registry.DefaultUsageLimitPolicyRef]; !ok {
+		return registerDefaultPlugin(cfg, handle, registry.DefaultUsageLimitPolicyRef)
+	}
 	return nil
 }
 

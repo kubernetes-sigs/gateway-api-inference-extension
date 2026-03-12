@@ -302,15 +302,15 @@ type FlowControlConfig struct {
 	PriorityBands []PriorityBandConfig `json:"priorityBands,omitempty"`
 
 	// +optional
-	// UsageLimitPolicyType is the plugin type name for the UsageLimitPolicy.
-	// The named plugin must be registered in the plugin registry before the runner starts.
-	// If omitted or the plugin is not found, a default no-op policy (limit=1.0) is used.
-	UsageLimitPolicyType string `json:"usageLimitPolicyType,omitempty"`
+	// UsageLimit specifies the UsageLimitPolicy plugin to use for adaptive capacity management.
+	// The PluginRef must reference a named plugin instance defined in the top-level Plugins section.
+	// If omitted, a default no-op policy (limit=1.0) is used.
+	UsageLimit *UsageLimitConfig `json:"usageLimit,omitempty"`
 }
 
 func (fcc *FlowControlConfig) String() string {
-	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v, UsageLimitPolicyType: %v}",
-		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands, fcc.UsageLimitPolicyType)
+	return fmt.Sprintf("{MaxBytes: %v, DefaultPriorityBand: %v, PriorityBands: %v, UsageLimit: %v}",
+		fcc.MaxBytes, fcc.DefaultPriorityBand, fcc.PriorityBands, fcc.UsageLimit)
 }
 
 // PriorityBandConfig configures a single priority band.
@@ -339,4 +339,18 @@ type PriorityBandConfig struct {
 func (pbc PriorityBandConfig) String() string {
 	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
 		pbc.Priority, pbc.MaxBytes, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+}
+
+// UsageLimitConfig contains the configuration for a UsageLimitPolicy plugin.
+type UsageLimitConfig struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// PluginRef specifies a particular Plugin instance to be used as the UsageLimitPolicy.
+	// The reference is to the name of an entry of the Plugins defined in the configuration's
+	// Plugins section.
+	PluginRef string `json:"pluginRef"`
+}
+
+func (ulc UsageLimitConfig) String() string {
+	return fmt.Sprintf("{PluginRef: %s}", ulc.PluginRef)
 }

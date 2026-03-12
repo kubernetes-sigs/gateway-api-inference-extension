@@ -2,15 +2,22 @@ package usagelimits
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// DefaultPolicy returns the default UsageLimitPolicy, which always returns 1.0 (no gating).
-func DefaultPolicy() flowcontrol.UsageLimitPolicy {
-	return NewConstPolicy("default-usage-limit-policy", 1.0)
+const NoopUsageLimitPolicyType = "noop-usage-limit-policy"
+
+func NoopPolicyFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+	return NewConstPolicy(name, 1.0), nil
+}
+
+// NoopPolicy returns the default UsageLimitPolicy, which always returns 1.0 (no gating).
+func NoopPolicy() flowcontrol.UsageLimitPolicy {
+	return NewConstPolicy(NoopUsageLimitPolicyType, 1.0)
 }
 
 // NewConstPolicy implements a UsageLimitPolicy that returns a fixed threshold for all priorities.
