@@ -350,11 +350,11 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		// --- Dispatch ---
 		if err := sp.dispatchItem(item); err != nil {
 			sp.logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle",
-				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
-			metrics.IncFlowControlDispatchAttempts(originalBand.PriorityName(), "error")
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.Priority())
+			metrics.IncFlowControlDispatchAttempts(strconv.Itoa(priority), "error")
 			continue // Continue to the next band to maximize work conservation.
 		}
-		metrics.IncFlowControlDispatchAttempts(originalBand.PriorityName(), "success")
+		metrics.IncFlowControlDispatchAttempts(strconv.Itoa(priority), "success")
 		return true
 	}
 	return false
