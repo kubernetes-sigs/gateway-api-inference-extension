@@ -19,7 +19,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"testing"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -51,7 +50,6 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 					Response: &extProcPb.ProcessingResponse_RequestBody{
 						RequestBody: &extProcPb.BodyResponse{
 							Response: &extProcPb.CommonResponse{
-								// Necessary so that the new headers are used in the routing decision.
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
 									SetHeaders: []*basepb.HeaderValueOption{
@@ -67,17 +65,6 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 												RawValue: []byte(""),
 											},
 										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      contentLengthHeader,
-												RawValue: []byte(strconv.Itoa(len(b))),
-											},
-										},
-									},
-								},
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_Body{
-										Body: b,
 									},
 								},
 							},
@@ -108,12 +95,6 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 											Header: &basepb.HeaderValue{
 												Key:      BaseModelHeader,
 												RawValue: []byte(""),
-											},
-										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      contentLengthHeader,
-												RawValue: []byte(strconv.Itoa(len(b))),
 											},
 										},
 									},

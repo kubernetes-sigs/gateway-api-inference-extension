@@ -66,12 +66,16 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 	reqCtx.Request.SetHeader(BaseModelHeader, baseModel)
 	logger.Info("Base model from datastore", "baseModel", baseModel)
 
-	// TODO: check and do this only if the request body actually changed.
-	mutatedBodyBytes, err := json.Marshal(reqCtx.Request.Body)
-	if err != nil {
-		return nil, err
+	bodyMutated := reqCtx.Request.BodyMutated()
+	var mutatedBodyBytes []byte
+	if bodyMutated {
+		var err error
+		mutatedBodyBytes, err = json.Marshal(reqCtx.Request.Body)
+		if err != nil {
+			return nil, err
+		}
+		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBodyBytes)))
 	}
-	reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBodyBytes)))
 
 	metrics.RecordSuccessCounter()
 
@@ -89,27 +93,35 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 				},
 			},
 		})
-		ret = addStreamedBodyResponse(ret, mutatedBodyBytes)
+		if bodyMutated {
+			ret = addStreamedBodyResponse(ret, mutatedBodyBytes)
+		} else {
+			ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		}
 		return ret, nil
+	}
+
+	// Necessary so that the new headers are used in the routing decision.
+	response := &eppb.CommonResponse{
+		ClearRouteCache: true,
+		HeaderMutation: &eppb.HeaderMutation{
+			SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
+			RemoveHeaders: reqCtx.Request.RemovedHeaders(),
+		},
+	}
+	if bodyMutated {
+		response.BodyMutation = &eppb.BodyMutation{
+			Mutation: &eppb.BodyMutation_Body{
+				Body: mutatedBodyBytes,
+			},
+		}
 	}
 
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_RequestBody{
 				RequestBody: &eppb.BodyResponse{
-					Response: &eppb.CommonResponse{
-						// Necessary so that the new headers are used in the routing decision.
-						ClearRouteCache: true,
-						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
-							RemoveHeaders: reqCtx.Request.RemovedHeaders(),
-						},
-						BodyMutation: &eppb.BodyMutation{
-							Mutation: &eppb.BodyMutation_Body{
-								Body: mutatedBodyBytes,
-							},
-						},
-					},
+					Response: response,
 				},
 			},
 		},

@@ -88,7 +88,7 @@ func TestHandleResponseBody_SinglePlugin(t *testing.T) {
 	mutatePlugin := &fakeResponsePlugin{
 		name: "mutator",
 		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
-			response.Body["mutated"] = true
+			response.SetBodyField("mutated", true)
 			return nil
 		},
 	}
@@ -121,14 +121,14 @@ func TestHandleResponseBody_MultiplePlugins(t *testing.T) {
 	plugin1 := &fakeResponsePlugin{
 		name: "plugin1",
 		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
-			response.Body["p1"] = testPluginValue
+			response.SetBodyField("p1", testPluginValue)
 			return nil
 		},
 	}
 	plugin2 := &fakeResponsePlugin{
 		name: "plugin2",
 		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
-			response.Body["p2"] = testPluginValue
+			response.SetBodyField("p2", testPluginValue)
 			return nil
 		},
 	}
@@ -184,7 +184,7 @@ func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 	mutatePlugin := &fakeResponsePlugin{
 		name: "mutator",
 		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
-			response.Body["mutated"] = true
+			response.SetBodyField("mutated", true)
 			return nil
 		},
 	}
@@ -239,6 +239,110 @@ func TestProcessResponseBody_Streaming(t *testing.T) {
 	}
 	if resp2 == nil {
 		t.Fatal("processResponseBody chunk2 should return a response on EoS")
+	}
+}
+
+func TestHandleResponseBody_PluginNoBodyMutation(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	headerOnlyPlugin := &fakeResponsePlugin{
+		name: "header-only",
+		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
+			response.SetHeader("X-Custom-Response", "added")
+			return nil
+		},
+	}
+
+	tests := []struct {
+		name      string
+		streaming bool
+		want      []*extProcPb.ProcessingResponse
+	}{
+		{
+			name: "unary - header-only plugin skips body mutation",
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key:      "X-Custom-Response",
+												RawValue: []byte("added"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:      "streaming - header-only plugin passes original body",
+			streaming: true,
+			want: func() []*extProcPb.ProcessingResponse {
+				responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+							ResponseHeaders: &extProcPb.HeadersResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      "X-Custom-Response",
+													RawValue: []byte("added"),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						Response: &extProcPb.ProcessingResponse_ResponseBody{
+							ResponseBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_StreamedResponse{
+											StreamedResponse: &extProcPb.StreamedBodyResponse{
+												Body:        responseBody,
+												EndOfStream: true,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := NewServer(tc.streaming, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{headerOnlyPlugin})
+			responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
+			resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
+			if err != nil {
+				t.Fatalf("HandleResponseBody returned unexpected error: %v", err)
+			}
+
+			envoytest.SortSetHeadersInResponses(tc.want)
+			envoytest.SortSetHeadersInResponses(resp)
+			if diff := cmp.Diff(tc.want, resp, protocmp.Transform()); diff != "" {
+				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
 	}
 }
 

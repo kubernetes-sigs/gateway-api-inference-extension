@@ -37,6 +37,7 @@ type InferenceMessage struct {
 	// mutations
 	mutatedHeaders map[string]string
 	removedHeaders sets.Set[string]
+	bodyMutated    bool
 }
 
 func (r *InferenceMessage) SetHeader(key string, value string) {
@@ -61,6 +62,27 @@ func (r *InferenceMessage) MutatedHeaders() map[string]string {
 
 func (r *InferenceMessage) RemovedHeaders() []string {
 	return r.removedHeaders.UnsortedList()
+}
+
+func (r *InferenceMessage) SetBody(body map[string]any) {
+	r.Body = body
+	r.bodyMutated = true
+}
+
+func (r *InferenceMessage) SetBodyField(key string, value any) {
+	r.Body[key] = value
+	r.bodyMutated = true
+}
+
+func (r *InferenceMessage) RemoveBodyField(key string) {
+	if _, ok := r.Body[key]; ok {
+		delete(r.Body, key)
+		r.bodyMutated = true
+	}
+}
+
+func (r *InferenceMessage) BodyMutated() bool {
+	return r.bodyMutated
 }
 
 type InferenceRequest struct {

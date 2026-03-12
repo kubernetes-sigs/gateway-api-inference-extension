@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 func TestHandleRequestHeaders(t *testing.T) {
@@ -212,47 +213,33 @@ func TestHandleRequestBody(t *testing.T) {
 				"model":  1,
 				"prompt": "Tell me a joke",
 			},
-			want: func() []*extProcPb.ProcessingResponse {
-				b, _ := json.Marshal(map[string]any{"model": 1, "prompt": "Tell me a joke"})
-				return []*extProcPb.ProcessingResponse{
-					{
-						Response: &extProcPb.ProcessingResponse_RequestBody{
-							RequestBody: &extProcPb.BodyResponse{
-								Response: &extProcPb.CommonResponse{
-									ClearRouteCache: true,
-									HeaderMutation: &extProcPb.HeaderMutation{
-										SetHeaders: []*basepb.HeaderValueOption{
-											{
-												Header: &basepb.HeaderValue{
-													Key:      ModelHeader,
-													RawValue: []byte("1"),
-												},
-											},
-											{
-												Header: &basepb.HeaderValue{
-													Key:      BaseModelHeader,
-													RawValue: []byte(""),
-												},
-											},
-											{
-												Header: &basepb.HeaderValue{
-													Key:      contentLengthHeader,
-													RawValue: []byte(strconv.Itoa(len(b))),
-												},
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key:      ModelHeader,
+												RawValue: []byte("1"),
 											},
 										},
-									},
-									BodyMutation: &extProcPb.BodyMutation{
-										Mutation: &extProcPb.BodyMutation_Body{
-											Body: b,
+										{
+											Header: &basepb.HeaderValue{
+												Key:      BaseModelHeader,
+												RawValue: []byte(""),
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-				}
-			}(),
+				},
+			},
 		},
 		{
 			name: "success",
@@ -260,47 +247,33 @@ func TestHandleRequestBody(t *testing.T) {
 				"model":  "foo",
 				"prompt": "Tell me a joke",
 			},
-			want: func() []*extProcPb.ProcessingResponse {
-				b, _ := json.Marshal(map[string]any{"model": "foo", "prompt": "Tell me a joke"})
-				return []*extProcPb.ProcessingResponse{
-					{
-						Response: &extProcPb.ProcessingResponse_RequestBody{
-							RequestBody: &extProcPb.BodyResponse{
-								Response: &extProcPb.CommonResponse{
-									ClearRouteCache: true,
-									HeaderMutation: &extProcPb.HeaderMutation{
-										SetHeaders: []*basepb.HeaderValueOption{
-											{
-												Header: &basepb.HeaderValue{
-													Key:      ModelHeader,
-													RawValue: []byte("foo"),
-												},
-											},
-											{
-												Header: &basepb.HeaderValue{
-													Key:      BaseModelHeader,
-													RawValue: []byte(""),
-												},
-											},
-											{
-												Header: &basepb.HeaderValue{
-													Key:      contentLengthHeader,
-													RawValue: []byte(strconv.Itoa(len(b))),
-												},
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key:      ModelHeader,
+												RawValue: []byte("foo"),
 											},
 										},
-									},
-									BodyMutation: &extProcPb.BodyMutation{
-										Mutation: &extProcPb.BodyMutation_Body{
-											Body: b,
+										{
+											Header: &basepb.HeaderValue{
+												Key:      BaseModelHeader,
+												RawValue: []byte(""),
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-				}
-			}(),
+				},
+			},
 		},
 		{
 			name: "success-with-streaming",
@@ -329,12 +302,6 @@ func TestHandleRequestBody(t *testing.T) {
 												Header: &basepb.HeaderValue{
 													Key:      BaseModelHeader,
 													RawValue: []byte(""),
-												},
-											},
-											{
-												Header: &basepb.HeaderValue{
-													Key:      contentLengthHeader,
-													RawValue: []byte(strconv.Itoa(len(b))),
 												},
 											},
 										},
@@ -396,12 +363,6 @@ func TestHandleRequestBody(t *testing.T) {
 												Header: &basepb.HeaderValue{
 													Key:      BaseModelHeader,
 													RawValue: []byte(""),
-												},
-											},
-											{
-												Header: &basepb.HeaderValue{
-													Key:      contentLengthHeader,
-													RawValue: []byte(strconv.Itoa(len(b))),
 												},
 											},
 										},
@@ -541,10 +502,159 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 }
 
 func mapToBytes(t *testing.T, m map[string]any) []byte {
-	// Convert map to JSON byte array
 	bytes, err := json.Marshal(m)
 	if err != nil {
 		t.Fatalf("Marshal(): %v", err)
 	}
 	return bytes
+}
+
+type bodyMutatingPlugin struct {
+	name     string
+	mutateFn func(ctx context.Context, request *framework.InferenceRequest) error
+}
+
+func (p *bodyMutatingPlugin) TypedName() epp.TypedName {
+	return epp.TypedName{Type: "fake", Name: p.name}
+}
+
+func (p *bodyMutatingPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) error {
+	return p.mutateFn(ctx, request)
+}
+
+var _ framework.RequestProcessor = &bodyMutatingPlugin{}
+
+func TestHandleRequestBody_BodyMutation(t *testing.T) {
+	metrics.Register()
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	plugin := &bodyMutatingPlugin{
+		name: "body-mutator",
+		mutateFn: func(_ context.Context, request *framework.InferenceRequest) error {
+			request.SetBodyField("injected", "value")
+			return nil
+		},
+	}
+
+	tests := []struct {
+		name      string
+		streaming bool
+		body      map[string]any
+		want      []*extProcPb.ProcessingResponse
+	}{
+		{
+			name: "unary with body mutation",
+			body: map[string]any{
+				"prompt": "test",
+			},
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"prompt": "test", "injected": "value"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
+											},
+										},
+									},
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_Body{
+											Body: b,
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+		},
+		{
+			name:      "streaming with body mutation",
+			streaming: true,
+			body: map[string]any{
+				"prompt": "test",
+			},
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"prompt": "test", "injected": "value"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{
+							RequestHeaders: &extProcPb.HeadersResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_StreamedResponse{
+											StreamedResponse: &extProcPb.StreamedBodyResponse{
+												Body:        b,
+												EndOfStream: true,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := NewServer(tc.streaming, &fakeDatastore{}, []framework.RequestProcessor{plugin}, []framework.ResponseProcessor{})
+			reqCtx := &RequestContext{
+				Request: framework.NewInferenceRequest(),
+			}
+			bodyBytes, _ := json.Marshal(tc.body)
+			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
+			if err != nil {
+				t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
+			}
+
+			envoytest.SortSetHeadersInResponses(tc.want)
+			envoytest.SortSetHeadersInResponses(resp)
+			if diff := cmp.Diff(tc.want, resp, protocmp.Transform()); diff != "" {
+				t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
+	}
 }

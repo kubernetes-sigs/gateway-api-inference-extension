@@ -78,12 +78,16 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 		return nil, fmt.Errorf("failed to execute response plugins - %w", err)
 	}
 
-	mutatedBytes, err := json.Marshal(reqCtx.Response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal mutated response body - %w", err)
+	bodyMutated := reqCtx.Response.BodyMutated()
+	var mutatedBytes []byte
+	if bodyMutated {
+		var err error
+		mutatedBytes, err = json.Marshal(reqCtx.Response.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal mutated response body - %w", err)
+		}
+		reqCtx.Response.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBytes)))
 	}
-
-	reqCtx.Response.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBytes)))
 
 	if s.streaming {
 		var ret []*eppb.ProcessingResponse
@@ -100,26 +104,34 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 				},
 			},
 		})
-		ret = envoy.AddStreamedResponseBody(ret, mutatedBytes)
+		if bodyMutated {
+			ret = envoy.AddStreamedResponseBody(ret, mutatedBytes)
+		} else {
+			ret = envoy.AddStreamedResponseBody(ret, responseBodyBytes)
+		}
 		return ret, nil
+	}
+
+	response := &eppb.CommonResponse{
+		ClearRouteCache: true,
+		HeaderMutation: &eppb.HeaderMutation{
+			SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+			RemoveHeaders: reqCtx.Response.RemovedHeaders(),
+		},
+	}
+	if bodyMutated {
+		response.BodyMutation = &eppb.BodyMutation{
+			Mutation: &eppb.BodyMutation_Body{
+				Body: mutatedBytes,
+			},
+		}
 	}
 
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_ResponseBody{
 				ResponseBody: &eppb.BodyResponse{
-					Response: &eppb.CommonResponse{
-						ClearRouteCache: true,
-						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
-							RemoveHeaders: reqCtx.Response.RemovedHeaders(),
-						},
-						BodyMutation: &eppb.BodyMutation{
-							Mutation: &eppb.BodyMutation_Body{
-								Body: mutatedBytes,
-							},
-						},
-					},
+					Response: response,
 				},
 			},
 		},
