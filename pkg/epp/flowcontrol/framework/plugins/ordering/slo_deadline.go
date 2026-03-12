@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -91,7 +92,7 @@ func calculateSLODeadline(item flowcontrol.QueueItemAccessor) time.Time {
 	if infReq == nil || infReq.Headers == nil {
 		return sloMaxDeadlineTime
 	}
-	sloTtft := getHeader(infReq.Headers, sloTtftHeader)
+	sloTtft := request.GetHeader(infReq.Headers, sloTtftHeader)
 	if sloTtft == "" {
 		return sloMaxDeadlineTime
 	}
@@ -100,20 +101,6 @@ func calculateSLODeadline(item flowcontrol.QueueItemAccessor) time.Time {
 		return sloMaxDeadlineTime
 	}
 	return req.ReceivedTimestamp().Add(time.Duration(ms) * time.Millisecond)
-}
-
-// getHeader returns the value for key from headers, with case-insensitive lookup.
-func getHeader(headers map[string]string, key string) string {
-	if v, ok := headers[key]; ok {
-		return v
-	}
-	lower := strings.ToLower(key)
-	for k, v := range headers {
-		if strings.ToLower(k) == lower {
-			return v
-		}
-	}
-	return ""
 }
 
 // Less returns true if item 'a' should be dispatched before item 'b'.

@@ -143,14 +143,3 @@ func TestCalculateSLODeadline(t *testing.T) {
 	accNoInfReq := &mocks.MockQueueItemAccessor{OriginalRequestV: reqNilInfReq}
 	assert.Equal(t, sloMaxDeadlineTime, calculateSLODeadline(accNoInfReq))
 }
-
-func TestGetHeader(t *testing.T) {
-	t.Parallel()
-
-	headers := map[string]string{"X-SLO-TTFT-MS": "42", "Other": "x"}
-	assert.Equal(t, "42", getHeader(headers, sloTtftHeader))
-	assert.Equal(t, "42", getHeader(headers, "X-SLO-TTFT-MS"))
-	assert.Equal(t, "42", getHeader(headers, "x-slo-ttft-ms"))
-	assert.Equal(t, "", getHeader(headers, "missing"))
-	assert.Equal(t, "", getHeader(nil, "k"))
-}

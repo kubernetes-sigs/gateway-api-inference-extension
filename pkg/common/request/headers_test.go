@@ -16,22 +16,16 @@ limitations under the License.
 
 package request
 
-import "strings"
+import (
+	"testing"
 
-const (
-	RequestIdHeaderKey = "x-request-id"
+	"github.com/stretchr/testify/assert"
 )
 
-// GetHeader returns the value for key from headers, with case-insensitive lookup.
-func GetHeader(headers map[string]string, key string) string {
-	if v, ok := headers[key]; ok {
-		return v
-	}
-	lower := strings.ToLower(key)
-	for k, v := range headers {
-		if strings.ToLower(k) == lower {
-			return v
-		}
-	}
-	return ""
+func TestGetHeader(t *testing.T) {
+	headers := map[string]string{"X-SLO-TTFT-MS": "42", "Other": "x"}
+	assert.Equal(t, "42", GetHeader(headers, "X-SLO-TTFT-MS"))
+	assert.Equal(t, "42", GetHeader(headers, "x-slo-ttft-ms"))
+	assert.Equal(t, "", GetHeader(headers, "missing"))
+	assert.Equal(t, "", GetHeader(nil, "k"))
 }
