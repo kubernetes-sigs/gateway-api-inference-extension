@@ -91,32 +91,72 @@ func (p *CustomDataOrderingPolicy) TypedName() plugin.TypedName {
 	}
 }
 
+// getMetadataValue extracts a numeric value for key from the custom ordering metadata m, or returns defaultVal if missing or invalid.
+func getMetadataValue(m any, key string, defaultVal float64) float64 {
+	if m == nil {
+		return defaultVal
+	}
+	switch typedMap := m.(type) {
+	case map[string]float64:
+		if v, ok := typedMap[key]; ok {
+			return v
+		}
+	case map[string]float32:
+		if v, ok := typedMap[key]; ok {
+			return float64(v)
+		}
+	case map[string]int:
+		if v, ok := typedMap[key]; ok {
+			return float64(v)
+		}
+	case map[string]int8:
+		if v, ok := typedMap[key]; ok {
+			return float64(v)
+		}
+	case map[string]int16:
+		if v, ok := typedMap[key]; ok {
+			return float64(v)
+		}
+	case map[string]int32:
+		if v, ok := typedMap[key]; ok {
+			return float64(v)
+		}
+	case map[string]int64:
+		if v, ok := typedMap[key]; ok {
+			return float64(v)
+		}
+	case map[string]any:
+		if v, ok := typedMap[key]; ok {
+			switch num := v.(type) {
+			case float64:
+				return num
+			case float32:
+				return float64(num)
+			case int:
+				return float64(num)
+			case int8:
+				return float64(num)
+			case int16:
+				return float64(num)
+			case int32:
+				return float64(num)
+			case int64:
+				return float64(num)
+			}
+		}
+	}
+	return defaultVal
+}
+
 func (p *CustomDataOrderingPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
 	for _, k := range p.keys {
-		aVal := k.defaultv
-		bVal := k.defaultv
-		var ok bool
-
-		mda := a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace]
-		if mda != nil {
-			aVal, ok = mda.(map[string]float64)[k.name]
-			if !ok {
-				aVal = k.defaultv
-			}
-		}
-		mdb := b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace]
-		if mdb != nil {
-			bVal, ok = mdb.(map[string]float64)[k.name]
-			if !ok {
-				bVal = k.defaultv
-			}
-		}
+		aVal := getMetadataValue(a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv)
+		bVal := getMetadataValue(b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv)
 
 		if aVal == bVal {
 			continue
 		}
 		return aVal*float64(k.direction) < bVal*float64(k.direction)
-
 	}
 	return false
 }
