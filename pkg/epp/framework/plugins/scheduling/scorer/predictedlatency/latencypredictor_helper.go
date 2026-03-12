@@ -27,9 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -93,14 +93,13 @@ func buildTrainingEntry(
 	}
 }
 
-// refreshLastSeenMetrics updates predictedLatencyCtx.LastSeenMetrics from the latest scheduling result.
+// refreshLastSeenMetrics updates predictedLatencyCtx.LastSeenMetrics for both primary and Experimental_DefaultPrefillProfile.
 func refreshLastSeenMetrics(ctx context.Context, predictedLatencyCtx *predictedLatencyCtx) {
 	if sr := predictedLatencyCtx.schedulingResult; sr != nil {
-		if pr := sr.ProfileResults[sr.PrimaryProfileName]; pr != nil && pr.TargetEndpoints != nil {
-			for profileName, profileResult := range sr.ProfileResults {
-				if profileResult != nil && profileResult.TargetEndpoints != nil && len(profileResult.TargetEndpoints) > 0 {
-					predictedLatencyCtx.lastSeenMetrics[profileName] = profileResult.TargetEndpoints[0].GetMetrics().Clone()
-				}
+
+		for profileName, profileResult := range sr.ProfileResults {
+			if profileResult != nil && profileResult.TargetEndpoints != nil && len(profileResult.TargetEndpoints) > 0 {
+				predictedLatencyCtx.lastSeenMetrics[profileName] = profileResult.TargetEndpoints[0].GetMetrics().Clone()
 			}
 		}
 	} else {
@@ -108,73 +107,45 @@ func refreshLastSeenMetrics(ctx context.Context, predictedLatencyCtx *predictedL
 	}
 }
 
-// getLatestMetricsForProfile retrieves the latest metrics for prediction from predictedLatencyCtx.LastSeenMetrics.
-func getLatestMetricsForProfile(predictedLatencyCtx *predictedLatencyCtx) (*fwkdl.Metrics, error) {
+// getLatestMetricsForProfile retrieves the latest metrics for the specified profile from predictedLatencyCtx.LastSeenMetrics.
+// If profileName is empty, it defaults to the primary profile.
+func getLatestMetricsForProfile(predictedLatencyCtx *predictedLatencyCtx, profileName string) (*fwkdl.Metrics, error) {
 	if len(predictedLatencyCtx.lastSeenMetrics) == 0 {
 		return nil, errors.New("no last seen metrics available for prediction")
 	}
 
-	primaryProfileName := predictedLatencyCtx.schedulingResult.PrimaryProfileName
-	if metrics, exists := predictedLatencyCtx.lastSeenMetrics[primaryProfileName]; exists {
+	if profileName == "" && predictedLatencyCtx.schedulingResult != nil {
+		profileName = predictedLatencyCtx.schedulingResult.PrimaryProfileName
+	}
+
+	if metrics, exists := predictedLatencyCtx.lastSeenMetrics[profileName]; exists {
 		return metrics, nil
 	}
 
-	return nil, fmt.Errorf("no metrics found for primary profile %s", primaryProfileName)
+	return nil, fmt.Errorf("no metrics found for profile %s", profileName)
 }
 
-// processPreRequestForLatencyPrediction refreshes metrics, applies TTFT prediction, updates predictedLatencyCtx.PredictedTTFT and timestamp.
+// processPreRequestForLatencyPrediction looks up the stored prediction for the target endpoint
+// and uses it for TTFT, avoiding a redundant prediction call.
 func processPreRequestForLatencyPrediction(
 	ctx context.Context,
-	predictor latencypredictor.PredictorInterface,
-	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
-) error {
+) {
 	logger := log.FromContext(ctx)
-
-	// just for debugging, print the req context scheduling result cycle state
-	// print the raw scores in scheduling result
-
-	// Build prediction request
-	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
-	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
-		return err
+	targetName := predictedLatencyCtx.targetMetadata.NamespacedName.Name
+	if m := predictedLatencyCtx.prefillTargetMetadata; m != nil {
+		targetName = m.NamespacedName.Name
 	}
-
-	target_endpoint_metadata := predictedLatencyCtx.targetMetadata
-	prefix_cache_score := predictedLatencyCtx.prefixCacheScoresForEndpoints[target_endpoint_metadata.NamespacedName.Name]
-
-	// Build prediction request (pod type is included if endpointRoleLabel is configured)
-	in := buildPredictionRequest(
-		endpointRoleLabel,
-		target_endpoint_metadata,
-		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
-		0, // NumTokensGenerated is 0 for pre-request TTFT prediction
-		prefix_cache_score,
-	)
-
-	// Predict TTFT
-	start := time.Now()
-	p, err := predictor.Predict(ctx, in)
-	dur := time.Since(start)
-	switch {
-	case err != nil:
-		logger.V(logutil.DEBUG).Error(err, "header TTFT predict failed", "duration_ms", dur.Milliseconds())
+	if storedPred, ok := predictedLatencyCtx.predictionsForScheduling[targetName]; ok {
+		logger.V(logutil.DEBUG).Info("PreRequest TTFT from stored prediction", "value_ms", storedPred.TTFT, "endpoint", targetName)
+		predictedLatencyCtx.predictedTTFT = storedPred.TTFT
+	} else {
+		logger.V(logutil.DEBUG).Info("PreRequest: no stored prediction found for target endpoint", "endpoint", targetName)
 		predictedLatencyCtx.predictedTTFT = 0
-	case p == nil:
-		logger.V(logutil.DEBUG).Info("header TTFT predict nil", "duration_ms", dur.Milliseconds())
-		predictedLatencyCtx.predictedTTFT = 0
-	default:
-		logger.V(logutil.DEBUG).Info("header TTFT succeeded", "value_ms", p.TTFT, "duration_ms", dur.Milliseconds())
-		metrics.RecordRequestTTFTPredictionDuration(ctx, predictedLatencyCtx.schedulingRequest.TargetModel, predictedLatencyCtx.incomingModelName, dur.Seconds())
-
-		predictedLatencyCtx.predictedTTFT = p.TTFT
 	}
 
 	// Advance timestamp for first token reference
 	predictedLatencyCtx.lastTokenTimestamp = time.Now()
-	return err
 }
 
 // processFirstTokenForLatencyPrediction records actual TTFT, trains, predicts first TPOT, updates predictedLatencyCtx, and advances timestamp.
@@ -194,35 +165,33 @@ func processFirstTokenForLatencyPrediction(
 	// Actual TTFT
 	predictedLatencyCtx.ttft = float64(now.Sub(predictedLatencyCtx.requestReceivedTimestamp).Milliseconds())
 	predictedLatencyCtx.generatedTokenCount = 1
-	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
-	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping prediction due to missing metrics", "error", err)
-		return
-	}
-	targetEndpointMetadata := predictedLatencyCtx.targetMetadata
-	if predictedLatencyCtx.schedulingResult != nil {
-		if prefillResult, exists := predictedLatencyCtx.schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil && len(prefillResult.TargetEndpoints) > 0 {
-			// Disaggregated mode: record TTFT for prefill pod only (TTFT is dominated by prefill work)
-			prefillMetadata := prefillResult.TargetEndpoints[0].GetMetadata()
-			prefillMetrics, metricsExist := predictedLatencyCtx.lastSeenMetrics[Experimental_DefaultPrefillProfile]
-			if metricsExist && prefillMetrics != nil {
-				prefillPrefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[prefillMetadata.NamespacedName.Name]
-				logger.V(logutil.DEBUG).Info("Recording prefill TTFT training data",
-					"ttft_ms", predictedLatencyCtx.ttft,
-					"prefillPod", prefillMetadata.NamespacedName.Name,
-					"prefixCacheScore", prefillPrefixCacheScore)
-				recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, prefillMetrics, prefillMetadata, now, prefillPrefixCacheScore)
-			}
-		} else {
-			// Monolithic mode: record TTFT for the single pod
-			prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
-			logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "prefixCacheScore", prefixCacheScore)
-			recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
+
+	if prefillTargetMetadata := predictedLatencyCtx.prefillTargetMetadata; prefillTargetMetadata != nil {
+		// Disaggregated mode: record TTFT for prefill pod only (TTFT is dominated by prefill work)
+		prefillMetrics, err := getLatestMetricsForProfile(predictedLatencyCtx, Experimental_DefaultPrefillProfile)
+		if err == nil {
+			prefillPrefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[prefillTargetMetadata.NamespacedName.Name]
+			logger.V(logutil.DEBUG).Info("Recording prefill TTFT training data",
+				"ttft_ms", predictedLatencyCtx.ttft,
+				"prefillPod", prefillTargetMetadata.NamespacedName.Name,
+				"prefixCacheScore", prefillPrefixCacheScore)
+			recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, prefillMetrics, prefillTargetMetadata, now, prefillPrefixCacheScore)
 		}
+	} else {
+		// Monolithic mode: record TTFT for the single pod
+		m, err := getLatestMetricsForProfile(predictedLatencyCtx, "")
+		if err != nil {
+			logger.V(logutil.DEBUG).Info("Skipping TTFT training due to missing metrics or schedulingResult", "error", err)
+			return
+		}
+		targetEndpointMetadata := predictedLatencyCtx.targetMetadata
+		prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
+		logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "predicted_ttft_ms", predictedLatencyCtx.predictedTTFT, "prefixCacheScore", prefixCacheScore)
+		recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
 	}
 
 	if streamingMode {
-		predictFirstTPOT(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, targetEndpointMetadata)
+		predictFirstTPOT(ctx, predictedLatencyCtx)
 	}
 
 	// Advance timestamp
@@ -234,7 +203,7 @@ func processFirstTokenForLatencyPrediction(
 func initializeSampler(ctx context.Context, predictedLatencyCtx *predictedLatencyCtx, samplingMean float64, maxSampledTokens int) {
 	if predictedLatencyCtx.tokenSampler == nil {
 		logger := log.FromContext(ctx)
-		requestID := predictedLatencyCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
+		requestID := predictedLatencyCtx.schedulingRequest.Headers[reqcommon.RequestIdHeaderKey]
 		predictedLatencyCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", predictedLatencyCtx.tokenSampler.getNextSampleToken())
 	}
@@ -255,7 +224,7 @@ func recordTTFTTrainingData(
 		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		predictedLatencyCtx.promptText,
 		predictedLatencyCtx.ttft,
 		0, // TTFT training
 		now,
@@ -269,40 +238,19 @@ func recordTTFTTrainingData(
 
 func predictFirstTPOT(
 	ctx context.Context,
-	predictor latencypredictor.PredictorInterface,
-	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
-	targetEndpointMetadata *fwkdl.EndpointMetadata,
 ) {
 	logger := log.FromContext(ctx)
-	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
-	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
-			"error", err)
-		return
-	}
-
-	in := buildPredictionRequest(
-		endpointRoleLabel,
-		targetEndpointMetadata,
-		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
-		predictedLatencyCtx.generatedTokenCount,
-		0, // TPOT does not use prefix cache score
-	)
-	start := time.Now()
-	p, err := predictor.Predict(ctx, in)
-	dur := time.Since(start)
-	if err != nil || p == nil {
-		logger.V(logutil.DEBUG).Error(err, "first TPOT predict failed", "duration_ms", dur.Milliseconds())
+	targetName := predictedLatencyCtx.targetMetadata.NamespacedName.Name
+	if storedPred, ok := predictedLatencyCtx.predictionsForScheduling[targetName]; ok {
+		logger.V(logutil.DEBUG).Info("first TPOT from stored prediction", "value_ms", storedPred.TPOT)
+		predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, storedPred.TPOT)
+		predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, storedPred.TPOT, len(predictedLatencyCtx.predictedTPOTObservations))
+	} else {
+		logger.V(logutil.DEBUG).Info("first TPOT: no stored prediction found for target endpoint", "endpoint", targetName)
 		predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, 0)
 		predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, 0, len(predictedLatencyCtx.predictedTPOTObservations))
-	} else {
-		logger.V(logutil.DEBUG).Info("first TPOT succeeded", "value_ms", p.TPOT, "duration_ms", dur.Milliseconds())
-		predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, p.TPOT)
-		predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, p.TPOT, len(predictedLatencyCtx.predictedTPOTObservations))
 	}
-	metrics.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyCtx.schedulingRequest.TargetModel, predictedLatencyCtx.incomingModelName, dur.Seconds())
 }
 
 // processTokenForLatencyPrediction records actual inter-token latency, trains, predicts sampled TPOT, updates predictedLatencyCtx, and advances timestamp.
@@ -320,7 +268,7 @@ func processTokenForLatencyPrediction(
 
 	// Initialize sampler if not yet
 	if predictedLatencyCtx.tokenSampler == nil {
-		requestID := predictedLatencyCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
+		requestID := predictedLatencyCtx.schedulingRequest.Headers[reqcommon.RequestIdHeaderKey]
 		predictedLatencyCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", predictedLatencyCtx.tokenSampler.getNextSampleToken())
 	}
@@ -329,31 +277,24 @@ func processTokenForLatencyPrediction(
 	latencyMs := float64(now.Sub(predictedLatencyCtx.lastTokenTimestamp).Milliseconds())
 	predictedLatencyCtx.generatedTokenCount++
 
-	// log the inter-token latency for predicted samples
-	if predictedLatencyCtx.generatedTokenCount == 2 || predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) { // tricky logic, since next sample token is always +1 from current token
+	// record sampled TPOT observations (avgTPOT is computed in ResponseComplete from e2e latency)
+	if predictedLatencyCtx.generatedTokenCount == 2 || predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) {
 		predictedLatencyCtx.tpotObservations = append(predictedLatencyCtx.tpotObservations, latencyMs)
-		predictedLatencyCtx.avgTPOT = calculateRunningAverage(predictedLatencyCtx.avgTPOT, latencyMs, len(predictedLatencyCtx.tpotObservations))
+	}
+	if predictedLatencyCtx.generatedTokenCount == 2 {
+		// debug log actual and predicted tpot
+		logger.V(logutil.DEBUG).Info("First inter-token latency observed",
+			"actual_tpot_ms", latencyMs,
+			"predicted_tpot_ms", predictedLatencyCtx.avgPredictedTPOT)
 	}
 
-	m, err := getLatestMetricsForProfile(predictedLatencyCtx)
+	// TPOT training is now done once per request in ResponseComplete using avgTPOT
+
+	m, err := getLatestMetricsForProfile(predictedLatencyCtx, "")
 	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping first TPOT prediction due to missing metrics",
+		logger.V(logutil.DEBUG).Info("Skipping TPOT prediction due to missing metrics or schedulingResult",
 			"error", err)
 		return
-	}
-	entry := buildTrainingEntry(
-		endpointRoleLabel,
-		targetEndpointMetadata,
-		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
-		0, // TTFT not recorded for TPOT
-		latencyMs,
-		now,
-		predictedLatencyCtx.generatedTokenCount-1,
-		0, // TPOT does not use prefix cache score
-	)
-	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
 	}
 
 	// Sampled predict
@@ -362,7 +303,7 @@ func processTokenForLatencyPrediction(
 			endpointRoleLabel,
 			targetEndpointMetadata,
 			m,
-			predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+			predictedLatencyCtx.promptText,
 			predictedLatencyCtx.generatedTokenCount,
 			0, // TPOT does not use prefix cache score
 		)
@@ -393,6 +334,7 @@ func processTokenForLatencyPrediction(
 // Returns predictions in the same order as the input slices.
 func bulkPredictWithMetrics(
 	ctx context.Context,
+	predictedLatencyContext *predictedLatencyCtx,
 	predictor latencypredictor.PredictorInterface,
 	metricsStates []*fwkdl.Metrics,
 	endpointRoleLabel string,
@@ -458,6 +400,10 @@ func bulkPredictWithMetrics(
 		return nil, errors.New("bulk prediction returned nil result")
 	}
 
+	if predictedLatencyContext != nil {
+		metrics.RecordRequestTTFTPredictionDuration(ctx, predictedLatencyContext.schedulingRequest.TargetModel, predictedLatencyContext.incomingModelName, duration.Seconds())
+		metrics.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyContext.schedulingRequest.TargetModel, predictedLatencyContext.incomingModelName, duration.Seconds())
+	}
 	// Convert to pointer slice for consistency with single prediction
 	results := make([]*latencypredictor.PredictionResponse, len(bulkResponse.Predictions))
 	for i := range bulkResponse.Predictions {

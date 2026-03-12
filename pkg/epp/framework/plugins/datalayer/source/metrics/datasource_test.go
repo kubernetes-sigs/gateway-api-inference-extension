@@ -47,6 +47,6 @@ func TestDatasource(t *testing.T) {
 		},
 		Address: "1.2.3.4:5678",
 	}, nil)
-	err = source.Collect(ctx, endpoint)
-	assert.NotNil(t, err, "expected to fail to collect metrics")
+	err = source.Poll(ctx, endpoint)
+	assert.NotNil(t, err, "expected to fail polling for metrics")
 }

@@ -30,6 +30,8 @@ var (
 )
 
 // DataSource provides raw data to registered Extractors.
+// For poll-based sources, use PollingDataSource.
+// For event-driven sources, use NotificationSource.
 type DataSource interface {
 	plugin.Plugin
 	// Extractors returns a list of registered Extractor names.
@@ -48,10 +50,15 @@ type DataSource interface {
 	// The Extractor's expected input type should be validated against
 	// the data source's output type upon registration.
 	AddExtractor(extractor Extractor) error
-	// Collect is triggered by the data layer framework to fetch potentially new
-	// data for an endpoint. Collect calls registered Extractors to convert the
+}
+
+// PollingDataSource is a poll-based DataSource that fetches data at regular intervals.
+type PollingDataSource interface {
+	DataSource
+	// Poll is triggered by the data layer framework to fetch potentially new
+	// data for an endpoint. Poll calls registered Extractors to convert the
 	// raw data into structured attributes.
-	Collect(ctx context.Context, ep Endpoint) error
+	Poll(ctx context.Context, ep Endpoint) error
 }
 
 // Extractor transforms raw data into structured attributes.

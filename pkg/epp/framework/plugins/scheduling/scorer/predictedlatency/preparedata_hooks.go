@@ -51,7 +51,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		}
 		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
 	}
-	predictions, err := s.generatePredictions(ctx, request, predictedLatencyCtx, endpoints)
+	predictions, err := s.generatePredictions(ctx, predictedLatencyCtx, endpoints)
 	if err == nil && len(predictions) == len(endpoints) {
 		s.updateRequestContextWithPredictions(predictedLatencyCtx, predictions)
 		s.updateHasValidPod(ctx, predictedLatencyCtx, endpoints)

@@ -83,7 +83,10 @@ func (s *PredictedLatency) updateHasValidPod(
 	endpoints []schedulingtypes.Endpoint,
 ) {
 	logger := log.FromContext(ctx)
-	predictions := predictedLatencyCtx.predictionsForScheduling
+	predictions := make([]endpointPredictionResult, 0, len(predictedLatencyCtx.predictionsForScheduling))
+	for _, pred := range predictedLatencyCtx.predictionsForScheduling {
+		predictions = append(predictions, pred)
+	}
 	allInvalid := s.allPodsAreInvalid(predictions, predictedLatencyCtx)
 	allHaveRunningRequests := s.allPodsHaveRunningRequests(predictions)
 	hasCold := s.hasColdPod(endpoints)

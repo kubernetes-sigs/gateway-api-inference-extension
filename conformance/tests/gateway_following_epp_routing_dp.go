@@ -29,7 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -91,13 +91,12 @@ var GatewayFollowingEPPRoutingWithDataParallelism = suite.ConformanceTest{
 			"prompt": "Write as if you were a critic: San Francisco"
 		}`
 
-		rt := &RoundTripper
 		// Single-pod pin to ensure header filter works before main test cases.
 		for _, backend := range backends {
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
@@ -181,7 +180,7 @@ var GatewayFollowingEPPRoutingWithDataParallelism = suite.ConformanceTest{
 
 func assertTrafficOnlyReachesToExpectedPodsDP(
 	t *testing.T,
-	_ *suite.ConformanceTestSuite,
+	suite *suite.ConformanceTestSuite,
 	gwAddr string,
 	expected gwhttp.ExpectedResponse,
 	expectedPodNames []string,
@@ -195,7 +194,7 @@ func assertTrafficOnlyReachesToExpectedPodsDP(
 	)
 
 	var (
-		rt = RoundTripper
+		rt = suite.RoundTripper
 		g  errgroup.Group
 		r  = gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
 	)

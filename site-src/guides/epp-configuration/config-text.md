@@ -7,7 +7,7 @@ At this time the YAML file based configuration allows for:
 1. The set of the lifecycle hooks (plugins) that are used by the IGW.
 2. The set of scheduling profiles that define how requests are scheduled to pods.
 3. The configuration of the saturation detector.
-4. The configuration of the flow control system (experimental).
+4. The configuration of the Flow Control system.
 5. The configuration of the data layer (experimental).
 6. A set of feature gates that are used to enable experimental features.
 
@@ -51,7 +51,7 @@ The `saturationDetector` section configures the saturation detector, which is us
 to be taken due to the system being overloaded or saturated. This section is described in more detail in the section
 [Saturation Detector configuration](#saturation-detector-configuration).
 
-The `flowControl` section configures the experimental Flow Control layer, which manages request concurrency and
+The `flowControl` section configures the Flow Control layer, which manages request concurrency and
 fairness. This section is described in more detail in the section
 [Flow Control configuration](#flow-control-configuration).
 
@@ -258,7 +258,7 @@ Picks the pod with the maximum score from the list of candidates. This is the de
 if not specified.
 
 - *Type*: max-score-picker
-- *Parameters*: 
+- *Parameters*:
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates, based on
     the scores of those endpoints. If not specified defaults to `1`.
 
@@ -267,7 +267,7 @@ if not specified.
 Picks a random pod from the list of candidates.
 
 - *Type*: random-picker
-- *Parameters*: 
+- *Parameters*:
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
@@ -315,10 +315,10 @@ An Ordering Policy that implements Earliest Deadline First. It prioritizes reque
 ## Scheduling Profiles
 
 The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
-requests to pods. If one is not defined, a default one names `default` will be added and will reference all of
+requests to pods. If one is not defined, a default one named `default` will be added and will reference all of
 the instantiated plugins.
 
-The number of scheduling profiles one defines, depends on the use case. For simple
+The number of scheduling profiles depends on the use case. For simple
 serving of requests, one is enough. For disaggregated prefill, two profiles are required. Each entry
 in this section has the following form:
 
@@ -372,13 +372,14 @@ a value of `0.8` will be used.
 metrics are older than this, it might be excluded from "good capacity" considerations or treated
 as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
 
-## Flow Control Configuration
+## [Flow Control Configuration](../flow-control.md)
 
 The Flow Control layer acts as a pool defense mechanism, shielding inference engines from overload to ensure stable,
 predictable performance. By shifting Head-of-Line blocking left, it buffers requests before they reach the backends,
 enabling the Scheduler to dispatch work only when capacity is available.
 
 It manages traffic through a **3-Tier Dispatch Hierarchy**:
+
 1.  **Priority (Band Selection)**: High-priority traffic is served first.
 2.  **Fairness (Flow Selection)**: Requests are distributed fairly between tenants/models within a priority level
     (e.g., Round Robin).
@@ -472,6 +473,6 @@ The Feature Gates section is an array of flags, each of which enables one experi
 The available values for these elements are:
 
 - `dataLayer` which, if present, enables the experimental Datalayer APIs.
-- `flowControl` which, if present, enables the experimental FlowControl feature.
+- `flowControl` which, if present, enables the [FlowControl](../flow-control.md) feature.
 
 In all cases if the appropriate element isn't present, that experimental feature will be disabled.

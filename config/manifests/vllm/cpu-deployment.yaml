@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama3-8b-instruct
+  name: vllm-qwen3-32b
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: vllm-llama3-8b-instruct
+      app: vllm-qwen3-32b
   template:
     metadata:
       labels:
-        app: vllm-llama3-8b-instruct
+        app: vllm-qwen3-32b
         inference.networking.k8s.io/engine-type: vllm
     spec:
       containers:
@@ -20,15 +20,15 @@ spec:
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
           - "--model"
-          - "Qwen/Qwen2.5-1.5B-Instruct"
+          - "Qwen/Qwen3-32B"
           - "--port"
           - "8000"
           - "--enable-lora"
           - "--max-loras"
           - "4"
           - "--lora-modules"
-          - '{"name": "food-review-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
-          - '{"name": "food-review-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
+          - '{"name": "small-segment-lora-0", "path": "ttt421/nec119-small-segment-lora", "base_model_name": "Qwen/Qwen3-32B"}'
+          - '{"name": "small-segment-lora-1", "path": "ttt421/nec119-small-segment-lora", "base_model_name": "Qwen/Qwen3-32B"}'
           env:
             - name: PORT
               value: "8000"
@@ -109,13 +109,13 @@ metadata:
 data:
   configmap.yaml: |
       vLLMLoRAConfig:
-        name: vllm-llama3-8b-instruct
+        name: vllm-qwen3-32b
         port: 8000
         ensureExist:
           models:
-          - base-model: Qwen/Qwen2.5-1.5B
-            id: food-review
-            source: SriSanth2345/Qwen-1.5B-Tweet-Generations
+          - base-model: Qwen/Qwen3-32B
+            id: small-segment-lora
+            source: ttt421/nec119-small-segment-lora
           - base-model: Qwen/Qwen2.5-1.5B
             id: cad-fabricator
             source: SriSanth2345/Qwen-1.5B-Tweet-Generations

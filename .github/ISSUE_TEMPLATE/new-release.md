@@ -130,6 +130,19 @@ This document defines the process for releasing Gateway API Inference Extension.
 9. Pushing the tag triggers Prow to build and publish the container image to the [staging registry][].
 10. Submit a PR against [k8s.io][] to add the staging image tag and SHA to [`k8s-staging-gateway-api-inference-extension/images.yaml`][yaml]. This will
     promote the image to the production registry, e.g. `registry.k8s.io/gateway-api-inference-extension/epp:v${MAJOR}.${MINOR}.${PATCH}`.
+    1. Collect release digests from Artifact Registry:
+       ```shell
+       ./hack/release-staging-digests.sh
+       ```
+    2. Ensure the PR updates all release artifacts:
+       - `charts/inferencepool`
+       - `charts/body-based-routing`
+       - `charts/standalone`
+       - `epp`
+       - `bbr`
+       - `latency-prediction-server`
+       - `latency-training-server`
+    3. If an artifact does not yet have a section in `images.yaml` (for example a newly added chart), add a new section before adding the digest mapping.
     **Note:** Add a link to this issue when the PR is merged.
 11. Test the steps in the tagged quickstart guide after the PR merges, for example: `https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/v0.1.0-rc.1/pkg/README.md`.
 12. Create a [new release][]:

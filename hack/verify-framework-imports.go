@@ -52,13 +52,6 @@ var globalExceptions = []string{
 // currentCodeExceptionMap maps existing violation in files to their allowed import exceptions.
 // This should cleaned-up alongside the relevant files and their imports.
 var currentCodeExceptionMap = map[string][]string{
-	"pkg/epp/framework/plugins/datalayer/extractor/metrics/podmetrics_parity_test.go": {
-		"pkg/epp/backend/metrics",
-		"pkg/epp/server",
-	},
-	"pkg/epp/framework/plugins/datalayer/source/http/datasource.go": {
-		"pkg/epp/datalayer",
-	},
 	"pkg/epp/framework/plugins/requestcontrol/test/responsereceived/destination_endpoint_served_verifier.go": {
 		"pkg/epp/metadata",
 	},

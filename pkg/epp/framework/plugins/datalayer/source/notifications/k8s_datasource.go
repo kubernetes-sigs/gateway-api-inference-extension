@@ -94,11 +94,6 @@ func (s *K8sNotificationSource) AddExtractor(ext fwkdl.Extractor) error {
 	return nil
 }
 
-// Collect is a no-op. Notification sources are event-driven, not poll-based.
-func (s *K8sNotificationSource) Collect(_ context.Context, _ fwkdl.Endpoint) error {
-	return nil
-}
-
 // Notify dispatches a notification event to all registered extractors
 // synchronously, preserving event ordering.
 func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.NotificationEvent) error {

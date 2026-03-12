@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requestcontrol
+package datalayer
 
 import (
 	"context"
@@ -23,15 +23,27 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkfcmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwksch "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
+
+const mockProducedDataKey = "mockProducedData"
 
 type mockPrepareRequestDataP struct {
 	name     string
 	produces map[string]any
 	consumes map[string]any
+}
+
+type mockProducedDataType struct {
+	value int
+}
+
+func (m *mockProducedDataType) Clone() fwkdl.Cloneable {
+	return &mockProducedDataType{value: m.value}
 }
 
 func (m *mockPrepareRequestDataP) TypedName() fwkplugin.TypedName {
@@ -46,12 +58,79 @@ func (m *mockPrepareRequestDataP) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *types.LLMRequest, endpoints []types.Endpoint) error {
-	endpoints[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
+func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *fwksch.LLMRequest, endpoints []fwksch.Endpoint) error {
+	endpoints[0].Put(mockProducedDataKey, &mockProducedDataType{value: 42})
 	return nil
 }
 
-func TestPrepareDataGraph(t *testing.T) {
+type MockConsumerFairnessPolicy struct {
+	fwkfcmocks.MockFairnessPolicy
+	consumes map[string]any
+}
+
+func (m *MockConsumerFairnessPolicy) Consumes() map[string]any {
+	return m.consumes
+}
+
+type MockSchedulingPlugin struct {
+	fwksch.Scorer
+	consumes map[string]any
+}
+
+func (m *MockSchedulingPlugin) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Name: "MockSchedulingPlugin", Type: "mock"}
+}
+
+func (m *MockSchedulingPlugin) Consumes() map[string]any {
+	return m.consumes
+}
+
+func TestValidatePluginExecutionOrder(t *testing.T) {
+	// Request control plugin that produces data.
+	pluginA := &mockPrepareRequestDataP{name: "A", produces: map[string]any{"keyA": nil}}
+	// Flow control plugin.
+	consumerFairnessPolicyPlugin := MockConsumerFairnessPolicy{consumes: map[string]any{"keyA": nil}}
+	// Scheduling plugin.
+	consumerSchedulingPlugin := MockSchedulingPlugin{consumes: map[string]any{"keyA": nil}}
+	if _, ok := any(pluginA).(fwkrc.PrepareDataPlugin); !ok {
+		t.Fatalf("pluginA should implement PrepareDataPlugin")
+	}
+
+	testCases := []struct {
+		name        string
+		plugins     []fwkplugin.Plugin
+		expectError bool
+	}{
+		{
+			name:        "Plugins with no dependencies",
+			plugins:     []fwkplugin.Plugin{pluginA},
+			expectError: false,
+		},
+		{
+			name:        "FC depends on a request control plugin (invalid layer execution order)",
+			plugins:     []fwkplugin.Plugin{pluginA, &consumerFairnessPolicyPlugin},
+			expectError: true,
+		},
+		{
+			name:        "Scheduling plugin depends on a request control plugin",
+			plugins:     []fwkplugin.Plugin{pluginA, &consumerSchedulingPlugin},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ValidateAndOrderDataDependencies(tc.plugins)
+			if tc.expectError {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestDAGAndTopologicalOrder(t *testing.T) {
 	pluginA := &mockPrepareRequestDataP{name: "A", produces: map[string]any{"keyA": nil}}
 	pluginB := &mockPrepareRequestDataP{name: "B", consumes: map[string]any{"keyA": nil}, produces: map[string]any{"keyB": nil}}
 	pluginC := &mockPrepareRequestDataP{name: "C", consumes: map[string]any{"keyB": nil}}
@@ -68,19 +147,19 @@ func TestPrepareDataGraph(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		plugins     []fwk.PrepareDataPlugin
+		plugins     []fwkrc.PrepareDataPlugin
 		expectedDAG map[string][]string
 		expectError bool
 	}{
 		{
 			name:        "No plugins",
-			plugins:     []fwk.PrepareDataPlugin{},
+			plugins:     []fwkrc.PrepareDataPlugin{},
 			expectedDAG: map[string][]string{},
 			expectError: false,
 		},
 		{
 			name:    "Plugins with no dependencies",
-			plugins: []fwk.PrepareDataPlugin{pluginA, pluginE},
+			plugins: []fwkrc.PrepareDataPlugin{pluginA, pluginE},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"E/mock": {},
@@ -89,7 +168,7 @@ func TestPrepareDataGraph(t *testing.T) {
 		},
 		{
 			name:    "Simple linear dependency (C -> B -> A)",
-			plugins: []fwk.PrepareDataPlugin{pluginA, pluginB, pluginC},
+			plugins: []fwkrc.PrepareDataPlugin{pluginA, pluginB, pluginC},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"B/mock": {"A/mock"},
@@ -99,7 +178,7 @@ func TestPrepareDataGraph(t *testing.T) {
 		},
 		{
 			name:    "DAG with multiple dependencies (B -> A, D -> A, E independent)",
-			plugins: []fwk.PrepareDataPlugin{pluginA, pluginB, pluginD, pluginE},
+			plugins: []fwkrc.PrepareDataPlugin{pluginA, pluginB, pluginD, pluginE},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"B/mock": {"A/mock"},
@@ -110,13 +189,13 @@ func TestPrepareDataGraph(t *testing.T) {
 		},
 		{
 			name:        "Graph with a cycle (X -> Y, Y -> X)",
-			plugins:     []fwk.PrepareDataPlugin{pluginX, pluginY},
+			plugins:     []fwkrc.PrepareDataPlugin{pluginX, pluginY},
 			expectedDAG: nil,
 			expectError: true,
 		},
 		{
 			name:        "Data type mismatch between produced and consumed data",
-			plugins:     []fwk.PrepareDataPlugin{pluginZ1, pluginZ2},
+			plugins:     []fwkrc.PrepareDataPlugin{pluginZ1, pluginZ2},
 			expectedDAG: nil,
 			expectError: true,
 		},

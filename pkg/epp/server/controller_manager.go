@@ -93,7 +93,7 @@ func defaultManagerOptions(cfg ControllerConfig, gknn common.GKNN, metricsServer
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool) (ctrl.Manager, error) {
+func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool, testOverrideSkipNameValidation bool) (ctrl.Manager, error) {
 	opt, err := defaultManagerOptions(controllerCfg, gknn, metricsServerOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
@@ -107,6 +107,8 @@ func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restCon
 		opt.LeaderElectionNamespace = gknn.Namespace
 		opt.LeaderElectionReleaseOnCancel = true
 	}
+
+	opt.Controller.SkipNameValidation = &testOverrideSkipNameValidation
 
 	manager, err := ctrl.NewManager(restConfig, opt)
 

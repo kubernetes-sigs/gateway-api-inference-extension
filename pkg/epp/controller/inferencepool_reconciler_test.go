@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -92,7 +93,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 	}
 	for _, epf := range factories {
 		// Set up the scheme.
@@ -100,7 +101,8 @@ func TestInferencePoolReconciler(t *testing.T) {
 		_ = clientgoscheme.AddToScheme(scheme)
 		_ = v1alpha2.Install(scheme)
 		_ = v1.Install(scheme)
-		initialObjects := []client.Object{pool1, pool2}
+		initialObjects := make([]client.Object, 0, 2+len(pods))
+		initialObjects = append(initialObjects, pool1, pool2)
 		for i := range pods {
 			initialObjects = append(initialObjects, pods[i])
 		}
@@ -245,7 +247,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 	}
 	for _, epf := range factories {
 		// Set up the scheme.
@@ -253,7 +255,8 @@ func TestXInferencePoolReconciler(t *testing.T) {
 		_ = clientgoscheme.AddToScheme(scheme)
 		_ = v1alpha2.Install(scheme)
 		_ = v1.Install(scheme)
-		initialObjects := []client.Object{pool1, pool2}
+		initialObjects := make([]client.Object, 0, 2+len(pods))
+		initialObjects = append(initialObjects, pool1, pool2)
 		for i := range pods {
 			initialObjects = append(initialObjects, pods[i])
 		}

@@ -16,16 +16,6 @@ limitations under the License.
 
 package request
 
-import (
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+const (
+	RequestIdHeaderKey = "x-request-id"
 )
-
-func ExtractMetadataValues(req *extProcPb.ProcessingRequest) map[string]any {
-	metadata := make(map[string]any)
-	if req != nil && req.MetadataContext != nil && req.MetadataContext.FilterMetadata != nil {
-		for key, val := range req.MetadataContext.FilterMetadata {
-			metadata[key] = val.AsMap()
-		}
-	}
-	return metadata
-}

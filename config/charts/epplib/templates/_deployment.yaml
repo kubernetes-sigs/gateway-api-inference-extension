@@ -179,7 +179,7 @@ spec:
         {{- include "gateway-api-inference-extension.latencyPredictor.env" . | nindent 12 }}
         {{- if .Values.inferenceExtension.tracing.enabled }}
             - name: OTEL_SERVICE_NAME
-              value: "gateway-api-inference-extension"
+              value: "gateway-api-inference-extension/epp"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.inferenceExtension.tracing.otelExporterEndpoint | quote }}
             - name: OTEL_TRACES_EXPORTER

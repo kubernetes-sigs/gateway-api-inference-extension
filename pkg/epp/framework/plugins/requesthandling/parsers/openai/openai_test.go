@@ -14,21 +14,42 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package request
+package openai
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 )
 
-func TestExtractRequestData(t *testing.T) {
+func TestNewOpenAIParser(t *testing.T) {
+	parser := NewOpenAIParser()
+
+	expectedName := fwkplugin.TypedName{
+		Type: OpenAIParserType,
+		Name: OpenAIParserType,
+	}
+
+	if diff := cmp.Diff(expectedName, parser.TypedName()); diff != "" {
+		t.Errorf("TypedName() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestOpenAIParser_ParseRequest(t *testing.T) {
+	parser := NewOpenAIParser()
+
 	tests := []struct {
 		name    string
-		body    map[string]any
 		headers map[string]string
-		want    *types.LLMRequestBody
+		body    map[string]any
+		want    *scheduling.LLMRequestBody
 		wantErr bool
 	}{
 		{
@@ -38,9 +59,13 @@ func TestExtractRequestData(t *testing.T) {
 				"model":  "test",
 				"prompt": "test prompt",
 			},
-			want: &types.LLMRequestBody{
-				Completions: &types.CompletionsRequest{
+			want: &scheduling.LLMRequestBody{
+				Completions: &scheduling.CompletionsRequest{
 					Prompt: "test prompt",
+				},
+				ParsedBody: map[string]any{
+					"model":  "test",
+					"prompt": "test prompt",
 				},
 			},
 		},
@@ -58,11 +83,22 @@ func TestExtractRequestData(t *testing.T) {
 					},
 				},
 			},
-			want: &types.LLMRequestBody{
-				ChatCompletions: &types.ChatCompletionsRequest{
-					Messages: []types.Message{
-						{Role: "system", Content: types.Content{Raw: "this is a system message"}},
-						{Role: "user", Content: types.Content{Raw: "hello"}},
+			want: &scheduling.LLMRequestBody{
+				ChatCompletions: &scheduling.ChatCompletionsRequest{
+					Messages: []scheduling.Message{
+						{Role: "system", Content: scheduling.Content{Raw: "this is a system message"}},
+						{Role: "user", Content: scheduling.Content{Raw: "hello"}},
+					},
+				},
+				ParsedBody: map[string]any{
+					"model": "test",
+					"messages": []any{
+						map[string]any{
+							"role": "system", "content": "this is a system message",
+						},
+						map[string]any{
+							"role": "user", "content": "hello",
+						},
 					},
 				},
 			},
@@ -95,25 +131,49 @@ func TestExtractRequestData(t *testing.T) {
 					},
 				},
 			},
-			want: &types.LLMRequestBody{
-				ChatCompletions: &types.ChatCompletionsRequest{
-					Messages: []types.Message{
-						{Role: "system", Content: types.Content{
-							Structured: []types.ContentBlock{
+			want: &scheduling.LLMRequestBody{
+				ChatCompletions: &scheduling.ChatCompletionsRequest{
+					Messages: []scheduling.Message{
+						{Role: "system", Content: scheduling.Content{
+							Structured: []scheduling.ContentBlock{
 								{
 									Text: "Describe this image in one sentence.",
 									Type: "text",
 								},
 							},
 						}},
-						{Role: "user", Content: types.Content{
-							Structured: []types.ContentBlock{
+						{Role: "user", Content: scheduling.Content{
+							Structured: []scheduling.ContentBlock{
 								{
 									Type:     "image_url",
-									ImageURL: types.ImageBlock{Url: "https://example.com/images/dui.jpg."},
+									ImageURL: scheduling.ImageBlock{Url: "https://example.com/images/dui.jpg."},
 								},
 							},
 						}},
+					},
+				},
+				ParsedBody: map[string]any{
+					"model": "test",
+					"messages": []any{
+						map[string]any{
+							"role": "system",
+							"content": []any{
+								map[string]any{
+									"type": "text",
+									"text": "Describe this image in one sentence.",
+								},
+							},
+						},
+						map[string]any{
+							"role": "user",
+							"content": []any{map[string]any{
+								"type": "image_url",
+								"image_url": map[string]any{
+									"url": "https://example.com/images/dui.jpg.",
+								},
+							},
+							},
+						},
 					},
 				},
 			},
@@ -144,21 +204,44 @@ func TestExtractRequestData(t *testing.T) {
 					},
 				},
 			},
-			want: &types.LLMRequestBody{
-				ChatCompletions: &types.ChatCompletionsRequest{
-					Messages: []types.Message{
-						{Role: "user", Content: types.Content{
-							Structured: []types.ContentBlock{
+			want: &scheduling.LLMRequestBody{
+				ChatCompletions: &scheduling.ChatCompletionsRequest{
+					Messages: []scheduling.Message{
+						{Role: "user", Content: scheduling.Content{
+							Structured: []scheduling.ContentBlock{
 								{
 									Type:       "input_audio",
-									InputAudio: types.AudioBlock{Data: "base64data", Format: "wav"},
+									InputAudio: scheduling.AudioBlock{Data: "base64data", Format: "wav"},
 								},
 								{
 									Type:     "video_url",
-									VideoURL: types.VideoBlock{Url: "https://example.com/video.mp4"},
+									VideoURL: scheduling.VideoBlock{Url: "https://example.com/video.mp4"},
 								},
 							},
 						}},
+					},
+				},
+				ParsedBody: map[string]any{
+					"model": "test",
+					"messages": []any{
+						map[string]any{
+							"role": "user",
+							"content": []any{
+								map[string]any{
+									"type": "input_audio",
+									"input_audio": map[string]any{
+										"data":   "base64data",
+										"format": "wav",
+									},
+								},
+								map[string]any{
+									"type": "video_url",
+									"video_url": map[string]any{
+										"url": "https://example.com/video.mp4",
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -179,9 +262,9 @@ func TestExtractRequestData(t *testing.T) {
 				"add_generation_prompt":        true,
 				"chat_template_kwargs":         map[string]any{"key": "value"},
 			},
-			want: &types.LLMRequestBody{
-				ChatCompletions: &types.ChatCompletionsRequest{
-					Messages:                  []types.Message{{Role: "user", Content: types.Content{Raw: "hello"}}},
+			want: &scheduling.LLMRequestBody{
+				ChatCompletions: &scheduling.ChatCompletionsRequest{
+					Messages:                  []scheduling.Message{{Role: "user", Content: scheduling.Content{Raw: "hello"}}},
 					Tools:                     []any{map[string]any{"type": "function"}},
 					Documents:                 []any{map[string]any{"content": "doc"}},
 					ChatTemplate:              "custom template",
@@ -189,6 +272,19 @@ func TestExtractRequestData(t *testing.T) {
 					ContinueFinalMessage:      true,
 					AddGenerationPrompt:       true,
 					ChatTemplateKWArgs:        map[string]any{"key": "value"},
+				},
+				ParsedBody: map[string]any{
+					"model": "test",
+					"messages": []any{
+						map[string]any{"role": "user", "content": "hello"},
+					},
+					"tools":                        []any{map[string]any{"type": "function"}},
+					"documents":                    []any{map[string]any{"content": "doc"}},
+					"chat_template":                "custom template",
+					"return_assistant_tokens_mask": true,
+					"continue_final_message":       true,
+					"add_generation_prompt":        true,
+					"chat_template_kwargs":         map[string]any{"key": "value"},
 				},
 			},
 		},
@@ -347,10 +443,15 @@ func TestExtractRequestData(t *testing.T) {
 				"prompt":     "test prompt",
 				"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 			},
-			want: &types.LLMRequestBody{
-				Completions: &types.CompletionsRequest{
+			want: &scheduling.LLMRequestBody{
+				Completions: &scheduling.CompletionsRequest{
 					Prompt:    "test prompt",
 					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
+				},
+				ParsedBody: map[string]any{
+					"model":      "test",
+					"prompt":     "test prompt",
+					"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 				},
 			},
 		},
@@ -369,13 +470,25 @@ func TestExtractRequestData(t *testing.T) {
 				},
 				"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 			},
-			want: &types.LLMRequestBody{
-				ChatCompletions: &types.ChatCompletionsRequest{
-					Messages: []types.Message{
-						{Role: "system", Content: types.Content{Raw: "this is a system message"}},
-						{Role: "user", Content: types.Content{Raw: "hello"}},
+			want: &scheduling.LLMRequestBody{
+				ChatCompletions: &scheduling.ChatCompletionsRequest{
+					Messages: []scheduling.Message{
+						{Role: "system", Content: scheduling.Content{Raw: "this is a system message"}},
+						{Role: "user", Content: scheduling.Content{Raw: "hello"}},
 					},
 					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
+				},
+				ParsedBody: map[string]any{
+					"model": "test",
+					"messages": []any{
+						map[string]any{
+							"role": "system", "content": "this is a system message",
+						},
+						map[string]any{
+							"role": "user", "content": "hello",
+						},
+					},
+					"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 				},
 			},
 		},
@@ -387,10 +500,15 @@ func TestExtractRequestData(t *testing.T) {
 				"input":        "How do I check if a Python object is an instance of a class?",
 				"instructions": "You are a coding assistant that talks like a pirate.",
 			},
-			want: &types.LLMRequestBody{
-				Responses: &types.ResponsesRequest{
+			want: &scheduling.LLMRequestBody{
+				Responses: &scheduling.ResponsesRequest{
 					Input:        "How do I check if a Python object is an instance of a class?",
 					Instructions: "You are a coding assistant that talks like a pirate.",
+				},
+				ParsedBody: map[string]any{
+					"model":        "gpt-4o",
+					"input":        "How do I check if a Python object is an instance of a class?",
+					"instructions": "You are a coding assistant that talks like a pirate.",
 				},
 			},
 		},
@@ -402,10 +520,15 @@ func TestExtractRequestData(t *testing.T) {
 				"input":      "test input",
 				"cache_salt": "abc123",
 			},
-			want: &types.LLMRequestBody{
-				Responses: &types.ResponsesRequest{
+			want: &scheduling.LLMRequestBody{
+				Responses: &scheduling.ResponsesRequest{
 					Input:     "test input",
 					CacheSalt: "abc123",
+				},
+				ParsedBody: map[string]any{
+					"model":      "gpt-4o",
+					"input":      "test input",
+					"cache_salt": "abc123",
 				},
 			},
 		},
@@ -428,11 +551,15 @@ func TestExtractRequestData(t *testing.T) {
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
-			want: &types.LLMRequestBody{
-				Conversations: &types.ConversationsRequest{
-					Items: []types.ConversationItem{
+			want: &scheduling.LLMRequestBody{
+				Conversations: &scheduling.ConversationsRequest{
+					Items: []scheduling.ConversationItem{
 						{Type: "message", Role: "user", Content: "Hello"},
 					},
+				},
+				ParsedBody: map[string]any{
+					"model": "gpt-4o",
+					"items": []any{map[string]any{"type": "message", "role": "user", "content": "Hello"}},
 				},
 			},
 		},
@@ -445,10 +572,16 @@ func TestExtractRequestData(t *testing.T) {
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
-			want: &types.LLMRequestBody{
-				Conversations: &types.ConversationsRequest{
-					Items: []types.ConversationItem{
+			want: &scheduling.LLMRequestBody{
+				Conversations: &scheduling.ConversationsRequest{
+					Items: []scheduling.ConversationItem{
 						{Type: "message", Role: "user", Content: "Hello"},
+					},
+				},
+				ParsedBody: map[string]any{
+					"model": "gpt-4o",
+					"items": []any{
+						map[string]any{"type": "message", "role": "user", "content": "Hello"},
 					},
 				},
 			},
@@ -460,9 +593,13 @@ func TestExtractRequestData(t *testing.T) {
 				"model":  "gpt-4o",
 				"prompt": "test prompt",
 			},
-			want: &types.LLMRequestBody{
-				Completions: &types.CompletionsRequest{
+			want: &scheduling.LLMRequestBody{
+				Completions: &scheduling.CompletionsRequest{
 					Prompt: "test prompt",
+				},
+				ParsedBody: map[string]any{
+					"model":  "gpt-4o",
+					"prompt": "test prompt",
 				},
 			},
 		},
@@ -470,17 +607,202 @@ func TestExtractRequestData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractRequestBody(tt.body, tt.headers)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ExtractRequestBody() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			bodyBytes, err := json.Marshal(tt.body)
+			if err != nil {
+				t.Fatalf("Invalid tt.body %v: cannot convert to bytes", tt.body)
 			}
+			got, err := parser.ParseRequest(context.Background(), bodyBytes, tt.headers)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseRequest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
 			if tt.wantErr {
 				return
 			}
 
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("ExtractRequestBody() mismatch (-want +got):\n%s", diff)
+				t.Errorf("ParseRequest() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestOpenAIParser_ParseResponse(t *testing.T) {
+	parser := NewOpenAIParser()
+
+	tests := []struct {
+		name    string
+		body    []byte
+		want    *fwkrh.ParsedResponse
+		wantErr bool
+	}{
+		{
+			name: "Chat Completion (uses prompt_tokens)",
+			body: []byte(`{
+				"object": "chat.completion",
+				"usage": {
+					"prompt_tokens": 10,
+					"completion_tokens": 20,
+					"total_tokens": 30
+				}
+			}`),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     10,
+					CompletionTokens: 20,
+					TotalTokens:      30,
+				},
+			},
+		},
+		{
+			name: "Conversations API (uses input_tokens)",
+			body: []byte(`{
+				"object": "conversation",
+				"usage": {
+					"input_tokens": 15,
+					"output_tokens": 25,
+					"total_tokens": 40
+				}
+			}`),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     15,
+					CompletionTokens: 25,
+					TotalTokens:      40,
+				},
+			},
+		},
+		{
+			name: "Full Usage with Cached Token details",
+			body: []byte(`{
+				"object": "chat.completion",
+				"usage": {
+					"prompt_tokens": 100,
+					"completion_tokens": 50,
+					"total_tokens": 150,
+					"prompt_token_details": {
+						"cached_tokens": 40
+					}
+				}
+			}`),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     100,
+					CompletionTokens: 50,
+					TotalTokens:      150,
+					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+						CachedTokens: 40,
+					},
+				},
+			},
+		},
+		{
+			name: "Fallback logic (unknown object type)",
+			body: []byte(`{
+				"object": "unknown_type",
+				"usage": {
+					"input_tokens": 5,
+					"completion_tokens": 5,
+					"total_tokens": 10
+				}
+			}`),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     5,
+					CompletionTokens: 5,
+					TotalTokens:      10,
+				},
+			},
+		},
+		{
+			name: "Missing usage field returns error",
+			body: []byte(`{"object": "chat.completion"}`),
+			want: &fwkrh.ParsedResponse{
+				Usage: nil,
+			},
+		},
+		{
+			name:    "Invalid JSON returns error",
+			body:    []byte(`{malformed`),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parser.ParseResponse(context.Background(), tt.body, map[string]string{}, false)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseResponse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ParseResponse() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestOpenAIParser_ParseResponse_Streaming(t *testing.T) {
+	parser := NewOpenAIParser()
+
+	tests := []struct {
+		name  string
+		chunk []byte
+		want  *fwkrh.ParsedResponse
+	}{
+		{
+			name:  "Single data chunk with usage",
+			chunk: []byte("data: {\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":10,\"total_tokens\":17}}\n"),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     7,
+					CompletionTokens: 10,
+					TotalTokens:      17,
+				},
+			},
+		},
+		{
+			name:  "Usage and DONE in the same multi-line response",
+			chunk: []byte("data: {\"usage\":{\"prompt_tokens\":10,\"prompt_token_details\":{\"cached_tokens\":10}}}\ndata: [DONE]"),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens: 10,
+					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+						CachedTokens: 10,
+					},
+				},
+			},
+		},
+		{
+			name:  "Chunk without usage returns ParsedResponse with nil usage",
+			chunk: []byte(`data: {"choices":[{"text":"hello"}]}`),
+			want: &fwkrh.ParsedResponse{
+				Usage: nil,
+			},
+		},
+		{
+			name:  "DONE message returns error",
+			chunk: []byte(`data: [DONE]`),
+			want: &fwkrh.ParsedResponse{
+				Usage: nil,
+			},
+		},
+		{
+			name:  "Malformed JSON in stream (skipped)",
+			chunk: []byte(`data: {bad-json}\ndata: {\"usage\":{\"total_tokens\":5}}`),
+			want: &fwkrh.ParsedResponse{
+				Usage: nil,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parser.ParseResponse(context.Background(), tt.chunk, map[string]string{contentType: eventStreamType}, true)
+			if err != nil {
+				t.Fatalf("ParseStreamResponse() error = %v", err)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ParseStreamResponse() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -493,10 +815,15 @@ func BenchmarkExtractRequestData_Completions(b *testing.B) {
 		"prompt": "test prompt",
 	}
 	headers := map[string]string{":path": "/v1/completions"}
+	parser := NewOpenAIParser()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -511,10 +838,15 @@ func BenchmarkExtractRequestData_ChatCompletions(b *testing.B) {
 		},
 	}
 	headers := map[string]string{":path": "/v1/chat/completions"}
+	parser := NewOpenAIParser()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -539,7 +871,11 @@ func BenchmarkExtractRequestData_ChatCompletionsWithOptionals(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = extractRequestBody(jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -553,10 +889,15 @@ func BenchmarkExtractRequestData_Responses(b *testing.B) {
 		"instructions": "You are a coding assistant that talks like a pirate.",
 	}
 	headers := map[string]string{":path": "/v1/responses"}
+	parser := NewOpenAIParser()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -571,10 +912,15 @@ func BenchmarkExtractRequestData_Conversations(b *testing.B) {
 		},
 	}
 	headers := map[string]string{":path": "/v1/conversations"}
+	parser := NewOpenAIParser()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ExtractRequestBody(body, headers)
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			b.Errorf("body cannot be marshalled to JSON bytes")
+		}
+		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}

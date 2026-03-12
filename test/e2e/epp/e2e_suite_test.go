@@ -242,7 +242,7 @@ func createClient(testConfig *testutils.TestConfig, filePath string) {
 func createMetricsRbac(testConfig *testutils.TestConfig, filePath string) {
 	inManifests := testutils.ReadYaml(filePath)
 	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
-	outManifests := []string{}
+	outManifests := make([]string, 0, len(inManifests))
 	for _, m := range inManifests {
 		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", testConfig.NsName))
 	}
@@ -276,7 +276,7 @@ func createHfSecret(testConfig *testutils.TestConfig, secretPath string) {
 
 	inManifests := testutils.ReadYaml(secretPath)
 	ginkgo.By("Replacing placeholder secret data with HF_TOKEN environment variable")
-	outManifests := []string{}
+	outManifests := make([]string, 0, len(inManifests))
 	for _, m := range inManifests {
 		outManifests = append(outManifests, strings.Replace(m, "$HF_TOKEN", token, 1))
 	}
@@ -289,7 +289,7 @@ func createHfSecret(testConfig *testutils.TestConfig, secretPath string) {
 func createEnvoy(testConfig *testutils.TestConfig, filePath string) {
 	inManifests := testutils.ReadYaml(filePath)
 	ginkgo.By("Replacing placeholder namespace with E2E_NS environment variable")
-	outManifests := []string{}
+	outManifests := make([]string, 0, len(inManifests))
 	for _, m := range inManifests {
 		outManifests = append(outManifests, strings.ReplaceAll(m, "$E2E_NS", testConfig.NsName))
 	}
@@ -304,7 +304,7 @@ func createInferExt(testConfig *testutils.TestConfig, filePath string) {
 	// This image needs to be updated to open multiple ports and respond.
 	inManifests := testutils.ReadYaml(filePath) // Modify inference-pool.yaml
 	ginkgo.By("Replacing placeholders with environment variables")
-	outManifests := []string{}
+	outManifests := make([]string, 0, len(inManifests))
 	replacer := strings.NewReplacer(
 		"$E2E_NS", testConfig.NsName,
 		"$E2E_IMAGE", e2eImage,

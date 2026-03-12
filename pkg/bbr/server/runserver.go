@@ -38,11 +38,12 @@ import (
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
-	GrpcPort       int
-	Datastore      datastore.Datastore
-	SecureServing  bool
-	Streaming      bool
-	RequestPlugins []framework.PayloadProcessor
+	GrpcPort        int
+	Datastore       datastore.Datastore
+	SecureServing   bool
+	Streaming       bool
+	RequestPlugins  []framework.RequestProcessor
+	ResponsePlugins []framework.ResponseProcessor
 }
 
 func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunner {
@@ -77,13 +78,16 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			if err != nil {
 				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
-			creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
+			creds := credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+				NextProtos:   []string{"h2"},
+			})
 			srv = grpc.NewServer(grpc.Creds(creds))
 		} else {
 			srv = grpc.NewServer()
 		}
 
-		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore, r.RequestPlugins))
+		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore, r.RequestPlugins, r.ResponsePlugins))
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)

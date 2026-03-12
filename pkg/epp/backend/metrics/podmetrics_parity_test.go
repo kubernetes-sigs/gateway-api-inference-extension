@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -30,13 +31,11 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	metricextractor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 )
 
 // vLLM metric names based on Model Server Protocol
@@ -277,7 +276,7 @@ type MetricMock struct {
 func parseWithBackendPodMetrics(t *testing.T, ctx context.Context, urlStr string) (*fwkdl.Metrics, error) {
 	t.Helper()
 
-	mapping, err := backendmetrics.NewMetricMapping(
+	mapping, err := NewMetricMapping(
 		WaitingMetric,
 		RunningMetric,
 		KVCacheMetric,
@@ -293,7 +292,7 @@ func parseWithBackendPodMetrics(t *testing.T, ctx context.Context, urlStr string
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
-	client := &backendmetrics.PodMetricsClientImpl{
+	client := &PodMetricsClientImpl{
 		MetricMapping:            mapping,
 		ModelServerMetricsPath:   "",
 		ModelServerMetricsScheme: parsedURL.Scheme,
@@ -317,18 +316,16 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
-	cleanup := setupTestFlags(t) // set-up test flags and restore on cleanup
-	defer cleanup()
-
-	// CLI flags to match the test server URL
-	if err := pflag.CommandLine.Set("model-server-metrics-scheme", parsedURL.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to set scheme flag: %w", err)
-	}
-	if err := pflag.CommandLine.Set("model-server-metrics-path", parsedURL.Path); err != nil {
-		return nil, fmt.Errorf("failed to set path flag: %w", err)
+	// Pass scheme and path directly as plugin parameters — no CLI flags needed.
+	params, err := json.Marshal(map[string]any{
+		"scheme": parsedURL.Scheme,
+		"path":   parsedURL.Path,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal datasource parameters: %w", err)
 	}
 
-	mapping, err := NewMapping(
+	mapping, err := metricextractor.NewMapping(
 		WaitingMetric,
 		RunningMetric,
 		KVCacheMetric,
@@ -339,28 +336,28 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 		return nil, fmt.Errorf("failed to create mapping: %w", err)
 	}
 
-	registry := NewMappingRegistry()
-	if err := registry.Register(DefaultEngineType, mapping); err != nil {
+	registry := metricextractor.NewMappingRegistry()
+	if err := registry.Register(metricextractor.DefaultEngineType, mapping); err != nil {
 		return nil, fmt.Errorf("failed to register mapping: %w", err)
 	}
 
-	extractor, err := NewModelServerExtractor(registry, DefaultEngineTypeLabelKey)
+	extractor, err := metricextractor.NewCoreMetricsExtractor(registry, metricextractor.DefaultEngineTypeLabelKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extractor: %w", err)
 	}
 
 	plugin, err := sourcemetrics.MetricsDataSourceFactory(
 		"test-metrics-source",
-		nil, // use default parameters from flags
-		nil, // no plugin handle needed for test
+		params, // configure scheme and path via parameters
+		nil,    // no plugin handle needed for test
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create data source: %w", err)
 	}
 
-	dataSource, ok := plugin.(fwkdl.DataSource)
+	dataSource, ok := plugin.(fwkdl.PollingDataSource)
 	if !ok {
-		return nil, errors.New("plugin is not a DataSource")
+		return nil, errors.New("plugin is not a PollingDataSource")
 	}
 
 	if err := dataSource.AddExtractor(extractor); err != nil {
@@ -370,31 +367,16 @@ func parseWithDatalayerMetrics(t *testing.T, ctx context.Context, urlStr string)
 	metadata := &fwkdl.EndpointMetadata{
 		MetricsHost: parsedURL.Host,
 		Labels: map[string]string{
-			DefaultEngineTypeLabelKey: DefaultEngineType,
+			metricextractor.DefaultEngineTypeLabelKey: metricextractor.DefaultEngineType,
 		},
 	}
 	endpoint := fwkdl.NewEndpoint(metadata, fwkdl.NewMetrics())
 
-	if err := dataSource.Collect(ctx, endpoint); err != nil {
+	if err := dataSource.Poll(ctx, endpoint); err != nil {
 		return endpoint.GetMetrics(), err
 	}
 
 	return endpoint.GetMetrics(), nil
-}
-
-// setupTestFlags creates a temporary FlagSet for testing and returns a cleanup function
-func setupTestFlags(t *testing.T) func() {
-	t.Helper()
-	originalFlags := pflag.CommandLine
-	testFlags := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	pflag.CommandLine = testFlags
-
-	opts := server.NewOptions()
-	opts.AddFlags(testFlags)
-
-	return func() {
-		pflag.CommandLine = originalFlags
-	}
 }
 
 // createMockServer creates an HTTP test server that serves Prometheus metrics

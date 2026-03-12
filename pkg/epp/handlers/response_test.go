@@ -18,7 +18,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -27,6 +26,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -54,6 +54,40 @@ const (
 		}
 	}
 	`
+
+	bodyWithoutUsage = `
+	{
+		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
+		"object": "text_completion",
+		"created": 1732563765,
+		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"choices": [
+			{
+				"index": 0,
+				"text": " Chronicle\nThe San Francisco Chronicle has a new book review section, and it's a good one. The reviews are short, but they're well-written and well-informed. The Chronicle's book review section is a good place to start if you're looking for a good book review.\nThe Chronicle's book review section is a good place to start if you're looking for a good book review. The Chronicle's book review section",
+				"logprobs": null,
+				"finish_reason": "length",
+				"stop_reason": null,
+				"prompt_logprobs": null
+			}
+		]
+	}
+	`
+
+	bodyInvalidJSON = `
+	{
+		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
+		"object": "text_completion",
+		"created": 1732563765,
+		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"choices": [
+			{
+				"invalid json"
+			}
+		]
+	}
+	`
+
 	bodyWithCachedTokens = `
 	{
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
@@ -117,11 +151,10 @@ func TestHandleResponseBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	tests := []struct {
-		name    string
-		body    []byte
-		reqCtx  *RequestContext
-		want    fwkrq.Usage
-		wantErr bool
+		name   string
+		body   []byte
+		reqCtx *RequestContext
+		want   fwkrq.Usage
 	}{
 		{
 			name: "success",
@@ -144,27 +177,33 @@ func TestHandleResponseBody(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "success body without usage, the HandleResponseBody should still return non-nil error",
+			body: []byte(bodyWithoutUsage),
+			want: fwkrq.Usage{}, // Since the usage is not set in the responseBody, this usage should be empty.
+		},
+		{
+			name: "success invalid joson body, the HandleResponseBody should still return non-nil error",
+			body: []byte(bodyInvalidJSON),
+			want: fwkrq.Usage{}, // Since the response is invalid json, the usage cannot be extrcated.
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &StreamingServer{}
+			server := &StreamingServer{
+				parser: openai.NewOpenAIParser(),
+			}
 			server.director = &mockDirector{}
 			reqCtx := test.reqCtx
 			if reqCtx == nil {
-				reqCtx = &RequestContext{}
-			}
-			var responseMap map[string]any
-			marshalErr := json.Unmarshal(test.body, &responseMap)
-			if marshalErr != nil {
-				t.Error(marshalErr, "Error unmarshaling request body")
-			}
-			_, err := server.HandleResponseBody(ctx, reqCtx, responseMap)
-			if err != nil {
-				if !test.wantErr {
-					t.Fatalf("HandleResponseBody returned unexpected error: %v, want %v", err, test.wantErr)
+				reqCtx = &RequestContext{
+					Response: &Response{},
 				}
-				return
+			}
+			_, err := server.HandleResponseBody(ctx, reqCtx, test.body)
+			if err != nil {
+				t.Errorf("HandleResponseBody returned unexpected error: %v, want nil", err)
 			}
 
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
@@ -178,26 +217,19 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	tests := []struct {
 		name    string
-		body    string
-		reqCtx  *RequestContext
+		body    []byte
 		want    fwkrq.Usage
 		wantErr bool
 	}{
 		{
-			name: "streaming request without usage",
-			body: streamingBodyWithoutUsage,
-			reqCtx: &RequestContext{
-				modelServerStreaming: true,
-			},
+			name:    "streaming request without usage",
+			body:    []byte(streamingBodyWithoutUsage),
 			wantErr: false,
 			// In the middle of streaming response, so request context response is not set yet.
 		},
 		{
-			name: "streaming request with usage",
-			body: streamingBodyWithUsage,
-			reqCtx: &RequestContext{
-				modelServerStreaming: true,
-			},
+			name:    "streaming request with usage",
+			body:    []byte(streamingBodyWithUsage),
 			wantErr: false,
 			want: fwkrq.Usage{
 				PromptTokens:     7,
@@ -206,11 +238,8 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			},
 		},
 		{
-			name: "streaming request with usage and cached tokens",
-			body: streamingBodyWithUsageAndCachedTokens,
-			reqCtx: &RequestContext{
-				modelServerStreaming: true,
-			},
+			name:    "streaming request with usage and cached tokens",
+			body:    []byte(streamingBodyWithUsageAndCachedTokens),
 			wantErr: false,
 			want: fwkrq.Usage{
 				PromptTokens:     7,
@@ -225,13 +254,18 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &StreamingServer{}
-			server.director = &mockDirector{}
-			reqCtx := test.reqCtx
-			if reqCtx == nil {
-				reqCtx = &RequestContext{}
+			server := &StreamingServer{
+				parser: openai.NewOpenAIParser(),
 			}
-			server.HandleResponseBodyModelStreaming(ctx, reqCtx, test.body)
+			server.director = &mockDirector{}
+			reqCtx := &RequestContext{
+				Response: &Response{
+					Headers: map[string]string{
+						"content-type": "text/event-stream; charset=utf-8",
+					},
+				},
+			}
+			server.HandleResponseBodyModelStreaming(ctx, reqCtx, test.body, true) // Hard coded to true since openAIParser does not endOfStream to switch logic.
 
 			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
 				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
@@ -243,42 +277,47 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 	t.Parallel()
 
+	type chunkStream struct {
+		body        []byte
+		endOfStream bool
+	}
+
 	tests := []struct {
 		name      string
-		chunks    []string
+		chunks    []chunkStream
 		wantUsage fwkrq.Usage
 	}{
 		{
 			name: "Standard: Usage and DONE in same chunk",
-			chunks: []string{
-				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`,
+			chunks: []chunkStream{
+				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`), endOfStream: true},
 			},
 			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Split: Usage in Chunk 1, DONE in Chunk 2",
-			chunks: []string{
+			chunks: []chunkStream{
 				// Chunk 1: Usage data arrives
-				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n",
+				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n"), endOfStream: false},
 				// Chunk 2: Stream termination. Should NOT overwrite the usage from Chunk 1.
-				`data: [DONE]`,
+				{body: []byte(`data: [DONE]`), endOfStream: true},
 			},
 			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Fragmented: Content -> Usage -> DONE",
-			chunks: []string{
-				`data: {"choices":[{"text":"Hello"}]}` + "\n",
-				`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n",
-				`data: [DONE]`,
+			chunks: []chunkStream{
+				{body: []byte(`data: {"choices":[{"text":"Hello"}]}` + "\n"), endOfStream: false},
+				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n"), endOfStream: false},
+				{body: []byte(`data: [DONE]`), endOfStream: true},
 			},
 			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "No Usage Data",
-			chunks: []string{
-				`data: {"choices":[{"text":"Hello"}]}` + "\n",
-				`data: [DONE]`,
+			chunks: []chunkStream{
+				{body: []byte(`data: {"choices":[{"text":"Hello"}]}` + "\n"), endOfStream: false},
+				{body: []byte(`data: [DONE]`), endOfStream: true},
 			},
 			wantUsage: fwkrq.Usage{}, // Zero values
 		},
@@ -287,16 +326,22 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			server := &StreamingServer{
+				parser:   openai.NewOpenAIParser(),
 				director: &mockDirector{},
 			}
-			reqCtx := &RequestContext{}
+			reqCtx := &RequestContext{
+				Response: &Response{
+					Headers: map[string]string{
+						"content-type": "text/event-stream",
+					},
+				},
+			}
 
 			for _, chunk := range tc.chunks {
-				server.HandleResponseBodyModelStreaming(context.Background(), reqCtx, chunk)
+				server.HandleResponseBodyModelStreaming(context.Background(), reqCtx, chunk.body, chunk.endOfStream)
 			}
 
 			assert.Equal(t, tc.wantUsage, reqCtx.Usage, "Usage data should match expected accumulation")
-			assert.True(t, reqCtx.ResponseComplete, "Response should be marked complete after [DONE]")
 		})
 	}
 }

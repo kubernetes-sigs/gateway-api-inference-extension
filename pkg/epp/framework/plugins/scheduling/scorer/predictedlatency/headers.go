@@ -20,8 +20,8 @@ package predictedlatency
 import (
 	"strconv"
 
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
 // parseFloatHeader retrieves a header by name, parses it as a float64,
@@ -36,8 +36,8 @@ func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (fl
 	// 2. Parse the header value to a float64
 	parsedFloat, err := strconv.ParseFloat(headerValue, 64)
 	if err != nil {
-		return 0, errutil.Error{
-			Code: errutil.BadRequest,
+		return 0, errcommon.Error{
+			Code: errcommon.BadRequest,
 			Msg:  headerName + " must be a float",
 		}
 	}

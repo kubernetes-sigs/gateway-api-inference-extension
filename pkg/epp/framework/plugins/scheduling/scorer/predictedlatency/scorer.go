@@ -72,7 +72,7 @@ type Config struct {
 
 var DefaultConfig = Config{
 	SamplingMean:              1000,
-	MaxSampledTokens:          5,
+	MaxSampledTokens:          0,
 	SLOBufferFactor:           1,
 	NegHeadroomTTFTWeight:     0.8,
 	NegHeadroomTPOTWeight:     0.2,
@@ -118,8 +118,8 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("samplingMean must be > 0, got %f", c.SamplingMean))
 	}
 
-	if c.MaxSampledTokens <= 0 {
-		errs = append(errs, fmt.Errorf("maxSampledTokens must be > 0, got %d", c.MaxSampledTokens))
+	if c.MaxSampledTokens < 0 {
+		errs = append(errs, fmt.Errorf("maxSampledTokens must be >= 0, got %d", c.MaxSampledTokens))
 	}
 
 	if c.SLOBufferFactor <= 0 {
@@ -305,22 +305,31 @@ func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleStat
 
 	predictedLatencyCtx, err := s.getPredictedLatencyContextForRequest(request)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(err, "PredictedLatency: no SLO context found for request, returning composite-only scores")
-		return s.scoreWithoutPredictions(ctx, newPredictedLatencyContext(request), endpoints, rng)
-	}
-
-	predictions := predictedLatencyCtx.predictionsForScheduling
-	if len(predictions) != len(endpoints) {
-		logger.V(logutil.DEBUG).Info("PredictedLatency: prediction count mismatch, falling back to composite-only scoring",
-			"predictions", len(predictions), "endpoints", len(endpoints))
+		logger.V(logutil.DEBUG).Info("PredictedLatency: no SLO context found for request, returning composite-only scores")
+		predictedLatencyCtx = newPredictedLatencyContext(request)
+		s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 		return s.scoreWithoutPredictions(ctx, predictedLatencyCtx, endpoints, rng)
 	}
+
+	// Extract predictions for filtered endpoints (supports profile-based filtering)
+	allPreds := make([]endpointPredictionResult, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if pred, ok := predictedLatencyCtx.predictionsForScheduling[endpoint.GetMetadata().NamespacedName.Name]; ok {
+			allPreds = append(allPreds, pred)
+		}
+	}
+
+	if len(allPreds) != len(endpoints) {
+		logger.V(logutil.DEBUG).Info("PredictedLatency: missing predictions for some endpoints, falling back to composite-only scoring",
+			"endpoints", len(endpoints), "predictions", len(allPreds))
+		return s.scoreWithoutPredictions(ctx, predictedLatencyCtx, endpoints, rng)
+	}
+
 	// Initialize scores map with all pods having score 0
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = 0
 	}
-	allPreds := append([]endpointPredictionResult(nil), predictions...)
 	allPreds, _ = s.epsilonGreedyAffinityGate(ctx, allPreds, rng, "overall", s.config.AffinityGateTauGlobal)
 
 	// 2) Tiered selection: positive headroom pods get 99% probability, negative get 1%

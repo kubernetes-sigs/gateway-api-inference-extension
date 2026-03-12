@@ -88,8 +88,22 @@ func NewCollector(poolInfo PoolInfo) *Collector {
 }
 
 // Start initiates data source collection for the endpoint.
+// All sources must implement PollingDataSource. Validation is performed by the caller.
 // TODO: pass PoolInfo for backward compatibility
 func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, sources []fwkdl.DataSource) error {
+	// Validate sources slice is not empty
+	if len(sources) == 0 {
+		return errors.New("cannot start collector with empty sources")
+	}
+
+	pollers := make([]fwkdl.PollingDataSource, 0, len(sources))
+	for _, src := range sources {
+		if src == nil {
+			return errors.New("cannot add nil data source")
+		}
+		pollers = append(pollers, src.(fwkdl.PollingDataSource))
+	}
+
 	var ready chan struct{}
 	started := false
 
@@ -99,7 +113,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 		started = true
 		ready = make(chan struct{})
 
-		go func(endpoint fwkdl.Endpoint, sources []fwkdl.DataSource) {
+		go func(endpoint fwkdl.Endpoint, sources []fwkdl.PollingDataSource) {
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {
@@ -115,21 +129,21 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 					return
 				case <-ticker.Channel():
 					// TODO: do not collect if there's no pool specified?
-					var collectErr error
+					var pollErr error
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
-						if err := src.Collect(ctx, endpoint); err != nil {
-							collectErr = err
+						if err := src.Poll(ctx, endpoint); err != nil {
+							pollErr = err
 						}
 						cancel() // release the ctx timeout resources
 					}
 					// Report endpoint health based on collection result
 					if c.poolInfo != nil {
-						c.poolInfo.EndpointSetHealthy(endpoint, collectErr == nil)
+						c.poolInfo.EndpointSetHealthy(endpoint, pollErr == nil)
 					}
 				}
 			}
-		}(ep, sources)
+		}(ep, pollers)
 	})
 
 	if !started {

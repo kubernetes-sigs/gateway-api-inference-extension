@@ -388,7 +388,7 @@ func EventuallyExists(testConfig *TestConfig, getResource func() error) {
 }
 
 func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
-	objNames := []string{}
+	objNames := make([]string, 0, len(objs))
 	for _, unstrObj := range objs {
 		ginkgo.By(fmt.Sprintf("Processing GVK: %s", unstrObj.GroupVersionKind()))
 		unstrObj.SetNamespace(testConfig.NsName)

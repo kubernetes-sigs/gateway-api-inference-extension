@@ -53,7 +53,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 	pmf := metrics.NewPodMetricsFactory(pmc, time.Second)
 	ds := datastore.NewDatastore(ctx, pmf, 0)
 
-	initObjs := []client.Object{}
+	initObjs := make([]client.Object, 0, len(objectives)+len(pods))
 	for _, objective := range objectives {
 		initObjs = append(initObjs, objective)
 		ds.ObjectiveSet(objective)
@@ -176,7 +176,7 @@ func CheckEnvoyGRPCHeaders(t *testing.T, response *pb.CommonResponse, expectedHe
 }
 
 func BuildEnvoyGRPCHeaders(headers map[string]string, rawValue bool) *pb.HttpHeaders {
-	headerValues := make([]*corev3.HeaderValue, 0)
+	headerValues := make([]*corev3.HeaderValue, 0, len(headers))
 	for key, value := range headers {
 		header := &corev3.HeaderValue{Key: key}
 		if rawValue {

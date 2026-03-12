@@ -24,7 +24,7 @@ import (
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
@@ -43,10 +43,10 @@ func ReqResponseOnly(
 	respHeaders map[string]string,
 	bodyChunks ...string,
 ) []*extProcPb.ProcessingRequest {
-	reqs := []*extProcPb.ProcessingRequest{}
+	reqs := make([]*extProcPb.ProcessingRequest, 0, 1+len(bodyChunks))
 
 	// 1. Response Headers
-	hListResp := []*envoyCorev3.HeaderValue{}
+	hListResp := make([]*envoyCorev3.HeaderValue, 0, len(respHeaders))
 	for k, v := range respHeaders {
 		hListResp = append(hListResp, &envoyCorev3.HeaderValue{Key: k, RawValue: []byte(v)})
 	}
@@ -83,7 +83,7 @@ func ExpectRouteTo(endpoint, targetModel, prompt string) []*extProcPb.Processing
 		endpoint, string(j),
 		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
 		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-			Key:      requtil.RequestIdHeaderKey,
+			Key:      reqcommon.RequestIdHeaderKey,
 			RawValue: []byte("test-request-id"),
 		}},
 	)
@@ -115,20 +115,18 @@ func ExpectBufferResp(body string, contentType string) []*extProcPb.ProcessingRe
 // 1. ResponseHeaders (with "x-went-into-resp-headers" and "text/event-stream")
 // 2. ResponseBody chunks (with EndOfStream=true on the final chunk)
 func ExpectStreamResp(chunks ...string) []*extProcPb.ProcessingResponse {
-	// 1. The Header Response Frame
-	res := []*extProcPb.ProcessingResponse{
-		integration.NewResponseHeaders(
-			&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-				Key:      "x-went-into-resp-headers",
-				RawValue: []byte("true"),
-			}},
-			&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-				Key:      "content-type",
-				RawValue: []byte("text/event-stream"),
-			}},
-			&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "status", RawValue: []byte("200")}},
-		),
-	}
+	res := make([]*extProcPb.ProcessingResponse, 0, 1+len(chunks))
+	res = append(res, integration.NewResponseHeaders(
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
+			Key:      "x-went-into-resp-headers",
+			RawValue: []byte("true"),
+		}},
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
+			Key:      "content-type",
+			RawValue: []byte("text/event-stream"),
+		}},
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "status", RawValue: []byte("200")}},
+	))
 
 	// 2. The Body Chunk Frames
 	for i, chunk := range chunks {

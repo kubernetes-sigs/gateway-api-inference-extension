@@ -28,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	datasourcemocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
 // --- Test Stubs ---
@@ -48,7 +49,7 @@ func defaultEndpoint() fwkdl.Endpoint {
 
 var (
 	endpoint = defaultEndpoint()
-	sources  = []fwkdl.DataSource{&FakeDataSource{}}
+	sources  = []fwkdl.DataSource{&datasourcemocks.MetricsDataSource{}}
 )
 
 func TestCollectorCanStartOnlyOnce(t *testing.T) {
@@ -80,7 +81,7 @@ func TestCollectorCanStopOnlyOnce(t *testing.T) {
 }
 
 func TestCollectorCollectsOnTicks(t *testing.T) {
-	source := &FakeDataSource{}
+	source := &datasourcemocks.MetricsDataSource{}
 	c := NewCollector(nil)
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
@@ -91,14 +92,14 @@ func TestCollectorCollectsOnTicks(t *testing.T) {
 
 	// use Eventually for async processing
 	require.Eventually(t, func() bool {
-		return atomic.LoadInt64(&source.callCount) == 2
+		return atomic.LoadInt64(&source.CallCount) == 2
 	}, 1*time.Second, 2*time.Millisecond, "expected 2 collections")
 
 	require.NoError(t, c.Stop())
 }
 
 func TestCollectorStopCancelsContext(t *testing.T) {
-	source := &FakeDataSource{}
+	source := &datasourcemocks.MetricsDataSource{}
 	c := NewCollector(nil)
 	ticker := mocks.NewTicker()
 	ctx := context.Background()
@@ -108,10 +109,50 @@ func TestCollectorStopCancelsContext(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	require.NoError(t, c.Stop())
-	before := atomic.LoadInt64(&source.callCount)
+	before := atomic.LoadInt64(&source.CallCount)
 
 	ticker.Tick()
 	time.Sleep(20 * time.Millisecond) // let collector run again
-	after := atomic.LoadInt64(&source.callCount)
+	after := atomic.LoadInt64(&source.CallCount)
 	assert.Equal(t, before, after, "call count changed after stop")
+}
+
+func TestCollectorStartSourceValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		sources []fwkdl.DataSource
+		wantErr bool
+	}{
+		{
+			name:    "empty sources returns error",
+			sources: []fwkdl.DataSource{},
+			wantErr: true,
+		},
+		{
+			name:    "nil source returns error",
+			sources: []fwkdl.DataSource{nil},
+			wantErr: true,
+		},
+		{
+			name:    "valid polling source succeeds",
+			sources: []fwkdl.DataSource{&datasourcemocks.MetricsDataSource{}},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCollector(nil)
+			ticker := mocks.NewTicker()
+			ctx := context.Background()
+
+			err := c.Start(ctx, ticker, endpoint, tt.sources)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				require.NoError(t, c.Stop())
+			}
+		})
+	}
 }

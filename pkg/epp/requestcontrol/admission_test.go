@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
@@ -31,7 +32,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
 // --- Mocks ---
@@ -93,7 +93,7 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 			isSaturated:     true,
 			locatorPods:     mockPods,
 			expectErr:       true,
-			expectErrCode:   errutil.InferencePoolResourceExhausted,
+			expectErrCode:   errcommon.ResourceExhausted,
 			expectErrSubstr: "system saturated, sheddable request dropped",
 		},
 		{
@@ -102,7 +102,7 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 			isSaturated:     true,
 			locatorPods:     []backendmetrics.PodMetrics{},
 			expectErr:       true,
-			expectErrCode:   errutil.InferencePoolResourceExhausted,
+			expectErrCode:   errcommon.ResourceExhausted,
 			expectErrSubstr: "system saturated, sheddable request dropped",
 		},
 	}
@@ -127,8 +127,8 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 				assert.NoError(t, err, "Admit() should not have returned an error for scenario: %s", tc.name)
 			} else {
 				require.Error(t, err, "Admit() should have returned an error for scenario: %s", tc.name)
-				var e errutil.Error
-				if assert.ErrorAs(t, err, &e, "error should be of type errutil.Error") {
+				var e errcommon.Error
+				if assert.ErrorAs(t, err, &e, "error should be of type errcommon.Error") {
 					assert.Equal(t, tc.expectErrCode, e.Code, "incorrect error code for scenario: %s", tc.name)
 					assert.Contains(t, e.Msg, tc.expectErrSubstr, "incorrect error message substring for scenario: %s", tc.name)
 				}
@@ -164,10 +164,10 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fcReq := &flowControlRequest{
-				requestID:       tc.requestID,
-				fairnessID:      tc.fairnessID,
-				priority:        tc.priority,
-				requestByteSize: tc.requestByteSize,
+				fairnessID:       tc.fairnessID,
+				priority:         tc.priority,
+				requestByteSize:  tc.requestByteSize,
+				inferenceRequest: &schedulingtypes.LLMRequest{RequestId: tc.requestID},
 			}
 
 			assert.Equal(t, tc.requestID, fcReq.ID(), "ID() mismatch")
@@ -214,7 +214,7 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 			priority:        0,
 			fcOutcome:       fctypes.QueueOutcomeRejectedCapacity,
 			expectErr:       true,
-			expectErrCode:   errutil.InferencePoolResourceExhausted,
+			expectErrCode:   errcommon.ResourceExhausted,
 			expectErrSubstr: "request rejected by flow control",
 		},
 		{
@@ -223,7 +223,7 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 			fcOutcome:       fctypes.QueueOutcomeEvictedTTL,
 			fcErr:           errors.New("timeout"),
 			expectErr:       true,
-			expectErrCode:   errutil.ServiceUnavailable,
+			expectErrCode:   errcommon.ServiceUnavailable,
 			expectErrSubstr: "request timed out in queue: timeout",
 		},
 		{
@@ -231,7 +231,7 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 			priority:        0,
 			fcOutcome:       fctypes.QueueOutcomeEvictedContextCancelled,
 			expectErr:       true,
-			expectErrCode:   errutil.ServiceUnavailable,
+			expectErrCode:   errcommon.ServiceUnavailable,
 			expectErrSubstr: "client disconnected",
 		},
 		{
@@ -239,7 +239,7 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 			priority:        0,
 			fcOutcome:       fctypes.QueueOutcomeRejectedOther,
 			expectErr:       true,
-			expectErrCode:   errutil.Internal,
+			expectErrCode:   errcommon.Internal,
 			expectErrSubstr: "internal flow control error",
 		},
 		{
@@ -248,7 +248,7 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 			fcOutcome:       fctypes.QueueOutcomeEvictedOther,
 			fcErr:           errors.New("internal error"),
 			expectErr:       true,
-			expectErrCode:   errutil.Internal,
+			expectErrCode:   errcommon.Internal,
 			expectErrSubstr: "internal flow control error: internal error",
 		},
 		{
@@ -256,7 +256,7 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 			priority:        0,
 			fcOutcome:       fctypes.QueueOutcomeNotYetFinalized,
 			expectErr:       true,
-			expectErrCode:   errutil.Internal,
+			expectErrCode:   errcommon.Internal,
 			expectErrSubstr: "unhandled flow control outcome",
 		},
 	}
@@ -275,8 +275,8 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 				assert.NoError(t, err, "Admit() returned an unexpected error for scenario: %s", tc.name)
 			} else {
 				require.Error(t, err, "Admit() should have returned an error for scenario: %s", tc.name)
-				var e errutil.Error
-				if assert.ErrorAs(t, err, &e, "error should be of type errutil.Error") {
+				var e errcommon.Error
+				if assert.ErrorAs(t, err, &e, "error should be of type errcommon.Error") {
 					assert.Equal(t, tc.expectErrCode, e.Code, "incorrect error code for scenario: %s", tc.name)
 					assert.Contains(t, e.Msg, tc.expectErrSubstr, "incorrect error message substring for scenario: %s", tc.name)
 				}
