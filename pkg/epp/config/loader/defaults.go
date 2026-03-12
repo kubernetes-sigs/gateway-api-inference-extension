@@ -205,7 +205,9 @@ func ensureFlowControlLayer(
 		}
 	}
 	if _, ok := allPlugins[registry.DefaultUsageLimitPolicyRef]; !ok {
-		return registerDefaultPlugin(cfg, handle, registry.DefaultUsageLimitPolicyRef)
+		if err := registerDefaultPlugin(cfg, handle, registry.DefaultUsageLimitPolicyRef); err != nil {
+			return err
+		}
 	}
 	return nil
 }
