@@ -134,11 +134,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				responses, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
 			}
 		case *extProcPb.ProcessingRequest_RequestBody:
-			if logger.V(logutil.DEBUG).Enabled() {
-				logger.V(logutil.DEBUG).Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
-			} else {
-				loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
-			}
+			loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			body = append(body, v.RequestBody.Body...)
 			if s.streaming && !v.RequestBody.EndOfStream {
 				continue
@@ -150,11 +146,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			responses, err = s.HandleResponseHeaders(reqCtx, req.GetResponseHeaders())
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			if logger.V(logutil.DEBUG).Enabled() {
-				logger.V(logutil.DEBUG).Info("Incoming response body chunk", "body", string(v.ResponseBody.Body), "EoS", v.ResponseBody.EndOfStream)
-			} else {
-				loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
-			}
+			loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
 			responses, err = s.processResponseBody(ctx, reqCtx, req.GetResponseBody(), respStreamedBody)
 		default:
 			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
