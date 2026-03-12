@@ -3,6 +3,7 @@ package ordering
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -28,7 +29,11 @@ func CustomDataOrderingPolicyFactory(name string, parameters json.RawMessage, _ 
 	if err := json.Unmarshal(parameters, params); err != nil {
 		return nil, fmt.Errorf("failed to parse the parameters of the '%s' ordering policy - %w", CustomDataOrderingPolicyType, err)
 	}
-	return newCustomDataOrderingPolicy(params).withName(name), nil
+	p, err := newCustomDataOrderingPolicy(params)
+	if err != nil {
+		return nil, err
+	}
+	return p.withName(name), nil
 }
 
 type orderingKey struct {
@@ -44,18 +49,23 @@ type CustomDataOrderingPolicy struct {
 
 var _ flowcontrol.OrderingPolicy = &CustomDataOrderingPolicy{}
 
-func newCustomDataOrderingPolicy(params *customOrderingParameters) *CustomDataOrderingPolicy {
+func newCustomDataOrderingPolicy(params *customOrderingParameters) (*CustomDataOrderingPolicy, error) {
 	if params == nil {
 		return &CustomDataOrderingPolicy{
 			name: CustomDataOrderingPolicyType,
 			keys: []orderingKey{},
-		}
+		}, nil
 	}
 	keys := make([]orderingKey, 0, len(params.Keys))
 	for _, p := range params.Keys {
 		dir := 1
-		if p.Direction == "desc" {
+		switch strings.ToLower(p.Direction) {
+		case "desc":
 			dir = -1
+		case "asc", "": // default to ascending
+			dir = 1
+		default:
+			return nil, fmt.Errorf("invalid direction '%s' for key '%s', must be 'asc' or 'desc'", p.Direction, p.Key)
 		}
 		keys = append(keys, orderingKey{
 			name:      p.Key,
@@ -66,7 +76,7 @@ func newCustomDataOrderingPolicy(params *customOrderingParameters) *CustomDataOr
 	return &CustomDataOrderingPolicy{
 		name: CustomDataOrderingPolicyType,
 		keys: keys,
-	}
+	}, nil
 }
 
 func (p *CustomDataOrderingPolicy) withName(name string) *CustomDataOrderingPolicy {

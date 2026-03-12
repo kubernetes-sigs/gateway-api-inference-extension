@@ -35,21 +35,38 @@ func TestCustomPolicy_Factory(t *testing.T) {
 
 func TestCustomPolicy_Name(t *testing.T) {
 	t.Parallel()
-	p := newCustomDataOrderingPolicy(nil)
+	p, err := newCustomDataOrderingPolicy(nil)
+	assert.Nil(t, err, "error should be nil")
 	assert.Equal(t, CustomDataOrderingPolicyType, p.Name())
 }
 
 func TestCustomPolicy_RequiredQueueCapabilities(t *testing.T) {
 	t.Parallel()
-	p := newCustomDataOrderingPolicy(nil)
+	p, err := newCustomDataOrderingPolicy(nil)
+	assert.Nil(t, err, "error should be nil")
 	c := p.RequiredQueueCapabilities()
 	assert.Len(t, c, 1)
 	assert.Equal(t, flowcontrol.CapabilityPriorityConfigurable, c[0])
 }
 
+func TestCustomPolicy_NewCustomDataOrderingPolicy_Error(t *testing.T) {
+	t.Parallel()
+	_, err := newCustomDataOrderingPolicy(&customOrderingParameters{
+		Keys: []customOrderingParameter{
+			{
+				Key:        "score1",
+				Direction:  "invalid",
+				DefaultVal: 2,
+			},
+		},
+	})
+	assert.NotNil(t, err, "error should not be nil")
+	assert.Equal(t, "invalid direction 'invalid' for key 'score1', must be 'asc' or 'desc'", err.Error())
+}
+
 func TestCustomPolicy_Less(t *testing.T) {
 	t.Parallel()
-	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+	p, err := newCustomDataOrderingPolicy(&customOrderingParameters{
 		Keys: []customOrderingParameter{
 			{
 				Key:        "score1",
@@ -58,6 +75,7 @@ func TestCustomPolicy_Less(t *testing.T) {
 			},
 		},
 	})
+	assert.Nil(t, err, "error should be nil")
 
 	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
 	b := mocks.NewMockQueueItemAccessor(2, "b", testFlowKey)
@@ -85,7 +103,7 @@ func TestCustomPolicy_Less(t *testing.T) {
 
 func TestCustomPolicy_Less_NilData(t *testing.T) {
 	t.Parallel()
-	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+	p, err := newCustomDataOrderingPolicy(&customOrderingParameters{
 		Keys: []customOrderingParameter{
 			{
 				Key:        "score1",
@@ -94,6 +112,7 @@ func TestCustomPolicy_Less_NilData(t *testing.T) {
 			},
 		},
 	})
+	assert.Nil(t, err, "error should be nil")
 
 	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
 	ma := a.OriginalRequest().GetMetadata()
@@ -110,7 +129,7 @@ func TestCustomPolicy_Less_NilData(t *testing.T) {
 
 func TestCustomPolicy_Less_Desc(t *testing.T) {
 	t.Parallel()
-	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+	p, err := newCustomDataOrderingPolicy(&customOrderingParameters{
 		Keys: []customOrderingParameter{
 			{
 				Key:        "score1",
@@ -119,6 +138,7 @@ func TestCustomPolicy_Less_Desc(t *testing.T) {
 			},
 		},
 	})
+	assert.Nil(t, err, "error should be nil")
 
 	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
 	b := mocks.NewMockQueueItemAccessor(2, "b", testFlowKey)
@@ -146,7 +166,7 @@ func TestCustomPolicy_Less_Desc(t *testing.T) {
 
 func TestCustomPolicy_Less_MultipleKeys(t *testing.T) {
 	t.Parallel()
-	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+	p, err := newCustomDataOrderingPolicy(&customOrderingParameters{
 		Keys: []customOrderingParameter{
 			{
 				Key:        "score1",
@@ -160,6 +180,7 @@ func TestCustomPolicy_Less_MultipleKeys(t *testing.T) {
 			},
 		},
 	})
+	assert.Nil(t, err, "error should be nil")
 
 	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
 	b := mocks.NewMockQueueItemAccessor(2, "b", testFlowKey)
@@ -198,7 +219,7 @@ func TestCustomPolicy_Less_MultipleKeys(t *testing.T) {
 
 func TestCustomPolicy_Less_MultipleKeys_Desc(t *testing.T) {
 	t.Parallel()
-	p := newCustomDataOrderingPolicy(&customOrderingParameters{
+	p, err := newCustomDataOrderingPolicy(&customOrderingParameters{
 		Keys: []customOrderingParameter{
 			{
 				Key:        "score1",
@@ -212,6 +233,7 @@ func TestCustomPolicy_Less_MultipleKeys_Desc(t *testing.T) {
 			},
 		},
 	})
+	assert.Nil(t, err, "error should be nil")
 
 	a := mocks.NewMockQueueItemAccessor(1, "a", testFlowKey)
 	b := mocks.NewMockQueueItemAccessor(2, "b", testFlowKey)
