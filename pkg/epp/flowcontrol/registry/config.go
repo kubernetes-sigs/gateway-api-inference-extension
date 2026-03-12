@@ -184,6 +184,7 @@ type PriorityBandConfig struct {
 	MaxBytes uint64
 
 	// MaxRequests defines the maximum total request count for this priority band, aggregated across all shards.
+	// A value of 0 signifies no request-count limit is enforced.
 	// Optional: Defaults to defaultPriorityBandMaxRequests (5000).
 	MaxRequests uint64
 }
