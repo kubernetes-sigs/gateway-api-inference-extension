@@ -56,23 +56,13 @@ type EndpointFactory interface {
 	SetSources(sources []fwkdl.DataSource)
 	NewEndpoint(parent context.Context, inEnpointMetadata *fwkdl.EndpointMetadata, poolinfo PoolInfo) fwkdl.Endpoint
 	ReleaseEndpoint(ep fwkdl.Endpoint)
-	// ReleaseEndpointsByPodName releases all endpoints associated with the given pod name.
-	// This is used when a pod is deleted to ensure all collectors are stopped,
-	// even for endpoints that may have been removed from the datastore due to being unhealthy.
-	ReleaseEndpointsByPodName(podName string)
-}
-
-// collectorEntry stores a collector and its associated pod name for cleanup.
-type collectorEntry struct {
-	collector *Collector
-	podName   string
 }
 
 // EndpointLifecycle manages the life cycle (creation and termination) of
 // endpoints.
 type EndpointLifecycle struct {
 	sources         []fwkdl.DataSource // data sources for collectors
-	collectors      sync.Map           // collectors map. key: Pod namespaced name, value: *collectorEntry
+	collectors      sync.Map           // collectors map. key: Pod namespaced name, value: *Collector
 	refreshInterval time.Duration      // metrics refresh interval
 }
 
@@ -108,12 +98,8 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetad
 
 	endpoint := fwkdl.NewEndpoint(inEndpointMetadata, nil)
 	collector := NewCollector(poolInfo)
-	entry := &collectorEntry{
-		collector: collector,
-		podName:   inEndpointMetadata.PodName,
-	}
 
-	if _, loaded := lc.collectors.LoadOrStore(key, entry); loaded {
+	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {
 		// another goroutine already created and stored a collector for this endpoint.
 		// No need to start the new collector.
 		logger.Info("collector already running for endpoint", "endpoint", key)
@@ -135,29 +121,16 @@ func (lc *EndpointLifecycle) ReleaseEndpoint(ep fwkdl.Endpoint) {
 	key := ep.GetMetadata().GetNamespacedName()
 
 	if value, ok := lc.collectors.LoadAndDelete(key); ok {
-		entry := value.(*collectorEntry)
-		_ = entry.collector.Stop()
+		collector := value.(*Collector)
+		_ = collector.Stop()
 	}
-}
-
-// ReleaseEndpointsByPodName implements EndpointFactory.ReleaseEndpointsByPodName
-// Releases all endpoints associated with the given pod name.
-func (lc *EndpointLifecycle) ReleaseEndpointsByPodName(podName string) {
-	lc.collectors.Range(func(key, value any) bool {
-		entry := value.(*collectorEntry)
-		if entry.podName == podName {
-			_ = entry.collector.Stop()
-			lc.collectors.Delete(key)
-		}
-		return true
-	})
 }
 
 // Shutdown gracefully stops all collectors and cleans up all resources.
 func (lc *EndpointLifecycle) Shutdown() {
 	lc.collectors.Range(func(key, value any) bool {
-		entry := value.(*collectorEntry)
-		_ = entry.collector.Stop()
+		collector := value.(*Collector)
+		_ = collector.Stop()
 		lc.collectors.Delete(key)
 		return true
 	})

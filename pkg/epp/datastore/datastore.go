@@ -354,15 +354,11 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 }
 
 func (ds *datastore) PodDelete(podName string) {
-	// First, release all endpoints (including unhealthy ones not in pods map) via factory.
-	// This ensures collectors are stopped even for endpoints that were removed due to being unhealthy.
-	ds.epf.ReleaseEndpointsByPodName(podName)
-
-	// Then clean up any remaining entries in pods map (healthy endpoints).
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(fwkdl.Endpoint)
 		if ep.GetMetadata().PodName == podName {
 			ds.pods.Delete(k)
+			ds.epf.ReleaseEndpoint(ep)
 		}
 		return true
 	})

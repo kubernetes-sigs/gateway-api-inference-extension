@@ -107,14 +107,13 @@ func (pm *podMetrics) refreshMetrics() error {
 	// 2. The FetchMetrics call can partially fail. For example, due to one metric missing. In
 	// this case, the updated metrics object will have partial updates. A partial update is
 	// considered better than no updates.
-	if updated != nil {
-		pm.UpdateMetrics(updated)
-		// Mark endpoint as healthy since we got metrics (even partial)
-		pm.ds.EndpointSetHealthy(pm, true)
-	} else {
-		// Mark endpoint as unhealthy since metrics fetch completely failed
+	if updated == nil {
 		pm.ds.EndpointSetHealthy(pm, false)
+		return nil
 	}
+
+	pm.UpdateMetrics(updated)
+	pm.ds.EndpointSetHealthy(pm, true)
 
 	return nil
 }

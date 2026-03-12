@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
+	datasourcemocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -263,12 +264,11 @@ var (
 		WaitingModels: map[string]int{},
 	}
 
-	pod1NamespacedName = types.NamespacedName{Name: pod1.Name + "-rank-0", Namespace: pod1.Namespace}
-	pod2NamespacedName = types.NamespacedName{Name: pod2.Name + "-rank-0", Namespace: pod2.Namespace}
-	// Multi-port endpoint names (pod1 with rank-0 and rank-1)
 	pod1Rank0NamespacedName = types.NamespacedName{Name: pod1.Name + "-rank-0", Namespace: pod1.Namespace}
 	pod1Rank1NamespacedName = types.NamespacedName{Name: pod1.Name + "-rank-1", Namespace: pod1.Namespace}
-	inferencePool           = &v1.InferencePool{
+	pod2Rank0NamespacedName = types.NamespacedName{Name: pod2.Name + "-rank-0", Namespace: pod2.Namespace}
+
+	inferencePool = &v1.InferencePool{
 		Spec: v1.InferencePoolSpec{
 			TargetPorts: []v1.Port{{Number: v1.PortNumber(int32(8000))}},
 		},
@@ -296,8 +296,8 @@ func TestMetrics(t *testing.T) {
 		{
 			name: "Probing metrics success",
 			metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
-				pod2NamespacedName: pod2Metrics,
+				pod1Rank0NamespacedName: pod1Metrics,
+				pod2Rank0NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
 			want:      []*fwkdl.Metrics{pod1Metrics, pod2Metrics},
@@ -305,8 +305,8 @@ func TestMetrics(t *testing.T) {
 		{
 			name: "Only pods in are probed",
 			metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
-				pod2NamespacedName: pod2Metrics,
+				pod1Rank0NamespacedName: pod1Metrics,
+				pod2Rank0NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1},
 			want:      []*fwkdl.Metrics{pod1Metrics},
@@ -314,11 +314,11 @@ func TestMetrics(t *testing.T) {
 		{
 			name: "Probing metrics error",
 			err: map[types.NamespacedName]error{
-				pod2NamespacedName: errors.New("injected error"),
+				pod2Rank0NamespacedName: errors.New("injected error"),
 			},
 			metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
-				pod2NamespacedName: pod2Metrics,
+				pod1Rank0NamespacedName: pod1Metrics,
+				pod2Rank0NamespacedName: pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
 			// Failed to fetch pod2 metrics so it is excluded from PodList as unhealthy.
@@ -378,11 +378,11 @@ func TestMetricsRecovery(t *testing.T) {
 
 		pmc := &backendmetrics.FakePodMetricsClient{
 			Res: map[types.NamespacedName]*backendmetrics.MetricsState{
-				pod1NamespacedName: {WaitingQueueSize: 0, KVCacheUsagePercent: 0.2},
-				pod2NamespacedName: {WaitingQueueSize: 1, KVCacheUsagePercent: 0.3},
+				pod1Rank0NamespacedName: {WaitingQueueSize: 0, KVCacheUsagePercent: 0.2},
+				pod2Rank0NamespacedName: {WaitingQueueSize: 1, KVCacheUsagePercent: 0.3},
 			},
 			Err: map[types.NamespacedName]error{
-				pod2NamespacedName: errors.New("injected error"),
+				pod2Rank0NamespacedName: errors.New("injected error"),
 			},
 		}
 		epf := backendmetrics.NewPodMetricsFactory(pmc, period)
@@ -418,13 +418,13 @@ func TestMetricsRecovery(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		fds := &datalayer.FakeDataSource{
+		fds := &datasourcemocks.MetricsDataSource{
 			Metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
-				pod2NamespacedName: pod2Metrics,
+				pod1Rank0NamespacedName: pod1Metrics,
+				pod2Rank0NamespacedName: pod2Metrics,
 			},
 			Errors: map[types.NamespacedName]error{
-				pod2NamespacedName: errors.New("injected error"),
+				pod2Rank0NamespacedName: errors.New("injected error"),
 			},
 		}
 		epf := datalayer.NewEndpointFactory([]fwkdl.DataSource{fds}, period)
@@ -514,7 +514,7 @@ func TestMultiPortPartialFailure(t *testing.T) {
 		defer cancel()
 
 		// pod1-rank-0 (port 8000) succeeds, pod1-rank-1 (port 8001) fails
-		fds := &datalayer.FakeDataSource{
+		fds := &datasourcemocks.MetricsDataSource{
 			Metrics: map[types.NamespacedName]*fwkdl.Metrics{
 				pod1Rank0NamespacedName: pod1Metrics,
 				pod1Rank1NamespacedName: pod1Metrics,
@@ -556,24 +556,24 @@ func TestMultiPortPartialFailure(t *testing.T) {
 	})
 }
 
-// TestPodUpdateDoesNotReaddUnhealthyEndpoint tests that when an unhealthy endpoint
+// TestPodUpdateDoesNotReAddUnhealthyEndpoint tests that when an unhealthy endpoint
 // is removed from PodList due to metrics scraping failure, calling PodUpdateOrAddIfNotExist
 // (simulating a pod update event) does not re-add the unhealthy endpoint.
 // The endpoint should only be re-added when the collector recovers.
-func TestPodUpdateDoesNotReaddUnhealthyEndpoint(t *testing.T) {
+func TestPodUpdateDoesNotReAddUnhealthyEndpoint(t *testing.T) {
 	period := time.Millisecond
 
 	// Test with FakePodMetricsClient
-	t.Run("pod update does not readd unhealthy endpoint with FakePodMetricsClient", func(t *testing.T) {
+	t.Run("pod update does not re-add unhealthy endpoint with FakePodMetricsClient", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		pmc := &backendmetrics.FakePodMetricsClient{
 			Res: map[types.NamespacedName]*backendmetrics.MetricsState{
-				pod1NamespacedName: {WaitingQueueSize: 0, KVCacheUsagePercent: 0.2},
+				pod1Rank0NamespacedName: {WaitingQueueSize: 0, KVCacheUsagePercent: 0.2},
 			},
 			Err: map[types.NamespacedName]error{
-				pod1NamespacedName: errors.New("injected error"),
+				pod1Rank0NamespacedName: errors.New("injected error"),
 			},
 		}
 		epf := backendmetrics.NewPodMetricsFactory(pmc, period)
@@ -613,16 +613,16 @@ func TestPodUpdateDoesNotReaddUnhealthyEndpoint(t *testing.T) {
 	})
 
 	// Test with FakeDataSource
-	t.Run("pod update does not readd unhealthy endpoint with FakeDataSource", func(t *testing.T) {
+	t.Run("pod update does not re-add unhealthy endpoint with FakeDataSource", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		fds := &datalayer.FakeDataSource{
+		fds := &datasourcemocks.MetricsDataSource{
 			Metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
+				pod1Rank0NamespacedName: pod1Metrics,
 			},
 			Errors: map[types.NamespacedName]error{
-				pod1NamespacedName: errors.New("injected error"),
+				pod1Rank0NamespacedName: errors.New("injected error"),
 			},
 		}
 		epf := datalayer.NewEndpointFactory([]fwkdl.DataSource{fds}, period)

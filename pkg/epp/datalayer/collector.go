@@ -129,17 +129,16 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 					return
 				case <-ticker.Channel():
 					// TODO: do not collect if there's no pool specified?
-					var pollErr error
+					var pollErrs error
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
-						if err := src.Poll(ctx, endpoint); err != nil {
-							pollErr = err
-						}
+						err := src.Poll(ctx, endpoint)
+						pollErrs = errors.Join(pollErrs, err)
 						cancel() // release the ctx timeout resources
 					}
 					// Report endpoint health based on collection result
 					if c.poolInfo != nil {
-						c.poolInfo.EndpointSetHealthy(endpoint, pollErr == nil)
+						c.poolInfo.EndpointSetHealthy(endpoint, pollErrs == nil)
 					}
 				}
 			}
