@@ -101,7 +101,58 @@ func ExpectBBRNoOpHeader() *extProcPb.ProcessingResponse {
 	}
 }
 
-// --- Response Expectations (Unary) ---
+// --- Response Phase Expectations ---
+
+// ExpectResponseHeadersPassThrough asserts that BBR passed response headers through with no mutations.
+func ExpectResponseHeadersPassThrough() *extProcPb.ProcessingResponse {
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+			ResponseHeaders: &extProcPb.HeadersResponse{},
+		},
+	}
+}
+
+// ExpectResponseBodyPassThrough asserts that BBR passed the response body through with no mutations
+// (i.e., no response plugins configured).
+func ExpectResponseBodyPassThrough() *extProcPb.ProcessingResponse {
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_ResponseBody{
+			ResponseBody: &extProcPb.BodyResponse{},
+		},
+	}
+}
+
+// ExpectResponseBodyMutation asserts that a response plugin mutated the response body (unary mode).
+// Includes ClearRouteCache and the Content-Length header mutation.
+func ExpectResponseBodyMutation(body map[string]any) *extProcPb.ProcessingResponse {
+	b, _ := json.Marshal(body)
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_ResponseBody{
+			ResponseBody: &extProcPb.BodyResponse{
+				Response: &extProcPb.CommonResponse{
+					ClearRouteCache: true,
+					HeaderMutation: &extProcPb.HeaderMutation{
+						SetHeaders: []*envoyCorev3.HeaderValueOption{
+							{
+								Header: &envoyCorev3.HeaderValue{
+									Key:      "Content-Length",
+									RawValue: []byte(strconv.Itoa(len(b))),
+								},
+							},
+						},
+					},
+					BodyMutation: &extProcPb.BodyMutation{
+						Mutation: &extProcPb.BodyMutation_Body{
+							Body: b,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// --- Request Phase Expectations (Unary) ---
 
 // ExpectBBRUnaryResponse creates expected response for unary tests where the body is mutated directly.
 func ExpectBBRUnaryResponse(modelName, prompt string) *extProcPb.ProcessingResponse {
