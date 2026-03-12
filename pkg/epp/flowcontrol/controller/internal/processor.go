@@ -348,7 +348,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		usageLimit := ceilings[i]
 		if saturation >= usageLimit {
 			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
-				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName(), "usageLimit", usageLimit)
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "usageLimit", usageLimit)
 			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
 			// lower-priority work might exacerbate the saturation affecting high-priority work.
 			return false
