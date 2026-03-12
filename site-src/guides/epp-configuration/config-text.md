@@ -312,6 +312,13 @@ An Ordering Policy that implements Earliest Deadline First. It prioritizes reque
 - *Type*: edf-ordering-policy
 - *Parameters*: none
 
+#### SLODeadlineOrderingPolicy
+
+An Ordering Policy that orders requests by an SLO-based deadline, computed from the time the request is received by the server. It prioritizes requests with the earliest such deadline.
+
+- *Type*: slo-deadline-ordering-policy
+- *Parameters*: none
+
 ## Scheduling Profiles
 
 The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
