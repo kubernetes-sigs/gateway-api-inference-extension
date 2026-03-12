@@ -392,20 +392,21 @@ form:
 
 ```yaml
 flowControl:
-  maxBytes: 10737418240 # 10 GB
+  maxBytes: 10Gi # 10737418240 bytes
   defaultRequestTTL: 60s
   defaultPriorityBand:
-    maxBytes: 1073741824
+    maxBytes: 10Gi
   priorityBands:
   - priority: 100
-    maxBytes: 5368709120
+    maxBytes: 5Gi
     orderingPolicyRef: fcfs-ordering-policy
     fairnessPolicyRef: global-strict-fairness-policy
 ```
 
 The fields in the `flowControl` section are:
 
-- `maxBytes`: Defines the global capacity limit (in bytes) for all active requests across all priority levels.
+- `maxBytes`: Defines the global capacity limit for all active requests across all priority levels.
+    - Supports Kubernetes quantity format (e.g., `10Gi`, `512Mi`, `1048576Ki`) as well as plain integers (in bytes).
     - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
 - `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
     - If `0` or omitted, it defaults to the client context deadline, meaning requests may wait indefinitely unless cancelled by the client.
@@ -419,6 +420,7 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 
 - `priority`: (Required for `priorityBands` entries) The integer priority level. Higher values indicate higher priority.
 - `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
+    - Supports Kubernetes quantity format (e.g., `5Gi`, `512Mi`) as well as plain integers (in bytes).
     - If `0` or omitted, the system default (1 GB) is used.
 - `orderingPolicyRef`: The name of the Ordering Policy plugin to use (e.g., `fcfs-ordering-policy`).
     - Defaults to `fcfs-ordering-policy` if omitted.
