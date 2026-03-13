@@ -7,7 +7,7 @@ This project has several implementations that are planned or in progress:
   - [Envoy AI Gateway](#envoy-ai-gateway)
   - [Google Kubernetes Engine](#google-kubernetes-engine)
   - [Istio](#istio)
-  - [Kgateway](#kgateway)
+  - [Agentgateway](#agentgateway)
   - [Kubvernor](#kubvernor)
   - [NGINX Gateway Fabric](#nginx-gateway-fabric)
 
@@ -15,11 +15,11 @@ This project has several implementations that are planned or in progress:
 [2]:#envoy-ai-gateway
 [3]:#google-kubernetes-engine
 [4]:#istio
-[5]:#kgateway
+[5]:#agentgateway
 [6]:#kubvernor
 [7]:#nginx-gateway-fabric
 
-Agentgateway can run independently or can be managed by [Kgateway](https://kgateway.dev/).
+Agentgateway supports both standalone and Kubernetes deployment modes.
 
 ## Alibaba Cloud Container Service for Kubernetes
 
@@ -84,14 +84,18 @@ For service mesh users, Istio also fully supports east-west (including [GAMMA](h
 Gateway API Inference Extension support is being tracked by this [GitHub
 Issue](https://github.com/istio/istio/issues/55768).
 
-## Kgateway
+## Agentgateway
 
-[Kgateway](https://kgateway.dev/) is a Gateway API and Inference Gateway
-[v1.0.0 conformant](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.0.0/gateway/kgateway)
-implementation that can run [independently](https://gateway-api-inference-extension.sigs.k8s.io/guides/#__tabbed_3_3), as an
-[Istio waypoint](https://kgateway.dev/blog/extend-istio-ambient-kgateway-waypoint/), or within your
-[llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to improve accelerator (GPU) utilization for AI inference workloads.
-Kgateway supports Inference Gateway with the [agentgateway](https://agentgateway.dev/) data plane.
+[Agentgateway](https://agentgateway.dev/) is a high-performance, Rust-based AI
+gateway for LLM, MCP, and A2A workloads that can also serve as a Gateway API
+and Inference Gateway implementation.
+
+It can run as a [standalone binary or in Docker](https://agentgateway.dev/docs/standalone/latest/)
+on a local machine or server without Kubernetes, or be deployed on
+[Kubernetes](https://agentgateway.dev/docs/kubernetes/latest/) for cluster-based
+environments, or within your
+[llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to
+improve accelerator (GPU) utilization for AI inference workloads.
 
 ## Kubvernor
 
