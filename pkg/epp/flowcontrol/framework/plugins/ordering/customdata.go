@@ -3,6 +3,8 @@ package ordering
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
@@ -19,9 +21,10 @@ type customOrderingParameters struct {
 }
 
 type customOrderingParameter struct {
-	Key        string  `json:"key"`
-	Direction  string  `json:"direction"`
-	DefaultVal float64 `json:"default_value"`
+	Key        string `json:"key"`
+	Direction  string `json:"direction"`
+	Type       string `json:"type"` // data type of the key value: "float" or "int"
+	DefaultVal any    `json:"default_value"`
 }
 
 func CustomDataOrderingPolicyFactory(name string, parameters json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
@@ -39,7 +42,7 @@ func CustomDataOrderingPolicyFactory(name string, parameters json.RawMessage, _ 
 type orderingKey struct {
 	name      string
 	direction int // 1 for ascending, -1 for descending
-	defaultv  float64
+	defaultv  any
 }
 
 type CustomDataOrderingPolicy struct {
@@ -67,16 +70,68 @@ func newCustomDataOrderingPolicy(params *customOrderingParameters) (*CustomDataO
 		default:
 			return nil, fmt.Errorf("invalid direction '%s' for key '%s', must be 'asc' or 'desc'", p.Direction, p.Key)
 		}
+		defaultv, err := parseDefaultVal(p.Type, p.DefaultVal, p.Key)
+		if err != nil {
+			return nil, err
+		}
 		keys = append(keys, orderingKey{
 			name:      p.Key,
 			direction: dir,
-			defaultv:  p.DefaultVal,
+			defaultv:  defaultv,
 		})
 	}
 	return &CustomDataOrderingPolicy{
 		name: CustomDataOrderingPolicyType,
 		keys: keys,
 	}, nil
+}
+
+// parseDefaultVal converts DefaultVal to the concrete type implied by typeStr ("float" or "int").
+// For "float": accepts JSON numbers, int-like values, or strings that parse as float ("2", "2.0", "2.3").
+// For "int": accepts only whole numbers; returns error if value has a non-zero fractional part.
+// Empty typeStr defaults to "float".
+func parseDefaultVal(typeStr string, v any, keyName string) (any, error) {
+	t := strings.ToLower(strings.TrimSpace(typeStr))
+	if t == "" {
+		t = "float"
+	}
+	switch t {
+	case "float":
+		return parseDefaultFloat(v, keyName)
+	case "int":
+		intv, err := parseDefaultFloat(v, keyName)
+		if err != nil {
+
+		}
+		if intv != math.Trunc(intv) {
+			return nil, fmt.Errorf("key %q: default_value %v is not a whole number (int type requires integer)", keyName, intv)
+		}
+		return int(intv), nil
+	default:
+		return nil, fmt.Errorf("invalid type %q for key %q, must be 'float' or 'int'", typeStr, keyName)
+	}
+}
+
+func parseDefaultFloat(v any, keyName string) (float64, error) {
+	if v == nil {
+		return 0, nil
+	}
+	switch n := v.(type) {
+	case float64:
+		return n, nil
+	case float32:
+		return float64(n), nil
+	case int:
+		return float64(n), nil
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
+		if err != nil {
+			return 0, fmt.Errorf("key %q: default_value %q is not a valid float", keyName, n)
+		}
+		return f, nil
+	default:
+		return 0, fmt.Errorf("key %q: default_value has unsupported type for float", keyName)
+	}
 }
 
 func (p *CustomDataOrderingPolicy) withName(name string) *CustomDataOrderingPolicy {
@@ -101,72 +156,50 @@ func (p *CustomDataOrderingPolicy) TypedName() plugin.TypedName {
 	}
 }
 
-// getMetadataValue extracts a numeric value for key from the custom ordering metadata m, or returns defaultVal if missing or invalid.
-func getMetadataValue(m any, key string, defaultVal float64) float64 {
+func (p *CustomDataOrderingPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
+	for _, k := range p.keys {
+		switch k.defaultv.(type) {
+		case float64:
+			aVal := getMetaData(a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv.(float64))
+			bVal := getMetaData(b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv.(float64))
+			if aVal == bVal {
+				continue
+			}
+			return isLess(aVal, bVal, k.direction)
+		case int:
+			aVal := getMetaData(a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv.(int))
+			bVal := getMetaData(b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv.(int))
+			if aVal == bVal {
+				continue
+			}
+			return isLess(aVal, bVal, k.direction)
+		}
+	}
+	return false
+}
+
+func getMetaData[T ~float64 | ~int](m any, key string, dv T) T {
 	if m == nil {
-		return defaultVal
+		return dv
 	}
 	switch typedMap := m.(type) {
-	case map[string]float64:
+	case map[string]T:
 		if v, ok := typedMap[key]; ok {
 			return v
-		}
-	case map[string]float32:
-		if v, ok := typedMap[key]; ok {
-			return float64(v)
-		}
-	case map[string]int:
-		if v, ok := typedMap[key]; ok {
-			return float64(v)
-		}
-	case map[string]int8:
-		if v, ok := typedMap[key]; ok {
-			return float64(v)
-		}
-	case map[string]int16:
-		if v, ok := typedMap[key]; ok {
-			return float64(v)
-		}
-	case map[string]int32:
-		if v, ok := typedMap[key]; ok {
-			return float64(v)
-		}
-	case map[string]int64:
-		if v, ok := typedMap[key]; ok {
-			return float64(v)
 		}
 	case map[string]any:
 		if v, ok := typedMap[key]; ok {
 			switch num := v.(type) {
 			case float64:
-				return num
-			case float32:
-				return float64(num)
+				return T(num)
 			case int:
-				return float64(num)
-			case int8:
-				return float64(num)
-			case int16:
-				return float64(num)
-			case int32:
-				return float64(num)
-			case int64:
-				return float64(num)
+				return T(num)
 			}
 		}
 	}
-	return defaultVal
+	return dv
 }
 
-func (p *CustomDataOrderingPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
-	for _, k := range p.keys {
-		aVal := getMetadataValue(a.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv)
-		bVal := getMetadataValue(b.OriginalRequest().GetMetadata()[metadata.CustomOrderingNamespace], k.name, k.defaultv)
-
-		if aVal == bVal {
-			continue
-		}
-		return aVal*float64(k.direction) < bVal*float64(k.direction)
-	}
-	return false
+func isLess[T ~float64 | ~int](a, b T, dir int) bool {
+	return a*T(dir) < b*T(dir)
 }
