@@ -16,7 +16,7 @@ spec:
   - backendRefs:
     - group: inference.networking.k8s.io
       kind: InferencePool
-      name: h2c-inference-pool
+      name: appprotocol-h2c-inference-pool
     matches:
     - path:
         type: PathPrefix
@@ -40,7 +40,7 @@ spec:
   - backendRefs:
     - group: inference.networking.k8s.io
       kind: InferencePool
-      name: secondary-inference-pool
+      name: appprotocol-http-inference-pool
     matches:
     - path:
         type: PathPrefix

@@ -68,8 +68,8 @@ var InferencePoolAppProtocol = suite.ConformanceTest{
 				path:       "/inferencepool-app-protocol-h2c",
 				targetPort: "3001",
 				routeNN:    types.NamespacedName{Name: "httproute-for-inferencepool-appprotocol-h2c", Namespace: resources.AppBackendNamespace},
-				poolNN:     resources.H2CInferencePoolNN,
-				labels:     map[string]string{"app": resources.PrimaryModelServerAppLabel},
+				poolNN:     resources.AppProtocolH2CInferencePoolNN,
+				labels:     map[string]string{"app": resources.AppProtocolModelServerAppLabel},
 			},
 			{
 				name:       "explicit HTTP/1.1 appProtocol",
@@ -77,8 +77,8 @@ var InferencePoolAppProtocol = suite.ConformanceTest{
 				path:       "/inferencepool-app-protocol-http",
 				targetPort: "3000",
 				routeNN:    types.NamespacedName{Name: "httproute-for-inferencepool-appprotocol-http", Namespace: resources.AppBackendNamespace},
-				poolNN:     resources.SecondaryInferencePoolNN,
-				labels:     map[string]string{"app": resources.SecondaryModelServerAppLabel},
+				poolNN:     resources.AppProtocolHTTPInferencePoolNN,
+				labels:     map[string]string{"app": resources.AppProtocolModelServerAppLabel},
 			},
 			{
 				name:       "omitted appProtocol defaults to HTTP/1.1",
@@ -91,10 +91,10 @@ var InferencePoolAppProtocol = suite.ConformanceTest{
 			},
 		}
 
-		// The shared base backends are protocol-specific per port: the primary
-		// backend serves cleartext HTTP/1.1 on 3000 and h2c on 3001. A successful
-		// request to the selected pod:port therefore proves the gateway honored the
-		// pool's appProtocol semantics.
+		// The dedicated appProtocol backend is protocol-specific per port: it
+		// serves cleartext HTTP/1.1 on 3000 and h2c on 3001. A successful request
+		// to the selected pod:port therefore proves the gateway honored the pool's
+		// appProtocol semantics.
 		for _, tc := range testCases {
 			tc := tc
 			t.Run(tc.name, func(t *testing.T) {
