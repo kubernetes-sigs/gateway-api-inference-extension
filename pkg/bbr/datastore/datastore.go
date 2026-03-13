@@ -128,6 +128,8 @@ func (ds *datastore) ConfigMapDelete(configmap *corev1.ConfigMap) {
 
 func (ds *datastore) GetBaseModel(modelName string) string {
 	trimmedModelName := strings.TrimSpace(modelName)
+	ds.lock.RLock()
+	defer ds.lock.RUnlock()
 	// if the given model name is a LoRA adapter, we should return its base model
 	if baseModel, ok := ds.loraAdapterToBaseModel[trimmedModelName]; ok {
 		return baseModel

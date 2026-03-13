@@ -191,6 +191,21 @@ func TestConfigMapDelete_MissingBaseModel(t *testing.T) {
 	}
 }
 
+func TestGetBaseModel_ConcurrentRace(t *testing.T) {
+	ds := NewDatastore()
+	cm := makeConfigMap(cmName, baseModel, "- a1\n")
+
+	go func() {
+		for i := 0; i < 10000; i++ {
+			_ = ds.ConfigMapUpdateOrAddIfNotExist(cm)
+		}
+	}()
+
+	for i := 0; i < 10000; i++ {
+		ds.GetBaseModel("a1")
+	}
+}
+
 func TestConfigMapDelete_BaseModelCount(t *testing.T) {
 	ds := NewDatastore()
 	cm1 := makeConfigMap(cmName, baseModel, "- a1\n")
