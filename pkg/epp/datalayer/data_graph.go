@@ -35,9 +35,6 @@ func ValidateAndOrderDataDependencies(plugins []plugin.Plugin) ([]string, error)
 	for _, p := range plugins {
 		pluginMap[p.TypedName().String()] = p
 	}
-	for _, p := range plugins {
-		pluginMap[p.TypedName().String()] = p
-	}
 	producers := make(map[string]plugin.ProducerPlugin)
 	consumers := make(map[string]plugin.ConsumerPlugin)
 	for name, p := range pluginMap {
