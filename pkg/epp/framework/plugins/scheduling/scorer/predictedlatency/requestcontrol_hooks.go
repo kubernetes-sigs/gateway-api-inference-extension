@@ -45,9 +45,8 @@ const (
 )
 
 var _ requestcontrol.PreRequest = &PredictedLatency{}
-var _ requestcontrol.ResponseReceived = &PredictedLatency{}
-var _ requestcontrol.ResponseStreaming = &PredictedLatency{}
-var _ requestcontrol.ResponseComplete = &PredictedLatency{}
+var _ requestcontrol.ResponseHeader = &PredictedLatency{}
+var _ requestcontrol.ResponseBody = &PredictedLatency{}
 var _ requestcontrol.AdmissionPlugin = &PredictedLatency{}
 
 type predictedLatencyCtx struct {
@@ -182,7 +181,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	processPreRequestForLatencyPrediction(ctx, predictedLatencyCtx)
 }
 
-func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
@@ -191,13 +190,13 @@ func (t *PredictedLatency) ResponseReceived(ctx context.Context, request *schedu
 }
 
 // --- Response Hooks when body chunks received---
-func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseBody(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseStreaming: request is nil, skipping")
 		return
 	}
-	if !t.checkPredictor(logger, targetMetadata) || response.EndOfStream || !t.config.StreamingMode {
+	if !t.checkPredictor(logger, targetMetadata) {
 		return
 	}
 
@@ -215,75 +214,52 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
-}
-
-func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, metadata *fwkdl.EndpointMetadata) {
-	logger := log.FromContext(ctx)
-	if request == nil {
-		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: request is nil, skipping")
-		return
-	}
-	targetMetadata := metadata
-	if !t.checkPredictor(logger, targetMetadata) {
-		return
-	}
-
-	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
-	if err != nil {
-		id := request.Headers[reqcommon.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
-		return
-	}
-	now := time.Now()
-	if !t.config.StreamingMode {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
-	}
-
-	if predictedLatencyCtx.ttft > 0 {
-		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", predictedLatencyCtx.ttft, "avgPredictedTTFT", predictedLatencyCtx.predictedTTFT)
-		metrics.RecordRequestTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft/1000)
-		metrics.RecordRequestPredictedTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.predictedTTFT/1000)
-		if predictedLatencyCtx.ttftSLO > 0 {
-			metrics.RecordRequestTTFTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft, predictedLatencyCtx.ttftSLO)
-		}
-	}
-
-	// Compute avgTPOT as (e2e - ttft) / (tokens - 1) for a more accurate overall average
-	if predictedLatencyCtx.ttft > 0 && predictedLatencyCtx.generatedTokenCount > 1 {
-		e2eMs := float64(now.Sub(predictedLatencyCtx.requestReceivedTimestamp).Milliseconds())
-		predictedLatencyCtx.avgTPOT = (e2eMs - predictedLatencyCtx.ttft) / float64(predictedLatencyCtx.generatedTokenCount-1)
-	}
-
-	if predictedLatencyCtx.avgTPOT > 0 {
-		logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", predictedLatencyCtx.avgTPOT, "avgPredictedTPOT", predictedLatencyCtx.avgPredictedTPOT)
-		metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT/1000)
-		metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
-		if predictedLatencyCtx.avgTPOTSLO > 0 {
-			metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
-		}
-
-		// Record one TPOT training entry per request using avgTPOT and dispatch-time metrics
-		if m, err := getLatestMetricsForProfile(predictedLatencyCtx, ""); err == nil {
-			entry := buildTrainingEntry(
-				t.config.EndpointRoleLabel,
-				targetMetadata,
-				m,
-				predictedLatencyCtx.promptText,
-				0, // TTFT not recorded for TPOT
-				predictedLatencyCtx.avgTPOT,
-				now,
-				0, // not used for TPOT prediction
-				0, // TPOT does not use prefix cache score
-			)
-			if err := t.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-				logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
+	if response.EndOfStream {
+		if predictedLatencyCtx.ttft > 0 {
+			logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", predictedLatencyCtx.ttft, "avgPredictedTTFT", predictedLatencyCtx.predictedTTFT)
+			metrics.RecordRequestTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft/1000)
+			metrics.RecordRequestPredictedTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.predictedTTFT/1000)
+			if predictedLatencyCtx.ttftSLO > 0 {
+				metrics.RecordRequestTTFTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft, predictedLatencyCtx.ttftSLO)
 			}
 		}
-	}
 
-	id := request.Headers[reqcommon.RequestIdHeaderKey]
-	t.removeRequestFromQueue(id, predictedLatencyCtx)
-	t.deletePredictedLatencyContextForRequest(request)
+		// Compute avgTPOT as (e2e - ttft) / (tokens - 1) for a more accurate overall average
+		if predictedLatencyCtx.ttft > 0 && predictedLatencyCtx.generatedTokenCount > 1 {
+			e2eMs := float64(now.Sub(predictedLatencyCtx.requestReceivedTimestamp).Milliseconds())
+			predictedLatencyCtx.avgTPOT = (e2eMs - predictedLatencyCtx.ttft) / float64(predictedLatencyCtx.generatedTokenCount-1)
+		}
+
+		if predictedLatencyCtx.avgTPOT > 0 {
+			logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", predictedLatencyCtx.avgTPOT, "avgPredictedTPOT", predictedLatencyCtx.avgPredictedTPOT)
+			metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT/1000)
+			metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
+			if predictedLatencyCtx.avgTPOTSLO > 0 {
+				metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
+			}
+			// Record one TPOT training entry per request using avgTPOT and dispatch-time metrics
+			if m, err := getLatestMetricsForProfile(predictedLatencyCtx, ""); err == nil {
+				entry := buildTrainingEntry(
+					t.config.EndpointRoleLabel,
+					targetMetadata,
+					m,
+					predictedLatencyCtx.promptText,
+					0, // TTFT not recorded for TPOT
+					predictedLatencyCtx.avgTPOT,
+					now,
+					0, // not used for TPOT prediction
+					0, // TPOT does not use prefix cache score
+				)
+				if err := t.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
+					logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
+				}
+			}
+		}
+
+		id := request.Headers[reqcommon.RequestIdHeaderKey]
+		t.removeRequestFromQueue(id, predictedLatencyCtx)
+		t.deletePredictedLatencyContextForRequest(request)
+	}
 }
 
 func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *fwkdl.EndpointMetadata) bool {

@@ -279,7 +279,7 @@ func TestPredictedLatency_ResponseReceived_NilPredictor(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic and should return early
-	router.ResponseReceived(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseHeader(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -299,7 +299,7 @@ func TestPredictedLatency_ResponseReceived_NoPod(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic with nil pod
-	router.ResponseReceived(ctx, request, response, nil)
+	router.ResponseHeader(ctx, request, response, nil)
 
 	// Predictor should not be called
 
@@ -316,7 +316,7 @@ func TestPredictedLatency_ResponseReceived_NoContext(t *testing.T) {
 	response := &requestcontrol.Response{}
 
 	// Don't set SLO context
-	router.ResponseReceived(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseHeader(ctx, request, response, endpoint.GetMetadata())
 
 	// Should handle missing context gracefully
 
@@ -335,7 +335,7 @@ func TestPredictedLatency_ResponseStreaming_NilPredictor(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic and should return early
-	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -382,7 +382,7 @@ func TestPredictedLatency_ResponseStreaming_FirstToken(t *testing.T) {
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
 
 	beforeTime := time.Now()
-	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 	afterTime := time.Now()
 
 	// Verify first token timestamp was set
@@ -435,7 +435,7 @@ func TestPredictedLatency_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	queue.Add(request.Headers[reqcommon.RequestIdHeaderKey], 50.0)
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
 
-	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify token timestamp was updated
 	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
@@ -443,7 +443,7 @@ func TestPredictedLatency_ResponseStreaming_SubsequentTokens(t *testing.T) {
 	assert.True(t, retrievedCtx.lastTokenTimestamp.After(firstTokenTime))
 }
 
-func TestPredictedLatency_ResponseComplete_QueueNotFound(t *testing.T) {
+func TestPredictedLatency_ResponseStreamingEndOfStream_QueueNotFound(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -451,7 +451,7 @@ func TestPredictedLatency_ResponseComplete_QueueNotFound(t *testing.T) {
 	ctx := context.Background()
 	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
-	response := &requestcontrol.Response{}
+	response := &requestcontrol.Response{EndOfStream: true}
 
 	predictedLatencyCtx := newPredictedLatencyContext(request)
 	predictedLatencyCtx.incomingModelName = testModelName
@@ -462,7 +462,7 @@ func TestPredictedLatency_ResponseComplete_QueueNotFound(t *testing.T) {
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, newRequestPriorityQueue())
 
 	// Should handle gracefully when request is not in queue
-	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should be deleted
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -479,13 +479,13 @@ func TestPredictedLatency_ResponseStreaming_NoContext(t *testing.T) {
 	response := &requestcontrol.Response{}
 
 	// Don't set SLO context - should handle gracefully
-	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Should not panic
 
 }
 
-func TestPredictedLatency_ResponseComplete_Success(t *testing.T) {
+func TestPredictedLatency_ResponseStreamingEndOfStream_Success(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -493,7 +493,7 @@ func TestPredictedLatency_ResponseComplete_Success(t *testing.T) {
 	ctx := context.Background()
 	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
-	response := &requestcontrol.Response{}
+	response := &requestcontrol.Response{EndOfStream: true}
 
 	// Create queue and add request
 	queue := newRequestPriorityQueue()
@@ -511,7 +511,7 @@ func TestPredictedLatency_ResponseComplete_Success(t *testing.T) {
 	predictedLatencyCtx.targetMetadata = endpoint.GetMetadata()
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify context was deleted
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -521,27 +521,27 @@ func TestPredictedLatency_ResponseComplete_Success(t *testing.T) {
 	assert.Equal(t, 0, queue.Len())
 }
 
-func TestPredictedLatency_ResponseComplete_NilPredictor(t *testing.T) {
+func TestPredictedLatency_ResponseStreamingEndOfStream_NilPredictor(t *testing.T) {
 	router := createTestRouter()
 	router.latencypredictor = nil
 
 	ctx := context.Background()
 	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
-	response := &requestcontrol.Response{}
+	response := &requestcontrol.Response{EndOfStream: true}
 
 	predictedLatencyCtx := newPredictedLatencyContext(request)
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic
-	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Context should still exist (deletion happens only with predictor)
 	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.NoError(t, err)
 }
 
-func TestPredictedLatency_ResponseComplete_NoPod(t *testing.T) {
+func TestPredictedLatency_ResponseStreamingEndOfStream_NoPod(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -554,14 +554,14 @@ func TestPredictedLatency_ResponseComplete_NoPod(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic with nil pod
-	router.ResponseComplete(ctx, request, response, nil)
+	router.ResponseBody(ctx, request, response, nil)
 
 	// Context should still exist (deletion happens only with validpod.GetPod())
 	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.NoError(t, err)
 }
 
-func TestPredictedLatency_ResponseComplete_NoContext(t *testing.T) {
+func TestPredictedLatency_ResponseStreamingEndOfStream_NoContext(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -569,16 +569,13 @@ func TestPredictedLatency_ResponseComplete_NoContext(t *testing.T) {
 	ctx := context.Background()
 	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
-	response := &requestcontrol.Response{}
+	response := &requestcontrol.Response{EndOfStream: true}
 
 	// Don't set SLO context - should handle gracefully
-	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
-
-	// Should not panic
-
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 }
 
-func TestPredictedLatency_ResponseComplete_WithMetrics(t *testing.T) {
+func TestPredictedLatency_ResponseStreamingEndOfStream_WithMetrics(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -586,7 +583,7 @@ func TestPredictedLatency_ResponseComplete_WithMetrics(t *testing.T) {
 	ctx := context.Background()
 	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test", 100, 50)
-	response := &requestcontrol.Response{}
+	response := &requestcontrol.Response{EndOfStream: true}
 
 	// Create queue
 	queue := newRequestPriorityQueue()
@@ -604,14 +601,14 @@ func TestPredictedLatency_ResponseComplete_WithMetrics(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should record metrics without panicking
-	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify cleanup
 	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
 }
 
-func TestPredictedLatency_ResponseComplete_NoSLOs(t *testing.T) {
+func TestPredictedLatency_ResponseStreamingEndOfStream_NoSLOs(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -619,7 +616,7 @@ func TestPredictedLatency_ResponseComplete_NoSLOs(t *testing.T) {
 	ctx := context.Background()
 	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
 	request := createTestLLMRequest("test-id", 0, 0) // No SLOs
-	response := &requestcontrol.Response{}
+	response := &requestcontrol.Response{EndOfStream: true}
 
 	// Create queue
 	queue := newRequestPriorityQueue()
@@ -633,7 +630,7 @@ func TestPredictedLatency_ResponseComplete_NoSLOs(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should handle missing SLOs gracefully
-	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify cleanup
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -800,7 +797,7 @@ func TestPredictedLatency_MultipleRequests_SamePod(t *testing.T) {
 	assert.NotNil(t, value)
 }
 
-func TestPredictedLatency_RequestLifecycle_Complete(t *testing.T) {
+func TestPredictedLatency_RequestLifecycle_ResponseEndOfStream(t *testing.T) {
 	router := createTestRouter()
 	mockPredictor := new(mockPredictor)
 	router.latencypredictor = mockPredictor
@@ -826,23 +823,24 @@ func TestPredictedLatency_RequestLifecycle_Complete(t *testing.T) {
 	assert.NotNil(t, retrievedCtx.targetMetadata)
 
 	// 2. ResponseReceived
-	router.ResponseReceived(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseHeader(ctx, request, response, endpoint.GetMetadata())
 
 	// 3. ResponseStreaming (first token)
-	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// 4. ResponseStreaming (subsequent tokens)
 	retrievedCtx, _ = router.getPredictedLatencyContextForRequest(request)
 	retrievedCtx.ttft = 100 // Mark first token received
 	router.setPredictedLatencyContextForRequest(request, retrievedCtx)
-	router.ResponseStreaming(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// 5. ResponseComplete
 	retrievedCtx, _ = router.getPredictedLatencyContextForRequest(request)
 	retrievedCtx.ttft = 80
 	retrievedCtx.avgTPOT = 30
+	response = &requestcontrol.Response{EndOfStream: true}
 	router.setPredictedLatencyContextForRequest(request, retrievedCtx)
-	router.ResponseComplete(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
 
 	// Verify context was cleaned up
 	_, err = router.getPredictedLatencyContextForRequest(request)

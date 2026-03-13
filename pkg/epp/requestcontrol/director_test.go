@@ -1092,10 +1092,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
-	_, err := director.HandleResponseReceived(ctx, reqCtx)
-	if err != nil {
-		t.Fatalf("HandleResponse() returned unexpected error: %v", err)
-	}
+	director.HandleResponseHeader(ctx, reqCtx)
 
 	if diff := cmp.Diff("test-req-id-for-response", pr1.lastRespOnResponse.RequestId); diff != "" {
 		t.Errorf("Scheduler.OnResponse RequestId mismatch (-want +got):\n%s", diff)
@@ -1129,56 +1126,21 @@ func TestDirector_HandleResponseStreaming(t *testing.T) {
 		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
-	_, err := director.HandleResponseBodyStreaming(ctx, reqCtx)
-	if err != nil {
-		t.Fatalf("HandleResponseBodyStreaming() returned unexpected error: %v", err)
-	}
+	director.HandleResponseBody(ctx, reqCtx, false)
+	director.HandleResponseBody(ctx, reqCtx, false)
+	director.HandleResponseBody(ctx, reqCtx, true)
 
-	if diff := cmp.Diff("test-req-id-for-streaming", ps1.lastRespOnStreaming.RequestId); diff != "" {
-		t.Errorf("Scheduler.OnStreaming RequestId mismatch (-want +got):\n%s", diff)
-	}
-	if diff := cmp.Diff(reqCtx.Response.Headers, ps1.lastRespOnStreaming.Headers); diff != "" {
-		t.Errorf("Scheduler.OnStreaming Headers mismatch (-want +got):\n%s", diff)
-	}
-	if diff := cmp.Diff("namespace1/test-pod-name", ps1.lastTargetPodOnStreaming); diff != "" {
-		t.Errorf("Scheduler.OnStreaming TargetPodName mismatch (-want +got):\n%s", diff)
-	}
-}
+	assert.Equal(t, 3, len(ps1.respsOnStreaming), "Should have received 3 streaming calls")
 
-func TestDirector_HandleResponseComplete(t *testing.T) {
-	pc1 := newTestResponseComplete("pc1")
-
-	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-	ds := datastore.NewDatastore(t.Context(), nil, 0)
-	mockSched := &mockScheduler{}
-	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
-	director := NewDirectorWithConfig(ds, mockSched, nil, nil, locator, NewConfig().WithResponseCompletePlugins(pc1))
-
-	reqCtx := &handlers.RequestContext{
-		Request: &handlers.Request{
-			Headers: map[string]string{
-				reqcommon.RequestIdHeaderKey: "test-req-id-for-complete",
-			},
-		},
-		Response: &handlers.Response{
-			Headers: map[string]string{"X-Test-Complete-Header": "CompleteValue"},
-		},
-		TargetPod: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
-	}
-
-	_, err := director.HandleResponseBodyComplete(ctx, reqCtx)
-	if err != nil {
-		t.Fatalf("HandleResponseBodyComplete() returned unexpected error: %v", err)
-	}
-
-	if diff := cmp.Diff("test-req-id-for-complete", pc1.lastRespOnComplete.RequestId); diff != "" {
-		t.Errorf("Scheduler.OnComplete RequestId mismatch (-want +got):\n%s", diff)
-	}
-	if diff := cmp.Diff(reqCtx.Response.Headers, pc1.lastRespOnComplete.Headers); diff != "" {
-		t.Errorf("Scheduler.OnComplete Headers mismatch (-want +got):\n%s", diff)
-	}
-	if diff := cmp.Diff("namespace1/test-pod-name", pc1.lastTargetPodOnComplete); diff != "" {
-		t.Errorf("Scheduler.OnComplete TargetPodName mismatch (-want +got):\n%s", diff)
+	for i, resp := range ps1.respsOnStreaming {
+		assert.Equal(t, "test-req-id-for-streaming", resp.RequestId)
+		assert.Equal(t, reqCtx.Response.Headers, resp.Headers)
+		assert.Equal(t, "namespace1/test-pod-name", ps1.targetPodsOnStreaming[i])
+		if i < 2 {
+			assert.False(t, resp.EndOfStream, "EndOfStream should be false for chunk %d", i)
+		} else {
+			assert.True(t, resp.EndOfStream, "EndOfStream should be true for last chunk")
+		}
 	}
 }
 
@@ -1195,15 +1157,13 @@ type testResponseReceived struct {
 }
 
 type testResponseStreaming struct {
-	typedName                fwkplugin.TypedName
+	typedName             fwkplugin.TypedName
+	respsOnStreaming      []*fwk.Response
+	targetPodsOnStreaming []string
+
+	// Legacy fields for existing tests if any, but better to update them
 	lastRespOnStreaming      *fwk.Response
 	lastTargetPodOnStreaming string
-}
-
-type testResponseComplete struct {
-	typedName               fwkplugin.TypedName
-	lastRespOnComplete      *fwk.Response
-	lastTargetPodOnComplete string
 }
 
 func newTestResponseReceived(name string) *testResponseReceived {
@@ -1218,12 +1178,6 @@ func newTestResponseStreaming(name string) *testResponseStreaming {
 	}
 }
 
-func newTestResponseComplete(name string) *testResponseComplete {
-	return &testResponseComplete{
-		typedName: fwkplugin.TypedName{Type: testPostCompleteType, Name: name},
-	}
-}
-
 func (p *testResponseReceived) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
@@ -1232,21 +1186,16 @@ func (p *testResponseStreaming) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseComplete) TypedName() fwkplugin.TypedName {
-	return p.typedName
-}
-
-func (p *testResponseReceived) ResponseReceived(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseReceived) ResponseHeader(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseStreaming(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseStreaming) ResponseBody(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+	p.respsOnStreaming = append(p.respsOnStreaming, response)
+	p.targetPodsOnStreaming = append(p.targetPodsOnStreaming, targetPod.NamespacedName.String())
+
+	// Maintain legacy fields for compatibility
 	p.lastRespOnStreaming = response
 	p.lastTargetPodOnStreaming = targetPod.NamespacedName.String()
-}
-
-func (p *testResponseComplete) ResponseComplete(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
-	p.lastRespOnComplete = response
-	p.lastTargetPodOnComplete = targetPod.NamespacedName.String()
 }

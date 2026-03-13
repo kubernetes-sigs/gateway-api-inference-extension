@@ -36,7 +36,7 @@ const (
 	DestinationEndpointServedVerifierType = "destination-endpoint-served-verifier"
 )
 
-var _ requestcontrol.ResponseReceived = &DestinationEndpointServedVerifier{}
+var _ requestcontrol.ResponseHeader = &DestinationEndpointServedVerifier{}
 
 // DestinationEndpointServedVerifier is a test-only plugin for conformance tests.
 // It verifies that the request was served by the expected endpoint.
@@ -70,8 +70,8 @@ func NewDestinationEndpointServedVerifier() *DestinationEndpointServedVerifier {
 	return &DestinationEndpointServedVerifier{}
 }
 
-// ResponseReceived is the handler for the ResponseReceived extension point.
-func (p *DestinationEndpointServedVerifier) ResponseReceived(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *fwkdl.EndpointMetadata) {
+// ResponseHeader is the handler for the ResponseHeader extension point.
+func (p *DestinationEndpointServedVerifier) ResponseHeader(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx).WithName(p.TypedName().String())
 	logger.V(logging.DEBUG).Info("Verifying destination endpoint served")
 
