@@ -26,6 +26,7 @@ const (
 
 	PrimaryInferencePoolName   = "primary-inference-pool"
 	SecondaryInferencePoolName = "secondary-inference-pool"
+	H2CInferencePoolName       = "h2c-inference-pool"
 
 	PrimaryModelServerAppLabel         = "primary-inference-model-server"
 	SecondaryModelServerAppLabel       = "secondary-inference-model-server"
@@ -42,6 +43,7 @@ var (
 
 	PrimaryInferencePoolNN   = types.NamespacedName{Name: PrimaryInferencePoolName, Namespace: AppBackendNamespace}
 	SecondaryInferencePoolNN = types.NamespacedName{Name: SecondaryInferencePoolName, Namespace: AppBackendNamespace}
+	H2CInferencePoolNN       = types.NamespacedName{Name: H2CInferencePoolName, Namespace: AppBackendNamespace}
 
 	PrimaryEppDeploymentNN   = types.NamespacedName{Name: "primary-app-endpoint-picker", Namespace: AppBackendNamespace}
 	SecondaryEppDeploymentNN = types.NamespacedName{Name: "secondary-app-endpoint-picker", Namespace: AppBackendNamespace}
