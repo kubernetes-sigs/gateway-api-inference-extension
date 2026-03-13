@@ -46,6 +46,35 @@ import (
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
 
+func TestPoolGet_NoDeadlockWithConcurrentWrite(t *testing.T) {
+	pool := &datalayer.EndpointPool{
+		Namespace:   "default",
+		Selector:    map[string]string{"app": "vllm"},
+		TargetPorts: []int{8000},
+	}
+	ds := &datastore{pool: pool}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 1000; i++ {
+			ds.mu.Lock()
+			ds.pool = pool
+			ds.mu.Unlock()
+		}
+	}()
+
+	for i := 0; i < 1000; i++ {
+		_, _ = ds.PoolGet()
+	}
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("deadlock detected: PoolGet and concurrent writer did not complete within timeout")
+	}
+}
+
 func TestPool(t *testing.T) {
 	pool1Selector := map[string]string{"app": "vllm_v1"}
 	pool1 := testutil.MakeInferencePool("pool1").

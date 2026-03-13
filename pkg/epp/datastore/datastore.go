@@ -170,7 +170,7 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 func (ds *datastore) PoolGet() (*datalayer.EndpointPool, error) {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
-	if !ds.PoolHasSynced() {
+	if ds.pool == nil {
 		return nil, errPoolNotSynced
 	}
 	return ds.pool, nil
