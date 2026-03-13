@@ -1,0 +1,23 @@
+GatewayAPIInferenceExtensionVersion: v1.4.0-rc.2
+apiVersion: gateway.networking.k8s.io/v1
+date: "2026-03-13T03:44:24Z"
+gatewayAPIChannel: experimental
+gatewayAPIVersion: v1.5.0
+implementation:
+  contact:
+  - github.com/agentgateway/agentgateway/issues/new/choose
+  organization: agentgateway
+  project: agentgateway
+  url: github.com/agentgateway/agentgateway
+  version: v1.0.0-alpha.4
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: success
+    statistics:
+      Failed: 0
+      Passed: 12
+      Skipped: 0
+  name: Gateway
+  summary: Core tests succeeded.
