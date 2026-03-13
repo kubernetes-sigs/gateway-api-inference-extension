@@ -352,7 +352,6 @@ func bulkPredictWithMetrics(
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
 	prefillTokensInFlights []int64,
-	decodeTokensInFlights []int64,
 ) ([]*latencypredictor.PredictionResponse, error) {
 	logger := log.FromContext(ctx)
 
@@ -393,9 +392,6 @@ func bulkPredictWithMetrics(
 		)
 		if i < len(prefillTokensInFlights) {
 			bulkRequests[i].PrefillTokensInFlight = prefillTokensInFlights[i]
-		}
-		if i < len(decodeTokensInFlights) {
-			bulkRequests[i].DecodeTokensInFlight = decodeTokensInFlights[i]
 		}
 	}
 

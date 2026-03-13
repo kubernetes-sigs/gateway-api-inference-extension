@@ -53,7 +53,6 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, predictedLat
 	generatedTokenCounts := make([]int, len(candidateEndpoints))
 	prefixCacheScores := make([]float64, len(candidateEndpoints))
 	prefillTokensInFlights := make([]int64, len(candidateEndpoints))
-	decodeTokensInFlights := make([]int64, len(candidateEndpoints)) // always zero; decode load captured by kv_cache_percentage
 
 	for i, endpoint := range candidateEndpoints {
 		logger.V(logutil.TRACE).Info("Candidate pod for scheduling", "endpoint", endpoint.GetMetadata().String(), "metrics", endpoint.GetMetrics().String())
@@ -74,7 +73,7 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, predictedLat
 	}
 
 	// Bulk predict
-	bulkPredictions, err := bulkPredictWithMetrics(ctx, predictedLatencyCtx, s.latencypredictor, metricsStates, s.config.EndpointRoleLabel, targetEndpointsMetadatas, prompts, generatedTokenCounts, prefixCacheScores, prefillTokensInFlights, decodeTokensInFlights)
+	bulkPredictions, err := bulkPredictWithMetrics(ctx, predictedLatencyCtx, s.latencypredictor, metricsStates, s.config.EndpointRoleLabel, targetEndpointsMetadatas, prompts, generatedTokenCounts, prefixCacheScores, prefillTokensInFlights)
 	if err != nil {
 		logger.V(logutil.DEBUG).Error(err, "Bulk prediction failed")
 		return nil, err
