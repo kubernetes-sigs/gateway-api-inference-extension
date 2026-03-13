@@ -71,9 +71,13 @@ func (i *indexer) Add(hashes []BlockHash, pod Server) {
 		lruForPod.Add(hash, struct{}{})
 	}
 
-	// Update hashToPods once under lock
+	// Update hashToPods once under lock, but only for hashes that survived eviction.
 	i.mu.Lock()
 	for _, hash := range hashes {
+		if !lruForPod.Contains(hash) {
+			// This hash was evicted by a later Add in the loop above; skip it.
+			continue
+		}
 		podIDs := i.hashToPods[hash]
 		if podIDs == nil {
 			podIDs = make(podSet)

@@ -51,6 +51,36 @@ func TestIndexer_AddAndGet(t *testing.T) {
 	assert.Empty(t, servers, "Cache should not contain non-existent hash")
 }
 
+func TestIndexer_AddEvictsWithinSingleCall(t *testing.T) {
+	// LRU capacity is 2, but we add 4 hashes in one call.
+	// H1 and H2 should be evicted by H3 and H4 and must NOT appear in hashToPods.
+	server := Server{
+		ServerID:       ServerID{Namespace: "default", Name: "server1"},
+		numOfGPUBlocks: 2,
+	}
+	i := newIndexer(context.Background(), 2)
+
+	hashes := []BlockHash{BlockHash(1), BlockHash(2), BlockHash(3), BlockHash(4)}
+	i.Add(hashes, server)
+
+	// Only the last 2 hashes should survive in the LRU.
+	assert.Equal(t, 2, i.podToLRU[server.ServerID].Len(), "LRU should contain exactly 2 entries")
+
+	// hashToPods should have exactly 2 entries, matching the LRU.
+	assert.Len(t, i.hashToPods, 2, "hashToPods should contain exactly 2 entries matching LRU size")
+
+	// Evicted hashes must not be in hashToPods; surviving hashes must be present.
+	for _, h := range hashes {
+		inLRU := i.podToLRU[server.ServerID].Contains(h)
+		pods := i.Get(h)
+		if inLRU {
+			assert.Contains(t, pods, server.ServerID, "hash %v is in LRU and should be in hashToPods", h)
+		} else {
+			assert.NotContains(t, pods, server.ServerID, "hash %v was evicted from LRU and should NOT be in hashToPods", h)
+		}
+	}
+}
+
 func TestIndexer_RemovePodAndEviction(t *testing.T) {
 	const indexerSize = 10
 
