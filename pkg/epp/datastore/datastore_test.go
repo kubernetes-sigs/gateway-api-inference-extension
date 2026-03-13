@@ -22,6 +22,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -1093,6 +1094,67 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet verifies that PodUpdateOrAddIfNotExist
+// does not race with PoolSet. Before the fix, PodUpdateOrAddIfNotExist read ds.pool
+// without holding ds.mu, which could panic or corrupt data when PoolSet concurrently
+// replaces ds.pool under the write lock.
+// Run with: go test -race -run TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet
+func TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	ctx := context.Background()
+	period := time.Second
+	epf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period)
+	ds := NewDatastore(ctx, epf, 0)
+
+	pool := pooltuil.InferencePoolToEndpointPool(
+		testutil.MakeInferencePool("pool1").
+			Namespace("default").
+			Selector(map[string]string{"app": "vllm"}).
+			TargetPorts(8000).ObjRef(),
+	)
+	_ = ds.PoolSet(ctx, fakeClient, pool)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+		},
+		Status: corev1.PodStatus{
+			PodIP: "10.0.0.1",
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Goroutine 1: repeatedly call PoolSet (including nil to simulate reset).
+	go func() {
+		defer wg.Done()
+		for range 500 {
+			_ = ds.PoolSet(ctx, fakeClient, pool)
+			_ = ds.PoolSet(ctx, fakeClient, nil)
+			_ = ds.PoolSet(ctx, fakeClient, pool)
+		}
+	}()
+
+	// Goroutine 2: repeatedly call PodUpdateOrAddIfNotExist.
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			ds.PodUpdateOrAddIfNotExist(pod)
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestExtractActivePorts(t *testing.T) {

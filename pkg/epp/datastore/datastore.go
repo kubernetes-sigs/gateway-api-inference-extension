@@ -272,7 +272,12 @@ func (ds *datastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoi
 }
 
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
-	if ds.pool == nil {
+	// Snapshot pool under read lock to avoid racing with PoolSet().
+	ds.mu.RLock()
+	pool := ds.pool
+	ds.mu.RUnlock()
+
+	if pool == nil {
 		return true
 	}
 
@@ -282,7 +287,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	modelServerMetricsPort := 0
-	if len(ds.pool.TargetPorts) == 1 {
+	if len(pool.TargetPorts) == 1 {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*fwkdl.EndpointMetadata{}
@@ -324,7 +329,7 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	}
 
 	// remove endpoints that are no longer active in the pool
-	for idx, port := range ds.pool.TargetPorts {
+	for idx, port := range pool.TargetPorts {
 		if activePorts.Has(port) {
 			continue
 		}
