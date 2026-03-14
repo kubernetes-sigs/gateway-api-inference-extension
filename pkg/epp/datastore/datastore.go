@@ -272,11 +272,20 @@ func (ds *datastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoi
 }
 
 func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
-	// Snapshot pool under read lock to avoid racing with PoolSet().
+	// Take a reference to pool under read lock to avoid racing with PoolSet().
+	// This is safe because PoolSet() replaces the entire pool struct rather than
+	// updating it in-place.
 	ds.mu.RLock()
 	pool := ds.pool
 	ds.mu.RUnlock()
 
+	return ds.podUpdateOrAddIfNotExist(pod, pool)
+}
+
+// podUpdateOrAddIfNotExist is the lock-free inner implementation.
+// Callers must ensure pool is a consistent snapshot (either read under lock
+// or already held, as in podResyncAll which runs under ds.mu.Lock via PoolSet).
+func (ds *datastore) podUpdateOrAddIfNotExist(pod *corev1.Pod, pool *datalayer.EndpointPool) bool {
 	if pool == nil {
 		return true
 	}
@@ -291,8 +300,8 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 		modelServerMetricsPort = int(ds.modelServerMetricsPort)
 	}
 	pods := []*fwkdl.EndpointMetadata{}
-	activePorts := ds.extractActivePorts(pod)
-	for idx, port := range ds.pool.TargetPorts {
+	activePorts := extractActivePorts(pod, pool.TargetPorts)
+	for idx, port := range pool.TargetPorts {
 		if !activePorts.Has(port) {
 			continue
 		}
@@ -377,7 +386,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		for idx := range ds.pool.TargetPorts {
 			activeEndpoints.Insert(createEndpointNamespacedName(&pod, idx))
 		}
-		if !ds.PodUpdateOrAddIfNotExist(&pod) {
+		if !ds.podUpdateOrAddIfNotExist(&pod, ds.pool) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
@@ -400,8 +409,8 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 }
 
 // extractActivePorts extracts the active ports from a pod's annotations.
-func (ds *datastore) extractActivePorts(pod *corev1.Pod) sets.Set[int] {
-	allPorts := sets.New(ds.pool.TargetPorts...)
+func extractActivePorts(pod *corev1.Pod, targetPorts []int) sets.Set[int] {
+	allPorts := sets.New(targetPorts...)
 	annotations := pod.GetAnnotations()
 	portsAnnotation, ok := annotations[activePortsAnnotation]
 	if !ok {

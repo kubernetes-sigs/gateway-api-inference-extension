@@ -1276,10 +1276,7 @@ func TestExtractActivePorts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := NewDatastore(context.Background(), nil, 0).WithEndpointPool(&datalayer.EndpointPool{
-				TargetPorts: tt.validPorts,
-			})
-			activePorts := ds.extractActivePorts(tt.pod)
+			activePorts := extractActivePorts(tt.pod, tt.validPorts)
 			if !reflect.DeepEqual(activePorts, tt.expectedPorts) {
 				t.Errorf("ExtractActivePorts() ports = %v, want %v", activePorts, tt.expectedPorts)
 			}
