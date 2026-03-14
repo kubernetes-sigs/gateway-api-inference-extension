@@ -41,19 +41,29 @@ func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.Htt
 		}
 	}
 
-	return []*eppb.ProcessingResponse{
-		{
-			Response: &eppb.ProcessingResponse_ResponseHeaders{
-				ResponseHeaders: &eppb.HeadersResponse{},
+	if !s.streaming || headers.GetEndOfStream() {
+		return []*eppb.ProcessingResponse{
+			{
+				Response: &eppb.ProcessingResponse_ResponseHeaders{
+					ResponseHeaders: &eppb.HeadersResponse{},
+				},
 			},
-		},
-	}, nil
+		}, nil
+	}
+
+	// In streaming mode with a body pending, defer the response —
+	// HandleResponseBody will send it together with the body response,
+	// mirroring the request-side pattern.
+	return nil, nil
 }
 
 // HandleResponseBody handles response bodies by executing response plugins in order.
 func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	if len(s.responsePlugins) == 0 {
+		if s.streaming {
+			return s.generateEmptyResponseBodyResponse(responseBodyBytes), nil
+		}
 		return []*eppb.ProcessingResponse{
 			{
 				Response: &eppb.ProcessingResponse_ResponseBody{
@@ -65,6 +75,9 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 
 	if err := json.Unmarshal(responseBodyBytes, &reqCtx.Response.Body); err != nil {
 		logger.Error(err, "Failed to parse response body as JSON, skipping response plugins")
+		if s.streaming {
+			return s.generateEmptyResponseBodyResponse(responseBodyBytes), nil
+		}
 		return []*eppb.ProcessingResponse{
 			{
 				Response: &eppb.ProcessingResponse_ResponseBody{
@@ -136,6 +149,20 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 			},
 		},
 	}, nil
+}
+
+// generateEmptyResponseBodyResponse builds a streaming response with an empty
+// ResponseHeaders followed by chunked body responses via AddStreamedResponseBody.
+func (s *Server) generateEmptyResponseBodyResponse(responseBodyBytes []byte) []*eppb.ProcessingResponse {
+	responses := []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{},
+			},
+		},
+	}
+	responses = envoy.AddStreamedResponseBody(responses, responseBodyBytes)
+	return responses
 }
 
 // HandleResponseTrailers handles response trailers.
