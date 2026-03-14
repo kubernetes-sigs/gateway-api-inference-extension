@@ -148,6 +148,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
 			responses, err = s.processResponseBody(ctx, reqCtx, req.GetResponseBody(), respStreamedBody)
+		case *extProcPb.ProcessingRequest_ResponseTrailers:
+			responses, err = s.HandleResponseTrailers(req.GetResponseTrailers())
 		default:
 			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")

@@ -41,19 +41,29 @@ func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.Htt
 		}
 	}
 
-	return []*eppb.ProcessingResponse{
-		{
-			Response: &eppb.ProcessingResponse_ResponseHeaders{
-				ResponseHeaders: &eppb.HeadersResponse{},
+	if !s.streaming || headers.GetEndOfStream() {
+		return []*eppb.ProcessingResponse{
+			{
+				Response: &eppb.ProcessingResponse_ResponseHeaders{
+					ResponseHeaders: &eppb.HeadersResponse{},
+				},
 			},
-		},
-	}, nil
+		}, nil
+	}
+
+	// In streaming mode with a body pending, defer the response —
+	// HandleResponseBody will send it together with the body response,
+	// mirroring the request-side pattern.
+	return nil, nil
 }
 
 // HandleResponseBody handles response bodies by executing response plugins in order.
 func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	if len(s.responsePlugins) == 0 {
+		if s.streaming {
+			return s.buildStreamingResponseBody(nil, responseBodyBytes), nil
+		}
 		return []*eppb.ProcessingResponse{
 			{
 				Response: &eppb.ProcessingResponse_ResponseBody{
@@ -65,6 +75,9 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 
 	if err := json.Unmarshal(responseBodyBytes, &reqCtx.Response.Body); err != nil {
 		logger.Error(err, "Failed to parse response body as JSON, skipping response plugins")
+		if s.streaming {
+			return s.buildStreamingResponseBody(nil, responseBodyBytes), nil
+		}
 		return []*eppb.ProcessingResponse{
 			{
 				Response: &eppb.ProcessingResponse_ResponseBody{
@@ -90,26 +103,17 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 	}
 
 	if s.streaming {
-		var ret []*eppb.ProcessingResponse
-		ret = append(ret, &eppb.ProcessingResponse{
-			Response: &eppb.ProcessingResponse_ResponseHeaders{
-				ResponseHeaders: &eppb.HeadersResponse{
-					Response: &eppb.CommonResponse{
-						ClearRouteCache: true,
-						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
-							RemoveHeaders: reqCtx.Response.RemovedHeaders(),
-						},
-					},
-				},
-			},
-		})
-		if bodyMutated {
-			ret = envoy.AddStreamedResponseBody(ret, mutatedBytes)
-		} else {
-			ret = envoy.AddStreamedResponseBody(ret, responseBodyBytes)
+		headerMutation := &eppb.HeaderMutation{
+			SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+			RemoveHeaders: reqCtx.Response.RemovedHeaders(),
 		}
-		return ret, nil
+		var bodyBytes []byte
+		if bodyMutated {
+			bodyBytes = mutatedBytes
+		} else {
+			bodyBytes = responseBodyBytes
+		}
+		return s.buildStreamingResponseBody(headerMutation, bodyBytes), nil
 	}
 
 	response := &eppb.CommonResponse{
@@ -136,6 +140,49 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 			},
 		},
 	}, nil
+}
+
+// buildStreamingResponseBody builds the response for streaming mode:
+// a deferred ResponseHeaders (mirroring the request-side pattern) followed
+// by a ResponseBody using StreamedBodyResponse as required by FULL_DUPLEX_STREAMED.
+func (s *Server) buildStreamingResponseBody(headerMutation *eppb.HeaderMutation, bodyBytes []byte) []*eppb.ProcessingResponse {
+	headerResp := &eppb.ProcessingResponse{
+		Response: &eppb.ProcessingResponse_ResponseHeaders{
+			ResponseHeaders: &eppb.HeadersResponse{},
+		},
+	}
+	if headerMutation != nil {
+		headerResp = &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{
+					Response: &eppb.CommonResponse{
+						ClearRouteCache: true,
+						HeaderMutation:  headerMutation,
+					},
+				},
+			},
+		}
+	}
+
+	return []*eppb.ProcessingResponse{
+		headerResp,
+		{
+			Response: &eppb.ProcessingResponse_ResponseBody{
+				ResponseBody: &eppb.BodyResponse{
+					Response: &eppb.CommonResponse{
+						BodyMutation: &eppb.BodyMutation{
+							Mutation: &eppb.BodyMutation_StreamedResponse{
+								StreamedResponse: &eppb.StreamedBodyResponse{
+									Body:        bodyBytes,
+									EndOfStream: true,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 // HandleResponseTrailers handles response trailers.
