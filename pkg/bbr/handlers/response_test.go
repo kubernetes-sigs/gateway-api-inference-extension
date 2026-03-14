@@ -62,24 +62,63 @@ func newTestRequestContext() *RequestContext {
 func TestHandleResponseBody_NoPlugins(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
-	responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
-	resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
-	if err != nil {
-		t.Fatalf("HandleResponseBody returned unexpected error: %v", err)
-	}
+	t.Run("unary", func(t *testing.T) {
+		server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+		responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
+		resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
+		if err != nil {
+			t.Fatalf("HandleResponseBody returned unexpected error: %v", err)
+		}
 
-	want := []*extProcPb.ProcessingResponse{
-		{
-			Response: &extProcPb.ProcessingResponse_ResponseBody{
-				ResponseBody: &extProcPb.BodyResponse{},
+		want := []*extProcPb.ProcessingResponse{
+			{
+				Response: &extProcPb.ProcessingResponse_ResponseBody{
+					ResponseBody: &extProcPb.BodyResponse{},
+				},
 			},
-		},
-	}
+		}
 
-	if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
-		t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
-	}
+		if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
+			t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+		}
+	})
+
+	t.Run("streaming", func(t *testing.T) {
+		server := NewServer(true, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+		responseBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
+		resp, err := server.HandleResponseBody(ctx, newTestRequestContext(), responseBody)
+		if err != nil {
+			t.Fatalf("HandleResponseBody returned unexpected error: %v", err)
+		}
+
+		want := []*extProcPb.ProcessingResponse{
+			{
+				Response: &extProcPb.ProcessingResponse_ResponseHeaders{
+					ResponseHeaders: &extProcPb.HeadersResponse{},
+				},
+			},
+			{
+				Response: &extProcPb.ProcessingResponse_ResponseBody{
+					ResponseBody: &extProcPb.BodyResponse{
+						Response: &extProcPb.CommonResponse{
+							BodyMutation: &extProcPb.BodyMutation{
+								Mutation: &extProcPb.BodyMutation_StreamedResponse{
+									StreamedResponse: &extProcPb.StreamedBodyResponse{
+										Body:        responseBody,
+										EndOfStream: true,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
+			t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+		}
+	})
 }
 
 func TestHandleResponseBody_SinglePlugin(t *testing.T) {
@@ -376,7 +415,7 @@ func expectedResponseBodyMutation(bodyBytes []byte) *extProcPb.ProcessingRespons
 }
 
 // expectedStreamedResponseBodyMutation builds the expected streamed response for a mutated body:
-// first a ResponseHeaders with the header mutation, then ResponseBody chunks with body data.
+// a deferred ResponseHeaders with header mutation, then a ResponseBody with StreamedBodyResponse.
 func expectedStreamedResponseBodyMutation(bodyBytes []byte) []*extProcPb.ProcessingResponse {
 	return []*extProcPb.ProcessingResponse{
 		{
