@@ -4,11 +4,10 @@ ARG BUILDER_IMAGE=golang:1.25
 ARG BASE_IMAGE=gcr.io/distroless/static:nonroot
 
 ## Multistage build
-FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} AS builder
-ARG TARGETARCH
+FROM ${BUILDER_IMAGE} AS builder
 ENV CGO_ENABLED=0
 ENV GOOS=linux
-ENV GOARCH=${TARGETARCH}
+ENV GOARCH=amd64
 ARG COMMIT_SHA=unknown
 ARG BUILD_REF
 
