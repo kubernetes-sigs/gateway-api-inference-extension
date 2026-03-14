@@ -380,7 +380,7 @@ func TestMetrics(t *testing.T) {
 				ds := NewDatastore(ctx, epf, 0)
 				_ = ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool))
 				for _, pod := range test.storePods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 				time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
 				if test.predict == nil {
@@ -414,7 +414,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod1)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod1)
 			},
 		},
 		{
@@ -422,7 +422,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantPods:     []*corev1.Pod{pod1, pod2},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod2)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod2)
 			},
 		},
 		{
@@ -457,7 +457,7 @@ func TestPods(t *testing.T) {
 					t.Error(err)
 				}
 				for _, pod := range test.existingPods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 
 				test.op(ctx, ds)
@@ -613,7 +613,7 @@ func TestEndpointMetadata(t *testing.T) {
 				},
 			},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod1)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod1)
 			},
 			pool: inferencePool,
 		},
@@ -647,7 +647,7 @@ func TestEndpointMetadata(t *testing.T) {
 				},
 			},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod1)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod1)
 			},
 			pool: inferencePoolMultiTarget,
 		},
@@ -705,7 +705,7 @@ func TestEndpointMetadata(t *testing.T) {
 				},
 			},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod2)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod2)
 			},
 			pool: inferencePoolMultiTarget,
 		},
@@ -760,7 +760,7 @@ func TestEndpointMetadata(t *testing.T) {
 					t.Error(err)
 				}
 				for _, pod := range test.existingPods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 
 				test.op(ctx, ds)
@@ -919,7 +919,7 @@ func TestActivePortFiltering(t *testing.T) {
 
 				// Add all pods
 				for _, pod := range test.pods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 
 				// Check final endpoint count
@@ -1019,7 +1019,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 			operations: []func(Datastore){
 				// Update the pod to reduce active ports from 3 to 1
 				func(ds Datastore) {
-					ds.PodUpdateOrAddIfNotExist(updatedPod1)
+					ds.PodUpdateOrAddIfNotExist(context.Background(), updatedPod1)
 				},
 			},
 			wantEndpointCount: 1, // Only port 8000 should remain active
@@ -1035,7 +1035,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 			operations: []func(Datastore){
 				// Update the pod to have no active ports
 				func(ds Datastore) {
-					ds.PodUpdateOrAddIfNotExist(inactivePod1)
+					ds.PodUpdateOrAddIfNotExist(context.Background(), inactivePod1)
 				},
 			},
 			wantEndpointCount: 0, // No ports should remain active
@@ -1068,7 +1068,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 				}
 
 				// Add the initial pod
-				ds.PodUpdateOrAddIfNotExist(test.initialPod)
+				ds.PodUpdateOrAddIfNotExist(ctx, test.initialPod)
 
 				// Wait a bit for the datastore to process the pod
 				time.Sleep(100 * time.Millisecond)
@@ -1150,7 +1150,7 @@ func TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for range 1000 {
-			ds.PodUpdateOrAddIfNotExist(pod)
+			ds.PodUpdateOrAddIfNotExist(ctx, pod)
 		}
 	}()
 

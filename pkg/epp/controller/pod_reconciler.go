@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -58,7 +57,7 @@ func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, fmt.Errorf("unable to get pod - %w", err)
 	}
 
-	c.updateDatastore(logger, pod)
+	c.updateDatastore(ctx, pod)
 	return ctrl.Result{}, nil
 }
 
@@ -88,12 +87,13 @@ func (c *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(c)
 }
 
-func (c *PodReconciler) updateDatastore(logger logr.Logger, pod *corev1.Pod) {
+func (c *PodReconciler) updateDatastore(ctx context.Context, pod *corev1.Pod) {
+	logger := log.FromContext(ctx)
 	if !podutil.IsPodReady(pod) || !c.Datastore.PoolLabelsMatch(pod.Labels) {
 		logger.V(logutil.DEBUG).Info("Pod removed or not added")
 		c.Datastore.PodDelete(pod.Name)
 	} else {
-		if c.Datastore.PodUpdateOrAddIfNotExist(pod) {
+		if c.Datastore.PodUpdateOrAddIfNotExist(ctx, pod) {
 			logger.V(logutil.DEFAULT).Info("Pod added")
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists")

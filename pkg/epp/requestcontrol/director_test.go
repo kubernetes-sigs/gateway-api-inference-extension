@@ -641,7 +641,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
 				},
 			}
-			ds.PodUpdateOrAddIfNotExist(testPod)
+			ds.PodUpdateOrAddIfNotExist(ctx, testPod)
 		}
 
 		for _, test := range tests {
@@ -786,7 +786,7 @@ func TestGetRandomEndpoint(t *testing.T) {
 					t.Errorf("unexpected error setting pool: %s", err)
 				}
 				for _, pod := range test.storePods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(context.Background(), pod)
 				}
 				d := &Director{datastore: ds}
 				gotEndpoint := d.GetRandomEndpoint()

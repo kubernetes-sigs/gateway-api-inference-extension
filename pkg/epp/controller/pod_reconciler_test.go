@@ -207,7 +207,7 @@ func TestPodReconciler(t *testing.T) {
 				store := datastore.NewDatastore(t.Context(), epf, 0)
 				_ = store.PoolSet(t.Context(), fakeClient, pool.InferencePoolToEndpointPool(test.pool))
 				for _, pod := range test.existingPods {
-					store.PodUpdateOrAddIfNotExist(pod)
+					store.PodUpdateOrAddIfNotExist(t.Context(), pod)
 				}
 
 				podReconciler := &PodReconciler{Reader: fakeClient, Datastore: store}
