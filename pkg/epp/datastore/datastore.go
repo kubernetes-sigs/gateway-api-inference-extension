@@ -78,7 +78,7 @@ type Datastore interface {
 
 	// PodList lists pods matching the given predicate.
 	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
-	PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool
+	PodUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.Pod) bool
 	PodDelete(podName string)
 
 	// Clears the store state, happens when the pool gets deleted.
@@ -271,7 +271,7 @@ func (ds *datastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoi
 	return res
 }
 
-func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
+func (ds *datastore) PodUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.Pod) bool {
 	// Take a reference to pool under read lock to avoid racing with PoolSet().
 	// This is safe because PoolSet() replaces the entire pool struct rather than
 	// updating it in-place.
@@ -279,13 +279,13 @@ func (ds *datastore) PodUpdateOrAddIfNotExist(pod *corev1.Pod) bool {
 	pool := ds.pool
 	ds.mu.RUnlock()
 
-	return ds.podUpdateOrAddIfNotExist(pod, pool)
+	return ds.podUpdateOrAddIfNotExist(ctx, pod, pool)
 }
 
 // podUpdateOrAddIfNotExist is the lock-free inner implementation.
 // Callers must ensure pool is a consistent snapshot (either read under lock
 // or already held, as in podResyncAll which runs under ds.mu.Lock via PoolSet).
-func (ds *datastore) podUpdateOrAddIfNotExist(pod *corev1.Pod, pool *datalayer.EndpointPool) bool {
+func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.Pod, pool *datalayer.EndpointPool) bool {
 	if pool == nil {
 		return true
 	}
@@ -318,6 +318,13 @@ func (ds *datastore) podUpdateOrAddIfNotExist(pod *corev1.Pod, pool *datalayer.E
 				MetricsHost:    net.JoinHostPort(pod.Status.PodIP, strconv.Itoa(metricsPort)),
 				Labels:         labels,
 			})
+	}
+
+	if len(pods) == 0 {
+		logger := log.FromContext(ctx)
+		containerPorts := extractContainerPorts(pod)
+		logger.V(logutil.VERBOSE).Info("No container ports match pool targetPorts, pod will not receive traffic",
+			"pod", pod.Name, "namespace", pod.Namespace, "targetPorts", pool.TargetPorts, "containerPorts", containerPorts)
 	}
 
 	result := true
@@ -386,7 +393,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		for idx := range ds.pool.TargetPorts {
 			activeEndpoints.Insert(createEndpointNamespacedName(&pod, idx))
 		}
-		if !ds.podUpdateOrAddIfNotExist(&pod, ds.pool) {
+		if !ds.podUpdateOrAddIfNotExist(ctx, &pod, ds.pool) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
@@ -427,6 +434,17 @@ func extractActivePorts(pod *corev1.Pod, targetPorts []int) sets.Set[int] {
 		}
 	}
 	return activePorts
+}
+
+// extractContainerPorts returns all container ports from the pod for diagnostic logging.
+func extractContainerPorts(pod *corev1.Pod) []int32 {
+	var ports []int32
+	for _, c := range pod.Spec.Containers {
+		for _, p := range c.Ports {
+			ports = append(ports, p.ContainerPort)
+		}
+	}
+	return ports
 }
 
 // createEndpointNamespacedName creates a namespaced name for an endpoint based on pod and rank index.
