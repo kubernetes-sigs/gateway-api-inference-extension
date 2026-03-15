@@ -43,7 +43,7 @@ import (
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
-	"sigs.k8s.io/gateway-api/pkg/features"
+	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -51,31 +51,16 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 )
 
 // GatewayLayerProfileName defines the name for the conformance profile that tests
 // the Gateway API layer aspects of the Inference Extension (e.g., InferencePool, InferenceObjective CRDs).
 // Future profiles will cover EPP and ModelServer layers.
 const GatewayLayerProfileName confsuite.ConformanceProfileName = "Gateway"
-
-// TODO(#863) Create a dedicated share location for feature names similar to
-// sigs.k8s.io/gateway-api/pkg/features and change the tests from
-// string casting the feature name to referencing the shared feature names.
-
-// Conformance specific features
-const SupportInferencePool features.FeatureName = "SupportInferencePool"
-
-// InferenceCoreFeatures defines the core features that implementations
-// of the "Gateway" profile for the Inference Extension MUST support.
-var InferenceCoreFeatures = sets.New(
-	features.SupportGateway, // This is needed to ensure manifest gets applied during setup.
-	features.SupportHTTPRoute,
-	SupportInferencePool,
-)
-
 var GatewayLayerProfile = confsuite.ConformanceProfile{
 	Name:         GatewayLayerProfileName,
-	CoreFeatures: InferenceCoreFeatures,
+	CoreFeatures: features.InferenceCoreFeatures,
 }
 
 // logDebugf conditionally logs a debug message if debug mode is enabled.
@@ -144,7 +129,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 		BaseManifests:        baseManifestsValue,
 		Debug:                *confflags.ShowDebug,
 		CleanupBaseResources: *confflags.CleanupBaseResources,
-		SupportedFeatures:    sets.New[features.FeatureName](),
+		SupportedFeatures:    sets.New[gatewayfeatures.FeatureName](),
 		TimeoutConfig:        inferenceconfig.DefaultInferenceExtensionTimeoutConfig().TimeoutConfig,
 		SkipTests:            skipTests,
 		ExemptFeatures:       exemptFeatures,

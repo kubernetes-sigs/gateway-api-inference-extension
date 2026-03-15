@@ -31,11 +31,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/pkg/features"
+	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 )
 
 // dpPorts are the data parallel ports exposed by the backend deployment. Update if the ports
@@ -52,9 +53,9 @@ var GatewayFollowingEPPRoutingWithDataParallelism = suite.ConformanceTest{
 	ShortName:   "GatewayFollowingEPPRoutingWithDataParallelism",
 	Description: "Inference gateway should restrict traffic to EPP-selected pods while EPP balances across multiple targetPorts (DP ranks)",
 	Manifests:   []string{"tests/gateway_following_epp_routing_dp.yaml"},
-	Features: []features.FeatureName{
-		features.FeatureName("SupportInferencePool"),
-		features.SupportGateway,
+	Features: []gatewayfeatures.FeatureName{
+		features.SupportInferencePool,
+		gatewayfeatures.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
