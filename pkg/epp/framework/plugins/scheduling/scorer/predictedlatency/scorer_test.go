@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -798,4 +799,53 @@ func TestSloContextStoreEviction(t *testing.T) {
 	item = pl.sloContextStore.Get(requestID)
 	assert.Nil(t, item, "Item should have been evicted from cache")
 	assert.False(t, queue.Contains(requestID), "Request should be removed from queue via OnEviction")
+}
+
+// TestCompositeLeastVsMost_NegativeHeadroom verifies that composite-least and
+// composite-most produce different endpoint selections when endpoints have
+// clearly different composite scores. This catches the copy-paste bug where
+// selectFromNegativeHeadroomEndpointsInternal passes the wrong strategy.
+func TestCompositeLeastVsMost_NegativeHeadroom(t *testing.T) {
+	// Two endpoints with very different KV cache usage so their composite
+	// scores diverge significantly.
+	//   podLow:  10% KV usage → 90% free → high composite weight
+	//   podHigh: 90% KV usage → 10% free → low composite weight
+	podLow := createTestEndpoint("pod-low-kv", 0.1, 1, 0)
+	podHigh := createTestEndpoint("pod-high-kv", 0.9, 1, 0)
+
+	candidates := []endpointPredictionResult{
+		{Endpoint: podLow, Headroom: -0.5, TTFTHeadroom: -0.5, IsValid: true},
+		{Endpoint: podHigh, Headroom: -0.3, TTFTHeadroom: -0.3, IsValid: true},
+	}
+
+	// Use "max" selection mode so the result is deterministic (always picks
+	// the endpoint with the highest weight, no randomness).
+	cfgMost := DefaultConfig
+	cfgMost.HeadroomSelectionStrategy = string(headroomStrategyCompositeMost)
+	cfgMost.SelectionMode = string(podSelectionMax)
+	routerMost := NewPredictedLatency(cfgMost, nil)
+
+	cfgLeast := DefaultConfig
+	cfgLeast.HeadroomSelectionStrategy = string(headroomStrategyCompositeLeast)
+	cfgLeast.SelectionMode = string(podSelectionMax)
+	routerLeast := NewPredictedLatency(cfgLeast, nil)
+
+	ctx := context.Background()
+	rng := rand.New(rand.NewSource(42))
+
+	selectedMost := routerMost.selectFromNegativeHeadroomEndpointsInternal(ctx, candidates, rng)
+	selectedLeast := routerLeast.selectFromNegativeHeadroomEndpointsInternal(ctx, candidates, rng)
+
+	assert.NotNil(t, selectedMost)
+	assert.NotNil(t, selectedLeast)
+
+	// composite-most should prefer higher composite score (pod-low-kv has
+	// more free KV cache → higher weight).
+	assert.Equal(t, "pod-low-kv", selectedMost.GetMetadata().NamespacedName.Name,
+		"composite-most should prefer the endpoint with more free KV cache")
+
+	// composite-least inverts the weights, so it should prefer the endpoint
+	// with the lower composite score (pod-high-kv has less free KV cache).
+	assert.Equal(t, "pod-high-kv", selectedLeast.GetMetadata().NamespacedName.Name,
+		"composite-least should prefer the endpoint with less free KV cache")
 }
