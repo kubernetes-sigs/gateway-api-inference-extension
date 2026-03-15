@@ -55,6 +55,7 @@ func NewRunner() *Runner {
 	return &Runner{
 		bbrExecutableName: "BBR",
 		requestPlugins:    []framework.RequestProcessor{},
+		responsePlugins:   []framework.ResponseProcessor{},
 		customCollectors:  []prometheus.Collector{},
 	}
 }
@@ -65,6 +66,9 @@ type Runner struct {
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
 	requestPlugins []framework.RequestProcessor
+	// The slice of BBR plugin instances executed by the response handler,
+	// in the same order the plugin flags are provided.
+	responsePlugins []framework.ResponseProcessor
 
 	customCollectors []prometheus.Collector
 }
@@ -211,15 +215,19 @@ func (r *Runner) Run(ctx context.Context) error {
 			if requestProcessor, ok := instance.(framework.RequestProcessor); ok {
 				r.requestPlugins = append(r.requestPlugins, requestProcessor)
 			}
+			if responseProcessor, ok := instance.(framework.ResponseProcessor); ok {
+				r.responsePlugins = append(r.responsePlugins, responseProcessor)
+			}
 		}
 	}
 
 	// Setup ExtProc Server Runner.
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:       opts.GRPCPort,
-		SecureServing:  opts.SecureServing,
-		Streaming:      opts.Streaming,
-		RequestPlugins: r.requestPlugins,
+		GrpcPort:        opts.GRPCPort,
+		SecureServing:   opts.SecureServing,
+		Streaming:       opts.Streaming,
+		RequestPlugins:  r.requestPlugins,
+		ResponsePlugins: r.responsePlugins,
 	}
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to setup BBR controllers")
