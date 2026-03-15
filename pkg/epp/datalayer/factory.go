@@ -43,6 +43,10 @@ const (
 type PoolInfo interface {
 	PoolGet() (*EndpointPool, error)
 	PodList(func(fwkdl.Endpoint) bool) []fwkdl.Endpoint
+	// EndpointSetHealthy marks an endpoint as healthy or unhealthy based on metrics scraping results.
+	// When healthy is false, the endpoint is removed from PodList results.
+	// When healthy is true, the endpoint is added back.
+	EndpointSetHealthy(ep fwkdl.Endpoint, healthy bool)
 }
 
 // EndpointFactory defines an interface for managing Endpoint lifecycle. Specifically,
@@ -83,7 +87,7 @@ func (lc *EndpointLifecycle) SetSources(sources []fwkdl.DataSource) {
 // NewEndpoint implements EndpointFactory.NewEndpoint.
 // Creates a new endpoint and starts its associated collector with its own ticker.
 // Guards against multiple concurrent calls for the same endpoint.
-func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *fwkdl.EndpointMetadata, _ PoolInfo) fwkdl.Endpoint {
+func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *fwkdl.EndpointMetadata, poolInfo PoolInfo) fwkdl.Endpoint {
 	key := types.NamespacedName{Namespace: inEndpointMetadata.GetNamespacedName().Namespace, Name: inEndpointMetadata.GetNamespacedName().Name}
 	logger := log.FromContext(parent).WithValues("pod", key)
 
@@ -93,7 +97,7 @@ func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetad
 	}
 
 	endpoint := fwkdl.NewEndpoint(inEndpointMetadata, nil)
-	collector := NewCollector() // TODO or full backward compatibility, set the logger and poolinfo
+	collector := NewCollector(poolInfo)
 
 	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {
 		// another goroutine already created and stored a collector for this endpoint.

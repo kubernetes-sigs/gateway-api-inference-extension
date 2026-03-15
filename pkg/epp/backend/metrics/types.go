@@ -41,12 +41,14 @@ func NewPodMetricsFactory(pmc PodMetricsClient, refreshMetricsInterval time.Dura
 	return &PodMetricsFactory{
 		pmc:                    pmc,
 		refreshMetricsInterval: refreshMetricsInterval,
+		endpoints:              sync.Map{},
 	}
 }
 
 type PodMetricsFactory struct {
 	pmc                    PodMetricsClient
 	refreshMetricsInterval time.Duration
+	endpoints              sync.Map // tracks active endpoints by NamespacedName
 }
 
 func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
@@ -54,6 +56,14 @@ func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
 }
 
 func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) fwkdl.Endpoint {
+	key := metadata.NamespacedName
+
+	// Check if endpoint already exists (e.g., unhealthy endpoint with running collector).
+	// Return nil to prevent duplicate goroutines and let the existing collector recover.
+	if _, ok := f.endpoints.Load(key); ok {
+		return nil
+	}
+
 	pm := &podMetrics{
 		pmc:       f.pmc,
 		ds:        ds,
@@ -66,6 +76,10 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 	pm.metadata.Store(metadata)
 	pm.metrics.Store(fwkdl.NewMetrics())
 
+	if _, loaded := f.endpoints.LoadOrStore(key, pm); loaded {
+		return nil
+	}
+
 	pm.startRefreshLoop(parentCtx)
 	return pm
 }
@@ -73,6 +87,7 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
 	if pm, ok := ep.(*podMetrics); ok {
 		pm.stopRefreshLoop()
+		f.endpoints.Delete(pm.GetMetadata().NamespacedName)
 	}
 }
 
