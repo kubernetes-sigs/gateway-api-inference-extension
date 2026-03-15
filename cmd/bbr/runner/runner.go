@@ -105,6 +105,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		flags[f.Name] = f.Value
 	})
 
+	setupLog.Info("Flags processed", "flags", flags)
+
+	logutil.InitLogging(&opts.ZapOptions)
+
 	if opts.Tracing {
 		err := tracing.InitTracing(ctx, setupLog, "gateway-api-inference-extension/bbr")
 		if err != nil {
@@ -112,10 +116,6 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 	}
-
-	setupLog.Info("Flags processed", "flags", flags)
-
-	logutil.InitLogging(&opts.ZapOptions)
 
 	// Init runtime.
 	cfg, err := ctrl.GetConfig()
