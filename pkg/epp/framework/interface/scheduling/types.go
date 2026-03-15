@@ -71,7 +71,7 @@ func (r *LLMRequest) String() string {
 
 // LLMRequestBody contains the request-body fields that we parse out as user input,
 // to be used in forming scheduling decisions.
-// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, or ConversationsRequest.
+// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, ConversationsRequest, or EmbeddingsRequest.
 type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
@@ -81,7 +81,8 @@ type LLMRequestBody struct {
 	Responses *ResponsesRequest `json:"responses,omitempty"`
 	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
-
+	// EmbeddingsRequest is the representation of the OpenAI /v1/embeddings request body.
+	Embeddings *EmbeddingsRequest `json:"embeddings,omitempty"`
 	// ParsedBody contains the unmarshaled request payload.
 	// Note: Because this handles multiple protocols, this field is strictly expected
 	// to be either a map[string]any (for HTTP/JSON) or a proto.Message (for gRPC).
@@ -130,6 +131,9 @@ func (r *LLMRequestBody) CacheSalt() string {
 	}
 	if r.Completions != nil {
 		return r.Completions.CacheSalt
+	}
+	if r.Embeddings != nil {
+		return r.Embeddings.CacheSalt
 	}
 	return ""
 }
@@ -218,6 +222,22 @@ func (c *ConversationsRequest) String() string {
 		return nilString
 	}
 	return fmt.Sprintf("{ItemsCount: %d}", len(c.Items))
+}
+
+// EmbeddingsRequest represents the OpenAI /v1/embeddings request body structure.
+// Input can be a string or array of strings; see https://platform.openai.com/docs/api-reference/embeddings.
+type EmbeddingsRequest struct {
+	// Input is the text to embed (string or array of strings).
+	Input interface{} `json:"input,omitempty"`
+	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
+	CacheSalt string `json:"cache_salt,omitempty"`
+}
+
+func (e *EmbeddingsRequest) String() string {
+	if e == nil {
+		return nilString
+	}
+	return fmt.Sprintf("{InputType: %T}", e.Input)
 }
 
 // ConversationItem represents a single item in a conversation

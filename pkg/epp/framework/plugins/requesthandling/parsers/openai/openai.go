@@ -35,6 +35,7 @@ const (
 	responsesAPI       = "responses"
 	chatCompletionsAPI = "chat/completions"
 	completionsAPI     = "completions"
+	embeddingsAPI      = "embeddings"
 
 	streamingRespPrefix = "data: "
 	streamingEndMsg     = "data: [DONE]"
@@ -169,6 +170,9 @@ func determineAPITypeFromPath(path string) string {
 	if strings.Contains(path, "/v1/completions") {
 		return completionsAPI
 	}
+	if strings.Contains(path, "/v1/embeddings") {
+		return embeddingsAPI
+	}
 
 	// Default to completions API for backward compatibility with existing clients and integration tests
 	return completionsAPI
@@ -210,6 +214,13 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.
 			return &scheduling.LLMRequestBody{Completions: &completions}, nil
 		}
 		return nil, errors.New("invalid completions request: must have prompt field")
+
+	case embeddingsAPI:
+		var embeddings scheduling.EmbeddingsRequest
+		if err := json.Unmarshal(rawBody, &embeddings); err == nil && embeddings.Input != nil {
+			return &scheduling.LLMRequestBody{Embeddings: &embeddings}, nil
+		}
+		return nil, errors.New("invalid embeddings request: must have input field")
 
 	default:
 		return nil, errors.New("unsupported API endpoint")
