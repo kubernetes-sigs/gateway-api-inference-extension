@@ -84,21 +84,22 @@ func NewCollector() *Collector {
 
 // Start initiates data source collection for the endpoint.
 // All sources must implement PollingDataSource. Validation is performed by the caller.
-// TODO: pass PoolInfo for backward compatibility
-func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, sources []fwkdl.DataSource) error {
+func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, pollers []fwkdl.PollingDataSource, extractors map[string][]fwkdl.Extractor) error {
 	// Validate sources slice is not empty
-	if len(sources) == 0 {
+	if len(pollers) == 0 {
 		return errors.New("cannot start collector with empty sources")
 	}
 
-	pollers := make([]fwkdl.PollingDataSource, 0, len(sources))
-	for _, src := range sources {
+	for _, src := range pollers {
 		if src == nil {
 			return errors.New("cannot add nil data source")
 		}
-		pollers = append(pollers, src.(fwkdl.PollingDataSource))
 	}
 
+	return c.startCollection(ctx, ticker, ep, pollers, extractors)
+}
+
+func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint, pollers []fwkdl.PollingDataSource, extractors map[string][]fwkdl.Extractor) error {
 	var ready chan struct{}
 	started := false
 
@@ -108,7 +109,7 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 		started = true
 		ready = make(chan struct{})
 
-		go func(endpoint fwkdl.Endpoint, sources []fwkdl.PollingDataSource) {
+		go func(endpoint fwkdl.Endpoint, sources []fwkdl.PollingDataSource, exts map[string][]fwkdl.Extractor) {
 			logger.V(logging.DEFAULT).Info("starting collection")
 
 			defer func() {
@@ -123,15 +124,27 @@ func (c *Collector) Start(ctx context.Context, ticker Ticker, ep fwkdl.Endpoint,
 				case <-c.ctx.Done(): // per endpoint context cancelled
 					return
 				case <-ticker.Channel():
-					// TODO: do not collect if there's no pool specified?
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
-						_ = src.Poll(ctx, endpoint) // TODO: track errors per collector?
-						cancel()                    // release the ctx timeout resources
+						data, err := src.Poll(ctx, endpoint)
+						if err != nil {
+							logger.Error(err, "poll failed", "source", src.TypedName())
+							cancel()
+							continue
+						}
+						cancel()
+						srcName := src.TypedName().Name
+						if srcExtractors, ok := exts[srcName]; ok && data != nil {
+							for _, ext := range srcExtractors {
+								if err := ext.Extract(ctx, data, endpoint); err != nil {
+									logger.Error(err, "extract failed", "extractor", ext.TypedName())
+								}
+							}
+						}
 					}
 				}
 			}
-		}(ep, pollers)
+		}(ep, pollers, extractors)
 	})
 
 	if !started {

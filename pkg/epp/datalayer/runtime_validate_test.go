@@ -21,6 +21,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+)
+
+var (
+	extractorType             = reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
+	notificationextractorType = reflect.TypeOf((*fwkdl.NotificationExtractor)(nil)).Elem()
 )
 
 func TestValidateInputTypeCompatible(t *testing.T) {
@@ -40,7 +48,7 @@ func TestValidateInputTypeCompatible(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := ValidateInputTypeCompatible(tt.output, tt.input)
+		err := validateInputTypeCompatible(tt.output, tt.input)
 		if tt.valid {
 			assert.NoError(t, err, "%s: expected valid extractor type", tt.name)
 		} else {
@@ -62,7 +70,7 @@ func TestValidateExtractorCompatible(t *testing.T) {
 		{
 			name:         "nil extractor type",
 			extType:      nil,
-			expectedType: ExtractorType,
+			expectedType: extractorType,
 			valid:        false,
 			errContains:  "can't be nil",
 		},
@@ -83,14 +91,14 @@ func TestValidateExtractorCompatible(t *testing.T) {
 		{
 			name:         "does not implement interface",
 			extType:      reflect.TypeOf(&notExtractor{}),
-			expectedType: ExtractorType,
+			expectedType: extractorType,
 			valid:        false,
 			errContains:  "does not implement interface",
 		},
 	}
 
 	for _, tt := range tests {
-		err := ValidateExtractorCompatible(tt.extType, tt.expectedType)
+		err := validateExtractorCompatible(tt.extType, tt.expectedType)
 		if tt.valid {
 			assert.NoError(t, err, "%s: expected valid", tt.name)
 		} else {
@@ -103,8 +111,8 @@ func TestValidateExtractorCompatible(t *testing.T) {
 }
 
 func TestTypeConstants(t *testing.T) {
-	assert.True(t, ExtractorType.Kind() == reflect.Interface, "ExtractorType should be an interface")
-	assert.True(t, NotificationExtractorType.Kind() == reflect.Interface, "NotificationExtractorType should be an interface")
+	assert.True(t, extractorType.Kind() == reflect.Interface, "extractorType should be an interface")
+	assert.True(t, notificationextractorType.Kind() == reflect.Interface, "notificationextractorType should be an interface")
 }
 
 func typeOfT(v any) reflect.Type {
@@ -116,4 +124,46 @@ func typeOfT(v any) reflect.Type {
 		return t.Elem()
 	}
 	return t
+}
+
+func TestRuntimeConfigureWithNilExtractor(t *testing.T) {
+	logger := newTestLogger(t)
+	r := NewRuntime(1)
+
+	cfg := &Config{
+		Sources: []DataSourceConfig{
+			{
+				Plugin:     &FakeDataSource{},
+				Extractors: nil, // nil extractors should be allowed
+			},
+		},
+	}
+
+	err := r.Configure(cfg, false, "", logger)
+	assert.NoError(t, err, "Configure should succeed with nil extractors")
+}
+
+func TestRuntimeConfigureDuplicateGVKFails(t *testing.T) {
+	logger := newTestLogger(t)
+	r := NewRuntime(1)
+
+	// Create two notification sources with the same GVK
+	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	src1 := &FakeNotificationSource{
+		gvk: gvk,
+	}
+	src2 := &FakeNotificationSource{
+		gvk: gvk,
+	}
+
+	cfg := &Config{
+		Sources: []DataSourceConfig{
+			{Plugin: src1, Extractors: nil},
+			{Plugin: src2, Extractors: nil},
+		},
+	}
+
+	err := r.Configure(cfg, false, "", logger)
+	assert.Error(t, err, "Configure should fail with duplicate GVK")
+	assert.Contains(t, err.Error(), "duplicate", "Error should mention duplicate GVK")
 }

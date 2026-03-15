@@ -49,7 +49,6 @@ import (
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
@@ -609,7 +608,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
+		datalayer.NewTestRuntime(t, period),
 	}
 	for _, epf := range factories {
 		// Datastore setup
@@ -775,7 +774,7 @@ func TestGetRandomEndpoint(t *testing.T) {
 		period := time.Millisecond
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
+			datalayer.NewTestRuntime(t, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {

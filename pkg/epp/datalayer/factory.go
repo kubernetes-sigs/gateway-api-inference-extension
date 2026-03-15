@@ -18,11 +18,6 @@ package datalayer
 
 import (
 	"context"
-	"sync"
-	"time"
-
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
@@ -49,85 +44,6 @@ type PoolInfo interface {
 // providing methods to allocate and retire endpoints. This can potentially be used for
 // pooled memory or other management chores in the implementation.
 type EndpointFactory interface {
-	SetSources(sources []fwkdl.DataSource)
 	NewEndpoint(parent context.Context, inEnpointMetadata *fwkdl.EndpointMetadata, poolinfo PoolInfo) fwkdl.Endpoint
 	ReleaseEndpoint(ep fwkdl.Endpoint)
-}
-
-// EndpointLifecycle manages the life cycle (creation and termination) of
-// endpoints.
-type EndpointLifecycle struct {
-	sources         []fwkdl.DataSource // data sources for collectors
-	collectors      sync.Map           // collectors map. key: Pod namespaced name, value: *Collector
-	refreshInterval time.Duration      // metrics refresh interval
-}
-
-// NewEndpointFactory returns a new endpoint for factory, managing collectors for
-// its endpoints. This function assumes that sources are not modified afterwards.
-func NewEndpointFactory(sources []fwkdl.DataSource, refreshMetricsInterval time.Duration) *EndpointLifecycle {
-	eplc := &EndpointLifecycle{
-		collectors:      sync.Map{},
-		refreshInterval: refreshMetricsInterval,
-	}
-	eplc.SetSources(sources)
-	return eplc
-}
-
-// SetSources sets the slice of collectors associated with the endpoint life cycle.
-// This overrides any sources which may have previously been set on creation.
-func (lc *EndpointLifecycle) SetSources(sources []fwkdl.DataSource) {
-	lc.sources = make([]fwkdl.DataSource, len(sources)) // clone the source slice
-	copy(lc.sources, sources)
-}
-
-// NewEndpoint implements EndpointFactory.NewEndpoint.
-// Creates a new endpoint and starts its associated collector with its own ticker.
-// Guards against multiple concurrent calls for the same endpoint.
-func (lc *EndpointLifecycle) NewEndpoint(parent context.Context, inEndpointMetadata *fwkdl.EndpointMetadata, _ PoolInfo) fwkdl.Endpoint {
-	key := types.NamespacedName{Namespace: inEndpointMetadata.GetNamespacedName().Namespace, Name: inEndpointMetadata.GetNamespacedName().Name}
-	logger := log.FromContext(parent).WithValues("pod", key)
-
-	if _, ok := lc.collectors.Load(key); ok {
-		logger.Info("collector already running for endpoint", "endpoint", key)
-		return nil
-	}
-
-	endpoint := fwkdl.NewEndpoint(inEndpointMetadata, nil)
-	collector := NewCollector() // TODO or full backward compatibility, set the logger and poolinfo
-
-	if _, loaded := lc.collectors.LoadOrStore(key, collector); loaded {
-		// another goroutine already created and stored a collector for this endpoint.
-		// No need to start the new collector.
-		logger.Info("collector already running for endpoint", "endpoint", key)
-		return nil
-	}
-
-	ticker := NewTimeTicker(lc.refreshInterval)
-	if err := collector.Start(parent, ticker, endpoint, lc.sources); err != nil {
-		logger.Error(err, "failed to start collector for endpoint", "endpoint", key)
-		lc.collectors.Delete(key)
-	}
-
-	return endpoint
-}
-
-// ReleaseEndpoint implements EndpointFactory.ReleaseEndpoint
-// Stops the collector and cleans up resources for the endpoint
-func (lc *EndpointLifecycle) ReleaseEndpoint(ep fwkdl.Endpoint) {
-	key := ep.GetMetadata().GetNamespacedName()
-
-	if value, ok := lc.collectors.LoadAndDelete(key); ok {
-		collector := value.(*Collector)
-		_ = collector.Stop()
-	}
-}
-
-// Shutdown gracefully stops all collectors and cleans up all resources.
-func (lc *EndpointLifecycle) Shutdown() {
-	lc.collectors.Range(func(key, value any) bool {
-		collector := value.(*Collector)
-		_ = collector.Stop()
-		lc.collectors.Delete(key)
-		return true
-	})
 }

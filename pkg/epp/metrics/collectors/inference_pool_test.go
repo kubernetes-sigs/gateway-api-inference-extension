@@ -56,7 +56,7 @@ func TestNoMetricsCollected(t *testing.T) {
 	period := time.Second
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
+		datalayer.NewTestRuntime(t, period),
 	}
 	for _, epf := range factories {
 		ds := datastore.NewDatastore(context.Background(), epf, 0)
@@ -78,7 +78,11 @@ func TestMetricsCollected(t *testing.T) {
 	period := time.Millisecond
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: metrics}, period),
-		datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{Metrics: metrics}}, period),
+		datalayer.NewTestRuntimeWithConfig(t, period, &datalayer.Config{
+			Sources: []datalayer.DataSourceConfig{
+				{Plugin: &mocks.MetricsDataSource{Metrics: metrics}},
+			},
+		}),
 	}
 	for _, epf := range factories {
 		inferencePool := &v1.InferencePool{
