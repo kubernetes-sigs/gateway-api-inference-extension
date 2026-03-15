@@ -416,6 +416,15 @@ var (
 		[]string{"priority", "outcome"},
 	)
 
+	flowControlDispatchAttempts = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: inferenceExtension,
+			Name:      "flow_control_dispatch_attempts_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of dispatch attempts in the EPP flow control layer.", compbasemetrics.ALPHA),
+		},
+		[]string{"priority", "result"},
+	)
+
 	flowControlQueueSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: inferenceExtension,
@@ -496,6 +505,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(prefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
 		metrics.Registry.MustRegister(flowControlDispatchCycleDuration)
+		metrics.Registry.MustRegister(flowControlDispatchAttempts)
 		metrics.Registry.MustRegister(flowControlQueueSize)
 		metrics.Registry.MustRegister(flowControlQueueBytes)
 		metrics.Registry.MustRegister(flowControlPoolSaturation)
@@ -549,6 +559,7 @@ func Reset() {
 	flowControlQueueBytes.Reset()
 	flowControlPoolSaturation.Reset()
 	flowControlRequestEnqueueDuration.Reset()
+	flowControlDispatchAttempts.Reset()
 	inferenceModelRewriteDecisionsTotal.Reset()
 }
 
@@ -856,6 +867,11 @@ func RecordFlowControlRequestEnqueueDuration(
 	flowControlRequestEnqueueDuration.WithLabelValues(
 		priority, outcome,
 	).Observe(duration.Seconds())
+}
+
+// IncFlowControlDispatchAttempts increments the number of attempted dispatches with a result and priority.
+func IncFlowControlDispatchAttempts(priority, result string) {
+	flowControlDispatchAttempts.WithLabelValues(priority, result).Inc()
 }
 
 // IncFlowControlQueueSize increments the Flow Control queue size gauge.

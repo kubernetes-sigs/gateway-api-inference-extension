@@ -728,6 +728,54 @@ func TestFlowControlDispatchCycleLengthMetric(t *testing.T) {
 		})
 	}
 }
+func TestFlowControlDispatchMetrics(t *testing.T) {
+	Reset()
+
+	scenarios := []struct {
+		priority string
+		result   string
+		count    int
+	}{
+		{"high", "success", 10},
+		{"high", "saturated", 5},
+		{"high", "error", 2},
+		{"medium", "success", 8},
+		{"medium", "saturated", 11},
+		{"medium", "error", 3},
+		{"low", "success", 1},
+		{"low", "saturated", 20},
+		{"low", "error", 4},
+	}
+
+	for _, s := range scenarios {
+		for range s.count {
+			IncFlowControlDispatchAttempts(s.priority, s.result)
+		}
+	}
+
+	wantMetrics, err := os.Open("testdata/flow_control_dispatch_metrics")
+	defer func() {
+		if err = wantMetrics.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We only have 1 metric now.
+	metricNames := []string{
+		"inference_extension_flow_control_dispatch_attempts_total",
+	}
+
+	if err := testutil.GatherAndCompare(
+		metrics.Registry,
+		wantMetrics,
+		metricNames...,
+	); err != nil {
+		t.Errorf("metric comparison failed: %v", err)
+	}
+}
 
 // TODO (7028): Research histogram bins using real-world data to ensure they are optimal.
 
