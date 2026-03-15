@@ -61,11 +61,6 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return ret, nil
 	}
 
-	// TODO temp until this is implemented as plugin
-	baseModel := s.ds.GetBaseModel(reqCtx.Request.Headers[ModelHeader])
-	reqCtx.Request.SetHeader(BaseModelHeader, baseModel)
-	logger.Info("Base model from datastore", "baseModel", baseModel)
-
 	bodyMutated := reqCtx.Request.BodyMutated()
 	var mutatedBodyBytes []byte
 	if bodyMutated {
@@ -75,6 +70,10 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 			return nil, err
 		}
 		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBodyBytes)))
+	} else if s.streaming {
+		// In streaming mode, always set Content-Length even if body is not mutated
+		// to inform Envoy of the body size that will follow
+		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(requestBodyBytes)))
 	}
 
 	metrics.RecordSuccessCounter()
