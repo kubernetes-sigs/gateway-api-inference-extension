@@ -191,7 +191,7 @@ func TestHandleResponseBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &StreamingServer{
+			server := &Server{
 				parser: openai.NewOpenAIParser(),
 			}
 			server.director = &mockDirector{}
@@ -254,7 +254,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := &StreamingServer{
+			server := &Server{
 				parser: openai.NewOpenAIParser(),
 			}
 			server.director = &mockDirector{}
@@ -325,7 +325,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := &StreamingServer{
+			server := &Server{
 				parser:   openai.NewOpenAIParser(),
 				director: &mockDirector{},
 			}
@@ -347,7 +347,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 }
 
 func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
-	server := &StreamingServer{}
+	server := &Server{}
 	reqCtx := &RequestContext{
 		Response: &Response{
 			Headers: map[string]string{

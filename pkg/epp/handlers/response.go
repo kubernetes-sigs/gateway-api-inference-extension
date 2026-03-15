@@ -23,14 +23,14 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
-func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) (*RequestContext, error) {
+func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
 
 	parsedResponse, parseErr := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, true)
@@ -45,7 +45,7 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte, endOfStream bool) {
+func (s *Server) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte, endOfStream bool) {
 	logger := log.FromContext(ctx)
 	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
 	if err != nil {
@@ -64,9 +64,9 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 	}
 }
 
-func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
+func (s *Server) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
 	for _, header := range resp.ResponseHeaders.Headers.Headers {
-		reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
+		reqCtx.Response.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
 	}
 
 	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)
@@ -74,7 +74,7 @@ func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *Req
 	return reqCtx, err
 }
 
-func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+func (s *Server) generateResponseHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
 	return &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extProcPb.HeadersResponse{
@@ -88,23 +88,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 	}
 }
 
-func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
-	commonResponses := envoy.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
-	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
-	for _, commonResp := range commonResponses {
-		resp := &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ResponseBody{
-				ResponseBody: &extProcPb.BodyResponse{
-					Response: commonResp,
-				},
-			},
-		}
-		responses = append(responses, resp)
-	}
-	return responses
-}
-
-func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
+func (s *Server) generateResponseHeaders(reqCtx *RequestContext) []*configPb.HeaderValueOption {
 	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
 	headers := []*configPb.HeaderValueOption{
 		{

@@ -34,7 +34,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
+	envoyhandlers "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/handlers"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
@@ -47,8 +48,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
-func NewStreamingServer(datastore Datastore, director Director, parser fwkrh.Parser) *StreamingServer {
-	return &StreamingServer{
+func NewServer(datastore Datastore, director Director, parser fwkrh.Parser) *Server {
+	return &Server{
 		director:  director,
 		datastore: datastore,
 		parser:    parser,
@@ -69,7 +70,7 @@ type Datastore interface {
 
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
-type StreamingServer struct {
+type Server struct {
 	datastore Datastore
 	director  Director
 	parser    fwkrh.Parser
@@ -135,7 +136,7 @@ const (
 	TrailerResponseResponsesComplete StreamRequestState = 7
 )
 
-func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
+func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
 
 	// Start tracing span for the request
@@ -209,11 +210,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
 		}
 
-		reqCtx.Request.Metadata = envoy.ExtractMetadataValues(req)
+		reqCtx.Request.Metadata = reqenvoy.ExtractMetadataValues(req)
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			requestID := envoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey)
+			requestID := reqenvoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey)
 			// request ID is a must for maintaining a state per request in plugins that hold internal state and use PluginState.
 			// if request id was not supplied as a header, we generate it ourselves.
 			if len(requestID) == 0 {
@@ -248,7 +249,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
-				reqCtx.reqBodyResp = envoy.GenerateRequestBodyResponses(reqCtx.Request.RawBody)
+				reqCtx.reqBodyResp = envoyhandlers.GenerateRequestBodyResponses(reqCtx.Request.RawBody)
 
 				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
 				metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
@@ -285,7 +286,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 			if reqCtx.modelServerStreaming {
 				s.HandleResponseBodyModelStreaming(ctx, reqCtx, chunk, endOfStream)
-				reqCtx.respBodyResp = generateResponseBodyResponses(chunk, endOfStream)
+				reqCtx.respBodyResp = envoyhandlers.GenerateResponseBodyResponses(chunk, endOfStream)
 			} else {
 				body = append(body, chunk...)
 			}
@@ -333,7 +334,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 // finishResponse ensures all post-response logic, such as metric recording
 // and state updates, is executed exactly once for the request lifecycle.
-func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestContext, body []byte) error {
+func (s *Server) finishResponse(ctx context.Context, reqCtx *RequestContext, body []byte) error {
 	// Return early if the response has already been finished to prevent
 	// duplicate execution of side effects and metrics.
 	if reqCtx.ResponseComplete {
@@ -352,7 +353,7 @@ func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestCon
 		metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
 		metrics.RecordNormalizedTimePerOutputToken(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp, reqCtx.Usage.CompletionTokens)
 	} else {
-		reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+		reqCtx.respBodyResp = envoyhandlers.GenerateResponseBodyResponses(body, true)
 		if _, err := s.HandleResponseBody(ctx, reqCtx, body); err != nil {
 			return err
 		}

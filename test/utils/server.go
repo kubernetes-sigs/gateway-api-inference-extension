@@ -45,7 +45,7 @@ const bufSize = 1024 * 1024
 
 var testListener *bufconn.Listener
 
-func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, pods []*corev1.Pod, poolName string, namespace string,
+func PrepareForTestExtProcServer(objectives []*v1alpha2.InferenceObjective, pods []*corev1.Pod, poolName string, namespace string,
 	poolPort int32) (context.Context, context.CancelFunc, datastore.Datastore, *metrics.FakePodMetricsClient) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -78,13 +78,13 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 	return ctx, cancel, ds, pmc
 }
 
-func SetupTestStreamingServer(t *testing.T, ctx context.Context, ds datastore.Datastore,
-	streamingServer pb.ExternalProcessorServer) (*bufconn.Listener, chan error) {
+func SetupTestExtProcServer(t *testing.T, ctx context.Context, ds datastore.Datastore,
+	extProcServer pb.ExternalProcessorServer) (*bufconn.Listener, chan error) {
 	testListener = bufconn.Listen(bufSize)
 
 	errChan := make(chan error)
 	go func() {
-		err := LaunchTestGRPCServer(streamingServer, ctx, testListener)
+		err := LaunchTestGRPCServer(extProcServer, ctx, testListener)
 		if err != nil {
 			t.Error("Error launching listener", err)
 		}
@@ -99,7 +99,7 @@ func testDialer(context.Context, string) (net.Conn, error) {
 	return testListener.Dial()
 }
 
-func GetStreamingServerClient(ctx context.Context, t *testing.T) (pb.ExternalProcessor_ProcessClient, *grpc.ClientConn) {
+func GetExtProcServerClient(ctx context.Context, t *testing.T) (pb.ExternalProcessor_ProcessClient, *grpc.ClientConn) {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(testDialer),

@@ -56,7 +56,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := &StreamingServer{}
+			server := &Server{}
 			reqCtx := &RequestContext{
 				Request: &Request{Headers: make(map[string]string)},
 			}
@@ -81,7 +81,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 }
 
 func TestGenerateHeaders_Sanitization(t *testing.T) {
-	server := &StreamingServer{}
+	server := &Server{}
 	reqCtx := &RequestContext{
 		TargetEndpoint: "1.2.3.4:8080",
 		RequestSize:    123,
@@ -111,7 +111,7 @@ func TestGenerateHeaders_Sanitization(t *testing.T) {
 func TestGenerateRequestHeaderResponse_MergeMetadata(t *testing.T) {
 	t.Parallel()
 
-	server := &StreamingServer{}
+	server := &Server{}
 	reqCtx := &RequestContext{
 		TargetEndpoint: "1.2.3.4:8080",
 		Request: &Request{

@@ -28,13 +28,13 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
+func (s *Server) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
 	// an EoS in the request headers means this request has no body or trailers.
@@ -54,7 +54,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	for _, header := range req.RequestHeaders.Headers.Headers {
-		reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
+		reqCtx.Request.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
 		switch header.Key {
 		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
@@ -72,7 +72,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	return nil
 }
 
-func (s *StreamingServer) generateRequestHeaderResponse(ctx context.Context, reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+func (s *Server) generateRequestHeaderResponse(ctx context.Context, reqCtx *RequestContext) *extProcPb.ProcessingResponse {
 	// The Endpoint Picker supports two approaches to communicating the target endpoint, as a request header
 	// and as an unstructure ext-proc response metadata key/value pair. This enables different integration
 	// options for gateway providers.
@@ -99,7 +99,7 @@ func (s *StreamingServer) generateRequestHeaderResponse(ctx context.Context, req
 	}
 }
 
-func (s *StreamingServer) generateHeaders(ctx context.Context, reqCtx *RequestContext) []*configPb.HeaderValueOption {
+func (s *Server) generateHeaders(ctx context.Context, reqCtx *RequestContext) []*configPb.HeaderValueOption {
 	// can likely refactor these two bespoke headers to be updated in PostDispatch, to centralize logic.
 	headers := []*configPb.HeaderValueOption{
 		{
@@ -148,7 +148,7 @@ func (s *StreamingServer) generateHeaders(ctx context.Context, reqCtx *RequestCo
 	return headers
 }
 
-func (s *StreamingServer) generateMetadata(endpoint string) *structpb.Struct {
+func (s *Server) generateMetadata(endpoint string) *structpb.Struct {
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			metadata.DestinationEndpointNamespace: {

@@ -28,7 +28,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
+	envoyhandlers "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/handlers"
+	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
@@ -37,7 +38,7 @@ import (
 func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
 	if headers != nil && headers.Headers != nil {
 		for _, header := range headers.Headers.Headers {
-			reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
+			reqCtx.Response.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
 		}
 	}
 
@@ -97,7 +98,7 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 					Response: &eppb.CommonResponse{
 						ClearRouteCache: true,
 						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+							SetHeaders:    reqenvoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
 							RemoveHeaders: reqCtx.Response.RemovedHeaders(),
 						},
 					},
@@ -105,9 +106,9 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 			},
 		})
 		if bodyMutated {
-			ret = envoy.AddStreamedResponseBody(ret, mutatedBytes)
+			ret = envoyhandlers.AddStreamedResponseBody(ret, mutatedBytes)
 		} else {
-			ret = envoy.AddStreamedResponseBody(ret, responseBodyBytes)
+			ret = envoyhandlers.AddStreamedResponseBody(ret, responseBodyBytes)
 		}
 		return ret, nil
 	}
@@ -115,7 +116,7 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 	response := &eppb.CommonResponse{
 		ClearRouteCache: true,
 		HeaderMutation: &eppb.HeaderMutation{
-			SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+			SetHeaders:    reqenvoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
 			RemoveHeaders: reqCtx.Response.RemovedHeaders(),
 		},
 	}

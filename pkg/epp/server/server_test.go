@@ -89,12 +89,12 @@ func runStreamingTest(t *testing.T, streamingResponse bool, hasTrailers bool) {
 		CreationTimestamp(metav1.Unix(1000, 0)).ObjRef()
 
 	director := &testDirector{}
-	ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
+	ctx, cancel, ds, _ := utils.PrepareForTestExtProcServer([]*v1alpha2.InferenceObjective{model},
 		[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
-	streamingServer := handlers.NewStreamingServer(ds, director, openai.NewOpenAIParser())
+	extProcServer := handlers.NewServer(ds, director, openai.NewOpenAIParser())
 
-	testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
-	process, conn := utils.GetStreamingServerClient(ctx, t)
+	testListener, errChan := utils.SetupTestExtProcServer(t, ctx, ds, extProcServer)
+	process, conn := utils.GetExtProcServerClient(ctx, t)
 	defer conn.Close()
 
 	// Send request headers - no response expected
