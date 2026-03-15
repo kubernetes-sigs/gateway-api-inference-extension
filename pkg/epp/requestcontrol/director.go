@@ -27,6 +27,9 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -129,6 +132,10 @@ func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.R
 // HandleRequest orchestrates the request lifecycle.
 // It always returns the requestContext even in the error case, as the request context is used in error handling.
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	tracer := otel.Tracer("gateway-api-inference-extension")
+	ctx, span := tracer.Start(ctx, "gateway.request_orchestration", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 
 	// Parse, mutate, and extract the request body
@@ -140,6 +147,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
+	span.SetAttributes(
+		attribute.String("target_model", reqCtx.TargetModelName),
+		attribute.Int("request_prio", *infObjective.Spec.Priority),
+	)
+
+	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
 		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		TargetModel: reqCtx.TargetModelName,
