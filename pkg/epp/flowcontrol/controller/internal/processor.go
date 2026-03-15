@@ -68,7 +68,7 @@ type ShardProcessor struct {
 	poolName             string
 	shard                contracts.RegistryShard
 	saturationDetector   contracts.SaturationDetector
-	podLocator           contracts.PodLocator
+	endpointCandidates   contracts.EndpointCandidates
 	clock                clock.WithTicker
 	cleanupSweepInterval time.Duration
 	logger               logr.Logger
@@ -91,7 +91,7 @@ func NewShardProcessor(
 	poolName string,
 	shard contracts.RegistryShard,
 	saturationDetector contracts.SaturationDetector,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -101,7 +101,7 @@ func NewShardProcessor(
 		shard:                shard,
 		poolName:             poolName,
 		saturationDetector:   saturationDetector,
-		podLocator:           podLocator,
+		endpointCandidates:   endpointCandidates,
 		clock:                clock,
 		cleanupSweepInterval: cleanupSweepInterval,
 		logger:               logger,
@@ -314,7 +314,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		metrics.RecordFlowControlDispatchCycleDuration(time.Since(dispatchCycleStart))
 	}()
 
-	pool := sp.podLocator.Locate(ctx, nil)
+	pool := sp.endpointCandidates.Locate(ctx, nil)
 	saturation := sp.saturationDetector.Saturation(ctx, pool)
 
 	// Record pool saturation metric

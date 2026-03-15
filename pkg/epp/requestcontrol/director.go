@@ -73,14 +73,14 @@ func NewDirectorWithConfig(
 	scheduler Scheduler,
 	admissionController AdmissionController,
 	parser fwkrh.Parser,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	config *Config,
 ) *Director {
 	return &Director{
 		datastore:             datastore,
 		scheduler:             scheduler,
 		admissionController:   admissionController,
-		podLocator:            podLocator,
+		endpointCandidates:    endpointCandidates,
 		requestControlPlugins: *config,
 		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
@@ -100,7 +100,7 @@ type Director struct {
 	datastore             Datastore
 	scheduler             Scheduler
 	admissionController   AdmissionController
-	podLocator            contracts.PodLocator
+	endpointCandidates    contracts.EndpointCandidates
 	requestControlPlugins Config
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
 	// no need to set this in the constructor, since the value we want is the default int val
@@ -156,14 +156,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
 	}
-	candidatePods := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
-	if len(candidatePods) == 0 {
+	endpointCandidates := d.endpointCandidates.Locate(ctx, reqCtx.Request.Metadata)
+	if len(endpointCandidates) == 0 {
 		return reqCtx, errcommon.Error{
 			Code: errcommon.ServiceUnavailable,
-			Msg:  "failed to find candidate pods for serving the request",
+			Msg:  "failed to find endpoint candidates for serving the request",
 		}
 	}
-	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
+	snapshotOfCandidatePods := d.toSchedulerPodMetrics(endpointCandidates)
 
 	// Prepare per request data by running PrepareData plugins.
 	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)

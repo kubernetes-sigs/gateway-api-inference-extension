@@ -120,25 +120,25 @@ func (m *MockSaturationDetector) Saturation(ctx context.Context, candidatePods [
 	return 0.0
 }
 
-// MockPodLocator provides a mock implementation of the contracts.PodLocator interface.
-// It allows tests to control the exact set of pods returned for a given request.
-type MockPodLocator struct {
+// MockEndpointCandidates provides a mock implementation of the contracts.EndpointCandidates interface.
+// It allows tests to control the exact set of endpoint candidates returned for a given request.
+type MockEndpointCandidates struct {
 	// LocateFunc allows injecting custom logic.
 	LocateFunc func(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics
-	// Pods is a static return value used if LocateFunc is nil.
-	Pods []metrics.PodMetrics
+	// Candidates is a static return value used if LocateFunc is nil.
+	Candidates []metrics.PodMetrics
 }
 
-func (m *MockPodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics {
+func (m *MockEndpointCandidates) Locate(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics {
 	if m.LocateFunc != nil {
 		return m.LocateFunc(ctx, requestMetadata)
 	}
 	// Return copy to be safe
-	if m.Pods == nil {
+	if m.Candidates == nil {
 		return nil
 	}
-	result := make([]metrics.PodMetrics, len(m.Pods))
-	copy(result, m.Pods)
+	result := make([]metrics.PodMetrics, len(m.Candidates))
+	copy(result, m.Candidates)
 	return result
 }
 

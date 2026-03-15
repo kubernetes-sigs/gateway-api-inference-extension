@@ -63,7 +63,7 @@ type shardProcessorFactory func(
 	ctx context.Context,
 	shard contracts.RegistryShard,
 	saturationDetector contracts.SaturationDetector,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -99,7 +99,7 @@ type FlowController struct {
 	config                *Config
 	registry              registryClient
 	saturationDetector    contracts.SaturationDetector
-	podLocator            contracts.PodLocator
+	endpointCandidates    contracts.EndpointCandidates
 	clock                 clock.WithTicker
 	logger                logr.Logger
 	shardProcessorFactory shardProcessorFactory
@@ -132,14 +132,14 @@ func NewFlowController(
 	config *Config,
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
 		config:             config,
 		registry:           registry,
 		saturationDetector: sd,
-		podLocator:         podLocator,
+		endpointCandidates: endpointCandidates,
 		clock:              clock.RealClock{},
 		logger:             log.FromContext(ctx).WithName("flow-controller"),
 		parentCtx:          ctx,
@@ -149,7 +149,7 @@ func NewFlowController(
 		ctx context.Context,
 		shard contracts.RegistryShard,
 		saturationDetector contracts.SaturationDetector,
-		podLocator contracts.PodLocator,
+		endpointCandidates contracts.EndpointCandidates,
 		clock clock.WithTicker,
 		cleanupSweepInterval time.Duration,
 		enqueueChannelBufferSize int,
@@ -160,7 +160,7 @@ func NewFlowController(
 			poolName,
 			shard,
 			saturationDetector,
-			podLocator,
+			endpointCandidates,
 			clock,
 			cleanupSweepInterval,
 			enqueueChannelBufferSize,
@@ -486,7 +486,7 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 		processorCtx,
 		shard,
 		fc.saturationDetector,
-		fc.podLocator,
+		fc.endpointCandidates,
 		fc.clock,
 		fc.config.ExpiryCleanupInterval,
 		fc.config.EnqueueChannelBufferSize,
