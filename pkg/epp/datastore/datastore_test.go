@@ -1108,53 +1108,70 @@ func TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet(t *testing.T) {
 
 	ctx := context.Background()
 	period := time.Second
-	epf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period)
-	ds := NewDatastore(ctx, epf, 0)
 
-	pool := pooltuil.InferencePoolToEndpointPool(
-		testutil.MakeInferencePool("pool1").
-			Namespace("default").
-			Selector(map[string]string{"app": "vllm"}).
-			TargetPorts(8000).ObjRef(),
-	)
-	_ = ds.PoolSet(ctx, fakeClient, pool)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pod1",
-			Namespace: "default",
-			Labels:    map[string]string{"app": "vllm"},
-		},
-		Status: corev1.PodStatus{
-			PodIP: "10.0.0.1",
-			Conditions: []corev1.PodCondition{
-				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
-			},
-		},
+	// Test both legacy and new endpoint factories for race conditions
+	mockDS := &mocks.MetricsDataSource{
+		Metrics: make(map[types.NamespacedName]*fwkdl.Metrics),
+	}
+	factories := []datalayer.EndpointFactory{
+		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
+		datalayer.NewEndpointFactory([]fwkdl.DataSource{mockDS}, period),
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// Goroutine 1: repeatedly call PoolSet (including nil to simulate reset).
-	go func() {
-		defer wg.Done()
-		for range 500 {
-			_ = ds.PoolSet(ctx, fakeClient, pool)
-			_ = ds.PoolSet(ctx, fakeClient, nil)
-			_ = ds.PoolSet(ctx, fakeClient, pool)
+	for i, epf := range factories {
+		factoryName := "Legacy PodMetricsFactory"
+		if i == 1 {
+			factoryName = "New EndpointLifecycle"
 		}
-	}()
+		t.Run(factoryName, func(t *testing.T) {
+			ds := NewDatastore(ctx, epf, 0)
 
-	// Goroutine 2: repeatedly call PodUpdateOrAddIfNotExist.
-	go func() {
-		defer wg.Done()
-		for range 1000 {
-			ds.PodUpdateOrAddIfNotExist(ctx, pod)
-		}
-	}()
+			pool := pooltuil.InferencePoolToEndpointPool(
+				testutil.MakeInferencePool("pool1").
+					Namespace("default").
+					Selector(map[string]string{"app": "vllm"}).
+					TargetPorts(8000).ObjRef(),
+			)
+			_ = ds.PoolSet(ctx, fakeClient, pool)
 
-	wg.Wait()
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pod1",
+					Namespace: "default",
+					Labels:    map[string]string{"app": "vllm"},
+				},
+				Status: corev1.PodStatus{
+					PodIP: "10.0.0.1",
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			// Goroutine 1: repeatedly call PoolSet (including nil to simulate reset).
+			go func() {
+				defer wg.Done()
+				for range 500 {
+					_ = ds.PoolSet(ctx, fakeClient, pool)
+					_ = ds.PoolSet(ctx, fakeClient, nil)
+					_ = ds.PoolSet(ctx, fakeClient, pool)
+				}
+			}()
+
+			// Goroutine 2: repeatedly call PodUpdateOrAddIfNotExist.
+			go func() {
+				defer wg.Done()
+				for range 1000 {
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
+				}
+			}()
+
+			wg.Wait()
+		})
+	}
 }
 
 func TestExtractActivePorts(t *testing.T) {

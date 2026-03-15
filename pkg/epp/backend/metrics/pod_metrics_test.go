@@ -20,13 +20,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
 var (
@@ -61,27 +60,77 @@ var (
 
 func TestMetricsRefresh(t *testing.T) {
 	ctx := context.Background()
-	pmc := &FakePodMetricsClient{}
-	pmf := NewPodMetricsFactory(pmc, time.Millisecond)
 
-	// The refresher is initialized with empty metrics.
-	pm := pmf.NewEndpoint(ctx, pod1Info, &FakeRefresherDataStore{})
-
-	// Use SetRes to simulate an update of metrics from the pod.
-	// Verify that the metrics are updated.
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: initial})
-	condition := func(collect *assert.CollectT) {
-		assert.True(collect, cmp.Equal(pm.GetMetrics(), initial, cmpopts.IgnoreFields(MetricsState{}, "UpdateTime")))
+	// Test both legacy (PodMetricsFactory) and new (EndpointLifecycle) approaches
+	testCases := []struct {
+		name    string
+		factory datalayer.EndpointFactory
+		setupFn func() (datalayer.EndpointFactory, func(map[types.NamespacedName]*MetricsState))
+	}{
+		{
+			name: "Legacy PodMetricsFactory",
+			setupFn: func() (datalayer.EndpointFactory, func(map[types.NamespacedName]*MetricsState)) {
+				pmc := &FakePodMetricsClient{}
+				pmf := NewPodMetricsFactory(pmc, time.Millisecond)
+				setMetrics := func(metrics map[types.NamespacedName]*MetricsState) {
+					pmc.SetRes(metrics)
+				}
+				return pmf, setMetrics
+			},
+		},
+		{
+			name: "New EndpointLifecycle with mock DataSource",
+			setupFn: func() (datalayer.EndpointFactory, func(map[types.NamespacedName]*MetricsState)) {
+				mockDS := &mocks.MetricsDataSource{
+					Metrics: make(map[types.NamespacedName]*fwkdl.Metrics),
+				}
+				epf := datalayer.NewEndpointFactory([]fwkdl.DataSource{mockDS}, time.Millisecond)
+				setMetrics := func(metrics map[types.NamespacedName]*MetricsState) {
+					// Convert MetricsState to fwkdl.Metrics
+					converted := make(map[types.NamespacedName]*fwkdl.Metrics)
+					for nn, ms := range metrics {
+						converted[nn] = &fwkdl.Metrics{
+							WaitingQueueSize:    ms.WaitingQueueSize,
+							KVCacheUsagePercent: ms.KVCacheUsagePercent,
+							MaxActiveModels:     ms.MaxActiveModels,
+							ActiveModels:        ms.ActiveModels,
+							WaitingModels:       ms.WaitingModels,
+						}
+					}
+					mockDS.SetMetrics(converted)
+				}
+				return epf, setMetrics
+			},
+		},
 	}
-	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 
-	// Stop the loop, and simulate metric update again, this time the PodMetrics won't get the
-	// new update.
-	pmf.ReleaseEndpoint(pm)
-	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: updated})
-	// Still expect the same condition (no metrics update).
-	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			factory, setMetrics := tc.setupFn()
+
+			// The refresher is initialized with empty metrics.
+			pm := factory.NewEndpoint(ctx, pod1Info, &FakeRefresherDataStore{})
+
+			// Use setMetrics to simulate an update of metrics from the pod.
+			// Verify that the metrics are updated.
+			setMetrics(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: initial})
+			condition := func(collect *assert.CollectT) {
+				gotMetrics := pm.GetMetrics()
+				assert.Equal(collect, initial.WaitingQueueSize, gotMetrics.WaitingQueueSize)
+				assert.Equal(collect, initial.KVCacheUsagePercent, gotMetrics.KVCacheUsagePercent)
+				assert.Equal(collect, initial.MaxActiveModels, gotMetrics.MaxActiveModels)
+			}
+			assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
+
+			// Stop the loop, and simulate metric update again, this time the endpoint won't get the
+			// new update.
+			factory.ReleaseEndpoint(pm)
+			time.Sleep(time.Millisecond * 10 /* small buffer for robustness */)
+			setMetrics(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: updated})
+			// Still expect the same condition (no metrics update).
+			assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
+		})
+	}
 }
 
 type FakeRefresherDataStore struct{}

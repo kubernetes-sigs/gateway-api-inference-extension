@@ -19,6 +19,7 @@ package mocks
 import (
 	"context"
 	"reflect"
+	"sync"
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -33,6 +34,7 @@ var _ fwkdl.PollingDataSource = (*MetricsDataSource)(nil)
 type MetricsDataSource struct {
 	typedName plugin.TypedName
 	CallCount int64
+	mu        sync.RWMutex
 	Metrics   map[types.NamespacedName]*fwkdl.Metrics
 	Errors    map[types.NamespacedName]error
 }
@@ -58,12 +60,21 @@ func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil
 
 func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
 	atomic.AddInt64(&fds.CallCount, 1)
+	fds.mu.RLock()
+	defer fds.mu.RUnlock()
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
 		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
 			ep.UpdateMetrics(metrics)
 		}
 	}
 	return nil
+}
+
+// SetMetrics safely updates the metrics map
+func (fds *MetricsDataSource) SetMetrics(metrics map[types.NamespacedName]*fwkdl.Metrics) {
+	fds.mu.Lock()
+	defer fds.mu.Unlock()
+	fds.Metrics = metrics
 }
 
 // NotificationSource implements both DataSource and NotificationSource for testing.
