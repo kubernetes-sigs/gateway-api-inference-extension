@@ -122,15 +122,17 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		var err error
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
+			if requestId := envoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey); len(requestId) > 0 {
+				logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestId)
+				loggerVerbose = logger.V(logutil.VERBOSE)
+				ctx = log.IntoContext(ctx, logger)
+			}
+
 			if s.streaming && !v.RequestHeaders.GetEndOfStream() {
-				// If streaming and the body is not empty, then headers are handled when processing request body.
-				loggerVerbose.Info("Received headers, passing off header processing until body arrives...")
+				// Capture headers now, but defer the response until body arrives.
+				_, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
+				loggerVerbose.Info("Captured headers, deferring response until body arrives...")
 			} else {
-				if requestId := envoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey); len(requestId) > 0 {
-					logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestId)
-					loggerVerbose = logger.V(logutil.VERBOSE)
-					ctx = log.IntoContext(ctx, logger)
-				}
 				responses, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
 			}
 		case *extProcPb.ProcessingRequest_RequestBody:
