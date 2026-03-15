@@ -47,9 +47,11 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 // The function is to handle streaming response if the modelServer is streaming.
 func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte, endOfStream bool) {
 	logger := log.FromContext(ctx)
-	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
-	if err != nil {
-		logger.Error(err, "error in HandleResponseBodyStreaming")
+	if responseText != "" {
+		_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
+		if err != nil {
+			logger.Error(err, "error in HandleResponseBodyStreaming")
+		}
 	}
 	parsedResp, err := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, endOfStream)
 	if err != nil {
