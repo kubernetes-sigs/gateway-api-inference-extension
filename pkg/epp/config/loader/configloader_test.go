@@ -41,6 +41,8 @@ import (
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
@@ -139,7 +141,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 					Kind:       "EndpointPickerConfig",
 				},
-				FeatureGates: configapi.FeatureGates{},
+				FeatureGates: configapi.FeatureGates{datalayer.ExperimentalDatalayerFeatureGate},
 				Plugins: []configapi.PluginSpec{
 					{
 						Name: scorer.QueueScorerType,
@@ -152,6 +154,26 @@ func TestLoadRawConfiguration(t *testing.T) {
 					{
 						Name: prefix.PrefixCachePluginType,
 						Type: prefix.PrefixCachePluginType,
+					},
+					{
+						Name: sourcemetrics.MetricsDataSourceType,
+						Type: sourcemetrics.MetricsDataSourceType,
+					},
+					{
+						Name: extractormetrics.MetricsExtractorType,
+						Type: extractormetrics.MetricsExtractorType,
+					},
+				},
+				Data: &configapi.DataLayerConfig{
+					Sources: []configapi.DataLayerSource{
+						{
+							PluginRef: sourcemetrics.MetricsDataSourceType,
+							Extractors: []configapi.DataLayerExtractor{
+								{
+									PluginRef: extractormetrics.MetricsExtractorType,
+								},
+							},
+						},
 					},
 				},
 				SchedulingProfiles: []configapi.SchedulingProfile{

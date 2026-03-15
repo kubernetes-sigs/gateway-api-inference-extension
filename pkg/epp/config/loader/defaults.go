@@ -22,9 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
@@ -46,6 +49,7 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 			Kind:       "EndpointPickerConfig",
 		},
+		FeatureGates: []string{datalayer.ExperimentalDatalayerFeatureGate},
 		Plugins: []configapi.PluginSpec{
 			{
 				Type: scorer.QueueScorerType,
@@ -55,6 +59,24 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 			},
 			{
 				Type: prefix.PrefixCachePluginType,
+			},
+			{
+				Type: sourcemetrics.MetricsDataSourceType,
+			},
+			{
+				Type: extractormetrics.MetricsExtractorType,
+			},
+		},
+		Data: &configapi.DataLayerConfig{
+			Sources: []configapi.DataLayerSource{
+				{
+					PluginRef: sourcemetrics.MetricsDataSourceType,
+					Extractors: []configapi.DataLayerExtractor{
+						{
+							PluginRef: extractormetrics.MetricsExtractorType,
+						},
+					},
+				},
 			},
 		},
 		SchedulingProfiles: []configapi.SchedulingProfile{
