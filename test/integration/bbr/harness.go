@@ -72,18 +72,13 @@ func NewBBRHarnessWithPlugins(t *testing.T, ctx context.Context, streaming bool,
 	runner.SecureServing = false
 	runner.Streaming = streaming
 
-	// Create BodyFieldToHeaderPlugin for X-Gateway-Model-Name
-	modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
-	require.NoError(t, err, "failed to create body-field-to-header plugin")
-
 	// Create BaseModelToHeaderPlugin for X-Gateway-Base-Model-Name
 	baseModelPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 
-	// Register both plugins
-	runner.RequestPlugins = []framework.RequestProcessor{
-		modelToHeaderPlugin,
-		baseModelPlugin,
-	}
+	// Combine provided plugins with the base model plugin
+	// The base model plugin should run after other plugins to extract base model from the target model
+	requestPlugins = append(requestPlugins, baseModelPlugin)
+	runner.RequestPlugins = requestPlugins
 
 	// Configure the BaseModelToHeaderPlugin with test data
 	// Create a test ConfigMap with model mappings

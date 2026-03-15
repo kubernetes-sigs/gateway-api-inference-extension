@@ -76,7 +76,10 @@ func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, request *f
 	// extract raw field value from body
 	rawFieldValue, exists := request.Body[modelField]
 	if !exists {
-		return fmt.Errorf("field '%s' not found in request body", modelField)
+		// If model field is not present, set empty base model header
+		request.SetHeader(baseModelHeader, "")
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("model field not found, setting empty base model header")
+		return nil
 	}
 
 	targetModel := fmt.Sprintf("%v", rawFieldValue) // convert any type to string

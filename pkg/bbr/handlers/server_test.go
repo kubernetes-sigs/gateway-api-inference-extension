@@ -88,6 +88,12 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
+												Key:      contentLengthHeader,
+												RawValue: []byte("15"),
+											},
+										},
+										{
+											Header: &basepb.HeaderValue{
 												Key:      ModelHeader,
 												RawValue: []byte("foo"),
 											},

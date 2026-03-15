@@ -295,6 +295,12 @@ func TestHandleRequestBody(t *testing.T) {
 										SetHeaders: []*basepb.HeaderValueOption{
 											{
 												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
 													Key:      ModelHeader,
 													RawValue: []byte("foo"),
 												},
@@ -354,6 +360,12 @@ func TestHandleRequestBody(t *testing.T) {
 									ClearRouteCache: true,
 									HeaderMutation: &extProcPb.HeaderMutation{
 										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
+											},
 											{
 												Header: &basepb.HeaderValue{
 													Key:      ModelHeader,
@@ -656,7 +668,8 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := NewServer(tc.streaming, []framework.RequestProcessor{plugin}, []framework.ResponseProcessor{})
+			baseModelPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+			server := NewServer(tc.streaming, []framework.RequestProcessor{plugin, baseModelPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
 				Request: framework.NewInferenceRequest(),
 			}
