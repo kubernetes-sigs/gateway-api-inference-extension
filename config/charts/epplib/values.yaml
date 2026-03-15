@@ -3,8 +3,8 @@ latencyPredictor:
   # Training Server Configuration
   trainingServer:
     image:
-      hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-      name: latencypredictor-training-server
+      registry: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+      repository: latencypredictor-training-server
       tag: latest
       pullPolicy: Always
     port: 8000
@@ -44,8 +44,8 @@ latencyPredictor:
     count: 10
     startPort: 8001
     image:
-      hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-      name: latencypredictor-prediction-server
+      registry: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
+      repository: latencypredictor-prediction-server
       tag: latest
       pullPolicy: Always
     resources:

@@ -2,8 +2,8 @@ bbr:
   name: body-based-router
   replicas: 1
   image:
-    name: bbr
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    registry: us-central1-docker.pkg.dev/k8s-staging-images
+    repository: gateway-api-inference-extension/bbr
     tag: main
     pullPolicy: Always
   port: 9004
