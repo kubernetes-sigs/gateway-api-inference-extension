@@ -89,6 +89,10 @@ var (
 	_ framework.Filter = &Detector{}
 )
 
+var (
+	_ framework.Filter = &Detector{}
+)
+
 // Detector determines system saturation based on metrics of the given candidate pods.
 type Detector struct {
 	config *Config
