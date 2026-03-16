@@ -295,7 +295,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 
 func driveLoad(ctx context.Context, detector *Detector, endpointName string, count int) {
 	res := makeSchedulingResult(endpointName)
-	for i := 0; i < count; i++ {
+	for range count {
 		detector.PreRequest(ctx, nil, res)
 	}
 }

@@ -27,6 +27,7 @@ import (
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func makePodMetric(name string, queueDepth int, kvUsage float64, updateTime time.Time) *backendmetrics.FakePodMetrics {
@@ -181,6 +182,95 @@ func TestDetector_Saturation(t *testing.T) {
 
 			got := detector.Saturation(context.Background(), tc.pods)
 			require.InDelta(t, tc.wantSaturation, got, 1e-4, "Saturation mismatch")
+		})
+	}
+}
+
+func TestDetector_Filter(t *testing.T) {
+	t.Parallel()
+
+	baseTime := time.Now()
+
+	config := &Config{
+		QueueDepthThreshold:       5,
+		KVCacheUtilThreshold:      0.80,
+		MetricsStalenessThreshold: 100 * time.Millisecond,
+		Headroom:                  0.2, // 20% burst
+	}
+
+	// Limits: Q = 5 * 1.2 = 6.0, KV = 0.8 * 1.2 = 0.96
+
+	tests := []struct {
+		name      string
+		endpoints []schedulingtypes.Endpoint
+		wantLen   int
+	}{
+		{
+			name: "All pass - under thresholds",
+			endpoints: []schedulingtypes.Endpoint{
+				makePodMetric("pod1", 1, 0.1, baseTime),
+				makePodMetric("pod2", 4, 0.7, baseTime),
+			},
+			wantLen: 2,
+		},
+		{
+			name: "Pass - at threshold but under burst",
+			endpoints: []schedulingtypes.Endpoint{
+				makePodMetric("pod1", 5, 0.8, baseTime),
+			},
+			wantLen: 1,
+		},
+		{
+			name: "Pass - in headroom burst",
+			endpoints: []schedulingtypes.Endpoint{
+				// Q=5.5 (< 6.0). KV=0.9 (< 0.96).
+				makePodMetric("pod1", 5, 0.9, baseTime),
+			},
+			wantLen: 1,
+		},
+		{
+			name: "Filtered - exceeds queue burst",
+			endpoints: []schedulingtypes.Endpoint{
+				// Pod1 (Over): Q=10/5=2.0.
+				makePodMetric("pod1", 7, 0.1, baseTime),
+				// Pod2 (OK): Q=1/5=0.2.
+				makePodMetric("pod2", 1, 0.1, baseTime),
+			},
+			wantLen: 1,
+		},
+		{
+			name: "Filtered - exceeds KV burst",
+			endpoints: []schedulingtypes.Endpoint{
+				// Pod1 (Over): KV=0.97/0.9=1.07...
+				makePodMetric("pod1", 1, 0.97, baseTime),
+				// Pod2 (OK): KV=0.5/0.9=0.55...
+				makePodMetric("pod2", 1, 0.5, baseTime),
+			},
+			wantLen: 1,
+		},
+		{
+			name: "Pass - all stale (Fail open at pool level)",
+			endpoints: []schedulingtypes.Endpoint{
+				makePodMetric("pod1", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
+				makePodMetric("pod2", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
+			},
+			wantLen: 2,
+		},
+		{
+			name: "Pass - all saturated (Fail open at pool level)",
+			endpoints: []schedulingtypes.Endpoint{
+				makePodMetric("pod1", 10, 0.1, baseTime),
+				makePodMetric("pod2", 1, 0.99, baseTime),
+			},
+			wantLen: 2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			detector := NewDetector(config, logr.Discard())
+			got := detector.Filter(context.Background(), nil, nil, tc.endpoints)
+			require.Len(t, got, tc.wantLen)
 		})
 	}
 }
