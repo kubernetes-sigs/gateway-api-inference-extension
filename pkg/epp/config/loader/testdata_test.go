@@ -61,6 +61,8 @@ plugins:
   type: test-plugin
   parameters:
     threshold: 10
+featureGates:
+- disableDataLayer
 `
 
 // successSchedulerConfigText represents a complex scheduler setup.
@@ -111,6 +113,8 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: testScorer
+featureGates:
+- disableDataLayer
 `
 
 // successWithNoProfileHandlersText tests that a default profile handler is injected.
@@ -124,6 +128,8 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
+featureGates:
+- disableDataLayer
 `
 
 // successPickerBeforeScorerText tests the regression case where a Picker appears before a Scorer (without weight) in
@@ -140,6 +146,8 @@ schedulingProfiles:
   plugins:
   - pluginRef: test-picker
   - pluginRef: test-scorer
+featureGates:
+- disableDataLayer
 `
 
 // successFlowControlConfigText tests that Flow Control configuration is correctly loaded.
@@ -155,6 +163,7 @@ schedulingProfiles:
   - pluginRef: maxScore
 featureGates:
 - flowControl
+- disableDataLayer
 flowControl:
   maxBytes: "1024"
   defaultRequestTTL: 1m
@@ -170,7 +179,8 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
-featureGates: [] # Explicitly empty
+featureGates:
+- disableDataLayer
 flowControl:
   maxBytes: "1024"
 `
@@ -192,6 +202,7 @@ schedulingProfiles:
   - pluginRef: maxScore
 featureGates:
 - flowControl
+- disableDataLayer
 flowControl:
   priorityBands:
   - priority: 100
@@ -213,6 +224,8 @@ schedulingProfiles:
   - pluginRef: maxScore
 parser:
   pluginRef: openai-parser
+featureGates:
+- disableDataLayer
 `
 
 // successWithNoParserConfigText tests that a default openaiParser is injected when no parser is configured.
@@ -226,6 +239,8 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
+featureGates:
+- disableDataLayer
 `
 
 // successParserConfigText tests that configuration with parser plugin with custom name is correctly loaded.
@@ -243,6 +258,8 @@ schedulingProfiles:
   - pluginRef: maxScore
 parser:
   pluginRef: openaiParser
+featureGates:
+- disableDataLayer
 `
 
 // --- Invalid Configurations (Syntax/Structure) ---

@@ -22,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -49,7 +48,7 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 			Kind:       "EndpointPickerConfig",
 		},
-		FeatureGates: []string{datalayer.ExperimentalDatalayerFeatureGate},
+		FeatureGates: []string{}, // Data layer is now enabled by default (no feature gate needed)
 		Plugins: []configapi.PluginSpec{
 			{
 				Type: scorer.QueueScorerType,

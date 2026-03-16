@@ -109,7 +109,10 @@ func InstantiateAndConfigure(
 	}
 
 	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
-	dataConfig, err := buildDataLayerConfig(rawConfig.Data, featureGates[datalayer.ExperimentalDatalayerFeatureGate], handle)
+	// Data layer is enabled by default (unless explicitly disabled)
+	// Support both old "dataLayer" gate (for backward compatibility) and new "disableDataLayer" gate
+	dataLayerEnabled := featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !featureGates[datalayer.DisableDataLayerFeatureGate]
+	dataConfig, err := buildDataLayerConfig(rawConfig.Data, dataLayerEnabled, handle)
 	if err != nil {
 		return nil, fmt.Errorf("data layer config build failed: %w", err)
 	}

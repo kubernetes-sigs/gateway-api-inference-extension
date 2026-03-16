@@ -70,6 +70,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 
 	// Register known feature gates for validation.
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
 	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	queueScorerWeight := 2.0
@@ -129,7 +130,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 				Plugins: []configapi.PluginSpec{
 					{Name: "test1", Type: testPluginType, Parameters: json.RawMessage(`{"threshold":10}`)},
 				},
-				FeatureGates: configapi.FeatureGates{},
+				FeatureGates: configapi.FeatureGates{datalayer.DisableDataLayerFeatureGate},
 			},
 			wantErr: false,
 		},
@@ -141,7 +142,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 					Kind:       "EndpointPickerConfig",
 				},
-				FeatureGates: configapi.FeatureGates{datalayer.ExperimentalDatalayerFeatureGate},
+				FeatureGates: configapi.FeatureGates{}, // Data layer is now enabled by default
 				Plugins: []configapi.PluginSpec{
 					{
 						Name: scorer.QueueScorerType,
@@ -234,7 +235,12 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	// Not parallel because it modifies global plugin registry.
 	registerTestPlugins(t)
 
+	// Register both old and new data layer feature gates for backward compatibility:
+	// - ExperimentalDatalayerFeatureGate ("dataLayer"): Old gate for enabling data layer (deprecated but still supported)
+	// - DisableDataLayerFeatureGate ("disableDataLayer"): New gate for disabling data layer (opt-out from default)
+	// Both must be registered so configs using either gate pass validation
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
 	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	tests := []struct {

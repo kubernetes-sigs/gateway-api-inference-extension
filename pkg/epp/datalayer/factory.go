@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	ExperimentalDatalayerFeatureGate = "dataLayer"
+	ExperimentalDatalayerFeatureGate = "dataLayer" // Deprecated: Use DisableDataLayerFeatureGate instead
+	DisableDataLayerFeatureGate      = "disableDataLayer"
 	PrepareDataPluginsFeatureGate    = "prepareDataPlugins"
 )
 
