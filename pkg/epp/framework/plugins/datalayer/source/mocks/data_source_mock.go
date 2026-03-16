@@ -95,8 +95,8 @@ func (m *NotificationSource) GVK() schema.GroupVersionKind {
 	return m.gvk
 }
 
-func (m *NotificationSource) Notify(_ context.Context, _ fwkdl.NotificationEvent) error {
-	return nil
+func (m *NotificationSource) Notify(_ context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
+	return &event, nil
 }
 
 func (m *NotificationSource) Extractors() []string {

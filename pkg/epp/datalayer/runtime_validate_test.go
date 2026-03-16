@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
 var (
@@ -133,7 +134,7 @@ func TestRuntimeConfigureWithNilExtractor(t *testing.T) {
 	cfg := &Config{
 		Sources: []DataSourceConfig{
 			{
-				Plugin:     &FakeDataSource{},
+				Plugin:     &mocks.MetricsDataSource{},
 				Extractors: nil, // nil extractors should be allowed
 			},
 		},
@@ -149,12 +150,8 @@ func TestRuntimeConfigureDuplicateGVKFails(t *testing.T) {
 
 	// Create two notification sources with the same GVK
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	src1 := &FakeNotificationSource{
-		gvk: gvk,
-	}
-	src2 := &FakeNotificationSource{
-		gvk: gvk,
-	}
+	src1 := mocks.NewNotificationSource("test", "source1", gvk)
+	src2 := mocks.NewNotificationSource("test", "source2", gvk)
 
 	cfg := &Config{
 		Sources: []DataSourceConfig{

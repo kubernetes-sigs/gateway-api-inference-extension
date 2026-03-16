@@ -22,19 +22,18 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // Runtime manages data sources, extractors, their mapping, and endpoint lifecycle.
 type Runtime struct {
 	pollingInterval time.Duration // used for polling sources
-	state           atomic.Int64  // stores RuntimeState
 
 	pollers          sync.Map // Map of polling sources (key=source name, value=PollingDataSource)
 	notifiers        sync.Map // Map of k8s notification sources (key=source name, value=NotificationSource)
@@ -56,31 +55,17 @@ func NewRuntime(pollingInterval time.Duration) *Runtime {
 	}
 	return &Runtime{
 		pollingInterval: interval,
-		// state defaults to 0 (i.e., StateInitial via iota)
 	}
 }
 
 // Configure is called to transform the configuration information into the Runtime's
 // internal fields.
 func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtractorType string, logger logr.Logger) error {
-	var err error
-
-	defer func() { // set the state to error on any failure
-		if err != nil {
-			r.setError()
-		}
-	}()
-
-	if err = r.transition(StateInitial, StateConfiguring); err != nil {
-		return err
-	}
-
 	if cfg == nil || len(cfg.Sources) == 0 {
 		if enableNewMetrics {
-			err = errors.New("data layer enabled but no data sources configured")
-			return err
+			return errors.New("data layer enabled but no data sources configured")
 		}
-		return r.transition(StateConfiguring, StateConfigured)
+		return nil
 	}
 
 	logger.Info("Configuring datalayer runtime", "numSources", len(cfg.Sources))
@@ -93,8 +78,8 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 		src := srcCfg.Plugin
 		srcName := src.TypedName().Name
 
-		logger.V(1).Info("Processing source", "source", srcName, "numExtractors", len(srcCfg.Extractors))
-		if err = r.validateSourceExtractors(src, srcCfg.Extractors, disallowedExtractorType); err != nil {
+		logger.V(logging.DEFAULT).Info("Processing source", "source", srcName, "numExtractors", len(srcCfg.Extractors))
+		if err := r.validateSourceExtractors(src, srcCfg.Extractors, disallowedExtractorType); err != nil {
 			return err
 		}
 
@@ -104,16 +89,14 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 		} else if notifier, ok := src.(fwkdl.NotificationSource); ok {
 			gvk := notifier.GVK().String()
 			if existingSource, exists := gvkToSource[gvk]; exists {
-				err = fmt.Errorf("duplicate notification source GVK %s: already used by source %s, cannot add %s",
+				return fmt.Errorf("duplicate notification source GVK %s: already used by source %s, cannot add %s",
 					gvk, existingSource, src.TypedName().String())
-				return err
 			}
 			r.notifiers.Store(srcName, notifier)
 			gvkToSource[gvk] = srcName
 			notifiersCount++
 		} else {
-			err = fmt.Errorf("skipping unknown datasource plugin type %s", src.TypedName().String())
-			return err
+			return fmt.Errorf("skipping unknown datasource plugin type %s", src.TypedName().String())
 		}
 
 		if len(srcCfg.Extractors) > 0 { // Store extractors mapped to source
@@ -124,28 +107,17 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 		for i, ext := range srcCfg.Extractors {
 			extractorNames[i] = ext.TypedName().String()
 		}
-		logger.V(1).Info("Source configured", "source", srcName, "extractors", extractorNames)
+		logger.V(logging.DEFAULT).Info("Source configured", "source", srcName, "extractors", extractorNames)
 	}
 
 	logger.Info("Datalayer runtime configured", "pollers", pollersCount, "notifiers", notifiersCount)
-	err = r.transition(StateConfiguring, StateConfigured)
-	return err
+	return nil
 }
 
 // Start is called to enable the Runtime to start processing data collection. It wires
 // Kubernetes notifications into the manager.
 func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) error {
 	var err error
-
-	defer func() {
-		if err != nil {
-			r.setError()
-		}
-	}()
-
-	if err = r.transition(StateConfigured, StateStarting); err != nil {
-		return err
-	}
 
 	r.notifiers.Range(func(key, val any) bool { // bind notification sources to the manager
 		ns := val.(fwkdl.NotificationSource)
@@ -166,55 +138,19 @@ func (r *Runtime) Start(ctx context.Context, mgr ctrl.Manager) error {
 		}
 		return true
 	})
-	if err != nil {
-		return err
-	}
-
-	err = r.transition(StateStarting, StateStarted)
 	return err
 }
 
 // Stop is called to terminate the Runtime's data collection. It terminates all
 // go routines used for polling data sources.
 func (r *Runtime) Stop() error {
-	var err error
-
-	defer func() {
-		if err != nil {
-			r.setError()
-		}
-	}()
-
-	if err = r.transition(StateStarted, StateStopping); err != nil {
-		return err
-	}
-
 	r.collectors.Range(func(_, val any) bool {
 		if c, ok := val.(*Collector); ok {
 			_ = c.Stop()
 		}
 		return true
 	})
-
-	err = r.transition(StateStopping, StateStopped)
-	return err
-}
-
-// transition attempts to atomically transition from expectedState to newState.
-// Returns nil on success, or an error if the transition fails.
-// If the transition fails, sets the state to StateError.
-func (r *Runtime) transition(expectedState, newState RuntimeState) error {
-	if r.state.CompareAndSwap(int64(expectedState), int64(newState)) {
-		return nil
-	}
-	r.setError()
-	current := RuntimeState(r.state.Load())
-	return fmt.Errorf("%w: cannot transition from %s to %s", errInvalidRuntimeState, current, newState)
-}
-
-// setError sets the state to StateError atomically.
-func (r *Runtime) setError() {
-	r.state.Store(int64(StateError))
+	return nil
 }
 
 // NewEndpoint sets up data polling on the provided endpoint.

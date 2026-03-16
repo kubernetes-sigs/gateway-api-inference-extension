@@ -120,7 +120,7 @@ type Runner struct {
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
 	parser               fwkrh.Parser
-	dlRuntime            *datalayer.Runtime // datalayer's runtime
+	dlRuntime            *datalayer.Runtime
 
 	testOverrideSkipNameValidation bool
 }
@@ -321,7 +321,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
-	if err := r.setupDataLayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
+	if err := r.configureAndStartDatalayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
 	}
@@ -595,7 +595,7 @@ func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	}
 }
 
-func (r *Runner) setupDataLayer(ctx context.Context, enableNewMetrics bool, cfg *datalayer.Config, mgr ctrl.Manager) error {
+func (r *Runner) configureAndStartDatalayer(ctx context.Context, enableNewMetrics bool, cfg *datalayer.Config, mgr ctrl.Manager) error {
 	disallowedExtractorType := ""
 	if !enableNewMetrics {
 		disallowedExtractorType = extractormetrics.MetricsExtractorType

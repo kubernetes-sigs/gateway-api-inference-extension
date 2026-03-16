@@ -127,12 +127,11 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
 						data, err := src.Poll(ctx, endpoint)
+						cancel()
 						if err != nil {
 							logger.Error(err, "poll failed", "source", src.TypedName())
-							cancel()
 							continue
 						}
-						cancel()
 						srcName := src.TypedName().Name
 						if srcExtractors, ok := exts[srcName]; ok && data != nil {
 							for _, ext := range srcExtractors {

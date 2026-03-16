@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -102,7 +103,7 @@ func (rn *notificationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (rn *notificationReconciler) dispatch(ctx context.Context, log logr.Logger, event *fwkdl.NotificationEvent) (ctrl.Result, error) {
-	log.V(1).Info("processing notification", "eventType", event.Type)
+	log.V(logging.TRACE).Info("processing notification", "eventType", event.Type)
 
 	processed, err := rn.src.Notify(ctx, *event)
 	if err != nil {
