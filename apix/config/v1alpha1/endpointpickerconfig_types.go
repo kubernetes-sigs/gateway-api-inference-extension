@@ -25,6 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const nilString = "<nil>"
+
 // +kubebuilder:object:root=true
 
 // EndpointPickerConfig is the Schema for the endpointpickerconfigs API
@@ -116,11 +118,11 @@ type PluginSpec struct {
 func (ps PluginSpec) String() string {
 	var parts []string
 	if ps.Name != "" {
-		parts = append(parts, fmt.Sprintf("Name: %s", ps.Name))
+		parts = append(parts, "Name: "+ps.Name)
 	}
-	parts = append(parts, fmt.Sprintf("Type: %s", ps.Type))
+	parts = append(parts, "Type: "+ps.Type)
 	if len(ps.Parameters) > 0 {
-		parts = append(parts, fmt.Sprintf("Parameters: %s", string(ps.Parameters)))
+		parts = append(parts, "Parameters: "+string(ps.Parameters))
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
@@ -141,7 +143,7 @@ type SchedulingProfile struct {
 
 func (sp SchedulingProfile) String() string {
 	var parts []string
-	parts = append(parts, fmt.Sprintf("Name: %s", sp.Name))
+	parts = append(parts, "Name: "+sp.Name)
 	if len(sp.Plugins) > 0 {
 		parts = append(parts, fmt.Sprintf("Plugins: %v", sp.Plugins))
 	}
@@ -166,7 +168,7 @@ type SchedulingPlugin struct {
 
 func (sp SchedulingPlugin) String() string {
 	var parts []string
-	parts = append(parts, fmt.Sprintf("PluginRef: %s", sp.PluginRef))
+	parts = append(parts, "PluginRef: "+sp.PluginRef)
 	if sp.Weight != nil {
 		parts = append(parts, fmt.Sprintf("Weight: %.2f", *sp.Weight))
 	}
@@ -215,7 +217,7 @@ type SaturationDetector struct {
 
 func (sd *SaturationDetector) String() string {
 	if sd == nil {
-		return "<nil>"
+		return nilString
 	}
 	var parts []string
 	if sd.QueueDepthThreshold != 0 {
@@ -240,7 +242,7 @@ type DataLayerConfig struct {
 
 func (dlc *DataLayerConfig) String() string {
 	if dlc == nil {
-		return "<nil>"
+		return nilString
 	}
 	return fmt.Sprintf("{Sources: %v}", dlc.Sources)
 }
@@ -264,7 +266,7 @@ type DataLayerSource struct {
 
 func (dls DataLayerSource) String() string {
 	var parts []string
-	parts = append(parts, fmt.Sprintf("PluginRef: %s", dls.PluginRef))
+	parts = append(parts, "PluginRef: "+dls.PluginRef)
 	if len(dls.Extractors) > 0 {
 		parts = append(parts, fmt.Sprintf("Extractors: %v", dls.Extractors))
 	}
@@ -287,7 +289,7 @@ func (dle DataLayerExtractor) String() string {
 
 func (pc *ParserConfig) String() string {
 	if pc == nil {
-		return "<nil>"
+		return nilString
 	}
 	return fmt.Sprintf("{PluginRef: %s}", pc.PluginRef)
 }
@@ -337,7 +339,7 @@ type FlowControlConfig struct {
 
 func (fcc *FlowControlConfig) String() string {
 	if fcc == nil {
-		return "<nil>"
+		return nilString
 	}
 
 	var parts []string
@@ -395,11 +397,11 @@ func (pbc PriorityBandConfig) String() string {
 	}
 
 	if pbc.FairnessPolicyRef != "" {
-		parts = append(parts, fmt.Sprintf("FairnessPolicyRef: %s", pbc.FairnessPolicyRef))
+		parts = append(parts, "FairnessPolicyRef: "+pbc.FairnessPolicyRef)
 	}
 
 	if pbc.OrderingPolicyRef != "" {
-		parts = append(parts, fmt.Sprintf("OrderingPolicyRef: %s", pbc.OrderingPolicyRef))
+		parts = append(parts, "OrderingPolicyRef: "+pbc.OrderingPolicyRef)
 	}
 
 	return "{" + strings.Join(parts, ", ") + "}"
