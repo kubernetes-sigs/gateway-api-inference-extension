@@ -347,8 +347,36 @@ type FlowControlConfig struct {
 }
 
 func (fcc *FlowControlConfig) String() string {
-	return fmt.Sprintf("{MaxBytes: %v, MaxRequests: %v, DefaultPriorityBand: %v, PriorityBands: %v}",
-		fcc.MaxBytes, fcc.MaxRequests, fcc.DefaultPriorityBand, fcc.PriorityBands)
+	if fcc == nil {
+		return nilString
+	}
+
+	var parts []string
+	if fcc.MaxBytes != nil {
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", fcc.MaxBytes.Value()))
+	} else {
+		parts = append(parts, "MaxBytes: unlimited")
+	}
+
+	if fcc.MaxRequests != nil {
+		parts = append(parts, fmt.Sprintf("MaxRequests: %d", fcc.MaxRequests.Value()))
+	} else {
+		parts = append(parts, "MaxRequests: unlimited")
+	}
+
+	if fcc.DefaultRequestTTL != nil {
+		parts = append(parts, fmt.Sprintf("DefaultRequestTTL: %s", fcc.DefaultRequestTTL.Duration))
+	}
+
+	if fcc.DefaultPriorityBand != nil {
+		parts = append(parts, fmt.Sprintf("DefaultPriorityBand: %v", fcc.DefaultPriorityBand))
+	}
+
+	if len(fcc.PriorityBands) > 0 {
+		parts = append(parts, fmt.Sprintf("PriorityBands: %v", fcc.PriorityBands))
+	}
+
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 // PriorityBandConfig configures a single priority band.
@@ -381,6 +409,24 @@ type PriorityBandConfig struct {
 }
 
 func (pbc PriorityBandConfig) String() string {
-	return fmt.Sprintf("{Priority: %d, MaxBytes: %v, MaxRequests: %v, FairnessPolicyRef: %s, OrderingPolicyRef: %s}",
-		pbc.Priority, pbc.MaxBytes, pbc.MaxRequests, pbc.FairnessPolicyRef, pbc.OrderingPolicyRef)
+	var parts []string
+	parts = append(parts, fmt.Sprintf("Priority: %d", pbc.Priority))
+
+	if pbc.MaxBytes != nil {
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", pbc.MaxBytes.Value()))
+	}
+
+	if pbc.MaxRequests != nil {
+		parts = append(parts, fmt.Sprintf("MaxRequests: %d", pbc.MaxRequests.Value()))
+	}
+
+	if pbc.FairnessPolicyRef != "" {
+		parts = append(parts, "FairnessPolicyRef: "+pbc.FairnessPolicyRef)
+	}
+
+	if pbc.OrderingPolicyRef != "" {
+		parts = append(parts, "OrderingPolicyRef: "+pbc.OrderingPolicyRef)
+	}
+
+	return "{" + strings.Join(parts, ", ") + "}"
 }
