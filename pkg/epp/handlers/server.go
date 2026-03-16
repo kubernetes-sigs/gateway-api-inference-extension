@@ -345,8 +345,12 @@ func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestCon
 	reqCtx.ResponseSize = len(body)
 
 	if reqCtx.modelServerStreaming {
-		if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
+		if reqCtx, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
 			log.FromContext(ctx).Error(err, "error in HandleResponseBodyComplete")
+		} else if reqCtx != nil && reqCtx.Response != nil && reqCtx.Response.DynamicMetadata != nil {
+			if len(reqCtx.respBodyResp) > 0 {
+				reqCtx.respBodyResp[len(reqCtx.respBodyResp)-1].DynamicMetadata = reqCtx.Response.DynamicMetadata
+			}
 		}
 		metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
 		metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
