@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -27,8 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
@@ -61,10 +61,20 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return ret, nil
 	}
 
-	// TODO temp until this is implemented as plugin
-	baseModel := s.ds.GetBaseModel(reqCtx.Request.Headers[ModelHeader])
-	reqCtx.Request.SetHeader(BaseModelHeader, baseModel)
-	logger.Info("Base model from datastore", "baseModel", baseModel)
+	bodyMutated := reqCtx.Request.BodyMutated()
+	var mutatedBodyBytes []byte
+	if bodyMutated {
+		var err error
+		mutatedBodyBytes, err = json.Marshal(reqCtx.Request.Body)
+		if err != nil {
+			return nil, err
+		}
+		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBodyBytes)))
+	} else if s.streaming {
+		// In streaming mode, always set Content-Length even if body is not mutated
+		// to inform Envoy of the body size that will follow
+		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(requestBodyBytes)))
+	}
 
 	metrics.RecordSuccessCounter()
 
@@ -75,29 +85,42 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 					Response: &eppb.CommonResponse{
 						ClearRouteCache: true,
 						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    reqenvoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
+							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
 							RemoveHeaders: reqCtx.Request.RemovedHeaders(),
 						},
 					},
 				},
 			},
 		})
-		ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		if bodyMutated {
+			ret = addStreamedBodyResponse(ret, mutatedBodyBytes)
+		} else {
+			ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		}
 		return ret, nil
+	}
+
+	// Necessary so that the new headers are used in the routing decision.
+	response := &eppb.CommonResponse{
+		ClearRouteCache: true,
+		HeaderMutation: &eppb.HeaderMutation{
+			SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
+			RemoveHeaders: reqCtx.Request.RemovedHeaders(),
+		},
+	}
+	if bodyMutated {
+		response.BodyMutation = &eppb.BodyMutation{
+			Mutation: &eppb.BodyMutation_Body{
+				Body: mutatedBodyBytes,
+			},
+		}
 	}
 
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_RequestBody{
 				RequestBody: &eppb.BodyResponse{
-					Response: &eppb.CommonResponse{
-						// Necessary so that the new headers are used in the routing decision.
-						ClearRouteCache: true,
-						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    reqenvoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
-							RemoveHeaders: reqCtx.Request.RemovedHeaders(),
-						},
-					},
+					Response: response,
 				},
 			},
 		},
@@ -121,7 +144,7 @@ func (s *Server) runRequestPlugins(ctx context.Context, request *framework.Infer
 }
 
 func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBytes []byte) []*eppb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
+	commonResponses := envoy.BuildChunkedBodyResponses(requestBodyBytes, true)
 	for _, commonResp := range commonResponses {
 		responses = append(responses, &eppb.ProcessingResponse{
 			Response: &eppb.ProcessingResponse_RequestBody{
@@ -141,7 +164,7 @@ func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.Http
 
 	if headers != nil && headers.Headers != nil {
 		for _, header := range headers.Headers.Headers {
-			reqCtx.Request.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+			reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
 		}
 	}
 

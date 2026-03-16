@@ -164,10 +164,10 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fcReq := &flowControlRequest{
-				requestID:       tc.requestID,
-				fairnessID:      tc.fairnessID,
-				priority:        tc.priority,
-				requestByteSize: tc.requestByteSize,
+				fairnessID:       tc.fairnessID,
+				priority:         tc.priority,
+				requestByteSize:  tc.requestByteSize,
+				inferenceRequest: &schedulingtypes.LLMRequest{RequestId: tc.requestID},
 			}
 
 			assert.Equal(t, tc.requestID, fcReq.ID(), "ID() mismatch")

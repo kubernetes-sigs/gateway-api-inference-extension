@@ -30,16 +30,14 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/controller"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort        int
-	Datastore       datastore.Datastore
 	SecureServing   bool
 	Streaming       bool
 	RequestPlugins  []framework.RequestProcessor
@@ -57,12 +55,18 @@ func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunne
 
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
-	// Create the configmap controller and register it with the manager
-	if err := (&controller.ConfigMapReconciler{
-		Datastore: r.Datastore,
-		Reader:    mgr.GetClient(),
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up ConfigMap Reconciler - %w", err)
+	// Find the BaseModelToHeaderPlugin in the request plugins and set up its reconciler
+	// TODO: make reconcilers/runnables registration with the mgr customizable
+	for _, plugin := range r.RequestPlugins {
+		if bmPlugin, ok := plugin.(*basemodelextractor.BaseModelToHeaderPlugin); ok {
+			reconciler := bmPlugin.GetReconciler()
+			reconciler.Reader = mgr.GetClient()
+			if err := reconciler.SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("failed setting up ConfigMap Reconciler - %w", err)
+			}
+			// Only set up the first BaseModelToHeaderPlugin's reconciler
+			break
+		}
 	}
 
 	return nil
@@ -87,7 +91,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore, r.RequestPlugins, r.ResponsePlugins))
+		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.RequestPlugins, r.ResponsePlugins))
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)

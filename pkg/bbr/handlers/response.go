@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -27,7 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	reqenvoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/request"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
@@ -36,23 +37,33 @@ import (
 func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
 	if headers != nil && headers.Headers != nil {
 		for _, header := range headers.Headers.Headers {
-			reqCtx.Response.Headers[header.Key] = reqenvoy.GetHeaderValue(header)
+			reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
 		}
 	}
 
-	return []*eppb.ProcessingResponse{
-		{
-			Response: &eppb.ProcessingResponse_ResponseHeaders{
-				ResponseHeaders: &eppb.HeadersResponse{},
+	if !s.streaming || headers.GetEndOfStream() {
+		return []*eppb.ProcessingResponse{
+			{
+				Response: &eppb.ProcessingResponse_ResponseHeaders{
+					ResponseHeaders: &eppb.HeadersResponse{},
+				},
 			},
-		},
-	}, nil
+		}, nil
+	}
+
+	// In streaming mode with a body pending, defer the response —
+	// HandleResponseBody will send it together with the body response,
+	// mirroring the request-side pattern.
+	return nil, nil
 }
 
 // HandleResponseBody handles response bodies by executing response plugins in order.
 func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	logger := log.FromContext(ctx)
 	if len(s.responsePlugins) == 0 {
+		if s.streaming {
+			return s.generateEmptyResponseBodyResponse(responseBodyBytes), nil
+		}
 		return []*eppb.ProcessingResponse{
 			{
 				Response: &eppb.ProcessingResponse_ResponseBody{
@@ -64,6 +75,9 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 
 	if err := json.Unmarshal(responseBodyBytes, &reqCtx.Response.Body); err != nil {
 		logger.Error(err, "Failed to parse response body as JSON, skipping response plugins")
+		if s.streaming {
+			return s.generateEmptyResponseBodyResponse(responseBodyBytes), nil
+		}
 		return []*eppb.ProcessingResponse{
 			{
 				Response: &eppb.ProcessingResponse_ResponseBody{
@@ -77,14 +91,78 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 		return nil, fmt.Errorf("failed to execute response plugins - %w", err)
 	}
 
-	// TODO: apply mutated body/headers to the response (see #2449 follow-ups).
+	bodyMutated := reqCtx.Response.BodyMutated()
+	var mutatedBytes []byte
+	if bodyMutated {
+		var err error
+		mutatedBytes, err = json.Marshal(reqCtx.Response.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal mutated response body - %w", err)
+		}
+		reqCtx.Response.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBytes)))
+	}
+
+	if s.streaming {
+		var ret []*eppb.ProcessingResponse
+		ret = append(ret, &eppb.ProcessingResponse{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{
+					Response: &eppb.CommonResponse{
+						ClearRouteCache: true,
+						HeaderMutation: &eppb.HeaderMutation{
+							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+							RemoveHeaders: reqCtx.Response.RemovedHeaders(),
+						},
+					},
+				},
+			},
+		})
+		if bodyMutated {
+			ret = envoy.AddStreamedResponseBody(ret, mutatedBytes)
+		} else {
+			ret = envoy.AddStreamedResponseBody(ret, responseBodyBytes)
+		}
+		return ret, nil
+	}
+
+	response := &eppb.CommonResponse{
+		ClearRouteCache: true,
+		HeaderMutation: &eppb.HeaderMutation{
+			SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Response.MutatedHeaders()),
+			RemoveHeaders: reqCtx.Response.RemovedHeaders(),
+		},
+	}
+	if bodyMutated {
+		response.BodyMutation = &eppb.BodyMutation{
+			Mutation: &eppb.BodyMutation_Body{
+				Body: mutatedBytes,
+			},
+		}
+	}
+
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_ResponseBody{
-				ResponseBody: &eppb.BodyResponse{},
+				ResponseBody: &eppb.BodyResponse{
+					Response: response,
+				},
 			},
 		},
 	}, nil
+}
+
+// generateEmptyResponseBodyResponse builds a streaming response with an empty
+// ResponseHeaders followed by chunked body responses via AddStreamedResponseBody.
+func (s *Server) generateEmptyResponseBodyResponse(responseBodyBytes []byte) []*eppb.ProcessingResponse {
+	responses := []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{},
+			},
+		},
+	}
+	responses = envoy.AddStreamedResponseBody(responses, responseBodyBytes)
+	return responses
 }
 
 // HandleResponseTrailers handles response trailers.

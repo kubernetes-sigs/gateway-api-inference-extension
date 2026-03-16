@@ -26,11 +26,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	schedulingframework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -796,46 +799,134 @@ func TestFlowControlEnqueueDurationMetric(t *testing.T) {
 
 func TestSchedulerAttemptsTotal(t *testing.T) {
 
-	scenarios := []struct {
-		name         string
-		successCount int
-		failureCount int
-	}{
-		{
-			name:         "mixed success and failure attempts",
-			successCount: 10,
-			failureCount: 5,
-		},
+	compareMetrics := func(t *testing.T, goldenFile string) {
+		t.Helper()
+		wantMetrics, err := os.Open(goldenFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err = wantMetrics.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if err := testutil.GatherAndCompare(
+			metrics.Registry,
+			wantMetrics,
+			"inference_extension_scheduler_attempts_total",
+		); err != nil {
+			t.Errorf("metric comparison failed: %v", err)
+		}
 	}
 
-	for _, scenario := range scenarios {
-		t.Run(scenario.name, func(t *testing.T) {
-			Reset()
-			for i := 0; i < scenario.successCount; i++ {
-				RecordSchedulerAttempt(nil)
-			}
-			for i := 0; i < scenario.failureCount; i++ {
-				RecordSchedulerAttempt(errors.New("simulated scheduling failure"))
-			}
+	t.Run("success with endpoint metadata", func(t *testing.T) {
+		Reset()
+		result := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", result)
+		RecordSchedulerAttempt(nil, "modelA", result)
+		compareMetrics(t, "testdata/scheduler_attempts_with_result_metrics")
+	})
 
-			wantMetrics, err := os.Open("testdata/scheduler_attempts_total_metrics")
-			defer func() {
-				if err = wantMetrics.Close(); err != nil {
-					t.Error(err)
-				}
-			}()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := testutil.GatherAndCompare(
-				metrics.Registry,
-				wantMetrics,
-				"inference_extension_scheduler_attempts_total",
-			); err != nil {
-				t.Errorf("metric comparison failed: %v", err)
-			}
-		})
-	}
+	t.Run("success with multiple endpoints uses first", func(t *testing.T) {
+		Reset()
+		result := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
+								PodName:        "pod-2",
+								Port:           "9090",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", result)
+		RecordSchedulerAttempt(nil, "modelB", result)
+		compareMetrics(t, "testdata/scheduler_attempts_multiple_endpoints_metrics")
+	})
+
+	t.Run("success with different models and endpoints", func(t *testing.T) {
+		Reset()
+		resultA := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		resultB := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
+								PodName:        "pod-2",
+								Port:           "9090",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", resultA)
+		RecordSchedulerAttempt(nil, "modelA", resultA)
+		RecordSchedulerAttempt(nil, "modelB", resultB)
+		compareMetrics(t, "testdata/scheduler_attempts_different_models_metrics")
+	})
+
+	t.Run("mixed success and failure attempts", func(t *testing.T) {
+		Reset()
+		for i := 0; i < 10; i++ {
+			RecordSchedulerAttempt(nil, "modelA", nil)
+		}
+		for i := 0; i < 5; i++ {
+			RecordSchedulerAttempt(errors.New("simulated scheduling failure"), "modelA", nil)
+		}
+		compareMetrics(t, "testdata/scheduler_attempts_total_metrics")
+	})
 }
 
 func TestPrefixCacheMetrics(t *testing.T) {
@@ -1118,6 +1209,47 @@ func TestFlowControlQueueBytesMetric(t *testing.T) {
 	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
+}
+
+func TestFlowControlPoolSaturationMetric(t *testing.T) {
+	Reset()
+
+	const pool = "test-pool"
+
+	// Set saturation to 0.5
+	RecordFlowControlPoolSaturation(pool, 0.5)
+	val, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value for pool saturation")
+	require.Equal(t, 0.5, val, "Gauge value should be 0.5")
+
+	// Update saturation to 1.0 (fully saturated)
+	RecordFlowControlPoolSaturation(pool, 1.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value after update")
+	require.Equal(t, 1.0, val, "Gauge value should be 1.0 after update")
+
+	// Update saturation to 0.0 (empty)
+	RecordFlowControlPoolSaturation(pool, 0.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value for empty pool")
+	require.Equal(t, 0.0, val, "Gauge value should be 0.0 for empty pool")
+
+	// Multiple pools
+	RecordFlowControlPoolSaturation("pool-a", 0.3)
+	RecordFlowControlPoolSaturation("pool-b", 0.7)
+
+	valA, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("pool-a"))
+	require.NoError(t, err, "Failed to get gauge value for pool-a")
+	require.Equal(t, 0.3, valA, "Gauge value should be 0.3 for pool-a")
+
+	valB, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("pool-b"))
+	require.NoError(t, err, "Failed to get gauge value for pool-b")
+	require.Equal(t, 0.7, valB, "Gauge value should be 0.7 for pool-b")
+
+	// Non-existent pool
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("non-existent"))
+	require.NoError(t, err, "Failed to get gauge value for non-existent pool")
+	require.Equal(t, 0.0, val, "Gauge value for non-existent pool should be 0")
 }
 
 func TestInferenceModelRewriteDecisionsTotalMetric(t *testing.T) {

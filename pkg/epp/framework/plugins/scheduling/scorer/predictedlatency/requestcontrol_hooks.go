@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -68,8 +69,9 @@ type predictedLatencyCtx struct {
 	tpotObservations          []float64
 	predictedTPOTObservations []float64
 
-	// promptText is the cached plain-text prompt, computed once per request.
-	promptText string
+	// promptText is the cached text representation of the request prompt, computed once.
+	promptText      string
+	inputTokenCount int // word-count estimate of prompt length, cached for counter bookkeeping
 
 	prefixCacheScoresForEndpoints map[string]float64
 
@@ -83,16 +85,23 @@ type predictedLatencyCtx struct {
 
 	// boolean set if request has valid endpoint based on predictions
 	hasValidEndpoint bool
+
+	// Snapshots of per-pod token-in-flight counters captured at dispatch time (PreRequest).
+	// Used when building training entries so that training data reflects scheduling-time load.
+	prefillTokensAtDispatch          int64 // snapshot from decode pod counter (used for TPOT training + prediction)
+	prefillTokensAtDispatchOnPrefill int64 // snapshot from prefill pod counter (used for TTFT training in disaggregated mode)
+	decodeTokensAtDispatch           int64
 }
 
 func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
-	var prompt string
+	var promptText string
 	if request.Body != nil {
-		prompt = request.Body.PromptText()
+		promptText = request.Body.PromptText()
 	}
 	return &predictedLatencyCtx{
 		schedulingRequest:             *request,
-		promptText:                    prompt,
+		promptText:                    promptText,
+		inputTokenCount:               len(strings.Fields(promptText)),
 		lastSeenMetrics:               make(map[string]*fwkdl.Metrics),
 		prefixCacheScoresForEndpoints: make(map[string]float64),
 		predictionsForScheduling:      make(map[string]endpointPredictionResult),
@@ -157,7 +166,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		id := request.Headers[reqcommon.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Info("PredictedLatency.PreRequest: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
+		logger.V(logutil.DEBUG).Info("PredictedLatency.PreRequest: Failed to get SLO context for request", "error", err, "requestID", id)
 		return
 	}
 
@@ -178,6 +187,20 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	predictedLatencyCtx.schedulingResult = schedulingResult
 	predictedLatencyCtx.requestReceivedTimestamp = time.Now()
 	refreshLastSeenMetrics(ctx, predictedLatencyCtx)
+
+	// Update per-pod token-in-flight counters and snapshot for training.
+	// prefillTokensInFlight is tracked on both the prefill pod (if disaggregated) and the decode pod.
+	// decodeTokensInFlight is zeroed out — it is only accurate in pure streaming mode,
+	// and kv_cache_percentage already captures decode load sufficiently.
+	decodePodKey := endpointName.String()
+	if predictedLatencyCtx.prefillTargetMetadata != nil {
+		prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
+		t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
+		predictedLatencyCtx.prefillTokensAtDispatchOnPrefill = t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Load()
+	}
+	t.podCounter(&t.prefillTokensInFlight, decodePodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
+	predictedLatencyCtx.prefillTokensAtDispatch = t.podCounter(&t.prefillTokensInFlight, decodePodKey).Load()
+	predictedLatencyCtx.decodeTokensAtDispatch = 0
 
 	processPreRequestForLatencyPrediction(ctx, predictedLatencyCtx)
 }
@@ -205,12 +228,21 @@ func (t *PredictedLatency) ResponseStreaming(ctx context.Context, request *sched
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		id := request.Headers[reqcommon.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseStreaming: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
+		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseStreaming: Failed to get SLO context for request", "error", err, "requestID", id)
 		return
 	}
 
 	if predictedLatencyCtx.ttft == 0 {
 		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		// In disaggregated streaming mode the prefill pod's work is done once TTFT is observed.
+		// Decrement its counter here so it accurately reflects current prefill load.
+		// In non-streaming mode TTFT and completion coincide, so ResponseComplete handles it.
+		if t.config.StreamingMode && predictedLatencyCtx.prefillTargetMetadata != nil {
+			prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
+			if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
+				t.prefillTokensInFlight.Delete(prefillPodKey)
+			}
+		}
 	} else {
 		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
@@ -231,7 +263,7 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		id := request.Headers[reqcommon.RequestIdHeaderKey]
-		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: Failed to get SLO context for request", "error", err.Error(), "requestID", id)
+		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseComplete: Failed to get SLO context for request", "error", err, "requestID", id)
 		return
 	}
 	now := time.Now()
@@ -275,10 +307,28 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 				0, // not used for TPOT prediction
 				0, // TPOT does not use prefix cache score
 			)
+			entry.PrefillTokensInFlight = predictedLatencyCtx.prefillTokensAtDispatch
+			entry.DecodeTokensInFlight = predictedLatencyCtx.decodeTokensAtDispatch
 			if err := t.latencypredictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 				logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
 			}
 		}
+	}
+
+	// Decrement per-pod token-in-flight counters now that the request is complete.
+	// Also clean up the map entry if the counter reaches zero, preventing stale entries
+	// from accumulating when pods are removed.
+	decodePodKey := targetMetadata.NamespacedName.String()
+	// In streaming mode the prefill pod counter was already decremented at first-token time
+	// (ResponseStreaming). In non-streaming mode, decrement it here at completion.
+	if !t.config.StreamingMode && predictedLatencyCtx.prefillTargetMetadata != nil {
+		prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
+		if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
+			t.prefillTokensInFlight.Delete(prefillPodKey)
+		}
+	}
+	if t.podCounter(&t.prefillTokensInFlight, decodePodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
+		t.prefillTokensInFlight.Delete(decodePodKey)
 	}
 
 	id := request.Headers[reqcommon.RequestIdHeaderKey]

@@ -115,6 +115,7 @@ class Settings:
     ENSEMBLE_MODE: bool = os.getenv("LATENCY_ENSEMBLE_MODE", "true").lower() == "true"
     MIN_SAMPLES_FOR_ENSEMBLE_SPLIT: int = int(os.getenv("LATENCY_MIN_SAMPLES_FOR_ENSEMBLE_SPLIT", "200"))
     TPOT_ZERO_TOKEN_COUNT: bool = os.getenv("LATENCY_TPOT_ZERO_TOKEN_COUNT", "true").lower() == "true"
+    ENABLE_TOKEN_IN_FLIGHT_FEATURES: bool = os.getenv("LATENCY_ENABLE_TOKEN_IN_FLIGHT_FEATURES", "true").lower() == "true"
 
     # Gated ensemble model paths (each wraps noqueue + queued sub-models)
     TTFT_GATED_MODEL_PATH: str = os.getenv("LATENCY_TTFT_GATED_MODEL_PATH", "/tmp/models/ttft_gated.joblib")
@@ -429,6 +430,15 @@ class LatencyPredictor:
         # Binary feature: gives the tree a clean signal to partition idle vs queued
         df['is_queued'] = (df['num_request_waiting'] > 0).astype(int)
 
+        # Token-in-flight columns: populate if present/enabled, else zero-fill for safety
+        tif_cols = []
+        if settings.ENABLE_TOKEN_IN_FLIGHT_FEATURES:
+            if 'prefill_tokens_in_flight' not in df.columns:
+                df['prefill_tokens_in_flight'] = 0
+            if 'decode_tokens_in_flight' not in df.columns:
+                df['decode_tokens_in_flight'] = 0
+            tif_cols = ['prefill_tokens_in_flight', 'decode_tokens_in_flight']
+
         if model_type == "ttft":
             # Create interaction: prefix score * input length
             # This captures that prefix caching benefit scales with input size
@@ -442,31 +452,20 @@ class LatencyPredictor:
             # make it categorical for tree models (safe for LGB, XGB with enable_categorical)
             df['prefill_score_bucket'] = pd.Categorical(df['prefill_score_bucket'], categories=[0,1,2,3], ordered=True)
 
-
-            # Return TTFT features with interaction and pod_type
-            feature_cols = [
-            'is_queued',
-            'kv_cache_percentage',
-            'input_token_length',
-            'num_request_waiting',
-            'num_request_running',
-            'prefix_cache_score',
-            'effective_input_tokens',
-            'prefill_score_bucket',
-            'pod_type_cat'
-            ]
+            feature_cols = (
+                ['is_queued', 'kv_cache_percentage', 'input_token_length',
+                 'num_request_waiting', 'num_request_running']
+                + tif_cols
+                + ['prefix_cache_score', 'effective_input_tokens', 'prefill_score_bucket', 'pod_type_cat']
+            )
             return df[feature_cols]
         else:  # tpot
-            # TPOT doesn't use prefix_cache_score, so no interaction needed
-            feature_cols = [
-                'is_queued',
-                'kv_cache_percentage',
-                'input_token_length',
-                'num_request_waiting',
-                'num_request_running',
-                'num_tokens_generated',
-                'pod_type_cat'
-            ]
+            feature_cols = (
+                ['is_queued', 'kv_cache_percentage', 'input_token_length',
+                 'num_request_waiting', 'num_request_running']
+                + tif_cols
+                + ['num_tokens_generated', 'pod_type_cat']
+            )
             return df[feature_cols]
 
 
@@ -536,16 +535,20 @@ class LatencyPredictor:
             elif self.model_type == ModelType.XGBOOST:  # XGBoost with quantile regression
                 if model_name == "ttft":
                      # enforce your TTFT feature order (including pod_type_cat)
+                        _tif = ["prefill_tokens_in_flight", "decode_tokens_in_flight"] if settings.ENABLE_TOKEN_IN_FLIGHT_FEATURES else []
                         if drop_queue_features:
-                            ttft_order = [
-                                "kv_cache_percentage", "input_token_length",
-                                "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"
-                            ]
+                            ttft_order = (
+                                ["kv_cache_percentage", "input_token_length", "num_request_running"]
+                                + _tif
+                                + ["prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"]
+                            )
                         else:
-                            ttft_order = [
-                                "is_queued", "kv_cache_percentage", "input_token_length", "num_request_waiting",
-                                "num_request_running", "prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"
-                            ]
+                            ttft_order = (
+                                ["is_queued", "kv_cache_percentage", "input_token_length",
+                                 "num_request_waiting", "num_request_running"]
+                                + _tif
+                                + ["prefix_cache_score", "effective_input_tokens", "prefill_score_bucket", "pod_type_cat"]
+                            )
                         if list(features.columns) != ttft_order:
                             try:
                                 features = features[ttft_order]
@@ -601,10 +604,20 @@ class LatencyPredictor:
 
 
                 elif model_name == "tpot":
+                    _tif = ["prefill_tokens_in_flight", "decode_tokens_in_flight"] if settings.ENABLE_TOKEN_IN_FLIGHT_FEATURES else []
                     if drop_queue_features:
-                        tpot_order = ["kv_cache_percentage","input_token_length","num_request_running","num_tokens_generated","pod_type_cat"]
+                        tpot_order = (
+                            ["kv_cache_percentage", "input_token_length", "num_request_running"]
+                            + _tif
+                            + ["num_tokens_generated", "pod_type_cat"]
+                        )
                     else:
-                        tpot_order = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting","num_request_running","num_tokens_generated","pod_type_cat"]
+                        tpot_order = (
+                            ["is_queued", "kv_cache_percentage", "input_token_length",
+                             "num_request_waiting", "num_request_running"]
+                            + _tif
+                            + ["num_tokens_generated", "pod_type_cat"]
+                        )
                     if list(features.columns) != tpot_order:
                         try:
                             features = features[tpot_order]
@@ -681,20 +694,23 @@ class LatencyPredictor:
 
             df_features = self._prepare_features_with_interaction(df_raw.copy(), model_type=model_name)
 
+            _tif = ['prefill_tokens_in_flight', 'decode_tokens_in_flight'] if settings.ENABLE_TOKEN_IN_FLIGHT_FEATURES else []
             if model_name == "ttft":
                 if self.model_type == ModelType.BAYESIAN_RIDGE:
-                    feature_cols = [
-                        'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
-                        'num_request_running','prefix_cache_score','effective_input_tokens','pod_type_cat'
-                    ]
+                    feature_cols = (
+                        ['is_queued','kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
+                        + _tif + ['prefix_cache_score','effective_input_tokens','pod_type_cat']
+                    )
                 else:
-                    feature_cols = [
-                        'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
-                        'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket','pod_type_cat'
-                    ]
+                    feature_cols = (
+                        ['is_queued','kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
+                        + _tif + ['prefix_cache_score','effective_input_tokens','prefill_score_bucket','pod_type_cat']
+                    )
             else:
-                feature_cols = ['is_queued','kv_cache_percentage', 'input_token_length',
-                               'num_request_waiting', 'num_request_running', 'num_tokens_generated', 'pod_type_cat']
+                feature_cols = (
+                    ['is_queued','kv_cache_percentage','input_token_length','num_request_waiting','num_request_running']
+                    + _tif + ['num_tokens_generated','pod_type_cat']
+                )
 
             X = df_features[feature_cols]
 
@@ -733,22 +749,26 @@ class LatencyPredictor:
             logging.info(f"Creating default '{model_type}' model with priors.")
             if model_type == "ttft":
                 features = pd.DataFrame({
-                    'kv_cache_percentage': [0.0, ],
-                    'input_token_length': [1, ],
-                    'num_request_waiting': [0, ],
-                    'num_request_running': [0, ],
-                    'prefix_cache_score': [0.0, ]  # Added prefix_cache_score
+                    'kv_cache_percentage': [0.0],
+                    'input_token_length': [1],
+                    'num_request_waiting': [0],
+                    'num_request_running': [0],
+                    'prefill_tokens_in_flight': [0],
+                    'decode_tokens_in_flight': [0],
+                    'prefix_cache_score': [0.0],
                 })
                 features = self._prepare_features_with_interaction(features, "ttft")
                 target = pd.Series([10.0])
-              
+
             else:
                 features = pd.DataFrame({
                     'kv_cache_percentage': [0.0],
-                    'input_token_length': [1],  # Added input_token_length
-                    'num_request_waiting': [0, ],
-                    'num_request_running': [0, ],
-                    'num_tokens_generated': [1,]
+                    'input_token_length': [1],
+                    'num_request_waiting': [0],
+                    'num_request_running': [0],
+                    'prefill_tokens_in_flight': [0],
+                    'decode_tokens_in_flight': [0],
+                    'num_tokens_generated': [1],
                 })
                 features = self._prepare_features_with_interaction(features, "tpot")
                 target = pd.Series([10.0])
@@ -779,14 +799,17 @@ class LatencyPredictor:
                 print(f"TTFT training data size: {len(df_ttft)} with sample data: {df_ttft.columns.tolist()}")
                 if len(df_ttft) >= settings.MIN_SAMPLES_FOR_RETRAIN:
                     # Updated TTFT features to include prefix_cache_score and pod_type_cat
-                    ttft_feature_cols_tree = [
-                    'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
-                    'num_request_running','prefix_cache_score','effective_input_tokens','prefill_score_bucket','pod_type_cat'
-                ]
-                    ttft_feature_cols_br = [
-                    'is_queued','kv_cache_percentage','input_token_length','num_request_waiting',
-                    'num_request_running','prefix_cache_score','effective_input_tokens'
-                ]
+                    _tif = ['prefill_tokens_in_flight', 'decode_tokens_in_flight'] if settings.ENABLE_TOKEN_IN_FLIGHT_FEATURES else []
+                    ttft_feature_cols_tree = (
+                        ['is_queued', 'kv_cache_percentage', 'input_token_length', 'num_request_waiting',
+                         'num_request_running'] + _tif +
+                        ['prefix_cache_score', 'effective_input_tokens', 'prefill_score_bucket', 'pod_type_cat']
+                    )
+                    ttft_feature_cols_br = (
+                        ['is_queued', 'kv_cache_percentage', 'input_token_length', 'num_request_waiting',
+                         'num_request_running'] + _tif +
+                        ['prefix_cache_score', 'effective_input_tokens']
+                    )
 
                     # Build X_ttft for all model types, then trim for BR
                     X_ttft = df_ttft[ttft_feature_cols_tree]
@@ -1013,10 +1036,13 @@ class LatencyPredictor:
                         raise ValueError(f"Missing required feature: {f}")
                     if not isinstance(features[f], (int, float)):
                         raise ValueError(f"Invalid type for feature {f}: expected number")
+                features.setdefault('prefill_tokens_in_flight', 0)
+                features.setdefault('decode_tokens_in_flight', 0)
 
-                # Updated TTFT features to include prefix_cache_score and pod_type
-                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','prefix_cache_score']
-                tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running','num_tokens_generated']
+                ttft_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running',
+                            'prefill_tokens_in_flight','decode_tokens_in_flight','prefix_cache_score']
+                tpot_cols = ['kv_cache_percentage','input_token_length','num_request_waiting','num_request_running',
+                            'prefill_tokens_in_flight','decode_tokens_in_flight','num_tokens_generated']
                 # Create DataFrames for predictions
                 df_ttft = pd.DataFrame([{col: features[col] for col in ttft_cols}])
                 # Add pod_type if present (otherwise _prepare_features_with_interaction will default to '')
@@ -1400,14 +1426,17 @@ class LatencyPredictor:
 
             if self.model_type == ModelType.BAYESIAN_RIDGE:
                 ttft_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
-                  "num_request_running","prefix_cache_score","effective_input_tokens"]
+                  "num_request_running","prefill_tokens_in_flight","decode_tokens_in_flight",
+                  "prefix_cache_score","effective_input_tokens"]
                 tpot_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
-                  "num_request_running","num_tokens_generated"]
+                  "num_request_running","prefill_tokens_in_flight","decode_tokens_in_flight","num_tokens_generated"]
             else:
                 ttft_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
-                  "num_request_running","prefix_cache_score","effective_input_tokens","prefill_score_bucket","pod_type_cat"]
+                  "num_request_running","prefill_tokens_in_flight","decode_tokens_in_flight",
+                  "prefix_cache_score","effective_input_tokens","prefill_score_bucket","pod_type_cat"]
                 tpot_feats = ["is_queued","kv_cache_percentage","input_token_length","num_request_waiting",
-                  "num_request_running","num_tokens_generated","pod_type_cat"]
+                  "num_request_running","prefill_tokens_in_flight","decode_tokens_in_flight",
+                  "num_tokens_generated","pod_type_cat"]
             emit_metrics(ttft_model, self.ttft_coefficients, ttft_feats, "ttft")
             emit_metrics(tpot_model, self.tpot_coefficients, tpot_feats, "tpot")
 
@@ -1549,6 +1578,8 @@ class TrainingEntry(BaseModel):
     num_tokens_generated: int = Field(..., ge=0)
     prefix_cache_score: float = Field(..., ge=0.0, le=1.0, description="Prefix cache hit ratio score (0.0 to 1.0)")
     pod_type: Optional[str] = Field(default="", description="Pod type: 'prefill', 'decode', or '' for monolithic")
+    prefill_tokens_in_flight: int = Field(default=0, ge=0)
+    decode_tokens_in_flight: int = Field(default=0, ge=0)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class PredictionRequest(BaseModel):

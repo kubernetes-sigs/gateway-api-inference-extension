@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -38,12 +39,19 @@ import (
 )
 
 type PredictedLatency struct {
-	typedName           plugin.TypedName
-	latencypredictor    latencypredictor.PredictorInterface
-	runningRequestLists sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
-	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
-	headroomStrategy    headroomStrategy
-	config              Config
+	typedName             plugin.TypedName
+	latencypredictor      latencypredictor.PredictorInterface
+	runningRequestLists   sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
+	sloContextStore       *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
+	headroomStrategy      headroomStrategy
+	config                Config
+	prefillTokensInFlight sync.Map // Key: pod NamespacedName.String(), Value: *atomic.Int64
+}
+
+// podCounter returns the atomic counter for the given pod key, creating it if necessary.
+func (t *PredictedLatency) podCounter(m *sync.Map, key string) *atomic.Int64 {
+	v, _ := m.LoadOrStore(key, new(atomic.Int64))
+	return v.(*atomic.Int64)
 }
 
 var _ framework.Scorer = &PredictedLatency{}
@@ -177,7 +185,26 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		if reason != ttlcache.EvictionReasonExpired {
 			return
 		}
-		predictedLatency.removeRequestFromQueue(item.Key(), item.Value())
+		plCtx := item.Value()
+		predictedLatency.removeRequestFromQueue(item.Key(), plCtx)
+		// If PreRequest ran (counter was incremented), decrement on TTL expiry to prevent
+		// the counter from staying inflated for hung requests.
+		if plCtx.prefillTokensAtDispatch > 0 || plCtx.prefillTokensAtDispatchOnPrefill > 0 {
+			// Prefill pod: only if not already decremented at TTFT (streaming disaggregated path).
+			if plCtx.prefillTargetMetadata != nil && plCtx.ttft == 0 {
+				prefillPodKey := plCtx.prefillTargetMetadata.NamespacedName.String()
+				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, prefillPodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
+					predictedLatency.prefillTokensInFlight.Delete(prefillPodKey)
+				}
+			}
+			// Decode pod.
+			if plCtx.targetMetadata != nil {
+				decodePodKey := plCtx.targetMetadata.NamespacedName.String()
+				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, decodePodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
+					predictedLatency.prefillTokensInFlight.Delete(decodePodKey)
+				}
+			}
+		}
 	})
 
 	go predictedLatency.sloContextStore.Start()

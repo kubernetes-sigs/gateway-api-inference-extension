@@ -22,6 +22,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,6 +46,35 @@ import (
 	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
+
+func TestPoolGet_NoDeadlockWithConcurrentWrite(t *testing.T) {
+	pool := &datalayer.EndpointPool{
+		Namespace:   "default",
+		Selector:    map[string]string{"app": "vllm"},
+		TargetPorts: []int{8000},
+	}
+	ds := &datastore{pool: pool}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 1000; i++ {
+			ds.mu.Lock()
+			ds.pool = pool
+			ds.mu.Unlock()
+		}
+	}()
+
+	for i := 0; i < 1000; i++ {
+		_, _ = ds.PoolGet()
+	}
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("deadlock detected: PoolGet and concurrent writer did not complete within timeout")
+	}
+}
 
 func TestPool(t *testing.T) {
 	pool1Selector := map[string]string{"app": "vllm_v1"}
@@ -350,7 +380,7 @@ func TestMetrics(t *testing.T) {
 				ds := NewDatastore(ctx, epf, 0)
 				_ = ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(inferencePool))
 				for _, pod := range test.storePods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 				time.Sleep(1 * time.Second) // Give some time for the metrics to be fetched.
 				if test.predict == nil {
@@ -384,7 +414,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{},
 			wantPods:     []*corev1.Pod{pod1},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod1)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod1)
 			},
 		},
 		{
@@ -392,7 +422,7 @@ func TestPods(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantPods:     []*corev1.Pod{pod1, pod2},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod2)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod2)
 			},
 		},
 		{
@@ -427,7 +457,7 @@ func TestPods(t *testing.T) {
 					t.Error(err)
 				}
 				for _, pod := range test.existingPods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 
 				test.op(ctx, ds)
@@ -583,7 +613,7 @@ func TestEndpointMetadata(t *testing.T) {
 				},
 			},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod1)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod1)
 			},
 			pool: inferencePool,
 		},
@@ -617,7 +647,7 @@ func TestEndpointMetadata(t *testing.T) {
 				},
 			},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod1)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod1)
 			},
 			pool: inferencePoolMultiTarget,
 		},
@@ -675,7 +705,7 @@ func TestEndpointMetadata(t *testing.T) {
 				},
 			},
 			op: func(ctx context.Context, ds Datastore) {
-				ds.PodUpdateOrAddIfNotExist(pod2)
+				ds.PodUpdateOrAddIfNotExist(ctx, pod2)
 			},
 			pool: inferencePoolMultiTarget,
 		},
@@ -730,7 +760,7 @@ func TestEndpointMetadata(t *testing.T) {
 					t.Error(err)
 				}
 				for _, pod := range test.existingPods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 
 				test.op(ctx, ds)
@@ -889,7 +919,7 @@ func TestActivePortFiltering(t *testing.T) {
 
 				// Add all pods
 				for _, pod := range test.pods {
-					ds.PodUpdateOrAddIfNotExist(pod)
+					ds.PodUpdateOrAddIfNotExist(ctx, pod)
 				}
 
 				// Check final endpoint count
@@ -989,7 +1019,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 			operations: []func(Datastore){
 				// Update the pod to reduce active ports from 3 to 1
 				func(ds Datastore) {
-					ds.PodUpdateOrAddIfNotExist(updatedPod1)
+					ds.PodUpdateOrAddIfNotExist(context.Background(), updatedPod1)
 				},
 			},
 			wantEndpointCount: 1, // Only port 8000 should remain active
@@ -1005,7 +1035,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 			operations: []func(Datastore){
 				// Update the pod to have no active ports
 				func(ds Datastore) {
-					ds.PodUpdateOrAddIfNotExist(inactivePod1)
+					ds.PodUpdateOrAddIfNotExist(context.Background(), inactivePod1)
 				},
 			},
 			wantEndpointCount: 0, // No ports should remain active
@@ -1038,7 +1068,7 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 				}
 
 				// Add the initial pod
-				ds.PodUpdateOrAddIfNotExist(test.initialPod)
+				ds.PodUpdateOrAddIfNotExist(ctx, test.initialPod)
 
 				// Wait a bit for the datastore to process the pod
 				time.Sleep(100 * time.Millisecond)
@@ -1064,6 +1094,67 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet verifies that PodUpdateOrAddIfNotExist
+// does not race with PoolSet. Before the fix, PodUpdateOrAddIfNotExist read ds.pool
+// without holding ds.mu, which could panic or corrupt data when PoolSet concurrently
+// replaces ds.pool under the write lock.
+// Run with: go test -race -run TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet
+func TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	ctx := context.Background()
+	period := time.Second
+	epf := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period)
+	ds := NewDatastore(ctx, epf, 0)
+
+	pool := pooltuil.InferencePoolToEndpointPool(
+		testutil.MakeInferencePool("pool1").
+			Namespace("default").
+			Selector(map[string]string{"app": "vllm"}).
+			TargetPorts(8000).ObjRef(),
+	)
+	_ = ds.PoolSet(ctx, fakeClient, pool)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "vllm"},
+		},
+		Status: corev1.PodStatus{
+			PodIP: "10.0.0.1",
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Goroutine 1: repeatedly call PoolSet (including nil to simulate reset).
+	go func() {
+		defer wg.Done()
+		for range 500 {
+			_ = ds.PoolSet(ctx, fakeClient, pool)
+			_ = ds.PoolSet(ctx, fakeClient, nil)
+			_ = ds.PoolSet(ctx, fakeClient, pool)
+		}
+	}()
+
+	// Goroutine 2: repeatedly call PodUpdateOrAddIfNotExist.
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			ds.PodUpdateOrAddIfNotExist(ctx, pod)
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestExtractActivePorts(t *testing.T) {
@@ -1185,10 +1276,9 @@ func TestExtractActivePorts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ports := extractActivePorts(tt.pod, tt.validPorts)
-
-			if !reflect.DeepEqual(ports, tt.expectedPorts) {
-				t.Errorf("ExtractActivePorts() ports = %v, want %v", ports, tt.expectedPorts)
+			activePorts := extractActivePorts(tt.pod, tt.validPorts)
+			if !reflect.DeepEqual(activePorts, tt.expectedPorts) {
+				t.Errorf("ExtractActivePorts() ports = %v, want %v", activePorts, tt.expectedPorts)
 			}
 		})
 	}

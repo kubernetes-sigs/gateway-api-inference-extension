@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package basemodelextractor
 
 import (
 	"context"
@@ -25,16 +25,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 )
 
-type ConfigMapReconciler struct {
+type configMapReconciler struct {
 	client.Reader
-	Datastore datastore.Datastore
+	adaptersStore adaptersStore
 }
 
-func (c *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (c *configMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling ConfigMap")
 
@@ -46,19 +44,19 @@ func (c *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	if errors.IsNotFound(err) || !configmap.DeletionTimestamp.IsZero() {
 		// ConfigMap object got deleted or is marked for deletion.
-		c.Datastore.ConfigMapDelete(configmap)
+		c.adaptersStore.configMapDelete(configmap)
 		return ctrl.Result{}, nil
 	}
 
 	// otherwise, add or update the entries of the configmap
-	if err := c.Datastore.ConfigMapUpdateOrAddIfNotExist(configmap); err != nil {
+	if err := c.adaptersStore.configMapUpdateOrAddIfNotExist(configmap); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to add or update ConfigMap - %w", err)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (c *ConfigMapReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (c *configMapReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.ConfigMap{}).
 		Complete(c)

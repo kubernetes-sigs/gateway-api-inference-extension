@@ -16,6 +16,22 @@ limitations under the License.
 
 package request
 
+import "strings"
+
 const (
 	RequestIdHeaderKey = "x-request-id"
 )
+
+// GetHeader returns the value for key from headers, with case-insensitive lookup.
+func GetHeader(headers map[string]string, key string) string {
+	if v, ok := headers[key]; ok {
+		return v
+	}
+	lower := strings.ToLower(key)
+	for k, v := range headers {
+		if strings.ToLower(k) == lower {
+			return v
+		}
+	}
+	return ""
+}

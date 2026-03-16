@@ -46,6 +46,8 @@ This guide describes the current state of exposed metrics and how to scrape them
 | inference_pool_per_pod_queue_size            | Gauge            | The total number of queue for each model server pod under the inference pool         | `model_server_pod`=&lt;model-server-pod-name&gt; <br> `name`=&lt;inference-pool-name&gt;                             | ALPHA       |
 | inference_pool_ready_pods                    | Gauge            | The number of ready pods for an inference server pool.            | `name`=&lt;inference-pool-name&gt;                                                 | ALPHA       |
 | inference_extension_info                     | Gauge            | The general information of the current build.                     | `commit`=&lt;hash-of-the-build&gt; <br> `build_ref`=&lt;ref-to-the-build&gt;        | ALPHA       |
+| inference_extension_scheduler_attempts_total | Counter          | Total number of scheduling attempts.                              | `status`=&lt;success\|failure&gt; <br> `target_model_name`=&lt;target-model-name&gt; <br> `pod_name`=&lt;pod-name&gt; <br> `namespace`=&lt;namespace&gt; <br> `port`=&lt;port&gt; | ALPHA       |
+
 
 ### Dynamic LoRA Adapter Sidecar
 
@@ -64,6 +66,7 @@ These metrics provide insights into the [Flow Control layer](flow-control.md) wi
 | inference_extension_flow_control_queue_bytes | Gauge | The current size in bytes of all requests being actively managed by the Flow Control layer. This includes requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_dispatch_cycle_duration_seconds | Histogram | The time taken for each dispatch cycle in the Flow Control layer. |  | ALPHA |
 | inference_extension_flow_control_request_enqueue_duration_seconds | Gauge | The time taken to enqueue requests by the EPP Flow Control layer. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
+| inference_extension_flow_control_pool_saturation | Gauge | Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated). | `inference_pool`=&lt;pool-name&gt; | ALPHA |
 
 
 ## Scrape Metrics & Pprof profiles

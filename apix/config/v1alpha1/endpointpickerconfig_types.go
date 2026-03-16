@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -271,13 +272,11 @@ type ParserConfig struct {
 // FlowControlConfig configures the Flow Control layer.
 type FlowControlConfig struct {
 	// +optional
-	// MaxBytes defines the global capacity limit for the Flow Control system.
-	// It represents the maximum aggregate byte size of all active requests across all priority
-	// levels. If this limit is exceeded, new requests will be rejected even if their specific
-	// priority band has capacity.
-	// If 0 or omitted, no global limit is enforced (unlimited).
-	// Default: 0 (unlimited).
-	MaxBytes *int64 `json:"maxBytes,omitempty"`
+	// MaxBytes is the global maximum number of bytes allowed across all priority levels.
+	// If exceeded, new requests will be rejected even if their specific priority band has capacity.
+	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
+	// If not specified, no global limits are enforced.
+	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
 
 	// +optional
 	// DefaultRequestTTL serves as a fallback timeout for requests that do not specify their own
@@ -315,9 +314,10 @@ type PriorityBandConfig struct {
 
 	// +optional
 	// MaxBytes is the maximum number of bytes allowed for this priority band.
-	// If 0 or omitted, the system default is used.
-	// Default: 1 GB.
-	MaxBytes *int64 `json:"maxBytes,omitempty"`
+	// If exceeded, new requests at this priority will be shed.
+	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
+	// If not specified, the system default is used (e.g., 1 GB).
+	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
 
 	// +optional
 	// FairnessPolicyRef specifies the name of the policy that governs flow selection.

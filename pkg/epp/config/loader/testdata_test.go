@@ -156,7 +156,7 @@ schedulingProfiles:
 featureGates:
 - flowControl
 flowControl:
-  maxBytes: 1024
+  maxBytes: "1024"
   defaultRequestTTL: 1m
 `
 
@@ -172,7 +172,7 @@ schedulingProfiles:
   - pluginRef: maxScore
 featureGates: [] # Explicitly empty
 flowControl:
-  maxBytes: 1024
+  maxBytes: "1024"
 `
 
 // successComplexFlowControlConfigText tests that Flow Control configuration with custom plugins is correctly loaded.

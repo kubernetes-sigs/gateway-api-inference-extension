@@ -46,6 +46,12 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
+const (
+	headerKeyContentLength       = "Content-Length"
+	extprocConnSetupTimeout      = 10 * time.Second
+	extPorcConnSetupPollInterval = 50 * time.Millisecond
+)
+
 // --- Request Builders (Protocol Level) ---
 
 // ReqLLM creates a sequence of gRPC messages representing a standard, streamed LLM inference request.
@@ -486,7 +492,7 @@ func ExtProcServerClient(
 		}
 		conn.Close()
 		return true
-	}, 5*time.Second, 50*time.Millisecond, "Server failed to bind port %s", serverAddr)
+	}, extprocConnSetupTimeout, extPorcConnSetupPollInterval, "Server failed to bind port %s", serverAddr)
 
 	// Connect client.
 	// Blocking dial is safe because we know the port is open.
@@ -544,7 +550,3 @@ func makeDestinationMetadata(endpoint string) *structpb.Struct {
 		},
 	}
 }
-
-const (
-	headerKeyContentLength = "Content-Length"
-)

@@ -18,6 +18,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -27,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
@@ -34,6 +36,7 @@ import (
 func TestHandleRequestBodyStreaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
+	b, _ := json.Marshal(map[string]any{"model": "foo"})
 	cases := []struct {
 		desc      string
 		streaming bool
@@ -42,15 +45,12 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 	}{
 		{
 			desc: "no-streaming",
-			body: mapToBytes(t, map[string]any{
-				"model": "foo",
-			}),
+			body: b,
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestBody{
 						RequestBody: &extProcPb.BodyResponse{
 							Response: &extProcPb.CommonResponse{
-								// Necessary so that the new headers are used in the routing decision.
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
 									SetHeaders: []*basepb.HeaderValueOption{
@@ -77,9 +77,7 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 		{
 			desc:      "streaming",
 			streaming: true,
-			body: mapToBytes(t, map[string]any{
-				"model": "foo",
-			}),
+			body:      b,
 			want: []*extProcPb.ProcessingResponse{
 				{
 					Response: &extProcPb.ProcessingResponse_RequestHeaders{
@@ -88,6 +86,12 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
 									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key:      contentLengthHeader,
+												RawValue: []byte("15"),
+											},
+										},
 										{
 											Header: &basepb.HeaderValue{
 												Key:      ModelHeader,
@@ -113,9 +117,7 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 								BodyMutation: &extProcPb.BodyMutation{
 									Mutation: &extProcPb.BodyMutation_StreamedResponse{
 										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body: mapToBytes(t, map[string]any{
-												"model": "foo",
-											}),
+											Body:        b,
 											EndOfStream: true,
 										},
 									},
@@ -130,7 +132,8 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
 			modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-			srv := NewServer(tc.streaming, &fakeDatastore{}, []framework.RequestProcessor{modelToHeaderPlugin}, []framework.ResponseProcessor{})
+			baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+			srv := NewServer(tc.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
 				Request: framework.NewInferenceRequest(),
 			}
@@ -147,10 +150,4 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 			}
 		})
 	}
-}
-
-type fakeDatastore struct{}
-
-func (ds *fakeDatastore) GetBaseModel(modelName string) string {
-	return ""
 }
