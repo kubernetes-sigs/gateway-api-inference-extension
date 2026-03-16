@@ -507,7 +507,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.4.0-rc.3 
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.4.0-rc.3
         imagePullPolicy: Always
         args:
         - --pool-name
