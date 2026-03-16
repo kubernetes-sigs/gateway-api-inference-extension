@@ -449,6 +449,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(picker.RandomPickerType, picker.RandomPickerFactory)
 	fwkplugin.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
+	fwkplugin.Register(picker.AffinityWeightedPickerType, picker.AffinityWeightedPickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	fwkplugin.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
 	fwkplugin.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
