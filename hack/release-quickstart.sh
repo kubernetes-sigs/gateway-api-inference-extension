@@ -114,8 +114,8 @@ echo "Updating ${VLLM_SIM_DEPLOY} ..."
 # Update the imagePullPolicy on the line following the vLLM image.
 sed -i.bak "/llm-d\\/llm-d-inference-sim/{n;s|imagePullPolicy: .*|imagePullPolicy: ${VLLM_SIM_PULL_POLICY}|;}" "$VLLM_SIM_DEPLOY"
 
-# Update the container tag for lora-syncer in vLLM CPU and GPU deployment manifests.
-sed -i.bak -E "s|(gateway-api-inference-extension/lora-syncer:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
+# lora-syncer is deprecated and no longer receives release-tagged images, so
+# release prep must preserve the checked-in promoted tag.
 # Update the container image pull policy for lora-syncer in vLLM CPU and GPU deployment manifests.
 sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/lora-syncer/{n;s/Always/IfNotPresent/;}' "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
 
