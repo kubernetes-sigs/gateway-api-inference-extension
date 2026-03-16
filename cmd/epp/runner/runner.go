@@ -77,6 +77,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -474,6 +475,9 @@ func (r *Runner) registerInTreePlugins() {
 	// register request control pluigns
 	fwkplugin.Register(requestattributereporter.RequestAttributeReporterType, requestattributereporter.RequestAttributeReporterPluginFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
+	// register saturation detector plugins
+	fwkplugin.Register(concurrencydetector.ConcurrencyDetectorType, concurrencydetector.ConcurrencyDetectorFactory)
+	fwkplugin.Register(utilizationdetector.UtilizationDetectorType, utilizationdetector.UtilizationDetectorFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver.Options) (*configapi.EndpointPickerConfig, error) {

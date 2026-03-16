@@ -31,9 +31,12 @@ package utilizationdetector
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
@@ -65,6 +68,21 @@ type Config struct {
 	// Headroom defines the allowed burst capacity above thresholds for specific pod scheduling,
 	// expressed as a fraction in [0.0, 1.0].
 	Headroom float64
+}
+
+func UtilizationDetectorFactory(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	config := &Config{
+		QueueDepthThreshold:       DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: DefaultMetricsStalenessThreshold,
+		Headroom:                  DefaultHeadroom,
+	}
+	if len(params) > 0 {
+		if err := json.Unmarshal(params, config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal utilization detector config: %w", err)
+		}
+	}
+	return NewDetector(config, log.FromContext(handle.Context())), nil
 }
 
 var (
