@@ -355,7 +355,6 @@ func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *hand
 	return reqCtx, nil
 }
 
-// HandleResponseBodyComplete is called when the response body is fully received.
 func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyComplete")
@@ -367,6 +366,7 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 	}
 
 	d.runResponseCompletePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	reqCtx.Response.DynamicMetadata = response.DynamicMetadata
 
 	logger.V(logutil.DEBUG).Info("Exiting HandleResponseBodyComplete")
 	return reqCtx, nil

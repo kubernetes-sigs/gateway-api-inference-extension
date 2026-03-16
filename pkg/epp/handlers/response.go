@@ -41,7 +41,13 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 		reqCtx.Usage = *parsedResponse.Usage
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
-	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
+	reqCtx, err := s.director.HandleResponseBodyComplete(ctx, reqCtx)
+	if err == nil && reqCtx != nil && reqCtx.Response != nil && reqCtx.Response.DynamicMetadata != nil {
+		if len(reqCtx.respBodyResp) > 0 {
+			reqCtx.respBodyResp[len(reqCtx.respBodyResp)-1].DynamicMetadata = reqCtx.Response.DynamicMetadata
+		}
+	}
+	return reqCtx, err
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
