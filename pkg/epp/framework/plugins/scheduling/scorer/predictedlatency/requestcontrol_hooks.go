@@ -250,6 +250,9 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 	}
 
 	if response.EndOfStream {
+		// Track whether ResponseStreaming already handled TTFT (and prefill counter decrement).
+		ttftNotYetRecorded := predictedLatencyCtx.ttft == 0
+		// Only record TTFT training data in non-streaming mode.
 		if !t.config.StreamingMode {
 			processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 		}
@@ -299,12 +302,10 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 		}
 
 		// Decrement per-pod token-in-flight counters now that the request is complete.
-		// Also clean up the map entry if the counter reaches zero, preventing stale entries
-		// from accumulating when pods are removed.
 		decodePodKey := targetMetadata.NamespacedName.String()
-		// In streaming mode the prefill pod counter was already decremented at first-token time
-		// (ResponseStreaming). In non-streaming mode, decrement it here at completion.
-		if !t.config.StreamingMode && predictedLatencyCtx.prefillTargetMetadata != nil {
+		// If TTFT was not yet recorded when we entered EOS, the prefill pod counter
+		// was never decremented in ResponseStreaming — decrement it here.
+		if ttftNotYetRecorded && predictedLatencyCtx.prefillTargetMetadata != nil {
 			prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
 			if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
 				t.prefillTokensInFlight.Delete(prefillPodKey)
