@@ -56,7 +56,10 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 	t.Helper()
 	modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
 	require.NoError(t, err, "failed to create body-field-to-header plugin")
-	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin})
+
+	baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+
+	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin})
 }
 
 // NewBBRHarnessWithPlugins boots up an isolated BBR server with custom request plugins.
@@ -67,59 +70,63 @@ func NewBBRHarnessWithPlugins(t *testing.T, ctx context.Context, streaming bool,
 	port, err := integration.GetFreePort()
 	require.NoError(t, err, "failed to acquire free port for BBR server")
 
-	// 2. Configure BBR Server with both plugins
+	// 2. Configure BBR Server with plugins
 	runner := runserver.NewDefaultExtProcServerRunner(port, false)
 	runner.SecureServing = false
 	runner.Streaming = streaming
-
-	// Create BaseModelToHeaderPlugin for X-Gateway-Base-Model-Name
-	baseModelPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
-
-	// Combine provided plugins with the base model plugin
-	// The base model plugin should run after other plugins to extract base model from the target model
-	requestPlugins = append(requestPlugins, baseModelPlugin)
 	runner.RequestPlugins = requestPlugins
 
-	// Configure the BaseModelToHeaderPlugin with test data
-	// Create a test ConfigMap with model mappings
-	testConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-model-mappings",
-			Namespace: "default",
-			Labels: map[string]string{
-				"inference.networking.k8s.io/bbr-managed": "true",
+	// Find the BaseModelToHeaderPlugin in the requestPlugins to configure it
+	var baseModelToHeaderPlugin *basemodelextractor.BaseModelToHeaderPlugin
+	for _, plugin := range requestPlugins {
+		if p, ok := plugin.(*basemodelextractor.BaseModelToHeaderPlugin); ok {
+			baseModelToHeaderPlugin = p
+			break
+		}
+	}
+
+	// Configure the BaseModelToHeaderPlugin with test data if it exists
+	if baseModelToHeaderPlugin != nil {
+		// Create a test ConfigMap with model mappings
+		testConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-model-mappings",
+				Namespace: "default",
+				Labels: map[string]string{
+					"inference.networking.k8s.io/bbr-managed": "true",
+				},
 			},
-		},
-		Data: map[string]string{
-			"baseModel": "llama",
-			"adapters": `
+			Data: map[string]string{
+				"baseModel": "llama",
+				"adapters": `
 - sql-lora-sheddable
 - foo
 - 1
 `,
-		},
+			},
+		}
+
+		// Get the reconciler from the plugin and set it up with a fake manager
+		reconciler := baseModelToHeaderPlugin.GetReconciler()
+
+		// Create a fake client with the test ConfigMap
+		fakeClient := fake.NewClientBuilder().
+			WithObjects(testConfigMap).
+			Build()
+
+		// Set the Reader on the reconciler
+		reconciler.Reader = fakeClient
+
+		// Call Reconcile() to update the adapters store with test data
+		req := ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: testConfigMap.Namespace,
+				Name:      testConfigMap.Name,
+			},
+		}
+		_, err = reconciler.Reconcile(ctx, req)
+		require.NoError(t, err, "failed to configure base model plugin with test data via Reconcile")
 	}
-
-	// Get the reconciler from the plugin and set it up with a fake manager
-	reconciler := baseModelPlugin.GetReconciler()
-
-	// Create a fake client with the test ConfigMap
-	fakeClient := fake.NewClientBuilder().
-		WithObjects(testConfigMap).
-		Build()
-
-	// Set the Reader on the reconciler
-	reconciler.Reader = fakeClient
-
-	// Call Reconcile() to update the adapters store with test data
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{
-			Namespace: testConfigMap.Namespace,
-			Name:      testConfigMap.Name,
-		},
-	}
-	_, err = reconciler.Reconcile(ctx, req)
-	require.NoError(t, err, "failed to configure base model plugin with test data via Reconcile")
 
 	// 3. Start Server in Background
 	serverCtx, serverCancel := context.WithCancel(ctx)

@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
@@ -58,7 +59,8 @@ func TestBodyMutation_Unary(t *testing.T) {
 	ctx := context.Background()
 
 	plugin := &bodyMutatingPlugin{fieldName: "injected", fieldValue: "test-value"}
-	h := NewBBRHarnessWithPlugins(t, ctx, false, []framework.RequestProcessor{plugin})
+	baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+	h := NewBBRHarnessWithPlugins(t, ctx, false, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin})
 
 	body := map[string]any{"prompt": "hello"}
 	bodyBytes, _ := json.Marshal(body)
@@ -124,7 +126,8 @@ func TestBodyMutation_Streaming(t *testing.T) {
 	ctx := context.Background()
 
 	plugin := &bodyMutatingPlugin{fieldName: "injected", fieldValue: "test-value"}
-	h := NewBBRHarnessWithPlugins(t, ctx, true, []framework.RequestProcessor{plugin})
+	baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+	h := NewBBRHarnessWithPlugins(t, ctx, true, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin})
 
 	body := map[string]any{"prompt": "hello"}
 	bodyBytes, _ := json.Marshal(body)

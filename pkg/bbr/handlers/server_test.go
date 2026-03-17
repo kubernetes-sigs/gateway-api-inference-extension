@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 
 	basepb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -89,7 +90,7 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 										{
 											Header: &basepb.HeaderValue{
 												Key:      contentLengthHeader,
-												RawValue: []byte("15"),
+												RawValue: []byte(strconv.Itoa(len(b))),
 											},
 										},
 										{
