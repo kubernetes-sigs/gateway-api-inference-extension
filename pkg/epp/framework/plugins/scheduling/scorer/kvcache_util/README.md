@@ -8,16 +8,16 @@ It is registered as type `kv-cache-utilization-scorer` and runs as a scheduling 
 
 For each candidate endpoint, the plugin computes:
 
-\[
-\text{score(endpoint)} = 1 - \text{kvCacheUsagePercent}
-\]
+```
+  {score(endpoint)} = 1 - {kvCacheUsagePercent}
+```
 
 Where `kvCacheUsagePercent` is read from endpoint metrics.
 
 This means:
 
-- lower KV-cache usage \(\rightarrow\) higher score
-- higher KV-cache usage \(\rightarrow\) lower score
+- lower KV-cache usage -> higher score
+- higher KV-cache usage -> lower score
 
 ## Scheduling intent
 

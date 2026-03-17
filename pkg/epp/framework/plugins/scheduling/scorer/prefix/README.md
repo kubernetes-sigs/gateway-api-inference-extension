@@ -16,11 +16,7 @@ For each incoming request, the plugin:
 2. Splits input into fixed-size blocks (in tokens, approximated to characters).
 3. Builds a rolling hash chain across blocks (including model name and optional `cache_salt`).
 4. Looks up which pods are likely to already have each prefix block cached.
-5. Computes per-endpoint score as:
-
-   \[
-   \text{score(endpoint)} = \frac{\text{matched prefix blocks}}{\text{total prefix blocks}}
-   \]
+5. Computes per-endpoint score
 
 Higher score means more expected prefix-cache hits and lower prefill work.
 

@@ -13,12 +13,6 @@ For each candidate endpoint, the plugin checks endpoint metrics for the request'
 - `0.6`: target model is already waiting to be loaded (`WaitingModels` contains target)
 - `0.0`: endpoint is at capacity and target model is neither active nor waiting
 
-Capacity check is based on:
-
-\[
-|ActiveModels| + |WaitingModels| < MaxActiveModels
-\]
-
 ## Scheduling intent
 
 The scorer returns category `Affinity`, preferring endpoints with higher probability of immediate adapter reuse and lower model-load latency.
