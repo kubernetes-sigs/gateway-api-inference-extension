@@ -65,6 +65,8 @@ const (
 	testConfig   = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
+featureGates:
+  - disableDataLayer
 plugins:
   - type: queue-scorer
   - type: kv-cache-utilization-scorer

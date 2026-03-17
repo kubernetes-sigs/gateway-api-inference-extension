@@ -496,6 +496,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	}
 
 	loader.RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	loader.RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
 	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
 
