@@ -319,9 +319,9 @@ func TestDetector_TokenSaturation(t *testing.T) {
 
 			driveTokenLoad(ctx, detector, "endpoint-a", tc.requests)
 
-			candidates := make([]backendmetrics.PodMetrics, 0, len(tc.candidateEndpoints))
+			candidates := make([]fwkdl.Endpoint, 0, len(tc.candidateEndpoints))
 			for _, name := range tc.candidateEndpoints {
-				candidates = append(candidates, newFakePodMetric(name))
+				candidates = append(candidates, newFakeEndpoint(name))
 			}
 
 			got := detector.Saturation(ctx, candidates)
@@ -376,7 +376,7 @@ func TestDetector_TokenLifecycle(t *testing.T) {
 	ctx := context.Background()
 	detector := NewDetector(config)
 	endpointName := "token-lifecycle-endpoint"
-	candidates := []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}
+	candidates := []fwkdl.Endpoint{newFakeEndpoint(endpointName)}
 	targetEndpoint := newStubSchedulingEndpoint(endpointName)
 
 	// PreRequest adds tokens ("1234567890123456" = 10 tokens)
@@ -413,7 +413,7 @@ func TestDetector_TokenDeleteEndpoint(t *testing.T) {
 	ctx := context.Background()
 	detector := NewDetector(config)
 	endpointName := "token-delete-endpoint"
-	candidates := []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}
+	candidates := []fwkdl.Endpoint{newFakeEndpoint(endpointName)}
 
 	req := makeTokenRequest("req1", "1234567890123456")
 	req.RequestId = "req1"
