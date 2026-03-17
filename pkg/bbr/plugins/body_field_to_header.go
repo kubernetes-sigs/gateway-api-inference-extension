@@ -46,7 +46,7 @@ type BodyFieldToHeaderConfig struct {
 }
 
 // BodyFieldToHeaderPluginFactory defines the factory function for NewBodyFieldToHeaderPlugin.
-func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage) (framework.BBRPlugin, error) {
+func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage, _ framework.Handle) (framework.BBRPlugin, error) {
 	var config BodyFieldToHeaderConfig
 
 	if len(rawParameters) > 0 {

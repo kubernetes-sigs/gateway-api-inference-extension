@@ -21,6 +21,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
@@ -44,16 +47,32 @@ type BaseModelToHeaderPlugin struct {
 }
 
 // BaseModelToHeaderPluginFactory defines the factory function for BaseModelToHeaderPlugin
-func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage) (framework.BBRPlugin, error) {
-	return NewBaseModelToHeaderPlugin().WithName(name), nil
+func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle framework.Handle) (framework.BBRPlugin, error) {
+	plugin, err := NewBaseModelToHeaderPlugin(handle.ReconcilerBuilder)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin '%s' - %w", BaseModelToHeaderPluginType, err)
+	}
+
+	return plugin.WithName(name), nil
 }
 
 // NewBaseModelToHeaderPlugin returns a concrete *BaseModelToHeaderPlugin with an initialized adaptersStore.
-func NewBaseModelToHeaderPlugin() *BaseModelToHeaderPlugin {
+func NewBaseModelToHeaderPlugin(reconcilerBuilder func() (*builder.Builder, client.Reader)) (*BaseModelToHeaderPlugin, error) {
+	reconciler, clientReader := reconcilerBuilder()
+	adaptersStore := newAdaptersStore()
+	configMapReconciler := &configMapReconciler{
+		Reader:        clientReader,
+		adaptersStore: adaptersStore,
+	}
+
+	if err := reconciler.For(&corev1.ConfigMap{}).Complete(configMapReconciler); err != nil {
+		return nil, fmt.Errorf("failed to register configmap reconciler for plugin '%s' - %w", BaseModelToHeaderPluginType, err)
+	}
+
 	return &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: BaseModelToHeaderPluginType},
 		adaptersStore: newAdaptersStore(),
-	}
+	}, nil
 }
 
 // TypedName returns the type and name tuple of this plugin instance.

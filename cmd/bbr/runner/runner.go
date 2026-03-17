@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -179,6 +180,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 
+	bbrHandle := framework.NewBbrHandle(ctx, mgr)
+
 	// Register factories for all known in-tree BBR plugins
 	r.registerInTreePlugins()
 
@@ -194,8 +197,13 @@ func (r *Runner) Run(ctx context.Context) error {
 		r.requestPlugins = append(r.requestPlugins, modelToHeaderPlugin)
 
 		// Create BaseModelToHeaderPlugin instance for extracting the "model" field into X-Gateway-Base-Model-Name
-		// The plugin initializes its own adaptersStore internally
-		baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+		baseModelToHeaderPlugin, err := basemodelextractor.NewBaseModelToHeaderPlugin(func() (*builder.Builder, client.Reader) {
+			return ctrl.NewControllerManagedBy(mgr), mgr.GetAPIReader()
+		})
+		if err != nil {
+			setupLog.Error(err, "Failed to create plugin", "pluginType", basemodelextractor.BaseModelToHeaderPluginType)
+			return err
+		}
 
 		r.requestPlugins = append(r.requestPlugins, baseModelToHeaderPlugin)
 	} else {
@@ -207,7 +215,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
 				return err
 			}
-			instance, err := factory(s.Name, s.JSON)
+			instance, err := factory(s.Name, s.JSON, bbrHandle)
 			if err != nil {
 				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
 				return err
@@ -228,10 +236,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		Streaming:       opts.Streaming,
 		RequestPlugins:  r.requestPlugins,
 		ResponsePlugins: r.responsePlugins,
-	}
-	if err := serverRunner.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to setup BBR controllers")
-		return err
 	}
 
 	// Register health server.

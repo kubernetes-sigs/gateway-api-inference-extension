@@ -154,7 +154,7 @@ func TestBodyFieldToHeaderPluginFactory(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := BodyFieldToHeaderPluginFactory(tt.pluginName, tt.rawParams)
+			p, err := BodyFieldToHeaderPluginFactory(tt.pluginName, tt.rawParams, nil)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
