@@ -40,6 +40,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fcfwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
@@ -70,7 +71,7 @@ type Config struct {
 	Headroom float64
 }
 
-func UtilizationDetectorFactory(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
+func UtilizationDetectorFactory(name string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	config := &Config{
 		QueueDepthThreshold:       DefaultQueueDepthThreshold,
 		KVCacheUtilThreshold:      DefaultKVCacheUtilThreshold,
@@ -82,20 +83,18 @@ func UtilizationDetectorFactory(_ string, params json.RawMessage, handle fwkplug
 			return nil, fmt.Errorf("failed to unmarshal utilization detector config: %w", err)
 		}
 	}
-	return NewDetector(config, log.FromContext(handle.Context())), nil
+	return NewDetector(config, log.FromContext(handle.Context())).withName(name), nil
 }
 
 var (
-	_ framework.Filter = &Detector{}
-)
-
-var (
-	_ framework.Filter = &Detector{}
+	_ framework.Filter         = &Detector{}
+	_ fcfwk.SaturationDetector = &Detector{}
 )
 
 // Detector determines system saturation based on metrics of the given candidate pods.
 type Detector struct {
-	config *Config
+	config    *Config
+	typedName fwkplugin.TypedName
 }
 
 // NewDetector creates a new SaturationDetector.
@@ -109,15 +108,22 @@ func NewDetector(config *Config, logger logr.Logger) *Detector {
 
 	return &Detector{
 		config: config,
+		typedName: fwkplugin.TypedName{
+			Type: UtilizationDetectorType,
+			Name: UtilizationDetectorType,
+		},
 	}
+}
+
+// withName sets the name of the detector.
+func (d *Detector) withName(name string) *Detector {
+	d.typedName.Name = name
+	return d
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
 func (d *Detector) TypedName() fwkplugin.TypedName {
-	return fwkplugin.TypedName{
-		Type: UtilizationDetectorType,
-		Name: UtilizationDetectorType,
-	}
+	return d.typedName
 }
 
 // Saturation calculates the saturation level of the pool.

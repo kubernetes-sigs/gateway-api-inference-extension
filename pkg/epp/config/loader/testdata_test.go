@@ -243,6 +243,40 @@ parser:
   pluginRef: openaiParser
 `
 
+// successSaturationDetectorConfigText tests saturation detector instantiation.
+const successSaturationDetectorConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+featureGates:
+  - flowControl
+plugins:
+  - name: maxScore
+    type: max-score-picker
+  - name: my-detector
+    type: utilization-detector
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: maxScore
+flowControl:
+  saturationDetectorRef: my-detector
+`
+
+// successSaturationDetectorDefaultConfigText tests saturation detector defaulting.
+const successSaturationDetectorDefaultConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- flowControl
+`
+
 // --- Invalid Configurations (Syntax/Structure) ---
 
 // errorBadYamlText contains invalid YAML syntax.
@@ -598,4 +632,58 @@ schedulingProfiles:
   - pluginRef: maxScore
 parser:
   pluginRef: wrongParser # Wrong names
+`
+
+// errorSaturationDetectorWrongPluginTypeText references a plugin of the wrong type.
+const errorSaturationDetectorWrongPluginTypeText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: testScorer
+  type: test-scorer
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- flowControl
+flowControl:
+  saturationDetectorRef: testScorer # Wrong type
+`
+
+// errorSaturationDetectorMissingPluginText references a non-existent plugin.
+const errorSaturationDetectorMissingPluginText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- flowControl
+flowControl:
+  saturationDetectorRef: non-existent
+`
+
+// successSaturationDetectorFlowControlDisabledConfigText tests that saturation detector is initialized even if flowControl feature gate is disabled.
+const successSaturationDetectorFlowControlDisabledConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: my-detector
+  type: utilization-detector
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates: []
+flowControl:
+  saturationDetectorRef: my-detector
 `

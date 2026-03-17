@@ -51,15 +51,6 @@ func TestStringers(t *testing.T) {
 			want: "{PluginRef: test-ref, Weight: 2.50}",
 		},
 		{
-			name: "SaturationDetector",
-			obj: &SaturationDetector{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      0.8,
-				MetricsStalenessThreshold: metav1.Duration{Duration: 100 * time.Millisecond},
-			},
-			want: "{QueueDepthThreshold: 10, KVCacheUtilThreshold: 0.80, MetricsStalenessThreshold: 100ms}",
-		},
-		{
 			name: "FlowControlConfig",
 			obj: &FlowControlConfig{
 				MaxBytes:          resource.NewQuantity(1024, resource.DecimalSI),

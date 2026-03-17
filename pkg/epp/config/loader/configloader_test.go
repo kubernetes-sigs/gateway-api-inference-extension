@@ -53,12 +53,13 @@ import (
 // Define constants for test plugins.
 // Constants must match those used in testdata_test.go.
 const (
-	testPluginType     = "test-plugin"
-	testPickerType     = "test-picker"
-	testScorerType     = "test-scorer"
-	testProfileHandler = "test-profile-handler"
-	testSourceType     = "test-source"
-	testExtractorType  = "test-extractor"
+	testPluginType         = "test-plugin"
+	testPickerType         = "test-picker"
+	testScorerType         = "test-scorer"
+	testProfileHandler     = "test-profile-handler"
+	testSourceType         = "test-source"
+	testExtractorType      = "test-extractor"
+	testSaturationDetector = "test-saturation-detector"
 )
 
 // --- Test: Phase 1 (Raw Loading & Static Defaults) ---
@@ -173,6 +174,88 @@ func TestLoadRawConfiguration(t *testing.T) {
 				},
 				FlowControl: &configapi.FlowControlConfig{
 					SaturationDetectorRef: utilizationdetector.UtilizationDetectorType,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Success - SaturationDetector correctly configured",
+			configText: successSaturationDetectorConfigText,
+			want: &configapi.EndpointPickerConfig{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+					Kind:       "EndpointPickerConfig",
+				},
+				Plugins: []configapi.PluginSpec{
+					{Name: "maxScore", Type: "max-score-picker"},
+					{Name: "my-detector", Type: utilizationdetector.UtilizationDetectorType},
+				},
+				SchedulingProfiles: []configapi.SchedulingProfile{
+					{
+						Name: "default",
+						Plugins: []configapi.SchedulingPlugin{
+							{PluginRef: "maxScore"},
+						},
+					},
+				},
+				FlowControl: &configapi.FlowControlConfig{
+					SaturationDetectorRef: "my-detector",
+				},
+				FeatureGates: configapi.FeatureGates{
+					flowcontrol.FeatureGate,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Success - SaturationDetector default configuration",
+			configText: successSaturationDetectorDefaultConfigText,
+			want: &configapi.EndpointPickerConfig{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+					Kind:       "EndpointPickerConfig",
+				},
+				Plugins: []configapi.PluginSpec{
+					{Name: "maxScore", Type: "max-score-picker"},
+				},
+				SchedulingProfiles: []configapi.SchedulingProfile{
+					{
+						Name: "default",
+						Plugins: []configapi.SchedulingPlugin{
+							{PluginRef: "maxScore"},
+						},
+					},
+				},
+				FlowControl: nil,
+				FeatureGates: configapi.FeatureGates{
+					flowcontrol.FeatureGate,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Success - SaturationDetector with flowControl feature gate disabled",
+			configText: successSaturationDetectorFlowControlDisabledConfigText,
+			want: &configapi.EndpointPickerConfig{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
+					Kind:       "EndpointPickerConfig",
+				},
+				Plugins: []configapi.PluginSpec{
+					{Name: "maxScore", Type: "max-score-picker"},
+					{Name: "my-detector", Type: utilizationdetector.UtilizationDetectorType},
+				},
+				SchedulingProfiles: []configapi.SchedulingProfile{
+					{
+						Name: "default",
+						Plugins: []configapi.SchedulingPlugin{
+							{PluginRef: "maxScore"},
+						},
+					},
+				},
+				FeatureGates: configapi.FeatureGates{},
+				FlowControl: &configapi.FlowControlConfig{
+					SaturationDetectorRef: "my-detector",
 				},
 			},
 			wantErr: false,
@@ -357,6 +440,39 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			},
 		},
 		{
+			name:       "Success - SaturationDetector default configuration",
+			configText: successSaturationDetectorDefaultConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.FlowControl, "FlowControl should be defaulted")
+				require.Equal(t, utilizationdetector.UtilizationDetectorType, rawCfg.FlowControl.SaturationDetectorRef)
+				require.NotNil(t, cfg.SaturationDetector, "SaturationDetector should be instantiated")
+				require.Equal(t, utilizationdetector.UtilizationDetectorType, cfg.SaturationDetector.TypedName().Name)
+			},
+		},
+		{
+			name:       "Success - SaturationDetector explicit configuration",
+			configText: successSaturationDetectorConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.FlowControl)
+				require.Equal(t, "my-detector", rawCfg.FlowControl.SaturationDetectorRef)
+				require.NotNil(t, cfg.SaturationDetector)
+				require.Equal(t, "my-detector", cfg.SaturationDetector.TypedName().Name)
+			},
+		},
+		{
+			name:       "Success - SaturationDetector with flowControl feature gate disabled",
+			configText: successSaturationDetectorFlowControlDisabledConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				// Even if FG is disabled, we still instantiate SaturationDetector if it's in the config.
+				// This is because SaturationDetector is used by the main picker logic, independent of FlowControl queueing.
+				require.NotNil(t, cfg.SaturationDetector)
+				require.Equal(t, "my-detector", cfg.SaturationDetector.TypedName().Name)
+			},
+		},
+		{
 			name:       "Success - Parser Config",
 			configText: successParserConfigText,
 			wantErr:    false,
@@ -493,6 +609,16 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			configText: errorParserWrongPluginNameText,
 			wantErr:    true,
 		},
+		{
+			name:       "Error - SaturationDetector wrong plugin type",
+			configText: errorSaturationDetectorWrongPluginTypeText,
+			wantErr:    true,
+		},
+		{
+			name:       "Error (SaturationDetector) - Missing Plugin",
+			configText: errorSaturationDetectorMissingPluginText,
+			wantErr:    true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -616,6 +742,13 @@ func (m *mockExtractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint
 	return nil
 }
 
+// Mock SaturationDetector
+type mockSaturationDetector struct{ mockPlugin }
+
+func (m *mockSaturationDetector) Saturation(ctx context.Context, candidatePods []fwkdl.Endpoint) float64 {
+	return 0.0
+}
+
 func registerTestPlugins(t *testing.T) {
 	t.Helper()
 
@@ -660,6 +793,10 @@ func registerTestPlugins(t *testing.T) {
 
 	fwkplugin.Register(testExtractorType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		return &mockExtractor{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testExtractorType}}}, nil
+	})
+
+	fwkplugin.Register(testSaturationDetector, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &mockSaturationDetector{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testSaturationDetector}}}, nil
 	})
 
 	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {

@@ -306,11 +306,11 @@ func (fcc *FlowControlConfig) String() string {
 	var parts []string
 
 	if fcc.SaturationDetectorRef != "" {
-		parts = append(parts, fmt.Sprintf("SaturationDetectorRef: %s", fcc.SaturationDetectorRef))
+		parts = append(parts, "SaturationDetectorRef: "+fcc.SaturationDetectorRef)
 	}
 
 	if fcc.MaxBytes != nil {
-		parts = append(parts, fmt.Sprintf("MaxBytes: %d", fcc.MaxBytes.Value()))
+		parts = append(parts, "MaxBytes: "+fcc.MaxBytes.String())
 	} else {
 		parts = append(parts, "MaxBytes: unlimited")
 	}

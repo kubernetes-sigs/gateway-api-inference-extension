@@ -112,9 +112,6 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle fwkplugin.H
 	if err := ensureParser(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply parser defaults: %w", err)
 	}
-	if err := ensureSaturationDetector(cfg, handle, allPlugins); err != nil {
-		return fmt.Errorf("failed to apply saturation detector defaults: %w", err)
-	}
 	return nil
 }
 
@@ -207,7 +204,22 @@ func ensureFlowControlLayer(
 		}
 	}
 	if _, ok := allPlugins[registry.DefaultFairnessPolicyRef]; !ok {
-		return registerDefaultPlugin(cfg, handle, registry.DefaultFairnessPolicyRef)
+		if err := registerDefaultPlugin(cfg, handle, registry.DefaultFairnessPolicyRef); err != nil {
+			return err
+		}
+	}
+
+	if cfg.FlowControl == nil {
+		cfg.FlowControl = &configapi.FlowControlConfig{}
+	}
+	if cfg.FlowControl.SaturationDetectorRef == "" {
+		cfg.FlowControl.SaturationDetectorRef = utilizationdetector.UtilizationDetectorType
+	}
+
+	if _, ok := allPlugins[cfg.FlowControl.SaturationDetectorRef]; !ok {
+		if err := registerDefaultPlugin(cfg, handle, utilizationdetector.UtilizationDetectorType); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -229,25 +241,6 @@ func ensureParser(
 	}
 	if _, ok := allPlugins[parserConfig.PluginRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, openai.OpenAIParserType); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func ensureSaturationDetector(
-	cfg *configapi.EndpointPickerConfig,
-	handle fwkplugin.Handle,
-	allPlugins map[string]fwkplugin.Plugin,
-) error {
-	if cfg.FlowControl == nil {
-		cfg.FlowControl = &configapi.FlowControlConfig{}
-	}
-	if cfg.FlowControl.SaturationDetectorRef == "" {
-		cfg.FlowControl.SaturationDetectorRef = utilizationdetector.UtilizationDetectorType
-	}
-	if _, ok := allPlugins[cfg.FlowControl.SaturationDetectorRef]; !ok {
-		if err := registerDefaultPlugin(cfg, handle, utilizationdetector.UtilizationDetectorType); err != nil {
 			return err
 		}
 	}
