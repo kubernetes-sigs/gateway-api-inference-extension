@@ -46,6 +46,9 @@ type LLMRequest struct {
 	Headers map[string]string
 	// Request Objective
 	Objectives RequestObjectives
+	// RequestSizeBytes is the size of the raw request body in bytes when available.
+	// Used for token estimation (e.g. inputTokens ≈ RequestSizeBytes/4) without parsing body or calling PlainText().
+	RequestSizeBytes int
 }
 
 func (r *LLMRequest) String() string {

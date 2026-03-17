@@ -41,22 +41,38 @@ func NewSimpleTokenEstimator() TokenEstimator {
 	}
 }
 
+// Estimate returns the total estimated token count (input + output) for the request.
+// When RequestSizeBytes is set, input tokens are derived from request size (~4 bytes per token)
+// to avoid allocations. Otherwise, input tokens are estimated from prompt/message character count
+// using CharactersPerToken; output tokens are estimated as inputTokens * OutputRatio.
 func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
-	if request == nil || request.Body == nil {
+	if request == nil {
 		return 0
 	}
-	var chars int
-	switch {
-	case request.Body.Completions != nil:
-		chars = len(request.Body.Completions.Prompt)
-	case request.Body.ChatCompletions != nil:
-		for _, m := range request.Body.ChatCompletions.Messages {
-			chars += len(m.Content.PlainText())
+	// Prefer request body size when available: avoids PlainText() and reduces GC pressure.
+	var inputTokens int64
+	if request.RequestSizeBytes > 0 {
+		inputTokens = int64(request.RequestSizeBytes) / 4
+		if inputTokens < 1 {
+			inputTokens = 1
 		}
-	default:
-		chars = 0
+	} else if request.Body != nil {
+		// Fallback: character count from prompt or chat messages.
+		var chars int
+		switch {
+		case request.Body.Completions != nil:
+			chars = len(request.Body.Completions.Prompt)
+		case request.Body.ChatCompletions != nil:
+			for _, m := range request.Body.ChatCompletions.Messages {
+				chars += len(m.Content.PlainText())
+			}
+		default:
+			chars = 0
+		}
+		inputTokens = int64(math.Max(1, math.Round(float64(chars)/e.CharactersPerToken)))
+	} else {
+		return 0
 	}
-	inputTokens := int64(math.Max(1, math.Round(float64(chars)/e.CharactersPerToken)))
 	outputTokens := int64(math.Round(float64(inputTokens) * e.OutputRatio))
 	return inputTokens + outputTokens
 }
