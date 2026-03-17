@@ -101,7 +101,7 @@ func NewDetector(config Config) *Detector {
 		config.Headroom = DefaultHeadroom
 	}
 	if config.ConcurrencyMode == nil || (*config.ConcurrencyMode != Requests && *config.ConcurrencyMode != Tokens) {
-		config.ConcurrencyMode = ModePtr(DefaultConcurrencyMode)
+		config.ConcurrencyMode = modePtr(DefaultConcurrencyMode)
 	}
 	if config.MaxTokenConcurrency < 0 {
 		config.MaxTokenConcurrency = DefaultMaxTokenConcurrency

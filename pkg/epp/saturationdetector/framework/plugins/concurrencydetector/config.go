@@ -75,8 +75,8 @@ const (
 	Tokens ConcurrencyMode = "tokens"
 )
 
-// ModePtr returns a pointer to m for use in Config.ConcurrencyMode.
-func ModePtr(m ConcurrencyMode) *ConcurrencyMode {
+// modePtr returns a pointer to m for use in Config.ConcurrencyMode.
+func modePtr(m ConcurrencyMode) *ConcurrencyMode {
 	return &m
 }
 
