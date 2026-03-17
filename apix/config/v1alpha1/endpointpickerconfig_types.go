@@ -344,7 +344,7 @@ func (fcc *FlowControlConfig) String() string {
 
 	var parts []string
 	if fcc.MaxBytes != nil {
-		parts = append(parts, fmt.Sprintf("MaxBytes: %d", *fcc.MaxBytes))
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", fcc.MaxBytes.Value()))
 	} else {
 		parts = append(parts, "MaxBytes: unlimited")
 	}
@@ -393,7 +393,7 @@ func (pbc PriorityBandConfig) String() string {
 	parts = append(parts, fmt.Sprintf("Priority: %d", pbc.Priority))
 
 	if pbc.MaxBytes != nil {
-		parts = append(parts, fmt.Sprintf("MaxBytes: %d", *pbc.MaxBytes))
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", pbc.MaxBytes.Value()))
 	}
 
 	if pbc.FairnessPolicyRef != "" {
