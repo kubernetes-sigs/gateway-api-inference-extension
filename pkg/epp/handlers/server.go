@@ -57,9 +57,8 @@ func NewStreamingServer(datastore Datastore, director Director, parser fwkrh.Par
 
 type Director interface {
 	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseReceived(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseBodyStreaming(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
-	HandleResponseBodyComplete(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleResponseHeader(ctx context.Context, reqCtx *RequestContext) *RequestContext
+	HandleResponseBody(ctx context.Context, reqCtx *RequestContext, endOfStream bool) *RequestContext
 	GetRandomEndpoint() *fwkdl.EndpointMetadata
 }
 
@@ -188,9 +187,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			// Use a fresh context as the request context might be canceled (Client Disconnect).
 			// We only need logging from the original context.
 			cleanupCtx := log.IntoContext(context.Background(), logger)
-			if _, err := s.director.HandleResponseBodyComplete(cleanupCtx, reqCtx); err != nil {
-				logger.Error(err, "error in HandleResponseBodyComplete")
-			}
+			s.director.HandleResponseBody(cleanupCtx, reqCtx, true)
 		}
 	}(err, reqCtx)
 
@@ -267,16 +264,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}
 			reqCtx.RequestState = ResponseReceived
-
-			var responseErr error
-			reqCtx, responseErr = s.HandleResponseHeaders(ctx, reqCtx, v)
-			if responseErr != nil {
-				if logger.V(logutil.DEBUG).Enabled() {
-					logger.V(logutil.DEBUG).Error(responseErr, "Failed to process response headers", "request", req)
-				} else {
-					logger.V(1).Error(responseErr, "Failed to process response headers")
-				}
-			}
+			reqCtx = s.HandleResponseHeaders(ctx, reqCtx, v)
 			reqCtx.respHeaderResp = s.generateResponseHeaderResponse(reqCtx)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
@@ -284,26 +272,26 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			chunk := v.ResponseBody.Body
 
 			if reqCtx.modelServerStreaming {
-				s.HandleResponseBodyModelStreaming(ctx, reqCtx, chunk, endOfStream)
+				s.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
+				// For streaming response, we send response chunk back to envoy every time we received it.
 				reqCtx.respBodyResp = generateResponseBodyResponses(chunk, endOfStream)
 			} else {
 				body = append(body, chunk...)
 			}
 
+			// If this chunk marks the end of the stream, trigger the finalization logic.
 			if endOfStream {
-				err = s.finishResponse(ctx, reqCtx, body)
+				s.finishResponse(ctx, reqCtx, body, reqCtx.modelServerStreaming)
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
 			// For HTTP, the response trailer is not sent. Thus, this case will not be triggered.
 			// For gRPC(over HTTP2), the protocol relies on responseTrialers to determine whether a response is complete.
 			// More info: https://chromium.googlesource.com/external/github.com/grpc/grpc/+/HEAD/doc/PROTOCOL-HTTP2.md#responses
-			err = s.finishResponse(ctx, reqCtx, body)
-			if err == nil {
-				reqCtx.respTrailerResp = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ResponseTrailers{
-						ResponseTrailers: &extProcPb.TrailersResponse{},
-					},
-				}
+			s.finishResponse(ctx, reqCtx, body, reqCtx.modelServerStreaming)
+			reqCtx.respTrailerResp = &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_ResponseTrailers{
+					ResponseTrailers: &extProcPb.TrailersResponse{},
+				},
 			}
 		}
 
@@ -333,38 +321,21 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 // finishResponse ensures all post-response logic, such as metric recording
 // and state updates, is executed exactly once for the request lifecycle.
-func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestContext, body []byte) error {
+func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestContext, body []byte, modelStreaming bool) {
 	// Return early if the response has already been finished to prevent
 	// duplicate execution of side effects and metrics.
 	if reqCtx.ResponseComplete {
-		return nil
+		return
 	}
 
 	reqCtx.ResponseComplete = true
 	reqCtx.ResponseCompleteTimestamp = time.Now()
 	reqCtx.ResponseSize = len(body)
-
-	if reqCtx.modelServerStreaming {
-		if _, err := s.director.HandleResponseBodyComplete(ctx, reqCtx); err != nil {
-			log.FromContext(ctx).Error(err, "error in HandleResponseBodyComplete")
-		}
-		metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-		metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
-		metrics.RecordNormalizedTimePerOutputToken(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp, reqCtx.Usage.CompletionTokens)
-	} else {
+	reqCtx = s.HandleResponseBody(ctx, reqCtx, body, true)
+	if !modelStreaming {
+		// For non-streaming response, we send response back to envoy after receiving all the response body.
 		reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
-		if _, err := s.HandleResponseBody(ctx, reqCtx, body); err != nil {
-			return err
-		}
-		metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
-		metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
-		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
-		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
-		if reqCtx.Usage.PromptTokenDetails != nil {
-			metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokenDetails.CachedTokens)
-		}
 	}
-	return nil
 }
 
 // updateStateAndSendIfNeeded checks state and can send mutiple responses in a single pass, but only if ordered properly.

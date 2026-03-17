@@ -39,8 +39,8 @@ limitations under the License.
 //
 // # Consistency & Drift Warning
 //
-// The Detector relies on a strict symmetry between PreRequest (increment) and ResponseComplete (decrement) calls.
-// It assumes the EPP framework guarantees that every PreRequest is eventually paired with a ResponseComplete.
+// The Detector relies on a strict symmetry between PreRequest (increment) and ResponseBody on EndOfStream (decrement).
+// It assumes the EPP framework guarantees that every PreRequest is eventually paired with a final ResponseBody.
 //
 // If the application panics, crashes, or if the framework fails to invoke the completion hook for a request, the
 // internal counters for a endpoint will drift upwards. This can lead to a "false saturated" state where the detector
@@ -77,9 +77,9 @@ func ConcurrencyDetectorFactory(_ string, params json.RawMessage, handle fwkplug
 }
 
 var (
-	_ requestcontrol.PreRequest       = &Detector{}
-	_ requestcontrol.ResponseComplete = &Detector{}
-	_ framework.Filter                = &Detector{}
+	_ requestcontrol.PreRequest   = &Detector{}
+	_ requestcontrol.ResponseBody = &Detector{}
+	_ framework.Filter            = &Detector{}
 )
 
 // Detector implements a saturation detector and scheduling filter based on active request concurrency.
@@ -200,14 +200,18 @@ func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, 
 	}
 }
 
-// ResponseComplete decrements the atomic in-flight counter for the target endpoint.
-// For token mode, the estimate is recalculated from the immutable request.
-func (d *Detector) ResponseComplete(
+// ResponseBody decrements the atomic in-flight counter for the target endpoint when the response is endOfStream.
+// For token mode, the estimate is recalculated from the request; request may be nil in some paths and
+// TokenEstimator.Estimate returns 0 in that case (may contribute to drift).
+func (d *Detector) ResponseBody(
 	_ context.Context,
 	request *framework.LLMRequest,
-	_ *requestcontrol.Response,
+	resp *requestcontrol.Response,
 	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
+	if targetEndpoint == nil || resp == nil || !resp.EndOfStream {
+		return
+	}
 	eid := targetEndpoint.NamespacedName.String()
 	if *d.config.ConcurrencyMode == Tokens {
 		tokens := d.tokenEstimator.Estimate(request)

@@ -85,7 +85,7 @@ func pluginToLayerExecutionOrder(plugin plugin.Plugin) int {
 	if _, ok := plugin.(fwkrq.PreRequest); ok {
 		return RequestControlLayer
 	}
-	if _, ok := plugin.(fwkrq.ResponseReceived); ok {
+	if _, ok := plugin.(fwkrq.ResponseHeader); ok {
 		return RequestControlLayer
 	}
 

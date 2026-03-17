@@ -27,6 +27,7 @@ import (
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -203,7 +204,7 @@ func TestDetector_Saturation(t *testing.T) {
 }
 
 // TestDetector_Lifecycle verifies the full state transition cycle:
-// New -> PreRequest (Inc) -> ResponseComplete (Dec) -> DeleteEndpoint (Reset).
+// New -> PreRequest (Inc) -> ResponseBody EndOfStream (Dec) -> DeleteEndpoint (Reset).
 func TestDetector_Lifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -222,7 +223,7 @@ func TestDetector_Lifecycle(t *testing.T) {
 
 	// 3. Decrement (Available)
 	targetEndpoint := newStubSchedulingEndpoint(endpointName)
-	detector.ResponseComplete(ctx, nil, nil, targetEndpoint.metadata)
+	detector.ResponseBody(ctx, nil, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected 0.0 after completion")
 
 	// 4. Increment again -> Delete -> Verify Reset
@@ -364,7 +365,7 @@ func TestDetector_TokenFilter(t *testing.T) {
 	require.Len(t, kept, 0, "endpoint should be filtered at burst limit")
 }
 
-// TestDetector_TokenLifecycle verifies PreRequest/ResponseComplete with token ledger.
+// TestDetector_TokenLifecycle verifies PreRequest/ResponseBody (EndOfStream) token accounting.
 func TestDetector_TokenLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -383,8 +384,8 @@ func TestDetector_TokenLifecycle(t *testing.T) {
 	detector.PreRequest(ctx, req1, makeSchedulingResult(endpointName))
 	require.InDelta(t, 0.1, detector.Saturation(ctx, candidates), 1e-6, "saturation after 1 request (10 tokens)")
 
-	// ResponseComplete removes tokens
-	detector.ResponseComplete(ctx, req1, nil, targetEndpoint.metadata)
+	eos := &requestcontrol.Response{EndOfStream: true}
+	detector.ResponseBody(ctx, req1, eos, targetEndpoint.metadata)
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "saturation after completion")
 
 	// Multiple requests, complete some
@@ -394,10 +395,10 @@ func TestDetector_TokenLifecycle(t *testing.T) {
 	detector.PreRequest(ctx, req3, makeSchedulingResult(endpointName))
 	require.InDelta(t, 6.0/100.0, detector.Saturation(ctx, candidates), 1e-6, "6 tokens in flight")
 
-	detector.ResponseComplete(ctx, req2, nil, targetEndpoint.metadata)
+	detector.ResponseBody(ctx, req2, eos, targetEndpoint.metadata)
 	require.InDelta(t, 3.0/100.0, detector.Saturation(ctx, candidates), 1e-6, "3 tokens after one completion")
 
-	detector.ResponseComplete(ctx, req3, nil, targetEndpoint.metadata)
+	detector.ResponseBody(ctx, req3, eos, targetEndpoint.metadata)
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "empty after all completions")
 }
 
@@ -440,8 +441,8 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	// positive drift.
 	warmUpRes := makeSchedulingResult(endpointName)
 	warmUpEndpoint := newStubSchedulingEndpoint(endpointName)
-	detector.PreRequest(ctx, nil, warmUpRes)                          // Creates entry, count=1
-	detector.ResponseComplete(ctx, nil, nil, warmUpEndpoint.metadata) // Decrements, count=0
+	detector.PreRequest(ctx, nil, warmUpRes)                                                              // Creates entry, count=1
+	detector.ResponseBody(ctx, nil, &requestcontrol.Response{EndOfStream: true}, warmUpEndpoint.metadata) // Decrements, count=0
 
 	const (
 		numGoroutines = 50
@@ -468,7 +469,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 			defer wg.Done()
 			targetEndpoint := newStubSchedulingEndpoint(endpointName)
 			for range opsPerRoutine {
-				detector.ResponseComplete(ctx, nil, nil, targetEndpoint.metadata)
+				detector.ResponseBody(ctx, nil, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
 			}
 		}()
 	}
