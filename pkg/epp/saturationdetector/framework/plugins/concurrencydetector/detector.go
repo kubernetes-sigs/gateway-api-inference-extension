@@ -24,6 +24,9 @@ limitations under the License.
 //
 //	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity
 //
+// In token mode (ConcurrencyMode=tokens), both numerator and denominator are in tokens:
+// inflight token count per pool and MaxTokenConcurrency capacity.
+//
 // # Role in Scheduling (The Traffic Shaper)
 //
 // The Detector implements the Filter interface to protect individual endpoints.
@@ -258,7 +261,7 @@ func (ct *concurrencyTracker) inc(endpointID string) {
 	ct.add(endpointID, 1)
 }
 
-// Adds detla count for the given endpoint, creates if it doesnt exist
+// add adds delta to the inflight count for the given endpoint, creating the counter if it doesn't exist.
 func (ct *concurrencyTracker) add(endpointID string, delta int64) {
 	// Fast path: Try with read lock first.
 	ct.mu.RLock()

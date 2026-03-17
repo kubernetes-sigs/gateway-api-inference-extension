@@ -51,12 +51,13 @@ func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
 	}
 	// Prefer request body size when available: avoids PlainText() and reduces GC pressure.
 	var inputTokens int64
-	if request.RequestSizeBytes > 0 {
+	switch {
+	case request.RequestSizeBytes > 0:
 		inputTokens = int64(request.RequestSizeBytes) / 4
 		if inputTokens < 1 {
 			inputTokens = 1
 		}
-	} else if request.Body != nil {
+	case request.Body != nil:
 		// Fallback: character count from prompt or chat messages.
 		var chars int
 		switch {
@@ -70,7 +71,7 @@ func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
 			chars = 0
 		}
 		inputTokens = int64(math.Max(1, math.Round(float64(chars)/e.CharactersPerToken)))
-	} else {
+	default:
 		return 0
 	}
 	outputTokens := int64(math.Round(float64(inputTokens) * e.OutputRatio))
