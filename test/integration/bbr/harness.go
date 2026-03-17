@@ -23,8 +23,16 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
@@ -42,21 +50,76 @@ type BBRHarness struct {
 	grpcConn *grpc.ClientConn
 }
 
-// NewBBRHarness boots up an isolated BBR server on a random port.
-// streaming: determines if the BBR server runs in streaming mode or unary/buffered mode.
+// NewBBRHarness boots up an isolated BBR server on a random port with the default
+// BodyFieldToHeaderPlugin for model extraction.
 func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarness {
+	t.Helper()
+	modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
+	require.NoError(t, err, "failed to create body-field-to-header plugin")
+	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin})
+}
+
+// NewBBRHarnessWithPlugins boots up an isolated BBR server with custom request plugins.
+func NewBBRHarnessWithPlugins(t *testing.T, ctx context.Context, streaming bool, requestPlugins []framework.RequestProcessor) *BBRHarness {
 	t.Helper()
 
 	// 1. Allocate Free Port
 	port, err := integration.GetFreePort()
 	require.NoError(t, err, "failed to acquire free port for BBR server")
 
-	// 2. Configure BBR Server
-	// BBR is simpler than EPP; it doesn't need a K8s Manager.
+	// 2. Configure BBR Server with both plugins
 	runner := runserver.NewDefaultExtProcServerRunner(port, false)
 	runner.SecureServing = false
 	runner.Streaming = streaming
-	runner.Datastore = datastore.NewDatastore()
+
+	// Create BaseModelToHeaderPlugin for X-Gateway-Base-Model-Name
+	baseModelPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+
+	// Combine provided plugins with the base model plugin
+	// The base model plugin should run after other plugins to extract base model from the target model
+	requestPlugins = append(requestPlugins, baseModelPlugin)
+	runner.RequestPlugins = requestPlugins
+
+	// Configure the BaseModelToHeaderPlugin with test data
+	// Create a test ConfigMap with model mappings
+	testConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-model-mappings",
+			Namespace: "default",
+			Labels: map[string]string{
+				"inference.networking.k8s.io/bbr-managed": "true",
+			},
+		},
+		Data: map[string]string{
+			"baseModel": "llama",
+			"adapters": `
+- sql-lora-sheddable
+- foo
+- 1
+`,
+		},
+	}
+
+	// Get the reconciler from the plugin and set it up with a fake manager
+	reconciler := baseModelPlugin.GetReconciler()
+
+	// Create a fake client with the test ConfigMap
+	fakeClient := fake.NewClientBuilder().
+		WithObjects(testConfigMap).
+		Build()
+
+	// Set the Reader on the reconciler
+	reconciler.Reader = fakeClient
+
+	// Call Reconcile() to update the adapters store with test data
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: testConfigMap.Namespace,
+			Name:      testConfigMap.Name,
+		},
+	}
+	_, err = reconciler.Reconcile(ctx, req)
+	require.NoError(t, err, "failed to configure base model plugin with test data via Reconcile")
 
 	// 3. Start Server in Background
 	serverCtx, serverCancel := context.WithCancel(ctx)

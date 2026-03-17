@@ -30,29 +30,41 @@ import (
 const component = "bbr"
 
 var (
+	// --- Info Metrics ---
+	bbrInfo = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: component,
+			Name:      "info",
+			Help:      metricsutil.HelpMsgWithStability("General information of the current build of BBR.", compbasemetrics.ALPHA),
+		},
+		[]string{"commit", "build_ref"},
+	)
+
 	successCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: component,
 			Name:      "success_total",
-			Help:      metricsutil.HelpMsgWithStability("Count of successes pulling model name from body and injecting it in the request headers.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Count of time the request was processed successfully.", compbasemetrics.ALPHA),
 		},
 		[]string{},
 	)
-	modelNotInBodyCounter = prometheus.NewCounterVec(
+
+	bodyFieldNotFoundCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: component,
-			Name:      "model_not_in_body_total",
-			Help:      metricsutil.HelpMsgWithStability("Count of times the model was not present in the request body.", compbasemetrics.ALPHA),
+			Name:      "body_field_not_found_total",
+			Help:      metricsutil.HelpMsgWithStability("Count of times a field wasn't found in a request body.", compbasemetrics.ALPHA),
 		},
-		[]string{},
+		[]string{"field"},
 	)
-	modelNotParsedCounter = prometheus.NewCounterVec(
+
+	bodyFieldEmptyCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: component,
-			Name:      "model_not_parsed_total",
-			Help:      metricsutil.HelpMsgWithStability("Count of times the model was in the request body but we could not parse it.", compbasemetrics.ALPHA),
+			Name:      "body_field_empty_total",
+			Help:      metricsutil.HelpMsgWithStability("Count of times a field was found in a request body but was empty.", compbasemetrics.ALPHA),
 		},
-		[]string{},
+		[]string{"field"},
 	)
 
 	pluginProcessingLatencies = prometheus.NewHistogramVec(
@@ -66,56 +78,45 @@ var (
 		},
 		[]string{"extension_point", "plugin_type", "plugin_name"},
 	)
-
-	// TODO: Uncomment and use this metrics once the core server implementation has handling to skip body parsing if header exists.
-	/*
-		modelAlreadyPresentInHeaderCounter = prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Subsystem:      component,
-				Name:           "model_already_present_in_header_total",
-				Help:           "Count of times the model was already present in request headers.",
-			},
-			[]string{},
-		)
-	*/
 )
 
 var registerMetrics sync.Once
 
 // Register all metrics.
-func Register() {
+func Register(customCollectors ...prometheus.Collector) {
 	registerMetrics.Do(func() {
+		metrics.Registry.MustRegister(bbrInfo)
 		metrics.Registry.MustRegister(successCounter)
-		metrics.Registry.MustRegister(modelNotInBodyCounter)
-		metrics.Registry.MustRegister(modelNotParsedCounter)
+		metrics.Registry.MustRegister(bodyFieldNotFoundCounter)
+		metrics.Registry.MustRegister(bodyFieldEmptyCounter)
 		metrics.Registry.MustRegister(pluginProcessingLatencies)
-		// metrics.Registry.MustRegister(modelAlreadyPresentInHeaderCounter)
+		for _, collector := range customCollectors {
+			metrics.Registry.MustRegister(collector)
+		}
 	})
 }
 
-// RecordSuccessCounter records the number of successful requests to inject the model name into request headers.
+// RecordBBRInfo records bbr build info.
+func RecordBBRInfo(commitSha, buildRef string) {
+	bbrInfo.WithLabelValues(commitSha, buildRef).Set(1)
+}
+
+// RecordSuccessCounter records the number of times the request was processed successfully.
 func RecordSuccessCounter() {
 	successCounter.WithLabelValues().Inc()
 }
 
-// RecordModelNotInBodyCounter records the number of times the model was not found in the request body.
-func RecordModelNotInBodyCounter() {
-	modelNotInBodyCounter.WithLabelValues().Inc()
+// RecordBodyFieldNotFound records the number of times a field wasn't found in a request body.
+func RecordBodyFieldNotFound(fieldName string) {
+	bodyFieldNotFoundCounter.WithLabelValues(fieldName).Inc()
 }
 
-// RecordModelNotParsedCounter records the number of times the model was found in the body but it could not be parsed.
-func RecordModelNotParsedCounter() {
-	modelNotParsedCounter.WithLabelValues().Inc()
+// RecordBodyFieldEmpty records the number of times a field was found in a request body but was empty.
+func RecordBodyFieldEmpty(fieldName string) {
+	bodyFieldEmptyCounter.WithLabelValues(fieldName).Inc()
 }
 
 // RecordPluginProcessingLatency records the processing latency for a BBR plugin.
 func RecordPluginProcessingLatency(extensionPoint, pluginType, pluginName string, duration time.Duration) {
 	pluginProcessingLatencies.WithLabelValues(extensionPoint, pluginType, pluginName).Observe(duration.Seconds())
 }
-
-/*
-// RecordModelAlreadyInHeaderCounter records the number of times the model was already found in the request headers.
-func RecordModelAlreadyInHeaderCounter() {
-	modelAlreadyPresentInHeaderCounter.WithLabelValues().Inc()
-}
-*/

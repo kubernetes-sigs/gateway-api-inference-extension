@@ -63,16 +63,14 @@ import (
 
 const ConcurrencyDetectorType = "concurrency-detector"
 
-func init() {
-	fwkplugin.Register(ConcurrencyDetectorType, func(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
-		var cfg Config
-		if len(params) > 0 {
-			if err := json.Unmarshal(params, &cfg); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal concurrency detector config: %w", err)
-			}
+func ConcurrencyDetectorFactory(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	var cfg Config
+	if len(params) > 0 {
+		if err := json.Unmarshal(params, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal concurrency detector config: %w", err)
 		}
-		return NewDetector(cfg), nil
-	})
+	}
+	return NewDetector(cfg), nil
 }
 
 var (

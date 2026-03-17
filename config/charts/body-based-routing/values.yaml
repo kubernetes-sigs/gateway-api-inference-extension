@@ -14,11 +14,13 @@ bbr:
     # Log verbosity
     v: 3
 
-  # Plugin configuration (transitional - currently runs no-op default plugin)
-  plugins:
-    - type: default-bbr
-      name: default-bbr
-      json: {"v":0, "no-op":true}
+  tracing:
+    enabled: false
+    otelServiceName: "gateway-api-inference-extension/bbr"
+    otelExporterEndpoint: "http://localhost:4317"
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "0.1"
 
 provider:
   name: none

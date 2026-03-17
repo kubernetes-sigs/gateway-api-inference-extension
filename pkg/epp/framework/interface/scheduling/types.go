@@ -49,6 +49,18 @@ type LLMRequest struct {
 	// RequestSizeBytes is the size of the raw request body in bytes when available.
 	// Used for token estimation (e.g. inputTokens ≈ RequestSizeBytes/4) without parsing body or calling PlainText().
 	RequestSizeBytes int
+	// TokenizedPrompt contains the tokenization results if external tokenization is enabled.
+	// This is nil if tokenization was not performed or if the tokenizer is not configured.
+	TokenizedPrompt *TokenizedPrompt
+}
+
+// TokenizedPrompt contains the result of tokenizing the request prompt.
+// It is populated by external tokenization plugins (e.g., via a PrepareData plugin)
+// and consumed by scheduling plugins that benefit from actual token data
+// (e.g., prefix cache scoring, latency prediction).
+type TokenizedPrompt struct {
+	// TokenIDs are the token IDs for the prompt.
+	TokenIDs []uint32
 }
 
 func (r *LLMRequest) String() string {
@@ -72,6 +84,41 @@ type LLMRequestBody struct {
 	Responses *ResponsesRequest `json:"responses,omitempty"`
 	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
+
+	// ParsedBody contains the unmarshaled request payload.
+	// Note: Because this handles multiple protocols, this field is strictly expected
+	// to be either a map[string]any (for HTTP/JSON) or a proto.Message (for gRPC).
+	ParsedBody any `json:"-"`
+}
+
+// PromptText returns a plain-text representation of the prompt from whichever
+// API type is populated, analogous to CacheSalt().
+func (r *LLMRequestBody) PromptText() string {
+	switch {
+	case r.Completions != nil:
+		return r.Completions.Prompt
+	case r.ChatCompletions != nil:
+		var sb strings.Builder
+		for _, msg := range r.ChatCompletions.Messages {
+			text := msg.Content.PlainText()
+			if text != "" {
+				sb.WriteString(text)
+				sb.WriteString(" ")
+			}
+		}
+		return sb.String()
+	case r.Responses != nil:
+		if s, ok := r.Responses.Input.(string); ok {
+			return s
+		}
+		b, _ := json.Marshal(r.Responses.Input)
+		return string(b)
+	case r.Conversations != nil:
+		b, _ := json.Marshal(r.Conversations.Items)
+		return string(b)
+	default:
+		return ""
+	}
 }
 
 func (r *LLMRequestBody) CacheSalt() string {

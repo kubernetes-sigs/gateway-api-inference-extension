@@ -25,6 +25,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
+
+	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
@@ -42,13 +44,13 @@ func TestBodyBasedRouting(t *testing.T) {
 		{
 			name:         "success: extracts model and sets header",
 			req:          integration.ReqLLMUnary(logger, "test", "llama"),
-			wantResponse: ExpectBBRUnaryResponse("llama"),
+			wantResponse: ExpectBBRUnaryResponse("llama", "llama", "test"),
 			wantErr:      false,
 		},
 		{
 			name:         "noop: no model parameter in body",
 			req:          integration.ReqLLMUnary(logger, "test1", ""),
-			wantResponse: ExpectBBRUnaryResponse(""), // Expect no headers.
+			wantResponse: ExpectBBRUnaryResponse("", "", "test1"), // Expect no headers.
 			wantErr:      false,
 		},
 	}
@@ -68,6 +70,9 @@ func TestBodyBasedRouting(t *testing.T) {
 				require.NoError(t, err, "unexpected error during request processing")
 			}
 
+			// sort headers in responses for deterministic tests
+			envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{tc.wantResponse})
+			envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{res})
 			if diff := cmp.Diff(tc.wantResponse, res, protocmp.Transform()); diff != "" {
 				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}
@@ -90,7 +95,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			name: "success: adds model header from simple body",
 			reqs: integration.ReqLLM(logger, "test", "foo", "bar"),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRHeader("foo"),
+				ExpectBBRHeader("foo", "llama", "64"),
 				ExpectBBRBodyPassThrough("test", "foo"),
 			},
 		},
@@ -102,7 +107,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				`ra-sheddable","prompt":"test","temperature":0}`,
 			),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRHeader("sql-lora-sheddable"),
+				ExpectBBRHeader("sql-lora-sheddable", "llama", "79"),
 				ExpectBBRBodyPassThrough("test", "sql-lora-sheddable"),
 			},
 		},
@@ -131,6 +136,9 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				require.NoError(t, err, "unexpected stream error")
 			}
 
+			// sort headers in responses for deterministic tests
+			envoytest.SortSetHeadersInResponses(tc.wantResponses)
+			envoytest.SortSetHeadersInResponses(responses)
 			if diff := cmp.Diff(tc.wantResponses, responses, protocmp.Transform()); diff != "" {
 				t.Errorf("Response mismatch (-want +got): %v", diff)
 			}

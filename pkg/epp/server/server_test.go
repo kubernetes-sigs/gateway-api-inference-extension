@@ -28,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -43,130 +44,254 @@ const (
 )
 
 func TestServer(t *testing.T) {
+	tests := []struct {
+		name              string
+		streamingResponse bool
+		hasTrailer        bool
+	}{
+		{
+			name:              "Streaming response with trailers",
+			streamingResponse: true,
+			hasTrailer:        true,
+		},
+		{
+			name:              "Non-streaming response with trailers",
+			streamingResponse: false,
+			hasTrailer:        true,
+		},
+		{
+			name:              "Streaming response without trailers",
+			streamingResponse: true,
+			hasTrailer:        false,
+		},
+		{
+			name:              "Non-streaming response without trailers",
+			streamingResponse: false,
+			hasTrailer:        false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runStreamingTest(t, test.streamingResponse, test.hasTrailer)
+		})
+	}
+}
+
+func runStreamingTest(t *testing.T, streamingResponse bool, hasTrailers bool) {
+	t.Helper()
+
 	expectedRequestHeaders := map[string]string{metadata.DestinationEndpointKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
 		"Content-Length": "42", ":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
 	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", "x-test": "body"}
 	expectedSchedulerHeaders := map[string]string{":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
 
-	t.Run("server", func(t *testing.T) {
-		model := testutil.MakeInferenceObjective("v1").
-			CreationTimestamp(metav1.Unix(1000, 0)).ObjRef()
+	model := testutil.MakeInferenceObjective("v1").
+		CreationTimestamp(metav1.Unix(1000, 0)).ObjRef()
 
-		director := &testDirector{}
-		ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
-			[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
-		streamingServer := handlers.NewStreamingServer(ds, director)
+	director := &testDirector{}
+	ctx, cancel, ds, _ := utils.PrepareForTestStreamingServer([]*v1alpha2.InferenceObjective{model},
+		[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
+	streamingServer := handlers.NewStreamingServer(ds, director, openai.NewOpenAIParser())
 
-		testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
-		process, conn := utils.GetStreamingServerClient(ctx, t)
-		defer conn.Close()
+	testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
+	process, conn := utils.GetStreamingServerClient(ctx, t)
+	defer conn.Close()
 
-		// Send request headers - no response expected
-		headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
-			"x-test":                   "body",
-			":method":                  "POST",
-			metadata.FlowFairnessIDKey: "a-very-interesting-fairness-id",
-			"x-request-id":             "test-request-id",
-		}, true)
-		request := &pb.ProcessingRequest{
-			Request: &pb.ProcessingRequest_RequestHeaders{
-				RequestHeaders: headers,
+	// Send request headers - no response expected
+	headers := utils.BuildEnvoyGRPCHeaders(map[string]string{
+		"x-test":                   "body",
+		":method":                  "POST",
+		metadata.FlowFairnessIDKey: "a-very-interesting-fairness-id",
+		"x-request-id":             "test-request-id",
+	}, true)
+	request := &pb.ProcessingRequest{
+		Request: &pb.ProcessingRequest_RequestHeaders{
+			RequestHeaders: headers,
+		},
+	}
+	err := process.Send(request)
+	if err != nil {
+		t.Error("Error sending request headers", err)
+	}
+
+	// Send request body
+	requestBody := "{\"model\":\"food-review\",\"prompt\":\"Is banana tasty?\"}"
+	expectedBody := "{\"model\":\"v1\",\"prompt\":\"Is banana tasty?\"}"
+	request = &pb.ProcessingRequest{
+		Request: &pb.ProcessingRequest_RequestBody{
+			RequestBody: &pb.HttpBody{
+				Body:        []byte(requestBody),
+				EndOfStream: true,
 			},
-		}
-		err := process.Send(request)
-		if err != nil {
-			t.Error("Error sending request headers", err)
-		}
+		},
+	}
+	err = process.Send(request)
+	if err != nil {
+		t.Error("Error sending request body", err)
+	}
 
-		// Send request body
-		requestBody := "{\"model\":\"food-review\",\"prompt\":\"Is banana tasty?\"}"
-		expectedBody := "{\"model\":\"v1\",\"prompt\":\"Is banana tasty?\"}"
-		request = &pb.ProcessingRequest{
-			Request: &pb.ProcessingRequest_RequestBody{
-				RequestBody: &pb.HttpBody{
-					Body:        []byte(requestBody),
-					EndOfStream: true,
-				},
-			},
+	// Receive request headers and check
+	responseReqHeaders, err := process.Recv()
+	if err != nil {
+		t.Error("Error receiving response", err)
+	} else {
+		if responseReqHeaders == nil || responseReqHeaders.GetRequestHeaders() == nil ||
+			responseReqHeaders.GetRequestHeaders().Response == nil ||
+			responseReqHeaders.GetRequestHeaders().Response.HeaderMutation == nil ||
+			responseReqHeaders.GetRequestHeaders().Response.HeaderMutation.SetHeaders == nil {
+			t.Error("Invalid request headers response")
+		} else if !utils.CheckEnvoyGRPCHeaders(t, responseReqHeaders.GetRequestHeaders().Response, expectedRequestHeaders) {
+			t.Error("Incorrect request headers")
 		}
-		err = process.Send(request)
-		if err != nil {
-			t.Error("Error sending request body", err)
-		}
+	}
 
-		// Receive request headers and check
-		responseReqHeaders, err := process.Recv()
-		if err != nil {
-			t.Error("Error receiving response", err)
+	// Receive request body and check
+	responseReqBody, err := process.Recv()
+	if err != nil {
+		t.Error("Error receiving response", err)
+	} else {
+		if responseReqBody == nil || responseReqBody.GetRequestBody() == nil ||
+			responseReqBody.GetRequestBody().Response == nil ||
+			responseReqBody.GetRequestBody().Response.BodyMutation == nil ||
+			responseReqBody.GetRequestBody().Response.BodyMutation.GetStreamedResponse() == nil {
+			t.Error("Invalid request body response")
 		} else {
-			if responseReqHeaders == nil || responseReqHeaders.GetRequestHeaders() == nil ||
-				responseReqHeaders.GetRequestHeaders().Response == nil ||
-				responseReqHeaders.GetRequestHeaders().Response.HeaderMutation == nil ||
-				responseReqHeaders.GetRequestHeaders().Response.HeaderMutation.SetHeaders == nil {
-				t.Error("Invalid request headers response")
-			} else if !utils.CheckEnvoyGRPCHeaders(t, responseReqHeaders.GetRequestHeaders().Response, expectedRequestHeaders) {
-				t.Error("Incorrect request headers")
+			body := responseReqBody.GetRequestBody().Response.BodyMutation.GetStreamedResponse().Body
+			if string(body) != expectedBody {
+				t.Errorf("Incorrect body %s expected %s", string(body), expectedBody)
 			}
 		}
+	}
 
-		// Receive request body and check
-		responseReqBody, err := process.Recv()
-		if err != nil {
-			t.Error("Error receiving response", err)
-		} else {
-			if responseReqBody == nil || responseReqBody.GetRequestBody() == nil ||
-				responseReqBody.GetRequestBody().Response == nil ||
-				responseReqBody.GetRequestBody().Response.BodyMutation == nil ||
-				responseReqBody.GetRequestBody().Response.BodyMutation.GetStreamedResponse() == nil {
-				t.Error("Invalid request body response")
-			} else {
-				body := responseReqBody.GetRequestBody().Response.BodyMutation.GetStreamedResponse().Body
-				if string(body) != expectedBody {
-					t.Errorf("Incorrect body %s expected %s", string(body), expectedBody)
-				}
-			}
+	// Check headers passed to the scheduler
+	for expectedKey, expectedValue := range expectedSchedulerHeaders {
+		got, ok := director.requestHeaders[expectedKey]
+		if !ok {
+			t.Errorf("Missing header %s", expectedKey)
+		} else if got != expectedValue {
+			t.Errorf("Incorrect value for header %s, want %s got %s", expectedKey, expectedValue, got)
 		}
+	}
 
-		// Check headers passed to the scheduler
-		for expectedKey, expectedValue := range expectedSchedulerHeaders {
-			got, ok := director.requestHeaders[expectedKey]
-			if !ok {
-				t.Errorf("Missing header %s", expectedKey)
-			} else if got != expectedValue {
-				t.Errorf("Incorrect value for header %s, want %s got %s", expectedKey, expectedValue, got)
-			}
-		}
-
-		// Send response headers
+	// Send response headers
+	if streamingResponse {
+		// If response is streaming, the header should have text/event-stream.
+		headers = utils.BuildEnvoyGRPCHeaders(map[string]string{"x-test": "body", ":method": "POST", "content-type": "text/event-stream"}, true)
+		expectedResponseHeaders = map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", "x-test": "body", "content-type": "text/event-stream"}
+	} else {
 		headers = utils.BuildEnvoyGRPCHeaders(map[string]string{"x-test": "body", ":method": "POST"}, false)
-		request = &pb.ProcessingRequest{
-			Request: &pb.ProcessingRequest_ResponseHeaders{
-				ResponseHeaders: headers,
+	}
+
+	request = &pb.ProcessingRequest{
+		Request: &pb.ProcessingRequest_ResponseHeaders{
+			ResponseHeaders: headers,
+		},
+	}
+	err = process.Send(request)
+	if err != nil {
+		t.Error("Error sending response", err)
+	}
+
+	// Receive response headers and check
+	response, err := process.Recv()
+	if err != nil {
+		t.Error("Error receiving response", err)
+	} else {
+		if response == nil || response.GetResponseHeaders() == nil || response.GetResponseHeaders().Response == nil ||
+			response.GetResponseHeaders().Response.HeaderMutation == nil ||
+			response.GetResponseHeaders().Response.HeaderMutation.SetHeaders == nil {
+			t.Error("Invalid response")
+		} else if !utils.CheckEnvoyGRPCHeaders(t, response.GetResponseHeaders().Response, expectedResponseHeaders) {
+			t.Error("Incorrect response headers")
+		}
+	}
+
+	// EndOfStream (eos) is true ONLY if we are NOT sending trailers later.
+	if err := sendResponseBody(process, []byte("test response body"), !hasTrailers); err != nil {
+		t.Fatalf("failed to send response body: %v", err)
+	}
+
+	switch {
+	case !hasTrailers:
+		if err := recvResponseBody(process); err != nil {
+			t.Fatalf("failed to receive response body (no trailers case): %v", err)
+		}
+	case streamingResponse:
+		// For streaming case, ext_proc will first receive the response before getting trailers.
+		if err := recvResponseBody(process); err != nil {
+			t.Fatalf("failed to receive response body (streaming case): %v", err)
+		}
+		if err := sendResponseTrailers(process); err != nil {
+			t.Fatalf("failed to send response trailers (streaming case): %v", err)
+		}
+		if err := recvResponseTrailers(process); err != nil {
+			t.Fatalf("failed to receive response trailers (streaming case): %v", err)
+		}
+	default:
+		// For non-streaming case, ext_proc will receive response until the trailer is sent by the client.
+		if err := sendResponseTrailers(process); err != nil {
+			t.Fatalf("failed to send response trailers (non-streaming case): %v", err)
+		}
+		if err := recvResponseBody(process); err != nil {
+			t.Fatalf("failed to receive response body (non-streaming case): %v", err)
+		}
+		if err := recvResponseTrailers(process); err != nil {
+			t.Fatalf("failed to receive response trailers (non-streaming case): %v", err)
+		}
+	}
+
+	cancel()
+	<-errChan
+	testListener.Close()
+}
+
+func sendResponseBody(stream pb.ExternalProcessor_ProcessClient, data []byte, eos bool) error {
+	req := &pb.ProcessingRequest{
+		Request: &pb.ProcessingRequest_ResponseBody{
+			ResponseBody: &pb.HttpBody{
+				Body:        data,
+				EndOfStream: eos,
 			},
-		}
-		err = process.Send(request)
-		if err != nil {
-			t.Error("Error sending response", err)
-		}
+		},
+	}
+	if err := stream.Send(req); err != nil {
+		return fmt.Errorf("sendBody failed: %w", err)
+	}
+	return nil
+}
 
-		// Receive response headers and check
-		response, err := process.Recv()
-		if err != nil {
-			t.Error("Error receiving response", err)
-		} else {
-			if response == nil || response.GetResponseHeaders() == nil || response.GetResponseHeaders().Response == nil ||
-				response.GetResponseHeaders().Response.HeaderMutation == nil ||
-				response.GetResponseHeaders().Response.HeaderMutation.SetHeaders == nil {
-				t.Error("Invalid response")
-			} else if !utils.CheckEnvoyGRPCHeaders(t, response.GetResponseHeaders().Response, expectedResponseHeaders) {
-				t.Error("Incorrect response headers")
-			}
-		}
+func sendResponseTrailers(stream pb.ExternalProcessor_ProcessClient) error {
+	req := &pb.ProcessingRequest{
+		Request: &pb.ProcessingRequest_ResponseTrailers{
+			ResponseTrailers: &pb.HttpTrailers{},
+		},
+	}
+	if err := stream.Send(req); err != nil {
+		return fmt.Errorf("sendTrailers failed: %w", err)
+	}
+	return nil
+}
 
-		cancel()
-		<-errChan
-		testListener.Close()
-	})
+func recvResponseBody(stream pb.ExternalProcessor_ProcessClient) error {
+	resp, err := stream.Recv()
+	if err != nil {
+		return fmt.Errorf("recvBody failed: %w", err)
+	}
+	if resp == nil || resp.GetResponseBody() == nil {
+		return fmt.Errorf("recvBody: expected ResponseBody, got %v", resp)
+	}
+	return nil
+}
+
+func recvResponseTrailers(stream pb.ExternalProcessor_ProcessClient) error {
+	resp, err := stream.Recv()
+	if err != nil {
+		return fmt.Errorf("recvTrailers failed: %w", err)
+	}
+	if resp == nil || resp.GetResponseTrailers() == nil {
+		return fmt.Errorf("recvTrailers: expected ResponseTrailers, got %v", resp)
+	}
+	return nil
 }
 
 type testDirector struct {

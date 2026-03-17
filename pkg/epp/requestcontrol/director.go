@@ -27,21 +27,23 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -70,6 +72,7 @@ func NewDirectorWithConfig(
 	datastore Datastore,
 	scheduler Scheduler,
 	admissionController AdmissionController,
+	parser fwkrh.Parser,
 	podLocator contracts.PodLocator,
 	config *Config,
 ) *Director {
@@ -79,6 +82,7 @@ func NewDirectorWithConfig(
 		admissionController:   admissionController,
 		podLocator:            podLocator,
 		requestControlPlugins: *config,
+		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
 	}
 }
@@ -102,6 +106,7 @@ type Director struct {
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
 	defaultPriority int
+	parser          fwkrh.Parser
 }
 
 // getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
@@ -127,7 +132,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger := log.FromContext(ctx)
 
 	// Parse, mutate, and extract the request body
-	llmRequestBody, err := d.processRequestBody(ctx, reqCtx)
+	llmRequestBody, err := d.processRequestBody(ctx, reqCtx, d.parser)
 	if err != nil {
 		return reqCtx, err
 	}
@@ -136,7 +141,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
-		RequestId:        reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:        reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		TargetModel:      reqCtx.TargetModelName,
 		Body:             llmRequestBody,
 		Headers:          reqCtx.Request.Headers,
@@ -154,15 +159,16 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 	candidatePods := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
 	if len(candidatePods) == 0 {
-		return reqCtx, errutil.Error{
-			Code: errutil.ServiceUnavailable,
+		return reqCtx, errcommon.Error{
+			Code: errcommon.ServiceUnavailable,
 			Msg:  "failed to find candidate pods for serving the request",
 		}
 	}
 	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
 
 	// Prepare per request data by running PrepareData plugins.
-	if d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) != nil {
+	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
+	if err != nil {
 		// Don't fail the request if PrepareData plugins fail.
 		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
 	}
@@ -170,12 +176,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	// Run admit request plugins
 	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
 		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
-		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "request cannot be admitted"}
+		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "request cannot be admitted"}
 	}
 
 	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
+		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
 	}
 
 	// Prepare Request (Populates RequestContext and call PreRequest plugins)
@@ -189,21 +195,24 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext) (*fwksched.LLMRequestBody, error) {
-	bodyMap := make(map[string]any)
-	if err := json.Unmarshal(reqCtx.Request.RawBody, &bodyMap); err != nil {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: "Error unmarshaling request body"}
-	}
-
-	if err := d.mutateAndRepackage(ctx, reqCtx, bodyMap); err != nil {
-		return nil, err
-	}
-
-	extractedBody, err := requtil.ExtractRequestBody(bodyMap, reqCtx.Request.Headers)
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwksched.LLMRequestBody, error) {
+	llmRequestBody, err := parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
 	if err != nil {
-		return nil, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
 	}
-	return extractedBody, nil
+
+	switch v := llmRequestBody.ParsedBody.(type) {
+	case proto.Message:
+		// Protos are not currently mutated, return as-is.
+		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+	case map[string]any:
+		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
+	}
+	return llmRequestBody, nil
 }
 
 func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.RequestContext, bodyMap map[string]any) error {
@@ -219,7 +228,7 @@ func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.Requ
 	requestBodyBytes, err := json.Marshal(bodyMap)
 	if err != nil {
 		logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
-		return errutil.Error{Code: errutil.Internal, Msg: "Error marshalling request body"}
+		return errcommon.Error{Code: errcommon.Internal, Msg: "Error marshalling request body"}
 	}
 
 	reqCtx.Request.RawBody = requestBodyBytes
@@ -232,9 +241,7 @@ func (d *Director) mutateModel(reqCtx *handlers.RequestContext, bodyMap map[stri
 	var ok bool
 	reqCtx.IncomingModelName, ok = bodyMap["model"].(string)
 	if !ok {
-
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
-
+		return reqCtx, errcommon.Error{Code: errcommon.BadRequest, Msg: "model not found in request body"}
 	}
 	if reqCtx.TargetModelName == "" {
 		// Default to incoming model name
@@ -287,7 +294,7 @@ func (d *Director) selectWeightedModel(models []v1alpha2.TargetModel) string {
 func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *fwksched.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	if result == nil || len(result.ProfileResults) == 0 {
-		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
+		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
 	targetMetadatas := []*fwkdl.EndpointMetadata{}
@@ -323,7 +330,7 @@ func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []fwk
 // HandleResponseReceived is called when the response headers are received.
 func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	response := &fwk.Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
 		ReqMetadata: reqCtx.Request.Metadata,
 	}
@@ -339,7 +346,7 @@ func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *hand
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
 	response := &fwk.Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
 		EndOfStream: reqCtx.ResponseComplete,
 	}
@@ -354,7 +361,7 @@ func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handl
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyComplete")
 	response := &fwk.Response{
-		RequestId:       reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:       reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:         reqCtx.Response.Headers,
 		DynamicMetadata: reqCtx.Response.DynamicMetadata,
 		Usage:           reqCtx.Usage,

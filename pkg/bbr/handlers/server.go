@@ -20,45 +20,82 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
+	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
-type Datastore interface {
-	GetBaseModel(modelName string) string
-}
+const (
+	ModelField      = "model"
+	ModelHeader     = "X-Gateway-Model-Name"
+	BaseModelHeader = "X-Gateway-Base-Model-Name"
 
-func NewServer(streaming bool, ds Datastore, requestPlugins []framework.PayloadProcessor) *Server {
+	contentLengthHeader = "Content-Length"
+
+	requestPluginExtensionPoint  = "request"
+	responsePluginExtensionPoint = "response"
+)
+
+func NewServer(streaming bool, requestPlugins []framework.RequestProcessor, responsePlugins []framework.ResponseProcessor) *Server {
 	return &Server{
-		streaming:      streaming,
-		ds:             ds,
-		requestPlugins: requestPlugins,
+		streaming:       streaming,
+		requestPlugins:  requestPlugins,
+		responsePlugins: responsePlugins,
 	}
 }
 
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
-	streaming      bool
-	ds             Datastore
-	requestPlugins []framework.PayloadProcessor
+	streaming       bool
+	requestPlugins  []framework.RequestProcessor
+	responsePlugins []framework.ResponseProcessor
+}
+
+// RequestContext stores context information during the lifetime of an HTTP request.
+type RequestContext struct {
+	RequestReceivedTimestamp  time.Time
+	ResponseCompleteTimestamp time.Time
+	Request                   *framework.InferenceRequest
+	Response                  *framework.InferenceResponse
 }
 
 func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
+
+	// Start tracing span for the request
+	tracer := otel.Tracer(
+		"gateway-api-inference-extension/bbr/extproc",
+		trace.WithInstrumentationVersion(version.BuildRef),
+		trace.WithInstrumentationAttributes(
+			attribute.String("commit-sha", version.CommitSHA),
+		),
+	)
+	ctx, span := tracer.Start(ctx, "gateway.request", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	loggerVerbose := logger.V(logutil.VERBOSE)
 	loggerVerbose.Info("Processing")
 
-	streamedBody := &streamedBody{}
+	reqCtx := &RequestContext{
+		Request:  framework.NewInferenceRequest(),
+		Response: framework.NewInferenceResponse(),
+	}
+	var body []byte
+	respStreamedBody := &streamedBody{}
 
 	for {
 		select {
@@ -79,30 +116,36 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		var err error
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
-			if s.streaming && !req.GetRequestHeaders().GetEndOfStream() {
-				// If streaming and the body is not empty, then headers are handled when processing request body.
-				loggerVerbose.Info("Received headers, passing off header processing until body arrives...")
+			if requestId := envoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey); len(requestId) > 0 {
+				logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestId)
+				loggerVerbose = logger.V(logutil.VERBOSE)
+				ctx = log.IntoContext(ctx, logger)
+			}
+
+			if s.streaming && !v.RequestHeaders.GetEndOfStream() {
+				// Capture headers now, but defer the response until body arrives.
+				_, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
+				loggerVerbose.Info("Captured headers, deferring response until body arrives...")
 			} else {
-				if requestId := requtil.ExtractHeaderValue(v, requtil.RequestIdHeaderKey); len(requestId) > 0 {
-					logger = logger.WithValues(requtil.RequestIdHeaderKey, requestId)
-					loggerVerbose = logger.V(logutil.VERBOSE)
-					ctx = log.IntoContext(ctx, logger)
-				}
-				responses, err = s.HandleRequestHeaders(req.GetRequestHeaders())
+				responses, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
 			}
 		case *extProcPb.ProcessingRequest_RequestBody:
-			if logger.V(logutil.DEBUG).Enabled() {
-				logger.V(logutil.DEBUG).Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
-			} else {
-				loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
+			loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
+			body = append(body, v.RequestBody.Body...)
+			if s.streaming && !v.RequestBody.EndOfStream {
+				continue
 			}
-			responses, err = s.processRequestBody(ctx, req.GetRequestBody(), streamedBody, logger)
+			responses, err = s.HandleRequestBody(ctx, reqCtx, body)
+			loggerVerbose.Info("Processing complete body")
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			responses, err = s.HandleRequestTrailers(req.GetRequestTrailers())
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
-			responses, err = s.HandleResponseHeaders(req.GetResponseHeaders())
+			responses, err = s.HandleResponseHeaders(reqCtx, req.GetResponseHeaders())
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			responses, err = s.HandleResponseBody(req.GetResponseBody())
+			loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
+			responses, err = s.processResponseBody(ctx, reqCtx, req.GetResponseBody(), respStreamedBody)
+		case *extProcPb.ProcessingRequest_ResponseTrailers:
+			responses, err = s.HandleResponseTrailers(req.GetResponseTrailers())
 		default:
 			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")
@@ -135,22 +178,21 @@ type streamedBody struct {
 	body []byte
 }
 
-func (s *Server) processRequestBody(ctx context.Context, body *extProcPb.HttpBody, streamedBody *streamedBody, logger logr.Logger) ([]*extProcPb.ProcessingResponse, error) {
-	loggerVerbose := logger.V(logutil.VERBOSE)
+func (s *Server) processResponseBody(ctx context.Context, reqCtx *RequestContext, body *extProcPb.HttpBody, streamedRespBody *streamedBody) ([]*extProcPb.ProcessingResponse, error) {
+	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
 
-	var requestBodyBytes []byte
+	var responseBodyBytes []byte
 	if s.streaming {
-		streamedBody.body = append(streamedBody.body, body.Body...)
-		// In the stream case, we can receive multiple request bodies.
+		streamedRespBody.body = append(streamedRespBody.body, body.Body...)
 		if body.EndOfStream {
-			loggerVerbose.Info("Flushing stream buffer")
-			requestBodyBytes = streamedBody.body
+			loggerVerbose.Info("Flushing response stream buffer")
+			responseBodyBytes = streamedRespBody.body
 		} else {
 			return nil, nil
 		}
 	} else {
-		requestBodyBytes = body.GetBody()
+		responseBodyBytes = body.GetBody()
 	}
 
-	return s.HandleRequestBody(ctx, requestBodyBytes)
+	return s.HandleResponseBody(ctx, reqCtx, responseBodyBytes)
 }

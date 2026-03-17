@@ -19,7 +19,6 @@ package runner
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -61,20 +60,24 @@ import (
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test/responsereceived"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/predictedlatency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test/filter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -118,6 +121,7 @@ type Runner struct {
 	requestControlConfig *requestcontrol.Config
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
+	parser               fwkrh.Parser
 
 	testOverrideSkipNameValidation bool
 }
@@ -164,7 +168,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	// Print all flag values
 	flags := make(map[string]any)
-	flag.VisitAll(func(f *flag.Flag) {
+	pflag.VisitAll(func(f *pflag.Flag) {
 		flags[f.Name] = f.Value
 	})
 	setupLog.Info("Flags processed", "flags", flags)
@@ -172,7 +176,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	logutil.InitLogging(&opts.ZapOptions)
 
 	if opts.Tracing {
-		err := tracing.InitTracing(ctx, setupLog)
+		err := tracing.InitTracing(ctx, setupLog, "gateway-api-inference-extension/epp")
 		if err != nil {
 			return fmt.Errorf("failed to init tracing %w", err)
 		}
@@ -338,6 +342,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		}
 		fc, err := fccontroller.NewFlowController(
 			ctx,
+			opts.PoolName,
 			eppConfig.FlowControlConfig.Controller,
 			registry, saturationDetector,
 			locator,
@@ -352,7 +357,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		admissionController = requestcontrol.NewLegacyAdmissionController(saturationDetector, locator)
 	}
 
-	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, locator, r.requestControlConfig)
+	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, r.parser, locator, r.requestControlConfig)
 
 	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
@@ -367,6 +372,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		RefreshPrometheusMetricsInterval: opts.RefreshPrometheusMetricsInterval,
 		MetricsStalenessThreshold:        opts.MetricsStalenessThreshold,
 		Director:                         director,
+		Parser:                           r.parser,
 		SaturationDetector:               saturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
 	}
@@ -434,8 +440,7 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 			setupLog.Error(err, "Failed to construct endpoint pool from options")
 			return nil, err
 		}
-		endpointPoolOption := datastore.WithEndpointPool(endpointPool)
-		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort, endpointPoolOption), nil
+		return datastore.NewDatastore(ctx, epFactory, modelServerMetricsPort).WithEndpointPool(endpointPool), nil
 	}
 }
 
@@ -455,6 +460,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
 	fwkplugin.Register(ordering.FCFSOrderingPolicyType, ordering.FCFSOrderingPolicyFactory)
 	fwkplugin.Register(ordering.EDFOrderingPolicyType, ordering.EDFOrderingPolicyFactory)
+	fwkplugin.Register(ordering.SLODeadlineOrderingPolicyType, ordering.SLODeadlineOrderingPolicyFactory)
 	// Latency predictor plugins
 	fwkplugin.Register(predictedlatency.PredictedLatencyPluginType, predictedlatency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
@@ -463,11 +469,15 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(testresponsereceived.DestinationEndpointServedVerifierType, testresponsereceived.DestinationEndpointServedVerifierFactory)
 	// register datalayer metrics collection plugins
 	fwkplugin.Register(sourcemetrics.MetricsDataSourceType, sourcemetrics.MetricsDataSourceFactory)
-	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.ModelServerExtractorFactory)
+	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.CoreMetricsExtractorFactory)
 	// register datalayer k8s notification source plugin
 	fwkplugin.Register(sourcenotifications.NotificationSourceType, sourcenotifications.NotificationSourceFactory)
 	// register request control pluigns
 	fwkplugin.Register(requestattributereporter.RequestAttributeReporterType, requestattributereporter.RequestAttributeReporterPluginFactory)
+	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
+	// register saturation detector plugins
+	fwkplugin.Register(concurrencydetector.ConcurrencyDetectorType, concurrencydetector.ConcurrencyDetectorFactory)
+	fwkplugin.Register(utilizationdetector.UtilizationDetectorType, utilizationdetector.UtilizationDetectorFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver.Options) (*configapi.EndpointPickerConfig, error) {
@@ -547,6 +557,7 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	r.applyDeprecatedSaturationConfig(cfg)
 
+	r.parser = handlers.NewParser(cfg.ParserConfig)
 	logger.Info("loaded configuration from file/text successfully")
 
 	return cfg, nil

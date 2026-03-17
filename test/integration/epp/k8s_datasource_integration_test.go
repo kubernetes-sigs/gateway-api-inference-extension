@@ -119,7 +119,7 @@ func setupIntegrationTest(t *testing.T, withReconciler bool) *testSetup {
 	t.Helper()
 
 	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+		t.Skip("Skipping integration test in short runMode")
 	}
 
 	uid := uuid.New().String()[:8] // create unique namespace

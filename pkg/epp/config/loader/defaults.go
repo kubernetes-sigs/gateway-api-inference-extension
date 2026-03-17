@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
@@ -103,6 +104,9 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle fwkplugin.H
 	}
 	if err := ensureFlowControlLayer(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply flow control system defaults: %w", err)
+	}
+	if err := ensureParser(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply parser defaults: %w", err)
 	}
 	return nil
 }
@@ -197,6 +201,29 @@ func ensureFlowControlLayer(
 	}
 	if _, ok := allPlugins[registry.DefaultFairnessPolicyRef]; !ok {
 		return registerDefaultPlugin(cfg, handle, registry.DefaultFairnessPolicyRef)
+	}
+	return nil
+}
+
+// ensureParser guarantees that parser is configured.
+// If the parser is not configured, the openAI parser is configured by default.
+func ensureParser(
+	cfg *configapi.EndpointPickerConfig,
+	handle fwkplugin.Handle,
+	allPlugins map[string]fwkplugin.Plugin,
+) error {
+	parserConfig := cfg.Parser
+	if parserConfig == nil {
+		parserConfig = &configapi.ParserConfig{
+			// Set default parser to openAI parser if the parser is not set in the config.
+			PluginRef: openai.OpenAIParserType,
+		}
+		cfg.Parser = parserConfig
+	}
+	if _, ok := allPlugins[parserConfig.PluginRef]; !ok {
+		if err := registerDefaultPlugin(cfg, handle, openai.OpenAIParserType); err != nil {
+			return err
+		}
 	}
 	return nil
 }

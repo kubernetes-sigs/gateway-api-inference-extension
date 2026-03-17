@@ -18,6 +18,7 @@ package latencypredictorasync
 
 import (
 	"context"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -55,18 +56,33 @@ type Config struct {
 	MetricsRefreshInterval time.Duration
 	// MaxBulkSize is the maximum number of predictions to send in a single bulk request.
 	MaxBulkSize int
+	// CoalesceWindow is how long the coalescer waits to accumulate concurrent
+	// PredictBulkStrict callers before firing one mega-batch HTTP call.
+	// Set to 0 to disable coalescing (each caller gets its own HTTP call).
+	CoalesceWindow time.Duration
+	// MaxCoalescedRows caps the total number of rows in one coalesced mega-batch,
+	// causing an early dispatch before the window expires.
+	// This is separate from MaxBulkSize (the per-caller row limit).
+	// Default 0 means no row cap (window-only dispatch).
+	MaxCoalescedRows int
+	// MaxConcurrentDispatches limits how many coalesced HTTP calls can be
+	// in-flight to the prediction server simultaneously. Defaults to 36.
+	MaxConcurrentDispatches int
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		TrainingURL:            "http://localhost:8000",
-		PredictionURLs:         []string{"http://localhost:8001"},
-		MaxSampleSize:          1000,
-		FlushInterval:          1 * time.Second,
-		MetricsRefreshInterval: 60 * time.Second,
-		UseNativeXGBoost:       true,
-		HTTPTimeout:            10 * time.Second,
-		MaxBulkSize:            100,
+		TrainingURL:             "http://localhost:8000",
+		PredictionURLs:          []string{"http://localhost:8001"},
+		MaxSampleSize:           1000,
+		FlushInterval:           1 * time.Second,
+		MetricsRefreshInterval:  60 * time.Second,
+		UseNativeXGBoost:        true,
+		HTTPTimeout:             10 * time.Second,
+		MaxBulkSize:             100,
+		CoalesceWindow:          1 * time.Millisecond,
+		MaxCoalescedRows:        0,
+		MaxConcurrentDispatches: 36,
 	}
 }
 
@@ -115,6 +131,23 @@ func ConfigFromEnv() *Config {
 			cfg.MaxBulkSize = size
 		}
 	}
+	if msStr := os.Getenv("LATENCY_COALESCE_WINDOW_MS"); msStr != "" {
+		if ms, err := strconv.Atoi(msStr); err == nil && ms >= 0 {
+			cfg.CoalesceWindow = time.Duration(ms) * time.Millisecond
+		}
+	}
+	if s := os.Getenv("LATENCY_MAX_COALESCED_ROWS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 0 {
+			cfg.MaxCoalescedRows = n
+		}
+	}
+	if s := os.Getenv("LATENCY_MAX_CONCURRENT_DISPATCHES"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			cfg.MaxConcurrentDispatches = n
+		} else {
+			log.Printf("WARNING: LATENCY_MAX_CONCURRENT_DISPATCHES=%q is invalid (must be > 0), using default %d", s, cfg.MaxConcurrentDispatches)
+		}
+	}
 	return cfg
 }
 
@@ -129,16 +162,18 @@ type PredictorInterface interface {
 // --- Data Models ---
 
 type TrainingEntry struct {
-	KVCachePercentage  float64   `json:"kv_cache_percentage"`
-	InputTokenLength   int       `json:"input_token_length"`
-	NumRequestWaiting  int       `json:"num_request_waiting"`
-	NumRequestRunning  int       `json:"num_request_running"`
-	NumTokensGenerated int       `json:"num_tokens_generated"`
-	ActualTTFT         float64   `json:"actual_ttft_ms"`
-	ActualTPOT         float64   `json:"actual_tpot_ms"`
-	PrefixCacheScore   float64   `json:"prefix_cache_score"`
-	PodType            string    `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
-	Timestamp          time.Time `json:"timestamp"`
+	KVCachePercentage     float64   `json:"kv_cache_percentage"`
+	InputTokenLength      int       `json:"input_token_length"`
+	NumRequestWaiting     int       `json:"num_request_waiting"`
+	NumRequestRunning     int       `json:"num_request_running"`
+	NumTokensGenerated    int       `json:"num_tokens_generated"`
+	ActualTTFT            float64   `json:"actual_ttft_ms"`
+	ActualTPOT            float64   `json:"actual_tpot_ms"`
+	PrefixCacheScore      float64   `json:"prefix_cache_score"`
+	PodType               string    `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
+	PrefillTokensInFlight int64     `json:"prefill_tokens_in_flight"`
+	DecodeTokensInFlight  int64     `json:"decode_tokens_in_flight"`
+	Timestamp             time.Time `json:"timestamp"`
 }
 
 type BulkTrainingRequest struct {
@@ -146,13 +181,15 @@ type BulkTrainingRequest struct {
 }
 
 type PredictionRequest struct {
-	KVCachePercentage  float64 `json:"kv_cache_percentage"`
-	InputTokenLength   int     `json:"input_token_length"`
-	NumRequestWaiting  int     `json:"num_request_waiting"`
-	NumRequestRunning  int     `json:"num_request_running"`
-	NumTokensGenerated int     `json:"num_tokens_generated"`
-	PrefixCacheScore   float64 `json:"prefix_cache_score"`
-	PodType            string  `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
+	KVCachePercentage     float64 `json:"kv_cache_percentage"`
+	InputTokenLength      int     `json:"input_token_length"`
+	NumRequestWaiting     int     `json:"num_request_waiting"`
+	NumRequestRunning     int     `json:"num_request_running"`
+	NumTokensGenerated    int     `json:"num_tokens_generated"`
+	PrefixCacheScore      float64 `json:"prefix_cache_score"`
+	PodType               string  `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
+	PrefillTokensInFlight int64   `json:"prefill_tokens_in_flight"`
+	DecodeTokensInFlight  int64   `json:"decode_tokens_in_flight"`
 }
 
 type PredictionResponse struct {

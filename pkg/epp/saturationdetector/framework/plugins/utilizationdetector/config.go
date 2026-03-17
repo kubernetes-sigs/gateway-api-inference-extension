@@ -31,4 +31,6 @@ const (
 	// Given the pod metrics refresh interval is 50ms, a threshold slightly above
 	// that should be fine.
 	DefaultMetricsStalenessThreshold = 200 * time.Millisecond
+	// DefaultHeadroom is the default burst allowance (0%).
+	DefaultHeadroom = 0.0
 )

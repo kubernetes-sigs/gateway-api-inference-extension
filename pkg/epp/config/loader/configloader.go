@@ -32,8 +32,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 )
@@ -95,7 +97,7 @@ func InstantiateAndConfigure(
 	if err := applySystemDefaults(rawConfig, handle); err != nil {
 		return nil, fmt.Errorf("system default application failed: %w", err)
 	}
-	logger.Info("Effective configuration loaded", "config", rawConfig)
+	logger.Info("Instantiated all plugins and applied system defaults. Effective raw configuration", "config", rawConfig.String())
 
 	if err := validateConfig(rawConfig); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -121,11 +123,17 @@ func InstantiateAndConfigure(
 		}
 	}
 
+	parserConfig, err := buildParserConfig(rawConfig.Parser, handle)
+	if err != nil {
+		return nil, fmt.Errorf("parse config build failed: %w", err)
+	}
+
 	return &config.Config{
 		SchedulerConfig:          schedulerConfig,
 		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
 		DataConfig:               dataConfig,
 		FlowControlConfig:        flowControlConfig,
+		ParserConfig:             parserConfig,
 	}, nil
 }
 
@@ -251,6 +259,23 @@ func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilization
 	}
 
 	return cfg
+}
+
+func buildParserConfig(rawParserConfig *configapi.ParserConfig, handle fwkplugin.Handle) (*handlers.Config, error) {
+	if rawParserConfig == nil {
+		return nil, errors.New("parserConfig is not configured")
+	}
+	plugin, ok := handle.GetAllPluginsWithNames()[rawParserConfig.PluginRef]
+	if !ok {
+		return nil, errors.New("the configured parser is not loaded")
+	}
+	v, ok := plugin.(fwkrh.Parser)
+	if !ok {
+		return nil, errors.New("the specified plugin is not a parser plugin in the config")
+	}
+	return &handlers.Config{
+		Parser: v,
+	}, nil
 }
 
 func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle fwkplugin.Handle) (*datalayer.Config, error) {

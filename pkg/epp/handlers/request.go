@@ -28,17 +28,10 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
-)
-
-const (
-	// defaultFairnessID is the default fairness ID used when no ID is provided in the request.
-	// This ensures that requests without explicit fairness identifiers are still grouped and managed by the Flow Control
-	// system.
-	defaultFairnessID = "default-flow"
 )
 
 func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_RequestHeaders) error {
@@ -52,7 +45,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 		// routed to a random upstream endpoint.
 		endpoint := s.director.GetRandomEndpoint()
 		if endpoint == nil {
-			return errutil.Error{Code: errutil.Internal, Msg: "no pods available in datastore"}
+			return errcommon.Error{Code: errcommon.Internal, Msg: "no pods available in datastore"}
 		}
 		reqCtx.TargetEndpoint = endpoint.GetIPAddress() + ":" + endpoint.GetPort()
 		reqCtx.RequestSize = 0
@@ -61,7 +54,7 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	for _, header := range req.RequestHeaders.Headers.Headers {
-		reqCtx.Request.Headers[header.Key] = request.GetHeaderValue(header)
+		reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
 		switch header.Key {
 		case metadata.FlowFairnessIDKey:
 			reqCtx.FairnessID = reqCtx.Request.Headers[header.Key]
@@ -73,26 +66,10 @@ func (s *StreamingServer) HandleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	if reqCtx.FairnessID == "" {
-		reqCtx.FairnessID = defaultFairnessID
+		reqCtx.FairnessID = metadata.DefaultFairnessID
 	}
 
 	return nil
-}
-
-func (s *StreamingServer) generateRequestBodyResponses(requestBodyBytes []byte) []*extProcPb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(requestBodyBytes, true)
-	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
-	for _, commonResp := range commonResponses {
-		resp := &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_RequestBody{
-				RequestBody: &extProcPb.BodyResponse{
-					Response: commonResp,
-				},
-			},
-		}
-		responses = append(responses, resp)
-	}
-	return responses
 }
 
 func (s *StreamingServer) generateRequestHeaderResponse(ctx context.Context, reqCtx *RequestContext) *extProcPb.ProcessingResponse {

@@ -7,7 +7,7 @@ At this time the YAML file based configuration allows for:
 1. The set of the lifecycle hooks (plugins) that are used by the IGW.
 2. The set of scheduling profiles that define how requests are scheduled to pods.
 3. The configuration of the saturation detector.
-4. The configuration of the flow control system (experimental).
+4. The configuration of the Flow Control system.
 5. The configuration of the data layer (experimental).
 6. A set of feature gates that are used to enable experimental features.
 
@@ -51,7 +51,7 @@ The `saturationDetector` section configures the saturation detector, which is us
 to be taken due to the system being overloaded or saturated. This section is described in more detail in the section
 [Saturation Detector configuration](#saturation-detector-configuration).
 
-The `flowControl` section configures the experimental Flow Control layer, which manages request concurrency and
+The `flowControl` section configures the Flow Control layer, which manages request concurrency and
 fairness. This section is described in more detail in the section
 [Flow Control configuration](#flow-control-configuration).
 
@@ -258,7 +258,7 @@ Picks the pod with the maximum score from the list of candidates. This is the de
 if not specified.
 
 - *Type*: max-score-picker
-- *Parameters*: 
+- *Parameters*:
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates, based on
     the scores of those endpoints. If not specified defaults to `1`.
 
@@ -267,7 +267,7 @@ if not specified.
 Picks a random pod from the list of candidates.
 
 - *Type*: random-picker
-- *Parameters*: 
+- *Parameters*:
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
@@ -310,6 +310,13 @@ An Ordering Policy that implements First-Come, First-Served ordering based on lo
 An Ordering Policy that implements Earliest Deadline First. It prioritizes requests with the closest expiration time (deadline).
 
 - *Type*: edf-ordering-policy
+- *Parameters*: none
+
+#### SLODeadlineOrderingPolicy
+
+An Ordering Policy that orders requests by an SLO-based deadline, computed from the time the request is received by the server. It prioritizes requests with the earliest such deadline.
+
+- *Type*: slo-deadline-ordering-policy
 - *Parameters*: none
 
 ## Scheduling Profiles
@@ -372,13 +379,14 @@ a value of `0.8` will be used.
 metrics are older than this, it might be excluded from "good capacity" considerations or treated
 as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
 
-## Flow Control Configuration
+## [Flow Control Configuration](../flow-control.md)
 
 The Flow Control layer acts as a pool defense mechanism, shielding inference engines from overload to ensure stable,
 predictable performance. By shifting Head-of-Line blocking left, it buffers requests before they reach the backends,
 enabling the Scheduler to dispatch work only when capacity is available.
 
 It manages traffic through a **3-Tier Dispatch Hierarchy**:
+
 1.  **Priority (Band Selection)**: High-priority traffic is served first.
 2.  **Fairness (Flow Selection)**: Requests are distributed fairly between tenants/models within a priority level
     (e.g., Round Robin).
@@ -392,20 +400,21 @@ form:
 
 ```yaml
 flowControl:
-  maxBytes: 10737418240 # 10 GB
+  maxBytes: 10Gi # 10737418240 bytes
   defaultRequestTTL: 60s
   defaultPriorityBand:
-    maxBytes: 1073741824
+    maxBytes: 10Gi
   priorityBands:
   - priority: 100
-    maxBytes: 5368709120
+    maxBytes: 5Gi
     orderingPolicyRef: fcfs-ordering-policy
     fairnessPolicyRef: global-strict-fairness-policy
 ```
 
 The fields in the `flowControl` section are:
 
-- `maxBytes`: Defines the global capacity limit (in bytes) for all active requests across all priority levels.
+- `maxBytes`: Defines the global capacity limit for all active requests across all priority levels.
+    - Supports Kubernetes quantity format (e.g., `10Gi`, `512Mi`, `1048576Ki`) as well as plain integers (in bytes).
     - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
 - `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
     - If `0` or omitted, it defaults to the client context deadline, meaning requests may wait indefinitely unless cancelled by the client.
@@ -419,6 +428,7 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 
 - `priority`: (Required for `priorityBands` entries) The integer priority level. Higher values indicate higher priority.
 - `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
+    - Supports Kubernetes quantity format (e.g., `5Gi`, `512Mi`) as well as plain integers (in bytes).
     - If `0` or omitted, the system default (1 GB) is used.
 - `orderingPolicyRef`: The name of the Ordering Policy plugin to use (e.g., `fcfs-ordering-policy`).
     - Defaults to `fcfs-ordering-policy` if omitted.
@@ -472,6 +482,6 @@ The Feature Gates section is an array of flags, each of which enables one experi
 The available values for these elements are:
 
 - `dataLayer` which, if present, enables the experimental Datalayer APIs.
-- `flowControl` which, if present, enables the experimental FlowControl feature.
+- `flowControl` which, if present, enables the [FlowControl](../flow-control.md) feature.
 
 In all cases if the appropriate element isn't present, that experimental feature will be disabled.

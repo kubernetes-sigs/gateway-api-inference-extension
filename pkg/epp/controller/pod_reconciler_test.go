@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 )
@@ -186,7 +187,7 @@ func TestPodReconciler(t *testing.T) {
 		period := time.Second
 		factories := []datalayer.EndpointFactory{
 			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewEndpointFactory([]fwkdl.DataSource{&datalayer.FakeDataSource{}}, period),
+			datalayer.NewEndpointFactory([]fwkdl.DataSource{&mocks.MetricsDataSource{}}, period),
 		}
 		for _, epf := range factories {
 			t.Run(test.name, func(t *testing.T) {
@@ -206,7 +207,7 @@ func TestPodReconciler(t *testing.T) {
 				store := datastore.NewDatastore(t.Context(), epf, 0)
 				_ = store.PoolSet(t.Context(), fakeClient, pool.InferencePoolToEndpointPool(test.pool))
 				for _, pod := range test.existingPods {
-					store.PodUpdateOrAddIfNotExist(pod)
+					store.PodUpdateOrAddIfNotExist(t.Context(), pod)
 				}
 
 				podReconciler := &PodReconciler{Reader: fakeClient, Datastore: store}

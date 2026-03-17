@@ -27,9 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -203,7 +203,7 @@ func processFirstTokenForLatencyPrediction(
 func initializeSampler(ctx context.Context, predictedLatencyCtx *predictedLatencyCtx, samplingMean float64, maxSampledTokens int) {
 	if predictedLatencyCtx.tokenSampler == nil {
 		logger := log.FromContext(ctx)
-		requestID := predictedLatencyCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
+		requestID := predictedLatencyCtx.schedulingRequest.Headers[reqcommon.RequestIdHeaderKey]
 		predictedLatencyCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for first token", "request_id", requestID, "next_prediction_token", predictedLatencyCtx.tokenSampler.getNextSampleToken())
 	}
@@ -224,13 +224,22 @@ func recordTTFTTrainingData(
 		endpointRoleLabel,
 		targetEndpointMetadata,
 		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+		predictedLatencyCtx.promptText,
 		predictedLatencyCtx.ttft,
 		0, // TTFT training
 		now,
 		0,
 		prefixCacheScore,
 	)
+	// In disaggregated mode, TTFT is dominated by prefill work on the prefill pod,
+	// so use the prefill pod's counter snapshot. In monolithic mode, fall back to
+	// the decode pod snapshot (which is the same pod doing prefill).
+	if predictedLatencyCtx.prefillTokensAtDispatchOnPrefill > 0 {
+		entry.PrefillTokensInFlight = predictedLatencyCtx.prefillTokensAtDispatchOnPrefill
+	} else {
+		entry.PrefillTokensInFlight = predictedLatencyCtx.prefillTokensAtDispatch
+	}
+	entry.DecodeTokensInFlight = predictedLatencyCtx.decodeTokensAtDispatch
 	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
 		logger.V(logutil.DEBUG).Error(err, "record TTFT training failed")
 	}
@@ -268,7 +277,7 @@ func processTokenForLatencyPrediction(
 
 	// Initialize sampler if not yet
 	if predictedLatencyCtx.tokenSampler == nil {
-		requestID := predictedLatencyCtx.schedulingRequest.Headers[requtil.RequestIdHeaderKey]
+		requestID := predictedLatencyCtx.schedulingRequest.Headers[reqcommon.RequestIdHeaderKey]
 		predictedLatencyCtx.tokenSampler = newTokenSampler(requestID, samplingMean, maxSampledTokens)
 		logger.V(logutil.DEBUG).Info("Initialized token sampler for subsequent tokens", "request_id", requestID, "next_prediction_token", predictedLatencyCtx.tokenSampler.getNextSampleToken())
 	}
@@ -277,10 +286,9 @@ func processTokenForLatencyPrediction(
 	latencyMs := float64(now.Sub(predictedLatencyCtx.lastTokenTimestamp).Milliseconds())
 	predictedLatencyCtx.generatedTokenCount++
 
-	// log the inter-token latency for predicted samples
-	if predictedLatencyCtx.generatedTokenCount == 2 || predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) { // tricky logic, since next sample token is always +1 from current token
+	// record sampled TPOT observations (avgTPOT is computed in ResponseComplete from e2e latency)
+	if predictedLatencyCtx.generatedTokenCount == 2 || predictedLatencyCtx.tokenSampler.shouldPredict(predictedLatencyCtx.generatedTokenCount) {
 		predictedLatencyCtx.tpotObservations = append(predictedLatencyCtx.tpotObservations, latencyMs)
-		predictedLatencyCtx.avgTPOT = calculateRunningAverage(predictedLatencyCtx.avgTPOT, latencyMs, len(predictedLatencyCtx.tpotObservations))
 	}
 	if predictedLatencyCtx.generatedTokenCount == 2 {
 		// debug log actual and predicted tpot
@@ -289,25 +297,13 @@ func processTokenForLatencyPrediction(
 			"predicted_tpot_ms", predictedLatencyCtx.avgPredictedTPOT)
 	}
 
+	// TPOT training is now done once per request in ResponseComplete using avgTPOT
+
 	m, err := getLatestMetricsForProfile(predictedLatencyCtx, "")
 	if err != nil {
-		logger.V(logutil.DEBUG).Info("Skipping TPOT training due to missing metrics or schedulingResult",
+		logger.V(logutil.DEBUG).Info("Skipping TPOT prediction due to missing metrics or schedulingResult",
 			"error", err)
 		return
-	}
-	entry := buildTrainingEntry(
-		endpointRoleLabel,
-		targetEndpointMetadata,
-		m,
-		predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
-		0, // TTFT not recorded for TPOT
-		latencyMs,
-		now,
-		predictedLatencyCtx.generatedTokenCount-1,
-		0, // TPOT does not use prefix cache score
-	)
-	if err := predictor.AddTrainingDataBulk([]latencypredictor.TrainingEntry{entry}); err != nil {
-		logger.V(logutil.DEBUG).Error(err, "record TPOT training failed")
 	}
 
 	// Sampled predict
@@ -316,7 +312,7 @@ func processTokenForLatencyPrediction(
 			endpointRoleLabel,
 			targetEndpointMetadata,
 			m,
-			predictedLatencyCtx.schedulingRequest.Body.Completions.Prompt,
+			predictedLatencyCtx.promptText,
 			predictedLatencyCtx.generatedTokenCount,
 			0, // TPOT does not use prefix cache score
 		)
@@ -355,6 +351,7 @@ func bulkPredictWithMetrics(
 	prompts []string,
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
+	prefillTokensInFlights []int64,
 ) ([]*latencypredictor.PredictionResponse, error) {
 	logger := log.FromContext(ctx)
 
@@ -393,6 +390,9 @@ func bulkPredictWithMetrics(
 			generatedTokenCounts[i],
 			prefixCacheScores[i],
 		)
+		if i < len(prefillTokensInFlights) {
+			bulkRequests[i].PrefillTokensInFlight = prefillTokensInFlights[i]
+		}
 	}
 
 	// Perform bulk prediction

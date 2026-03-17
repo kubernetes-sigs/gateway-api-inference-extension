@@ -18,139 +18,55 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
-	"strings"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-const (
-	streamingRespPrefix = "data: "
-	streamingEndMsg     = "data: [DONE]"
-
-	// OpenAI API object types
-	objectTypeResponse            = "response"
-	objectTypeConversation        = "conversation"
-	objectTypeChatCompletion      = "chat.completion"
-	objectTypeChatCompletionChunk = "chat.completion.chunk"
-	objectTypeTextCompletion      = "text_completion"
-)
-
-// extractUsageByAPIType extracts usage statistics using the appropriate field names
-// based on the OpenAI API type identified by the "object" field.
-func extractUsageByAPIType(usg map[string]any, objectType string) fwkrq.Usage {
-	usage := fwkrq.Usage{}
-
-	switch {
-	case strings.HasPrefix(objectType, objectTypeResponse) || strings.HasPrefix(objectType, objectTypeConversation):
-		// Responses/Conversations APIs use input_tokens/output_tokens
-		if usg["input_tokens"] != nil {
-			usage.PromptTokens = int(usg["input_tokens"].(float64))
-		}
-		if usg["output_tokens"] != nil {
-			usage.CompletionTokens = int(usg["output_tokens"].(float64))
-		}
-	case objectType == objectTypeChatCompletion || objectType == objectTypeChatCompletionChunk || objectType == objectTypeTextCompletion:
-		// Traditional APIs use prompt_tokens/completion_tokens
-		if usg["prompt_tokens"] != nil {
-			usage.PromptTokens = int(usg["prompt_tokens"].(float64))
-		}
-		if usg["completion_tokens"] != nil {
-			usage.CompletionTokens = int(usg["completion_tokens"].(float64))
-		}
-	default:
-		// Fallback: try both field naming conventions
-		if usg["input_tokens"] != nil {
-			usage.PromptTokens = int(usg["input_tokens"].(float64))
-		} else if usg["prompt_tokens"] != nil {
-			usage.PromptTokens = int(usg["prompt_tokens"].(float64))
-		}
-
-		if usg["output_tokens"] != nil {
-			usage.CompletionTokens = int(usg["output_tokens"].(float64))
-		} else if usg["completion_tokens"] != nil {
-			usage.CompletionTokens = int(usg["completion_tokens"].(float64))
-		}
-	}
-
-	// total_tokens field name is consistent across all API types
-	if usg["total_tokens"] != nil {
-		usage.TotalTokens = int(usg["total_tokens"].(float64))
-	}
-
-	return usage
-}
-
 // HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
 func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) (*RequestContext, error) {
 	logger := log.FromContext(ctx)
-	var responseErr error
-	var responseBody map[string]any
-	responseErr = json.Unmarshal(responseBytes, &responseBody)
-	if responseErr != nil {
-		if logger.V(logutil.DEBUG).Enabled() {
-			logger.V(logutil.DEBUG).Error(responseErr, "Error unmarshalling request body", "body", string(responseBytes))
-		} else {
-			logger.V(logutil.DEFAULT).Error(responseErr, "Error unmarshalling request body", "body", string(responseBytes))
-		}
-		return reqCtx, responseErr
-	}
 
-	if responseBody["usage"] != nil {
-		usg := responseBody["usage"].(map[string]any)
-		objectType, _ := responseBody["object"].(string)
-		usage := extractUsageByAPIType(usg, objectType)
-		if usg["prompt_token_details"] != nil {
-			detailsMap := usg["prompt_token_details"].(map[string]any)
-			if cachedTokens, ok := detailsMap["cached_tokens"]; ok {
-				usage.PromptTokenDetails = &fwkrq.PromptTokenDetails{
-					CachedTokens: int(cachedTokens.(float64)),
-				}
-			}
-		}
-		reqCtx.Usage = usage
+	parsedResponse, parseErr := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, true)
+	if parseErr != nil {
+		logger.Error(parseErr, "response parsing")
+	}
+	if parsedResponse != nil && parsedResponse.Usage != nil {
+		reqCtx.Usage = *parsedResponse.Usage
 		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
 	}
-
 	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
 }
 
 // The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) {
+func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte, endOfStream bool) {
 	logger := log.FromContext(ctx)
 	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
 	if err != nil {
 		logger.Error(err, "error in HandleResponseBodyStreaming")
 	}
-
-	responseText := string(responseBytes)
-	// Parse usage on EVERY chunk to catch split streams (where usage and [DONE] are in different chunks).
-	if resp := parseRespForUsage(ctx, responseText); resp.Usage.TotalTokens > 0 {
-		reqCtx.Usage = resp.Usage
-	}
-
-	if strings.Contains(responseText, streamingEndMsg) {
+	parsedResp, err := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, endOfStream)
+	if err != nil {
+		logger.Error(err, "streaming response parsing")
+	} else if parsedResp != nil && parsedResp.Usage != nil {
+		reqCtx.Usage = *parsedResp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
 		metrics.RecordOutputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.CompletionTokens)
-		cachedToken := 0
 		if reqCtx.Usage.PromptTokenDetails != nil {
-			cachedToken = reqCtx.Usage.PromptTokenDetails.CachedTokens
+			metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokenDetails.CachedTokens)
 		}
-		metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, cachedToken)
 	}
 }
 
 func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
 	for _, header := range resp.ResponseHeaders.Headers.Headers {
-		reqCtx.Response.Headers[header.Key] = request.GetHeaderValue(header)
+		reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
 	}
 
 	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)
@@ -173,7 +89,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 }
 
 func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
-	commonResponses := common.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
+	commonResponses := envoy.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
 	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
 		resp := &extProcPb.ProcessingResponse{
@@ -213,47 +129,4 @@ func (s *StreamingServer) generateResponseHeaders(reqCtx *RequestContext) []*con
 		})
 	}
 	return headers
-}
-
-// Example message if "stream_options": {"include_usage": "true"} is included in the request:
-// data: {"id":"...","object":"text_completion","created":1739400043,"model":"small-segment-lora-0","choices":[],
-// "usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
-//
-// data: [DONE]
-//
-// Noticed that vLLM returns two entries in one response.
-// We need to strip the `data:` prefix and next Data: [DONE] from the message to fetch response data.
-//
-// If include_usage is not included in the request, `data: [DONE]` is returned separately, which
-// indicates end of streaming.
-func parseRespForUsage(ctx context.Context, responseText string) ResponseBody {
-	response := ResponseBody{}
-	logger := log.FromContext(ctx)
-
-	lines := strings.SplitSeq(responseText, "\n")
-	for line := range lines {
-		if !strings.HasPrefix(line, streamingRespPrefix) {
-			continue
-		}
-		content := strings.TrimPrefix(line, streamingRespPrefix)
-		if content == "[DONE]" {
-			continue
-		}
-
-		byteSlice := []byte(content)
-		if err := json.Unmarshal(byteSlice, &response); err != nil {
-			logger.Error(err, "unmarshaling response body")
-			continue
-		}
-	}
-
-	return response
-}
-
-type ResponseBody struct {
-	Usage fwkrq.Usage `json:"usage"`
-}
-
-type PromptTokenDetails struct {
-	CachedTokens int `json:"cached_tokens"`
 }

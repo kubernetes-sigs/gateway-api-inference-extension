@@ -24,6 +24,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	attrlatency "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/latency"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
 
@@ -51,10 +52,33 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		}
 		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
 	}
-	predictions, err := s.generatePredictions(ctx, request, predictedLatencyCtx, endpoints)
+	predictions, err := s.generatePredictions(ctx, predictedLatencyCtx, endpoints)
 	if err == nil && len(predictions) == len(endpoints) {
 		s.updateRequestContextWithPredictions(predictedLatencyCtx, predictions)
 		s.updateHasValidPod(ctx, predictedLatencyCtx, endpoints)
+
+		// Store predictions in endpoint attributes
+		for _, pred := range predictions {
+			if pred.Endpoint != nil {
+				latencyInfo := attrlatency.NewLatencyPredictionInfo(
+					pred.TTFTValid,
+					pred.TPOTValid,
+					pred.TTFTHeadroom,
+					pred.Headroom, // Maps to TPOTHeadroom
+					pred.TTFT,
+					pred.TPOT,
+				)
+				pred.Endpoint.Put(attrlatency.LatencyPredictionInfoKey, latencyInfo)
+				logger.V(logutil.DEBUG).Info("Stored latency prediction in endpoint",
+					"pod", pred.Endpoint.GetMetadata().NamespacedName.Name,
+					"ttft", pred.TTFT,
+					"tpot", pred.TPOT,
+					"ttftValid", pred.TTFTValid,
+					"tpotValid", pred.TPOTValid,
+					"ttftHeadroom", pred.TTFTHeadroom,
+					"tpotHeadroom", pred.Headroom)
+			}
+		}
 	}
 
 	s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
@@ -62,7 +86,9 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 }
 
 func (p *PredictedLatency) Produces() map[string]any {
-	return map[string]any{}
+	return map[string]any{
+		attrlatency.LatencyPredictionInfoKey: attrlatency.LatencyPredictionInfo{},
+	}
 }
 
 func (p *PredictedLatency) Consumes() map[string]any {

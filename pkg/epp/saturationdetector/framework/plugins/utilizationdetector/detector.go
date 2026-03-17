@@ -31,17 +31,25 @@ package utilizationdetector
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
 	// loggerName is the name to use for loggers created by this package.
 	loggerName = "SaturationDetector"
+
+	// UtilizationDetectorType is the unique identifier for this plugin.
+	UtilizationDetectorType = "utilization-detector"
 )
 
 // Config holds the configuration for the SaturationDetector.
@@ -57,7 +65,29 @@ type Config struct {
 	// "good capacity" considerations or treated as having no capacity for
 	// safety.
 	MetricsStalenessThreshold time.Duration
+	// Headroom defines the allowed burst capacity above thresholds for specific pod scheduling,
+	// expressed as a fraction in [0.0, 1.0].
+	Headroom float64
 }
+
+func UtilizationDetectorFactory(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	config := &Config{
+		QueueDepthThreshold:       DefaultQueueDepthThreshold,
+		KVCacheUtilThreshold:      DefaultKVCacheUtilThreshold,
+		MetricsStalenessThreshold: DefaultMetricsStalenessThreshold,
+		Headroom:                  DefaultHeadroom,
+	}
+	if len(params) > 0 {
+		if err := json.Unmarshal(params, config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal utilization detector config: %w", err)
+		}
+	}
+	return NewDetector(config, log.FromContext(handle.Context())), nil
+}
+
+var (
+	_ framework.Filter = &Detector{}
+)
 
 // Detector determines system saturation based on metrics of the given candidate pods.
 type Detector struct {
@@ -70,10 +100,19 @@ func NewDetector(config *Config, logger logr.Logger) *Detector {
 	logger.WithName(loggerName).V(logutil.DEFAULT).Info("Creating new SaturationDetector",
 		"queueDepthThreshold", config.QueueDepthThreshold,
 		"kvCacheUtilThreshold", config.KVCacheUtilThreshold,
-		"metricsStalenessThreshold", config.MetricsStalenessThreshold.String())
+		"metricsStalenessThreshold", config.MetricsStalenessThreshold.String(),
+		"headroom", config.Headroom)
 
 	return &Detector{
 		config: config,
+	}
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (d *Detector) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{
+		Type: UtilizationDetectorType,
+		Name: UtilizationDetectorType,
 	}
 }
 
@@ -108,4 +147,35 @@ func (d *Detector) Saturation(_ context.Context, candidatePods []backendmetrics.
 	}
 
 	return totalScore / float64(len(candidatePods))
+}
+
+// Filter blocks traffic to specific pods that are physically saturated or exceeding their safety limits.
+//
+// It applies a relaxed limit (Threshold * (1 + Headroom)) to allow for scheduling flexibility and burst tolerance.
+func (d *Detector) Filter(
+	_ context.Context,
+	_ *framework.CycleState,
+	_ *framework.LLMRequest,
+	endpoints []framework.Endpoint,
+) []framework.Endpoint {
+	qLimit := float64(d.config.QueueDepthThreshold) * (1.0 + d.config.Headroom)
+	kvLimit := d.config.KVCacheUtilThreshold * (1.0 + d.config.Headroom)
+
+	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
+	filtered := make([]framework.Endpoint, 0, len(endpoints))
+
+	for _, endpoint := range endpoints {
+		metrics := endpoint.GetMetrics()
+		if metrics == nil || time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
+			continue
+		}
+
+		if float64(metrics.WaitingQueueSize) < qLimit && metrics.KVCacheUsagePercent < kvLimit {
+			filtered = append(filtered, endpoint)
+		}
+	}
+	if len(filtered) == 0 {
+		return endpoints
+	}
+	return filtered
 }
