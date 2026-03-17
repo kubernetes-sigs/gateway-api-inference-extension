@@ -36,42 +36,42 @@ import (
 func TestDatastorePodLocator_Locate(t *testing.T) {
 	t.Parallel()
 
-	podA := makeMockPodMetrics("pod-a", "10.0.0.1")
-	podB := makeMockPodMetrics("pod-b", "10.0.0.2")
-	podC := makeMockPodMetrics("pod-c", "10.0.0.3")
+	endpointA := makeMockEndpoint("pod-a", "10.0.0.1")
+	endpointB := makeMockEndpoint("pod-b", "10.0.0.2")
+	endpointC := makeMockEndpoint("pod-c", "10.0.0.3")
 
-	allPods := []fwkdl.Endpoint{podA, podB, podC}
-	mockDS := &mockDatastore{pods: allPods}
+	allEndpoints := []fwkdl.Endpoint{endpointA, endpointB, endpointC}
+	mockDS := &mockDatastore{pods: allEndpoints}
 
 	tests := []struct {
-		name           string
-		opts           []LocatorOption
-		metadata       map[string]any
-		expectedPodIPs []string
+		name                string
+		opts                []LocatorOption
+		metadata            map[string]any
+		expectedEndpointIPs []string
 	}{
 		{
-			name:           "Nil metadata returns all pods",
-			metadata:       nil,
-			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+			name:                "Nil metadata returns all pods",
+			metadata:            nil,
+			expectedEndpointIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 		{
-			name:           "Empty metadata returns all pods",
-			metadata:       map[string]any{},
-			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+			name:                "Empty metadata returns all pods",
+			metadata:            map[string]any{},
+			expectedEndpointIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 		{
 			name: "Metadata without subset namespace returns all pods",
 			metadata: map[string]any{
 				"other-filter": "value",
 			},
-			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+			expectedEndpointIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 		{
 			name: "Subset filter with single match",
 			metadata: makeMetadataWithSubset([]any{
 				"10.0.0.1:8080",
 			}),
-			expectedPodIPs: []string{"10.0.0.1"},
+			expectedEndpointIPs: []string{"10.0.0.1"},
 		},
 		{
 			name: "Subset filter with multiple matches",
@@ -79,14 +79,14 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 				"10.0.0.1:8080",
 				"10.0.0.3:9090",
 			}),
-			expectedPodIPs: []string{"10.0.0.1", "10.0.0.3"},
+			expectedEndpointIPs: []string{"10.0.0.1", "10.0.0.3"},
 		},
 		{
 			name: "Subset filter with no matches (Scale-from-Zero scenario)",
 			metadata: makeMetadataWithSubset([]any{
 				"192.168.1.1:8080", // Does not exist in mockDS
 			}),
-			expectedPodIPs: []string{},
+			expectedEndpointIPs: []string{},
 		},
 		{
 			name: "Subset filter is present but list is empty",
@@ -95,7 +95,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 					metadata.SubsetFilterKey: []any{},
 				},
 			},
-			expectedPodIPs: []string{},
+			expectedEndpointIPs: []string{},
 		},
 		{
 			name: "Subset filter contains malformed data (non-string)",
@@ -103,7 +103,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 				"10.0.0.1:8080",
 				12345, // Should be ignored
 			}),
-			expectedPodIPs: []string{"10.0.0.1"},
+			expectedEndpointIPs: []string{"10.0.0.1"},
 		},
 		{
 			name: "Subset filter with match (filter disabled)",
@@ -113,15 +113,15 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			metadata: makeMetadataWithSubset([]any{
 				"10.0.0.1:8080",
 			}),
-			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+			expectedEndpointIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 		{
 			name: "Subset filter is present but list is empty (filter disabled)",
 			opts: []LocatorOption{
 				WithDisableEndpointSubsetFilter(true),
 			},
-			metadata:       makeMetadataWithSubset([]any{}),
-			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+			metadata:            makeMetadataWithSubset([]any{}),
+			expectedEndpointIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 		{
 			name: "Subset filter with no matches (filter disabled)",
@@ -131,7 +131,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			metadata: makeMetadataWithSubset([]any{
 				"192.168.1.1:8080",
 			}),
-			expectedPodIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
+			expectedEndpointIPs: []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"},
 		},
 	}
 
@@ -142,10 +142,10 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 			result := locator.Locate(context.Background(), tc.metadata)
 
 			var gotIPs []string
-			for _, pm := range result {
-				gotIPs = append(gotIPs, pm.GetMetadata().GetIPAddress())
+			for _, ep := range result {
+				gotIPs = append(gotIPs, ep.GetMetadata().GetIPAddress())
 			}
-			assert.ElementsMatch(t, tc.expectedPodIPs, gotIPs, "Locate returned unexpected set of pods")
+			assert.ElementsMatch(t, tc.expectedEndpointIPs, gotIPs, "Locate returned unexpected set of pods")
 		})
 	}
 }
@@ -156,7 +156,7 @@ func TestCachedPodLocator_CachingBehavior(t *testing.T) {
 	t.Parallel()
 
 	mockDelegate := &mockPodLocator{
-		result: []fwkdl.Endpoint{makeMockPodMetrics("p1", "1.1.1.1")},
+		result: []fwkdl.Endpoint{makeMockEndpoint("p1", "1.1.1.1")},
 	}
 
 	// Use a short TTL for testing.
@@ -207,7 +207,7 @@ func TestCachedPodLocator_Concurrency_ThunderingHerd(t *testing.T) {
 	mockDelegate := &mockPodLocator{
 		delay: 10 * time.Millisecond,
 		result: []fwkdl.Endpoint{
-			makeMockPodMetrics("p1", "1.1.1.1"),
+			makeMockEndpoint("p1", "1.1.1.1"),
 		},
 	}
 
@@ -258,7 +258,7 @@ func TestCachedPodLocator_CacheIsolation_EmptyVsDefault(t *testing.T) {
 	t.Parallel()
 
 	mockDelegate := &mockPodLocator{
-		result: []fwkdl.Endpoint{makeMockPodMetrics("p1", "1.1.1.1")},
+		result: []fwkdl.Endpoint{makeMockEndpoint("p1", "1.1.1.1")},
 	}
 	cached := NewCachedPodLocator(context.Background(), mockDelegate, time.Minute)
 
@@ -303,7 +303,7 @@ func (m *mockPodLocator) callCount() int {
 	return m.calls
 }
 
-func makeMockPodMetrics(name, ip string) fwkdl.Endpoint {
+func makeMockEndpoint(name, ip string) fwkdl.Endpoint {
 	return &backendmetrics.FakePodMetrics{
 		Metadata: &fwkdl.EndpointMetadata{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: name},

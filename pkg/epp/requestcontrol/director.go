@@ -63,7 +63,7 @@ type Datastore interface {
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidatePods []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidateEndpoints []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
 }
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
@@ -156,31 +156,31 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
 	}
-	candidatePods := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
-	if len(candidatePods) == 0 {
+	candidateEndpoints := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
+	if len(candidateEndpoints) == 0 {
 		return reqCtx, errcommon.Error{
 			Code: errcommon.ServiceUnavailable,
-			Msg:  "failed to find candidate pods for serving the request",
+			Msg:  "failed to find candidate endpoints for serving the request",
 		}
 	}
-	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
+	candidateSnapshot := d.toSchedulerEndpoints(candidateEndpoints)
 
 	// Prepare per request data by running PrepareData plugins.
-	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
+	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
 	if err != nil {
 		// Don't fail the request if PrepareData plugins fail.
 		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
 	}
 
 	// Run admit request plugins
-	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot) {
 		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
 		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "request cannot be admitted"}
 	}
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
 	if err != nil {
-		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
+		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target endpoint: %w", err).Error()}
 	}
 
 	// Prepare Request (Populates RequestContext and call PreRequest plugins)
@@ -317,13 +317,13 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	return reqCtx, nil
 }
 
-func (d *Director) toSchedulerPodMetrics(pods []fwkdl.Endpoint) []fwksched.Endpoint {
-	pm := make([]fwksched.Endpoint, len(pods))
-	for i, pod := range pods {
-		pm[i] = fwksched.NewEndpoint(pod.GetMetadata(), pod.GetMetrics(), pod.GetAttributes())
+func (d *Director) toSchedulerEndpoints(endpoints []fwkdl.Endpoint) []fwksched.Endpoint {
+	result := make([]fwksched.Endpoint, len(endpoints))
+	for i, endpoint := range endpoints {
+		result[i] = fwksched.NewEndpoint(endpoint.GetMetadata(), endpoint.GetMetrics(), endpoint.GetAttributes())
 	}
 
-	return pm
+	return result
 }
 
 // HandleResponseHeader is called when the response headers are received.

@@ -19,7 +19,6 @@ package requestcontrol
 import (
 	"context"
 	"errors"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +29,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	fctypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
