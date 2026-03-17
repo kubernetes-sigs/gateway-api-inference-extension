@@ -50,8 +50,9 @@ type EndpointPickerConfig struct {
 	SchedulingProfiles []SchedulingProfile `json:"schedulingProfiles"`
 
 	// +optional
-	// SaturationDetector when present specifies the configuration of the
+	// Deprecated: SaturationDetector when present specifies the configuration of the
 	// Saturation detector. If not present, default values are used.
+	// Use FlowControl.SaturationDetector instead.
 	SaturationDetector *SaturationDetector `json:"saturationDetector,omitempty"`
 
 	// +optional
@@ -195,23 +196,33 @@ func (fg FeatureGates) String() string {
 	return "{" + result + "}"
 }
 
-// SaturationDetector
+// SaturationDetector defines the configuration for a saturation detector.
 type SaturationDetector struct {
 	// +optional
-	// QueueDepthThreshold defines the backend waiting queue size above which a
+	// PluginRef specifies a particular Plugin instance to be associated with
+	// this SaturationDetector. The reference is to the name of an entry of the Plugins
+	// defined in the configuration's Plugins section.
+	// If omitted, "utilization-detector" is used by default.
+	PluginRef string `json:"pluginRef,omitempty"`
+
+	// +optional
+	// Deprecated: QueueDepthThreshold defines the backend waiting queue size above which a
 	// pod is considered to have insufficient capacity for new requests.
+	// If using utilization-detector, this value should be passed via plugin parameters instead.
 	QueueDepthThreshold int `json:"queueDepthThreshold,omitempty"`
 
 	// +optional
-	// KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
+	// Deprecated: KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
 	// which a pod is considered to have insufficient capacity.
+	// If using utilization-detector, this value should be passed via plugin parameters instead.
 	KVCacheUtilThreshold float64 `json:"kvCacheUtilThreshold,omitempty"`
 
 	// +optional
-	// MetricsStalenessThreshold defines how old a pod's metrics can be.
+	// Deprecated: MetricsStalenessThreshold defines how old a pod's metrics can be.
 	// If a pod's metrics are older than this, it might be excluded from
 	// "good capacity" considerations or treated as having no capacity for
 	// safety.
+	// If using utilization-detector, this value should be passed via plugin parameters instead.
 	MetricsStalenessThreshold metav1.Duration `json:"metricsStalenessThreshold,omitempty"`
 }
 
@@ -335,6 +346,11 @@ type FlowControlConfig struct {
 	// priority levels. Traffic matching these priorities will be handled according to these rules.
 	// If a priority band is not specified, it uses specific defaults.
 	PriorityBands []PriorityBandConfig `json:"priorityBands,omitempty"`
+
+	// +optional
+	// SaturationDetector when present specifies the configuration of the
+	// Saturation detector. If not present, default values are used.
+	SaturationDetector *SaturationDetector `json:"saturationDetector,omitempty"`
 }
 
 func (fcc *FlowControlConfig) String() string {

@@ -20,8 +20,27 @@ import (
 	"context"
 	"errors"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
+
+// SaturationDetector defines the contract for a component that provides real-time load signals to the FlowController.
+//
+// Plugins implementing this interface provide a continuous saturation signal [0.0, 1.0+] based on the observed state
+// of the backend model servers.
+type SaturationDetector interface {
+	plugin.Plugin
+
+	// Saturation returns the saturation level of the pool.
+	// - A value >= 1.0 indicates that the system is fully saturated.
+	// - A value < 1.0 indicates the ratio of used capacity to total capacity.
+	//
+	// FlowController consumes this signal to make dispatch decisions:
+	// - If Saturation() >= 1.0: Stop dispatching (enforce HoL blocking).
+	// - If Saturation() < 1.0: Continue dispatching.
+	Saturation(ctx context.Context, candidatePods []datalayer.Endpoint) float64
+}
+
 
 var (
 	// ErrIncompatiblePriorityType indicates that a FairnessPolicy attempted to compare items from two different flow

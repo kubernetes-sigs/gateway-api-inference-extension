@@ -109,9 +109,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 					flowcontrol.FeatureGate,
 				},
 				SaturationDetector: &configapi.SaturationDetector{
-					QueueDepthThreshold:       10,
-					KVCacheUtilThreshold:      0.8,
-					MetricsStalenessThreshold: metav1.Duration{Duration: 100 * time.Millisecond},
+					PluginRef: "utilization-detector",
 				},
 			},
 			wantErr: false,
@@ -172,6 +170,9 @@ func TestLoadRawConfiguration(t *testing.T) {
 							},
 						},
 					},
+				},
+				SaturationDetector: &configapi.SaturationDetector{
+					PluginRef: utilizationdetector.UtilizationDetectorType,
 				},
 			},
 			wantErr: false,
@@ -525,61 +526,6 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	}
 }
 
-// Verify the SaturationConfig builder specifically.
-func TestBuildSaturationConfig(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    *configapi.SaturationDetector
-		expected *utilizationdetector.Config
-	}{
-		{
-			name: "Valid Configuration",
-			input: &configapi.SaturationDetector{
-				QueueDepthThreshold:       20,
-				KVCacheUtilThreshold:      0.9,
-				MetricsStalenessThreshold: metav1.Duration{Duration: 500 * time.Millisecond},
-			},
-			expected: &utilizationdetector.Config{
-				QueueDepthThreshold:       20,
-				KVCacheUtilThreshold:      0.9,
-				MetricsStalenessThreshold: 500 * time.Millisecond,
-			},
-		},
-		{
-			name:  "Nil Input (Defaults)",
-			input: nil,
-			expected: &utilizationdetector.Config{
-				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
-			},
-		},
-		{
-			name: "Invalid Values (Fallback to Defaults)",
-			input: &configapi.SaturationDetector{
-				QueueDepthThreshold:       -5,
-				KVCacheUtilThreshold:      1.5,
-				MetricsStalenessThreshold: metav1.Duration{Duration: -10 * time.Second},
-			},
-			expected: &utilizationdetector.Config{
-				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := buildSaturationConfig(tc.input)
-			if diff := cmp.Diff(tc.expected, got); diff != "" {
-				t.Errorf("buildSaturationConfig mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
 
 // --- Helpers & Mocks ---
 
@@ -732,4 +678,5 @@ func registerTestPlugins(t *testing.T) {
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
+	fwkplugin.Register(utilizationdetector.UtilizationDetectorType, utilizationdetector.UtilizationDetectorFactory)
 }

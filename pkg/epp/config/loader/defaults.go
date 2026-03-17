@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 )
 
 // DefaultScorerWeight is the weight used for scorers referenced in the configuration without explicit weights.
@@ -76,6 +77,9 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 				},
 			},
 		},
+		SaturationDetector: &configapi.SaturationDetector{
+			PluginRef: utilizationdetector.UtilizationDetectorType,
+		},
 	}
 }
 
@@ -107,6 +111,9 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle fwkplugin.H
 	}
 	if err := ensureParser(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply parser defaults: %w", err)
+	}
+	if err := ensureSaturationDetector(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply saturation detector defaults: %w", err)
 	}
 	return nil
 }
@@ -222,6 +229,26 @@ func ensureParser(
 	}
 	if _, ok := allPlugins[parserConfig.PluginRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, openai.OpenAIParserType); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureSaturationDetector(
+	cfg *configapi.EndpointPickerConfig,
+	handle fwkplugin.Handle,
+	allPlugins map[string]fwkplugin.Plugin,
+) error {
+	saturationConfig := cfg.SaturationDetector
+	if saturationConfig == nil {
+		saturationConfig = &configapi.SaturationDetector{
+			PluginRef: utilizationdetector.UtilizationDetectorType,
+		}
+		cfg.SaturationDetector = saturationConfig
+	}
+	if _, ok := allPlugins[saturationConfig.PluginRef]; !ok {
+		if err := registerDefaultPlugin(cfg, handle, utilizationdetector.UtilizationDetectorType); err != nil {
 			return err
 		}
 	}
