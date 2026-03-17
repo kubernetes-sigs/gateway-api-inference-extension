@@ -115,7 +115,7 @@ func newUnitHarness(
 		opt(harnessOpts)
 	}
 
-	mockDetector := &mocks.MockSaturationDetector{}
+	mockDetector := &frameworkmocks.MockSaturationDetector{}
 	mockPodLocator := &mocks.MockPodLocator{}
 
 	mockProcessorFactory := &mockShardProcessorFactory{
@@ -154,7 +154,7 @@ func newUnitHarness(
 // validating the controller-processor interaction.
 func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, registry *mockRegistryClient) *testHarness {
 	t.Helper()
-	mockDetector := &mocks.MockSaturationDetector{}
+	mockDetector := &frameworkmocks.MockSaturationDetector{}
 	mockPodLocator := &mocks.MockPodLocator{}
 
 	// Align FakeClock with system time. See explanation in newUnitHarness.
@@ -276,7 +276,7 @@ type mockShardProcessorFactory struct {
 func (f *mockShardProcessorFactory) new(
 	_ context.Context, // The factory does not use the lifecycle context; it's passed to the processor's Run method later.
 	shard contracts.RegistryShard,
-	_ contracts.SaturationDetector,
+	_ flowcontrol.SaturationDetector,
 	_ contracts.PodLocator,
 	_ clock.WithTicker,
 	_ time.Duration,
@@ -1140,7 +1140,7 @@ func TestFlowController_WorkerManagement(t *testing.T) {
 		h.fc.shardProcessorFactory = func(
 			ctx context.Context, // The context created by getOrStartWorker for the potential new processor.
 			shard contracts.RegistryShard,
-			_ contracts.SaturationDetector,
+			_ flowcontrol.SaturationDetector,
 			_ contracts.PodLocator,
 			_ clock.WithTicker,
 			_ time.Duration,

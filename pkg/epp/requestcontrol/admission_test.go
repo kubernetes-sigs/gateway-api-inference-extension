@@ -29,7 +29,8 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	fctypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	flowcontrol "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	fwmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 )
@@ -110,7 +111,7 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			mockDetector := &mocks.MockSaturationDetector{
+			mockDetector := &fwmocks.MockSaturationDetector{
 				SaturationFunc: func(context.Context, []backendmetrics.PodMetrics) float64 {
 					if tc.isSaturated {
 						return 1.0

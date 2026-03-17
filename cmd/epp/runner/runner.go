@@ -92,7 +92,6 @@ const (
 	// control layer.
 	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
 	enableExperimentalFlowControlLayer = "ENABLE_EXPERIMENTAL_FLOW_CONTROL_LAYER"
-
 )
 
 var (
@@ -550,7 +549,6 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 	// The plugins will be executed in topologically sorted order to ensure that data is produced before it is consumed.
 	r.requestControlConfig.OrderPrepareDataPlugins(dag)
 
-
 	r.parser = handlers.NewParser(cfg.ParserConfig)
 	logger.Info("loaded configuration from file/text successfully")
 
@@ -568,7 +566,6 @@ func applyDeprecatedEnvFeatureGate(envVar, featureName, featureGate string, rawC
 		}
 	}
 }
-
 
 func (r *Runner) configureAndStartDatalayer(ctx context.Context, enableNewMetrics bool, cfg *datalayer.Config, mgr ctrl.Manager) error {
 	disallowedExtractorType := ""

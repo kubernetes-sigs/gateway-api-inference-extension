@@ -62,7 +62,7 @@ type shardProcessor interface {
 type shardProcessorFactory func(
 	ctx context.Context,
 	shard contracts.RegistryShard,
-	saturationDetector contracts.SaturationDetector,
+	saturationDetector flowcontrol.SaturationDetector,
 	podLocator contracts.PodLocator,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
@@ -98,7 +98,7 @@ type FlowController struct {
 
 	config                *Config
 	registry              registryClient
-	saturationDetector    contracts.SaturationDetector
+	saturationDetector    flowcontrol.SaturationDetector
 	podLocator            contracts.PodLocator
 	clock                 clock.WithTicker
 	logger                logr.Logger
@@ -131,7 +131,7 @@ func NewFlowController(
 	poolName string,
 	config *Config,
 	registry contracts.FlowRegistry,
-	sd contracts.SaturationDetector,
+	sd flowcontrol.SaturationDetector,
 	podLocator contracts.PodLocator,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
@@ -148,7 +148,7 @@ func NewFlowController(
 	fc.shardProcessorFactory = func(
 		ctx context.Context,
 		shard contracts.RegistryShard,
-		saturationDetector contracts.SaturationDetector,
+		saturationDetector flowcontrol.SaturationDetector,
 		podLocator contracts.PodLocator,
 		clock clock.WithTicker,
 		cleanupSweepInterval time.Duration,

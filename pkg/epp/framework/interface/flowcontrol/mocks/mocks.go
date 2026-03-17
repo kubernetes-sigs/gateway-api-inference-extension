@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -277,3 +278,30 @@ func (m *MockFairnessPolicy) Pick(ctx context.Context, flowGroup flowcontrol.Pri
 }
 
 var _ flowcontrol.FairnessPolicy = &MockFairnessPolicy{}
+
+// MockSaturationDetector is a simple "stub-style" mock for testing.
+type MockSaturationDetector struct {
+	TypedNameV     plugin.TypedName
+	InitFunc       func(ctx context.Context, config any) error
+	SaturationFunc func(ctx context.Context, candidatePods []datalayer.Endpoint) float64
+}
+
+func (m *MockSaturationDetector) TypedName() plugin.TypedName {
+	return m.TypedNameV
+}
+
+func (m *MockSaturationDetector) Init(ctx context.Context, config any) error {
+	if m.InitFunc != nil {
+		return m.InitFunc(ctx, config)
+	}
+	return nil
+}
+
+func (m *MockSaturationDetector) Saturation(ctx context.Context, candidatePods []datalayer.Endpoint) float64 {
+	if m.SaturationFunc != nil {
+		return m.SaturationFunc(ctx, candidatePods)
+	}
+	return 0.0
+}
+
+var _ flowcontrol.SaturationDetector = &MockSaturationDetector{}

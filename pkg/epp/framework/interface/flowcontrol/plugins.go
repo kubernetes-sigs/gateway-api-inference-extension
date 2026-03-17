@@ -41,7 +41,6 @@ type SaturationDetector interface {
 	Saturation(ctx context.Context, candidatePods []datalayer.Endpoint) float64
 }
 
-
 var (
 	// ErrIncompatiblePriorityType indicates that a FairnessPolicy attempted to compare items from two different flow
 	// queues whose ItemComparators have different ScoreType values, making a meaningful comparison impossible.

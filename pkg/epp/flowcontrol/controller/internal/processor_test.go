@@ -73,7 +73,7 @@ type testHarness struct {
 	processor          *ShardProcessor
 	clock              *testclock.FakeClock
 	logger             logr.Logger
-	saturationDetector *mocks.MockSaturationDetector
+	saturationDetector *fwmocks.MockSaturationDetector
 	podLocator         *mocks.MockPodLocator
 
 	// --- Centralized Mock State ---
@@ -94,7 +94,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		MockRegistryShard:  &mocks.MockRegistryShard{},
 		clock:              testclock.NewFakeClock(time.Now()),
 		logger:             logr.Discard(),
-		saturationDetector: &mocks.MockSaturationDetector{},
+		saturationDetector: &fwmocks.MockSaturationDetector{},
 		podLocator:         &mocks.MockPodLocator{Pods: []metrics.PodMetrics{&metrics.FakePodMetrics{}}},
 		startSignal:        make(chan struct{}),
 		queues:             make(map[flowcontrol.FlowKey]*mocks.MockManagedQueue),

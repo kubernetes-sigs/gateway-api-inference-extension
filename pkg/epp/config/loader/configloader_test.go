@@ -526,7 +526,6 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	}
 }
 
-
 // --- Helpers & Mocks ---
 
 func hasPluginType(handle fwkplugin.Handle, typeName string) bool {

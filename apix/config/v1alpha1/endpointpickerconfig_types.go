@@ -187,7 +187,6 @@ func (fg FeatureGates) String() string {
 	return "{" + result + "}"
 }
 
-
 // DataLayerConfig contains the configuration of the DataLayer feature
 type DataLayerConfig struct {
 	// +required

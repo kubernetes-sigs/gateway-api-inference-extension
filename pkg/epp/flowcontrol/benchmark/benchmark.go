@@ -120,12 +120,13 @@ func (m benchMatrix) name() string {
 
 // testDetector exposes an API to manually release downstream capacity during a test run.
 type testDetector interface {
-	contracts.SaturationDetector
+	flowcontrol.SaturationDetector
 	Release()
 }
 
 // benchDetector models target saturation based strictly on active request counts.
 type benchDetector struct {
+	plugin.Plugin
 	concurrencyLimit atomic.Int64
 	// _ prevents false sharing between atomic counters on multicore CPU cache lines.
 	_        [56]byte
@@ -159,7 +160,9 @@ func (d *benchDetector) Saturation(ctx context.Context, candidates []metrics.Pod
 
 // alwaysSaturatedDetector simulates a permanently saturated downstream pool.
 // It is strictly used to evaluate garbage collection pathways and client abandonment scenarios.
-type alwaysSaturatedDetector struct{}
+type alwaysSaturatedDetector struct {
+	plugin.Plugin
+}
 
 // Release is a no-op for the permanently saturated mock.
 func (d *alwaysSaturatedDetector) Release() {}

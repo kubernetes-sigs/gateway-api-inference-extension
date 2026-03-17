@@ -40,10 +40,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	datalayerlogger "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/logger"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fwkfc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	fwkfc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
