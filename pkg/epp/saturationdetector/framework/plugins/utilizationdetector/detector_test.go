@@ -57,17 +57,17 @@ func TestDetector_Saturation(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		pods           []backendmetrics.PodMetrics
+		pods           []fwkdl.Endpoint
 		wantSaturation float64
 	}{
 		{
 			name:           "No candidate pods",
-			pods:           []backendmetrics.PodMetrics{},
+			pods:           []fwkdl.Endpoint{},
 			wantSaturation: 1.0, // Fail closed
 		},
 		{
 			name: "Single pod with good capacity",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Q=2/5 (0.4). KV=0.5/0.9 (0.555...).
 				// Max(0.4, 0.555...) = 0.555...
 				makePodMetric("pod1", 2, 0.5, baseTime),
@@ -76,7 +76,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Single pod with stale metrics",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Stale = 1.0
 				makePodMetric("pod1", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
 			},
@@ -84,7 +84,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Single pod with high queue depth",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Q=10/5 (2.0). KV=0.1/0.9 (0.11).
 				// Max(2.0, 0.11) = 2.0
 				makePodMetric("pod1", 10, 0.1, baseTime),
@@ -93,7 +93,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Single pod with high KV cache utilization",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Q=1/5 (0.2). KV=0.95/0.90 (1.055...).
 				// Max(0.2, 1.055...) = 1.055...
 				makePodMetric("pod1", 1, 0.95, baseTime),
@@ -102,7 +102,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Single pod with nil metrics",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				&backendmetrics.FakePodMetrics{
 					Metadata: &fwkdl.EndpointMetadata{
 						NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "ns1"},
@@ -114,7 +114,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Multiple pods, all good capacity",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Pod1: Q=1/5(0.2), KV=0.1/0.9(0.11). Max=0.2.
 				makePodMetric("pod1", 1, 0.1, baseTime),
 				// Pod2: Q=0/5(0.0), KV=0.2/0.9(0.22). Max=0.22...
@@ -125,7 +125,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Multiple pods, one good, one stale",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Pod1 (Good): Q=1/5(0.2), KV=0.1/0.9(0.11). Max=0.2.
 				makePodMetric("pod1", 1, 0.1, baseTime),
 				// Pod2 (Stale): 1.0.
@@ -136,7 +136,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Multiple pods, one good, one bad (high queue)",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Pod1 (Good): Max=0.2.
 				makePodMetric("pod1", 1, 0.1, baseTime),
 				// Pod2 (Bad): Q=15/5(3.0). Max=3.0.
@@ -147,7 +147,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Multiple pods, all bad capacity",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Pod1 (Stale): 1.0
 				makePodMetric("pod1", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
 				// Pod2 (High Q): 20/5 = 4.0
@@ -160,7 +160,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Queue depth exactly at threshold",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				// Q=5/5(1.0). KV=Low.
 				// Max=1.0
 				makePodMetric("pod1", 5, 0.1, baseTime),
@@ -169,7 +169,7 @@ func TestDetector_Saturation(t *testing.T) {
 		},
 		{
 			name: "Metrics age just over staleness threshold",
-			pods: []backendmetrics.PodMetrics{
+			pods: []fwkdl.Endpoint{
 				makePodMetric("pod1", 1, 0.1, baseTime.Add(-101*time.Millisecond)),
 			},
 			wantSaturation: 1.0,

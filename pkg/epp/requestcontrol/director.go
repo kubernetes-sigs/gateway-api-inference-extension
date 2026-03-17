@@ -34,7 +34,6 @@ import (
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
@@ -57,7 +56,7 @@ const (
 type Datastore interface {
 	PoolGet() (*datalayer.EndpointPool, error)
 	ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective
-	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint
 	// ModelRewriteGet returns the rewrite rule for a given model name and the name of the InferenceModelRewrite object.
 	ModelRewriteGet(modelName string) (*v1alpha2.InferenceModelRewriteRule, string)
 }
@@ -318,7 +317,7 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	return reqCtx, nil
 }
 
-func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []fwksched.Endpoint {
+func (d *Director) toSchedulerPodMetrics(pods []fwkdl.Endpoint) []fwksched.Endpoint {
 	pm := make([]fwksched.Endpoint, len(pods))
 	for i, pod := range pods {
 		pm[i] = fwksched.NewEndpoint(pod.GetMetadata(), pod.GetMetrics(), pod.GetAttributes())

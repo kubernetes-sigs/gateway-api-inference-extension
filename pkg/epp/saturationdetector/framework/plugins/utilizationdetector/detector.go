@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
@@ -125,7 +125,7 @@ func (d *Detector) TypedName() fwkplugin.TypedName {
 // For each pod, the score is determined by the most constrained resource (Compute or Memory):
 //
 //	PodScore = Max(WaitingQueue / QueueThreshold, KVCacheUsage / KVCacheThreshold)
-func (d *Detector) Saturation(_ context.Context, candidatePods []backendmetrics.PodMetrics) float64 {
+func (d *Detector) Saturation(_ context.Context, candidatePods []fwkdl.Endpoint) float64 {
 	if len(candidatePods) == 0 {
 		return 1.0
 	}

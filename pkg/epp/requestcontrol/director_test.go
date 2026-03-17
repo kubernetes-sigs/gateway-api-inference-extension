@@ -86,7 +86,7 @@ func (m *mockScheduler) Schedule(_ context.Context, _ *fwksched.LLMRequest, endp
 }
 
 type mockDatastore struct {
-	pods     []backendmetrics.PodMetrics
+	pods     []fwkdl.Endpoint
 	rewrites []*v1alpha2.InferenceModelRewrite
 }
 
@@ -96,8 +96,8 @@ func (ds *mockDatastore) PoolGet() (*datalayer.EndpointPool, error) {
 func (ds *mockDatastore) ObjectiveGet(_ string) *v1alpha2.InferenceObjective {
 	return nil
 }
-func (ds *mockDatastore) PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics {
-	res := []backendmetrics.PodMetrics{}
+func (ds *mockDatastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint {
+	res := []fwkdl.Endpoint{}
 	for _, pod := range ds.pods {
 		if predicate(pod) {
 			res = append(res, pod)

@@ -318,7 +318,7 @@ func TestMetrics(t *testing.T) {
 		err       map[types.NamespacedName]error
 		storePods []*corev1.Pod
 		want      []*fwkdl.Metrics
-		predict   func(backendmetrics.PodMetrics) bool
+		predict   func(fwkdl.Endpoint) bool
 	}{
 		{
 			name: "Probing metrics success",

@@ -57,7 +57,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
@@ -128,7 +127,7 @@ func (d *Detector) TypedName() fwkplugin.TypedName {
 // It returns an aggregate saturation signal where:
 //
 //	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity.
-func (d *Detector) Saturation(_ context.Context, candidateEndpoints []metrics.PodMetrics) float64 {
+func (d *Detector) Saturation(_ context.Context, candidateEndpoints []fwkdl.Endpoint) float64 {
 	var totalInflight, totalCapacity int64
 	for _, endpoint := range candidateEndpoints {
 		if endpoint.GetMetadata() == nil {

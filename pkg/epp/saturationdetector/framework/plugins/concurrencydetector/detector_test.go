@@ -89,13 +89,13 @@ func TestNewPlugin_Configuration(t *testing.T) {
 			// Expected Saturation = (Max - 1) / Max
 			driveLoad(ctx, detector, endpointName, int(tc.effectiveMax-1))
 			expectedSat := float64(tc.effectiveMax-1) / float64(tc.effectiveMax)
-			actualSat := detector.Saturation(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)})
+			actualSat := detector.Saturation(ctx, []fwkdl.Endpoint{newFakePodMetric(endpointName)})
 			require.InDelta(t, expectedSat, actualSat, 1e-6, "expected saturation gradient to reflect partial load")
 
 			// B. Increment to exactly the limit (Max)
 			// Expected Saturation = 1.0
 			driveLoad(ctx, detector, endpointName, 1)
-			actualSat = detector.Saturation(ctx, []backendmetrics.PodMetrics{newFakePodMetric(endpointName)})
+			actualSat = detector.Saturation(ctx, []fwkdl.Endpoint{newFakePodMetric(endpointName)})
 			require.InDelta(t, 1.0, actualSat, 1e-6, `expected 100% saturation at MaxConcurrency`)
 
 			// 2. Verify Headroom via Filter
@@ -192,7 +192,7 @@ func TestDetector_Saturation(t *testing.T) {
 			}
 
 			// Build candidates.
-			candidates := make([]backendmetrics.PodMetrics, 0, len(tc.candidateEndpoints))
+			candidates := make([]fwkdl.Endpoint, 0, len(tc.candidateEndpoints))
 			for _, name := range tc.candidateEndpoints {
 				candidates = append(candidates, newFakePodMetric(name))
 			}
@@ -212,7 +212,7 @@ func TestDetector_Lifecycle(t *testing.T) {
 	detector := NewDetector(Config{MaxConcurrency: 1})
 	ctx := context.Background()
 	endpointName := "lifecycle-endpoint"
-	candidates := []backendmetrics.PodMetrics{newFakePodMetric(endpointName)}
+	candidates := []fwkdl.Endpoint{newFakePodMetric(endpointName)}
 
 	// 1. Initially Empty
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected initially 0.0")

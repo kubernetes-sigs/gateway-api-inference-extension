@@ -40,7 +40,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 	podB := makeMockPodMetrics("pod-b", "10.0.0.2")
 	podC := makeMockPodMetrics("pod-c", "10.0.0.3")
 
-	allPods := []backendmetrics.PodMetrics{podA, podB, podC}
+	allPods := []fwkdl.Endpoint{podA, podB, podC}
 	mockDS := &mockDatastore{pods: allPods}
 
 	tests := []struct {
@@ -156,7 +156,7 @@ func TestCachedPodLocator_CachingBehavior(t *testing.T) {
 	t.Parallel()
 
 	mockDelegate := &mockPodLocator{
-		result: []backendmetrics.PodMetrics{makeMockPodMetrics("p1", "1.1.1.1")},
+		result: []fwkdl.Endpoint{makeMockPodMetrics("p1", "1.1.1.1")},
 	}
 
 	// Use a short TTL for testing.
@@ -206,7 +206,7 @@ func TestCachedPodLocator_Concurrency_ThunderingHerd(t *testing.T) {
 	// Simulate a slow delegate to exacerbate race conditions.
 	mockDelegate := &mockPodLocator{
 		delay: 10 * time.Millisecond,
-		result: []backendmetrics.PodMetrics{
+		result: []fwkdl.Endpoint{
 			makeMockPodMetrics("p1", "1.1.1.1"),
 		},
 	}
@@ -258,7 +258,7 @@ func TestCachedPodLocator_CacheIsolation_EmptyVsDefault(t *testing.T) {
 	t.Parallel()
 
 	mockDelegate := &mockPodLocator{
-		result: []backendmetrics.PodMetrics{makeMockPodMetrics("p1", "1.1.1.1")},
+		result: []fwkdl.Endpoint{makeMockPodMetrics("p1", "1.1.1.1")},
 	}
 	cached := NewCachedPodLocator(context.Background(), mockDelegate, time.Minute)
 
@@ -281,10 +281,10 @@ type mockPodLocator struct {
 	mu     sync.Mutex
 	calls  int
 	delay  time.Duration
-	result []backendmetrics.PodMetrics
+	result []fwkdl.Endpoint
 }
 
-func (m *mockPodLocator) Locate(ctx context.Context, _ map[string]any) []backendmetrics.PodMetrics {
+func (m *mockPodLocator) Locate(ctx context.Context, _ map[string]any) []fwkdl.Endpoint {
 	m.mu.Lock()
 	m.calls++
 	delay := m.delay
@@ -303,7 +303,7 @@ func (m *mockPodLocator) callCount() int {
 	return m.calls
 }
 
-func makeMockPodMetrics(name, ip string) backendmetrics.PodMetrics {
+func makeMockPodMetrics(name, ip string) fwkdl.Endpoint {
 	return &backendmetrics.FakePodMetrics{
 		Metadata: &fwkdl.EndpointMetadata{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: name},
