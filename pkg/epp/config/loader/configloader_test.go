@@ -108,8 +108,8 @@ func TestLoadRawConfiguration(t *testing.T) {
 					datalayer.ExperimentalDatalayerFeatureGate,
 					flowcontrol.FeatureGate,
 				},
-				SaturationDetector: &configapi.SaturationDetector{
-					PluginRef: "utilization-detector",
+				FlowControl: &configapi.FlowControlConfig{
+					SaturationDetectorRef: "utilization-detector",
 				},
 			},
 			wantErr: false,
@@ -171,8 +171,8 @@ func TestLoadRawConfiguration(t *testing.T) {
 						},
 					},
 				},
-				SaturationDetector: &configapi.SaturationDetector{
-					PluginRef: utilizationdetector.UtilizationDetectorType,
+				FlowControl: &configapi.FlowControlConfig{
+					SaturationDetectorRef: utilizationdetector.UtilizationDetectorType,
 				},
 			},
 			wantErr: false,

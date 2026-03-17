@@ -128,7 +128,11 @@ func InstantiateAndConfigure(
 		return nil, fmt.Errorf("parse config build failed: %w", err)
 	}
 
-	saturationDetector, err := buildSaturationDetector(rawConfig.SaturationDetector, handle)
+	var saturationDetectorRef string
+	if rawConfig.FlowControl != nil {
+		saturationDetectorRef = rawConfig.FlowControl.SaturationDetectorRef
+	}
+	saturationDetector, err := buildSaturationDetector(saturationDetectorRef, handle)
 	if err != nil {
 		return nil, fmt.Errorf("saturation detector build failed: %w", err)
 	}
@@ -244,17 +248,17 @@ func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
 	return config
 }
 
-func buildSaturationDetector(rawSaturationConfig *configapi.SaturationDetector, handle fwkplugin.Handle) (fwkfc.SaturationDetector, error) {
-	if rawSaturationConfig == nil {
-		return nil, errors.New("saturationDetector is not configured")
+func buildSaturationDetector(pluginRef string, handle fwkplugin.Handle) (fwkfc.SaturationDetector, error) {
+	if pluginRef == "" {
+		return nil, errors.New("saturationDetector plugin reference is missing")
 	}
-	plugin, ok := handle.GetAllPluginsWithNames()[rawSaturationConfig.PluginRef]
+	plugin, ok := handle.GetAllPluginsWithNames()[pluginRef]
 	if !ok {
-		return nil, fmt.Errorf("the configured saturation detector '%s' is not loaded", rawSaturationConfig.PluginRef)
+		return nil, fmt.Errorf("the configured saturation detector '%s' is not loaded", pluginRef)
 	}
 	v, ok := plugin.(fwkfc.SaturationDetector)
 	if !ok {
-		return nil, fmt.Errorf("the specified plugin '%s' is not a saturation detector plugin in the config", rawSaturationConfig.PluginRef)
+		return nil, fmt.Errorf("the specified plugin '%s' is not a saturation detector plugin in the config", pluginRef)
 	}
 	return v, nil
 }

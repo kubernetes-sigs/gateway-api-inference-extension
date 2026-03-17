@@ -77,8 +77,8 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 				},
 			},
 		},
-		SaturationDetector: &configapi.SaturationDetector{
-			PluginRef: utilizationdetector.UtilizationDetectorType,
+		FlowControl: &configapi.FlowControlConfig{
+			SaturationDetectorRef: utilizationdetector.UtilizationDetectorType,
 		},
 	}
 }
@@ -240,14 +240,13 @@ func ensureSaturationDetector(
 	handle fwkplugin.Handle,
 	allPlugins map[string]fwkplugin.Plugin,
 ) error {
-	saturationConfig := cfg.SaturationDetector
-	if saturationConfig == nil {
-		saturationConfig = &configapi.SaturationDetector{
-			PluginRef: utilizationdetector.UtilizationDetectorType,
-		}
-		cfg.SaturationDetector = saturationConfig
+	if cfg.FlowControl == nil {
+		cfg.FlowControl = &configapi.FlowControlConfig{}
 	}
-	if _, ok := allPlugins[saturationConfig.PluginRef]; !ok {
+	if cfg.FlowControl.SaturationDetectorRef == "" {
+		cfg.FlowControl.SaturationDetectorRef = utilizationdetector.UtilizationDetectorType
+	}
+	if _, ok := allPlugins[cfg.FlowControl.SaturationDetectorRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, utilizationdetector.UtilizationDetectorType); err != nil {
 			return err
 		}
