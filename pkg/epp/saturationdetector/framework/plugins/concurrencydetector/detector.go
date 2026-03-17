@@ -62,8 +62,6 @@ import (
 )
 
 const ConcurrencyDetectorType = "concurrency-detector"
-const ConcurrencyModeRequests = "requests"
-const ConcurrencyModeTokens = "tokens"
 
 func init() {
 	fwkplugin.Register(ConcurrencyDetectorType, func(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
@@ -87,7 +85,6 @@ var (
 type Detector struct {
 	requestTracker *concurrencyTracker // requests in flight per endpoint
 	tokenTracker   *concurrencyTracker // tokens in flight per endpoint
-	tokenLedger    *tokenLedger        // requestID -> {endpointID -> tokensAdded}
 	tokenEstimator TokenEstimator      // SimpleTokenEstimator with CharactersPerToken
 	config         Config
 }
@@ -102,8 +99,8 @@ func NewDetector(config Config) *Detector {
 	if config.Headroom < 0 {
 		config.Headroom = DefaultHeadroom
 	}
-	if config.ConcurrencyMode != ConcurrencyModeRequests && config.ConcurrencyMode != ConcurrencyModeTokens {
-		config.ConcurrencyMode = DefaultConcurrencyMode
+	if config.ConcurrencyMode == nil || (*config.ConcurrencyMode != Requests && *config.ConcurrencyMode != Tokens) {
+		config.ConcurrencyMode = ModePtr(DefaultConcurrencyMode)
 	}
 	if config.MaxTokenConcurrency < 0 {
 		config.MaxTokenConcurrency = DefaultMaxTokenConcurrency
@@ -112,7 +109,6 @@ func NewDetector(config Config) *Detector {
 	return &Detector{
 		requestTracker: newConcurrencyTracker(),
 		tokenTracker:   newConcurrencyTracker(),
-		tokenLedger:    newTokenLedger(),
 		tokenEstimator: NewSimpleTokenEstimator(),
 		config:         config,
 	}
@@ -139,7 +135,7 @@ func (d *Detector) Saturation(_ context.Context, candidateEndpoints []metrics.Po
 		}
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
 
-		if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+		if *d.config.ConcurrencyMode == Tokens {
 			tokenCount := d.tokenTracker.get(endpointID)
 			totalInflight += tokenCount
 			totalCapacity += d.config.MaxTokenConcurrency
@@ -169,15 +165,20 @@ func (d *Detector) Filter(
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
 	filtered := make([]framework.Endpoint, 0, len(endpoints))
 
+	var limit int64
+	if *d.config.ConcurrencyMode == Tokens {
+		limit = int64(float64(d.config.MaxTokenConcurrency) * (1.0 + d.config.Headroom))
+	} else {
+		limit = int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
+	}
+
 	for _, endpoint := range endpoints {
 		endpointID := endpoint.GetMetadata().NamespacedName.String()
-		if d.config.ConcurrencyMode == ConcurrencyModeTokens {
-			limit := int64(float64(d.config.MaxTokenConcurrency) * (1.0 + d.config.Headroom))
+		if *d.config.ConcurrencyMode == Tokens {
 			if d.tokenTracker.get(endpointID) < limit {
 				filtered = append(filtered, endpoint)
 			}
 		} else {
-			limit := int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
 			if d.requestTracker.get(endpointID) < limit {
 				filtered = append(filtered, endpoint)
 			}
@@ -190,16 +191,16 @@ func (d *Detector) Filter(
 // We assume the scheduling result is valid based on the Director's contract.
 func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
 	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String()
-	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
+	if *d.config.ConcurrencyMode == Tokens {
 		tokens := d.tokenEstimator.Estimate(request)
 		d.tokenTracker.add(eid, tokens)
-		d.tokenLedger.add(request.RequestId, eid, tokens)
 	} else {
 		d.requestTracker.inc(eid)
 	}
 }
 
 // ResponseComplete decrements the atomic in-flight counter for the target endpoint.
+// For token mode, the estimate is recalculated from the immutable request.
 func (d *Detector) ResponseComplete(
 	_ context.Context,
 	request *framework.LLMRequest,
@@ -207,11 +208,9 @@ func (d *Detector) ResponseComplete(
 	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
 	eid := targetEndpoint.NamespacedName.String()
-	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
-		tokenCount, ok := d.tokenLedger.remove(request.RequestId)
-		if ok {
-			d.tokenTracker.add(eid, -tokenCount)
-		}
+	if *d.config.ConcurrencyMode == Tokens {
+		tokens := d.tokenEstimator.Estimate(request)
+		d.tokenTracker.add(eid, -tokens)
 	} else {
 		d.requestTracker.dec(eid)
 	}
@@ -220,10 +219,8 @@ func (d *Detector) ResponseComplete(
 // DeleteEndpoint removes an endpoint from the concurrency tracker to prevent memory leaks.
 // This should be called by the controller when a backend is removed from the pool.
 func (d *Detector) DeleteEndpoint(endpointID string) {
-	if d.config.ConcurrencyMode == ConcurrencyModeTokens {
-		for _, e := range d.tokenLedger.removeForEndpoint(endpointID) {
-			d.tokenTracker.add(endpointID, -e.tokenCount)
-		}
+	if *d.config.ConcurrencyMode == Tokens {
+		d.tokenTracker.delete(endpointID)
 	} else {
 		d.requestTracker.delete(endpointID)
 	}

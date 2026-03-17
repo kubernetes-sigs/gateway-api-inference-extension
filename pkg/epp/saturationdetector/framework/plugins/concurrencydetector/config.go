@@ -54,8 +54,8 @@ type Config struct {
 	// - "requests": use request count for concurrency detection.
 	// - "tokens": use token count for concurrency detection.
 	//
-	// Defaults to "requests" if unset.
-	ConcurrencyMode string `json:"concurrencyMode"`
+	// When nil (unset), defaults to "requests".
+	ConcurrencyMode *ConcurrencyMode `json:"concurrencyMode"`
 
 	// MaxTokenConcurrency defines the maximum number of tokens allowed for an inference pool.
 	//
@@ -65,13 +65,28 @@ type Config struct {
 	MaxTokenConcurrency int64 `json:"maxTokenConcurrency"`
 }
 
+// ConcurrencyMode is the concurrency detection mode. A pointer in Config distinguishes unset (nil) from explicit.
+type ConcurrencyMode string
+
+const (
+	// Requests uses request count for concurrency detection.
+	Requests ConcurrencyMode = "requests"
+	// Tokens uses token count for concurrency detection.
+	Tokens ConcurrencyMode = "tokens"
+)
+
+// ModePtr returns a pointer to m for use in Config.ConcurrencyMode.
+func ModePtr(m ConcurrencyMode) *ConcurrencyMode {
+	return &m
+}
+
 const (
 	// DefaultMaxConcurrency is the safe baseline for many LLM serving engines.
 	DefaultMaxConcurrency = 100
 	// DefaultHeadroom is the default burst allowance (0%).
 	DefaultHeadroom = 0.0
-	// DefaultConcurrencyMode is the default mode to check for concurency. We default to "requests"to retain existing behaviour.
-	DefaultConcurrencyMode = "requests"
+	// DefaultConcurrencyMode is used when ConcurrencyMode is nil.
+	DefaultConcurrencyMode = Requests
 	// DefaultMaxTokenConcurrency is the maximum number of tokens allowed for a request.
 	DefaultMaxTokenConcurrency = 1000000
 )

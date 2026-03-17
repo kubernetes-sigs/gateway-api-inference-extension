@@ -242,7 +242,7 @@ func TestDetector_TokenSaturation(t *testing.T) {
 	// MaxTokenConcurrency set to 100 for simple testing
 	const maxTokenConcurrency = 100
 	config := Config{
-		ConcurrencyMode:     ConcurrencyModeTokens,
+		ConcurrencyMode:     ModePtr(Tokens),
 		MaxTokenConcurrency: maxTokenConcurrency,
 	}
 
@@ -334,7 +334,7 @@ func TestDetector_TokenFilter(t *testing.T) {
 	t.Parallel()
 
 	config := Config{
-		ConcurrencyMode:     ConcurrencyModeTokens,
+		ConcurrencyMode:     ModePtr(Tokens),
 		MaxTokenConcurrency: 100,
 		Headroom:            0.2, // Burst limit = 100 * 1.2 = 120 tokens
 	}
@@ -369,7 +369,7 @@ func TestDetector_TokenLifecycle(t *testing.T) {
 	t.Parallel()
 
 	config := Config{
-		ConcurrencyMode:     ConcurrencyModeTokens,
+		ConcurrencyMode:     ModePtr(Tokens),
 		MaxTokenConcurrency: 100,
 	}
 	ctx := context.Background()
@@ -406,7 +406,7 @@ func TestDetector_TokenDeleteEndpoint(t *testing.T) {
 	t.Parallel()
 
 	config := Config{
-		ConcurrencyMode:     ConcurrencyModeTokens,
+		ConcurrencyMode:     ModePtr(Tokens),
 		MaxTokenConcurrency: 100,
 	}
 	ctx := context.Background()
