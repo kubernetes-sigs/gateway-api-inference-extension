@@ -14,6 +14,19 @@ bbr:
     # Log verbosity
     v: 3
 
+  # BBR plugins configuration.
+  # When plugins are explicitly specified, the runner's default auto-load is skipped.
+  # Both plugins below replicate the default behavior.
+  # Format: type (registered plugin type), name (instance name), json (optional config object)
+  plugins:
+    - type: body-field-to-header
+      name: model-extractor
+      json:
+        field_name: model
+        header_name: X-Gateway-Model-Name
+    - type: base-model-to-header
+      name: base-model-mapper
+
   tracing:
     enabled: false
     otelServiceName: "gateway-api-inference-extension/bbr"
