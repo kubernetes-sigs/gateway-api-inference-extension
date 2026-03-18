@@ -165,7 +165,7 @@ func (c *Plugin) ResponseBody(ctx context.Context, request *scheduling.LLMReques
 		return
 	}
 	if !shouldCalculateValue {
-		log.FromContext(ctx).Info("shouldCalculateValue is false, returning")
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("shouldCalculateValue is false, returning")
 		return
 	}
 
@@ -175,6 +175,9 @@ func (c *Plugin) ResponseBody(ctx context.Context, request *scheduling.LLMReques
 	}
 	if intVal == -1 {
 		return // Type error in calculateValue
+	}
+	if intVal == 0 {
+		return // Skip writing/logging zero values
 	}
 
 	// Write the calculated value to dynamic metadata so it can be returned via the ext_proc response.

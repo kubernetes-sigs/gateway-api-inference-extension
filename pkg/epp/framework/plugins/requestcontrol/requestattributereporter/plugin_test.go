@@ -235,19 +235,7 @@ func TestValueReporting(t *testing.T) {
 					PromptTokens: 0,
 				},
 			},
-			wantResult: &structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					defaultNamespace: {
-						Kind: &structpb.Value_StructValue{
-							StructValue: &structpb.Struct{
-								Fields: map[string]*structpb.Value{
-									"prompt_tokens": {Kind: &structpb.Value_NumberValue{NumberValue: 0}},
-								},
-							},
-						},
-					},
-				},
-			},
+			wantResult: nil, // Expect early return for zero value
 		},
 		{
 			name: "condition not met",
@@ -351,19 +339,7 @@ func TestValueReporting(t *testing.T) {
 			response: &requestcontrol.Response{
 				Usage: requestcontrol.Usage{}, // Empty usage
 			},
-			wantResult: &structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					defaultNamespace: {
-						Kind: &structpb.Value_StructValue{
-							StructValue: &structpb.Struct{
-								Fields: map[string]*structpb.Value{
-									"total_tokens": {Kind: &structpb.Value_NumberValue{NumberValue: 0}},
-								},
-							},
-						},
-					},
-				},
-			},
+			wantResult: nil, // Expect early return for zero value
 		},
 		{
 			name: "partial usage fields missing with has() guards",
