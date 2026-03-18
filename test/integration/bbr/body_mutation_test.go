@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	bbrtest "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/test"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
@@ -44,7 +45,7 @@ func (p *bodyMutatingPlugin) TypedName() epp.TypedName {
 	return epp.TypedName{Type: "test-body-mutator", Name: "test-body-mutator"}
 }
 
-func (p *bodyMutatingPlugin) ProcessRequest(_ context.Context, request *framework.InferenceRequest) error {
+func (p *bodyMutatingPlugin) ProcessRequest(_ context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
 	request.SetBodyField(p.fieldName, p.fieldValue)
 	return nil
 }
@@ -58,7 +59,9 @@ func TestBodyMutation_Unary(t *testing.T) {
 	ctx := context.Background()
 
 	plugin := &bodyMutatingPlugin{fieldName: "injected", fieldValue: "test-value"}
-	h := NewBBRHarnessWithPlugins(t, ctx, false, []framework.RequestProcessor{plugin})
+	baseModelToHeaderPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	require.NoError(t, err, "failed to create base model plugin")
+	h := NewBBRHarnessWithPlugins(t, ctx, false, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin})
 
 	body := map[string]any{"prompt": "hello"}
 	bodyBytes, _ := json.Marshal(body)
@@ -124,7 +127,9 @@ func TestBodyMutation_Streaming(t *testing.T) {
 	ctx := context.Background()
 
 	plugin := &bodyMutatingPlugin{fieldName: "injected", fieldValue: "test-value"}
-	h := NewBBRHarnessWithPlugins(t, ctx, true, []framework.RequestProcessor{plugin})
+	baseModelToHeaderPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	require.NoError(t, err, "failed to create base model plugin")
+	h := NewBBRHarnessWithPlugins(t, ctx, true, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin})
 
 	body := map[string]any{"prompt": "hello"}
 	bodyBytes, _ := json.Marshal(body)

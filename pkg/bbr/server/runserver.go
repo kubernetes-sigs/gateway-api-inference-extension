@@ -25,14 +25,12 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -51,25 +49,6 @@ func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunne
 		Streaming:     streaming,
 	}
 	// Dependencies can be assigned later.
-}
-
-// SetupWithManager sets up the runner with the given manager.
-func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
-	// Find the BaseModelToHeaderPlugin in the request plugins and set up its reconciler
-	// TODO: make reconcilers/runnables registration with the mgr customizable
-	for _, plugin := range r.RequestPlugins {
-		if bmPlugin, ok := plugin.(*basemodelextractor.BaseModelToHeaderPlugin); ok {
-			reconciler := bmPlugin.GetReconciler()
-			reconciler.Reader = mgr.GetClient()
-			if err := reconciler.SetupWithManager(mgr); err != nil {
-				return fmt.Errorf("failed setting up ConfigMap Reconciler - %w", err)
-			}
-			// Only set up the first BaseModelToHeaderPlugin's reconciler
-			break
-		}
-	}
-
-	return nil
 }
 
 // AsRunnable returns a Runnable that can be used to start the ext-proc gRPC server.

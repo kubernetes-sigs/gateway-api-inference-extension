@@ -68,13 +68,13 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -141,7 +141,7 @@ func (d *benchDetector) Release() {
 
 // Saturation reserves a concurrency slot atomically to guarantee the queues remain strictly at the
 // target depth.
-func (d *benchDetector) Saturation(ctx context.Context, candidates []metrics.PodMetrics) float64 {
+func (d *benchDetector) Saturation(ctx context.Context, candidates []fwkdl.Endpoint) float64 {
 	limit := d.concurrencyLimit.Load()
 	if limit <= 0 {
 		return 0.0 // Free-flow
@@ -165,7 +165,7 @@ type alwaysSaturatedDetector struct{}
 func (d *alwaysSaturatedDetector) Release() {}
 
 // Saturation permanently returns 1.0 (100% saturated) to ensure requests queue.
-func (d *alwaysSaturatedDetector) Saturation(ctx context.Context, candidates []metrics.PodMetrics) float64 {
+func (d *alwaysSaturatedDetector) Saturation(ctx context.Context, candidates []fwkdl.Endpoint) float64 {
 	return 1.0
 }
 

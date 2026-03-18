@@ -35,7 +35,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
@@ -77,7 +76,7 @@ type Datastore interface {
 	ModelRewriteGetAll() []*v1alpha2.InferenceModelRewrite
 
 	// PodList lists pods matching the given predicate.
-	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint
 	PodUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.Pod) bool
 	PodDelete(podName string)
 
@@ -114,7 +113,7 @@ type datastore struct {
 	objectives map[string]*v1alpha2.InferenceObjective
 	// modelRewrites store for InferenceModelRewrite objects.
 	modelRewrites *modelRewriteStore
-	// key: types.NamespacedName, value: backendmetrics.PodMetrics
+	// key: types.NamespacedName, value: fwkdl.Endpoint
 	pods *sync.Map
 	// modelServerMetricsPort metrics port from EPP command line argument
 	// used only if there is only one inference engine per pod
@@ -135,7 +134,7 @@ func (ds *datastore) Clear() {
 	ds.modelRewrites = newModelRewriteStore()
 	// stop all pods go routines before clearing the pods map.
 	ds.pods.Range(func(_, v any) bool {
-		ds.epf.ReleaseEndpoint(v.(backendmetrics.PodMetrics))
+		ds.epf.ReleaseEndpoint(v.(fwkdl.Endpoint))
 		return true
 	})
 	ds.pods.Clear()
@@ -337,7 +336,7 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 			ds.pods.Store(endpointMetadata.NamespacedName, ep)
 			result = false
 		} else {
-			ep = existing.(backendmetrics.PodMetrics)
+			ep = existing.(fwkdl.Endpoint)
 		}
 		// Update endpoint properties if anything changed.
 		ep.UpdateMetadata(endpointMetadata)

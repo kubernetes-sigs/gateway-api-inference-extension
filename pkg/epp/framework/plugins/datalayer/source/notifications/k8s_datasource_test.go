@@ -28,11 +28,10 @@ import (
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/mocks"
 )
 
 var (
-	testGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}
+	testGVK = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 )
 
 func TestNewK8sNotificationSource(t *testing.T) {
@@ -42,27 +41,8 @@ func TestNewK8sNotificationSource(t *testing.T) {
 	assert.Equal(t, testGVK, src.GVK())
 }
 
-func TestAddExtractor(t *testing.T) {
+func TestNotifyReturnsEvent(t *testing.T) {
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
-
-	ext1 := mocks.NewNotificationExtractor("ext1")
-	ext2 := mocks.NewNotificationExtractor("ext2")
-
-	require.NoError(t, src.AddExtractor(ext1))
-	require.NoError(t, src.AddExtractor(ext2))
-
-	err := src.AddExtractor(ext1) // error on duplicate
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate")
-
-	names := src.Extractors()
-	assert.Len(t, names, 2)
-}
-
-func TestNotify(t *testing.T) {
-	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
-	ext := mocks.NewNotificationExtractor("ext1")
-	_ = src.AddExtractor(ext)
 
 	ctx := context.Background()
 
@@ -70,50 +50,49 @@ func TestNotify(t *testing.T) {
 	obj.SetName("test-cm")
 	obj.SetNamespace("default")
 
-	// test AddOrUpdate mutation
-	err := src.Notify(ctx, fwkdl.NotificationEvent{
+	// test AddOrUpdate - source returns event unchanged (extractors handled by reconciler)
+	event, err := src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventAddOrUpdate,
 		Object: obj.DeepCopy(),
 	})
 	assert.NoError(t, err, "failed to notify")
-	events := ext.GetEvents()
-	require.Len(t, events, 1)
-	assert.Equal(t, fwkdl.EventAddOrUpdate, events[0].Type)
-	assert.Equal(t, "test-cm", events[0].Object.GetName())
+	require.NotNil(t, event)
+	assert.Equal(t, fwkdl.EventAddOrUpdate, event.Type)
+	assert.Equal(t, "test-cm", event.Object.GetName())
 
 	// verify deep copy: mutating the received object doesn't affect original.
-	events[0].Object.SetName("mutated")
+	event.Object.SetName("mutated")
 	assert.Equal(t, "test-cm", obj.GetName())
 
-	// test Delete event.
-	err = src.Notify(ctx, fwkdl.NotificationEvent{
+	// test Delete event
+	event, err = src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventDelete,
 		Object: obj.DeepCopy(),
 	})
 	assert.NoError(t, err, "failed to notify")
-	events = ext.GetEvents()
-	require.Len(t, events, 2)
-	assert.Equal(t, fwkdl.EventDelete, events[1].Type)
-	assert.Equal(t, "test-cm", events[1].Object.GetName())
+	require.NotNil(t, event)
+	assert.Equal(t, fwkdl.EventDelete, event.Type)
+	assert.Equal(t, "test-cm", event.Object.GetName())
 }
 
-func TestNotifyMultipleExtractors(t *testing.T) {
+func TestNotifyReturnsNilOnSkip(t *testing.T) {
+	// This tests the case where Notify might return nil to signal
+	// Runtime to skip extractor dispatch. Currently K8sNotificationSource
+	// always returns the event, but this test verifies the contract.
 	src := NewK8sNotificationSource(NotificationSourceType, "test", testGVK)
-	ext1 := mocks.NewNotificationExtractor("ext1")
-	ext2 := mocks.NewNotificationExtractor("ext2")
-	_ = src.AddExtractor(ext1)
-	_ = src.AddExtractor(ext2)
 
+	ctx := context.Background()
 	obj := &unstructured.Unstructured{}
-	obj.SetName("cm1")
+	obj.SetName("test-cm")
 
-	err := src.Notify(context.Background(), fwkdl.NotificationEvent{
+	event, err := src.Notify(ctx, fwkdl.NotificationEvent{
 		Type:   fwkdl.EventAddOrUpdate,
 		Object: obj,
 	})
-	assert.NoError(t, err, "failed to notify")
-	assert.Len(t, ext1.GetEvents(), 1)
-	assert.Len(t, ext2.GetEvents(), 1)
+	assert.NoError(t, err)
+	// Currently source always returns event (not nil)
+	// This test verifies the return value contract
+	assert.NotNil(t, event)
 }
 
 // marshalParams is a test helper that marshals parameters to JSON.
@@ -162,10 +141,10 @@ func TestNotificationSourceFactory(t *testing.T) {
 		},
 		{
 			name:       "core resource (empty group)",
-			pluginName: "cm-watcher",
-			params:     notificationSourceParams{Group: "", Version: "v1", Kind: "ConfigMap"},
-			wantGVK:    schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"},
-			wantName:   "cm-watcher",
+			pluginName: "pod-watcher",
+			params:     notificationSourceParams{Group: "", Version: "v1", Kind: "Pod"},
+			wantGVK:    schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+			wantName:   "pod-watcher",
 		},
 		{
 			name:       "name defaults to GVK",
@@ -177,7 +156,7 @@ func TestNotificationSourceFactory(t *testing.T) {
 		{
 			name:          "missing version",
 			pluginName:    "test",
-			params:        notificationSourceParams{Group: "", Kind: "ConfigMap"},
+			params:        notificationSourceParams{Group: "", Kind: "Pod"},
 			expectedError: "version and kind are required",
 		},
 		{

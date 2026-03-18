@@ -47,6 +47,37 @@ type Config struct {
 	//
 	// Defaults to 0.0 (no burst allowed).
 	Headroom float64 `json:"headroom"`
+
+	// ConcurrencyMode defines the mode of concurrency detection.
+	//
+	// Valid values are:
+	// - "requests": use request count for concurrency detection.
+	// - "tokens": use token count for concurrency detection.
+	//
+	// When nil (unset), defaults to "requests".
+	ConcurrencyMode *ConcurrencyMode `json:"concurrencyMode"`
+
+	// MaxTokenConcurrency defines the maximum number of tokens allowed for an inference pool.
+	//
+	// This limit is used to prevent requests from consuming too many tokens.
+	//
+	// Defaults to 1000000 if unset.
+	MaxTokenConcurrency int64 `json:"maxTokenConcurrency"`
+}
+
+// ConcurrencyMode is the concurrency detection mode. A pointer in Config distinguishes unset (nil) from explicit.
+type ConcurrencyMode string
+
+const (
+	// Requests uses request count for concurrency detection.
+	Requests ConcurrencyMode = "requests"
+	// Tokens uses token count for concurrency detection.
+	Tokens ConcurrencyMode = "tokens"
+)
+
+// modePtr returns a pointer to m for use in Config.ConcurrencyMode.
+func modePtr(m ConcurrencyMode) *ConcurrencyMode {
+	return &m
 }
 
 const (
@@ -54,4 +85,8 @@ const (
 	DefaultMaxConcurrency = 100
 	// DefaultHeadroom is the default burst allowance (0%).
 	DefaultHeadroom = 0.0
+	// DefaultConcurrencyMode is used when ConcurrencyMode is nil.
+	DefaultConcurrencyMode = Requests
+	// DefaultMaxTokenConcurrency is the maximum number of tokens allowed for a request.
+	DefaultMaxTokenConcurrency = 1000000
 )

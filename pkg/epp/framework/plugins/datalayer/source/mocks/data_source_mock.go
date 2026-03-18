@@ -56,14 +56,14 @@ func (fds *MetricsDataSource) ExtractorType() reflect.Type {
 func (fds *MetricsDataSource) Extractors() []string                 { return []string{} }
 func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
 
-func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
+func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.CallCount, 1)
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
 		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
 			ep.UpdateMetrics(metrics)
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // NotificationSource implements both DataSource and NotificationSource for testing.
@@ -95,8 +95,8 @@ func (m *NotificationSource) GVK() schema.GroupVersionKind {
 	return m.gvk
 }
 
-func (m *NotificationSource) Notify(_ context.Context, _ fwkdl.NotificationEvent) error {
-	return nil
+func (m *NotificationSource) Notify(_ context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
+	return &event, nil
 }
 
 func (m *NotificationSource) Extractors() []string {

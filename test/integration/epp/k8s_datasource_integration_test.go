@@ -144,8 +144,7 @@ func setupIntegrationTest(t *testing.T, withReconciler bool) *testSetup {
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	src := notifications.NewK8sNotificationSource(notifications.NotificationSourceType, "pod-watcher", gvk)
 	extractor := mocks.NewNotificationExtractor("pod-extractor")
-	require.NoError(t, src.AddExtractor(extractor))
-	require.NoError(t, datalayer.BindNotificationSource(src, mgr))
+	require.NoError(t, datalayer.BindNotificationSource(src, []fwkdl.NotificationExtractor{extractor}, mgr))
 
 	ctx, cancel := context.WithTimeout(context.Background(), testContextTimeout)
 	t.Cleanup(cancel)

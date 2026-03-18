@@ -30,12 +30,12 @@ type RequestProcessor interface {
 	BBRPlugin
 	// ProcessRequest runs the RequestProcessor plugin.
 	// RequestProcessor can mutate the headers and/or the body of the request.
-	ProcessRequest(ctx context.Context, request *InferenceRequest) error
+	ProcessRequest(ctx context.Context, cycleState *CycleState, request *InferenceRequest) error
 }
 
 type ResponseProcessor interface {
 	BBRPlugin
 	// ProcessResponse runs the ResponseProcessor plugin.
 	// ResponseProcessor can mutate the headers and/or the body of the response.
-	ProcessResponse(ctx context.Context, response *InferenceResponse) error
+	ProcessResponse(ctx context.Context, cycleState *CycleState, response *InferenceResponse) error
 }
