@@ -58,11 +58,6 @@ func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle frame
 
 // NewBaseModelToHeaderPlugin returns a concrete *BaseModelToHeaderPlugin with an initialized adaptersStore.
 func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clientReader client.Reader) (*BaseModelToHeaderPlugin, error) {
-	// this is an example for how to build a reconciler that is mandatory for a plugin.
-	// the idea eventually is to move the resposibility to the plugin - cause plugin cannot operate without it!
-	// so initializing this plugin should initialize the reconciler. and if that fails, the plugin should fail to start.
-	// having said that - we added an abstraction - plugin doesn't have access to mgr.
-	// it gets a callback to build reconciler (could be called multiple times for multiple reconcilers)
 	reconcilerBuidler := reconcilerBuilder()
 	adaptersStore := newAdaptersStore()
 	configMapReconciler := &configMapReconciler{
@@ -76,7 +71,7 @@ func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clien
 
 	return &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: BaseModelToHeaderPluginType},
-		adaptersStore: newAdaptersStore(),
+		adaptersStore: adaptersStore,
 	}, nil
 }
 

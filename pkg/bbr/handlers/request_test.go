@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
+	bbrtest "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/test"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -421,10 +422,13 @@ func TestHandleRequestBody(t *testing.T) {
 		},
 	}
 
+	baseModelToHeaderPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-			baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 			server := NewServer(test.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
 				Request: framework.NewInferenceRequest(),
@@ -471,7 +475,10 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-	baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+	baseModelToHeaderPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
 	server := NewServer(false, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
 		Request: framework.NewInferenceRequest(),
@@ -481,7 +488,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 		"model":  "bar",
 		"prompt": "test",
 	})
-	_, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
+	_, err = server.HandleRequestBody(ctx, reqCtx, bodyBytes)
 	if err != nil {
 		t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
 	}
@@ -666,9 +673,12 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 		},
 	}
 
+	baseModelPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			baseModelPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 			server := NewServer(tc.streaming, []framework.RequestProcessor{plugin, baseModelPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
 				Request: framework.NewInferenceRequest(),
