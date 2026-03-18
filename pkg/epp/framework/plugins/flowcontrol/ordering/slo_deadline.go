@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
