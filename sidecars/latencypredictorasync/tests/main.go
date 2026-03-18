@@ -1,3 +1,19 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
@@ -56,7 +72,7 @@ func main() {
 	}
 
 	testQPS := parseEnvInt("TEST_QPS", 100)
-	testDurationSec := parseEnvInt("TEST_DURATION_SECONDS", 120)
+	testDurationSeconds := parseEnvInt("TEST_DURATION_SECONDS", 120)
 	maxBulkSize := parseEnvInt("MAX_BULK_SIZE", 200)
 	numEndpointsPerRequest := parseEnvInt("NUM_ENDPOINTS_PER_REQUEST", 10)
 	trainingBatchSize := parseEnvInt("TRAINING_BATCH_SIZE", 100)
@@ -75,7 +91,7 @@ func main() {
 	if err := os.WriteFile("/tmp/test_running", []byte("running"), 0644); err != nil {
 		log.Printf("Warning: could not create test_running marker: %v", err)
 	}
-	defer os.Remove("/tmp/test_running")
+	// Removed defer — cleaned up explicitly before all exit points to satisfy gocritic.
 
 	// Create logger using stdr (standard log -> logr.Logger)
 	logger := stdr.New(log.New(os.Stdout, "[predictor-test] ", log.LstdFlags))
@@ -84,7 +100,7 @@ func main() {
 		"prediction_servers", predictionServers,
 		"training_server", trainingServerURL,
 		"target_qps", testQPS,
-		"duration_sec", testDurationSec,
+		"duration_seconds", testDurationSeconds,
 		"endpoints_per_request", numEndpointsPerRequest,
 		"training_batch_size", trainingBatchSize,
 		"training_interval_ms", trainingIntervalMs)
@@ -107,22 +123,24 @@ func main() {
 	// Create predictor
 	predictor := latencypredictorasync.New(cfg, logger)
 
-	testCtx, cancel := context.WithTimeout(context.Background(), time.Duration(testDurationSec)*time.Second+30*time.Second)
-	defer cancel()
+	testCtx, cancel := context.WithTimeout(context.Background(), time.Duration(testDurationSeconds)*time.Second+30*time.Second)
 
 	if err := predictor.Start(testCtx); err != nil {
-		log.Fatalf("Failed to start predictor: %v", err)
+		cancel()
+		os.Remove("/tmp/test_running")
+		logger.Error(err, "Failed to start predictor")
+		return
 	}
 
 	predMetrics := &TestMetrics{
 		MinLatency: math.MaxInt64,
-		Latencies:  make([]int64, 0, testQPS*testDurationSec),
+		Latencies:  make([]int64, 0, testQPS*testDurationSeconds),
 	}
 
 	trainMetrics := &TrainingMetrics{}
 
 	testStart := time.Now()
-	testEnd := testStart.Add(time.Duration(testDurationSec) * time.Second)
+	testEnd := testStart.Add(time.Duration(testDurationSeconds) * time.Second)
 
 	logger.Info("Starting test requests...")
 
@@ -409,15 +427,18 @@ func main() {
 		"success_rate_pct", trainSuccessRate)
 
 	// Cleanup
+	cancel()
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer stopCancel()
 	predictor.Stop(stopCtx)
+	stopCancel()
 
 	if failedReq > 0 {
 		logger.Info("WARNING: Test had failed prediction requests", "failed_count", failedReq)
+		os.Remove("/tmp/test_running")
 		os.Exit(1)
 	}
 
+	os.Remove("/tmp/test_running")
 	logger.Info("Test completed successfully!")
 }
 
