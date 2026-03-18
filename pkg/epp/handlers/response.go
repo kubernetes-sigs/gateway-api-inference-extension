@@ -93,11 +93,12 @@ func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool, dynami
 				},
 			},
 		}
-		// Attach dynamic metadata if available.
-		if dynamicMetadata != nil {
-			resp.DynamicMetadata = dynamicMetadata
-		}
 		responses = append(responses, resp)
+	}
+
+	// Attach dynamic metadata to the last response if available.
+	if len(responses) > 0 && dynamicMetadata != nil {
+		responses[len(responses)-1].DynamicMetadata = dynamicMetadata
 	}
 	return responses
 }
