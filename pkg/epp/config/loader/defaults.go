@@ -28,8 +28,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
 )
 
 // DefaultScorerWeight is the weight used for scorers referenced in the configuration without explicit weights.
@@ -48,10 +49,10 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 		},
 		Plugins: []configapi.PluginSpec{
 			{
-				Type: scorer.QueueScorerType,
+				Type: queuedepth.QueueScorerType,
 			},
 			{
-				Type: scorer.KvCacheUtilizationScorerType,
+				Type: kvcacheutilization.KvCacheUtilizationScorerType,
 			},
 			{
 				Type: prefix.PrefixCachePluginType,
@@ -62,11 +63,11 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 				Name: "default",
 				Plugins: []configapi.SchedulingPlugin{
 					{
-						PluginRef: scorer.QueueScorerType,
+						PluginRef: queuedepth.QueueScorerType,
 						Weight:    &queueScorerWeight,
 					},
 					{
-						PluginRef: scorer.KvCacheUtilizationScorerType,
+						PluginRef: kvcacheutilization.KvCacheUtilizationScorerType,
 						Weight:    &kvCacheUtilizationScorerWeight,
 					},
 					{

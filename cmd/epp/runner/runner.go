@@ -69,9 +69,12 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/predictedlatency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/runningrequest"
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -450,10 +453,10 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(picker.RandomPickerType, picker.RandomPickerFactory)
 	fwkplugin.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
-	fwkplugin.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
-	fwkplugin.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
-	fwkplugin.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
-	fwkplugin.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	fwkplugin.Register(kvcacheutilization.KvCacheUtilizationScorerType, kvcacheutilization.KvCacheUtilizationScorerFactory)
+	fwkplugin.Register(queuedepth.QueueScorerType, queuedepth.QueueScorerFactory)
+	fwkplugin.Register(runningrequest.RunningRequestsSizeScorerType, runningrequest.RunningRequestsSizeScorerFactory)
+	fwkplugin.Register(loraaffinity.LoraAffinityScorerType, loraaffinity.LoraAffinityScorerFactory)
 	// Flow Control plugins
 	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, fairness.GlobalStrictFairnessPolicyFactory)
 	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
