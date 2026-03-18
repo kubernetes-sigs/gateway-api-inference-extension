@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: predictor-warmup
+  namespace: default
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: predictor-warmup
+        image: <your-registry>/latency-predictor-load-test:latest
+        imagePullPolicy: Always
+        env:
+        - name: PREDICTION_SERVERS
+          value: "http://vllm-llama3-8b-instruct-epp:8001"
+        - name: TRAINING_SERVER_URL
+          value: "http://vllm-llama3-8b-instruct-epp:8000"
+        # Minimal prediction load — warmup is purely to fill training buckets
+        - name: TEST_QPS
+          value: "1"
+        - name: TEST_DURATION_SECONDS
+          value: "300"
+        - name: MAX_BULK_SIZE
+          value: "1000"
+        - name: NUM_ENDPOINTS_PER_REQUEST
+          value: "1"
+        - name: MAX_CONCURRENT_DISPATCHES
+          value: "2"
+        - name: MAX_INFLIGHT_REQUESTS
+          value: "10"
+        - name: COALESCE_WINDOW_MS
+          value: "1"
+        - name: MAX_COALESCED_CALLERS
+          value: "10"
+        # High training rate to fill buckets fast
+        - name: TRAINING_BATCH_SIZE
+          value: "1000"
+        - name: TRAINING_INTERVAL_MS
+          value: "500"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
