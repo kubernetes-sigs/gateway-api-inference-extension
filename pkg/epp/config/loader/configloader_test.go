@@ -44,8 +44,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -142,12 +143,12 @@ func TestLoadRawConfiguration(t *testing.T) {
 				FeatureGates: configapi.FeatureGates{},
 				Plugins: []configapi.PluginSpec{
 					{
-						Name: scorer.QueueScorerType,
-						Type: scorer.QueueScorerType,
+						Name: queuedepth.QueueScorerType,
+						Type: queuedepth.QueueScorerType,
 					},
 					{
-						Name: scorer.KvCacheUtilizationScorerType,
-						Type: scorer.KvCacheUtilizationScorerType,
+						Name: kvcacheutilization.KvCacheUtilizationScorerType,
+						Type: kvcacheutilization.KvCacheUtilizationScorerType,
 					},
 					{
 						Name: prefix.PrefixCachePluginType,
@@ -159,11 +160,11 @@ func TestLoadRawConfiguration(t *testing.T) {
 						Name: "default",
 						Plugins: []configapi.SchedulingPlugin{
 							{
-								PluginRef: scorer.QueueScorerType,
+								PluginRef: queuedepth.QueueScorerType,
 								Weight:    &queueScorerWeight,
 							},
 							{
-								PluginRef: scorer.KvCacheUtilizationScorerType,
+								PluginRef: kvcacheutilization.KvCacheUtilizationScorerType,
 								Weight:    &kvCacheUtilizationScorerWeight,
 							},
 							{
