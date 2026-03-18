@@ -111,6 +111,13 @@ data:
     - type: queue-scorer
     - type: kv-cache-utilization-scorer
     - type: prefix-cache-scorer
+    - type: metrics-data-source
+    - type: core-metrics-extractor
+    data:
+      sources:
+      - pluginRef: metrics-data-source
+        extractors:
+        - pluginRef: core-metrics-extractor
     schedulingProfiles:
     - name: default
       plugins:
