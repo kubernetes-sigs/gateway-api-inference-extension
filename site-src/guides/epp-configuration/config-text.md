@@ -215,7 +215,7 @@ instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
 These plugins are referenced within the `schedulingProfiles` section.
 
-#### PrefixCacheScorer
+#### PrefixCache Scorer
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
 
@@ -228,7 +228,10 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
   - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
     per server (pod). If not specified defaults to `31250`
 
-#### LoRAAffinityScorer
+#### LoRAAffinity Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity) Link**
+
 
 Scores pods based on whether the requested LoRA adapter is already loaded in the pod's HBM, or if
 the pod is ready to load the LoRA on demand.
@@ -236,20 +239,37 @@ the pod is ready to load the LoRA on demand.
 - *Type*: lora-affinity-scorer
 - *Parameters*: none
 
-#### KvCacheScorer
+#### KvCacheUtilization Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization) Link**
 
 Scores the candidate pods based on their KV cache utilization.
 
 - *Type*: kv-cache-utilization-scorer
 - *Parameters*: none
 
-#### QueueScorer
+#### QueueDepth Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/queuedepth) Link**
 
 Scores list of candidate pods based on the pod's waiting queue size. The lower the
 waiting queue size the pod has, the higher the score it will get (since it's more
 available to serve new request).
 
 - *Type*: queue-scorer
+- *Parameters*: none
+
+#### RunningRequest Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/runningrequest) Link**
+
+Scores candidate pods based on the number of requests currently being processed (in-flight) on
+each pod. Pods with fewer running requests receive a higher score. Scores are normalized across
+the candidate set — the pod with the fewest running requests scores `1.0`, the pod with the most
+scores `0.0`, and all others are linearly interpolated. When all candidates have the same count,
+every pod receives a neutral score of `1.0`.
+
+- *Type*: running-requests-size-scorer
 - *Parameters*: none
 
 #### MaxScorePicker
