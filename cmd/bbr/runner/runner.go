@@ -197,9 +197,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		r.requestPlugins = append(r.requestPlugins, modelToHeaderPlugin)
 
 		// Create BaseModelToHeaderPlugin instance for extracting the "model" field into X-Gateway-Base-Model-Name
-		baseModelToHeaderPlugin, err := basemodelextractor.NewBaseModelToHeaderPlugin(func() (*builder.Builder, client.Reader) {
-			return ctrl.NewControllerManagedBy(mgr), mgr.GetAPIReader()
-		})
+		baseModelToHeaderPlugin, err := basemodelextractor.NewBaseModelToHeaderPlugin(func() *builder.Builder {
+			return ctrl.NewControllerManagedBy(mgr)
+		}, mgr.GetAPIReader())
 		if err != nil {
 			setupLog.Error(err, "Failed to create plugin", "pluginType", basemodelextractor.BaseModelToHeaderPluginType)
 			return err

@@ -28,8 +28,8 @@ import (
 type Handle interface {
 	// Context returns a context the plugins can use, if they need one
 	Context() context.Context
-
-	ReconcilerBuilder() (*ctrlbuilder.Builder, client.Reader)
+	ClientReader() client.Reader
+	ReconcilerBuilder() *ctrlbuilder.Builder
 }
 
 // bbrHandle is an implementation of the Handle interface.
@@ -43,8 +43,12 @@ func (h *bbrHandle) Context() context.Context {
 	return h.ctx
 }
 
-func (h *bbrHandle) ReconcilerBuilder() (*ctrlbuilder.Builder, client.Reader) {
-	return ctrl.NewControllerManagedBy(h.mgr), h.mgr.GetAPIReader()
+func (h *bbrHandle) ClientReader() client.Reader {
+	return h.mgr.GetAPIReader()
+}
+
+func (h *bbrHandle) ReconcilerBuilder() *ctrlbuilder.Builder {
+	return ctrl.NewControllerManagedBy(h.mgr)
 }
 
 func NewBbrHandle(ctx context.Context, mgr ctrl.Manager) Handle {

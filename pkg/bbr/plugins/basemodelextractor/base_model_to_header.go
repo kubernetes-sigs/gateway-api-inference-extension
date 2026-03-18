@@ -48,7 +48,7 @@ type BaseModelToHeaderPlugin struct {
 
 // BaseModelToHeaderPluginFactory defines the factory function for BaseModelToHeaderPlugin
 func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle framework.Handle) (framework.BBRPlugin, error) {
-	plugin, err := NewBaseModelToHeaderPlugin(handle.ReconcilerBuilder)
+	plugin, err := NewBaseModelToHeaderPlugin(handle.ReconcilerBuilder, handle.ClientReader())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin '%s' - %w", BaseModelToHeaderPluginType, err)
 	}
@@ -57,15 +57,20 @@ func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle frame
 }
 
 // NewBaseModelToHeaderPlugin returns a concrete *BaseModelToHeaderPlugin with an initialized adaptersStore.
-func NewBaseModelToHeaderPlugin(reconcilerBuilder func() (*builder.Builder, client.Reader)) (*BaseModelToHeaderPlugin, error) {
-	reconciler, clientReader := reconcilerBuilder()
+func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clientReader client.Reader) (*BaseModelToHeaderPlugin, error) {
+	// this is an example for how to build a reconciler that is mandatory for a plugin.
+	// the idea eventually is to move the resposibility to the plugin - cause plugin cannot operate without it!
+	// so initializing this plugin should initialize the reconciler. and if that fails, the plugin should fail to start.
+	// having said that - we added an abstraction - plugin doesn't have access to mgr.
+	// it gets a callback to build reconciler (could be called multiple times for multiple reconcilers)
+	reconcilerBuidler := reconcilerBuilder()
 	adaptersStore := newAdaptersStore()
 	configMapReconciler := &configMapReconciler{
 		Reader:        clientReader,
 		adaptersStore: adaptersStore,
 	}
 
-	if err := reconciler.For(&corev1.ConfigMap{}).Complete(configMapReconciler); err != nil {
+	if err := reconcilerBuidler.For(&corev1.ConfigMap{}).Complete(configMapReconciler); err != nil {
 		return nil, fmt.Errorf("failed to register configmap reconciler for plugin '%s' - %w", BaseModelToHeaderPluginType, err)
 	}
 
