@@ -81,7 +81,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 	}
 }
 
-func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
+func generateResponseBodyResponses(reqCtx *RequestContext, responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
 	commonResponses := envoy.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
 	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
@@ -91,6 +91,10 @@ func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*ext
 					Response: commonResp,
 				},
 			},
+		}
+		// Attach dynamic metadata if available.
+		if reqCtx.Response.DynamicMetadata != nil {
+			resp.DynamicMetadata = reqCtx.Response.DynamicMetadata
 		}
 		responses = append(responses, resp)
 	}

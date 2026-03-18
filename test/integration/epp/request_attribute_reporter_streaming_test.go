@@ -43,14 +43,16 @@ func TestRequestAttributeReporterStreaming(t *testing.T) {
 `,
 		`data: {"choices":[{"delta":{},"index":0,"finish_reason":"stop"}],"id":"123","created":1,"model":"modelName","object":"chat.completion.chunk","usage":{"completion_tokens":10,"prompt_tokens":32,"total_tokens":42}}
 `,
+		`data: [DONE]
+`,
 	)
 	requests = append(requests, respRequests...)
 
-	// We send ReqHeaders, ReqBody, RespHeaders, RespBody(chunk1), RespBody(chunk2) -> 5 responses
-	responses, err := integration.StreamedRequest(t, h.Client, requests, 5)
+	// We send ReqHeaders, ReqBody, RespHeaders, RespBody(chunk1), RespBody(chunk2), RespBody(chunk3) -> 6 responses
+	responses, err := integration.StreamedRequest(t, h.Client, requests, 6)
 	require.NoError(t, err)
 
-	res := responses[4]
+	res := responses[5]
 	require.NotNil(t, res.DynamicMetadata, "expected DynamicMetadata in ext_proc response")
 	envoyLbMap, ok := res.DynamicMetadata.Fields["envoy.lb"]
 	require.True(t, ok, "expected envoy.lb namespace in DynamicMetadata")

@@ -348,6 +348,7 @@ func (d *Director) HandleResponseBody(ctx context.Context, reqCtx *handlers.Requ
 		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
 		EndOfStream: endOfStream,
+		Usage:       reqCtx.Usage,
 	}
 	d.runResponseBodyPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 	reqCtx.Response.DynamicMetadata = response.DynamicMetadata

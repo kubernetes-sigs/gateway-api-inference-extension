@@ -150,12 +150,8 @@ func (c *Plugin) TypedName() plugin.TypedName {
 	return c.typedName
 }
 
-// ResponseBody implements the requestcontrol.ResponseBody interface.
 func (c *Plugin) ResponseBody(ctx context.Context, request *scheduling.LLMRequest, response *requestcontrol.Response,
 	_ *datalayer.EndpointMetadata) {
-	if !response.EndOfStream {
-		return
-	}
 	// Convert the request usage Go struct into a protobuf struct so that it can be used as a CEL variable.
 	celData, err := c.getCelData(response)
 	if err != nil {

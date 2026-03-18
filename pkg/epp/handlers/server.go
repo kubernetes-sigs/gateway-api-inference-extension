@@ -273,8 +273,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 			if reqCtx.modelServerStreaming {
 				s.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
-				// For streaming response, we send response chunk back to envoy every time we received it.
-				reqCtx.respBodyResp = generateResponseBodyResponses(chunk, endOfStream)
+				reqCtx.respBodyResp = generateResponseBodyResponses(reqCtx, chunk, endOfStream)
 			} else {
 				body = append(body, chunk...)
 			}
@@ -333,8 +332,7 @@ func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestCon
 	reqCtx.ResponseSize = len(body)
 	reqCtx = s.HandleResponseBody(ctx, reqCtx, body, true)
 	if !modelStreaming {
-		// For non-streaming response, we send response back to envoy after receiving all the response body.
-		reqCtx.respBodyResp = generateResponseBodyResponses(body, true)
+		reqCtx.respBodyResp = generateResponseBodyResponses(reqCtx, body, true)
 	}
 }
 
