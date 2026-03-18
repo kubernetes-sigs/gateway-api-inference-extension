@@ -427,7 +427,8 @@ func TestHandleRequestBody(t *testing.T) {
 			baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 			server := NewServer(test.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: framework.NewInferenceRequest(),
+				CycleState: framework.NewCycleState(),
+				Request:    framework.NewInferenceRequest(),
 			}
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
@@ -474,7 +475,8 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 	server := NewServer(false, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
-		Request: framework.NewInferenceRequest(),
+		CycleState: framework.NewCycleState(),
+		Request:    framework.NewInferenceRequest(),
 	}
 
 	bodyBytes, _ := json.Marshal(map[string]any{
@@ -539,15 +541,15 @@ func mapToBytes(t *testing.T, m map[string]any) []byte {
 
 type bodyMutatingPlugin struct {
 	name     string
-	mutateFn func(ctx context.Context, request *framework.InferenceRequest) error
+	mutateFn func(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error
 }
 
 func (p *bodyMutatingPlugin) TypedName() epp.TypedName {
 	return epp.TypedName{Type: "fake", Name: p.name}
 }
 
-func (p *bodyMutatingPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) error {
-	return p.mutateFn(ctx, request)
+func (p *bodyMutatingPlugin) ProcessRequest(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error {
+	return p.mutateFn(ctx, cycleState, request)
 }
 
 var _ framework.RequestProcessor = &bodyMutatingPlugin{}
@@ -558,7 +560,7 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 
 	plugin := &bodyMutatingPlugin{
 		name: "body-mutator",
-		mutateFn: func(_ context.Context, request *framework.InferenceRequest) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
 			request.SetBodyField("injected", "value")
 			return nil
 		},
@@ -671,7 +673,8 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 			baseModelPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 			server := NewServer(tc.streaming, []framework.RequestProcessor{plugin, baseModelPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: framework.NewInferenceRequest(),
+				CycleState: framework.NewCycleState(),
+				Request:    framework.NewInferenceRequest(),
 			}
 			bodyBytes, _ := json.Marshal(tc.body)
 			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)

@@ -296,7 +296,7 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest(t *testing.T) {
 				t.Fatalf("failed to create plugin: %v", err)
 			}
 
-			err = p.ProcessRequest(context.Background(), tt.request)
+			err = p.ProcessRequest(context.Background(), nil, tt.request)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -324,7 +324,7 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest_MutatedHeaders(t *testing.T) {
 	request := framework.NewInferenceRequest()
 	request.Body["model"] = testModelValue
 
-	if err := p.ProcessRequest(context.Background(), request); err != nil {
+	if err := p.ProcessRequest(context.Background(), nil, request); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

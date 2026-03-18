@@ -68,7 +68,7 @@ func (p *BaseModelToHeaderPlugin) WithName(name string) *BaseModelToHeaderPlugin
 }
 
 // ProcessRequest sets base model name on the header
-func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) error {
+func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
 	if request == nil || request.Headers == nil || request.Body == nil {
 		return nil // this shouldn't happen
 	}

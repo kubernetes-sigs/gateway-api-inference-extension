@@ -136,7 +136,8 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 			baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 			srv := NewServer(tc.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: framework.NewInferenceRequest(),
+				CycleState: framework.NewCycleState(),
+				Request:    framework.NewInferenceRequest(),
 			}
 			got, err := srv.HandleRequestBody(ctx, reqCtx, tc.body)
 			if err != nil {

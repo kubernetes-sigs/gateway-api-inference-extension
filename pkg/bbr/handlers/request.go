@@ -41,7 +41,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return nil, err
 	}
 
-	if err := s.runRequestPlugins(ctx, reqCtx.Request); err != nil {
+	if err := s.runRequestPlugins(ctx, reqCtx.CycleState, reqCtx.Request); err != nil {
 		logger.V(logutil.DEFAULT).Error(err, "failed to execute request plugins")
 		if s.streaming {
 			ret = append(ret, &eppb.ProcessingResponse{
@@ -128,12 +128,12 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 }
 
 // runRequestPlugins executes request plugins in the order they were registered.
-func (s *Server) runRequestPlugins(ctx context.Context, request *framework.InferenceRequest) error {
+func (s *Server) runRequestPlugins(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error {
 	var err error
 	for _, plugin := range s.requestPlugins {
 		log.FromContext(ctx).V(logutil.VERBOSE).Info("Executing request plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		err = plugin.ProcessRequest(ctx, request)
+		err = plugin.ProcessRequest(ctx, cycleState, request)
 		metrics.RecordPluginProcessingLatency(requestPluginExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
 			return fmt.Errorf("failed to execute request plugin '%s' - %w", plugin.TypedName(), err)
