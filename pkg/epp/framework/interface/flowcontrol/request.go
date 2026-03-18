@@ -57,7 +57,7 @@ type FlowControlRequest interface {
 	ID() string
 
 	// GetMetadata returns the opaque metadata associated with the request (e.g., header-derived context, subset filters).
-	// This data is passed transparently to components like the contracts.PodLocator to resolve resources (candidate pods)
+	// This data is passed transparently to components like contracts.EndpointCandidates to resolve resources (endpoint candidates)
 	// lazily during the dispatch cycle.
 	GetMetadata() map[string]any
 

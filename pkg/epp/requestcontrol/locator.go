@@ -34,78 +34,78 @@ import (
 )
 
 const (
-	// defaultCacheTTL is the duration for which a pod lookup result is considered valid.
-	// This trades off "Scale-from-Zero" responsiveness (latency to see new pods) against Datastore lock contention.
+	// defaultCacheTTL is the duration for which an endpoint candidate lookup result is considered valid.
+	// This trades off "Scale-from-Zero" responsiveness (latency to see new endpoints) against Datastore lock contention.
 	// 50ms aligns roughly with standard Prometheus scrape intervals or high-frequency control loops.
 	defaultCacheTTL = 50 * time.Millisecond
 
 	// cleanupInterval dictates how often we sweep the map for expired entries.
 	cleanupInterval = 1 * time.Minute
 
-	// defaultCacheKey is used when no subset filter is present (Return All Pods).
+	// defaultCacheKey is used when no subset filter is present (Return All Endpoints).
 	defaultCacheKey = "__default__"
 
-	// emptySubsetCacheKey is used when a subset filter is present but empty (Return No Pods).
+	// emptySubsetCacheKey is used when a subset filter is present but empty (Return No Endpoints).
 	emptySubsetCacheKey = "__explicit_empty__"
 )
 
-// --- DatastorePodLocator (The Delegate) ---
+// --- DatastoreEndpointCandidates (The Delegate) ---
 
-// PodLocatorConfig holds configuration for the DatastorePodLocator.
-type PodLocatorConfig struct {
+// EndpointCandidatesConfig holds configuration for the DatastoreEndpointCandidates.
+type EndpointCandidatesConfig struct {
 	DisableEndpointSubsetFilter bool
 }
 
-// LocatorOption is a function that configures the PodLocatorConfig.
-type LocatorOption func(*PodLocatorConfig)
+// EndpointCandidatesOption is a function that configures the EndpointCandidatesConfig.
+type EndpointCandidatesOption func(*EndpointCandidatesConfig)
 
 // WithDisableEndpointSubsetFilter sets the DisableEndpointSubsetFilter flag.
-func WithDisableEndpointSubsetFilter(disable bool) LocatorOption {
-	return func(c *PodLocatorConfig) {
+func WithDisableEndpointSubsetFilter(disable bool) EndpointCandidatesOption {
+	return func(c *EndpointCandidatesConfig) {
 		c.DisableEndpointSubsetFilter = disable
 	}
 }
 
-// DatastorePodLocator implements contracts.PodLocator by querying the EPP Datastore.
-// It centralizes the logic for resolving candidate pods based on request metadata (specifically Envoy subset filters).
-type DatastorePodLocator struct {
+// DatastoreEndpointCandidates implements contracts.EndpointCandidates by querying the EPP Datastore.
+// It centralizes the logic for resolving endpoint candidates based on request metadata (specifically Envoy subset filters).
+type DatastoreEndpointCandidates struct {
 	datastore Datastore
-	config    PodLocatorConfig
+	config    EndpointCandidatesConfig
 }
 
-var _ contracts.PodLocator = &DatastorePodLocator{}
+var _ contracts.EndpointCandidates = &DatastoreEndpointCandidates{}
 
-// NewDatastorePodLocator creates a new DatastorePodLocator.
-func NewDatastorePodLocator(ds Datastore, opts ...LocatorOption) *DatastorePodLocator {
-	cfg := PodLocatorConfig{
+// NewDatastoreEndpointCandidates creates a new DatastoreEndpointCandidates.
+func NewDatastoreEndpointCandidates(ds Datastore, opts ...EndpointCandidatesOption) *DatastoreEndpointCandidates {
+	cfg := EndpointCandidatesConfig{
 		DisableEndpointSubsetFilter: false,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return &DatastorePodLocator{
+	return &DatastoreEndpointCandidates{
 		datastore: ds,
 		config:    cfg,
 	}
 }
 
-// Locate retrieves the list of candidate pods from the datastore that match the criteria defined in the request
+// Locate retrieves the list of endpoint candidates from the datastore that match the criteria defined in the request
 // metadata.
 //
 // It supports:
-// 1. Returning all pods if no specific subset filter is present.
-// 2. Returning a filtered list of pods if "x-gateway-destination-endpoint-subset" is present.
-func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint {
+// 1. Returning all endpoint candidates if no specific subset filter is present.
+// 2. Returning a filtered list of endpoint candidates if "x-gateway-destination-endpoint-subset" is present.
+func (d *DatastoreEndpointCandidates) Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
-	// If the user explicitly disabled subset filtering, return the default pool (all pods).
+	// If the user explicitly disabled subset filtering, return the default pool (all endpoint candidates).
 	if d.config.DisableEndpointSubsetFilter {
-		loggerTrace.Info("endpoint subset filtering is explicitly disabled, returning all pods")
+		loggerTrace.Info("endpoint subset filtering is explicitly disabled, returning all endpoint candidates")
 		return d.datastore.PodList(datastore.AllPodsPredicate)
 	}
 
 	// Check if the subset filter namespace exists in metadata.
-	// If not, we assume the request targets the default pool (all pods).
+	// If not, we assume the request targets the default pool (all endpoint candidates).
 	if requestMetadata == nil {
 		return d.datastore.PodList(datastore.AllPodsPredicate)
 	}
@@ -124,7 +124,7 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 	// If the filter key exists but the list is empty, it implies a filter that matched nothing upstream (or malformed
 	// data), so we return nothing.
 	if len(endpointSubsetList) == 0 {
-		loggerTrace.Info("found empty subset filter in request metadata, returning empty pod list")
+		loggerTrace.Info("found empty subset filter in request metadata, returning empty endpoint candidate list")
 		return []fwkdl.Endpoint{}
 	}
 
@@ -160,29 +160,29 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 		return false
 	})
 
-	loggerTrace.Info("filtered candidate pods by subset filtering",
+	loggerTrace.Info("filtered endpoint candidates by subset filtering",
 		"podTotalCount", podTotalCount,
 		"filteredCount", len(podFilteredList))
 
 	return podFilteredList
 }
 
-// --- CachedPodLocator (The Decorator) ---
+// --- CachedEndpointCandidates (The Decorator) ---
 
-// cacheEntry represents a snapshot of pod metrics at a specific point in time.
+// cacheEntry represents a snapshot of endpoint candidate metrics at a specific point in time.
 type cacheEntry struct {
 	pods   []fwkdl.Endpoint
 	expiry time.Time
 }
 
-// CachedPodLocator is a decorator for contracts.PodLocator that caches resultscto reduce lock contention on the
+// CachedEndpointCandidates is a decorator for contracts.EndpointCandidates that caches results to reduce lock contention on the
 // underlying Datastore.
 //
 // It is designed for high-throughput paths (like the Flow Control dispatch loop)cwhere fetching fresh data every
 // millisecond is unnecessary and expensive.
-type CachedPodLocator struct {
-	// delegate is the underlying source of truth (usually the DatastorePodLocator).
-	delegate contracts.PodLocator
+type CachedEndpointCandidates struct {
+	// delegate is the underlying source of truth (usually the DatastoreEndpointCandidates).
+	delegate contracts.EndpointCandidates
 
 	// ttl defines how long a cache entry remains valid.
 	ttl time.Duration
@@ -192,16 +192,16 @@ type CachedPodLocator struct {
 	cache map[string]cacheEntry
 }
 
-var _ contracts.PodLocator = &CachedPodLocator{}
+var _ contracts.EndpointCandidates = &CachedEndpointCandidates{}
 
-// NewCachedPodLocator creates a new CachedPodLocator and starts a background cleanup routine.
+// NewCachedEndpointCandidates creates a new CachedEndpointCandidates and starts a background cleanup routine.
 // The provided context is used to control the lifecycle of the cleanup goroutine.
-func NewCachedPodLocator(ctx context.Context, delegate contracts.PodLocator, ttl time.Duration) *CachedPodLocator {
+func NewCachedEndpointCandidates(ctx context.Context, delegate contracts.EndpointCandidates, ttl time.Duration) *CachedEndpointCandidates {
 	if ttl <= 0 {
 		ttl = defaultCacheTTL
 	}
 
-	c := &CachedPodLocator{
+	c := &CachedEndpointCandidates{
 		delegate: delegate,
 		ttl:      ttl,
 		cache:    make(map[string]cacheEntry),
@@ -213,9 +213,9 @@ func NewCachedPodLocator(ctx context.Context, delegate contracts.PodLocator, ttl
 	return c
 }
 
-// Locate returns the list of candidate pods for the given request metadata, using a cached result if available and
+// Locate returns the list of endpoint candidates for the given request metadata, using a cached result if available and
 // fresh.
-func (c *CachedPodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint {
+func (c *CachedEndpointCandidates) Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint {
 	key := c.generateCacheKey(requestMetadata)
 
 	// Fast Path: Read Lock
@@ -253,10 +253,10 @@ func (c *CachedPodLocator) Locate(ctx context.Context, requestMetadata map[strin
 	return freshPods
 }
 
-// generateCacheKey creates a deterministic string key representing the pod selection criteria.
+// generateCacheKey creates a deterministic string key representing the endpoint selection criteria.
 // It handles the "x-gateway-destination-endpoint-subset" structure specifically.
-func (c *CachedPodLocator) generateCacheKey(reqMetadata map[string]any) string {
-	// No Metadata -> All Pods
+func (c *CachedEndpointCandidates) generateCacheKey(reqMetadata map[string]any) string {
+	// No Metadata -> All Endpoints
 	if reqMetadata == nil {
 		return defaultCacheKey
 	}
@@ -270,12 +270,12 @@ func (c *CachedPodLocator) generateCacheKey(reqMetadata map[string]any) string {
 	// We must treat this list as a set (order independent).
 	endpointSubsetList, found := subsetMap[metadata.SubsetFilterKey].([]any)
 
-	// Namespace exists, but "subset" key is missing -> All Pods
+	// Namespace exists, but "subset" key is missing -> All Endpoints
 	if !found {
 		return defaultCacheKey
 	}
 
-	// "subset" key exists, but is empty list -> No Pods
+	// "subset" key exists, but is empty list -> No Endpoints
 	if len(endpointSubsetList) == 0 {
 		return emptySubsetCacheKey
 	}
@@ -301,8 +301,8 @@ func (c *CachedPodLocator) generateCacheKey(reqMetadata map[string]any) string {
 }
 
 // runCleanup periodically removes expired entries from the cache to prevent unbounded growth.
-func (c *CachedPodLocator) runCleanup(ctx context.Context) {
-	logger := log.FromContext(ctx).WithName("CachedPodLocatorCleanup")
+func (c *CachedEndpointCandidates) runCleanup(ctx context.Context) {
+	logger := log.FromContext(ctx).WithName("CachedEndpointCandidatesCleanup")
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
@@ -318,7 +318,7 @@ func (c *CachedPodLocator) runCleanup(ctx context.Context) {
 }
 
 // cleanup iterates over the map and removes expired entries.
-func (c *CachedPodLocator) cleanup() {
+func (c *CachedEndpointCandidates) cleanup() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
