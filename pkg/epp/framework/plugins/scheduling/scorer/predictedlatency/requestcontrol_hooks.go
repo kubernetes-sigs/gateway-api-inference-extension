@@ -231,9 +231,11 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 	}
 
 	if predictedLatencyCtx.ttft == 0 {
-		// For streaming, we record TTFT immediately.
-		// For non-streaming, we wait until EndOfStream.
-		if t.config.StreamingMode {
+		// For streaming, we record TTFT on the first non-EOS chunk.
+		// If EOS arrives with ttft==0, this is a non-streaming request in streaming mode —
+		// skip TTFT here to avoid recording e2e latency as TTFT (pollutes training).
+		// The prefill counter will be decremented in the EOS block via ttftNotYetRecorded.
+		if t.config.StreamingMode && !response.EndOfStream {
 			processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 
 			// In disaggregated streaming, prefill is done once TTFT is hit.
