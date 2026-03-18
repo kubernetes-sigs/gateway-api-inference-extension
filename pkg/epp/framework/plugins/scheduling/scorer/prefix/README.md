@@ -50,9 +50,3 @@ The plugin config supports:
 - Matching is model-scoped (same prompt across different models does not collide).
 - Pods no longer active are periodically removed from the index.
 - Hashing uses token-to-character approximation, so it is a heuristic, not exact tokenizer parity.
-
-## Source files
-
-- `plugin.go`: scorer behavior, request hashing, score computation, lifecycle hooks.
-- `indexer.go`: in-memory per-pod LRU index and reverse hash lookup.
-- `plugin_test.go`, `indexer_test.go`: behavior and concurrency tests.

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
+package runningrequest
 
 import (
 	"context"
@@ -26,58 +26,58 @@ import (
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
-func TestQueueScorer(t *testing.T) {
+func TestRunningRequestsSizeScorer(t *testing.T) {
 	tests := []struct {
-		name                   string
-		endpoints              []fwksched.Endpoint
-		expectedScoresEndpoint map[int]float64 // Map of endpoint index to expected score
+		name              string
+		endpoints         []fwksched.Endpoint
+		expectedScoresPod map[int]float64 // Map of pod index to expected score
 	}{
 		{
-			name: "Different queue sizes",
+			name: "Different running queue sizes",
 			endpoints: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 10}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 5}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{RunningRequestsSize: 10}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{RunningRequestsSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{RunningRequestsSize: 0}, nil),
 			},
-			expectedScoresEndpoint: map[int]float64{
+			expectedScoresPod: map[int]float64{
 				0: 0.0, // Longest queue (10) gets lowest score
 				1: 0.5, // Medium queue (5) gets medium score
 				2: 1.0, // Shortest queue (0) gets highest score
 			},
 		},
 		{
-			name: "Same queue sizes",
+			name: "Same running queue sizes",
 			endpoints: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 5}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{RunningRequestsSize: 5}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{RunningRequestsSize: 5}, nil),
 			},
-			expectedScoresEndpoint: map[int]float64{
+			expectedScoresPod: map[int]float64{
 				0: 1.0, // When all pods have the same queue size, they get the same neutral score
 				1: 1.0,
 			},
 		},
 		{
-			name: "Zero queue sizes",
+			name: "Zero running queue sizes",
 			endpoints: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 0}, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{WaitingQueueSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{RunningRequestsSize: 0}, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{}, &fwkdl.Metrics{RunningRequestsSize: 0}, nil),
 			},
-			expectedScoresEndpoint: map[int]float64{
+			expectedScoresPod: map[int]float64{
 				0: 1.0,
 				1: 1.0,
 			},
 		},
 	}
 
-	scorer := &QueueScorer{}
+	scorer := &RunningRequestsSizeScorer{}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.LLMRequest{}, test.endpoints)
 
 			for i, endpoint := range test.endpoints {
-				expectedScore := test.expectedScoresEndpoint[i]
-				assert.InDelta(t, expectedScore, scores[endpoint], 0.0001, "Pod %d should have score %f", i, expectedScore)
+				expectedScore := test.expectedScoresPod[i]
+				assert.InDelta(t, expectedScore, scores[endpoint], 0.0001, "Endpoint %d should have score %f", i, expectedScore)
 			}
 		})
 	}

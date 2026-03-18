@@ -32,8 +32,3 @@ The plugin consumes:
 ## Configuration
 
 This scorer currently has no runtime parameters.
-
-## Source files
-
-- `kvcache_utilization.go`: plugin type, factory, and scoring logic.
-- `kvcache_utilization_test.go`: table-driven tests for score behavior across utilization levels.

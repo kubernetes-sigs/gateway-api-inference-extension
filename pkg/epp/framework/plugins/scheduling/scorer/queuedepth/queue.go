@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scorer
+package queuedepth
 
 import (
 	"context"
@@ -27,61 +27,61 @@ import (
 )
 
 const (
-	RunningRequestsSizeScorerType = "running-requests-size-scorer"
+	QueueScorerType = "queue-scorer"
 )
 
 // compile-time type assertion
-var _ framework.Scorer = &RunningRequestsSizeScorer{}
+var _ framework.Scorer = &QueueScorer{}
 
-// RunningRequestsSizeScorerFactory defines the factory function for RunningRequestsSizeScorer.
-func RunningRequestsSizeScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	return NewRunningRequestsSizeScorer().WithName(name), nil
+// QueueScorerFactory defines the factory function for QueueScorer.
+func QueueScorerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	return NewQueueScorer().WithName(name), nil
 }
 
-// NewRunningRequestsSizeScorer initializes a new RunningRequestsSizeScorer and returns its pointer.
-func NewRunningRequestsSizeScorer() *RunningRequestsSizeScorer {
-	return &RunningRequestsSizeScorer{
-		typedName: fwkplugin.TypedName{Type: RunningRequestsSizeScorerType, Name: RunningRequestsSizeScorerType},
+// NewQueueScorer initializes a new QueueScorer and returns its pointer.
+func NewQueueScorer() *QueueScorer {
+	return &QueueScorer{
+		typedName: fwkplugin.TypedName{Type: QueueScorerType, Name: QueueScorerType},
 	}
 }
 
-// RunningRequestsSizeScorer scores list of candidate pods based on the pod's running request size.
-// the less running request size the pod has, the higher score it will get (since it's more available to serve new request).
-type RunningRequestsSizeScorer struct {
+// QueueScorer scores list of candidate pods based on the pod's waiting queue size.
+// the less waiting queue size the pod has, the higher score it will get (since it's more available to serve new request).
+type QueueScorer struct {
 	typedName fwkplugin.TypedName
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (s *RunningRequestsSizeScorer) TypedName() fwkplugin.TypedName {
+func (s *QueueScorer) TypedName() fwkplugin.TypedName {
 	return s.typedName
 }
 
 // Category returns the preference the scorer applies when scoring candidate endpoints.
-func (s *RunningRequestsSizeScorer) Category() framework.ScorerCategory {
+func (s *QueueScorer) Category() framework.ScorerCategory {
 	return framework.Distribution
 }
 
 // Consumes returns the list of data that is consumed by the plugin.
-func (s *RunningRequestsSizeScorer) Consumes() map[string]any {
+func (s *QueueScorer) Consumes() map[string]any {
 	return map[string]any{
-		metrics.RunningRequestsSizeKey: int(0),
+		metrics.WaitingQueueSizeKey: int(0),
 	}
 }
 
 // WithName sets the name of the scorer.
-func (s *RunningRequestsSizeScorer) WithName(name string) *RunningRequestsSizeScorer {
+func (s *QueueScorer) WithName(name string) *QueueScorer {
 	s.typedName.Name = name
 	return s
 }
 
-// Score returns the scoring result for the given list of pods based on context.
-func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+// Score returns the scoring result for the given list of endpoints based on context.
+func (s *QueueScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	minQueueSize := math.MaxInt
 	maxQueueSize := math.MinInt
 
 	// Iterate through the remaining endpoints to find min and max
 	for _, endpoint := range endpoints {
-		queueSize := endpoint.GetMetrics().RunningRequestsSize
+		queueSize := endpoint.GetMetrics().WaitingQueueSize
 		if queueSize < minQueueSize {
 			minQueueSize = queueSize
 		}
@@ -93,10 +93,10 @@ func (s *RunningRequestsSizeScorer) Score(_ context.Context, _ *framework.CycleS
 	// endpointScoreFunc calculates the score based on the queue size of each endpoint. Longer queue gets a lower score.
 	endpointScoreFunc := func(endpoint framework.Endpoint) float64 {
 		if maxQueueSize == minQueueSize {
-			// If all endpoints have the same queue size, return a neutral score
+			// If all pods have the same queue size, return a neutral score
 			return 1.0
 		}
-		return float64(maxQueueSize-endpoint.GetMetrics().RunningRequestsSize) / float64(maxQueueSize-minQueueSize)
+		return float64(maxQueueSize-endpoint.GetMetrics().WaitingQueueSize) / float64(maxQueueSize-minQueueSize)
 	}
 
 	// Create a map to hold the scores for each endpoint

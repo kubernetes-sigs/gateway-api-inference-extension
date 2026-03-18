@@ -33,8 +33,3 @@ The plugin consumes:
 ## Configuration
 
 This scorer currently has no runtime parameters.
-
-## Source files
-
-- `queue.go`: plugin type, factory, and queue-depth scoring logic.
-- `queue_test.go`: table-driven tests for normalization behavior.

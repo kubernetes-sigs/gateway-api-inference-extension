@@ -29,8 +29,3 @@ It also relies on endpoint metric `MaxActiveModels` to determine remaining adapt
 ## Configuration
 
 This scorer currently has no runtime parameters.
-
-## Source files
-
-- `lora_affinity.go`: plugin type, factory, and score computation.
-- `lora_affinity_test.go`: table-driven tests for active/waiting/capacity scenarios.
