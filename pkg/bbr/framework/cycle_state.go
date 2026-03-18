@@ -27,28 +27,19 @@ var (
 	ErrNotFound = errors.New("not found")
 )
 
-// StateKey is the type of keys stored in CycleState.
-type StateKey string
-
-// StateData is a generic type for arbitrary data stored in CycleState.
-type StateData interface {
-	// Clone is an interface to make a copy of StateData.
-	Clone() StateData
-}
-
 // NewCycleState initializes a new CycleState and returns its pointer.
 func NewCycleState() *CycleState {
 	return &CycleState{}
 }
 
 // CycleState provides a mechanism for plugins to store and retrieve arbitrary data.
-// StateData stored by one plugin can be read, altered, or deleted by another plugin.
+// Data stored by one plugin can be read, altered, or deleted by another plugin.
 // CycleState does not provide any data protection, as all plugins are assumed to be
 // trusted.
 // Note: CycleState uses a sync.Map to back the storage, because it is thread safe.
 // It's aimed to optimize for the "write once and read many times" scenarios.
 type CycleState struct {
-	// key: StateKey, value: StateData
+	// key: string, value: any
 	storage sync.Map
 }
 
@@ -56,9 +47,9 @@ type CycleState struct {
 // present, ErrNotFound is returned.
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Read(key StateKey) (StateData, error) {
+func (c *CycleState) Read(key string) (any, error) {
 	if v, ok := c.storage.Load(key); ok {
-		return v.(StateData), nil
+		return v, nil
 	}
 	return nil, ErrNotFound
 }
@@ -66,20 +57,20 @@ func (c *CycleState) Read(key StateKey) (StateData, error) {
 // Write stores the given "val" in CycleState with the given "key".
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Write(key StateKey, val StateData) {
+func (c *CycleState) Write(key string, val any) {
 	c.storage.Store(key, val)
 }
 
 // Delete deletes data with the given key from CycleState.
 //
 // See CycleState for notes on concurrency.
-func (c *CycleState) Delete(key StateKey) {
+func (c *CycleState) Delete(key string) {
 	c.storage.Delete(key)
 }
 
 // ReadCycleStateKey retrieves data with the given key from CycleState and asserts it to type T.
 // Returns an error if the key is not found or the type assertion fails.
-func ReadCycleStateKey[T StateData](c *CycleState, key StateKey) (T, error) {
+func ReadCycleStateKey[T any](c *CycleState, key string) (T, error) {
 	var zero T
 
 	raw, err := c.Read(key)
