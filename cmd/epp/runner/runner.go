@@ -509,6 +509,11 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 
 	r.featureGates = featureGates
 
+	if featureGates[datalayer.ExperimentalDatalayerFeatureGate] {
+		logger.Info("WARNING: The 'dataLayer' feature gate is deprecated and will be removed in a future release. " +
+			"The data layer is now enabled by default. To use the legacy metrics system, use 'disableDataLayer' feature gate instead.")
+	}
+
 	return rawConfig, nil
 }
 

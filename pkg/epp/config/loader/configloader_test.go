@@ -142,7 +142,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 					Kind:       "EndpointPickerConfig",
 				},
-				FeatureGates: configapi.FeatureGates{}, // Data layer is now enabled by default
+				FeatureGates: configapi.FeatureGates{}, // Empty means datalayer enabled (default behavior)
 				Plugins: []configapi.PluginSpec{
 					{
 						Name: scorer.QueueScorerType,
