@@ -157,8 +157,8 @@ spec:
           tty: true
           stdin: true 
           image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.2.1
-          restartPolicy: IfNotPresent
-          imagePullPolicy: Always
+          restartPolicy: Always
+          imagePullPolicy: IfNotPresent
           env: 
             - name: DYNAMIC_LORA_ROLLOUT_CONFIG
               value: "/config/configmap.yaml"
