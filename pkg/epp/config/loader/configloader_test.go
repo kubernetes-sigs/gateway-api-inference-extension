@@ -621,7 +621,7 @@ func (m *mockSource) ExtractorType() reflect.Type {
 type mockExtractor struct{ mockPlugin }
 
 func (m *mockExtractor) ExpectedInputType() reflect.Type {
-	return reflect.TypeOf("")
+	return reflect.TypeFor[string]()
 }
 
 func (m *mockExtractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {

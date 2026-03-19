@@ -95,7 +95,7 @@ func InstantiateAndConfigure(
 	if err := applySystemDefaults(rawConfig, handle); err != nil {
 		return nil, fmt.Errorf("system default application failed: %w", err)
 	}
-	logger.Info("Effective configuration loaded", "config", rawConfig)
+	logger.Info("Instantiated all plugins and applied system defaults. Effective raw configuration", "config", rawConfig.String())
 
 	if err := validateConfig(rawConfig); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
