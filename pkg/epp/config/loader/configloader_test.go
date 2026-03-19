@@ -17,17 +17,22 @@ limitations under the License.
 package loader
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
+	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -525,6 +530,33 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	}
 }
 
+func TestInstantiateAndConfigureLogsConfigWithoutConfigError(t *testing.T) {
+	registerTestPlugins(t)
+
+	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(flowcontrol.FeatureGate)
+
+	var logOutput testLogBuffer
+	logger := ctrlzap.New(ctrlzap.UseFlagOptions(&ctrlzap.Options{
+		DestWriter:  &logOutput,
+		Development: true,
+		Level:       zapcore.Level(-5),
+	}))
+
+	rawConfig, _, err := LoadRawConfig([]byte(successSchedulerConfigText), logger)
+	require.NoError(t, err)
+
+	handle := utils.NewTestHandle(context.Background())
+	_, err = InstantiateAndConfigure(rawConfig, handle, logger)
+	require.NoError(t, err)
+
+	logs := logOutput.String()
+	require.Contains(t, logs, "Effective raw configuration")
+	require.Contains(t, logs, "FeatureGates:")
+	require.NotContains(t, strings.ToLower(logs), "configerror")
+	require.NotContains(t, logs, "got runtime.Object without object metadata")
+}
+
 // Verify the SaturationConfig builder specifically.
 func TestBuildSaturationConfig(t *testing.T) {
 	t.Parallel()
@@ -594,6 +626,23 @@ func hasPluginType(handle fwkplugin.Handle, typeName string) bool {
 
 type mockPlugin struct {
 	t fwkplugin.TypedName
+}
+
+type testLogBuffer struct {
+	buf bytes.Buffer
+	mu  sync.Mutex
+}
+
+func (b *testLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *testLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func (m *mockPlugin) TypedName() fwkplugin.TypedName { return m.t }

@@ -64,11 +64,11 @@ func LoadRawConfig(configBytes []byte, logger logr.Logger) (*configapi.EndpointP
 		if err != nil {
 			return nil, nil, err
 		}
-		logger.Info("Loaded raw configuration", "config", rawConfig.String())
+		logger.Info("Loaded raw configuration", "config", configForLog(rawConfig))
 	} else {
 		logger.Info("A configuration wasn't specified. A default one is being used.")
 		rawConfig = loadDefaultConfig()
-		logger.Info("Default raw configuration used", "config", rawConfig.String())
+		logger.Info("Default raw configuration used", "config", configForLog(rawConfig))
 	}
 
 	applyStaticDefaults(rawConfig)
@@ -97,7 +97,7 @@ func InstantiateAndConfigure(
 	if err := applySystemDefaults(rawConfig, handle); err != nil {
 		return nil, fmt.Errorf("system default application failed: %w", err)
 	}
-	logger.Info("Instantiated all plugins and applied system defaults. Effective raw configuration", "config", rawConfig.String())
+	logger.Info("Instantiated all plugins and applied system defaults. Effective raw configuration", "config", configForLog(rawConfig))
 
 	if err := validateConfig(rawConfig); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -144,6 +144,15 @@ func decodeRawConfig(configBytes []byte) (*configapi.EndpointPickerConfig, error
 		return nil, fmt.Errorf("failed to decode configuration JSON/YAML: %w", err)
 	}
 	return cfg, nil
+}
+
+// configForLog converts EndpointPickerConfig to a plain string so controller-runtime's
+// Kubernetes-aware zap encoder does not try to treat it as an object with metadata.
+func configForLog(cfg *configapi.EndpointPickerConfig) string {
+	if cfg == nil {
+		return "<nil>"
+	}
+	return cfg.String()
 }
 
 func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplugin.Handle) error {
