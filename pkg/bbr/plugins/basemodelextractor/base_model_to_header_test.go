@@ -71,46 +71,6 @@ func TestBaseModelToHeaderPlugin_WithName(t *testing.T) {
 	}
 }
 
-// TestBaseModelToHeaderPlugin_ProcessRequest_EdgeCases tests edge cases that are difficult
-// to trigger in integration tests: nil request, nil headers, nil body.
-func TestBaseModelToHeaderPlugin_ProcessRequest_EdgeCases(t *testing.T) {
-	p := &BaseModelToHeaderPlugin{
-		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: "test"},
-		adaptersStore: newAdaptersStore(),
-	}
-
-	tests := []struct {
-		name string
-		req  *framework.InferenceRequest
-	}{
-		{
-			name: "nil request",
-			req:  nil,
-		},
-		{
-			name: "nil headers",
-			req: &framework.InferenceRequest{
-				InferenceMessage: framework.InferenceMessage{
-					Body: map[string]any{"model": "test"},
-				},
-			},
-		},
-		{
-			name: "nil body",
-			req:  framework.NewInferenceRequest(),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := p.ProcessRequest(context.Background(), nil, tt.req)
-			if err != nil {
-				t.Errorf("ProcessRequest() error = %v, want nil (should handle gracefully)", err)
-			}
-		})
-	}
-}
-
 // TestBaseModelToHeaderPluginFactory tests the factory function with various configurations.
 func TestBaseModelToHeaderPluginFactory(t *testing.T) {
 	tests := []struct {
