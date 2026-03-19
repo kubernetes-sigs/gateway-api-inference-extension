@@ -33,8 +33,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/test"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
-	bbrtest "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -58,7 +58,7 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 	modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
 	require.NoError(t, err, "failed to create body-field-to-header plugin")
 
-	baseModelToHeaderPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
 	require.NoError(t, err, "failed to create base model plugin")
 
 	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin})

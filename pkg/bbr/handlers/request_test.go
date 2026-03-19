@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
-	bbrtest "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/test"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/test"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -422,7 +422,7 @@ func TestHandleRequestBody(t *testing.T) {
 		},
 	}
 
-	baseModelToHeaderPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
 	if err != nil {
 		t.Fatalf("failed to create base model plugin: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-	baseModelToHeaderPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
 	if err != nil {
 		t.Fatalf("failed to create base model plugin: %v", err)
 	}
@@ -675,7 +675,7 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 		},
 	}
 
-	baseModelPlugin, err := bbrtest.NewTestBaseModelPlugin()
+	baseModelPlugin, err := test.NewTestBaseModelPlugin()
 	if err != nil {
 		t.Fatalf("failed to create base model plugin: %v", err)
 	}
