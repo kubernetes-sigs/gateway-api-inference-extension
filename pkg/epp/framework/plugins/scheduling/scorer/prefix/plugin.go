@@ -244,7 +244,7 @@ func (p *Plugin) Consumes() map[string]any {
 }
 
 // PrepareRequestData hashes prompt, finds longest prefix match and stores it in endpoint as attribute.
-func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMRequest, endpoints []framework.Endpoint) error {
+func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.InferenceRequest, endpoints []framework.Endpoint) error {
 	blockSize := getBlockSize(endpoints, p.config)
 	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
@@ -259,12 +259,12 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMR
 	}
 
 	// Store the state in plugin state for later use.
-	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
+	p.pluginState.Write(request.LLM.RequestId, plugin.StateKey(p.TypedName().String()), state)
 	return nil
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
 	blockSize := getBlockSize(endpoints, p.config)
 	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
@@ -276,7 +276,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 	cycleState.Write(plugin.StateKey(p.TypedName().String()), state)
 
 	// store the state in plugin state for later use in PreRequest. This may go away once we default to prepare request data plugin hook.
-	p.pluginState.Write(request.RequestId, plugin.StateKey(p.TypedName().String()), state)
+	p.pluginState.Write(request.LLM.RequestId, plugin.StateKey(p.TypedName().String()), state)
 	log.FromContext(ctx).V(logutil.TRACE).Info("prefix cached state", "cached-servers", state.PrefixCacheServers, "hashes", state.PrefixHashes)
 	// calculate the scores of endpoints
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
@@ -298,7 +298,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 }
 
 // PreRequest records in the plugin cache the result of the scheduling selection.
-func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, schedulingResult *framework.SchedulingResult) {
+func (p *Plugin) PreRequest(ctx context.Context, request *framework.InferenceRequest, schedulingResult *framework.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
 	targetEndpoint := primaryProfileResult.TargetEndpoints[0] // get the first endpoint of the primary profile
 	servers := []Server{p.makeServer(targetEndpoint)}
@@ -307,10 +307,10 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 		servers = append(servers, p.makeServer(pr.TargetEndpoints[0]))
 	}
 
-	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(p.TypedName().String()))
-	p.pluginState.Delete(request.RequestId) // delete the state explicitly after completing using it
+	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.LLM.RequestId, plugin.StateKey(p.TypedName().String()))
+	p.pluginState.Delete(request.LLM.RequestId) // delete the state explicitly after completing using it
 	if err != nil {
-		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
+		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.LLM.RequestId)
 		return
 	}
 
@@ -396,9 +396,9 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *framework.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
+func hashPrompt(ctx context.Context, request *framework.InferenceRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	if request == nil || request.Body == nil {
+	if request == nil || request.LLM.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
 		return nil
 	}
@@ -425,8 +425,8 @@ func hashPrompt(ctx context.Context, request *framework.LLMRequest, blockSizeTok
 	res := make([]BlockHash, 0, len(userInput)/cacheBlockSizeChars)
 	// Add the model to the first block hash so that different models have different hashes even with the same body.
 	h := xxhash.New()
-	_, _ = h.Write([]byte(request.TargetModel))
-	if cacheSalt := request.Body.CacheSalt(); cacheSalt != "" {
+	_, _ = h.Write([]byte(request.LLM.TargetModel))
+	if cacheSalt := request.LLM.Body.CacheSalt(); cacheSalt != "" {
 		_, _ = h.Write([]byte(cacheSalt))
 	}
 
@@ -449,44 +449,44 @@ func toBytes(i BlockHash) []byte {
 	return bytes
 }
 
-func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
+func getUserInputBytes(request *framework.InferenceRequest) ([]byte, error) {
 	switch {
-	case request.Body.Conversations != nil:
+	case request.LLM.Body.Conversations != nil:
 		// Handle conversations API - marshal the entire items slice for cache key generation
-		return json.Marshal(request.Body.Conversations.Items)
+		return json.Marshal(request.LLM.Body.Conversations.Items)
 
-	case request.Body.Responses != nil:
+	case request.LLM.Body.Responses != nil:
 		// Handle responses API - use ordered slice to ensure deterministic marshaling
 		var combined []map[string]interface{}
 
 		// 1. Instructions (if present)
-		if request.Body.Responses.Instructions != nil {
+		if request.LLM.Body.Responses.Instructions != nil {
 			combined = append(combined, map[string]interface{}{
-				"instructions": request.Body.Responses.Instructions,
+				"instructions": request.LLM.Body.Responses.Instructions,
 			})
 		}
 
 		// 2. Tools (if present)
-		if request.Body.Responses.Tools != nil {
+		if request.LLM.Body.Responses.Tools != nil {
 			combined = append(combined, map[string]interface{}{
-				"tools": request.Body.Responses.Tools,
+				"tools": request.LLM.Body.Responses.Tools,
 			})
 		}
 
 		// 3. Input (always present)
 		combined = append(combined, map[string]interface{}{
-			"input": request.Body.Responses.Input,
+			"input": request.LLM.Body.Responses.Input,
 		})
 
 		return json.Marshal(combined)
 
-	case request.Body.ChatCompletions != nil:
+	case request.LLM.Body.ChatCompletions != nil:
 		// Handle chat completions API (maintain backward compatibility)
-		return json.Marshal(request.Body.ChatCompletions.Messages)
+		return json.Marshal(request.LLM.Body.ChatCompletions.Messages)
 
-	case request.Body.Completions != nil:
+	case request.LLM.Body.Completions != nil:
 		// Handle completions API (maintain backward compatibility)
-		return []byte(request.Body.Completions.Prompt), nil
+		return []byte(request.LLM.Body.Completions.Prompt), nil
 
 	case request.Body.Embeddings != nil:
 		// Handle embeddings API - marshal input for cache key generation

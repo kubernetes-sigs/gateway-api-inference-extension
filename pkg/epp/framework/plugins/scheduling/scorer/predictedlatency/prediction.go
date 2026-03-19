@@ -42,7 +42,7 @@ type endpointPredictionResult struct {
 }
 
 // generatePredictions creates prediction results for all candidate pods
-func (s *PredictedLatency) generatePredictions(ctx context.Context, predictedLatencyCtx *predictedLatencyCtx, candidateEndpoints []schedulingtypes.Endpoint) ([]endpointPredictionResult, error) {
+func (s *PredictedLatency) generatePredictions(ctx context.Context, request *schedulingtypes.InferenceRequest, predictedLatencyCtx *predictedLatencyCtx, candidateEndpoints []schedulingtypes.Endpoint) ([]endpointPredictionResult, error) {
 	logger := log.FromContext(ctx)
 	predictions := make([]endpointPredictionResult, 0, len(candidateEndpoints))
 
@@ -63,8 +63,7 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, predictedLat
 		logger.V(logutil.DEBUG).Info("Prefix cache score for pod", "pod", endpoint.GetMetadata().String(), "prefixCacheScore", prefixCacheScore)
 
 		metricsStates[i] = endpoint.GetMetrics()
-		targetEndpointsMetadatas[i] = endpoint.GetMetadata()
-		prompts[i] = predictedLatencyCtx.promptText
+		prompts[i] = request.LLM.Body.Completions.Prompt
 		generatedTokenCounts[i] = 1
 		prefixCacheScores[i] = prefixCacheScore
 

@@ -59,16 +59,18 @@ func TestSchedule(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     *fwksched.LLMRequest
+		req     *fwksched.InferenceRequest
 		input   []fwksched.Endpoint
 		wantRes *fwksched.SchedulingResult
 		err     bool
 	}{
 		{
 			name: "no candidate endpoints",
-			req: &fwksched.LLMRequest{
-				RequestId:   uuid.NewString(),
-				TargetModel: "any-model",
+			req: &fwksched.InferenceRequest{
+				LLM: &fwksched.LLMRequest{
+					RequestId:   uuid.NewString(),
+					TargetModel: "any-model",
+				},
 			},
 			input:   []fwksched.Endpoint{},
 			wantRes: nil,
@@ -76,9 +78,11 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "finds optimal endpoint",
-			req: &fwksched.LLMRequest{
-				RequestId:   uuid.NewString(),
-				TargetModel: "critical",
+			req: &fwksched.InferenceRequest{
+				LLM: &fwksched.LLMRequest{
+					RequestId:   uuid.NewString(),
+					TargetModel: "critical",
+				},
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.

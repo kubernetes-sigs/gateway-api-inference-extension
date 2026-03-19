@@ -358,7 +358,7 @@ func (s *PredictedLatency) scoreWithoutPredictions(
 	return scores
 }
 
-func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleState, request *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	if s.latencypredictor == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency: no predictor configured, returning nil scores")
@@ -414,7 +414,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleStat
 	return scores
 }
 
-func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *framework.LLMRequest) *predictedLatencyCtx {
+func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *framework.InferenceRequest) *predictedLatencyCtx {
 	sloCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		sloCtx = newPredictedLatencyContext(request)

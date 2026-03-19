@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -125,8 +126,10 @@ func TestBulkPredictWithMetrics_WithPredictedLatencyCtx(t *testing.T) {
 	prefixCacheScores := []float64{0.0}
 
 	plCtx := &predictedLatencyCtx{
-		schedulingRequest: schedulingtypes.LLMRequest{
-			TargetModel: "test-model",
+		schedulingRequest: schedulingtypes.InferenceRequest{
+			LLM: &schedulingtypes.LLMRequest{
+				TargetModel: "test-model",
+			},
 		},
 		incomingModelName: "incoming-model",
 	}
@@ -151,14 +154,7 @@ func TestBulkPredictWithMetrics_ChatCompletionsPrompt(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"}},
 	}
 
-	chatBody := &schedulingtypes.LLMRequestBody{
-		ChatCompletions: &schedulingtypes.ChatCompletionsRequest{
-			Messages: []schedulingtypes.Message{
-				{Role: "user", Content: schedulingtypes.Content{Raw: "Hello world"}},
-			},
-		},
-	}
-	prompts := []string{chatBody.PromptText()}
+	prompts := []string{"Hello world "}
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 

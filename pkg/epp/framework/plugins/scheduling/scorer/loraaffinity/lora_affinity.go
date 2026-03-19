@@ -73,13 +73,13 @@ func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
 	return s
 }
 
-func (s *LoraAffinityScorer) Score(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *LoraAffinityScorer) Score(_ context.Context, _ *framework.CycleState, request *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 
 	// Assign a score to each endpoint for loading the target adapter.
 	for _, endpoint := range endpoints {
-		_, active := endpoint.GetMetrics().ActiveModels[request.TargetModel]
-		_, waiting := endpoint.GetMetrics().WaitingModels[request.TargetModel]
+		_, active := endpoint.GetMetrics().ActiveModels[request.LLM.TargetModel]
+		_, waiting := endpoint.GetMetrics().WaitingModels[request.LLM.TargetModel]
 
 		// Determine the model server's suitability score based on adapter load status and capacity.
 		switch {

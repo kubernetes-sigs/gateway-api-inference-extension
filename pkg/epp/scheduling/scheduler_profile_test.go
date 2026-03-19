@@ -120,9 +120,11 @@ func TestSchedulePlugins(t *testing.T) {
 			test.profile.picker.(*testPlugin).reset()
 
 			// Initialize the scheduling context
-			request := &fwksched.LLMRequest{
-				TargetModel: "test-model",
-				RequestId:   uuid.NewString(),
+			request := &fwksched.InferenceRequest{
+				LLM: &fwksched.LLMRequest{
+					TargetModel: "test-model",
+					RequestId:   uuid.NewString(),
+				},
 			}
 			// Run profile cycle
 			got, err := test.profile.Run(context.Background(), request, fwksched.NewCycleState(), test.input)
@@ -204,13 +206,13 @@ func (tp *testPlugin) Category() fwksched.ScorerCategory {
 	return fwksched.Distribution
 }
 
-func (tp *testPlugin) Filter(_ context.Context, _ *fwksched.CycleState, _ *fwksched.LLMRequest, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
+func (tp *testPlugin) Filter(_ context.Context, _ *fwksched.CycleState, _ *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
 	tp.FilterCallCount++
 	return findEndpoints(endpoints, tp.FilterRes...)
 
 }
 
-func (tp *testPlugin) Score(_ context.Context, _ *fwksched.CycleState, _ *fwksched.LLMRequest, endpoints []fwksched.Endpoint) map[fwksched.Endpoint]float64 {
+func (tp *testPlugin) Score(_ context.Context, _ *fwksched.CycleState, _ *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) map[fwksched.Endpoint]float64 {
 	tp.ScoreCallCount++
 	scoredEndpoints := make(map[fwksched.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
@@ -396,9 +398,11 @@ func TestRunWithOutOfRangeScores(t *testing.T) {
 		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
 	}
 
-	request := &fwksched.LLMRequest{
-		TargetModel: "test-model",
-		RequestId:   uuid.NewString(),
+	request := &fwksched.InferenceRequest{
+		LLM: &fwksched.LLMRequest{
+			TargetModel: "test-model",
+			RequestId:   uuid.NewString(),
+		},
 	}
 
 	_, err := profile.Run(context.Background(), request, fwksched.NewCycleState(), input)
@@ -421,7 +425,7 @@ func (p *filterOnlyPlugin) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *filterOnlyPlugin) Filter(_ context.Context, _ *fwksched.CycleState, _ *fwksched.LLMRequest, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
+func (p *filterOnlyPlugin) Filter(_ context.Context, _ *fwksched.CycleState, _ *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
 	return endpoints
 }
 

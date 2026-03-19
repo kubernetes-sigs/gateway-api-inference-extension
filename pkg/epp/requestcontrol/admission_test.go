@@ -69,7 +69,9 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	reqCtx := &handlers.RequestContext{
-		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		SchedulingRequest: &schedulingtypes.InferenceRequest{
+			LLM: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		},
 		Request: &handlers.Request{
 			Metadata: map[string]any{},
 		},
@@ -180,7 +182,7 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 				fairnessID:       tc.fairnessID,
 				priority:         tc.priority,
 				requestByteSize:  tc.requestByteSize,
-				inferenceRequest: &schedulingtypes.LLMRequest{RequestId: tc.requestID},
+				inferenceRequest: &schedulingtypes.InferenceRequest{LLM: &schedulingtypes.LLMRequest{RequestId: tc.requestID}},
 			}
 
 			assert.Equal(t, tc.requestID, fcReq.ID(), "ID() mismatch")
@@ -195,7 +197,9 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	reqCtx := &handlers.RequestContext{
-		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		SchedulingRequest: &schedulingtypes.InferenceRequest{
+			LLM: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		},
 		Request: &handlers.Request{
 			Metadata: map[string]any{},
 		},

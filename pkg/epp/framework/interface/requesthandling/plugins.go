@@ -14,22 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requesthandle
+package requesthandling
 
 import (
 	"context"
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // Parser defines the interface for parsing payload(requests and responses).
 type Parser interface {
 	fwkplugin.Plugin
 	// ParseRequest parses the request body and headers and returns a map representation.
-	ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.LLMRequestBody, error)
+	ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*RequestBody, error)
 
 	// ParseResponse parses the response payload.
 	// For streaming responses , this method is invoked multiple times (once per chunk),
@@ -41,5 +38,5 @@ type Parser interface {
 
 type ParsedResponse struct {
 	// Usage is only populate when the raw response has usage.
-	Usage *requestcontrol.Usage
+	Usage *Usage
 }

@@ -73,7 +73,9 @@ func TestRunningRequestsSizeScorer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.LLMRequest{}, test.endpoints)
+			scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.InferenceRequest{
+				LLM: &fwksched.LLMRequest{},
+			}, test.endpoints)
 
 			for i, endpoint := range test.endpoints {
 				expectedScore := test.expectedScoresPod[i]

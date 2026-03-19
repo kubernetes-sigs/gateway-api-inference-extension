@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -52,8 +52,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Less than 4 characters",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					Completions: &framework.CompletionsRequest{
+				Body: &fwkrh.RequestBody{
+					Completions: &fwkrh.CompletionsRequest{
 						Prompt: "123",
 					},
 				},
@@ -63,8 +63,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Completions Request",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					Completions: &framework.CompletionsRequest{
+				Body: &fwkrh.RequestBody{
+					Completions: &fwkrh.CompletionsRequest{
 						Prompt: "Hello, world!",
 					},
 				},
@@ -74,8 +74,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Completions with empty prompt",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					Completions: &framework.CompletionsRequest{
+				Body: &fwkrh.RequestBody{
+					Completions: &fwkrh.CompletionsRequest{
 						Prompt: "",
 					},
 				},
@@ -85,8 +85,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Completions with exactly 4 characters",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					Completions: &framework.CompletionsRequest{
+				Body: &fwkrh.RequestBody{
+					Completions: &fwkrh.CompletionsRequest{
 						Prompt: "1234",
 					},
 				},
@@ -96,13 +96,13 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions Request with Structured content",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{
+				Body: &fwkrh.RequestBody{
+					ChatCompletions: &fwkrh.ChatCompletionsRequest{
+						Messages: []fwkrh.Message{
 							{
 								Role: "user",
-								Content: framework.Content{
-									Structured: []framework.ContentBlock{
+								Content: fwkrh.Content{
+									Structured: []fwkrh.ContentBlock{
 										{
 											Type: "text",
 											Text: "This is a longer message.",
@@ -119,12 +119,12 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions with Raw content",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{
+				Body: &fwkrh.RequestBody{
+					ChatCompletions: &fwkrh.ChatCompletionsRequest{
+						Messages: []fwkrh.Message{
 							{
 								Role: "user",
-								Content: framework.Content{
+								Content: fwkrh.Content{
 									Raw: "This is raw content.",
 								},
 							},
@@ -137,21 +137,21 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions with multiple messages",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{
+				Body: &fwkrh.RequestBody{
+					ChatCompletions: &fwkrh.ChatCompletionsRequest{
+						Messages: []fwkrh.Message{
 							{
 								Role: "user",
-								Content: framework.Content{
-									Structured: []framework.ContentBlock{
+								Content: fwkrh.Content{
+									Structured: []fwkrh.ContentBlock{
 										{Type: "text", Text: "Hi"},
 									},
 								},
 							},
 							{
 								Role: "assistant",
-								Content: framework.Content{
-									Structured: []framework.ContentBlock{
+								Content: fwkrh.Content{
+									Structured: []fwkrh.ContentBlock{
 										{Type: "text", Text: "Hello"},
 									},
 								},
@@ -165,9 +165,9 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions with empty messages",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{},
+				Body: &fwkrh.RequestBody{
+					ChatCompletions: &fwkrh.ChatCompletionsRequest{
+						Messages: []fwkrh.Message{},
 					},
 				},
 			},
@@ -197,8 +197,8 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		{
 			name: "Empty prompt with custom config",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					Completions: &framework.CompletionsRequest{
+				Body: &fwkrh.RequestBody{
+					Completions: &fwkrh.CompletionsRequest{
 						Prompt: "",
 					},
 				},
@@ -208,8 +208,8 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		{
 			name: "4 chars with custom config",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					Completions: &framework.CompletionsRequest{
+				Body: &fwkrh.RequestBody{
+					Completions: &fwkrh.CompletionsRequest{
 						Prompt: "1234",
 					},
 				},
@@ -219,8 +219,8 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		{
 			name: "More than 4 chars with custom config",
 			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
-					Completions: &framework.CompletionsRequest{
+				Body: &fwkrh.RequestBody{
+					Completions: &fwkrh.CompletionsRequest{
 						Prompt: "This is a longer message.",
 					},
 				},

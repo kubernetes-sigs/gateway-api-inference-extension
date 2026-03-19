@@ -178,16 +178,16 @@ type benchRequest struct {
 }
 
 // --- stubs required by FlowControlRequest interface ---
-func (r *benchRequest) FlowKey() flowcontrol.FlowKey             { return r.key }
-func (r *benchRequest) ByteSize() uint64                         { return r.byteSize }
-func (r *benchRequest) InitialEffectiveTTL() time.Duration       { return 5 * time.Minute }
-func (r *benchRequest) ID() string                               { return "bench-req" }
-func (r *benchRequest) GetMetadata() map[string]any              { return nil }
-func (r *benchRequest) InferencePoolName() string                { return "bench-pool" }
-func (r *benchRequest) ModelName() string                        { return "bench-model" }
-func (r *benchRequest) TargetModelName() string                  { return "bench-target" }
-func (r *benchRequest) InferenceRequest() *scheduling.LLMRequest { return nil }
-func (r *benchRequest) ReceivedTimestamp() time.Time             { return time.Now() }
+func (r *benchRequest) FlowKey() flowcontrol.FlowKey                   { return r.key }
+func (r *benchRequest) ByteSize() uint64                               { return r.byteSize }
+func (r *benchRequest) InitialEffectiveTTL() time.Duration             { return 5 * time.Minute }
+func (r *benchRequest) ID() string                                     { return "bench-req" }
+func (r *benchRequest) GetMetadata() map[string]any                    { return nil }
+func (r *benchRequest) InferencePoolName() string                      { return "bench-pool" }
+func (r *benchRequest) ModelName() string                              { return "bench-model" }
+func (r *benchRequest) TargetModelName() string                        { return "bench-target" }
+func (r *benchRequest) InferenceRequest() *scheduling.InferenceRequest { return nil }
+func (r *benchRequest) ReceivedTimestamp() time.Time                   { return time.Now() }
 
 // setupRegistry provisions the concrete FlowRegistry.
 func setupRegistry(

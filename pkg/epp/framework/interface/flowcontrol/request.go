@@ -40,7 +40,7 @@ type FlowControlRequest interface {
 	ByteSize() uint64
 
 	// InferenceRequest returns the inference request passed to the scheduling layer.
-	InferenceRequest() *scheduling.LLMRequest
+	InferenceRequest() *scheduling.InferenceRequest
 
 	// ReceivedTimestamp returns the timestamp when the request was received by the server.
 	ReceivedTimestamp() time.Time

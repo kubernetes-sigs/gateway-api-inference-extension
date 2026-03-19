@@ -26,9 +26,9 @@ import (
 
 // parseFloatHeader retrieves a header by name, parses it as a float64,
 // and returns the value or an error if the header is missing or invalid.
-func parseFloatHeader(request schedulingtypes.LLMRequest, headerName string) (float64, error) {
+func parseFloatHeader(request schedulingtypes.InferenceRequest, headerName string) (float64, error) {
 	// 1. Get header value from the map
-	headerValue, ok := request.Headers[headerName]
+	headerValue, ok := request.LLM.Headers[headerName]
 	if !ok {
 		return 0, nil // Header not found, return 0 and false
 	}

@@ -148,7 +148,7 @@ func (d *detector) Saturation(_ context.Context, endpoints []datalayer.Endpoint)
 func (d *detector) Filter(
 	_ context.Context,
 	_ *framework.CycleState,
-	_ *framework.LLMRequest,
+	_ *framework.InferenceRequest,
 	endpoints []framework.Endpoint,
 ) []framework.Endpoint {
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
@@ -178,10 +178,14 @@ func (d *detector) Filter(
 
 // PreRequest increments the atomic in-flight counter for the target endpoint.
 // We assume the scheduling result is valid based on the Director's contract.
-func (d *detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
+func (d *Detector) PreRequest(_ context.Context, request *framework.InferenceRequest, result *framework.SchedulingResult) {
 	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String()
-	if d.config.mode == modeTokens {
-		tokens := d.tokenEstimator.Estimate(request)
+	if *d.config.ConcurrencyMode == Tokens {
+		var req *framework.LLMRequest
+		if request != nil {
+			req = request.LLM
+		}
+		tokens := d.tokenEstimator.Estimate(req)
 		d.tokenTracker.add(eid, tokens)
 	} else {
 		d.requestTracker.inc(eid)
@@ -193,7 +197,7 @@ func (d *detector) PreRequest(_ context.Context, request *framework.LLMRequest, 
 // TokenEstimator.Estimate returns 0 in that case (may contribute to drift).
 func (d *detector) ResponseBody(
 	_ context.Context,
-	request *framework.LLMRequest,
+	request *framework.InferenceRequest,
 	resp *requestcontrol.Response,
 	targetEndpoint *datalayer.EndpointMetadata,
 ) {
@@ -201,8 +205,12 @@ func (d *detector) ResponseBody(
 		return
 	}
 	eid := targetEndpoint.NamespacedName.String()
-	if d.config.mode == modeTokens {
-		tokens := d.tokenEstimator.Estimate(request)
+	if *d.config.ConcurrencyMode == Tokens {
+		var req *framework.LLMRequest
+		if request != nil {
+			req = request.LLM
+		}
+		tokens := d.tokenEstimator.Estimate(req)
 		d.tokenTracker.add(eid, -tokens)
 	} else {
 		d.requestTracker.dec(eid)

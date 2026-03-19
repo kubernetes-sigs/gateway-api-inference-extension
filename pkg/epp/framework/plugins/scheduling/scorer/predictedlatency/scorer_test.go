@@ -31,6 +31,7 @@ import (
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -120,26 +121,7 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 	)
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
-		Completions: &fwksched.CompletionsRequest{
-			Prompt: "test prompt",
-		},
-	})
-}
-
-func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
-		ChatCompletions: &fwksched.ChatCompletionsRequest{
-			Messages: []fwksched.Message{
-				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
-				{Role: "user", Content: fwksched.Content{Raw: "Tell me a joke."}},
-			},
-		},
-	})
-}
-
-func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.LLMRequestBody) *fwksched.LLMRequest {
+func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
 	headers := make(map[string]string)
 	headers[reqcommon.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -149,15 +131,21 @@ func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
 
-	return &fwksched.LLMRequest{
-		Headers: headers,
-		Body:    body,
+	return &fwksched.InferenceRequest{
+		LLM: &fwksched.LLMRequest{
+			Headers: headers,
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "test prompt",
+				},
+			},
+		},
 	}
 }
 
 // Add this helper function after the createTestLLMRequest function
 
-func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
+func setupPredictionContext(router *PredictedLatency, request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
 	ctx := context.Background()
 
 	// Create prediction context
@@ -191,7 +179,7 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 	}
 
 	// Store the context using the request ID
-	reqID := request.Headers[reqcommon.RequestIdHeaderKey]
+	reqID := request.LLM.Headers[reqcommon.RequestIdHeaderKey]
 	router.sloContextStore.Set(reqID, predictedLatencyCtx, ttlcache.DefaultTTL)
 }
 
@@ -200,7 +188,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 		name           string
 		predictor      *mockPredictor
 		strategy       headroomStrategy
-		request        *fwksched.LLMRequest
+		request        *fwksched.InferenceRequest
 		endpoints      []fwksched.Endpoint
 		expectedScores map[string]float64 // Map of pod name to expected score
 		expectNil      bool
@@ -304,7 +292,15 @@ func TestPredictedLatency_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestChatCompletionsLLMRequest("test-chat", 1.0, 0.05),
+			request: func() *fwksched.InferenceRequest {
+				req := createTestLLMRequest("test-chat", 1.0, 0.05)
+				req.LLM.Body = &requesthandling.RequestBody{
+					ChatCompletions: &requesthandling.ChatCompletionsRequest{
+						Messages: []requesthandling.Message{{Content: requesthandling.Content{Raw: "You are a helpful assistant. Tell me a joke. "}}},
+					},
+				}
+				return req
+			}(),
 			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 				createTestEndpoint("pod2", 0.6, 3, 2),
@@ -771,9 +767,11 @@ func TestSloContextStoreEviction(t *testing.T) {
 	requestID := "test-req-id"
 	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
 
-	req := &fwksched.LLMRequest{
-		Headers: map[string]string{
-			reqcommon.RequestIdHeaderKey: requestID,
+	req := &fwksched.InferenceRequest{
+		LLM: &fwksched.LLMRequest{
+			Headers: map[string]string{
+				reqcommon.RequestIdHeaderKey: requestID,
+			},
 		},
 	}
 
