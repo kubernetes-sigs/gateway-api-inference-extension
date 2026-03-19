@@ -52,6 +52,10 @@ type LLMRequest struct {
 	// TokenizedPrompt contains the tokenization results if external tokenization is enabled.
 	// This is nil if tokenization was not performed or if the tokenizer is not configured.
 	TokenizedPrompt *TokenizedPrompt
+	// SchedulingResult stores the result of the scheduling cycle for this request.
+	SchedulingResult *SchedulingResult
+	// WasPrefillReleased indicates if the prefill pod load has already been released for this request.
+	WasPrefillReleased bool
 }
 
 // TokenizedPrompt contains the result of tokenizing the request prompt.

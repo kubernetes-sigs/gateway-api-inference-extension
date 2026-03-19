@@ -195,6 +195,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err != nil {
 		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target endpoint: %w", err).Error()}
 	}
+	reqCtx.SchedulingRequest.SchedulingResult = result
 
 	// Prepare Request (Populates RequestContext and call PreRequest plugins)
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.

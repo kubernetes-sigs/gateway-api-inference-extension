@@ -218,16 +218,19 @@ func TestDetector_Lifecycle(t *testing.T) {
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected initially 0.0")
 
 	// 2. Increment (Saturated)
-	detector.PreRequest(ctx, nil, makeSchedulingResult(endpointName))
+	req := &schedulingtypes.LLMRequest{RequestId: "req1"}
+	res := makeSchedulingResult(endpointName)
+	req.SchedulingResult = res
+	detector.PreRequest(ctx, req, res)
 	require.InDelta(t, 1.0, detector.Saturation(ctx, candidates), 1e-6, "expected 1.0 after 1 request")
 
 	// 3. Decrement (Available)
 	targetEndpoint := newStubSchedulingEndpoint(endpointName)
-	detector.ResponseBody(ctx, nil, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
+	detector.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected 0.0 after completion")
 
 	// 4. Increment again -> Delete -> Verify Reset
-	detector.PreRequest(ctx, nil, makeSchedulingResult(endpointName))
+	detector.PreRequest(ctx, req, res)
 	require.InDelta(t, 1.0, detector.Saturation(ctx, candidates), 1e-6, "re-saturation failed")
 
 	detector.DeleteEndpoint(fullEndpointName(endpointName))
@@ -381,7 +384,8 @@ func TestDetector_TokenLifecycle(t *testing.T) {
 
 	// PreRequest adds tokens ("1234567890123456" = 10 tokens)
 	req1 := makeTokenRequest("req1", "1234567890123456")
-	detector.PreRequest(ctx, req1, makeSchedulingResult(endpointName))
+	req1.SchedulingResult = makeSchedulingResult(endpointName)
+	detector.PreRequest(ctx, req1, req1.SchedulingResult)
 	require.InDelta(t, 0.1, detector.Saturation(ctx, candidates), 1e-6, "saturation after 1 request (10 tokens)")
 
 	eos := &requestcontrol.Response{EndOfStream: true}
@@ -390,9 +394,11 @@ func TestDetector_TokenLifecycle(t *testing.T) {
 
 	// Multiple requests, complete some
 	req2 := makeTokenRequest("req2", "1234")
+	req2.SchedulingResult = makeSchedulingResult(endpointName)
 	req3 := makeTokenRequest("req3", "1234")
-	detector.PreRequest(ctx, req2, makeSchedulingResult(endpointName))
-	detector.PreRequest(ctx, req3, makeSchedulingResult(endpointName))
+	req3.SchedulingResult = makeSchedulingResult(endpointName)
+	detector.PreRequest(ctx, req2, req2.SchedulingResult)
+	detector.PreRequest(ctx, req3, req3.SchedulingResult)
 	require.InDelta(t, 6.0/100.0, detector.Saturation(ctx, candidates), 1e-6, "6 tokens in flight")
 
 	detector.ResponseBody(ctx, req2, eos, targetEndpoint.metadata)
@@ -417,7 +423,8 @@ func TestDetector_TokenDeleteEndpoint(t *testing.T) {
 
 	req := makeTokenRequest("req1", "1234567890123456")
 	req.RequestId = "req1"
-	detector.PreRequest(ctx, req, makeSchedulingResult(endpointName))
+	req.SchedulingResult = makeSchedulingResult(endpointName)
+	detector.PreRequest(ctx, req, req.SchedulingResult)
 	require.InDelta(t, 0.1, detector.Saturation(ctx, candidates), 1e-6)
 
 	detector.DeleteEndpoint(fullEndpointName(endpointName))
@@ -440,9 +447,10 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	// Otherwise, early 'dec' calls might be ignored (safety feature) if they beat the first 'inc' calls, causing a
 	// positive drift.
 	warmUpRes := makeSchedulingResult(endpointName)
+	warmUpReq := &schedulingtypes.LLMRequest{RequestId: "warmup", SchedulingResult: warmUpRes}
 	warmUpEndpoint := newStubSchedulingEndpoint(endpointName)
-	detector.PreRequest(ctx, nil, warmUpRes)                                                              // Creates entry, count=1
-	detector.ResponseBody(ctx, nil, &requestcontrol.Response{EndOfStream: true}, warmUpEndpoint.metadata) // Decrements, count=0
+	detector.PreRequest(ctx, warmUpReq, warmUpRes)                                                              // Creates entry, count=1
+	detector.ResponseBody(ctx, warmUpReq, &requestcontrol.Response{EndOfStream: true}, warmUpEndpoint.metadata) // Decrements, count=0
 
 	const (
 		numGoroutines = 50
@@ -453,25 +461,28 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	wg.Add(numGoroutines * 2)
 
 	// Launch increments.
-	for range numGoroutines {
-		go func() {
+	for i := range numGoroutines {
+		go func(i int) {
 			defer wg.Done()
 			res := makeSchedulingResult(endpointName)
-			for range opsPerRoutine {
-				detector.PreRequest(ctx, nil, res)
+			for j := range opsPerRoutine {
+				req := &schedulingtypes.LLMRequest{RequestId: fmt.Sprintf("inc-%d-%d", i, j), SchedulingResult: res}
+				detector.PreRequest(ctx, req, res)
 			}
-		}()
+		}(i)
 	}
 
 	// Launch decrements.
-	for range numGoroutines {
-		go func() {
+	for i := range numGoroutines {
+		go func(i int) {
 			defer wg.Done()
+			res := makeSchedulingResult(endpointName)
 			targetEndpoint := newStubSchedulingEndpoint(endpointName)
-			for range opsPerRoutine {
-				detector.ResponseBody(ctx, nil, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
+			for j := range opsPerRoutine {
+				req := &schedulingtypes.LLMRequest{RequestId: fmt.Sprintf("inc-%d-%d", i, j), SchedulingResult: res}
+				detector.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, targetEndpoint.metadata)
 			}
-		}()
+		}(i)
 	}
 
 	wg.Wait()
@@ -485,8 +496,9 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 
 func driveLoad(ctx context.Context, detector *Detector, endpointName string, count int) {
 	res := makeSchedulingResult(endpointName)
-	for range count {
-		detector.PreRequest(ctx, nil, res)
+	for i := range count {
+		req := &schedulingtypes.LLMRequest{RequestId: fmt.Sprintf("load-%d", i), SchedulingResult: res}
+		detector.PreRequest(ctx, req, res)
 	}
 }
 
@@ -540,9 +552,12 @@ func makeTokenRequest(requestID, prompt string) *schedulingtypes.LLMRequest {
 // driveTokenLoad drives token based load by issuing PreRequest with the given requests.
 func driveTokenLoad(ctx context.Context, detector *Detector, endpointName string, requests []*schedulingtypes.LLMRequest) {
 	res := makeSchedulingResult(endpointName)
-	for i, req := range requests {
-		if req != nil && req.RequestId == "" {
-			req.RequestId = fmt.Sprintf("req%d", i+1)
+	for _, req := range requests {
+		if req != nil {
+			if req.RequestId == "" {
+				req.RequestId = fmt.Sprintf("req-%p", req)
+			}
+			req.SchedulingResult = res
 		}
 		detector.PreRequest(ctx, req, res)
 	}
