@@ -83,9 +83,6 @@ func (cfg EndpointPickerConfig) String() string {
 	if cfg.FlowControl != nil {
 		parts = append(parts, fmt.Sprintf("FlowControl: %v", cfg.FlowControl))
 	}
-	if cfg.Parser != nil {
-		parts = append(parts, fmt.Sprintf("Parser: %v", cfg.Parser))
-	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 
@@ -281,13 +278,6 @@ func (dle DataLayerExtractor) String() string {
 	return fmt.Sprintf("{PluginRef: %s}", dle.PluginRef)
 }
 
-func (pc *ParserConfig) String() string {
-	if pc == nil {
-		return nilString
-	}
-	return fmt.Sprintf("{PluginRef: %s}", pc.PluginRef)
-}
-
 // FlowControlConfig configures the Flow Control layer.
 type FlowControlConfig struct {
 	// +optional
@@ -329,7 +319,7 @@ func (fcc *FlowControlConfig) String() string {
 
 	var parts []string
 	if fcc.MaxBytes != nil {
-		parts = append(parts, fmt.Sprintf("MaxBytes: %d", fcc.MaxBytes.Value()))
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", *fcc.MaxBytes))
 	} else {
 		parts = append(parts, "MaxBytes: unlimited")
 	}
@@ -377,7 +367,7 @@ func (pbc PriorityBandConfig) String() string {
 	parts = append(parts, fmt.Sprintf("Priority: %d", pbc.Priority))
 
 	if pbc.MaxBytes != nil {
-		parts = append(parts, fmt.Sprintf("MaxBytes: %d", pbc.MaxBytes.Value()))
+		parts = append(parts, fmt.Sprintf("MaxBytes: %d", *pbc.MaxBytes))
 	}
 
 	if pbc.FairnessPolicyRef != "" {

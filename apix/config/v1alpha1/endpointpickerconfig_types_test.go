@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -62,20 +61,13 @@ func TestStringers(t *testing.T) {
 		{
 			name: "FlowControlConfig",
 			obj: &FlowControlConfig{
-				MaxBytes:          resource.NewQuantity(1024, resource.DecimalSI),
+				MaxBytes:          ptr.To(int64(1024)),
 				DefaultRequestTTL: &metav1.Duration{Duration: 30 * time.Second},
 				PriorityBands: []PriorityBandConfig{
-					{Priority: 10, MaxBytes: resource.NewQuantity(512, resource.DecimalSI)},
+					{Priority: 10, MaxBytes: ptr.To(int64(512))},
 				},
 			},
 			want: "{MaxBytes: 1024, DefaultRequestTTL: 30s, PriorityBands: [{Priority: 10, MaxBytes: 512}]}",
-		},
-		{
-			name: "ParserConfig",
-			obj: &ParserConfig{
-				PluginRef: "test-parser",
-			},
-			want: "{PluginRef: test-parser}",
 		},
 	}
 
