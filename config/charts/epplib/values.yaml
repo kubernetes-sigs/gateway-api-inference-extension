@@ -3,9 +3,9 @@ latencyPredictor:
   # Training Server Configuration
   trainingServer:
     image:
-      hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+      hub: registry.k8s.io/gateway-api-inference-extension
       name: latency-training-server
-      tag: main
+      tag: v1.4.0
       pullPolicy: Always
     port: 8000
     resources:
@@ -44,9 +44,9 @@ latencyPredictor:
     count: 1
     startPort: 8001
     image:
-      hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+      hub: registry.k8s.io/gateway-api-inference-extension
       name: latency-prediction-server
-      tag: main
+      tag: v1.4.0
       pullPolicy: Always
     resources:
       requests:
