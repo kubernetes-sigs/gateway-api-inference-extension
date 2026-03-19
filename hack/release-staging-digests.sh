@@ -20,6 +20,11 @@ if ! command -v gcloud >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "error: jq is required" >&2
+  exit 1
+fi
+
 : "${MAJOR:?MAJOR must be set}"
 : "${MINOR:?MINOR must be set}"
 : "${PATCH:?PATCH must be set}"
@@ -53,22 +58,17 @@ find_digest() {
     gcloud artifacts docker images list "${resource}" \
       --include-tags \
       --limit="${LIMIT}" \
-      --format='value(version,tags)' 2>/dev/null | grep '^sha256:' || true
+      --format=json 2>/dev/null || true
   )"
 
-  local digest tags tag
-  while IFS=$'\t' read -r digest tags; do
-    [[ -z "${digest}" || -z "${tags}" ]] && continue
-    IFS=',' read -r -a tag_list <<< "${tags}"
-    for tag in "${tag_list[@]}"; do
-      if [[ "${tag}" == "${RELEASE_TAG}" ]]; then
-        echo "${digest}"
-        return 0
-      fi
-    done
-  done <<< "${rows}"
+  jq -er --arg tag "${RELEASE_TAG}" '
+    map(select((.tags // []) | index($tag)))
+    | sort_by(.updateTime // .createTime // "")
+    | last
+    | .version
+  ' <<< "${rows}" 2>/dev/null || return 1
 
-  return 1
+  return 0
 }
 
 echo "Release tag: ${RELEASE_TAG}"
