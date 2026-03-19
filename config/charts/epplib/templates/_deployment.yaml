@@ -142,7 +142,7 @@ spec:
             - name: metrics
               containerPort: 9090
         {{- if .Values.inferenceExtension.extraContainerPorts }}
-        {{- toYaml .Values.inferenceExtension.extraContainerPorts | nindent 8 }}
+            {{- toYaml .Values.inferenceExtension.extraContainerPorts | nindent 12 }}
         {{- end }}
           livenessProbe:
           {{- if gt (.Values.inferenceExtension.replicas | int) 1 }}
