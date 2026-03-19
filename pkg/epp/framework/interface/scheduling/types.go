@@ -430,6 +430,7 @@ type Endpoint interface {
 	Get(string) (fwkdl.Cloneable, bool)
 	Put(string, fwkdl.Cloneable)
 	Keys() []string
+	Clone() fwkdl.AttributeMap
 }
 
 func (ep *endpoint) String() string {
@@ -446,6 +447,10 @@ func (ep *endpoint) GetMetadata() *fwkdl.EndpointMetadata {
 
 func (ep *endpoint) GetMetrics() *fwkdl.Metrics {
 	return ep.Metrics
+}
+
+func (ep *endpoint) Clone() fwkdl.AttributeMap {
+	return ep.AttributeMap.Clone()
 }
 
 type endpoint struct {
