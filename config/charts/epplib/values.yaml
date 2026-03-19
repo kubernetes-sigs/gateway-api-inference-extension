@@ -3,9 +3,9 @@ latencyPredictor:
   # Training Server Configuration
   trainingServer:
     image:
-      hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-      name: latencypredictor-training-server
-      tag: latest
+      hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+      name: latency-training-server
+      tag: main
       pullPolicy: Always
     port: 8000
     resources:
@@ -29,43 +29,46 @@ latencyPredictor:
       periodSeconds: 10
     volumeSize: "20Gi"
     config:
-      LATENCY_RETRAINING_INTERVAL_SEC: "1"
+      LATENCY_RETRAINING_INTERVAL_SEC: "10"
       LATENCY_MIN_SAMPLES_FOR_RETRAIN: "100"
       LATENCY_TTFT_MODEL_PATH: "/models/ttft.joblib"
       LATENCY_TPOT_MODEL_PATH: "/models/tpot.joblib"
       LATENCY_TTFT_SCALER_PATH: "/models/ttft_scaler.joblib"
       LATENCY_TPOT_SCALER_PATH: "/models/tpot_scaler.joblib"
       LATENCY_MODEL_TYPE: "xgboost"
-      LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "5000"
-      LATENCY_QUANTILE_ALPHA: "0.9"
+      LATENCY_MAX_TRAINING_DATA_SIZE_PER_BUCKET: "500"
+      LATENCY_OBJECTIVE_TYPE: "mean"
 
   # Prediction Server Configuration
   predictionServers:
-    count: 10
+    count: 1
     startPort: 8001
     image:
-      hub: path/to/your/docker/repo # NOTE: Update with your Docker repository path for sidecars
-      name: latencypredictor-prediction-server
-      tag: latest
+      hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+      name: latency-prediction-server
+      tag: main
       pullPolicy: Always
     resources:
       requests:
-        cpu: "500m"
-        memory: "1Gi"
+        cpu: "8000m"
+        memory: "4Gi"
       limits:
-        cpu: "1000m"
-        memory: "2Gi"
+        cpu: "28000m"
+        memory: "8Gi"
     livenessProbe:
       httpGet:
         path: /healthz
       initialDelaySeconds: 15
       periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 5
     readinessProbe:
       httpGet:
         path: /readyz
       initialDelaySeconds: 10
-      periodSeconds: 5
-      failureThreshold: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
     volumeSize: "10Gi"
     config:
       LATENCY_MODEL_TYPE: "xgboost"
@@ -74,7 +77,13 @@ latencyPredictor:
       LOCAL_TPOT_MODEL_PATH: "/server_models/tpot.joblib"
       LOCAL_TTFT_SCALER_PATH: "/server_models/ttft_scaler.joblib"
       LOCAL_TPOT_SCALER_PATH: "/server_models/tpot_scaler.joblib"
+      UVICORN_WORKERS: "28"
+      OMP_NUM_THREADS: "1"
+      MODEL_SYNC_INTERVAL_SEC: "30"
+      LATENCY_OBJECTIVE_TYPE: "mean"
 
   # EPP Environment Variables for Latency Predictor
   eppEnv:
     LATENCY_MAX_SAMPLE_SIZE: "10000"
+    LATENCY_MAX_CONCURRENT_DISPATCHES: "36"
+    LATENCY_COALESCE_WINDOW_MS: "1"
