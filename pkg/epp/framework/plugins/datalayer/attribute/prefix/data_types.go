@@ -22,6 +22,7 @@ import (
 
 const (
 	PrefixCacheMatchInfoKey = "PrefixCacheMatchInfoKey"
+	PrefixCachePluginType   = "prefix-cache-scorer"
 )
 
 type PrefixCacheMatchInfo struct {

@@ -161,7 +161,7 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplug
 		if !ok {
 			return fmt.Errorf("plugin type '%s' is not registered", spec.Type)
 		}
-
+		// Note: if factory is for approx_prefix_cache prepare data plugin, pass the scorer parameters for backward compatibility.
 		plugin, err := factory(spec.Name, spec.Parameters, handle)
 		if err != nil {
 			return fmt.Errorf("failed to create plugin '%s' (type: %s): %w", spec.Name, spec.Type, err)
