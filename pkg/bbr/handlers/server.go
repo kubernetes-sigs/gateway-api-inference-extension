@@ -32,6 +32,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
@@ -149,13 +150,22 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			return status.Error(codes.Unknown, "unknown request type")
 		}
 
+		// Handle the err and fire an immediate response.
 		if err != nil {
 			if logger.V(logutil.DEBUG).Enabled() {
 				logger.V(logutil.DEBUG).Error(err, "Failed to process request", "request", req)
 			} else {
 				logger.V(logutil.DEFAULT).Error(err, "Failed to process request")
 			}
-			return status.Errorf(status.Code(err), "failed to handle request: %v", err)
+			resp, err := errcommon.BuildErrResponse(err)
+			if err != nil {
+				return err
+			}
+			if sendErr := srv.Send(resp); sendErr != nil {
+				logger.V(logutil.DEFAULT).Error(sendErr, "Send failed")
+				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", sendErr)
+			}
+			return nil
 		}
 
 		for _, resp := range responses {

@@ -152,63 +152,20 @@ func TestHandleRequestBody(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name: "model not found",
-			body: map[string]any{
-				"prompt": "Tell me a joke",
-			},
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{},
-					},
-				},
-			},
+			name:    "model not found",
+			body:    map[string]any{"prompt": "Tell me a joke"},
+			wantErr: true,
 		},
 		{
-			name: "model not found with streaming",
-			body: map[string]any{
-				"prompt": "Tell me a joke",
-			},
+			name:      "model not found with streaming",
+			body:      map[string]any{"prompt": "Tell me a joke"},
 			streaming: true,
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{},
-					},
-				},
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body: mapToBytes(t, map[string]any{
-												"prompt": "Tell me a joke",
-											}),
-											EndOfStream: true,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			wantErr:   true,
 		},
 		{
-			name: "model in body but empty",
-			body: map[string]any{
-				"model":  "",
-				"prompt": "Tell me a joke",
-			},
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{},
-					},
-				},
-			},
+			name:    "model in body but empty",
+			body:    map[string]any{"model": "", "prompt": "Tell me a joke"},
+			wantErr: true,
 		},
 		{
 			name: "model is not string, success after it's being auto converted to string",
@@ -513,14 +470,6 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	if pluginsWithMetrics != 2 {
 		t.Errorf("Expected 2 request plugins with metrics observations, got %d", pluginsWithMetrics)
 	}
-}
-
-func mapToBytes(t *testing.T, m map[string]any) []byte {
-	bytes, err := json.Marshal(m)
-	if err != nil {
-		t.Fatalf("Marshal(): %v", err)
-	}
-	return bytes
 }
 
 type bodyMutatingPlugin struct {

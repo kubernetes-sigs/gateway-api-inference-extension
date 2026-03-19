@@ -23,7 +23,6 @@ import (
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -304,7 +303,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			} else {
 				logger.V(1).Error(err, "Failed to process request")
 			}
-			resp, err := buildErrResponse(err)
+			resp, err := errcommon.BuildErrResponse(err)
 			if err != nil {
 				return err
 			}
@@ -403,64 +402,4 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 		}
 	}
 	return nil
-}
-
-func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
-	var resp *extProcPb.ProcessingResponse
-
-	switch errcommon.CanonicalCode(err) {
-	// This code can be returned by scheduler when there is no capacity for sheddable
-	// requests.
-	case errcommon.ResourceExhausted:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_TooManyRequests,
-					},
-				},
-			},
-		}
-	// This code can be returned by when EPP processes the request and run into server-side errors.
-	case errcommon.Internal:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_InternalServerError,
-					},
-				},
-			},
-		}
-	// This code can be returned by the director when there are no candidate pods for the request scheduling.
-	case errcommon.ServiceUnavailable:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_ServiceUnavailable,
-					},
-				},
-			},
-		}
-	// This code can be returned when users provide invalid json request.
-	case errcommon.BadRequest:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_BadRequest,
-					},
-				},
-			},
-		}
-	default:
-		return nil, status.Errorf(status.Code(err), "failed to handle request: %v", err)
-	}
-
-	if err.Error() != "" {
-		resp.Response.(*extProcPb.ProcessingResponse_ImmediateResponse).ImmediateResponse.Body = []byte(err.Error())
-	}
-
-	return resp, nil
 }

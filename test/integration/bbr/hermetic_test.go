@@ -19,9 +19,11 @@ package bbr
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -36,22 +38,23 @@ func TestBodyBasedRouting(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		req          *extProcPb.ProcessingRequest
-		wantResponse *extProcPb.ProcessingResponse
-		wantErr      bool
+		name             string
+		req              *extProcPb.ProcessingRequest
+		wantResponse     *extProcPb.ProcessingResponse
+		wantErr          bool
+		wantStatusCode   envoyTypePb.StatusCode
+		wantBodyContains string
 	}{
 		{
 			name:         "success: extracts model and sets header",
 			req:          integration.ReqLLMUnary(logger, "test", "llama"),
 			wantResponse: ExpectBBRUnaryResponse("llama", "llama", "test"),
-			wantErr:      false,
 		},
 		{
-			name:         "noop: no model parameter in body",
-			req:          integration.ReqLLMUnary(logger, "test1", ""),
-			wantResponse: ExpectBBRUnaryResponse("", "", "test1"), // Expect no headers.
-			wantErr:      false,
+			name:             "immediate response: no model parameter in body",
+			req:              integration.ReqLLMUnary(logger, "test1", ""),
+			wantStatusCode:   envoyTypePb.StatusCode_BadRequest,
+			wantBodyContains: "model",
 		},
 	}
 
@@ -66,8 +69,19 @@ func TestBodyBasedRouting(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err, "expected error during request processing")
-			} else {
-				require.NoError(t, err, "unexpected error during request processing")
+				return
+			}
+			require.NoError(t, err, "unexpected error during request processing")
+
+			if tc.wantStatusCode != 0 {
+				ir := res.GetImmediateResponse()
+				require.NotNil(t, ir, "expected ImmediateResponse")
+				require.Equal(t, tc.wantStatusCode, ir.GetStatus().GetCode())
+				if tc.wantBodyContains != "" {
+					require.True(t, strings.Contains(string(ir.GetBody()), tc.wantBodyContains),
+						"ImmediateResponse body %s should contain %s", string(ir.GetBody()), tc.wantBodyContains)
+				}
+				return
 			}
 
 			// sort headers in responses for deterministic tests
@@ -86,10 +100,12 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		reqs          []*extProcPb.ProcessingRequest
-		wantResponses []*extProcPb.ProcessingResponse
-		wantErr       bool
+		name             string
+		reqs             []*extProcPb.ProcessingRequest
+		wantResponses    []*extProcPb.ProcessingResponse
+		wantErr          bool
+		wantStatusCode   envoyTypePb.StatusCode
+		wantBodyContains string
 	}{
 		{
 			name: "success: adds model header from simple body",
@@ -112,12 +128,10 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			},
 		},
 		{
-			name: "noop: handles missing model field gracefully",
-			reqs: integration.ReqLLM(logger, "test", "", ""),
-			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRNoOpHeader(),
-				ExpectBBRBodyPassThrough("test", ""),
-			},
+			name:             "immediate response: handles missing model field",
+			reqs:             integration.ReqLLM(logger, "test", "", ""),
+			wantStatusCode:   envoyTypePb.StatusCode_BadRequest,
+			wantBodyContains: "model",
 		},
 	}
 
@@ -128,12 +142,29 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			ctx := context.Background()
 			h := NewBBRHarness(t, ctx, true)
 
-			responses, err := integration.StreamedRequest(t, h.Client, tc.reqs, len(tc.wantResponses))
+			expectedCount := len(tc.wantResponses)
+			if tc.wantStatusCode != 0 || tc.wantErr {
+				expectedCount = 1
+			}
+
+			responses, err := integration.StreamedRequest(t, h.Client, tc.reqs, expectedCount)
 
 			if tc.wantErr {
 				require.Error(t, err, "expected stream error")
-			} else {
-				require.NoError(t, err, "unexpected stream error")
+				return
+			}
+			require.NoError(t, err, "unexpected stream error")
+
+			if tc.wantStatusCode != 0 {
+				require.Len(t, responses, 1)
+				ir := responses[0].GetImmediateResponse()
+				require.NotNil(t, ir, "expected ImmediateResponse")
+				require.Equal(t, tc.wantStatusCode, ir.GetStatus().GetCode())
+				if tc.wantBodyContains != "" {
+					require.True(t, strings.Contains(string(ir.GetBody()), tc.wantBodyContains),
+						"ImmediateResponse body %s should contain %s", string(ir.GetBody()), tc.wantBodyContains)
+				}
+				return
 			}
 
 			// sort headers in responses for deterministic tests

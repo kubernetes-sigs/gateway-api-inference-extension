@@ -88,7 +88,7 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 	}
 
 	if err := s.runResponsePlugins(ctx, reqCtx.CycleState, reqCtx.Response); err != nil {
-		return nil, fmt.Errorf("failed to execute response plugins - %w", err)
+		return nil, err
 	}
 
 	bodyMutated := reqCtx.Response.BodyMutated()
@@ -185,7 +185,8 @@ func (s *Server) runResponsePlugins(ctx context.Context, cycleState *framework.C
 		err = plugin.ProcessResponse(ctx, cycleState, response)
 		metrics.RecordPluginProcessingLatency(responsePluginExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
-			return fmt.Errorf("failed to execute response plugin '%s' - %w", plugin.TypedName(), err)
+			log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "Failed to execute response plugin", "plugin", plugin.TypedName())
+			return err
 		}
 	}
 

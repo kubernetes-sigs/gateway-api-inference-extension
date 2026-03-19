@@ -18,7 +18,10 @@ package error
 
 import (
 	"errors"
+	"strings"
 	"testing"
+
+	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 )
 
 func TestError_Error(t *testing.T) {
@@ -214,5 +217,97 @@ func TestErrorConstants(t *testing.T) {
 		if constant != expected {
 			t.Errorf("Constant value %q != expected %q", constant, expected)
 		}
+	}
+}
+
+func TestBuildErrResponse(t *testing.T) {
+	tests := []struct {
+		name             string
+		err              error
+		wantHTTPStatus   envoyTypePb.StatusCode
+		wantBodyContains string
+		wantGRPCErr      bool
+	}{
+		{
+			name:             "BadRequest returns 400",
+			err:              Error{Code: BadRequest, Msg: "invalid model name"},
+			wantHTTPStatus:   envoyTypePb.StatusCode_BadRequest,
+			wantBodyContains: "invalid model name",
+		},
+		{
+			name:             "Unauthorized returns 401",
+			err:              Error{Code: Unauthorized, Msg: "missing token"},
+			wantHTTPStatus:   envoyTypePb.StatusCode_Unauthorized,
+			wantBodyContains: "missing token",
+		},
+		{
+			name:             "Forbidden returns 403",
+			err:              Error{Code: Forbidden, Msg: "unsafe content blocked"},
+			wantHTTPStatus:   envoyTypePb.StatusCode_Forbidden,
+			wantBodyContains: "unsafe content blocked",
+		},
+		{
+			name:             "NotFound returns 404",
+			err:              Error{Code: NotFound, Msg: "model not found"},
+			wantHTTPStatus:   envoyTypePb.StatusCode_NotFound,
+			wantBodyContains: "model not found",
+		},
+		{
+			name:             "ResourceExhausted returns 429",
+			err:              Error{Code: ResourceExhausted, Msg: "no capacity"},
+			wantHTTPStatus:   envoyTypePb.StatusCode_TooManyRequests,
+			wantBodyContains: "no capacity",
+		},
+		{
+			name:             "Internal returns 500",
+			err:              Error{Code: Internal, Msg: "unexpected failure"},
+			wantHTTPStatus:   envoyTypePb.StatusCode_InternalServerError,
+			wantBodyContains: "unexpected failure",
+		},
+		{
+			name:             "ServiceUnavailable returns 503",
+			err:              Error{Code: ServiceUnavailable, Msg: "no endpoints"},
+			wantHTTPStatus:   envoyTypePb.StatusCode_ServiceUnavailable,
+			wantBodyContains: "no endpoints",
+		},
+		{
+			name:        "plain error returns gRPC error",
+			err:         errors.New("unknown problem"),
+			wantGRPCErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := BuildErrResponse(tt.err)
+
+			if tt.wantGRPCErr {
+				if err == nil {
+					t.Fatal("expected gRPC error, got nil")
+				}
+				if resp != nil {
+					t.Errorf("expected nil response on gRPC error, got %v", resp)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp == nil {
+				t.Fatal("expected response, got nil")
+			}
+
+			ir := resp.GetImmediateResponse()
+			if ir == nil {
+				t.Fatal("expected ImmediateResponse, got nil")
+			}
+			if ir.GetStatus().GetCode() != tt.wantHTTPStatus {
+				t.Errorf("HTTP status = %v, want %v", ir.GetStatus().GetCode(), tt.wantHTTPStatus)
+			}
+			if tt.wantBodyContains != "" && !strings.Contains(string(ir.GetBody()), tt.wantBodyContains) {
+				t.Errorf("body %q should contain %q", string(ir.GetBody()), tt.wantBodyContains)
+			}
+		})
 	}
 }
