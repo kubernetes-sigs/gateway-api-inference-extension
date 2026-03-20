@@ -14,19 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package utilizationdetector implements a mechanism to determine the aggregate saturation level of backend model
-// servers based on observed metrics for compute and memory resources.
-//
-// # Saturation Logic (The Roofline Model)
-//
-// The detector calculates a continuous saturation gradient where:
-//
-//	Saturation = Average(PodSaturationScore)
-//
-// For each pod, the score is determined by the most constrained resource (Compute vs. Memory), following a Roofline
-// performance model:
-//
-//	PodSaturationScore = Max(WaitingQueue / QueueThreshold, KVCacheUsage / KVCacheThreshold)
 package utilizationdetector
 
 import (
@@ -40,6 +27,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
@@ -69,7 +57,8 @@ func UtilizationDetectorFactory(
 }
 
 var (
-	_ framework.Filter = &Detector{}
+	_ framework.Filter               = &Detector{}
+	_ flowcontrol.SaturationDetector = &Detector{}
 )
 
 // Detector determines system saturation based on metrics of the given candidate pods.

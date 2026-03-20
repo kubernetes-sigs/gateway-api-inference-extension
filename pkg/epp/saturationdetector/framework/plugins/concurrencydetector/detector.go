@@ -14,40 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package concurrencydetector implements a real-time saturation detection and scheduling filter mechanism based on
-// active in-flight request accounting.
-//
-// # Role in Flow Control (The Gatekeeper)
-//
-// The Detector implements the SaturationDetector interface to provide a utilization gradient, allowing the Flow
-// Controller to apply proportional backpressure.
-//
-//	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity
-//
-// In token mode (ConcurrencyMode=tokens), both numerator and denominator are in tokens:
-// inflight token count per pool and MaxTokenConcurrency capacity.
-//
-// # Role in Scheduling (The Traffic Shaper)
-//
-// The Detector implements the Filter interface to protect individual endpoints.
-// It removes endpoints from candidate lists if they exceed the specific safety limit:
-//
-//	Limit = MaxConcurrency * (1 + Headroom)
-//
-// This two-tier approach allows the Flow Controller to manage average pool load, while the Scheduler retains the
-// flexibility to burst slightly above ideal targets (the "Headroom") to satisfy affinity or scoring objectives.
-//
-// # Consistency & Drift Warning
-//
-// The Detector relies on a strict symmetry between PreRequest (increment) and ResponseBody on EndOfStream (decrement).
-// It assumes the EPP framework guarantees that every PreRequest is eventually paired with a final ResponseBody.
-//
-// If the application panics, crashes, or if the framework fails to invoke the completion hook for a request, the
-// internal counters for a endpoint will drift upwards. This can lead to a "false saturated" state where the detector
-// believes a endpoint is full when it is actually empty.
-//
-// Currently, the only mechanism to reset a drifted counter is the DeleteEndpoint signal (when a backend is removed from the
-// pool). Future iterations may require a reconciliation loop or a TTL-based cleanup to recover from persistent drift.
 package concurrencydetector
 
 import (
@@ -63,6 +29,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -92,9 +59,10 @@ func ConcurrencyDetectorFactory(
 }
 
 var (
-	_ requestcontrol.PreRequest   = &detector{}
-	_ requestcontrol.ResponseBody = &detector{}
-	_ framework.Filter            = &detector{}
+	_ requestcontrol.PreRequest      = &detector{}
+	_ requestcontrol.ResponseBody    = &detector{}
+	_ framework.Filter               = &detector{}
+	_ flowcontrol.SaturationDetector = &detector{}
 )
 
 // detector implements a saturation detector and scheduling filter based on active request concurrency.
