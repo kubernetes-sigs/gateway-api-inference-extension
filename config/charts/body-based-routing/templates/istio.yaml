@@ -7,7 +7,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   targetRefs:
-  - group: "gateway.networking.k8s.io"
+  - group: gateway.networking.k8s.io
     kind: Gateway
     name: {{ .Values.inferenceGateway.name }}
   configPatches:
@@ -21,7 +21,7 @@ spec:
     patch:
       operation: INSERT_FIRST
       value:
-        name: envoy.filters.http.ext_proc
+        name: envoy.filters.http.ext_proc.bbr
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
           failure_mode_allow: false
