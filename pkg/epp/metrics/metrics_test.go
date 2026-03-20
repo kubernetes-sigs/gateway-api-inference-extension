@@ -26,11 +26,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	schedulingframework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -796,46 +799,134 @@ func TestFlowControlEnqueueDurationMetric(t *testing.T) {
 
 func TestSchedulerAttemptsTotal(t *testing.T) {
 
-	scenarios := []struct {
-		name         string
-		successCount int
-		failureCount int
-	}{
-		{
-			name:         "mixed success and failure attempts",
-			successCount: 10,
-			failureCount: 5,
-		},
+	compareMetrics := func(t *testing.T, goldenFile string) {
+		t.Helper()
+		wantMetrics, err := os.Open(goldenFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err = wantMetrics.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if err := testutil.GatherAndCompare(
+			metrics.Registry,
+			wantMetrics,
+			"inference_extension_scheduler_attempts_total",
+		); err != nil {
+			t.Errorf("metric comparison failed: %v", err)
+		}
 	}
 
-	for _, scenario := range scenarios {
-		t.Run(scenario.name, func(t *testing.T) {
-			Reset()
-			for i := 0; i < scenario.successCount; i++ {
-				RecordSchedulerAttempt(nil)
-			}
-			for i := 0; i < scenario.failureCount; i++ {
-				RecordSchedulerAttempt(errors.New("simulated scheduling failure"))
-			}
+	t.Run("success with endpoint metadata", func(t *testing.T) {
+		Reset()
+		result := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", result)
+		RecordSchedulerAttempt(nil, "modelA", result)
+		compareMetrics(t, "testdata/scheduler_attempts_with_result_metrics")
+	})
 
-			wantMetrics, err := os.Open("testdata/scheduler_attempts_total_metrics")
-			defer func() {
-				if err = wantMetrics.Close(); err != nil {
-					t.Error(err)
-				}
-			}()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := testutil.GatherAndCompare(
-				metrics.Registry,
-				wantMetrics,
-				"inference_extension_scheduler_attempts_total",
-			); err != nil {
-				t.Errorf("metric comparison failed: %v", err)
-			}
-		})
-	}
+	t.Run("success with multiple endpoints uses first", func(t *testing.T) {
+		Reset()
+		result := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
+								PodName:        "pod-2",
+								Port:           "9090",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", result)
+		RecordSchedulerAttempt(nil, "modelB", result)
+		compareMetrics(t, "testdata/scheduler_attempts_multiple_endpoints_metrics")
+	})
+
+	t.Run("success with different models and endpoints", func(t *testing.T) {
+		Reset()
+		resultA := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		resultB := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
+								PodName:        "pod-2",
+								Port:           "9090",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", resultA)
+		RecordSchedulerAttempt(nil, "modelA", resultA)
+		RecordSchedulerAttempt(nil, "modelB", resultB)
+		compareMetrics(t, "testdata/scheduler_attempts_different_models_metrics")
+	})
+
+	t.Run("mixed success and failure attempts", func(t *testing.T) {
+		Reset()
+		for i := 0; i < 10; i++ {
+			RecordSchedulerAttempt(nil, "modelA", nil)
+		}
+		for i := 0; i < 5; i++ {
+			RecordSchedulerAttempt(errors.New("simulated scheduling failure"), "modelA", nil)
+		}
+		compareMetrics(t, "testdata/scheduler_attempts_total_metrics")
+	})
 }
 
 func TestPrefixCacheMetrics(t *testing.T) {

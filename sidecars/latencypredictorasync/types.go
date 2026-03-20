@@ -162,16 +162,18 @@ type PredictorInterface interface {
 // --- Data Models ---
 
 type TrainingEntry struct {
-	KVCachePercentage  float64   `json:"kv_cache_percentage"`
-	InputTokenLength   int       `json:"input_token_length"`
-	NumRequestWaiting  int       `json:"num_request_waiting"`
-	NumRequestRunning  int       `json:"num_request_running"`
-	NumTokensGenerated int       `json:"num_tokens_generated"`
-	ActualTTFT         float64   `json:"actual_ttft_ms"`
-	ActualTPOT         float64   `json:"actual_tpot_ms"`
-	PrefixCacheScore   float64   `json:"prefix_cache_score"`
-	PodType            string    `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
-	Timestamp          time.Time `json:"timestamp"`
+	KVCachePercentage     float64   `json:"kv_cache_percentage"`
+	InputTokenLength      int       `json:"input_token_length"`
+	NumRequestWaiting     int       `json:"num_request_waiting"`
+	NumRequestRunning     int       `json:"num_request_running"`
+	NumTokensGenerated    int       `json:"num_tokens_generated"`
+	ActualTTFT            float64   `json:"actual_ttft_ms"`
+	ActualTPOT            float64   `json:"actual_tpot_ms"`
+	PrefixCacheScore      float64   `json:"prefix_cache_score"`
+	PodType               string    `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
+	PrefillTokensInFlight int64     `json:"prefill_tokens_in_flight"`
+	DecodeTokensInFlight  int64     `json:"decode_tokens_in_flight"`
+	Timestamp             time.Time `json:"timestamp"`
 }
 
 type BulkTrainingRequest struct {
@@ -179,13 +181,15 @@ type BulkTrainingRequest struct {
 }
 
 type PredictionRequest struct {
-	KVCachePercentage  float64 `json:"kv_cache_percentage"`
-	InputTokenLength   int     `json:"input_token_length"`
-	NumRequestWaiting  int     `json:"num_request_waiting"`
-	NumRequestRunning  int     `json:"num_request_running"`
-	NumTokensGenerated int     `json:"num_tokens_generated"`
-	PrefixCacheScore   float64 `json:"prefix_cache_score"`
-	PodType            string  `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
+	KVCachePercentage     float64 `json:"kv_cache_percentage"`
+	InputTokenLength      int     `json:"input_token_length"`
+	NumRequestWaiting     int     `json:"num_request_waiting"`
+	NumRequestRunning     int     `json:"num_request_running"`
+	NumTokensGenerated    int     `json:"num_tokens_generated"`
+	PrefixCacheScore      float64 `json:"prefix_cache_score"`
+	PodType               string  `json:"pod_type,omitempty"` // "prefill", "decode", or "" for monolithic
+	PrefillTokensInFlight int64   `json:"prefill_tokens_in_flight"`
+	DecodeTokensInFlight  int64   `json:"decode_tokens_in_flight"`
 }
 
 type PredictionResponse struct {

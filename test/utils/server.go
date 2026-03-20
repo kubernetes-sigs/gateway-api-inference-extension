@@ -60,7 +60,7 @@ func PrepareForTestStreamingServer(objectives []*v1alpha2.InferenceObjective, po
 	}
 	for _, pod := range pods {
 		initObjs = append(initObjs, pod)
-		ds.PodUpdateOrAddIfNotExist(pod)
+		ds.PodUpdateOrAddIfNotExist(ctx, pod)
 	}
 
 	scheme := runtime.NewScheme()

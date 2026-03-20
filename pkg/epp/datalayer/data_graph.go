@@ -35,9 +35,6 @@ func ValidateAndOrderDataDependencies(plugins []plugin.Plugin) ([]string, error)
 	for _, p := range plugins {
 		pluginMap[p.TypedName().String()] = p
 	}
-	for _, p := range plugins {
-		pluginMap[p.TypedName().String()] = p
-	}
 	producers := make(map[string]plugin.ProducerPlugin)
 	consumers := make(map[string]plugin.ConsumerPlugin)
 	for name, p := range pluginMap {
@@ -88,7 +85,7 @@ func pluginToLayerExecutionOrder(plugin plugin.Plugin) int {
 	if _, ok := plugin.(fwkrq.PreRequest); ok {
 		return RequestControlLayer
 	}
-	if _, ok := plugin.(fwkrq.ResponseReceived); ok {
+	if _, ok := plugin.(fwkrq.ResponseHeader); ok {
 		return RequestControlLayer
 	}
 

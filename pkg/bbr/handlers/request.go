@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -40,7 +41,7 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return nil, err
 	}
 
-	if err := s.runRequestPlugins(ctx, reqCtx.Request); err != nil {
+	if err := s.runRequestPlugins(ctx, reqCtx.CycleState, reqCtx.Request); err != nil {
 		logger.V(logutil.DEFAULT).Error(err, "failed to execute request plugins")
 		if s.streaming {
 			ret = append(ret, &eppb.ProcessingResponse{
@@ -60,10 +61,20 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		return ret, nil
 	}
 
-	// TODO temp until this is implemented as plugin
-	baseModel := s.ds.GetBaseModel(reqCtx.Request.Headers[ModelHeader])
-	reqCtx.Request.SetHeader(BaseModelHeader, baseModel)
-	logger.Info("Base model from datastore", "baseModel", baseModel)
+	bodyMutated := reqCtx.Request.BodyMutated()
+	var mutatedBodyBytes []byte
+	if bodyMutated {
+		var err error
+		mutatedBodyBytes, err = json.Marshal(reqCtx.Request.Body)
+		if err != nil {
+			return nil, err
+		}
+		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(mutatedBodyBytes)))
+	} else if s.streaming {
+		// In streaming mode, always set Content-Length even if body is not mutated
+		// to inform Envoy of the body size that will follow
+		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(requestBodyBytes)))
+	}
 
 	metrics.RecordSuccessCounter()
 
@@ -81,22 +92,35 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 				},
 			},
 		})
-		ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		if bodyMutated {
+			ret = addStreamedBodyResponse(ret, mutatedBodyBytes)
+		} else {
+			ret = addStreamedBodyResponse(ret, requestBodyBytes)
+		}
 		return ret, nil
+	}
+
+	// Necessary so that the new headers are used in the routing decision.
+	response := &eppb.CommonResponse{
+		ClearRouteCache: true,
+		HeaderMutation: &eppb.HeaderMutation{
+			SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
+			RemoveHeaders: reqCtx.Request.RemovedHeaders(),
+		},
+	}
+	if bodyMutated {
+		response.BodyMutation = &eppb.BodyMutation{
+			Mutation: &eppb.BodyMutation_Body{
+				Body: mutatedBodyBytes,
+			},
+		}
 	}
 
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_RequestBody{
 				RequestBody: &eppb.BodyResponse{
-					Response: &eppb.CommonResponse{
-						// Necessary so that the new headers are used in the routing decision.
-						ClearRouteCache: true,
-						HeaderMutation: &eppb.HeaderMutation{
-							SetHeaders:    envoy.GenerateHeadersMutation(reqCtx.Request.MutatedHeaders()),
-							RemoveHeaders: reqCtx.Request.RemovedHeaders(),
-						},
-					},
+					Response: response,
 				},
 			},
 		},
@@ -104,12 +128,12 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 }
 
 // runRequestPlugins executes request plugins in the order they were registered.
-func (s *Server) runRequestPlugins(ctx context.Context, request *framework.InferenceRequest) error {
+func (s *Server) runRequestPlugins(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error {
 	var err error
 	for _, plugin := range s.requestPlugins {
 		log.FromContext(ctx).V(logutil.VERBOSE).Info("Executing request plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		err = plugin.ProcessRequest(ctx, request)
+		err = plugin.ProcessRequest(ctx, cycleState, request)
 		metrics.RecordPluginProcessingLatency(requestPluginExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
 			return fmt.Errorf("failed to execute request plugin '%s' - %w", plugin.TypedName(), err)

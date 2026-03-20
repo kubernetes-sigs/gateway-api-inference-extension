@@ -793,6 +793,35 @@ func TestOpenAIParser_ParseResponse_Streaming(t *testing.T) {
 				Usage: nil,
 			},
 		},
+		{
+			name:  "ResponsesAPI streaming with full response",
+			chunk: []byte("event: response.completed\ndata: {\"response\":{\"id\":\"resp_8e38bd02b4f56572\",\"model\":\"Qwen/Qwen3-32B\",\"object\":\"response\",\"usage\":{\"input_tokens\":31,\"input_tokens_details\":{\"cached_tokens\":16},\"output_tokens\":3,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":34}},\"type\":\"response.completed\"}"),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     31,
+					CompletionTokens: 3,
+					TotalTokens:      34,
+				},
+			},
+		},
+		{
+			name:  "ResponsesAPI without response.completed type returns nil",
+			chunk: []byte("event: response.in_progress\ndata: {\"response\":{\"usage\":{\"input_tokens\":31,\"output_tokens\":3}},\"type\":\"response.in_progress\"}"),
+			want: &fwkrh.ParsedResponse{
+				Usage: nil,
+			},
+		},
+		{
+			name:  "ResponsesAPI with multiple events extracts from completed",
+			chunk: []byte("event: response.output_text.delta\ndata: {\"delta\":\"Hello\",\"type\":\"response.output_text.delta\"}\n\nevent: response.completed\ndata: {\"response\":{\"usage\":{\"input_tokens\":39,\"output_tokens\":10,\"total_tokens\":49}},\"type\":\"response.completed\"}"),
+			want: &fwkrh.ParsedResponse{
+				Usage: &fwkrc.Usage{
+					PromptTokens:     39,
+					CompletionTokens: 10,
+					TotalTokens:      49,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

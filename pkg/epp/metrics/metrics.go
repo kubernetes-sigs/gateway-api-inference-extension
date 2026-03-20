@@ -28,6 +28,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	metricsutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/metrics"
+	schedulingframework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -55,6 +56,7 @@ var (
 	modelLabels     = []string{"model_name", "target_model_name"}
 	modelTypeLabels = []string{"model_name", "target_model_name", "type"}
 	poolLabels      = []string{"name"}
+	endpointLabels  = []string{"pod_name", "namespace", "port"}
 
 	// --- Common Buckets ---
 
@@ -320,7 +322,7 @@ var (
 			Name:      "scheduler_attempts_total",
 			Help:      metricsutil.HelpMsgWithStability("Total number of scheduling attempts.", compbasemetrics.ALPHA),
 		},
-		[]string{"status"}, // "success", "failure"
+		append([]string{"status", "target_model_name"}, endpointLabels...),
 	)
 
 	pluginProcessingLatencies = prometheus.NewHistogramVec(
@@ -770,13 +772,29 @@ func RecordSchedulerE2ELatency(duration time.Duration) {
 	schedulerE2ELatency.WithLabelValues().Observe(duration.Seconds())
 }
 
-// RecordSchedulerAttempt records a scheduling attempt with status.
-func RecordSchedulerAttempt(err error) {
+// RecordSchedulerAttempt records a scheduling attempt with status and endpoint information.
+func RecordSchedulerAttempt(err error, targetModelName string, result *schedulingframework.SchedulingResult) {
 	if err != nil {
-		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusFailure).Inc()
-	} else {
-		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess).Inc()
+		schedulerAttemptsTotal.WithLabelValues(SchedulerStatusFailure, targetModelName, "", "", "").Inc()
+		return
 	}
+
+	if result != nil {
+		// Collect endpoint information for successful scheduling attempts
+		primaryResults := result.ProfileResults[result.PrimaryProfileName]
+		if primaryResults != nil {
+			// prepareRequest (in director.go) selects the first endpoint. Do the same here.
+			if len(primaryResults.TargetEndpoints) > 0 {
+				metadata := primaryResults.TargetEndpoints[0].GetMetadata()
+				if metadata != nil {
+					schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port).Inc()
+					return
+				}
+			}
+		}
+	}
+
+	schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, "", "", "").Inc()
 }
 
 const (

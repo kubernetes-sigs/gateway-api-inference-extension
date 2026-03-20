@@ -21,39 +21,30 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
-	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
-// HandleResponseBody always returns the requestContext even in the error case, as the request context is used in error handling.
-func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte) (*RequestContext, error) {
+// HandleResponseBody processes response data for both streaming and non-streaming models.
+//
+// Streaming case:
+//
+//	Invoked multiple times as data chunks arrive. The final call is identified by
+//	endOfStream=true, triggering final metric collection and plugin cleanup.
+//
+// Non-streaming case:
+//
+//	Invoked exactly once with endOfStream=true. It processes the entire response
+//	body as a single "stream" event.
+func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte, endOfStream bool) *RequestContext {
 	logger := log.FromContext(ctx)
-
-	parsedResponse, parseErr := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, true)
-	if parseErr != nil {
-		logger.Error(parseErr, "response parsing")
-	}
-	if parsedResponse != nil && parsedResponse.Usage != nil {
-		reqCtx.Usage = *parsedResponse.Usage
-		logger.V(logutil.VERBOSE).Info("Response generated", "usage", reqCtx.Usage)
-	}
-	return s.director.HandleResponseBodyComplete(ctx, reqCtx)
-}
-
-// The function is to handle streaming response if the modelServer is streaming.
-func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, reqCtx *RequestContext, responseBytes []byte, endOfStream bool) {
-	logger := log.FromContext(ctx)
-	_, err := s.director.HandleResponseBodyStreaming(ctx, reqCtx)
-	if err != nil {
-		logger.Error(err, "error in HandleResponseBodyStreaming")
-	}
 	parsedResp, err := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, endOfStream)
 	if err != nil {
-		logger.Error(err, "streaming response parsing")
+		logger.Error(err, "parsing response")
 	} else if parsedResp != nil && parsedResp.Usage != nil {
 		reqCtx.Usage = *parsedResp.Usage
 		metrics.RecordInputTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokens)
@@ -62,16 +53,19 @@ func (s *StreamingServer) HandleResponseBodyModelStreaming(ctx context.Context, 
 			metrics.RecordPromptCachedTokens(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Usage.PromptTokenDetails.CachedTokens)
 		}
 	}
+	if endOfStream {
+		metrics.RecordNormalizedTimePerOutputToken(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp, reqCtx.Usage.CompletionTokens)
+		metrics.RecordRequestLatencies(ctx, reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestReceivedTimestamp, reqCtx.ResponseCompleteTimestamp)
+		metrics.RecordResponseSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseSize)
+	}
+	return s.director.HandleResponseBody(ctx, reqCtx, endOfStream)
 }
 
-func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) (*RequestContext, error) {
+func (s *StreamingServer) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, resp *extProcPb.ProcessingRequest_ResponseHeaders) *RequestContext {
 	for _, header := range resp.ResponseHeaders.Headers.Headers {
 		reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
 	}
-
-	reqCtx, err := s.director.HandleResponseReceived(ctx, reqCtx)
-
-	return reqCtx, err
+	return s.director.HandleResponseHeader(ctx, reqCtx)
 }
 
 func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
@@ -88,7 +82,7 @@ func (s *StreamingServer) generateResponseHeaderResponse(reqCtx *RequestContext)
 	}
 }
 
-func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*extProcPb.ProcessingResponse {
+func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool, dynamicMetadata *structpb.Struct) []*extProcPb.ProcessingResponse {
 	commonResponses := envoy.BuildChunkedBodyResponses(responseBodyBytes, setEoS)
 	responses := make([]*extProcPb.ProcessingResponse, 0, len(commonResponses))
 	for _, commonResp := range commonResponses {
@@ -100,6 +94,11 @@ func generateResponseBodyResponses(responseBodyBytes []byte, setEoS bool) []*ext
 			},
 		}
 		responses = append(responses, resp)
+	}
+
+	// Attach dynamic metadata to the last response if available.
+	if len(responses) > 0 && dynamicMetadata != nil {
+		responses[len(responses)-1].DynamicMetadata = dynamicMetadata
 	}
 	return responses
 }

@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -37,11 +38,11 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
@@ -55,6 +56,7 @@ func NewRunner() *Runner {
 	return &Runner{
 		bbrExecutableName: "BBR",
 		requestPlugins:    []framework.RequestProcessor{},
+		responsePlugins:   []framework.ResponseProcessor{},
 		customCollectors:  []prometheus.Collector{},
 	}
 }
@@ -65,6 +67,9 @@ type Runner struct {
 	// The slice of BBR plugin instances executed by the request handler,
 	// in the same order the plugin flags are provided.
 	requestPlugins []framework.RequestProcessor
+	// The slice of BBR plugin instances executed by the response handler,
+	// in the same order the plugin flags are provided.
+	responsePlugins []framework.ResponseProcessor
 
 	customCollectors []prometheus.Collector
 }
@@ -124,8 +129,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	ds := datastore.NewDatastore()
-
 	// --- Setup Metrics Server ---
 	metrics.Register(r.customCollectors...)
 	metrics.RecordBBRInfo(version.CommitSHA, version.BuildRef)
@@ -177,19 +180,32 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 
+	bbrHandle := framework.NewBbrHandle(ctx, mgr)
+
 	// Register factories for all known in-tree BBR plugins
 	r.registerInTreePlugins()
 
-	// Construct BBR plugin instances for the in tree plugins that are (1) registered and (2) requested via the --plugin flags
+	// Construct BBR plugin instances for the in-tree plugins that are (1) registered and (2) requested via the --plugin flags
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
-		// Append a default BBRPlugin to the slice of the BBRPlugin instances using regular registered factory mechanism.
-		bodyToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
+
+		modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
 		if err != nil {
-			setupLog.Error(err, "failed to initlialize 'BodyFieldToHeader' plugin")
+			setupLog.Error(err, "Failed to create plugin", "pluginType", plugins.BodyFieldToHeaderPluginType)
 			return err
 		}
-		r.requestPlugins = append(r.requestPlugins, bodyToHeaderPlugin)
+		r.requestPlugins = append(r.requestPlugins, modelToHeaderPlugin)
+
+		// Create BaseModelToHeaderPlugin instance for extracting the "model" field into X-Gateway-Base-Model-Name
+		baseModelToHeaderPlugin, err := basemodelextractor.NewBaseModelToHeaderPlugin(func() *builder.Builder {
+			return ctrl.NewControllerManagedBy(mgr)
+		}, mgr.GetAPIReader())
+		if err != nil {
+			setupLog.Error(err, "Failed to create plugin", "pluginType", basemodelextractor.BaseModelToHeaderPluginType)
+			return err
+		}
+
+		r.requestPlugins = append(r.requestPlugins, baseModelToHeaderPlugin)
 	} else {
 		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
 
@@ -199,7 +215,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
 				return err
 			}
-			instance, err := factory(s.Name, s.JSON)
+			instance, err := factory(s.Name, s.JSON, bbrHandle)
 			if err != nil {
 				setupLog.Error(err, fmt.Sprintf("invalid %s#%s: %v\n", s.Type, s.Name, err))
 				return err
@@ -207,20 +223,19 @@ func (r *Runner) Run(ctx context.Context) error {
 			if requestProcessor, ok := instance.(framework.RequestProcessor); ok {
 				r.requestPlugins = append(r.requestPlugins, requestProcessor)
 			}
+			if responseProcessor, ok := instance.(framework.ResponseProcessor); ok {
+				r.responsePlugins = append(r.responsePlugins, responseProcessor)
+			}
 		}
 	}
 
 	// Setup ExtProc Server Runner.
 	serverRunner := &runserver.ExtProcServerRunner{
-		GrpcPort:       opts.GRPCPort,
-		Datastore:      ds,
-		SecureServing:  opts.SecureServing,
-		Streaming:      opts.Streaming,
-		RequestPlugins: r.requestPlugins,
-	}
-	if err := serverRunner.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to setup BBR controllers")
-		return err
+		GrpcPort:        opts.GRPCPort,
+		SecureServing:   opts.SecureServing,
+		Streaming:       opts.Streaming,
+		RequestPlugins:  r.requestPlugins,
+		ResponsePlugins: r.responsePlugins,
 	}
 
 	// Register health server.
@@ -247,6 +262,7 @@ func (r *Runner) Run(ctx context.Context) error {
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
 	framework.Register(plugins.BodyFieldToHeaderPluginType, plugins.BodyFieldToHeaderPluginFactory)
+	framework.Register(basemodelextractor.BaseModelToHeaderPluginType, basemodelextractor.BaseModelToHeaderPluginFactory)
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.

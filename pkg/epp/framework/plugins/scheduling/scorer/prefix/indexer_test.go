@@ -18,6 +18,7 @@ package prefix
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,4 +110,24 @@ func TestIndexer_RemovePodAndEviction(t *testing.T) {
 
 	// Ensure hashToPods contains exactly indexerSize hashes (post-eviction and server2 removal)
 	assert.Len(t, i.hashToPods, indexerSize, "hashToPods should contain %d hashes after cleanup", indexerSize)
+}
+
+func TestIndexer_ConcurrentAddRemovePod(t *testing.T) {
+	lruSize := 10
+	for iter := range 100 {
+		i := newIndexer(context.Background(), lruSize)
+		pod := Server{ServerID: ServerID{Namespace: "default", Name: "pod1"}}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); i.Add([]BlockHash{1, 2, 3}, pod) }()
+		go func() { defer wg.Done(); i.RemovePod(pod.ServerID) }()
+		wg.Wait()
+
+		if _, exists := i.podToLRU[pod.ServerID]; !exists {
+			for hash, pods := range i.hashToPods {
+				assert.NotContains(t, pods, pod.ServerID, "iter %d: hashToPods[%v] references removed pod", iter, hash)
+			}
+		}
+	}
 }

@@ -21,8 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -38,12 +40,19 @@ import (
 )
 
 type PredictedLatency struct {
-	typedName           plugin.TypedName
-	latencypredictor    latencypredictor.PredictorInterface
-	runningRequestLists sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
-	sloContextStore     *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
-	headroomStrategy    headroomStrategy
-	config              Config
+	typedName             plugin.TypedName
+	latencypredictor      latencypredictor.PredictorInterface
+	runningRequestLists   sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
+	sloContextStore       *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
+	headroomStrategy      headroomStrategy
+	config                Config
+	prefillTokensInFlight sync.Map // Key: pod NamespacedName.String(), Value: *atomic.Int64
+}
+
+// podCounter returns the atomic counter for the given pod key, creating it if necessary.
+func (t *PredictedLatency) podCounter(m *sync.Map, key string) *atomic.Int64 {
+	v, _ := m.LoadOrStore(key, new(atomic.Int64))
+	return v.(*atomic.Int64)
 }
 
 var _ framework.Scorer = &PredictedLatency{}
@@ -64,6 +73,7 @@ type Config struct {
 	EpsilonExploreNeg         float64       `json:"epsilonExploreNeg,omitempty"`
 	AffinityGateTau           float64       `json:"affinityGateTau,omitempty"`
 	AffinityGateTauGlobal     float64       `json:"affinityGateTauGlobal,omitempty"`
+	AffinityMaxTTFTPenaltyMs  float64       `json:"affinityMaxTTFTPenaltyMs,omitempty"`
 	ContextTTL                time.Duration `json:"contextTTL,omitempty"`
 	SelectionMode             string        `json:"selectionMode,omitempty"`
 	StreamingMode             bool          `json:"streamingMode,omitempty"`
@@ -86,6 +96,7 @@ var DefaultConfig = Config{
 	EpsilonExploreNeg:         0.01,
 	AffinityGateTau:           0.80,
 	AffinityGateTauGlobal:     0.99,
+	AffinityMaxTTFTPenaltyMs:  5000.0,
 	ContextTTL:                5 * time.Minute,
 	SelectionMode:             "linear",
 	StreamingMode:             true,
@@ -148,6 +159,9 @@ func (c *Config) validate() error {
 	if c.AffinityGateTauGlobal < 0 || c.AffinityGateTauGlobal > 1 {
 		errs = append(errs, fmt.Errorf("affinityGateTauGlobal must be in (0, 1], got %f", c.AffinityGateTauGlobal))
 	}
+	if c.AffinityMaxTTFTPenaltyMs < 0 {
+		errs = append(errs, fmt.Errorf("affinityMaxTTFTPenaltyMs must be >= 0, got %f", c.AffinityMaxTTFTPenaltyMs))
+	}
 
 	if len(errs) > 0 {
 		return errors.Join(errs...)
@@ -177,7 +191,26 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		if reason != ttlcache.EvictionReasonExpired {
 			return
 		}
-		predictedLatency.removeRequestFromQueue(item.Key(), item.Value())
+		plCtx := item.Value()
+		predictedLatency.removeRequestFromQueue(item.Key(), plCtx)
+		// If PreRequest ran (counter was incremented), decrement on TTL expiry to prevent
+		// the counter from staying inflated for hung requests.
+		if plCtx.prefillTokensAtDispatch > 0 || plCtx.prefillTokensAtDispatchOnPrefill > 0 {
+			// Prefill pod: only if not already decremented at TTFT (streaming disaggregated path).
+			if plCtx.prefillTargetMetadata != nil && plCtx.ttft == 0 {
+				prefillPodKey := plCtx.prefillTargetMetadata.NamespacedName.String()
+				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, prefillPodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
+					predictedLatency.prefillTokensInFlight.Delete(prefillPodKey)
+				}
+			}
+			// Decode pod.
+			if plCtx.targetMetadata != nil {
+				decodePodKey := plCtx.targetMetadata.NamespacedName.String()
+				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, decodePodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
+					predictedLatency.prefillTokensInFlight.Delete(decodePodKey)
+				}
+			}
+		}
 	})
 
 	go predictedLatency.sloContextStore.Start()
@@ -245,6 +278,37 @@ func (s *PredictedLatency) epsilonGreedyAffinityGate(
 		logger.V(logutil.DEBUG).Info("ε-greedy: exploring (ignoring affinity gate)",
 			"path", label, "epsilon", s.config.EpsilonExploreSticky, "eligibleCount", len(eligible))
 		return candidates, false
+	}
+
+	// Load gate: compare the best sticky pod's predicted TTFT against the
+	// best overall pod's predicted TTFT.  The predictor already credits the
+	// prefix-cache benefit, so a positive delta means queuing cost exceeds
+	// cache savings — break stickiness.
+	if s.config.AffinityMaxTTFTPenaltyMs > 0 {
+		bestTTFTAll := math.MaxFloat64
+		for _, p := range candidates {
+			if p.TTFT > 0 && p.TTFT < bestTTFTAll {
+				bestTTFTAll = p.TTFT
+			}
+		}
+		bestTTFTSticky := math.MaxFloat64
+		for _, p := range eligible {
+			if p.TTFT > 0 && p.TTFT < bestTTFTSticky {
+				bestTTFTSticky = p.TTFT
+			}
+		}
+		if bestTTFTAll < math.MaxFloat64 && bestTTFTSticky < math.MaxFloat64 {
+			penalty := bestTTFTSticky - bestTTFTAll
+			if penalty > s.config.AffinityMaxTTFTPenaltyMs {
+				logger.V(logutil.DEBUG).Info("Affinity load gate: TTFT penalty too high, breaking stickiness",
+					"path", label,
+					"bestStickyTTFT", bestTTFTSticky,
+					"bestOverallTTFT", bestTTFTAll,
+					"penaltyMs", penalty,
+					"maxPenaltyMs", s.config.AffinityMaxTTFTPenaltyMs)
+				return candidates, false
+			}
+		}
 	}
 
 	logger.V(logutil.DEBUG).Info("ε-greedy: exploiting (apply affinity gate)",

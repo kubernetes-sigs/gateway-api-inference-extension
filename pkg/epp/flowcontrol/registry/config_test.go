@@ -22,16 +22,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -529,15 +530,15 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "ShouldSucceed_WithFullConfiguration",
 			apiConfig: &configapi.FlowControlConfig{
-				MaxBytes: ptr.To(int64(100)),
+				MaxBytes: ptr.To(resource.MustParse("100")),
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(int64(50)),
+						MaxBytes: ptr.To(resource.MustParse("50")),
 					},
 				},
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(int64(10)),
+					MaxBytes: ptr.To(resource.MustParse("10")),
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
@@ -553,6 +554,25 @@ func TestNewConfigFromAPI(t *testing.T) {
 				require.NotNil(t, cfg.DefaultPriorityBand, "DefaultPriorityBand should be configured")
 				assert.Equal(t, uint64(10), cfg.DefaultPriorityBand.MaxBytes,
 					"DefaultPriorityBand template MaxBytes should be translated")
+			},
+		},
+		{
+			name: "ShouldSucceed_WithKubernetesQuantityFormat",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxBytes: ptr.To(resource.MustParse("1Gi")),
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+						MaxBytes: ptr.To(resource.MustParse("500Mi")),
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(1073741824), cfg.MaxBytes,
+					"1Gi should be correctly parsed as 1073741824 bytes")
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, uint64(524288000), cfg.PriorityBands[1].MaxBytes,
+					"500Mi should be correctly parsed as 524288000 bytes")
 			},
 		},
 		{
@@ -626,7 +646,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(int64(0)), // Explicitly zero
+						MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
 					},
 				},
 			},
@@ -640,7 +660,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			name: "ShouldApplyDefault_WhenDefaultPriorityBandMaxBytesIsZero",
 			apiConfig: &configapi.FlowControlConfig{
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(int64(0)), // Explicitly zero
+					MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
@@ -654,9 +674,9 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "ShouldError_WithNegativeGlobalMaxBytes",
 			apiConfig: &configapi.FlowControlConfig{
-				MaxBytes: ptr.To(int64(-1)),
+				MaxBytes: ptr.To(resource.MustParse("-1")),
 			},
-			expectedErr: "MaxBytes must be non-negative",
+			expectedErr: "global MaxBytes must be non-negative",
 		},
 		{
 			name: "ShouldError_WithNegativePriorityBandMaxBytes",
@@ -664,7 +684,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(int64(-100)),
+						MaxBytes: ptr.To(resource.MustParse("-100")),
 					},
 				},
 			},
@@ -674,7 +694,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			name: "ShouldError_WithNegativeDefaultPriorityBandMaxBytes",
 			apiConfig: &configapi.FlowControlConfig{
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(int64(-5)),
+					MaxBytes: ptr.To(resource.MustParse("-5")),
 				},
 			},
 			expectedErr: "DefaultPriorityBand MaxBytes must be non-negative",

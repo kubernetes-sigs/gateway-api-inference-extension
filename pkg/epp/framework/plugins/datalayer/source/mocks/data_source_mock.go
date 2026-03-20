@@ -58,7 +58,7 @@ func (fds *MetricsDataSource) ExtractorType() reflect.Type {
 func (fds *MetricsDataSource) Extractors() []string                 { return []string{} }
 func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
 
-func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
+func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.CallCount, 1)
 	nn := ep.GetMetadata().Clone().NamespacedName
 
@@ -67,13 +67,13 @@ func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) error
 	fds.errMu.RUnlock()
 
 	if hasError {
-		return epErr
+		return nil, epErr
 	}
 
 	if metrics, ok := fds.Metrics[nn]; ok {
 		ep.UpdateMetrics(metrics)
 	}
-	return nil
+	return nil, nil
 }
 
 // SetErrors sets the error map for the fake data source (thread-safe).
@@ -112,8 +112,8 @@ func (m *NotificationSource) GVK() schema.GroupVersionKind {
 	return m.gvk
 }
 
-func (m *NotificationSource) Notify(_ context.Context, _ fwkdl.NotificationEvent) error {
-	return nil
+func (m *NotificationSource) Notify(_ context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
+	return &event, nil
 }
 
 func (m *NotificationSource) Extractors() []string {

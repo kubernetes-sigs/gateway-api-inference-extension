@@ -215,7 +215,7 @@ instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
 These plugins are referenced within the `schedulingProfiles` section.
 
-#### PrefixCacheScorer
+#### PrefixCache Scorer
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
 
@@ -228,7 +228,10 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
   - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
     per server (pod). If not specified defaults to `31250`
 
-#### LoRAAffinityScorer
+#### LoRAAffinity Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity) Link**
+
 
 Scores pods based on whether the requested LoRA adapter is already loaded in the pod's HBM, or if
 the pod is ready to load the LoRA on demand.
@@ -236,20 +239,37 @@ the pod is ready to load the LoRA on demand.
 - *Type*: lora-affinity-scorer
 - *Parameters*: none
 
-#### KvCacheScorer
+#### KvCacheUtilization Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization) Link**
 
 Scores the candidate pods based on their KV cache utilization.
 
 - *Type*: kv-cache-utilization-scorer
 - *Parameters*: none
 
-#### QueueScorer
+#### QueueDepth Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/queuedepth) Link**
 
 Scores list of candidate pods based on the pod's waiting queue size. The lower the
 waiting queue size the pod has, the higher the score it will get (since it's more
 available to serve new request).
 
 - *Type*: queue-scorer
+- *Parameters*: none
+
+#### RunningRequest Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/runningrequest) Link**
+
+Scores candidate pods based on the number of requests currently being processed (in-flight) on
+each pod. Pods with fewer running requests receive a higher score. Scores are normalized across
+the candidate set — the pod with the fewest running requests scores `1.0`, the pod with the most
+scores `0.0`, and all others are linearly interpolated. When all candidates have the same count,
+every pod receives a neutral score of `1.0`.
+
+- *Type*: running-requests-size-scorer
 - *Parameters*: none
 
 #### MaxScorePicker
@@ -310,6 +330,13 @@ An Ordering Policy that implements First-Come, First-Served ordering based on lo
 An Ordering Policy that implements Earliest Deadline First. It prioritizes requests with the closest expiration time (deadline).
 
 - *Type*: edf-ordering-policy
+- *Parameters*: none
+
+#### SLODeadlineOrderingPolicy
+
+An Ordering Policy that orders requests by an SLO-based deadline, computed from the time the request is received by the server. It prioritizes requests with the earliest such deadline.
+
+- *Type*: slo-deadline-ordering-policy
 - *Parameters*: none
 
 ## Scheduling Profiles
@@ -393,20 +420,21 @@ form:
 
 ```yaml
 flowControl:
-  maxBytes: 10737418240 # 10 GB
+  maxBytes: 10Gi # 10737418240 bytes
   defaultRequestTTL: 60s
   defaultPriorityBand:
-    maxBytes: 1073741824
+    maxBytes: 10Gi
   priorityBands:
   - priority: 100
-    maxBytes: 5368709120
+    maxBytes: 5Gi
     orderingPolicyRef: fcfs-ordering-policy
     fairnessPolicyRef: global-strict-fairness-policy
 ```
 
 The fields in the `flowControl` section are:
 
-- `maxBytes`: Defines the global capacity limit (in bytes) for all active requests across all priority levels.
+- `maxBytes`: Defines the global capacity limit for all active requests across all priority levels.
+    - Supports Kubernetes quantity format (e.g., `10Gi`, `512Mi`, `1048576Ki`) as well as plain integers (in bytes).
     - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
 - `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
     - If `0` or omitted, it defaults to the client context deadline, meaning requests may wait indefinitely unless cancelled by the client.
@@ -420,6 +448,7 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 
 - `priority`: (Required for `priorityBands` entries) The integer priority level. Higher values indicate higher priority.
 - `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
+    - Supports Kubernetes quantity format (e.g., `5Gi`, `512Mi`) as well as plain integers (in bytes).
     - If `0` or omitted, the system default (1 GB) is used.
 - `orderingPolicyRef`: The name of the Ordering Policy plugin to use (e.g., `fcfs-ordering-policy`).
     - Defaults to `fcfs-ordering-policy` if omitted.

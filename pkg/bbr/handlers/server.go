@@ -42,18 +42,15 @@ const (
 	ModelHeader     = "X-Gateway-Model-Name"
 	BaseModelHeader = "X-Gateway-Base-Model-Name"
 
+	contentLengthHeader = "Content-Length"
+
 	requestPluginExtensionPoint  = "request"
 	responsePluginExtensionPoint = "response"
 )
 
-type Datastore interface {
-	GetBaseModel(modelName string) string
-}
-
-func NewServer(streaming bool, ds Datastore, requestPlugins []framework.RequestProcessor, responsePlugins []framework.ResponseProcessor) *Server {
+func NewServer(streaming bool, requestPlugins []framework.RequestProcessor, responsePlugins []framework.ResponseProcessor) *Server {
 	return &Server{
 		streaming:       streaming,
-		ds:              ds,
 		requestPlugins:  requestPlugins,
 		responsePlugins: responsePlugins,
 	}
@@ -63,7 +60,6 @@ func NewServer(streaming bool, ds Datastore, requestPlugins []framework.RequestP
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type Server struct {
 	streaming       bool
-	ds              Datastore
 	requestPlugins  []framework.RequestProcessor
 	responsePlugins []framework.ResponseProcessor
 }
@@ -72,6 +68,7 @@ type Server struct {
 type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
+	CycleState                *framework.CycleState
 	Request                   *framework.InferenceRequest
 	Response                  *framework.InferenceResponse
 }
@@ -95,8 +92,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	loggerVerbose.Info("Processing")
 
 	reqCtx := &RequestContext{
-		Request:  framework.NewInferenceRequest(),
-		Response: framework.NewInferenceResponse(),
+		CycleState: framework.NewCycleState(),
+		Request:    framework.NewInferenceRequest(),
+		Response:   framework.NewInferenceResponse(),
 	}
 	var body []byte
 	respStreamedBody := &streamedBody{}
@@ -120,23 +118,21 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		var err error
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
+			if requestId := envoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey); len(requestId) > 0 {
+				logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestId)
+				loggerVerbose = logger.V(logutil.VERBOSE)
+				ctx = log.IntoContext(ctx, logger)
+			}
+
 			if s.streaming && !v.RequestHeaders.GetEndOfStream() {
-				// If streaming and the body is not empty, then headers are handled when processing request body.
-				loggerVerbose.Info("Received headers, passing off header processing until body arrives...")
+				// Capture headers now, but defer the response until body arrives.
+				_, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
+				loggerVerbose.Info("Captured headers, deferring response until body arrives...")
 			} else {
-				if requestId := envoy.ExtractHeaderValue(v, reqcommon.RequestIdHeaderKey); len(requestId) > 0 {
-					logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestId)
-					loggerVerbose = logger.V(logutil.VERBOSE)
-					ctx = log.IntoContext(ctx, logger)
-				}
 				responses, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
 			}
 		case *extProcPb.ProcessingRequest_RequestBody:
-			if logger.V(logutil.DEBUG).Enabled() {
-				logger.V(logutil.DEBUG).Info("Incoming body chunk", "body", string(v.RequestBody.Body), "EoS", v.RequestBody.EndOfStream)
-			} else {
-				loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
-			}
+			loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			body = append(body, v.RequestBody.Body...)
 			if s.streaming && !v.RequestBody.EndOfStream {
 				continue
@@ -148,12 +144,10 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			responses, err = s.HandleResponseHeaders(reqCtx, req.GetResponseHeaders())
 		case *extProcPb.ProcessingRequest_ResponseBody:
-			if logger.V(logutil.DEBUG).Enabled() {
-				logger.V(logutil.DEBUG).Info("Incoming response body chunk", "body", string(v.ResponseBody.Body), "EoS", v.ResponseBody.EndOfStream)
-			} else {
-				loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
-			}
+			loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
 			responses, err = s.processResponseBody(ctx, reqCtx, req.GetResponseBody(), respStreamedBody)
+		case *extProcPb.ProcessingRequest_ResponseTrailers:
+			responses, err = s.HandleResponseTrailers(req.GetResponseTrailers())
 		default:
 			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")

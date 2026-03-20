@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -32,8 +33,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/test"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 func TestHandleRequestHeaders(t *testing.T) {
@@ -110,7 +114,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+			server := NewServer(false, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
 				Request: framework.NewInferenceRequest(),
 			}
@@ -216,7 +220,6 @@ func TestHandleRequestBody(t *testing.T) {
 					Response: &extProcPb.ProcessingResponse_RequestBody{
 						RequestBody: &extProcPb.BodyResponse{
 							Response: &extProcPb.CommonResponse{
-								// Necessary so that the new headers are used in the routing decision.
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
 									SetHeaders: []*basepb.HeaderValueOption{
@@ -251,7 +254,6 @@ func TestHandleRequestBody(t *testing.T) {
 					Response: &extProcPb.ProcessingResponse_RequestBody{
 						RequestBody: &extProcPb.BodyResponse{
 							Response: &extProcPb.CommonResponse{
-								// Necessary so that the new headers are used in the routing decision.
 								ClearRouteCache: true,
 								HeaderMutation: &extProcPb.HeaderMutation{
 									SetHeaders: []*basepb.HeaderValueOption{
@@ -282,24 +284,33 @@ func TestHandleRequestBody(t *testing.T) {
 				"prompt": "Tell me a joke",
 			},
 			streaming: true,
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{
-							Response: &extProcPb.CommonResponse{
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*basepb.HeaderValueOption{
-										{
-											Header: &basepb.HeaderValue{
-												Key:      ModelHeader,
-												RawValue: []byte("foo"),
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"model": "foo", "prompt": "Tell me a joke"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{
+							RequestHeaders: &extProcPb.HeadersResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
 											},
-										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      BaseModelHeader,
-												RawValue: []byte(""),
+											{
+												Header: &basepb.HeaderValue{
+													Key:      ModelHeader,
+													RawValue: []byte("foo"),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
 											},
 										},
 									},
@@ -307,27 +318,24 @@ func TestHandleRequestBody(t *testing.T) {
 							},
 						},
 					},
-				},
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body: mapToBytes(t, map[string]any{
-												"model":  "foo",
-												"prompt": "Tell me a joke",
-											}),
-											EndOfStream: true,
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_StreamedResponse{
+											StreamedResponse: &extProcPb.StreamedBodyResponse{
+												Body:        b,
+												EndOfStream: true,
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			},
+				}
+			}(),
 		},
 		{
 			name: "success-with-streaming-large-body",
@@ -353,6 +361,12 @@ func TestHandleRequestBody(t *testing.T) {
 									ClearRouteCache: true,
 									HeaderMutation: &extProcPb.HeaderMutation{
 										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
+											},
 											{
 												Header: &basepb.HeaderValue{
 													Key:      ModelHeader,
@@ -408,12 +422,17 @@ func TestHandleRequestBody(t *testing.T) {
 		},
 	}
 
+	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-			server := NewServer(test.streaming, &fakeDatastore{}, []framework.RequestProcessor{modelToHeaderPlugin}, []framework.ResponseProcessor{})
+			server := NewServer(test.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: framework.NewInferenceRequest(),
+				CycleState: framework.NewCycleState(),
+				Request:    framework.NewInferenceRequest(),
 			}
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
@@ -456,17 +475,22 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	plugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-	server := NewServer(false, &fakeDatastore{}, []framework.RequestProcessor{plugin}, []framework.ResponseProcessor{})
+	modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
+	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
+	server := NewServer(false, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
-		Request: framework.NewInferenceRequest(),
+		CycleState: framework.NewCycleState(),
+		Request:    framework.NewInferenceRequest(),
 	}
 
 	bodyBytes, _ := json.Marshal(map[string]any{
 		"model":  "bar",
 		"prompt": "test",
 	})
-	_, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
+	_, err = server.HandleRequestBody(ctx, reqCtx, bodyBytes)
 	if err != nil {
 		t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
 	}
@@ -476,7 +500,9 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 		t.Fatalf("Failed to gather metrics: %v", err)
 	}
 
-	found := false
+	// Check for both plugins' metrics
+	foundBodyFieldToHeader := false
+	foundBaseModelToHeader := false
 	for _, mf := range mfs {
 		if mf.GetName() == "bbr_plugin_duration_seconds" {
 			for _, m := range mf.GetMetric() {
@@ -484,28 +510,193 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 				for _, lp := range m.GetLabel() {
 					labels[lp.GetName()] = lp.GetValue()
 				}
-				if labels["extension_point"] == requestPluginExtensionPoint &&
-					labels["plugin_type"] == plugins.BodyFieldToHeaderPluginType &&
-					labels["plugin_name"] == plugins.BodyFieldToHeaderPluginType {
-					if m.GetHistogram().GetSampleCount() > 0 {
-						found = true
+				if labels["extension_point"] == requestPluginExtensionPoint {
+					if labels["plugin_type"] == plugins.BodyFieldToHeaderPluginType &&
+						labels["plugin_name"] == plugins.BodyFieldToHeaderPluginType {
+						if m.GetHistogram().GetSampleCount() > 0 {
+							foundBodyFieldToHeader = true
+						}
+					}
+					if labels["plugin_type"] == basemodelextractor.BaseModelToHeaderPluginType &&
+						labels["plugin_name"] == basemodelextractor.BaseModelToHeaderPluginType {
+						if m.GetHistogram().GetSampleCount() > 0 {
+							foundBaseModelToHeader = true
+						}
 					}
 				}
 			}
 		}
 	}
 
-	if !found {
+	if !foundBodyFieldToHeader {
 		t.Error("Expected bbr_plugin_duration_seconds metric with extension_point=request, " +
 			"plugin_type=body-field-to-header, plugin_name=body-field-to-header to have observations, but none found")
+	}
+	if !foundBaseModelToHeader {
+		t.Error("Expected bbr_plugin_duration_seconds metric with extension_point=request, " +
+			"plugin_type=base-model-to-header, plugin_name=base-model-to-header to have observations, but none found")
 	}
 }
 
 func mapToBytes(t *testing.T, m map[string]any) []byte {
-	// Convert map to JSON byte array
 	bytes, err := json.Marshal(m)
 	if err != nil {
 		t.Fatalf("Marshal(): %v", err)
 	}
 	return bytes
+}
+
+type bodyMutatingPlugin struct {
+	name     string
+	mutateFn func(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error
+}
+
+func (p *bodyMutatingPlugin) TypedName() epp.TypedName {
+	return epp.TypedName{Type: "fake", Name: p.name}
+}
+
+func (p *bodyMutatingPlugin) ProcessRequest(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error {
+	return p.mutateFn(ctx, cycleState, request)
+}
+
+var _ framework.RequestProcessor = &bodyMutatingPlugin{}
+
+func TestHandleRequestBody_BodyMutation(t *testing.T) {
+	metrics.Register()
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	plugin := &bodyMutatingPlugin{
+		name: "body-mutator",
+		mutateFn: func(_ context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
+			request.SetBodyField("injected", "value")
+			return nil
+		},
+	}
+
+	tests := []struct {
+		name      string
+		streaming bool
+		body      map[string]any
+		want      []*extProcPb.ProcessingResponse
+	}{
+		{
+			name: "unary with body mutation",
+			body: map[string]any{
+				"prompt": "test",
+			},
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"prompt": "test", "injected": "value"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
+											},
+										},
+									},
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_Body{
+											Body: b,
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+		},
+		{
+			name:      "streaming with body mutation",
+			streaming: true,
+			body: map[string]any{
+				"prompt": "test",
+			},
+			want: func() []*extProcPb.ProcessingResponse {
+				b, _ := json.Marshal(map[string]any{"prompt": "test", "injected": "value"})
+				return []*extProcPb.ProcessingResponse{
+					{
+						Response: &extProcPb.ProcessingResponse_RequestHeaders{
+							RequestHeaders: &extProcPb.HeadersResponse{
+								Response: &extProcPb.CommonResponse{
+									ClearRouteCache: true,
+									HeaderMutation: &extProcPb.HeaderMutation{
+										SetHeaders: []*basepb.HeaderValueOption{
+											{
+												Header: &basepb.HeaderValue{
+													Key:      BaseModelHeader,
+													RawValue: []byte(""),
+												},
+											},
+											{
+												Header: &basepb.HeaderValue{
+													Key:      contentLengthHeader,
+													RawValue: []byte(strconv.Itoa(len(b))),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						Response: &extProcPb.ProcessingResponse_RequestBody{
+							RequestBody: &extProcPb.BodyResponse{
+								Response: &extProcPb.CommonResponse{
+									BodyMutation: &extProcPb.BodyMutation{
+										Mutation: &extProcPb.BodyMutation_StreamedResponse{
+											StreamedResponse: &extProcPb.StreamedBodyResponse{
+												Body:        b,
+												EndOfStream: true,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}(),
+		},
+	}
+
+	baseModelPlugin, err := test.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := NewServer(tc.streaming, []framework.RequestProcessor{plugin, baseModelPlugin}, []framework.ResponseProcessor{})
+			reqCtx := &RequestContext{
+				CycleState: framework.NewCycleState(),
+				Request:    framework.NewInferenceRequest(),
+			}
+			bodyBytes, _ := json.Marshal(tc.body)
+			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
+			if err != nil {
+				t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
+			}
+
+			envoytest.SortSetHeadersInResponses(tc.want)
+			envoytest.SortSetHeadersInResponses(resp)
+			if diff := cmp.Diff(tc.want, resp, protocmp.Transform()); diff != "" {
+				t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
+	}
 }

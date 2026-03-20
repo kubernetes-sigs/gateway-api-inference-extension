@@ -22,13 +22,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -71,11 +72,11 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "Success - Explicit Values",
 			apiConfig: &configapi.FlowControlConfig{
-				MaxBytes: ptr.To(int64(2048)),
+				MaxBytes: ptr.To(resource.MustParse("2048")),
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, uint64(2048), cfg.Registry.MaxBytes,
-					"MaxBytes should be correctly translated from int64 in API to uint64 in internal config")
+					"MaxBytes should be correctly translated from resource.Quantity in API to uint64 in internal config")
 			},
 		},
 	}

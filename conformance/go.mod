@@ -7,9 +7,9 @@ replace sigs.k8s.io/gateway-api-inference-extension => ../
 replace cloud.google.com/go/storage => cloud.google.com/go/storage v1.59.2
 
 require (
-	sigs.k8s.io/gateway-api v1.5.0
+	sigs.k8s.io/gateway-api v1.5.1
 	sigs.k8s.io/gateway-api-inference-extension v0.0.0-00010101000000-000000000000
-	sigs.k8s.io/gateway-api/conformance v1.5.0
+	sigs.k8s.io/gateway-api/conformance v1.5.1
 )
 
 require (
@@ -59,7 +59,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.41.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/term v0.40.0 // indirect

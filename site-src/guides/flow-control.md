@@ -29,7 +29,7 @@ Without Flow Control, a sudden burst of traffic piles up directly inside the mod
 Traffic is organized into **Flows**. When a request arrives, the EPP assigns it a `FlowKey` consisting of two parts:
 
 1. **Fairness ID:** An identifier extracted from the `x-gateway-inference-fairness-id` HTTP header (e.g., a tenant ID, a user tier, or an API key). If absent, it defaults to a global bucket.
-2. **Priority:** An integer value derived from the `InferenceObjective` Kubernetes resource targeting the pool. Negative values are permissible and explicitly define background/low-priority traffic.
+2. **Priority:** An integer value derived from the [`InferenceObjective`](../concepts/priority-and-capacity.md) Kubernetes resource targeting the pool. Negative values are permissible and explicitly define background/low-priority traffic.
 
 ### Priority (Strict Ordering)
 Priority provides a hard guarantee for service order. The Flow Controller will **always** dispatch all buffered requests from higher-priority queues before servicing any requests from lower-priority queues. Unlike the default admission mode (when Flow Control is disabled), negative-priority requests are not immediately rejected upon saturation but are held in their own dynamically provisioned queues until dispatched, until they expire, or until configured [capacity limits](epp-configuration/config-text.md#priority-band-configuration) are exceeded. This means operators can control load shedding by strictly limiting the capacity applied to lower-priority levels.

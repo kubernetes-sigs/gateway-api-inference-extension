@@ -78,9 +78,9 @@ spec:
         - name: lora-adapter-syncer
           tty: true
           stdin: true
-          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
+          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.2.1
           restartPolicy: Always
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           env:
             - name: DYNAMIC_LORA_ROLLOUT_CONFIG
               value: "/config/configmap.yaml"

@@ -17,10 +17,13 @@ limitations under the License.
 package envoy
 
 import (
+	"sort"
 	"testing"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestExtractHeaderValue(t *testing.T) {
@@ -77,6 +80,89 @@ func TestExtractHeaderValue(t *testing.T) {
 			result := ExtractHeaderValue(req, tt.key)
 			if result != tt.expected {
 				t.Errorf("ExtractHeaderValue() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateHeadersMutation(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers map[string]string
+		want    []*corev3.HeaderValueOption
+	}{
+		{
+			name:    "empty map returns empty slice",
+			headers: map[string]string{},
+			want:    []*corev3.HeaderValueOption{},
+		},
+		{
+			name:    "single header",
+			headers: map[string]string{"x-api-key": "secret-123"},
+			want: []*corev3.HeaderValueOption{
+				{
+					Header: &corev3.HeaderValue{
+						Key:      "x-api-key",
+						RawValue: []byte("secret-123"),
+					},
+				},
+			},
+		},
+		{
+			name: "multiple headers",
+			headers: map[string]string{
+				"x-api-key":     "key-val",
+				"x-request-id":  "req-456",
+				"authorization": "Bearer tok",
+			},
+			want: []*corev3.HeaderValueOption{
+				{
+					Header: &corev3.HeaderValue{
+						Key:      "authorization",
+						RawValue: []byte("Bearer tok"),
+					},
+				},
+				{
+					Header: &corev3.HeaderValue{
+						Key:      "x-api-key",
+						RawValue: []byte("key-val"),
+					},
+				},
+				{
+					Header: &corev3.HeaderValue{
+						Key:      "x-request-id",
+						RawValue: []byte("req-456"),
+					},
+				},
+			},
+		},
+		{
+			name:    "header with empty value",
+			headers: map[string]string{"x-empty": ""},
+			want: []*corev3.HeaderValueOption{
+				{
+					Header: &corev3.HeaderValue{
+						Key:      "x-empty",
+						RawValue: []byte(""),
+					},
+				},
+			},
+		},
+	}
+
+	sortByKey := func(opts []*corev3.HeaderValueOption) {
+		sort.Slice(opts, func(i, j int) bool {
+			return opts[i].GetHeader().GetKey() < opts[j].GetHeader().GetKey()
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GenerateHeadersMutation(tt.headers)
+			sortByKey(got)
+			sortByKey(tt.want)
+			if diff := cmp.Diff(tt.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("GenerateHeadersMutation() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

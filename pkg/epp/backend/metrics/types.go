@@ -28,12 +28,12 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
-func PodsWithFreshMetrics(stalenessThreshold time.Duration) func(PodMetrics) bool {
-	return func(pm PodMetrics) bool {
-		if pm == nil {
+func PodsWithFreshMetrics(stalenessThreshold time.Duration) func(fwkdl.Endpoint) bool {
+	return func(ep fwkdl.Endpoint) bool {
+		if ep == nil {
 			return false // Skip nil pods
 		}
-		return time.Since(pm.GetMetrics().UpdateTime) <= stalenessThreshold
+		return time.Since(ep.GetMetrics().UpdateTime) <= stalenessThreshold
 	}
 }
 
@@ -49,10 +49,6 @@ type PodMetricsFactory struct {
 	pmc                    PodMetricsClient
 	refreshMetricsInterval time.Duration
 	endpoints              sync.Map // tracks active endpoints by NamespacedName
-}
-
-func (f *PodMetricsFactory) SetSources(_ []fwkdl.DataSource) {
-	// no-op
 }
 
 func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwkdl.EndpointMetadata, ds datalayer.PoolInfo) fwkdl.Endpoint {
@@ -84,11 +80,9 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 	return pm
 }
 
-func (f *PodMetricsFactory) ReleaseEndpoint(ep PodMetrics) {
+func (f *PodMetricsFactory) ReleaseEndpoint(ep fwkdl.Endpoint) {
 	if pm, ok := ep.(*podMetrics); ok {
 		pm.stopRefreshLoop()
 		f.endpoints.Delete(pm.GetMetadata().NamespacedName)
 	}
 }
-
-type PodMetrics = fwkdl.Endpoint

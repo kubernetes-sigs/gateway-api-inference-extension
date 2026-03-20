@@ -39,6 +39,14 @@ func SortSetHeadersInResponses(responses []*extProcPb.ProcessingResponse) {
 			if rr.RequestBody != nil && rr.RequestBody.Response != nil {
 				common = rr.RequestBody.Response
 			}
+		case *extProcPb.ProcessingResponse_ResponseHeaders:
+			if rr.ResponseHeaders != nil && rr.ResponseHeaders.Response != nil {
+				common = rr.ResponseHeaders.Response
+			}
+		case *extProcPb.ProcessingResponse_ResponseBody:
+			if rr.ResponseBody != nil && rr.ResponseBody.Response != nil {
+				common = rr.ResponseBody.Response
+			}
 		default:
 			continue
 		}

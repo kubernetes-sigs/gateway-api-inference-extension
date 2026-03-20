@@ -90,7 +90,7 @@ func (f *FakeRefresherDataStore) PoolGet() (*datalayer.EndpointPool, error) {
 	return &datalayer.EndpointPool{}, nil
 }
 
-func (f *FakeRefresherDataStore) PodList(func(PodMetrics) bool) []PodMetrics {
+func (f *FakeRefresherDataStore) PodList(func(fwkdl.Endpoint) bool) []fwkdl.Endpoint {
 	// Not implemented.
 	return nil
 }

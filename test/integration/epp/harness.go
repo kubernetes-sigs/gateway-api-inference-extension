@@ -100,6 +100,9 @@ type HarnessConfig struct {
 
 	// standaloneStrategy settings are used when runMode == modeStandalone.
 	standaloneStrategy standaloneStrategy
+
+	// configText overrides the default testConfig if provided. A nil value means use default.
+	configText *string
 }
 
 // HarnessOption is a functional option for configuring the TestHarness.
@@ -113,10 +116,17 @@ func WithStandaloneMode(standaloneStrategy standaloneStrategy) HarnessOption {
 	}
 }
 
-// WithStandard configures the harness to run in standard runMode
+// WithStandardMode configures the harness to run in standard runMode
 func WithStandardMode() HarnessOption {
 	return func(c *HarnessConfig) {
 		c.runMode = modeStandard
+	}
+}
+
+// WithConfigText overrides the default EPP configuration text.
+func WithConfigText(text string) HarnessOption {
+	return func(c *HarnessConfig) {
+		c.configText = &text
 	}
 }
 
@@ -158,6 +168,9 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 	require.NoError(t, k8sClient.Create(ctx, ns), "failed to create test namespace")
 
 	eppOptions := defaultEppServerOptions(t, testNamespaceName)
+	if config.configText != nil {
+		eppOptions.ConfigText = *config.configText
+	}
 	if config.runMode == modeStandalone && config.standaloneStrategy == strategyNoCRD {
 		// Only standalone EPP without crd need to set the EndpointSelector.
 		eppOptions.EndpointSelector = "app=" + testPoolName

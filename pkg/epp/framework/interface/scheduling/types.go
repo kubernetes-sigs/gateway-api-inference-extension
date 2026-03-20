@@ -46,6 +46,21 @@ type LLMRequest struct {
 	Headers map[string]string
 	// Request Objective
 	Objectives RequestObjectives
+	// RequestSizeBytes is the size of the raw request body in bytes when available.
+	// Used for token estimation (e.g. inputTokens ≈ RequestSizeBytes/4) without parsing body or calling PlainText().
+	RequestSizeBytes int
+	// TokenizedPrompt contains the tokenization results if external tokenization is enabled.
+	// This is nil if tokenization was not performed or if the tokenizer is not configured.
+	TokenizedPrompt *TokenizedPrompt
+}
+
+// TokenizedPrompt contains the result of tokenizing the request prompt.
+// It is populated by external tokenization plugins (e.g., via a PrepareData plugin)
+// and consumed by scheduling plugins that benefit from actual token data
+// (e.g., prefix cache scoring, latency prediction).
+type TokenizedPrompt struct {
+	// TokenIDs are the token IDs for the prompt.
+	TokenIDs []uint32
 }
 
 func (r *LLMRequest) String() string {

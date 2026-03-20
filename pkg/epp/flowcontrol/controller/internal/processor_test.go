@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
@@ -95,7 +96,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		clock:              testclock.NewFakeClock(time.Now()),
 		logger:             logr.Discard(),
 		saturationDetector: &mocks.MockSaturationDetector{},
-		podLocator:         &mocks.MockPodLocator{Pods: []metrics.PodMetrics{&metrics.FakePodMetrics{}}},
+		podLocator:         &mocks.MockPodLocator{Pods: []fwkdl.Endpoint{&metrics.FakePodMetrics{}}},
 		startSignal:        make(chan struct{}),
 		queues:             make(map[flowcontrol.FlowKey]*mocks.MockManagedQueue),
 		priorityFlows:      make(map[int][]flowcontrol.FlowKey),
@@ -740,7 +741,7 @@ func TestShardProcessor(t *testing.T) {
 							qLow := h.addQueue(keyLow)
 							require.NoError(t, qLow.Add(h.newTestItem("item-low", keyLow, testTTL)))
 
-							h.saturationDetector.SaturationFunc = func(_ context.Context, _ []metrics.PodMetrics) float64 {
+							h.saturationDetector.SaturationFunc = func(_ context.Context, _ []fwkdl.Endpoint) float64 {
 								return 1.0 // Saturated
 							}
 						},

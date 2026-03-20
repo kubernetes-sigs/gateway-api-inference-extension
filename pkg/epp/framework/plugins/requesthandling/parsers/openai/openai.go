@@ -304,9 +304,22 @@ func extractUsageByAPIType(usg map[string]any, objectType string) fwkrc.Usage {
 //
 // If include_usage is not included in the request, `data: [DONE]` is returned separately, which
 // indicates end of streaming.
+//
+// For ResponsesAPI streaming, usage is nested in the response object:
+//
+//	event: response.completed
+//	data: {"response":{"usage":{"input_tokens":31,..},...},"type":"response.completed"}
+//
+// It extracts usage from events with type="response.completed".
 func extractUsageStreaming(responseText string) *fwkrc.Usage {
-	var response struct {
-		Usage *fwkrc.Usage `json:"usage"`
+
+	var streamResponse struct {
+		Usage    *fwkrc.Usage `json:"usage"`
+		Response struct {
+			Usage  map[string]any `json:"usage"`
+			Object string         `json:"object"`
+		} `json:"response"`
+		Type string `json:"type"`
 	}
 
 	lines := strings.SplitSeq(responseText, "\n")
@@ -320,9 +333,24 @@ func extractUsageStreaming(responseText string) *fwkrc.Usage {
 		}
 
 		byteSlice := []byte(content)
-		if err := json.Unmarshal(byteSlice, &response); err != nil {
+		if err := json.Unmarshal(byteSlice, &streamResponse); err != nil {
 			continue
 		}
+		// Standard ChatCompletion / vLLM usage format
+		if streamResponse.Usage != nil {
+			return streamResponse.Usage
+		}
+		// Responses API streaming format
+		if streamResponse.Response.Usage != nil && streamResponse.Type == "response.completed" {
+			// Convert map[string]any to JSON and parse
+			jsonBytes, _ := json.Marshal(map[string]any{
+				"usage":  streamResponse.Response.Usage,
+				"object": streamResponse.Response.Object,
+			})
+			if usage, err := extractUsage(jsonBytes); err == nil && usage != nil {
+				return usage
+			}
+		}
 	}
-	return response.Usage
+	return nil
 }
