@@ -330,7 +330,11 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		return nil, nil, err
 	}
 
-	saturationDetector := utilizationdetector.NewDetector(eppConfig.SaturationDetectorConfig, setupLog)
+	saturationDetector := utilizationdetector.NewDetector(
+		utilizationdetector.UtilizationDetectorType,
+		*eppConfig.SaturationDetectorConfig,
+		setupLog,
+	)
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController

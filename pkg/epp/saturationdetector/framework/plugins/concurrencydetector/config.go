@@ -16,77 +16,157 @@ limitations under the License.
 
 package concurrencydetector
 
-// Config holds the configuration for the Concurrency Detector.
-type Config struct {
-	// MaxConcurrency defines the saturation threshold for a backend.
+import (
+	"errors"
+	"fmt"
+
+	"k8s.io/utils/ptr"
+)
+
+// apiConfig represents the external configuration schema for the concurrency detector.
+// It dictates how the plugin calculates pool-level saturation (to trigger backpressure) and
+// endpoint-level limits (to filter out overloaded candidates during routing).
+//
+// It is designed to be deserialized from JSON via the plugin's raw parameters.
+type apiConfig struct {
+	// MaxConcurrency defines the request-based saturation threshold for an endpoint.
 	//
-	// This limit serves as the "ideal" capacity for a backend. When the number of active requests on a replica reaches
-	// this value, that specific backend is considered "full" for the purpose of global saturation detection. If all
-	// available replicas are full (>= MaxConcurrency), the Detector signals saturation to the Flow Controller, which will
-	// trigger backpressure.
+	// This limit serves as the "ideal" request capacity for a single endpoint. The plugin aggregates
+	// the active requests across all endpoints and compares them against the aggregate pool capacity
+	// (Total Endpoints * MaxConcurrency) to compute PoolSaturation. When the pool approaches or
+	// exceeds this aggregate capacity, the Flow Controller triggers backpressure to buffer new
+	// traffic until capacity becomes available.
 	//
 	// Defaults to 100 if unset.
-	MaxConcurrency int64 `json:"maxConcurrency"`
+	MaxConcurrency *int64 `json:"maxConcurrency,omitempty"`
 
-	// Headroom defines the allowed burst capacity above MaxConcurrency for specific pod scheduling, expressed as a
-	// fraction in [0.0, 1.0].
+	// Headroom defines the allowed burst capacity above the ideal threshold (MaxConcurrency or
+	// MaxTokenConcurrency), expressed as a multiplier (e.g., 0.2 for 20%).
 	//
-	// While IsSaturated uses MaxConcurrency as the "ideal" capacity limit per pod to determine if the pool is full
-	// (rejecting admission if ALL pods are >= MaxConcurrency), the Filter logic uses (MaxConcurrency * (1 + Headroom))
-	// to determine if a specific pod is capable of accepting more work.
+	// This parameter decouples pool-level backpressure from individual endpoint routing. While
+	// PoolSaturation uses the strict ideal capacity to manage overall pool load, the Filter logic
+	// uses EndpointLimit (Capacity * (1 + Headroom)) to determine if a specific endpoint can accept
+	// more work.
 	//
-	// Example: MaxConcurrency=100 (per pod), Headroom=0.2.
-	// - Global Saturation: Triggered when all pods have >= 100 active requests.
-	//   This stops new requests from entering the scheduling loop, enforcing pool-average concurrency.
-	// - Pod Filter Limit: 120 active requests.
-	//   The scheduler can still assign a request to a pod with 110 requests to satisfy affinity rules, as long as it
-	//   stays under 120.
+	// Example: MaxConcurrency=100, Headroom=0.2.
 	//
-	// This allows the system to maintain a target average load (100) while giving the scheduler flexibility to handle
-	// hot-spots or affinity (up to 120).
+	//   - Backpressure: An endpoint with 110 requests is considered 110% full, pushing pool averages up.
+	//   - Routing: The endpoint's hard filter limit is 120. The scheduling layer can still send it
+	//     requests (e.g., to satisfy high affinity) until it hits 120.
 	//
-	// Defaults to 0.0 (no burst allowed).
-	Headroom float64 `json:"headroom"`
+	// Defaults to 0.0 (no burst allowed) if unset.
+	Headroom *float64 `json:"headroom,omitempty"`
 
 	// ConcurrencyMode defines the mode of concurrency detection.
 	//
 	// Valid values are:
-	// - "requests": use request count for concurrency detection.
-	// - "tokens": use token count for concurrency detection.
+	// - "requests": use discrete request counts for capacity accounting.
+	// - "tokens": use estimated token counts for capacity accounting.
 	//
-	// When nil (unset), defaults to "requests".
-	ConcurrencyMode *ConcurrencyMode `json:"concurrencyMode"`
+	// Defaults to "requests" if unset.
+	ConcurrencyMode *concurrencyMode `json:"concurrencyMode,omitempty"`
 
-	// MaxTokenConcurrency defines the maximum number of tokens allowed for an inference pool.
+	// MaxTokenConcurrency defines the token-based saturation threshold for an endpoint.
 	//
-	// This limit is used to prevent requests from consuming too many tokens.
+	// This is the "tokens" mode equivalent of MaxConcurrency. It represents the "ideal" token
+	// capacity per endpoint. It drives both the pool saturation calculation (for backpressure) and,
+	// combined with Headroom, the per-endpoint filtering limits (for routing).
 	//
 	// Defaults to 1000000 if unset.
-	MaxTokenConcurrency int64 `json:"maxTokenConcurrency"`
+	MaxTokenConcurrency *int64 `json:"maxTokenConcurrency,omitempty"`
 }
 
-// ConcurrencyMode is the concurrency detection mode. A pointer in Config distinguishes unset (nil) from explicit.
-type ConcurrencyMode string
+// concurrencyMode is the concurrency detection mode.
+type concurrencyMode string
 
 const (
-	// Requests uses request count for concurrency detection.
-	Requests ConcurrencyMode = "requests"
-	// Tokens uses token count for concurrency detection.
-	Tokens ConcurrencyMode = "tokens"
+	// modeRequests uses request count for concurrency detection.
+	modeRequests concurrencyMode = "requests"
+	// modeTokens uses token count for concurrency detection.
+	modeTokens concurrencyMode = "tokens"
 )
 
-// modePtr returns a pointer to m for use in Config.ConcurrencyMode.
-func modePtr(m ConcurrencyMode) *ConcurrencyMode {
-	return &m
+const (
+	// defaultMaxConcurrency is the safe baseline for many LLM serving engines.
+	defaultMaxConcurrency int64 = 100
+	// defaultHeadroom is the default burst allowance (0%).
+	defaultHeadroom float64 = 0.0
+	// defaultConcurrencyMode is used when ConcurrencyMode is unset.
+	defaultConcurrencyMode = modeRequests
+	// defaultMaxTokenConcurrency is the default maximum number of tokens allowed per endpoint.
+	defaultMaxTokenConcurrency int64 = 1000000
+)
+
+// config is the internal, fully-validated configuration used by the detector.
+type config struct {
+	maxConcurrency      int64
+	headroom            float64
+	mode                concurrencyMode
+	maxTokenConcurrency int64
 }
 
-const (
-	// DefaultMaxConcurrency is the safe baseline for many LLM serving engines.
-	DefaultMaxConcurrency = 100
-	// DefaultHeadroom is the default burst allowance (0%).
-	DefaultHeadroom = 0.0
-	// DefaultConcurrencyMode is used when ConcurrencyMode is nil.
-	DefaultConcurrencyMode = Requests
-	// DefaultMaxTokenConcurrency is the maximum number of tokens allowed for a request.
-	DefaultMaxTokenConcurrency = 1000000
-)
+// buildConfig applies the configuration lifecycle (defaulting and validation) and translates the
+// external schema into the internal domain model.
+// The provided apiConfig is copied to prevent mutation side-effects.
+func buildConfig(apiCfg *apiConfig) (*config, error) {
+	var safeCfg apiConfig
+	if apiCfg != nil {
+		safeCfg = *apiCfg
+	}
+
+	applyDefaults(&safeCfg)
+
+	if err := validateConfig(&safeCfg); err != nil {
+		return nil, fmt.Errorf("invalid concurrency detector configuration: %w", err)
+	}
+
+	return &config{
+		maxConcurrency:      *safeCfg.MaxConcurrency,
+		headroom:            *safeCfg.Headroom,
+		mode:                *safeCfg.ConcurrencyMode,
+		maxTokenConcurrency: *safeCfg.MaxTokenConcurrency,
+	}, nil
+}
+
+// applyDefaults populates unset fields in the external configuration with their standard defaults.
+func applyDefaults(cfg *apiConfig) {
+	if cfg.MaxConcurrency == nil {
+		cfg.MaxConcurrency = ptr.To(defaultMaxConcurrency)
+	}
+	if cfg.Headroom == nil {
+		cfg.Headroom = ptr.To(defaultHeadroom)
+	}
+	if cfg.ConcurrencyMode == nil {
+		cfg.ConcurrencyMode = ptr.To(defaultConcurrencyMode)
+	}
+	if cfg.MaxTokenConcurrency == nil {
+		cfg.MaxTokenConcurrency = ptr.To(defaultMaxTokenConcurrency)
+	}
+}
+
+// validateConfig checks the constraints of the fully defaulted configuration.
+// It aggregates all validation failures.
+func validateConfig(cfg *apiConfig) error {
+	var errs []error
+
+	if cfg.MaxConcurrency != nil && *cfg.MaxConcurrency <= 0 {
+		errs = append(errs, fmt.Errorf("maxConcurrency must be strictly positive, got %d", *cfg.MaxConcurrency))
+	}
+	if cfg.Headroom != nil && *cfg.Headroom < 0.0 {
+		errs = append(errs, fmt.Errorf("headroom must be a non-negative value, got %f", *cfg.Headroom))
+	}
+	if cfg.MaxTokenConcurrency != nil && *cfg.MaxTokenConcurrency <= 0 {
+		errs = append(errs, fmt.Errorf("maxTokenConcurrency must be strictly positive, got %d", *cfg.MaxTokenConcurrency))
+	}
+
+	if cfg.ConcurrencyMode != nil {
+		switch *cfg.ConcurrencyMode {
+		case modeRequests, modeTokens:
+			// Valid
+		default:
+			errs = append(errs, fmt.Errorf("unsupported concurrencyMode: %q", *cfg.ConcurrencyMode))
+		}
+	}
+
+	return errors.Join(errs...)
+}

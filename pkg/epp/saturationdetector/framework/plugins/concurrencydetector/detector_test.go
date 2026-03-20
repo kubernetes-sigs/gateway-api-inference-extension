@@ -22,107 +22,173 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
-// TestNewPlugin_Configuration validates that the plugin correctly applies defaults and respects explicit configuration
-// values.
-func TestNewPlugin_Configuration(t *testing.T) {
+// TestConcurrencyDetectorFactory validates the initialization of the concurrency detector plugin.
+// It ensures that valid configuration blocks successfully instantiate the plugin while malformed or
+// semantically invalid configurations are rejected with descriptive errors.
+func TestConcurrencyDetectorFactory(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name                   string
-		config                 Config
-		effectiveMax           int64
-		effectiveHeadroomBurst int64
+		name       string
+		configJSON []byte
+		wantError  bool
 	}{
 		{
-			name:                   "defaults_applied_on_zero_values",
-			config:                 Config{}, // Zero values
-			effectiveMax:           100,      // DefaultMaxConcurrency
-			effectiveHeadroomBurst: 100,      // Default Headroom is 0.0, so limit == max
+			name:       "valid configuration",
+			configJSON: []byte(`{"mode": "requests", "maxConcurrency": 50, "headroom": 0.2}`),
+			wantError:  false,
 		},
 		{
-			name: "explicit_values_respected",
-			config: Config{
-				MaxConcurrency: 50,
-				Headroom:       0.2, // 20% burst
-			},
-			effectiveMax:           50,
-			effectiveHeadroomBurst: 60, // 50 * 1.2 = 60
+			name:       "invalid schema",
+			configJSON: []byte(`{"maxConcurrency": "invalid_type"}`),
+			wantError:  true,
 		},
 		{
-			name: "negative_max_resets_to_default",
-			config: Config{
-				MaxConcurrency: -10,
-			},
-			effectiveMax:           100,
-			effectiveHeadroomBurst: 100,
+			name:       "empty config applies defaults",
+			configJSON: []byte(`{}`),
+			wantError:  false,
 		},
 		{
-			name: "negative_headroom_resets_to_default",
-			config: Config{
-				MaxConcurrency: 10,
-				Headroom:       -0.5,
-			},
-			effectiveMax:           10,
-			effectiveHeadroomBurst: 10, // Headroom resets to 0.0
+			name:       "invalid max concurrency",
+			configJSON: []byte(`{"maxConcurrency": 0}`),
+			wantError:  true,
+		},
+		{
+			name:       "invalid max token concurrency",
+			configJSON: []byte(`{"maxTokenConcurrency": 0}`),
+			wantError:  true,
+		},
+		{
+			name:       "invalid headroom",
+			configJSON: []byte(`{"headroom": -0.5}`),
+			wantError:  true,
+		},
+		{
+			name:       "invalid mode",
+			configJSON: []byte(`{"concurrencyMode": "magic"}`),
+			wantError:  true,
+		},
+		{
+			name:       "high headroom warning",
+			configJSON: []byte(`{"headroom": 2.0}`),
+			wantError:  false,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := context.Background()
-			detector := NewDetector(tc.config)
-			endpointName := "test-endpoint"
 
-			// 1. Verify MaxConcurrency via Saturation
-
-			// A. Drive load to just below the limit (Max - 1)
-			// Expected Saturation = (Max - 1) / Max
-			driveLoad(ctx, detector, endpointName, int(tc.effectiveMax-1))
-			expectedSat := float64(tc.effectiveMax-1) / float64(tc.effectiveMax)
-			actualSat := detector.Saturation(ctx, []fwkdl.Endpoint{newFakeEndpoint(endpointName)})
-			require.InDelta(t, expectedSat, actualSat, 1e-6, "expected saturation gradient to reflect partial load")
-
-			// B. Increment to exactly the limit (Max)
-			// Expected Saturation = 1.0
-			driveLoad(ctx, detector, endpointName, 1)
-			actualSat = detector.Saturation(ctx, []fwkdl.Endpoint{newFakeEndpoint(endpointName)})
-			require.InDelta(t, 1.0, actualSat, 1e-6, `expected 100% saturation at MaxConcurrency`)
-
-			// 2. Verify Headroom via Filter
-
-			// Reset state first.
-			detector.DeleteEndpoint(fullEndpointName(endpointName))
-
-			// A. Drive load to just below the burst limit (Limit - 1)
-			driveLoad(ctx, detector, endpointName, int(tc.effectiveHeadroomBurst-1))
-			kept := detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)})
-			require.Len(t, kept, 1, "expected endpoint to be KEPT at BurstLimit-1")
-
-			// B. Reach the burst limit (Limit)
-			driveLoad(ctx, detector, endpointName, 1)
-			kept = detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)})
-			require.Len(t, kept, 0, "expected endpoint to be FILTERED at BurstLimit")
+			plugin, err := ConcurrencyDetectorFactory("test-concurrency-detector",
+				tc.configJSON, utils.NewTestHandle(t.Context()))
+			if tc.wantError {
+				require.Error(t, err, "Expected initialization to fail on invalid configuration")
+				require.Nil(t, plugin, "Plugin must be nil when initialization fails")
+			} else {
+				require.NoError(t, err, "Expected initialization to succeed with valid configuration")
+				require.NotNil(t, plugin, "Plugin must not be nil on success")
+			}
 		})
 	}
 }
 
-// TestDetector_Saturation verifies the global saturation gradient logic.
-// It ensures saturation is reported as an aggregate ratio of TotalInflight / TotalCapacity.
+// TestDetector_Configuration evaluates the internal mechanics of the configuration parameters.
+// It verifies that gradients are correctly mapped over limits and that fallback logic respects
+// maximum capacities under synthetic traffic load.
+func TestDetector_Configuration(t *testing.T) {
+	t.Parallel()
+
+	tc := struct {
+		config                 config
+		effectiveMax           int64
+		effectiveHeadroomBurst int64
+	}{
+		config: config{
+			maxConcurrency: 50,
+			headroom:       0.2, // 20% burst
+		},
+		effectiveMax:           50,
+		effectiveHeadroomBurst: 60, // 50 * 1.2 = 60
+	}
+
+	t.Run("verify max concurrency saturation gradient", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		detector := newDetector("test-detector", tc.config, logr.Discard())
+		endpointName := "test-endpoint"
+
+		// Drive load to just below the limit (Max - 1).
+		// Expected Saturation = (Max - 1) / Max
+		driveLoad(ctx, detector, endpointName, int(tc.effectiveMax-1))
+		expectedSat := float64(tc.effectiveMax-1) / float64(tc.effectiveMax)
+		actualSat := detector.Saturation(ctx, []datalayer.Endpoint{newFakeEndpoint(endpointName)})
+		require.InDelta(t, expectedSat, actualSat, 1e-6, "Saturation must linearly reflect partial load")
+
+		// Increment to exactly the limit (Max).
+		// Expected Saturation = 1.0
+		driveLoad(ctx, detector, endpointName, 1)
+		actualSat = detector.Saturation(ctx, []datalayer.Endpoint{newFakeEndpoint(endpointName)})
+		require.InDelta(t, 1.0, actualSat, 1e-6, "Saturation must cap at 1.0 at maxConcurrency limit")
+	})
+
+	t.Run("verify headroom filter limits", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		detector := newDetector("test-detector", tc.config, logr.Discard())
+		endpointName := "test-endpoint"
+
+		// Drive load to just below the burst limit (Limit - 1).
+		driveLoad(ctx, detector, endpointName, int(tc.effectiveHeadroomBurst-1))
+		kept := detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)})
+		require.Len(t, kept, 1, "Endpoint should be retained when operating below burst capacity")
+
+		// Reach the burst limit (Limit).
+		driveLoad(ctx, detector, endpointName, 1)
+
+		t.Run("fallback to clean endpoint", func(t *testing.T) {
+			cleanEndpoint := "clean-endpoint"
+			kept = detector.Filter(ctx, nil, nil, []schedulingtypes.Endpoint{
+				newStubSchedulingEndpoint(endpointName),
+				newStubSchedulingEndpoint(cleanEndpoint),
+			})
+			require.Len(t, kept, 1, "Filter should drop the overloaded endpoint")
+			require.Equal(t, cleanEndpoint, kept[0].GetMetadata().NamespacedName.Name,
+				"Filter should retain the clean fallback endpoint")
+		})
+	})
+}
+
+// TestDetector_TypedName verifies that the runtime type identification of the plugin is populated
+// correctly during instantiation and accurately reflects the hardcoded concurrency-detector type.
+func TestDetector_TypedName(t *testing.T) {
+	t.Parallel()
+	plugin, err := ConcurrencyDetectorFactory("test-plugin", []byte(`{}`), utils.NewTestHandle(t.Context()))
+	require.NoError(t, err, "Plugin initialization should succeed")
+	require.Equal(t, "test-plugin", plugin.TypedName().Name,
+		"TypedName must match the name provided during initialization")
+	require.Equal(t, "concurrency-detector", plugin.TypedName().Type,
+		"TypedName.Type must be exactly 'concurrency-detector'")
+}
+
+// TestDetector_Saturation evaluates the quantitative scaling of the saturation output.
+// It verifies that 0, partial, overloaded, and over-saturated loads return exact mathematical
+// representations, protecting upper layers from incorrect metrics.
 func TestDetector_Saturation(t *testing.T) {
 	t.Parallel()
 
 	const maxConcurrency = 10
-	config := Config{MaxConcurrency: maxConcurrency}
+	config := config{maxConcurrency: maxConcurrency}
 
 	tests := []struct {
 		name               string
@@ -184,7 +250,7 @@ func TestDetector_Saturation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			detector := NewDetector(config)
+			detector := newDetector("test-detector", config, logr.Discard())
 
 			// Setup load.
 			for endpointName, load := range tc.endpointLoadSetup {
@@ -192,7 +258,7 @@ func TestDetector_Saturation(t *testing.T) {
 			}
 
 			// Build candidates.
-			candidates := make([]fwkdl.Endpoint, 0, len(tc.candidateEndpoints))
+			candidates := make([]datalayer.Endpoint, 0, len(tc.candidateEndpoints))
 			for _, name := range tc.candidateEndpoints {
 				candidates = append(candidates, newFakeEndpoint(name))
 			}
@@ -209,10 +275,10 @@ func TestDetector_Lifecycle(t *testing.T) {
 	t.Parallel()
 
 	// MaxConcurrency 1 makes math simple.
-	detector := NewDetector(Config{MaxConcurrency: 1})
+	detector := newDetector("test", config{maxConcurrency: 1}, logr.Discard())
 	ctx := context.Background()
 	endpointName := "lifecycle-endpoint"
-	candidates := []fwkdl.Endpoint{newFakeEndpoint(endpointName)}
+	candidates := []datalayer.Endpoint{newFakeEndpoint(endpointName)}
 
 	// 1. Initially Empty
 	require.InDelta(t, 0.0, detector.Saturation(ctx, candidates), 1e-6, "expected initially 0.0")
@@ -242,9 +308,9 @@ func TestDetector_TokenSaturation(t *testing.T) {
 
 	// MaxTokenConcurrency set to 100 for simple testing
 	const maxTokenConcurrency = 100
-	config := Config{
-		ConcurrencyMode:     modePtr(Tokens),
-		MaxTokenConcurrency: maxTokenConcurrency,
+	config := config{
+		mode:                modeTokens,
+		maxTokenConcurrency: maxTokenConcurrency,
 	}
 
 	tests := []struct {
@@ -315,11 +381,11 @@ func TestDetector_TokenSaturation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			detector := NewDetector(config)
+			detector := newDetector("test-detector", config, logr.Discard())
 
 			driveTokenLoad(ctx, detector, "endpoint-a", tc.requests)
 
-			candidates := make([]fwkdl.Endpoint, 0, len(tc.candidateEndpoints))
+			candidates := make([]datalayer.Endpoint, 0, len(tc.candidateEndpoints))
 			for _, name := range tc.candidateEndpoints {
 				candidates = append(candidates, newFakeEndpoint(name))
 			}
@@ -334,14 +400,14 @@ func TestDetector_TokenSaturation(t *testing.T) {
 func TestDetector_TokenFilter(t *testing.T) {
 	t.Parallel()
 
-	config := Config{
-		ConcurrencyMode:     modePtr(Tokens),
-		MaxTokenConcurrency: 100,
-		Headroom:            0.2, // Burst limit = 100 * 1.2 = 120 tokens
+	config := config{
+		mode:                modeTokens,
+		maxTokenConcurrency: 100,
+		headroom:            0.2, // Burst limit = 100 * 1.2 = 120 tokens
 	}
 
 	ctx := context.Background()
-	detector := NewDetector(config)
+	detector := newDetector("test-detector", config, logr.Discard())
 	endpointName := "token-filter-endpoint"
 	endpoints := []schedulingtypes.Endpoint{newStubSchedulingEndpoint(endpointName)}
 
@@ -369,14 +435,14 @@ func TestDetector_TokenFilter(t *testing.T) {
 func TestDetector_TokenLifecycle(t *testing.T) {
 	t.Parallel()
 
-	config := Config{
-		ConcurrencyMode:     modePtr(Tokens),
-		MaxTokenConcurrency: 100,
+	config := config{
+		mode:                modeTokens,
+		maxTokenConcurrency: 100,
 	}
 	ctx := context.Background()
-	detector := NewDetector(config)
+	detector := newDetector("test-detector", config, logr.Discard())
 	endpointName := "token-lifecycle-endpoint"
-	candidates := []fwkdl.Endpoint{newFakeEndpoint(endpointName)}
+	candidates := []datalayer.Endpoint{newFakeEndpoint(endpointName)}
 	targetEndpoint := newStubSchedulingEndpoint(endpointName)
 
 	// PreRequest adds tokens ("1234567890123456" = 10 tokens)
@@ -406,14 +472,14 @@ func TestDetector_TokenLifecycle(t *testing.T) {
 func TestDetector_TokenDeleteEndpoint(t *testing.T) {
 	t.Parallel()
 
-	config := Config{
-		ConcurrencyMode:     modePtr(Tokens),
-		MaxTokenConcurrency: 100,
+	config := config{
+		mode:                modeTokens,
+		maxTokenConcurrency: 100,
 	}
 	ctx := context.Background()
-	detector := NewDetector(config)
+	detector := newDetector("test-detector", config, logr.Discard())
 	endpointName := "token-delete-endpoint"
-	candidates := []fwkdl.Endpoint{newFakeEndpoint(endpointName)}
+	candidates := []datalayer.Endpoint{newFakeEndpoint(endpointName)}
 
 	req := makeTokenRequest("req1", "1234567890123456")
 	req.RequestId = "req1"
@@ -430,7 +496,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 	t.Parallel()
 
 	// Config doesn't matter much here as we check internal state, but keep it consistent.
-	detector := NewDetector(Config{MaxConcurrency: 10000})
+	detector := newDetector("test-detector", config{maxConcurrency: 10000}, logr.Discard())
 	ctx := context.Background()
 	endpointName := "stress-endpoint"
 	fullID := fullEndpointName(endpointName)
@@ -483,7 +549,7 @@ func TestDetector_ConcurrencyStress(t *testing.T) {
 
 // --- Test Helpers & Mocks ---
 
-func driveLoad(ctx context.Context, detector *Detector, endpointName string, count int) {
+func driveLoad(ctx context.Context, detector *detector, endpointName string, count int) {
 	res := makeSchedulingResult(endpointName)
 	for range count {
 		detector.PreRequest(ctx, nil, res)
@@ -508,7 +574,7 @@ func makeSchedulingResult(endpointName string) *schedulingtypes.SchedulingResult
 
 func newFakeEndpoint(name string) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Metadata: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		Metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
@@ -516,16 +582,16 @@ func newFakeEndpoint(name string) *backendmetrics.FakePodMetrics {
 // It embeds the interface to satisfy the compiler but only implements GetMetadata.
 type stubSchedulingEndpoint struct {
 	schedulingtypes.Endpoint
-	metadata *fwkdl.EndpointMetadata
+	metadata *datalayer.EndpointMetadata
 }
 
 func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
 	return &stubSchedulingEndpoint{
-		metadata: &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
 	}
 }
 
-func (f *stubSchedulingEndpoint) GetMetadata() *fwkdl.EndpointMetadata { return f.metadata }
+func (f *stubSchedulingEndpoint) GetMetadata() *datalayer.EndpointMetadata { return f.metadata }
 
 // makeTokenRequest creates an LLMRequest with a prompt.
 func makeTokenRequest(requestID, prompt string) *schedulingtypes.LLMRequest {
@@ -538,7 +604,7 @@ func makeTokenRequest(requestID, prompt string) *schedulingtypes.LLMRequest {
 }
 
 // driveTokenLoad drives token based load by issuing PreRequest with the given requests.
-func driveTokenLoad(ctx context.Context, detector *Detector, endpointName string, requests []*schedulingtypes.LLMRequest) {
+func driveTokenLoad(ctx context.Context, detector *detector, endpointName string, requests []*schedulingtypes.LLMRequest) {
 	res := makeSchedulingResult(endpointName)
 	for i, req := range requests {
 		if req != nil && req.RequestId == "" {

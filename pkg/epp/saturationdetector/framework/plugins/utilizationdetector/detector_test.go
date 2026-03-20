@@ -28,6 +28,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 func makePodMetric(name string, queueDepth int, kvUsage float64, updateTime time.Time) *backendmetrics.FakePodMetrics {
@@ -41,6 +42,90 @@ func makePodMetric(name string, queueDepth int, kvUsage float64, updateTime time
 			UpdateTime:          updateTime,
 		},
 	}
+}
+
+// TestUtilizationDetectorFactory evaluates instantiation properties and config parsing constraints.
+// It guards against improper configuration block parameters failing initialization correctly.
+func TestUtilizationDetectorFactory(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		configJSON []byte
+		wantError  bool
+	}{
+		{
+			name:       "valid configuration",
+			configJSON: []byte(`{"queueDepthThreshold": 5, "kvCacheUtilThreshold": 0.8}`),
+			wantError:  false,
+		},
+		{
+			name:       "invalid schema",
+			configJSON: []byte(`{"queueDepthThreshold": "invalid_type"}`),
+			wantError:  true,
+		},
+		{
+			name:       "empty config applies defaults",
+			configJSON: []byte(`{}`),
+			wantError:  false,
+		},
+		{
+			name:       "invalid queue depth",
+			configJSON: []byte(`{"queueDepthThreshold": 0}`),
+			wantError:  true,
+		},
+		{
+			name:       "invalid kv cache high",
+			configJSON: []byte(`{"kvCacheUtilThreshold": 1.5}`),
+			wantError:  true,
+		},
+		{
+			name:       "invalid kv cache low",
+			configJSON: []byte(`{"kvCacheUtilThreshold": 0.0}`),
+			wantError:  true,
+		},
+		{
+			name:       "invalid metrics staleness",
+			configJSON: []byte(`{"metricsStalenessThreshold": "0s"}`),
+			wantError:  true,
+		},
+		{
+			name:       "invalid headroom",
+			configJSON: []byte(`{"headroom": -0.5}`),
+			wantError:  true,
+		},
+		{
+			name:       "high headroom warning",
+			configJSON: []byte(`{"headroom": 2.0}`),
+			wantError:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			plugin, err := UtilizationDetectorFactory("test-util-detector", tc.configJSON, utils.NewTestHandle(t.Context()))
+			if tc.wantError {
+				require.Error(t, err, "Expected initialization to fail on invalid configuration")
+				require.Nil(t, plugin, "Plugin must be nil when initialization fails")
+			} else {
+				require.NoError(t, err, "Expected initialization to succeed with valid configuration")
+				require.NotNil(t, plugin, "Plugin must not be nil on success")
+			}
+		})
+	}
+}
+
+// TestDetector_TypedName provides structural assurance that initialization assigns proper types.
+func TestDetector_TypedName(t *testing.T) {
+	t.Parallel()
+	plugin, err := UtilizationDetectorFactory("test-plugin", []byte(`{}`), utils.NewTestHandle(t.Context()))
+	require.NoError(t, err, "Plugin initialization should succeed")
+	require.Equal(t, "test-plugin", plugin.TypedName().Name,
+		"TypedName must match the name provided during initialization")
+	require.Equal(t, "utilization-detector", plugin.TypedName().Type,
+		"TypedName.Type must be exactly 'utilization-detector'")
 }
 
 func TestDetector_Saturation(t *testing.T) {
@@ -178,7 +263,7 @@ func TestDetector_Saturation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			detector := NewDetector(config, logr.Discard())
+			detector := NewDetector("test-detector", *config, logr.Discard())
 
 			got := detector.Saturation(context.Background(), tc.pods)
 			require.InDelta(t, tc.wantSaturation, got, 1e-4, "Saturation mismatch")
@@ -268,7 +353,7 @@ func TestDetector_Filter(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			detector := NewDetector(config, logr.Discard())
+			detector := NewDetector("test-detector", *config, logr.Discard())
 			got := detector.Filter(context.Background(), nil, nil, tc.endpoints)
 			require.Len(t, got, tc.wantLen)
 		})

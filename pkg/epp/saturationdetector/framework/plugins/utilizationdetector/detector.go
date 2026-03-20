@@ -39,50 +39,33 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
-	// loggerName is the name to use for loggers created by this package.
-	loggerName = "SaturationDetector"
-
 	// UtilizationDetectorType is the unique identifier for this plugin.
 	UtilizationDetectorType = "utilization-detector"
 )
 
-// Config holds the configuration for the SaturationDetector.
-type Config struct {
-	// QueueDepthThreshold defines the backend waiting queue size above which a
-	// pod is considered to have insufficient capacity for new requests.
-	QueueDepthThreshold int
-	// KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
-	// which a pod is considered to have insufficient capacity.
-	KVCacheUtilThreshold float64
-	// MetricsStalenessThreshold defines how old a pod's metrics can be.
-	// If a pod's metrics are older than this, it might be excluded from
-	// "good capacity" considerations or treated as having no capacity for
-	// safety.
-	MetricsStalenessThreshold time.Duration
-	// Headroom defines the allowed burst capacity above thresholds for specific pod scheduling,
-	// expressed as a fraction in [0.0, 1.0].
-	Headroom float64
-}
-
-func UtilizationDetectorFactory(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	config := &Config{
-		QueueDepthThreshold:       DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: DefaultMetricsStalenessThreshold,
-		Headroom:                  DefaultHeadroom,
-	}
+// UtilizationDetectorFactory instantiates the detector plugin using the provided JSON parameters.
+func UtilizationDetectorFactory(
+	name string,
+	params json.RawMessage,
+	handle fwkplugin.Handle,
+) (fwkplugin.Plugin, error) {
+	var apiCfg apiConfig
 	if len(params) > 0 {
-		if err := json.Unmarshal(params, config); err != nil {
+		if err := json.Unmarshal(params, &apiCfg); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal utilization detector config: %w", err)
 		}
 	}
-	return NewDetector(config, log.FromContext(handle.Context())), nil
+	cfg, err := buildConfig(&apiCfg)
+	if err != nil {
+		return nil, err
+	}
+	return NewDetector(name, *cfg, log.FromContext(handle.Context())), nil
 }
 
 var (
@@ -91,29 +74,40 @@ var (
 
 // Detector determines system saturation based on metrics of the given candidate pods.
 type Detector struct {
-	config *Config
+	config    Config
+	typedName fwkplugin.TypedName
 }
 
-// NewDetector creates a new SaturationDetector.
+// NewDetector creates a new instance of the Utilization Detector.
 // The config provides the thresholds for determining saturation.
-func NewDetector(config *Config, logger logr.Logger) *Detector {
-	logger.WithName(loggerName).V(logutil.DEFAULT).Info("Creating new SaturationDetector",
-		"queueDepthThreshold", config.QueueDepthThreshold,
-		"kvCacheUtilThreshold", config.KVCacheUtilThreshold,
-		"metricsStalenessThreshold", config.MetricsStalenessThreshold.String(),
-		"headroom", config.Headroom)
+func NewDetector(name string, cfg Config, logger logr.Logger) *Detector {
+	typedName := fwkplugin.TypedName{
+		Type: UtilizationDetectorType,
+		Name: name,
+	}
+
+	pluginLogger := logger.WithName(typedName.String())
+	pluginLogger.V(logutil.DEFAULT).Info("Creating new UtilizationDetector",
+		"queueDepthThreshold", cfg.QueueDepthThreshold,
+		"kvCacheUtilThreshold", cfg.KVCacheUtilThreshold,
+		"metricsStalenessThreshold", cfg.MetricsStalenessThreshold.String(),
+		"headroom", cfg.Headroom)
+
+	if cfg.Headroom > 1.0 {
+		pluginLogger.Info("Unusually high headroom configured; verify value is a fraction, not a percentage",
+			"headroom", cfg.Headroom,
+			"effectiveBurst", fmt.Sprintf("%.0f%%", cfg.Headroom*100))
+	}
 
 	return &Detector{
-		config: config,
+		config:    cfg,
+		typedName: typedName,
 	}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
 func (d *Detector) TypedName() fwkplugin.TypedName {
-	return fwkplugin.TypedName{
-		Type: UtilizationDetectorType,
-		Name: UtilizationDetectorType,
-	}
+	return d.typedName
 }
 
 // Saturation calculates the saturation level of the pool.
@@ -125,14 +119,14 @@ func (d *Detector) TypedName() fwkplugin.TypedName {
 // For each pod, the score is determined by the most constrained resource (Compute or Memory):
 //
 //	PodScore = Max(WaitingQueue / QueueThreshold, KVCacheUsage / KVCacheThreshold)
-func (d *Detector) Saturation(_ context.Context, candidatePods []fwkdl.Endpoint) float64 {
-	if len(candidatePods) == 0 {
+func (d *Detector) Saturation(_ context.Context, candidates []datalayer.Endpoint) float64 {
+	if len(candidates) == 0 {
 		return 1.0
 	}
 
 	var totalScore float64
-	for _, podMetric := range candidatePods {
-		metrics := podMetric.GetMetrics()
+	for _, e := range candidates {
+		metrics := e.GetMetrics()
 
 		if metrics == nil || time.Since(metrics.UpdateTime) > d.config.MetricsStalenessThreshold {
 			totalScore += 1.0
@@ -146,7 +140,7 @@ func (d *Detector) Saturation(_ context.Context, candidatePods []fwkdl.Endpoint)
 		totalScore += max(qRatio, kvRatio)
 	}
 
-	return totalScore / float64(len(candidatePods))
+	return totalScore / float64(len(candidates))
 }
 
 // Filter blocks traffic to specific pods that are physically saturated or exceeding their safety limits.

@@ -57,69 +57,87 @@ import (
 	"sync"
 	"sync/atomic"
 
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
-const ConcurrencyDetectorType = "concurrency-detector"
+const (
+	ConcurrencyDetectorType = "concurrency-detector"
+)
 
-func ConcurrencyDetectorFactory(_ string, params json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	var cfg Config
+// ConcurrencyDetectorFactory instantiates the detector plugin using the provided JSON parameters.
+func ConcurrencyDetectorFactory(
+	name string,
+	params json.RawMessage,
+	handle fwkplugin.Handle,
+) (fwkplugin.Plugin, error) {
+	var apiCfg apiConfig
 	if len(params) > 0 {
-		if err := json.Unmarshal(params, &cfg); err != nil {
+		if err := json.Unmarshal(params, &apiCfg); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal concurrency detector config: %w", err)
 		}
 	}
-	return NewDetector(cfg), nil
+	cfg, err := buildConfig(&apiCfg)
+	if err != nil {
+		return nil, err
+	}
+	return newDetector(name, *cfg, log.FromContext(handle.Context())), nil
 }
 
 var (
-	_ requestcontrol.PreRequest   = &Detector{}
-	_ requestcontrol.ResponseBody = &Detector{}
-	_ framework.Filter            = &Detector{}
+	_ requestcontrol.PreRequest   = &detector{}
+	_ requestcontrol.ResponseBody = &detector{}
+	_ framework.Filter            = &detector{}
 )
 
-// Detector implements a saturation detector and scheduling filter based on active request concurrency.
-type Detector struct {
+// detector implements a saturation detector and scheduling filter based on active request concurrency.
+type detector struct {
 	requestTracker *concurrencyTracker // requests in flight per endpoint
 	tokenTracker   *concurrencyTracker // tokens in flight per endpoint
 	tokenEstimator TokenEstimator      // SimpleTokenEstimator with CharactersPerToken
-	config         Config
+	config         config
+	typedName      fwkplugin.TypedName
 }
 
-// NewDetector creates a new instance of the Concurrency Detector.
-func NewDetector(config Config) *Detector {
-	// TODO: Replace with more robust validation and defaulting logic once Saturation Detector becomes an official
-	// extension point.
-	if config.MaxConcurrency <= 0 {
-		config.MaxConcurrency = DefaultMaxConcurrency
-	}
-	if config.Headroom < 0 {
-		config.Headroom = DefaultHeadroom
-	}
-	if config.ConcurrencyMode == nil || (*config.ConcurrencyMode != Requests && *config.ConcurrencyMode != Tokens) {
-		config.ConcurrencyMode = modePtr(DefaultConcurrencyMode)
-	}
-	if config.MaxTokenConcurrency < 0 {
-		config.MaxTokenConcurrency = DefaultMaxTokenConcurrency
+// newDetector creates a new instance of the Concurrency Detector.
+func newDetector(name string, cfg config, logger logr.Logger) *detector {
+	typedName := fwkplugin.TypedName{
+		Type: ConcurrencyDetectorType,
+		Name: name,
 	}
 
-	return &Detector{
+	pluginLogger := logger.WithName(typedName.String())
+	pluginLogger.V(logutil.DEFAULT).Info("Creating new ConcurrencyDetector",
+		"mode", cfg.mode,
+		"maxConcurrency", cfg.maxConcurrency,
+		"maxTokenConcurrency", cfg.maxTokenConcurrency,
+		"headroom", cfg.headroom)
+
+	if cfg.headroom > 1.0 {
+		pluginLogger.Info("Unusually high headroom configured; verify value is a fraction, not a percentage",
+			"headroom", cfg.headroom,
+			"effectiveBurst", fmt.Sprintf("%.0f%%", cfg.headroom*100))
+	}
+
+	return &detector{
 		requestTracker: newConcurrencyTracker(),
 		tokenTracker:   newConcurrencyTracker(),
 		tokenEstimator: NewSimpleTokenEstimator(),
-		config:         config,
+		config:         cfg,
+		typedName:      typedName,
 	}
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
-func (d *Detector) TypedName() fwkplugin.TypedName {
-	return fwkplugin.TypedName{
-		Type: ConcurrencyDetectorType,
-		Name: ConcurrencyDetectorType,
-	}
+func (d *detector) TypedName() fwkplugin.TypedName {
+	return d.typedName
 }
 
 // Saturation calculates the saturation level of the pool.
@@ -127,22 +145,22 @@ func (d *Detector) TypedName() fwkplugin.TypedName {
 // It returns an aggregate saturation signal where:
 //
 //	Saturation = Total Inflight Requests / Total MaxConcurrency Capacity.
-func (d *Detector) Saturation(_ context.Context, candidateEndpoints []fwkdl.Endpoint) float64 {
+func (d *detector) Saturation(_ context.Context, endpoints []datalayer.Endpoint) float64 {
 	var totalInflight, totalCapacity int64
-	for _, endpoint := range candidateEndpoints {
-		if endpoint.GetMetadata() == nil {
+	for _, e := range endpoints {
+		if e.GetMetadata() == nil {
 			continue
 		}
-		endpointID := endpoint.GetMetadata().NamespacedName.String()
+		endpointID := e.GetMetadata().NamespacedName.String()
 
-		if *d.config.ConcurrencyMode == Tokens {
+		if d.config.mode == modeTokens {
 			tokenCount := d.tokenTracker.get(endpointID)
 			totalInflight += tokenCount
-			totalCapacity += d.config.MaxTokenConcurrency
+			totalCapacity += d.config.maxTokenConcurrency
 		} else {
 			inflight := d.requestTracker.get(endpointID)
 			totalInflight += inflight
-			totalCapacity += d.config.MaxConcurrency
+			totalCapacity += d.config.maxConcurrency
 		}
 	}
 
@@ -156,7 +174,7 @@ func (d *Detector) Saturation(_ context.Context, candidateEndpoints []fwkdl.Endp
 // Filter blocks traffic to specific endpoints that are physically saturated or exceeding their safety limits.
 //
 // It applies a relaxed limit (MaxConcurrency * (1 + Headroom)) to allow for scheduling flexibility and burst tolerance.
-func (d *Detector) Filter(
+func (d *detector) Filter(
 	_ context.Context,
 	_ *framework.CycleState,
 	_ *framework.LLMRequest,
@@ -166,21 +184,21 @@ func (d *Detector) Filter(
 	filtered := make([]framework.Endpoint, 0, len(endpoints))
 
 	var limit int64
-	if *d.config.ConcurrencyMode == Tokens {
-		limit = int64(float64(d.config.MaxTokenConcurrency) * (1.0 + d.config.Headroom))
+	if d.config.mode == modeTokens {
+		limit = int64(float64(d.config.maxTokenConcurrency) * (1.0 + d.config.headroom))
 	} else {
-		limit = int64(float64(d.config.MaxConcurrency) * (1.0 + d.config.Headroom))
+		limit = int64(float64(d.config.maxConcurrency) * (1.0 + d.config.headroom))
 	}
 
-	for _, endpoint := range endpoints {
-		endpointID := endpoint.GetMetadata().NamespacedName.String()
-		if *d.config.ConcurrencyMode == Tokens {
+	for _, e := range endpoints {
+		endpointID := e.GetMetadata().NamespacedName.String()
+		if d.config.mode == modeTokens {
 			if d.tokenTracker.get(endpointID) < limit {
-				filtered = append(filtered, endpoint)
+				filtered = append(filtered, e)
 			}
 		} else {
 			if d.requestTracker.get(endpointID) < limit {
-				filtered = append(filtered, endpoint)
+				filtered = append(filtered, e)
 			}
 		}
 	}
@@ -189,9 +207,9 @@ func (d *Detector) Filter(
 
 // PreRequest increments the atomic in-flight counter for the target endpoint.
 // We assume the scheduling result is valid based on the Director's contract.
-func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
+func (d *detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
 	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String()
-	if *d.config.ConcurrencyMode == Tokens {
+	if d.config.mode == modeTokens {
 		tokens := d.tokenEstimator.Estimate(request)
 		d.tokenTracker.add(eid, tokens)
 	} else {
@@ -202,17 +220,17 @@ func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, 
 // ResponseBody decrements the atomic in-flight counter for the target endpoint when the response is endOfStream.
 // For token mode, the estimate is recalculated from the request; request may be nil in some paths and
 // TokenEstimator.Estimate returns 0 in that case (may contribute to drift).
-func (d *Detector) ResponseBody(
+func (d *detector) ResponseBody(
 	_ context.Context,
 	request *framework.LLMRequest,
 	resp *requestcontrol.Response,
-	targetEndpoint *fwkdl.EndpointMetadata,
+	targetEndpoint *datalayer.EndpointMetadata,
 ) {
 	if targetEndpoint == nil || resp == nil || !resp.EndOfStream {
 		return
 	}
 	eid := targetEndpoint.NamespacedName.String()
-	if *d.config.ConcurrencyMode == Tokens {
+	if d.config.mode == modeTokens {
 		tokens := d.tokenEstimator.Estimate(request)
 		d.tokenTracker.add(eid, -tokens)
 	} else {
@@ -222,8 +240,8 @@ func (d *Detector) ResponseBody(
 
 // DeleteEndpoint removes an endpoint from the concurrency tracker to prevent memory leaks.
 // This should be called by the controller when a backend is removed from the pool.
-func (d *Detector) DeleteEndpoint(endpointID string) {
-	if *d.config.ConcurrencyMode == Tokens {
+func (d *detector) DeleteEndpoint(endpointID string) {
+	if d.config.mode == modeTokens {
 		d.tokenTracker.delete(endpointID)
 	} else {
 		d.requestTracker.delete(endpointID)
