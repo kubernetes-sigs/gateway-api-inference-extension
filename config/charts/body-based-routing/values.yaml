@@ -14,11 +14,26 @@ bbr:
     # Log verbosity
     v: 3
 
-  # Plugin configuration (transitional - currently runs no-op default plugin)
+  # BBR plugins configuration.
+  # When plugins are explicitly specified, the runner's default auto-load is skipped.
+  # Both plugins below replicate the default behavior.
+  # Format: type (registered plugin type), name (instance name), json (optional config object)
   plugins:
-    - type: default-bbr
-      name: default-bbr
-      json: {"v":0, "no-op":true}
+    - type: body-field-to-header
+      name: model-extractor
+      json:
+        field_name: model
+        header_name: X-Gateway-Model-Name
+    - type: base-model-to-header
+      name: base-model-mapper
+
+  tracing:
+    enabled: false
+    otelServiceName: "gateway-api-inference-extension/bbr"
+    otelExporterEndpoint: "http://localhost:4317"
+    sampling:
+      sampler: "parentbased_traceidratio"
+      samplerArg: "0.1"
 
 provider:
   name: none

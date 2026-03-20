@@ -20,27 +20,29 @@ package requestcontrol
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
 
 const (
@@ -54,14 +56,14 @@ const (
 type Datastore interface {
 	PoolGet() (*datalayer.EndpointPool, error)
 	ObjectiveGet(objectiveName string) *v1alpha2.InferenceObjective
-	PodList(predicate func(backendmetrics.PodMetrics) bool) []backendmetrics.PodMetrics
+	PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint
 	// ModelRewriteGet returns the rewrite rule for a given model name and the name of the InferenceModelRewrite object.
 	ModelRewriteGet(modelName string) (*v1alpha2.InferenceModelRewriteRule, string)
 }
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidatePods []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidateEndpoints []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
 }
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
@@ -69,6 +71,7 @@ func NewDirectorWithConfig(
 	datastore Datastore,
 	scheduler Scheduler,
 	admissionController AdmissionController,
+	parser fwkrh.Parser,
 	podLocator contracts.PodLocator,
 	config *Config,
 ) *Director {
@@ -78,6 +81,7 @@ func NewDirectorWithConfig(
 		admissionController:   admissionController,
 		podLocator:            podLocator,
 		requestControlPlugins: *config,
+		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
 	}
 }
@@ -101,6 +105,7 @@ type Director struct {
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
 	defaultPriority int
+	parser          fwkrh.Parser
 }
 
 // getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
@@ -125,43 +130,25 @@ func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.R
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 
-	// Parse Request, Resolve Target Models, and Determine Parameters
-	requestBodyMap := reqCtx.Request.Body
-	var ok bool
-	reqCtx.IncomingModelName, ok = requestBodyMap["model"].(string)
-
-	if !ok {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: "model not found in request body"}
-	}
-	if reqCtx.TargetModelName == "" {
-		// Default to incoming model name
-		reqCtx.TargetModelName = reqCtx.IncomingModelName
-	}
-
-	d.applyWeightedModelRewrite(reqCtx)
-
-	reqCtx.Request.Body["model"] = reqCtx.TargetModelName
-
-	requestBody, err := requtil.ExtractRequestBody(reqCtx.Request.Body, reqCtx.Request.Headers)
+	// Parse, mutate, and extract the request body
+	llmRequestBody, err := d.processRequestBody(ctx, reqCtx, d.parser)
 	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.BadRequest, Msg: fmt.Errorf("failed to extract request data: %w", err).Error()}
+		return reqCtx, err
 	}
 
-	// Parse inference objective.
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
-	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		TargetModel: reqCtx.TargetModelName,
-		Body:        requestBody,
-		Headers:     reqCtx.Request.Headers,
-		Objectives:  requestObjectives,
+		RequestId:        reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
+		TargetModel:      reqCtx.TargetModelName,
+		Body:             llmRequestBody,
+		Headers:          reqCtx.Request.Headers,
+		Objectives:       requestObjectives,
+		RequestSizeBytes: reqCtx.RequestSize,
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
-
 	ctx = log.IntoContext(ctx, logger)
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
@@ -169,30 +156,31 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
 	}
-	candidatePods := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
-	if len(candidatePods) == 0 {
-		return reqCtx, errutil.Error{
-			Code: errutil.ServiceUnavailable,
-			Msg:  "failed to find candidate pods for serving the request",
+	candidateEndpoints := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
+	if len(candidateEndpoints) == 0 {
+		return reqCtx, errcommon.Error{
+			Code: errcommon.ServiceUnavailable,
+			Msg:  "failed to find candidate endpoints for serving the request",
 		}
 	}
-	snapshotOfCandidatePods := d.toSchedulerPodMetrics(candidatePods)
+	candidateSnapshot := d.toSchedulerEndpoints(candidateEndpoints)
 
 	// Prepare per request data by running PrepareData plugins.
-	if d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) != nil {
+	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
+	if err != nil {
 		// Don't fail the request if PrepareData plugins fail.
 		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
 	}
 
 	// Run admit request plugins
-	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot) {
 		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
-		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "request cannot be admitted"}
+		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "request cannot be admitted"}
 	}
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
 	if err != nil {
-		return reqCtx, errutil.Error{Code: errutil.InferencePoolResourceExhausted, Msg: fmt.Errorf("failed to find target pod: %w", err).Error()}
+		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target endpoint: %w", err).Error()}
 	}
 
 	// Prepare Request (Populates RequestContext and call PreRequest plugins)
@@ -203,6 +191,63 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, err
 	}
 
+	return reqCtx, nil
+}
+
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwksched.LLMRequestBody, error) {
+	llmRequestBody, err := parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
+	if err != nil {
+		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
+	}
+
+	switch v := llmRequestBody.ParsedBody.(type) {
+	case proto.Message:
+		// Protos are not currently mutated, return as-is.
+		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+	case map[string]any:
+		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
+	}
+	return llmRequestBody, nil
+}
+
+func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.RequestContext, bodyMap map[string]any) error {
+	logger := log.FromContext(ctx)
+
+	// Mutate the model name inside the map
+	_, err := d.mutateModel(reqCtx, bodyMap)
+	if err != nil {
+		return err
+	}
+
+	// Marshal back to bytes so downstream ExtProc filters see the updated model
+	requestBodyBytes, err := json.Marshal(bodyMap)
+	if err != nil {
+		logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+		return errcommon.Error{Code: errcommon.Internal, Msg: "Error marshalling request body"}
+	}
+
+	reqCtx.Request.RawBody = requestBodyBytes
+	reqCtx.RequestSize = len(requestBodyBytes)
+
+	return nil
+}
+
+func (d *Director) mutateModel(reqCtx *handlers.RequestContext, bodyMap map[string]any) (*handlers.RequestContext, error) {
+	var ok bool
+	reqCtx.IncomingModelName, ok = bodyMap["model"].(string)
+	if !ok {
+		return reqCtx, errcommon.Error{Code: errcommon.BadRequest, Msg: "model not found in request body"}
+	}
+	if reqCtx.TargetModelName == "" {
+		// Default to incoming model name
+		reqCtx.TargetModelName = reqCtx.IncomingModelName
+	}
+	d.applyWeightedModelRewrite(reqCtx)
+	bodyMap["model"] = reqCtx.TargetModelName
 	return reqCtx, nil
 }
 
@@ -248,7 +293,7 @@ func (d *Director) selectWeightedModel(models []v1alpha2.TargetModel) string {
 func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestContext, result *fwksched.SchedulingResult) (*handlers.RequestContext, error) {
 	logger := log.FromContext(ctx)
 	if result == nil || len(result.ProfileResults) == 0 {
-		return reqCtx, errutil.Error{Code: errutil.Internal, Msg: "results must be greater than zero"}
+		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "results must be greater than zero"}
 	}
 	// primary profile is used to set destination
 	targetMetadatas := []*fwkdl.EndpointMetadata{}
@@ -272,59 +317,43 @@ func (d *Director) prepareRequest(ctx context.Context, reqCtx *handlers.RequestC
 	return reqCtx, nil
 }
 
-func (d *Director) toSchedulerPodMetrics(pods []backendmetrics.PodMetrics) []fwksched.Endpoint {
-	pm := make([]fwksched.Endpoint, len(pods))
-	for i, pod := range pods {
-		pm[i] = fwksched.NewEndpoint(pod.GetMetadata(), pod.GetMetrics(), pod.GetAttributes())
+func (d *Director) toSchedulerEndpoints(endpoints []fwkdl.Endpoint) []fwksched.Endpoint {
+	result := make([]fwksched.Endpoint, len(endpoints))
+	for i, endpoint := range endpoints {
+		result[i] = fwksched.NewEndpoint(endpoint.GetMetadata(), endpoint.GetMetrics(), endpoint.GetAttributes())
 	}
 
-	return pm
+	return result
 }
 
-// HandleResponseReceived is called when the response headers are received.
-func (d *Director) HandleResponseReceived(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+// HandleResponseHeader is called when the response headers are received.
+func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.RequestContext) *handlers.RequestContext {
 	response := &fwk.Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
 		ReqMetadata: reqCtx.Request.Metadata,
 	}
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
-	d.runResponseReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
-
-	return reqCtx, nil
+	d.runResponseHeaderPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	return reqCtx
 }
 
-// HandleResponseBodyStreaming is called every time a chunk of the response body is received.
-func (d *Director) HandleResponseBodyStreaming(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+// HandleResponseBody is invoked by the director for every chunk received in a streaming
+// response, or exactly once for a non-streaming response.
+func (d *Director) HandleResponseBody(ctx context.Context, reqCtx *handlers.RequestContext, endOfStream bool) *handlers.RequestContext {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
 	response := &fwk.Response{
-		RequestId:   reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
+		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
-		EndOfStream: reqCtx.ResponseComplete,
+		EndOfStream: endOfStream,
+		Usage:       reqCtx.Usage,
 	}
-
-	d.runResponseStreamingPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	d.runResponseBodyPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	reqCtx.Response.DynamicMetadata = response.DynamicMetadata
 	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
-	return reqCtx, nil
-}
-
-// HandleResponseBodyComplete is called when the response body is fully received.
-func (d *Director) HandleResponseBodyComplete(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
-	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
-	logger.V(logutil.DEBUG).Info("Entering HandleResponseBodyComplete")
-	response := &fwk.Response{
-		RequestId:       reqCtx.Request.Headers[requtil.RequestIdHeaderKey],
-		Headers:         reqCtx.Response.Headers,
-		DynamicMetadata: reqCtx.Response.DynamicMetadata,
-		Usage:           reqCtx.Usage,
-	}
-
-	d.runResponseCompletePlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
-
-	logger.V(logutil.DEBUG).Info("Exiting HandleResponseBodyComplete")
-	return reqCtx, nil
+	return reqCtx
 }
 
 func (d *Director) GetRandomEndpoint() *fwkdl.EndpointMetadata {
@@ -371,35 +400,24 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 	return true
 }
 
-func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseHeaderPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running ResponseReceived plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.ResponseReceived(ctx, request, response, targetEndpoint)
+		plugin.ResponseHeader(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(fwk.ResponseReceivedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running ResponseReceived plugin successfully", "plugin", plugin.TypedName())
 	}
 }
 
-func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
 		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.ResponseStreaming(ctx, request, response, targetEndpoint)
+		plugin.ResponseBody(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(fwk.ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerTrace.Info("Completed running ResponseStreaming plugin successfully", "plugin", plugin.TypedName())
-	}
-}
-
-func (d *Director) runResponseCompletePlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
-	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
-	for _, plugin := range d.requestControlPlugins.responseCompletePlugins {
-		loggerDebug.Info("Running ResponseComplete plugin", "plugin", plugin.TypedName())
-		before := time.Now()
-		plugin.ResponseComplete(ctx, request, response, targetEndpoint)
-		metrics.RecordPluginProcessingLatency(fwk.ResponseCompleteExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
-		loggerDebug.Info("Completed running ResponseComplete plugin successfully", "plugin", plugin.TypedName())
 	}
 }

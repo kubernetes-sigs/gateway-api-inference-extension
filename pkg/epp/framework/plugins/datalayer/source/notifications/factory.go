@@ -35,7 +35,7 @@ type notificationSourceParams struct {
 	Group string `json:"group"`
 	// Version is the API version (e.g., "v1", "v1beta1").
 	Version string `json:"version"`
-	// Kind is the resource kind (e.g., "ConfigMap", "Deployment").
+	// Kind is the resource kind (e.g., "Pod", "Service").
 	Kind string `json:"kind"`
 }
 

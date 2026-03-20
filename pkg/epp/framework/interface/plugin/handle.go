@@ -81,7 +81,7 @@ func (h *eppHandlePlugins) AddPlugin(name string, plugin Plugin) {
 
 // GetAllPlugins returns all of the known plugins
 func (h *eppHandlePlugins) GetAllPlugins() []Plugin {
-	result := make([]Plugin, 0)
+	result := make([]Plugin, 0, len(h.plugins))
 	for _, plugin := range h.plugins {
 		result = append(result, plugin)
 	}

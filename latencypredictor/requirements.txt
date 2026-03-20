@@ -10,3 +10,4 @@ requests
 xgboost
 aiohttp
 lightgbm
+orjson

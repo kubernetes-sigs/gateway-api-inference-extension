@@ -212,10 +212,10 @@ const (
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: InferenceModelRewrite
 metadata:
-  name: food-review-canary-rollout
+  name: small-segment-lora-canary-rollout
 spec:
   poolRef:
-    name: main-food-review-pool
+    name: main-small-segment-lora-pool
   rules:
   - matches:
     - model:

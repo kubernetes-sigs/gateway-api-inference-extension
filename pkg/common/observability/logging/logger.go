@@ -27,14 +27,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
+// atomicLevel is shared between InitSetupLogging and InitLogging so the log
+// level can be adjusted after the controller-runtime delegation is fulfilled.
+var atomicLevel = uberzap.NewAtomicLevelAt(zapcore.InfoLevel)
+
 func InitSetupLogging() {
-	logger := zap.New(zap.RawZapOpts(uberzap.AddCaller()))
+	logger := zap.New(zap.Level(atomicLevel), zap.RawZapOpts(uberzap.AddCaller()))
 	ctrl.SetLogger(logger)
 }
 
 func InitLogging(opts *zap.Options) {
-	logger := zap.New(zap.UseFlagOptions(opts), zap.RawZapOpts(uberzap.AddCaller()))
-	ctrl.SetLogger(logger)
+	// Update the shared atomic level so the logger created in InitSetupLogging
+	// (and all loggers derived from it) pick up the new verbosity.
+	// ctrl.SetLogger only fulfills the delegation once, so calling it again
+	// after InitSetupLogging is a no-op. Instead we mutate the atomic level.
+	if opts.Level != nil {
+		switch lvl := opts.Level.(type) {
+		case uberzap.AtomicLevel:
+			atomicLevel.SetLevel(lvl.Level())
+		case zapcore.Level:
+			atomicLevel.SetLevel(lvl)
+		}
+	}
 }
 
 // NewTestLogger creates a new Zap logger using the dev mode.

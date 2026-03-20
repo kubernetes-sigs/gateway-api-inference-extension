@@ -27,9 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -95,7 +95,7 @@ func NewDatastorePodLocator(ds Datastore, opts ...LocatorOption) *DatastorePodLo
 // It supports:
 // 1. Returning all pods if no specific subset filter is present.
 // 2. Returning a filtered list of pods if "x-gateway-destination-endpoint-subset" is present.
-func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics {
+func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 
 	// If the user explicitly disabled subset filtering, return the default pool (all pods).
@@ -125,7 +125,7 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 	// data), so we return nothing.
 	if len(endpointSubsetList) == 0 {
 		loggerTrace.Info("found empty subset filter in request metadata, returning empty pod list")
-		return []backendmetrics.PodMetrics{}
+		return []fwkdl.Endpoint{}
 	}
 
 	// Build a lookup map for efficient filtering.
@@ -148,7 +148,7 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 
 	// Query the Datastore with a predicate.
 	podTotalCount := 0
-	podFilteredList := d.datastore.PodList(func(pm backendmetrics.PodMetrics) bool {
+	podFilteredList := d.datastore.PodList(func(pm fwkdl.Endpoint) bool {
 		podTotalCount++
 		// If the pod's IP is in our allowed map, include it.
 		// Note: We use GetIPAddress() which should align with the subset address.
@@ -171,7 +171,7 @@ func (d *DatastorePodLocator) Locate(ctx context.Context, requestMetadata map[st
 
 // cacheEntry represents a snapshot of pod metrics at a specific point in time.
 type cacheEntry struct {
-	pods   []backendmetrics.PodMetrics
+	pods   []fwkdl.Endpoint
 	expiry time.Time
 }
 
@@ -215,7 +215,7 @@ func NewCachedPodLocator(ctx context.Context, delegate contracts.PodLocator, ttl
 
 // Locate returns the list of candidate pods for the given request metadata, using a cached result if available and
 // fresh.
-func (c *CachedPodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []backendmetrics.PodMetrics {
+func (c *CachedPodLocator) Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint {
 	key := c.generateCacheKey(requestMetadata)
 
 	// Fast Path: Read Lock

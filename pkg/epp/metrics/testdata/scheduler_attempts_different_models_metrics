@@ -1,0 +1,4 @@
+# HELP inference_extension_scheduler_attempts_total [ALPHA] Total number of scheduling attempts.
+# TYPE inference_extension_scheduler_attempts_total counter
+inference_extension_scheduler_attempts_total{namespace="ns-1",pod_name="pod-1",port="8080",status="success",target_model_name="modelA"} 2
+inference_extension_scheduler_attempts_total{namespace="ns-2",pod_name="pod-2",port="9090",status="success",target_model_name="modelB"} 1

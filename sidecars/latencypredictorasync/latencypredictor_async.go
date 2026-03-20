@@ -43,6 +43,9 @@ type Predictor struct {
 	bufferMu sync.Mutex
 	pending  []TrainingEntry
 
+	coalesceCh  chan *batchSubmission
+	dispatchSem chan struct{} // semaphore limiting concurrent HTTP dispatches
+
 	wg   sync.WaitGroup
 	done chan struct{}
 }
@@ -51,15 +54,24 @@ func New(config *Config, logger logr.Logger) *Predictor {
 	if config == nil {
 		config = ConfigFromEnv()
 	}
-	p := &Predictor{
-		config:     config,
-		httpClient: &http.Client{Timeout: config.HTTPTimeout},
-		logger:     logger.WithName("latency-predictor-client"),
-		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
-		done:       make(chan struct{}),
+	maxDispatches := config.MaxConcurrentDispatches
+	sem := make(chan struct{}, maxDispatches)
+	for i := 0; i < maxDispatches; i++ {
+		sem <- struct{}{}
 	}
-	p.wg.Add(1)
+
+	p := &Predictor{
+		config:      config,
+		httpClient:  &http.Client{Timeout: config.HTTPTimeout},
+		logger:      logger.WithName("latency-predictor-client"),
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
+		done:        make(chan struct{}),
+		coalesceCh:  make(chan *batchSubmission, 1024),
+		dispatchSem: sem,
+	}
+	p.wg.Add(2)
 	go p.backgroundLoop()
+	go p.coalesceDispatcher()
 	return p
 }
 
@@ -205,6 +217,23 @@ func (p *Predictor) GetCurrentQuantile() float64 {
 	}
 
 	return 0.9 // Default quantile
+}
+
+// GetCurrentObjectiveType returns the current objective type from server status or defaults to "quantile".
+// Returns ObjectiveQuantile ("quantile") for backward compatibility with servers that don't report objective_type.
+func (p *Predictor) GetCurrentObjectiveType() string {
+	p.metricsMu.RLock()
+	defer p.metricsMu.RUnlock()
+
+	if p.serverStatus != nil && p.serverStatus.ObjectiveType != "" {
+		return p.serverStatus.ObjectiveType
+	}
+
+	if p.modelInfo != nil && p.modelInfo.ObjectiveType != "" {
+		return p.modelInfo.ObjectiveType
+	}
+
+	return ObjectiveQuantile
 }
 
 // IsReady returns true if a prediction method is ready based on the current model type.

@@ -21,6 +21,9 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 8001
 
+# Number of worker processes — configurable via env var
+ENV UVICORN_WORKERS=8
+
 # Command to run the application using uvicorn
 # We use 0.0.0.0 to bind to all network interfaces inside the container
-CMD ["uvicorn", "prediction_server:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["sh", "-c", "uvicorn prediction_server:app --host 0.0.0.0 --port 8001 --workers $UVICORN_WORKERS"]

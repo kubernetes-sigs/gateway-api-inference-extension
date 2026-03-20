@@ -45,14 +45,14 @@ Consider a simple inference pool like this:
 apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
-  name: vllm-llama3-8b-instruct
+  name: vllm-qwen3-32b
 spec:
   targetPorts:
     - number: 8000
   selector:
-    app: vllm-llama3-8b-instruct
+    app: vllm-qwen3-32b
   extensionRef:
-    name: vllm-llama3-8b-instruct-epp
+    name: vllm-qwen3-32b-epp
 ```
 There are mainly two options for how to treat the Inference Pool in your controller.
 
@@ -64,14 +64,14 @@ If your Gateway controller already handles Service as a backend, you can choose 
 apiVersion: v1
 kind: Service
 metadata: 
-  name: vllm-llama3-8b-instruct-shadow-service
+  name: vllm-qwen3-32b-shadow-service
 spec:
   ports:
   - port: 54321
     protocol: TCP
     targetPort: 8000
   selector:
-    app:  vllm-llama3-8b-instruct
+    app:  vllm-qwen3-32b
   type: ClusterIP
   clusterIP: None
 ```
@@ -82,7 +82,7 @@ This approach likely allows you to leverage existing service discovery, healthch
 
 **Option 2: Tracking InferencePool Endpoints Separately**
 
-You can also choose to directly select and monitor the endpoints belonging to the InferencePool. For the simple inference pool example we have above, the controller would use the label `app: vllm-llama3-8b-instruct` to discover the pods matching the criteria, and get their endpoints (i.e. IP and port number). It would then need to monitor these pods for health and availability. 
+You can also choose to directly select and monitor the endpoints belonging to the InferencePool. For the simple inference pool example we have above, the controller would use the label `app: vllm-qwen3-32b` to discover the pods matching the criteria, and get their endpoints (i.e. IP and port number). It would then need to monitor these pods for health and availability. 
 
 With this approach, you can tailor the endpoint tracking and routing logic specifically to the characteristics and requirements of your InferencePool.
 
@@ -142,7 +142,7 @@ Supporting this broad range of extension capabilities (including for inference, 
 Several implementations can be used as references:
 
 - A fully featured [reference implementation](https://github.com/envoyproxy/envoy/tree/main/source/extensions/filters/http/ext_proc) (C++) can be found in the Envoy GitHub repository.
-- A second implementation (Rust, non-Envoy) is available in [agentgateway](https://github.com/agentgateway/agentgateway/blob/v0.7.2/crates/agentgateway/src/http/ext_proc.rs).
+- A second implementation (Rust, non-Envoy) is available in [agentgateway](https://github.com/agentgateway/agentgateway/blob/v1.0.0/crates/agentgateway/src/http/ext_proc.rs).
 
 #### Portable Implementation
 

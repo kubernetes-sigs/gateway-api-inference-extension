@@ -52,6 +52,8 @@ func newIndexer(ctx context.Context, defaultLRUSize int) *indexer {
 // Add adds a list of prefix hashes to the cache, tied to the server.
 func (i *indexer) Add(hashes []BlockHash, pod Server) {
 	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	// Check if the LRU pod exist
 	lruForPod, exists := i.podToLRU[pod.ServerID]
 	if !exists {
@@ -64,15 +66,12 @@ func (i *indexer) Add(hashes []BlockHash, pod Server) {
 		lruForPod = newLRU
 	}
 
-	i.mu.Unlock()
-
 	// Add to LRU (may evict)
 	for _, hash := range hashes {
 		lruForPod.Add(hash, struct{}{})
 	}
 
-	// Update hashToPods once under lock
-	i.mu.Lock()
+	// Update hashToPods
 	for _, hash := range hashes {
 		podIDs := i.hashToPods[hash]
 		if podIDs == nil {
@@ -81,8 +80,6 @@ func (i *indexer) Add(hashes []BlockHash, pod Server) {
 		podIDs[pod.ServerID] = struct{}{}
 		i.hashToPods[hash] = podIDs
 	}
-
-	i.mu.Unlock()
 }
 
 // Get returns a set of servers that have the given prefix hash cached.
@@ -103,8 +100,6 @@ func (i *indexer) Get(hash BlockHash) podSet {
 // makeEvictionFn returns a per-pod LRU eviction callback that removes the pod from hashToPods on eviction.
 func (i *indexer) makeEvictionFn(pod ServerID) func(BlockHash, struct{}) {
 	return func(hash BlockHash, _ struct{}) {
-		i.mu.Lock()
-		defer i.mu.Unlock()
 		// Remove the pod from the hash→pods map
 		if podSet, ok := i.hashToPods[hash]; ok {
 			delete(podSet, pod)
@@ -156,10 +151,10 @@ func (i *indexer) reportLRUSize(ctx context.Context, interval time.Duration) {
 
 // RemovePod removes a pod and its associated entries from the indexer.
 func (i *indexer) RemovePod(pod ServerID) {
-	i.mu.RLock()
-	lruCache, exists := i.podToLRU[pod]
-	i.mu.RUnlock()
+	i.mu.Lock()
+	defer i.mu.Unlock()
 
+	lruCache, exists := i.podToLRU[pod]
 	if !exists {
 		return
 	}
@@ -169,9 +164,7 @@ func (i *indexer) RemovePod(pod ServerID) {
 		lruCache.Remove(hash)
 	}
 
-	i.mu.Lock()
 	delete(i.podToLRU, pod)
-	i.mu.Unlock()
 }
 
 // Pods returns the list of all pods currently tracked in the indexer.

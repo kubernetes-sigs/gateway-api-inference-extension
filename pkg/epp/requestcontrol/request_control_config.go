@@ -27,9 +27,8 @@ func NewConfig() *Config {
 		admissionPlugins:         []fwk.AdmissionPlugin{},
 		prepareDataPlugins:       []fwk.PrepareDataPlugin{},
 		preRequestPlugins:        []fwk.PreRequest{},
-		responseReceivedPlugins:  []fwk.ResponseReceived{},
-		responseStreamingPlugins: []fwk.ResponseStreaming{},
-		responseCompletePlugins:  []fwk.ResponseComplete{},
+		responseReceivedPlugins:  []fwk.ResponseHeader{},
+		responseStreamingPlugins: []fwk.ResponseBody{},
 	}
 }
 
@@ -38,9 +37,8 @@ type Config struct {
 	admissionPlugins         []fwk.AdmissionPlugin
 	prepareDataPlugins       []fwk.PrepareDataPlugin
 	preRequestPlugins        []fwk.PreRequest
-	responseReceivedPlugins  []fwk.ResponseReceived
-	responseStreamingPlugins []fwk.ResponseStreaming
-	responseCompletePlugins  []fwk.ResponseComplete
+	responseReceivedPlugins  []fwk.ResponseHeader
+	responseStreamingPlugins []fwk.ResponseBody
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -52,22 +50,15 @@ func (c *Config) WithPreRequestPlugins(plugins ...fwk.PreRequest) *Config {
 
 // WithResponseReceivedPlugins sets the given plugins as the ResponseReceived plugins.
 // If the Config has ResponseReceived plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseReceivedPlugins(plugins ...fwk.ResponseReceived) *Config {
+func (c *Config) WithResponseReceivedPlugins(plugins ...fwk.ResponseHeader) *Config {
 	c.responseReceivedPlugins = plugins
 	return c
 }
 
 // WithResponseStreamingPlugins sets the given plugins as the ResponseStreaming plugins.
 // If the Config has ResponseStreaming plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseStreamingPlugins(plugins ...fwk.ResponseStreaming) *Config {
+func (c *Config) WithResponseStreamingPlugins(plugins ...fwk.ResponseBody) *Config {
 	c.responseStreamingPlugins = plugins
-	return c
-}
-
-// WithResponseCompletePlugins sets the given plugins as the ResponseComplete plugins.
-// If the Config has ResponseComplete plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseCompletePlugins(plugins ...fwk.ResponseComplete) *Config {
-	c.responseCompletePlugins = plugins
 	return c
 }
 
@@ -91,14 +82,11 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 		if preRequestPlugin, ok := plugin.(fwk.PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
 		}
-		if responseReceivedPlugin, ok := plugin.(fwk.ResponseReceived); ok {
+		if responseReceivedPlugin, ok := plugin.(fwk.ResponseHeader); ok {
 			c.responseReceivedPlugins = append(c.responseReceivedPlugins, responseReceivedPlugin)
 		}
-		if responseStreamingPlugin, ok := plugin.(fwk.ResponseStreaming); ok {
+		if responseStreamingPlugin, ok := plugin.(fwk.ResponseBody); ok {
 			c.responseStreamingPlugins = append(c.responseStreamingPlugins, responseStreamingPlugin)
-		}
-		if responseCompletePlugin, ok := plugin.(fwk.ResponseComplete); ok {
-			c.responseCompletePlugins = append(c.responseCompletePlugins, responseCompletePlugin)
 		}
 		if prepareDataPlugin, ok := plugin.(fwk.PrepareDataPlugin); ok {
 			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)
@@ -109,65 +97,8 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 	}
 }
 
-// ProducerConsumerPlugins iterates through all registered plugins and returns two slices:
-// one containing the names of plugins that implement the ProducerPlugin interface,
-// and another for plugins that implement the ConsumerPlugin interface.
-func (c *Config) ProducerConsumerPlugins() (map[string]plugin.ProducerPlugin, map[string]plugin.ConsumerPlugin) {
-	producers := make(map[string]plugin.ProducerPlugin)
-	consumers := make(map[string]plugin.ConsumerPlugin)
-	// Collect all unique plugins from the config.
-	allPlugins := make(map[string]plugin.Plugin)
-	for _, p := range c.admissionPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.prepareDataPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.preRequestPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.responseReceivedPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.responseStreamingPlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-	for _, p := range c.responseCompletePlugins {
-		allPlugins[p.TypedName().String()] = p
-	}
-
-	for name, p := range allPlugins {
-		if producer, ok := p.(plugin.ProducerPlugin); ok {
-			producers[name] = producer
-		}
-		if consumer, ok := p.(plugin.ConsumerPlugin); ok {
-			consumers[name] = consumer
-		}
-	}
-	return producers, consumers
-}
-
-// ValidateDataDependencies creates a data dependency graph and sorts the plugins in topological order.
-// If a cycle is detected, it returns an error.
-func (c *Config) ValidateAndOrderDataDependencies() error {
-	producers, consumers := c.ProducerConsumerPlugins()
-	dag, err := buildDAG(producers, consumers)
-	if err != nil {
-		return err
-	}
-	// Topologically sort the DAG to determine the order of plugin execution.
-	plugins, err := topologicalSort(dag)
-	if err != nil {
-		return err
-	}
-	// Reorder the prepareDataPlugins in the Config based on the sorted order.
-	c.orderPrepareDataPlugins(plugins)
-
-	return nil
-}
-
-// orderPrepareDataPlugins reorders the prepareDataPlugins in the Config based on the given sorted plugin names.
-func (c *Config) orderPrepareDataPlugins(sortedPluginNames []string) {
+// OrderPrepareDataPlugins reorders the prepareDataPlugins in the Config based on the given sorted plugin names.
+func (c *Config) OrderPrepareDataPlugins(sortedPluginNames []string) {
 	sortedPlugins := make([]fwk.PrepareDataPlugin, 0, len(sortedPluginNames))
 	nameToPlugin := make(map[string]fwk.PrepareDataPlugin)
 	for _, plugin := range c.prepareDataPlugins {

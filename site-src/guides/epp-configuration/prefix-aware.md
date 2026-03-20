@@ -63,6 +63,6 @@ for more details.
         ```
         max_kv_tokens_per_server = (80GB - 16GB) / 128KB = 500,000
         # assume avg_chars_per_token = 4, prefix_indexer_hash_block_size = 64 (default)
-        # each entry is about 358KB, so the memory footrpint is abut 11 MB per server
+        # each entry is about 358KB, so the memory footprint is about 11 MB per server
         lru_indexer_capacity_per_server = 500,000*4/64 = 31250
         ```

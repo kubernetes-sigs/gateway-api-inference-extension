@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
-	gwhttp "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/http"
+	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 
@@ -67,13 +67,12 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		require.Len(t, pods, resources.ModelServerPodReplicas, "Expected to find %d backend pod, but found %d.", resources.ModelServerPodReplicas, len(pods))
 
 		targetPodIP := pods[0].Status.PodIP
-		rt := &RoundTripper
 		t.Run("Phase 1: Verify baseline connectivity with EPP available", func(t *testing.T) {
 			t.Log("Sending request to ensure the Gateway and EPP are working correctly...")
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{
@@ -104,8 +103,8 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 			t.Log("Sending request again, expecting success to verify fail-open...")
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 				t,
-				rt,
-				rt.TimeoutConfig,
+				s.RoundTripper,
+				s.TimeoutConfig,
 				gwAddr,
 				gwhttp.ExpectedResponse{
 					Request: gwhttp.Request{

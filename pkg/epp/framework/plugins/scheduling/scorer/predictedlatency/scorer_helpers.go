@@ -24,9 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
 )
 
 func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedulingtypes.LLMRequest, predictedLatencyCtx *predictedLatencyCtx) {
@@ -36,12 +36,12 @@ func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedul
 	// Get Request SLOs from request header
 	predictedLatencyCtx.ttftSLO, err = parseFloatHeader(*request, ttftSLOHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "PredictedLatency: Error parsing TTFT SLO from header")
+		logger.V(logutil.DEBUG).Error(errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "PredictedLatency: Error parsing TTFT SLO from header")
 	}
 
 	predictedLatencyCtx.avgTPOTSLO, err = parseFloatHeader(*request, tpotSLOHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errutil.Error{Code: errutil.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "PredictedLatency: Error parsing TPOT SLO from header")
+		logger.V(logutil.DEBUG).Error(errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "PredictedLatency: Error parsing TPOT SLO from header")
 	}
 }
 
@@ -99,6 +99,19 @@ func (s *PredictedLatency) selectEndpointBasedOnStrategy(
 	return selectedEndpoint
 }
 
+func (s *PredictedLatency) getRunningRequestList(endpointName types.NamespacedName) *requestPriorityQueue {
+	if value, ok := s.runningRequestLists.Load(endpointName); ok {
+		return value.(*requestPriorityQueue)
+	}
+	return nil
+}
+
+func (s *PredictedLatency) removeRequestFromEndpoint(endpointName types.NamespacedName, requestID string) {
+	if queue := s.getRunningRequestList(endpointName); queue != nil {
+		queue.Remove(requestID)
+	}
+}
+
 func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predictedLatencyCtx) {
 	if ctx == nil || ctx.targetMetadata == nil {
 		return
@@ -107,7 +120,5 @@ func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predict
 		Name:      ctx.targetMetadata.NamespacedName.Name,
 		Namespace: ctx.targetMetadata.NamespacedName.Namespace,
 	}
-	if queue, ok := s.runningRequestLists[endpointName]; ok {
-		queue.Remove(requestID)
-	}
+	s.removeRequestFromEndpoint(endpointName, requestID)
 }

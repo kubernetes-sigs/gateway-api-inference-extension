@@ -18,12 +18,9 @@ package notifications
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"sync"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -37,9 +34,8 @@ var (
 // K8sNotificationSource watches a single GVK and dispatches events to
 // registered NotificationExtractors.
 type K8sNotificationSource struct {
-	typedName  fwkplugin.TypedName
-	gvk        schema.GroupVersionKind
-	extractors sync.Map // key: name (string), value: fwkdl.NotificationExtractor
+	typedName fwkplugin.TypedName
+	gvk       schema.GroupVersionKind
 }
 
 // NewK8sNotificationSource returns a new notification source for the given GVK.
@@ -61,56 +57,19 @@ func (s *K8sNotificationSource) GVK() schema.GroupVersionKind {
 	return s.gvk
 }
 
-// Extractors returns names of registered extractors.
-func (s *K8sNotificationSource) Extractors() []string {
-	var names []string
-	s.extractors.Range(func(_, val any) bool {
-		if ext, ok := val.(fwkdl.NotificationExtractor); ok {
-			names = append(names, ext.TypedName().String())
-		}
-		return true
-	})
-	return names
+// OutputType returns the type of data this DataSource produces (NotificationEvent).
+func (s *K8sNotificationSource) OutputType() reflect.Type {
+	return fwkdl.NotificationEventType
 }
 
-// AddExtractor registers an extractor. The extractor must implement
-// NotificationExtractor; regular Extractors are rejected.
-func (s *K8sNotificationSource) AddExtractor(ext fwkdl.Extractor) error {
-	if ext == nil {
-		return errors.New("cannot add nil extractor")
-	}
-	notifyExt, ok := ext.(fwkdl.NotificationExtractor)
-	if !ok {
-		return fmt.Errorf("extractor %s does not implement NotificationExtractor", ext.TypedName())
-	}
-	if _, loaded := s.extractors.LoadOrStore(notifyExt.TypedName().Name, notifyExt); loaded {
-		return fmt.Errorf("duplicate extractor %s on notification source %s",
-			notifyExt.TypedName(), s.TypedName())
-	}
-	return nil
+// ExtractorType returns the type of Extractor this DataSource expects (NotificationExtractor).
+func (s *K8sNotificationSource) ExtractorType() reflect.Type {
+	return fwkdl.NotificationExtractorType
 }
 
-// Collect is a no-op. Notification sources are event-driven, not poll-based.
-func (s *K8sNotificationSource) Collect(_ context.Context, _ fwkdl.Endpoint) error {
-	return nil
-}
-
-// Notify dispatches a notification event to all registered extractors
-// synchronously, preserving event ordering.
-func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.NotificationEvent) error {
-	logger := log.FromContext(ctx).WithValues("gvk", s.gvk, "eventType", event.Type)
-
-	var errs []error
-	s.extractors.Range(func(_, val any) bool {
-		ext := val.(fwkdl.NotificationExtractor) // safe, was verified on AddExtractor
-		if err := ext.ExtractNotification(ctx, event); err != nil {
-			errs = append(errs, fmt.Errorf("extractor %s: %w", ext.TypedName(), err))
-		}
-		return true
-	})
-
-	if len(errs) > 0 {
-		logger.Error(errors.Join(errs...), "extractor(s) failed processing notification")
-	}
-	return nil
+// Notify processes a notification event and returns it for Runtime to dispatch.
+// Returns the event (possibly modified) for Runtime to dispatch to extractors.
+// Returns nil event to signal Runtime to skip extractor dispatch.
+func (s *K8sNotificationSource) Notify(ctx context.Context, event fwkdl.NotificationEvent) (*fwkdl.NotificationEvent, error) {
+	return &event, nil
 }

@@ -34,7 +34,7 @@ import (
 // --- Test Helpers ---
 
 func makeMetric(labels map[string]string, value float64, timestampMs int64) *dto.Metric {
-	labelPairs := []*dto.LabelPair{}
+	labelPairs := make([]*dto.LabelPair, 0, len(labels))
 	for k, v := range labels {
 		labelPairs = append(labelPairs, &dto.LabelPair{Name: proto.String(k), Value: proto.String(v)})
 	}

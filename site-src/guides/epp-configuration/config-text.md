@@ -7,7 +7,7 @@ At this time the YAML file based configuration allows for:
 1. The set of the lifecycle hooks (plugins) that are used by the IGW.
 2. The set of scheduling profiles that define how requests are scheduled to pods.
 3. The configuration of the saturation detector.
-4. The configuration of the flow control system (experimental).
+4. The configuration of the Flow Control system.
 5. The configuration of the data layer (experimental).
 6. A set of feature gates that are used to enable experimental features.
 
@@ -51,7 +51,7 @@ The `saturationDetector` section configures the saturation detector, which is us
 to be taken due to the system being overloaded or saturated. This section is described in more detail in the section
 [Saturation Detector configuration](#saturation-detector-configuration).
 
-The `flowControl` section configures the experimental Flow Control layer, which manages request concurrency and
+The `flowControl` section configures the Flow Control layer, which manages request concurrency and
 fairness. This section is described in more detail in the section
 [Flow Control configuration](#flow-control-configuration).
 
@@ -215,7 +215,7 @@ instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
 
 These plugins are referenced within the `schedulingProfiles` section.
 
-#### PrefixCacheScorer
+#### PrefixCache Scorer
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
 
@@ -228,7 +228,10 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
   - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
     per server (pod). If not specified defaults to `31250`
 
-#### LoRAAffinityScorer
+#### LoRAAffinity Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity) Link**
+
 
 Scores pods based on whether the requested LoRA adapter is already loaded in the pod's HBM, or if
 the pod is ready to load the LoRA on demand.
@@ -236,14 +239,18 @@ the pod is ready to load the LoRA on demand.
 - *Type*: lora-affinity-scorer
 - *Parameters*: none
 
-#### KvCacheScorer
+#### KvCacheUtilization Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization) Link**
 
 Scores the candidate pods based on their KV cache utilization.
 
 - *Type*: kv-cache-utilization-scorer
 - *Parameters*: none
 
-#### QueueScorer
+#### QueueDepth Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/queuedepth) Link**
 
 Scores list of candidate pods based on the pod's waiting queue size. The lower the
 waiting queue size the pod has, the higher the score it will get (since it's more
@@ -252,13 +259,26 @@ available to serve new request).
 - *Type*: queue-scorer
 - *Parameters*: none
 
+#### RunningRequest Scorer
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/runningrequest) Link**
+
+Scores candidate pods based on the number of requests currently being processed (in-flight) on
+each pod. Pods with fewer running requests receive a higher score. Scores are normalized across
+the candidate set — the pod with the fewest running requests scores `1.0`, the pod with the most
+scores `0.0`, and all others are linearly interpolated. When all candidates have the same count,
+every pod receives a neutral score of `1.0`.
+
+- *Type*: running-requests-size-scorer
+- *Parameters*: none
+
 #### MaxScorePicker
 
 Picks the pod with the maximum score from the list of candidates. This is the default picker plugin
 if not specified.
 
 - *Type*: max-score-picker
-- *Parameters*: 
+- *Parameters*:
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates, based on
     the scores of those endpoints. If not specified defaults to `1`.
 
@@ -267,7 +287,7 @@ if not specified.
 Picks a random pod from the list of candidates.
 
 - *Type*: random-picker
-- *Parameters*: 
+- *Parameters*:
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
@@ -312,13 +332,20 @@ An Ordering Policy that implements Earliest Deadline First. It prioritizes reque
 - *Type*: edf-ordering-policy
 - *Parameters*: none
 
+#### SLODeadlineOrderingPolicy
+
+An Ordering Policy that orders requests by an SLO-based deadline, computed from the time the request is received by the server. It prioritizes requests with the earliest such deadline.
+
+- *Type*: slo-deadline-ordering-policy
+- *Parameters*: none
+
 ## Scheduling Profiles
 
 The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
-requests to pods. If one is not defined, a default one names `default` will be added and will reference all of
+requests to pods. If one is not defined, a default one named `default` will be added and will reference all of
 the instantiated plugins.
 
-The number of scheduling profiles one defines, depends on the use case. For simple
+The number of scheduling profiles depends on the use case. For simple
 serving of requests, one is enough. For disaggregated prefill, two profiles are required. Each entry
 in this section has the following form:
 
@@ -372,13 +399,14 @@ a value of `0.8` will be used.
 metrics are older than this, it might be excluded from "good capacity" considerations or treated
 as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
 
-## Flow Control Configuration
+## [Flow Control Configuration](../flow-control.md)
 
 The Flow Control layer acts as a pool defense mechanism, shielding inference engines from overload to ensure stable,
 predictable performance. By shifting Head-of-Line blocking left, it buffers requests before they reach the backends,
 enabling the Scheduler to dispatch work only when capacity is available.
 
 It manages traffic through a **3-Tier Dispatch Hierarchy**:
+
 1.  **Priority (Band Selection)**: High-priority traffic is served first.
 2.  **Fairness (Flow Selection)**: Requests are distributed fairly between tenants/models within a priority level
     (e.g., Round Robin).
@@ -392,20 +420,21 @@ form:
 
 ```yaml
 flowControl:
-  maxBytes: 10737418240 # 10 GB
+  maxBytes: 10Gi # 10737418240 bytes
   defaultRequestTTL: 60s
   defaultPriorityBand:
-    maxBytes: 1073741824
+    maxBytes: 10Gi
   priorityBands:
   - priority: 100
-    maxBytes: 5368709120
+    maxBytes: 5Gi
     orderingPolicyRef: fcfs-ordering-policy
     fairnessPolicyRef: global-strict-fairness-policy
 ```
 
 The fields in the `flowControl` section are:
 
-- `maxBytes`: Defines the global capacity limit (in bytes) for all active requests across all priority levels.
+- `maxBytes`: Defines the global capacity limit for all active requests across all priority levels.
+    - Supports Kubernetes quantity format (e.g., `10Gi`, `512Mi`, `1048576Ki`) as well as plain integers (in bytes).
     - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
 - `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
     - If `0` or omitted, it defaults to the client context deadline, meaning requests may wait indefinitely unless cancelled by the client.
@@ -419,6 +448,7 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 
 - `priority`: (Required for `priorityBands` entries) The integer priority level. Higher values indicate higher priority.
 - `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
+    - Supports Kubernetes quantity format (e.g., `5Gi`, `512Mi`) as well as plain integers (in bytes).
     - If `0` or omitted, the system default (1 GB) is used.
 - `orderingPolicyRef`: The name of the Ordering Policy plugin to use (e.g., `fcfs-ordering-policy`).
     - Defaults to `fcfs-ordering-policy` if omitted.
@@ -472,6 +502,6 @@ The Feature Gates section is an array of flags, each of which enables one experi
 The available values for these elements are:
 
 - `dataLayer` which, if present, enables the experimental Datalayer APIs.
-- `flowControl` which, if present, enables the experimental FlowControl feature.
+- `flowControl` which, if present, enables the [FlowControl](../flow-control.md) feature.
 
 In all cases if the appropriate element isn't present, that experimental feature will be disabled.

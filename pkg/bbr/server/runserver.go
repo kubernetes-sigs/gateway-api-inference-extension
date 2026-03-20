@@ -25,24 +25,21 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/controller"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
-	bbr "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort        int
-	Datastore       datastore.Datastore
 	SecureServing   bool
 	Streaming       bool
-	PluginInstances []bbr.BBRPlugin
+	RequestPlugins  []framework.RequestProcessor
+	ResponsePlugins []framework.ResponseProcessor
 }
 
 func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunner {
@@ -52,19 +49,6 @@ func NewDefaultExtProcServerRunner(port int, streaming bool) *ExtProcServerRunne
 		Streaming:     streaming,
 	}
 	// Dependencies can be assigned later.
-}
-
-// SetupWithManager sets up the runner with the given manager.
-func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
-	// Create the configmap controller and register it with the manager
-	if err := (&controller.ConfigMapReconciler{
-		Datastore: r.Datastore,
-		Reader:    mgr.GetClient(),
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("failed setting up ConfigMap Reconciler - %w", err)
-	}
-
-	return nil
 }
 
 // AsRunnable returns a Runnable that can be used to start the ext-proc gRPC server.
@@ -77,13 +61,16 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			if err != nil {
 				return fmt.Errorf("failed to create self signed certificate - %w", err)
 			}
-			creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
+			creds := credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+				NextProtos:   []string{"h2"},
+			})
 			srv = grpc.NewServer(grpc.Creds(creds))
 		} else {
 			srv = grpc.NewServer()
 		}
 
-		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.Datastore, r.PluginInstances))
+		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.RequestPlugins, r.ResponsePlugins))
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)

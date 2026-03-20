@@ -18,7 +18,7 @@ spec:
         imagePullPolicy: Always
         args:
         - --model
-        - deepseek/vllm-deepseek-r1
+        - deepseek/DeepSeek-r1
         - --port
         - "8000"
         - --max-loras
@@ -50,7 +50,7 @@ metadata:
   labels:
     inference.networking.k8s.io/bbr-managed: "true"
 data:
-  baseModel: deepseek/vllm-deepseek-r1
+  baseModel: deepseek/DeepSeek-r1
   adapters: |
     - ski-resorts
     - movie-critique

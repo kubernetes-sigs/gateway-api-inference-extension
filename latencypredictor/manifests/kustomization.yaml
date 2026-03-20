@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - dual-server-deployment.yaml
+  # Uncomment to include test job
+  # - test-dual-server-deployment.yaml
+
+images:
+  # Replace the placeholder training server image with the actual built image
+  - name: placeholder-for-training-server-image
+    newName: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/latency-training-server
+    newTag: latest
+
+  # Replace the placeholder prediction server image with the actual built image
+  - name: placeholder-for-prediction-server-image
+    newName: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/latency-prediction-server
+    newTag: latest
+
+  # Replace the placeholder test image with the actual built image (when test job is enabled)
+  - name: placeholder-for-test-image
+    newName: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/latency-prediction-test
+    newTag: latest
+
+# Optional: Add common labels to all resources
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: latency-predictor
+
+# Optional: Add namespace if deploying to a specific namespace
+# namespace: latency-prediction

@@ -22,12 +22,15 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // MockFlowControlRequest provides a mock implementation of the FlowControlRequest interface.
 type MockFlowControlRequest struct {
 	FlowKeyV             flowcontrol.FlowKey
 	ByteSizeV            uint64
+	InferenceRequestV    *scheduling.LLMRequest
+	ReceivedTimestampV   time.Time
 	InitialEffectiveTTLV time.Duration
 	IDV                  string
 	MetadataV            map[string]any
@@ -81,8 +84,12 @@ func NewMockFlowControlRequest(
 	return m
 }
 
-func (m *MockFlowControlRequest) FlowKey() flowcontrol.FlowKey       { return m.FlowKeyV }
-func (m *MockFlowControlRequest) ByteSize() uint64                   { return m.ByteSizeV }
+func (m *MockFlowControlRequest) FlowKey() flowcontrol.FlowKey { return m.FlowKeyV }
+func (m *MockFlowControlRequest) ByteSize() uint64             { return m.ByteSizeV }
+func (m *MockFlowControlRequest) InferenceRequest() *scheduling.LLMRequest {
+	return m.InferenceRequestV
+}
+func (m *MockFlowControlRequest) ReceivedTimestamp() time.Time       { return m.ReceivedTimestampV }
 func (m *MockFlowControlRequest) InitialEffectiveTTL() time.Duration { return m.InitialEffectiveTTLV }
 func (m *MockFlowControlRequest) ID() string                         { return m.IDV }
 func (m *MockFlowControlRequest) GetMetadata() map[string]any        { return m.MetadataV }

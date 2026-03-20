@@ -57,8 +57,8 @@ To enable latency-based routing, you must enable the latency predictor in the ch
 3. Deploy the chart with the latency predictor enabled by setting `inferenceExtension.latencyPredictor.enabled` to `true` in your `values.yaml` file, or by using the `--set` flag on the command line:
 
 ```txt
-helm install vllm-llama3-8b-instruct . \
-  --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+helm install vllm-qwen3-32b . \
+  --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
   --set inferenceExtension.monitoring.prometheus.enabled=true \
   --set inferenceExtension.latencyPredictor.enabled=true \
   --set provider.name=gke \
@@ -79,8 +79,8 @@ If you have a standard setup via using the [Getting Started Guide](getting-start
 export GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}'):80
 
 curl -v $GW_IP/v1/completions -H 'Content-Type: application/json' -H 'x-slo-ttft-ms: 100' -H 'x-slo-tpot-ms: 100' -d '{
-"model": "meta-llama/Llama-3.1-8B-Instruct",
-"prompt": "Write as if you were a critic: San Francisco where the ",
+"model": "Qwen/Qwen3-32B",
+"prompt": "Write as if you were a critic: San Francisco",
 "max_tokens": 100,
 "temperature": 0, "stream_options": {"include_usage": "true"}, "stream" : "true"
 }'

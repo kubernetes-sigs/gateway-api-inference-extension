@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	datalayerlogger "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/logger"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
@@ -58,12 +59,9 @@ type ExtProcServerRunner struct {
 	RefreshPrometheusMetricsInterval time.Duration
 	MetricsStalenessThreshold        time.Duration
 	Director                         *requestcontrol.Director
+	Parser                           fwkrh.Parser
 	SaturationDetector               *utilizationdetector.Detector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
-
-	// This should only be used in tests. We won't need this once we do not inject metrics in the tests.
-	// TODO:(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/432) Cleanup
-	TestPodMetricsClient *backendmetrics.FakePodMetricsClient
 }
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
@@ -168,10 +166,12 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 					GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 						return reloader.Get(), nil
 					},
+					NextProtos: []string{"h2"},
 				})
 			} else {
 				creds = credentials.NewTLS(&tls.Config{
 					Certificates: []tls.Certificate{cert},
+					NextProtos:   []string{"h2"},
 				})
 			}
 			// Init the server.
@@ -180,7 +180,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcServer := handlers.NewStreamingServer(r.Datastore, r.Director)
+		extProcServer := handlers.NewStreamingServer(r.Datastore, r.Director, r.Parser)
 		extProcPb.RegisterExternalProcessorServer(srv, extProcServer)
 
 		if r.HealthChecking {

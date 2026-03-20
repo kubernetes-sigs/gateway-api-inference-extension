@@ -132,7 +132,7 @@ func newUnitHarness(
 		withClock(harnessOpts.clock),
 		withShardProcessorFactory(mockProcessorFactory.new),
 	}
-	fc, err := NewFlowController(ctx, cfg, registry, mockDetector, mockPodLocator, fcOpts...)
+	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, fcOpts...)
 	require.NoError(t, err, "failed to create FlowController for unit test harness")
 
 	h := &testHarness{
@@ -167,7 +167,7 @@ func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, regis
 		withRegistryClient(registry),
 		withClock(mockClock),
 	}
-	fc, err := NewFlowController(ctx, cfg, registry, mockDetector, mockPodLocator, opts...)
+	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, opts...)
 	require.NoError(t, err, "failed to create FlowController for integration test harness")
 
 	h := &testHarness{

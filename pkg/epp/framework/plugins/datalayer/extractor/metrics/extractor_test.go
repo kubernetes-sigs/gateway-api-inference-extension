@@ -43,7 +43,7 @@ const (
 func TestExtractorExtract(t *testing.T) {
 	ctx := context.Background()
 
-	if _, err := NewModelServerExtractor(nil, ""); err == nil {
+	if _, err := NewCoreMetricsExtractor(nil, ""); err == nil {
 		t.Error("expected to fail to create extractor with nil registry")
 	}
 
@@ -57,7 +57,7 @@ func TestExtractorExtract(t *testing.T) {
 		t.Fatalf("failed to register mapping: %v", err)
 	}
 
-	extractor, err := NewModelServerExtractor(registry, "")
+	extractor, err := NewCoreMetricsExtractor(registry, "")
 	if err != nil {
 		t.Fatalf("failed to create extractor: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestExtractorMultiEngine(t *testing.T) {
 	mSgl, _ := NewMapping("sglang:num_queue_reqs", "sglang:num_running_reqs", "", "", "")
 	_ = registry.Register("sglang", mSgl)
 
-	extractor, _ := NewModelServerExtractor(registry, "")
+	extractor, _ := NewCoreMetricsExtractor(registry, "")
 
 	// Sample metric data
 	data := sourcemetrics.PrometheusMetricMap{
@@ -276,7 +276,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	mDef, _ := NewMapping("vllm:num_requests_waiting", "", "", "", "")
 	_ = registry.Register(DefaultEngineType, mDef)
 
-	extractor, _ := NewModelServerExtractor(registry, "")
+	extractor, _ := NewCoreMetricsExtractor(registry, "")
 
 	data := sourcemetrics.PrometheusMetricMap{
 		"vllm:num_requests_waiting": &dto.MetricFamily{
@@ -306,7 +306,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	}
 }
 
-func TestModelServerExtractorFactoryDefaultEngine(t *testing.T) {
+func TestCoreMetricsExtractorFactoryDefaultEngine(t *testing.T) {
 	tests := []struct {
 		name         string
 		params       map[string]any
@@ -475,7 +475,7 @@ func TestModelServerExtractorFactoryDefaultEngine(t *testing.T) {
 				}
 			}
 
-			plugin, err := ModelServerExtractorFactory("test", params, nil)
+			plugin, err := CoreMetricsExtractorFactory("test", params, nil)
 
 			if tt.wantErr {
 				if err == nil {

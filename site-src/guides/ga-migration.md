@@ -135,10 +135,10 @@ kubectl apply -f [https://github.com/kubernetes-sigs/gateway-api-inference-exten
 
 **2. Install the v1 `InferencePool`**
 
-Use Helm to install a new `v1` `InferencePool` with a distinct release name (e.g., `vllm-llama3-8b-instruct-ga`).
+Use Helm to install a new `v1` `InferencePool` with a distinct release name (e.g., `vllm-qwen3-32b-ga`).
 
 ```bash
-helm install vllm-llama3-8b-instruct-ga \
+helm install vllm-qwen3-32b-ga \
   --set inferencePool.modelServers.matchLabels.app=<the_label_you_used_for_the_model_server_deployment> \
   --set provider.name=<YOUR_PROVIDER> \
   --version $RELEASE \
@@ -155,12 +155,12 @@ kubectl apply -f - <<EOF
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
 metadata:
-  name: food-review
+  name: small-segment-lora
 spec:
   priority: 1
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct-ga
+    name: vllm-qwen3-32b-ga
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
@@ -170,7 +170,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct-ga
+    name: vllm-qwen3-32b-ga
 ---
 EOF
 ```
@@ -199,11 +199,11 @@ spec:
   - backendRefs:
     - group: inference.networking.x-k8s.io
       kind: InferencePool
-      name: vllm-llama3-8b-instruct-alpha
+      name: vllm-qwen3-32b-alpha
       weight: 50
     - group: inference.networking.k8s.io
       kind: InferencePool
-      name: vllm-llama3-8b-instruct-ga
+      name: vllm-qwen3-32b-ga
       weight: 50
 ---
 EOF
@@ -238,7 +238,7 @@ spec:
   - backendRefs:
     - group: inference.networking.k8s.io
       kind: InferencePool
-      name: vllm-llama3-8b-instruct-ga
+      name: vllm-qwen3-32b-ga
       weight: 100
 EOF
 ```

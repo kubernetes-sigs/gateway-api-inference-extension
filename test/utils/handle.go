@@ -52,7 +52,7 @@ func (h *testHandlePlugins) AddPlugin(name string, plugin plugin.Plugin) {
 }
 
 func (h *testHandlePlugins) GetAllPlugins() []plugin.Plugin {
-	result := make([]plugin.Plugin, 0)
+	result := make([]plugin.Plugin, 0, len(h.plugins))
 	for _, plugin := range h.plugins {
 		result = append(result, plugin)
 	}

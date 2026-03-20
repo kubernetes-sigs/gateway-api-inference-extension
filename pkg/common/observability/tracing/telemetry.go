@@ -43,13 +43,13 @@ func (h *errorHandler) Handle(err error) {
 	h.logger.V(logging.DEFAULT).Error(err, "trace error occurred")
 }
 
-func InitTracing(ctx context.Context, logger logr.Logger) error {
+func InitTracing(ctx context.Context, logger logr.Logger, defaultServiceName string) error {
 	logger = logger.WithName("trace")
 	loggerWrap := &errorHandler{logger: logger}
 
 	_, ok := os.LookupEnv("OTEL_SERVICE_NAME")
 	if !ok {
-		os.Setenv("OTEL_SERVICE_NAME", "gateway-api-inference-extension")
+		os.Setenv("OTEL_SERVICE_NAME", defaultServiceName)
 	}
 
 	_, ok = os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT")

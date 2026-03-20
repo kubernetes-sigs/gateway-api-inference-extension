@@ -1,6 +1,6 @@
 # Documentation
 
-This documentation provides instructions for setting up grafana dashboards to see metrics emitted from the inference extension and model servers.
+This documentation provides instructions for setting up grafana dashboards to see metrics emitted from the inference extension, body based router, and model servers.
 
 ## Requirements
 

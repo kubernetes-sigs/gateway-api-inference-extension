@@ -17,7 +17,7 @@ spec:
   extensionRef:
     name: {{ include "gateway-api-inference-extension.name" . }}
     portNumber: {{ .Values.inferenceExtension.extProcPort | default 9002 }}
-    failureMode: {{ .Values.inferenceExtension.failureMode | default "FailClose" }}
+    failureMode: {{ .Values.inferenceExtension.failureMode | default "FailOpen" }}
 {{ else }}
 {{ include "gateway-api-inference-extension.validations.inferencepool.common" $ }}
 apiVersion: "inference.networking.k8s.io/v1"
@@ -43,4 +43,5 @@ spec:
     name: {{ include "gateway-api-inference-extension.name" . }}
     port:
       number: {{ .Values.inferenceExtension.extProcPort | default 9002 }}
+    failureMode: {{ .Values.inferenceExtension.failureMode | default "FailOpen" }}
 {{- end }}

@@ -70,6 +70,7 @@ nav:
       - Use Cases:
         - Serving Multiple Inference Pools (Latest/Main): guides/serving-multiple-inference-pools-latest.md
         - Deploy As a Standalone Request Scheduler: guides/standalone.md
+      - Flow Control: guides/flow-control.md
       - Rollout:
         - Adapter Rollout: guides/adapter-rollout.md
         - InferencePool Rollout: guides/inferencepool-rollout.md
@@ -79,6 +80,7 @@ nav:
       - Configuration Guide:
           - Configuring the EndPoint Picker via configuration YAML file: guides/epp-configuration/config-text.md
           - Prefix Cache Aware Plugin: guides/epp-configuration/prefix-aware.md
+          - Resource Tuning: guides/epp-configuration/resource-tuning.md
           - Latency-Based Routing: guides/latency-based-predictor.md
       - Migration Guide: guides/ga-migration.md
       - Troubleshooting Guide: guides/troubleshooting.md

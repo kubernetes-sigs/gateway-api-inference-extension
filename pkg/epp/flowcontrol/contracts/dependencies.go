@@ -19,7 +19,7 @@ package contracts
 import (
 	"context"
 
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
 // PodLocator defines the contract for a component that resolves the set of candidate pods for a request based on its
@@ -29,7 +29,7 @@ import (
 // enabling support for "Scale-from-Zero" scenarios where pods may not exist when the request is first enqueued.
 type PodLocator interface {
 	// Locate returns a list of pod metrics that match the criteria defined in the request metadata.
-	Locate(ctx context.Context, requestMetadata map[string]any) []metrics.PodMetrics
+	Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint
 }
 
 // SaturationDetector defines the contract for a component that provides real-time load signals to the FlowController.
@@ -41,5 +41,5 @@ type SaturationDetector interface {
 	// FlowController consumes this signal to make dispatch decisions:
 	// - If Saturation() >= 1.0: Stop dispatching (enforce HoL blocking).
 	// - If Saturation() < 1.0: Continue dispatching.
-	Saturation(ctx context.Context, candidatePods []metrics.PodMetrics) float64
+	Saturation(ctx context.Context, candidatePods []fwkdl.Endpoint) float64
 }

@@ -26,29 +26,28 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	errutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/error"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	schedulingframework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
-	RequestTotalMetric                 = InferenceObjectiveComponent + "_request_total"
-	RequestErrorTotalMetric            = InferenceObjectiveComponent + "_request_error_total"
-	RequestLatenciesMetric             = InferenceObjectiveComponent + "_request_duration_seconds"
-	RequestSizesMetric                 = InferenceObjectiveComponent + "_request_sizes"
-	ResponseSizesMetric                = InferenceObjectiveComponent + "_response_sizes"
-	InputTokensMetric                  = InferenceObjectiveComponent + "_input_tokens"
-	OutputTokensMetric                 = InferenceObjectiveComponent + "_output_tokens"
-	NormalizedTimePerOutputTokenMetric = InferenceObjectiveComponent + "_normalized_time_per_output_token_seconds"
-	RunningRequestsMetric              = InferenceObjectiveComponent + "_running_requests"
-	PromptCachedTokensMetric           = InferenceObjectiveComponent + "_prompt_cached_tokens"
-	KVCacheAvgUsageMetric              = InferencePoolComponent + "_average_kv_cache_utilization"
-	QueueAvgSizeMetric                 = InferencePoolComponent + "_average_queue_size"
-	PerPodQueueSizeMetrics             = InferencePoolComponent + "_per_pod_queue_size"
-	RequestTTFTSecondsMetric           = InferenceObjectiveComponent + "_request_ttft_seconds"
-	RequestTPOTSecondsMetric           = InferenceObjectiveComponent + "_request_tpot_seconds"
+	requestTotalMetric                 = inferenceObjectiveComponent + "_request_total"
+	requestErrorTotalMetric            = inferenceObjectiveComponent + "_request_error_total"
+	requestLatenciesMetric             = inferenceObjectiveComponent + "_request_duration_seconds"
+	requestSizesMetric                 = inferenceObjectiveComponent + "_request_sizes"
+	responseSizesMetric                = inferenceObjectiveComponent + "_response_sizes"
+	inputTokensMetric                  = inferenceObjectiveComponent + "_input_tokens"
+	outputTokensMetric                 = inferenceObjectiveComponent + "_output_tokens"
+	normalizedTimePerOutputTokenMetric = inferenceObjectiveComponent + "_normalized_time_per_output_token_seconds"
+	runningRequestsMetric              = inferenceObjectiveComponent + "_running_requests"
+	kvCacheAvgUsageMetric              = inferencePoolComponent + "_average_kv_cache_utilization"
+	queueAvgSizeMetric                 = inferencePoolComponent + "_average_queue_size"
 )
 
 func TestMain(m *testing.M) {
@@ -107,7 +106,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestTotal, RequestTotalMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestTotal, requestTotalMetric); err != nil {
 				t.Error(err)
 			}
 			wantRequestSizes, err := os.Open("testdata/request_sizes_metric")
@@ -119,7 +118,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestSizes, RequestSizesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestSizes, requestSizesMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -144,22 +143,22 @@ func TestRecordRequestErrorCounter(t *testing.T) {
 				{
 					modelName:       "m10",
 					targetModelName: "t10",
-					error:           errutil.Internal,
+					error:           errcommon.Internal,
 				},
 				{
 					modelName:       "m10",
 					targetModelName: "t10",
-					error:           errutil.Internal,
+					error:           errcommon.Internal,
 				},
 				{
 					modelName:       "m10",
 					targetModelName: "t11",
-					error:           errutil.ModelServerError,
+					error:           errcommon.ModelServerError,
 				},
 				{
 					modelName:       "m20",
 					targetModelName: "t20",
-					error:           errutil.InferencePoolResourceExhausted,
+					error:           errcommon.ResourceExhausted,
 				},
 			},
 		},
@@ -179,7 +178,7 @@ func TestRecordRequestErrorCounter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestErrorCounter, RequestErrorTotalMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestErrorCounter, requestErrorTotalMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -261,7 +260,7 @@ func TestRecordRequestLatencies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestLatencies, RequestLatenciesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRequestLatencies, requestLatenciesMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -362,7 +361,7 @@ func TestRecordNormalizedTimePerOutputToken(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantLatencyPerToken, NormalizedTimePerOutputTokenMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantLatencyPerToken, normalizedTimePerOutputTokenMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -436,7 +435,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantResponseSize, ResponseSizesMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantResponseSize, responseSizesMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -449,7 +448,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantInputToken, InputTokensMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantInputToken, inputTokensMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -462,7 +461,7 @@ func TestRecordResponseMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantOutputToken, OutputTokensMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantOutputToken, outputTokensMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -522,7 +521,7 @@ func TestRunningRequestsMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantRunningRequests, RunningRequestsMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRunningRequests, runningRequestsMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -558,7 +557,7 @@ func TestInferencePoolMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantKVCache, KVCacheAvgUsageMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantKVCache, kvCacheAvgUsageMetric); err != nil {
 				t.Error(err)
 			}
 
@@ -571,7 +570,7 @@ func TestInferencePoolMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := testutil.GatherAndCompare(metrics.Registry, wantQueueSize, QueueAvgSizeMetric); err != nil {
+			if err := testutil.GatherAndCompare(metrics.Registry, wantQueueSize, queueAvgSizeMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -800,54 +799,142 @@ func TestFlowControlEnqueueDurationMetric(t *testing.T) {
 
 func TestSchedulerAttemptsTotal(t *testing.T) {
 
-	scenarios := []struct {
-		name         string
-		successCount int
-		failureCount int
-	}{
-		{
-			name:         "mixed success and failure attempts",
-			successCount: 10,
-			failureCount: 5,
-		},
+	compareMetrics := func(t *testing.T, goldenFile string) {
+		t.Helper()
+		wantMetrics, err := os.Open(goldenFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err = wantMetrics.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if err := testutil.GatherAndCompare(
+			metrics.Registry,
+			wantMetrics,
+			"inference_extension_scheduler_attempts_total",
+		); err != nil {
+			t.Errorf("metric comparison failed: %v", err)
+		}
 	}
 
-	for _, scenario := range scenarios {
-		t.Run(scenario.name, func(t *testing.T) {
-			Reset()
-			for i := 0; i < scenario.successCount; i++ {
-				RecordSchedulerAttempt(nil)
-			}
-			for i := 0; i < scenario.failureCount; i++ {
-				RecordSchedulerAttempt(errors.New("simulated scheduling failure"))
-			}
+	t.Run("success with endpoint metadata", func(t *testing.T) {
+		Reset()
+		result := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", result)
+		RecordSchedulerAttempt(nil, "modelA", result)
+		compareMetrics(t, "testdata/scheduler_attempts_with_result_metrics")
+	})
 
-			wantMetrics, err := os.Open("testdata/scheduler_attempts_total_metrics")
-			defer func() {
-				if err = wantMetrics.Close(); err != nil {
-					t.Error(err)
-				}
-			}()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := testutil.GatherAndCompare(
-				metrics.Registry,
-				wantMetrics,
-				"inference_extension_scheduler_attempts_total",
-			); err != nil {
-				t.Errorf("metric comparison failed: %v", err)
-			}
-		})
-	}
+	t.Run("success with multiple endpoints uses first", func(t *testing.T) {
+		Reset()
+		result := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
+								PodName:        "pod-2",
+								Port:           "9090",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", result)
+		RecordSchedulerAttempt(nil, "modelB", result)
+		compareMetrics(t, "testdata/scheduler_attempts_multiple_endpoints_metrics")
+	})
+
+	t.Run("success with different models and endpoints", func(t *testing.T) {
+		Reset()
+		resultA := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
+								PodName:        "pod-1",
+								Port:           "8080",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		resultB := &schedulingframework.SchedulingResult{
+			PrimaryProfileName: "primary",
+			ProfileResults: map[string]*schedulingframework.ProfileRunResult{
+				"primary": {
+					TargetEndpoints: []schedulingframework.Endpoint{
+						schedulingframework.NewEndpoint(
+							&fwkdl.EndpointMetadata{
+								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
+								PodName:        "pod-2",
+								Port:           "9090",
+							},
+							nil, nil,
+						),
+					},
+				},
+			},
+		}
+		RecordSchedulerAttempt(nil, "modelA", resultA)
+		RecordSchedulerAttempt(nil, "modelA", resultA)
+		RecordSchedulerAttempt(nil, "modelB", resultB)
+		compareMetrics(t, "testdata/scheduler_attempts_different_models_metrics")
+	})
+
+	t.Run("mixed success and failure attempts", func(t *testing.T) {
+		Reset()
+		for i := 0; i < 10; i++ {
+			RecordSchedulerAttempt(nil, "modelA", nil)
+		}
+		for i := 0; i < 5; i++ {
+			RecordSchedulerAttempt(errors.New("simulated scheduling failure"), "modelA", nil)
+		}
+		compareMetrics(t, "testdata/scheduler_attempts_total_metrics")
+	})
 }
 
 func TestPrefixCacheMetrics(t *testing.T) {
 	Reset()
 	const (
-		PrefixCacheSizeMetric      = InferenceExtension + "_prefix_indexer_size"
-		PrefixCacheHitRatioMetric  = InferenceExtension + "_prefix_indexer_hit_ratio"
-		PrefixCacheHitLengthMetric = InferenceExtension + "_prefix_indexer_hit_bytes"
+		PrefixCacheSizeMetric      = inferenceExtension + "_prefix_indexer_size"
+		PrefixCacheHitRatioMetric  = inferenceExtension + "_prefix_indexer_hit_ratio"
+		PrefixCacheHitLengthMetric = inferenceExtension + "_prefix_indexer_hit_bytes"
 	)
 
 	type cacheMatchRecord struct {
@@ -1122,6 +1209,47 @@ func TestFlowControlQueueBytesMetric(t *testing.T) {
 	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
+}
+
+func TestFlowControlPoolSaturationMetric(t *testing.T) {
+	Reset()
+
+	const pool = "test-pool"
+
+	// Set saturation to 0.5
+	RecordFlowControlPoolSaturation(pool, 0.5)
+	val, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value for pool saturation")
+	require.Equal(t, 0.5, val, "Gauge value should be 0.5")
+
+	// Update saturation to 1.0 (fully saturated)
+	RecordFlowControlPoolSaturation(pool, 1.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value after update")
+	require.Equal(t, 1.0, val, "Gauge value should be 1.0 after update")
+
+	// Update saturation to 0.0 (empty)
+	RecordFlowControlPoolSaturation(pool, 0.0)
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues(pool))
+	require.NoError(t, err, "Failed to get gauge value for empty pool")
+	require.Equal(t, 0.0, val, "Gauge value should be 0.0 for empty pool")
+
+	// Multiple pools
+	RecordFlowControlPoolSaturation("pool-a", 0.3)
+	RecordFlowControlPoolSaturation("pool-b", 0.7)
+
+	valA, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("pool-a"))
+	require.NoError(t, err, "Failed to get gauge value for pool-a")
+	require.Equal(t, 0.3, valA, "Gauge value should be 0.3 for pool-a")
+
+	valB, err := testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("pool-b"))
+	require.NoError(t, err, "Failed to get gauge value for pool-b")
+	require.Equal(t, 0.7, valB, "Gauge value should be 0.7 for pool-b")
+
+	// Non-existent pool
+	val, err = testutil.GetGaugeMetricValue(flowControlPoolSaturation.WithLabelValues("non-existent"))
+	require.NoError(t, err, "Failed to get gauge value for non-existent pool")
+	require.Equal(t, 0.0, val, "Gauge value for non-existent pool should be 0")
 }
 
 func TestInferenceModelRewriteDecisionsTotalMetric(t *testing.T) {

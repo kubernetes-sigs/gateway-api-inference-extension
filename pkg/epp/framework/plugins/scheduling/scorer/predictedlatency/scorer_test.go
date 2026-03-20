@@ -28,9 +28,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 
+	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -120,8 +120,27 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 }
 
 func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+		Completions: &fwksched.CompletionsRequest{
+			Prompt: "test prompt",
+		},
+	})
+}
+
+func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+		ChatCompletions: &fwksched.ChatCompletionsRequest{
+			Messages: []fwksched.Message{
+				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
+				{Role: "user", Content: fwksched.Content{Raw: "Tell me a joke."}},
+			},
+		},
+	})
+}
+
+func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.LLMRequestBody) *fwksched.LLMRequest {
 	headers := make(map[string]string)
-	headers[requtil.RequestIdHeaderKey] = reqID
+	headers[reqcommon.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
 		headers["x-ttft-slo"] = fmt.Sprintf("%f", ttftSLO)
 	}
@@ -131,11 +150,7 @@ func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMR
 
 	return &fwksched.LLMRequest{
 		Headers: headers,
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "test prompt",
-			},
-		},
+		Body:    body,
 	}
 }
 
@@ -175,7 +190,7 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 	}
 
 	// Store the context using the request ID
-	reqID := request.Headers[requtil.RequestIdHeaderKey]
+	reqID := request.Headers[reqcommon.RequestIdHeaderKey]
 	router.sloContextStore.Set(reqID, predictedLatencyCtx, ttlcache.DefaultTTL)
 }
 
@@ -277,6 +292,22 @@ func TestPredictedLatency_Score(t *testing.T) {
 			request:   createTestLLMRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{},
 			// Should return empty scores map
+			expectedScores: map[string]float64{},
+		},
+		{
+			name: "Chat completions request does not panic",
+			predictor: &mockPredictor{
+				predictions: map[string]*latencypredictor.PredictionResponse{
+					"0.5": {TTFT: 0.5, TPOT: 0.03},
+					"0.6": {TTFT: 0.6, TPOT: 0.04},
+				},
+			},
+			strategy: headroomStrategyLeast,
+			request:  createTestChatCompletionsLLMRequest("test-chat", 1.0, 0.05),
+			endpoints: []fwksched.Endpoint{
+				createTestEndpoint("pod1", 0.5, 2, 1),
+				createTestEndpoint("pod2", 0.6, 3, 2),
+			},
 			expectedScores: map[string]float64{},
 		},
 	}
@@ -398,7 +429,7 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 					selectedCount++
 				}
 			}
-			assert.Equal(t, 1, selectedCount, "Strategy %s should select exactly one pod", tt.strategy)
+			assert.Equal(t, 1, selectedCount, "strategy %s should select exactly one pod", tt.strategy)
 		})
 	}
 }
@@ -445,8 +476,9 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[podName] = newRequestPriorityQueue()
-				r.runningRequestLists[podName].Add("req1", 0.04)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				r.runningRequestLists.Store(podName, queue)
 			},
 			expectedCount: 1,
 		},
@@ -457,10 +489,11 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 					Name:      p.GetMetadata().NamespacedName.Name,
 					Namespace: p.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
-				r.runningRequestLists[endpointName].Add("req1", 0.04)
-				r.runningRequestLists[endpointName].Add("req2", 0.03)
-				r.runningRequestLists[endpointName].Add("req3", 0.05)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				queue.Add("req2", 0.03)
+				queue.Add("req3", 0.05)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedCount: 3,
 		},
@@ -500,8 +533,9 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
-				r.runningRequestLists[endpointName].Add("req1", 0.04)
+				queue := newRequestPriorityQueue()
+				queue.Add("req1", 0.04)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedSLO: 0.04,
 		},
@@ -512,11 +546,12 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 					Name:      e.GetMetadata().NamespacedName.Name,
 					Namespace: e.GetMetadata().NamespacedName.Namespace,
 				}
-				r.runningRequestLists[endpointName] = newRequestPriorityQueue()
+				queue := newRequestPriorityQueue()
 				// Add in any order - heap will maintain minimum at top
-				r.runningRequestLists[endpointName].Add("req1", 0.05)
-				r.runningRequestLists[endpointName].Add("req2", 0.03) // This is the minimum
-				r.runningRequestLists[endpointName].Add("req3", 0.04)
+				queue.Add("req1", 0.05)
+				queue.Add("req2", 0.03) // This is the minimum
+				queue.Add("req3", 0.04)
+				r.runningRequestLists.Store(endpointName, queue)
 			},
 			expectedSLO: 0.03, // Minimum TPOT (heap guarantees this is at items[0])
 		},
@@ -737,7 +772,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 
 	req := &fwksched.LLMRequest{
 		Headers: map[string]string{
-			requtil.RequestIdHeaderKey: requestID,
+			reqcommon.RequestIdHeaderKey: requestID,
 		},
 	}
 
@@ -753,7 +788,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 
 	queue := newRequestPriorityQueue()
 	queue.Add(requestID, sloCtx.avgTPOTSLO)
-	pl.runningRequestLists[endpointName] = queue
+	pl.runningRequestLists.Store(endpointName, queue)
 
 	assert.True(t, queue.Contains(requestID), "Request should be in queue initially")
 	item := pl.sloContextStore.Get(requestID)

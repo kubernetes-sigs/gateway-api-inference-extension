@@ -128,6 +128,7 @@ type flowControllerOption func(*FlowController)
 // The provided context governs the lifecycle of the controller and all its workers.
 func NewFlowController(
 	ctx context.Context,
+	poolName string,
 	config *Config,
 	registry contracts.FlowRegistry,
 	sd contracts.SaturationDetector,
@@ -156,6 +157,7 @@ func NewFlowController(
 	) shardProcessor {
 		return internal.NewShardProcessor(
 			ctx,
+			poolName,
 			shard,
 			saturationDetector,
 			podLocator,
