@@ -103,17 +103,21 @@ func (pm *podMetrics) refreshMetrics() error {
 	// The FetchMetrics can return an error for the following reasons:
 	// 1. As refresher is running in the background, it's possible that the pod is deleted but
 	// the refresh goroutine doesn't read the done channel yet. In this case, the updated
-	// metrics object will be nil. And the refresher will soon be stopped.
+	// metrics object will be nil. The endpoint will be marked as unhealthy.
 	// 2. The FetchMetrics call can partially fail. For example, due to one metric missing. In
 	// this case, the updated metrics object will have partial updates. A partial update is
 	// considered better than no updates.
 	if updated == nil {
-		pm.ds.EndpointSetHealthy(pm, false)
+		if pm.ds != nil {
+			pm.ds.EndpointSetHealthy(pm, false)
+		}
 		return nil
 	}
 
 	pm.UpdateMetrics(updated)
-	pm.ds.EndpointSetHealthy(pm, true)
+	if pm.ds != nil {
+		pm.ds.EndpointSetHealthy(pm, true)
+	}
 
 	return nil
 }

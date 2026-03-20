@@ -120,6 +120,10 @@ type datastore struct {
 	modelRewrites *modelRewriteStore
 	// key: types.NamespacedName, value: fwkdl.Endpoint
 	pods *sync.Map
+	// unhealthyEndpoints tracks endpoints that failed health checks.
+	// key: types.NamespacedName, value: bool
+	// Endpoints remain in pods map for lifecycle management; this map controls PodList filtering.
+	unhealthyEndpoints sync.Map
 	// modelServerMetricsPort metrics port from EPP command line argument
 	// used only if there is only one inference engine per pod
 	modelServerMetricsPort int32 // TODO: deprecating
@@ -143,6 +147,7 @@ func (ds *datastore) Clear() {
 		return true
 	})
 	ds.pods.Clear()
+	ds.unhealthyEndpoints.Clear()
 }
 
 // /// Pool APIs ///
@@ -265,6 +270,10 @@ func (ds *datastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoi
 	res := []fwkdl.Endpoint{}
 
 	ds.pods.Range(func(k, v any) bool {
+		// Skip unhealthy endpoints
+		if _, unhealthy := ds.unhealthyEndpoints.Load(k); unhealthy {
+			return true
+		}
 		ep := v.(fwkdl.Endpoint)
 		if predicate(ep) {
 			res = append(res, ep)
@@ -276,14 +285,14 @@ func (ds *datastore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoi
 }
 
 // EndpointSetHealthy marks an endpoint as healthy or unhealthy based on metrics scraping results.
-// When healthy is false, the endpoint is removed from PodList results.
-// When healthy is true, the endpoint is added back.
+// Unhealthy endpoints remain in the pods map for lifecycle management (PodDelete, Clear)
+// but are excluded from PodList results via the unhealthyEndpoints map.
 func (ds *datastore) EndpointSetHealthy(ep fwkdl.Endpoint, healthy bool) {
 	name := ep.GetMetadata().NamespacedName
 	if healthy {
-		ds.pods.Store(name, ep)
+		ds.unhealthyEndpoints.Delete(name)
 	} else {
-		ds.pods.Delete(name)
+		ds.unhealthyEndpoints.Store(name, true)
 	}
 }
 
@@ -351,8 +360,7 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 		if !ok {
 			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
 			if ep == nil {
-				// Collector already exists for this endpoint (e.g., unhealthy endpoint).
-				// Skip adding to pods map; the collector will call EndpointSetHealthy when it recovers.
+				// Factory returned nil because a collector already exists (race guard).
 				continue
 			}
 			ds.pods.Store(endpointMetadata.NamespacedName, ep)
@@ -385,6 +393,7 @@ func (ds *datastore) PodDelete(podName string) {
 		ep := v.(fwkdl.Endpoint)
 		if ep.GetMetadata().PodName == podName {
 			ds.pods.Delete(k)
+			ds.unhealthyEndpoints.Delete(k)
 			ds.epf.ReleaseEndpoint(ep)
 		}
 		return true
@@ -427,6 +436,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 		if !activeEndpoints.Has(endpointName) {
 			logger.V(logutil.VERBOSE).Info("Removing endpoint", "endpoint", endpointName)
 			ds.pods.Delete(k)
+			ds.unhealthyEndpoints.Delete(k)
 			ds.epf.ReleaseEndpoint(ep)
 		}
 		return true

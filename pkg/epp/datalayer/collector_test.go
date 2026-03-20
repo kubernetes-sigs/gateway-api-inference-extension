@@ -31,6 +31,23 @@ import (
 	datasourcemocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
+// --- Fake PoolInfo ---
+
+type FakePoolInfo struct {
+	healthyCalls   int64
+	unhealthyCalls int64
+}
+
+func (f *FakePoolInfo) PoolGet() (*EndpointPool, error) { return nil, nil }
+func (f *FakePoolInfo) PodList(_ func(fwkdl.Endpoint) bool) []fwkdl.Endpoint { return nil }
+func (f *FakePoolInfo) EndpointSetHealthy(_ fwkdl.Endpoint, healthy bool) {
+	if healthy {
+		atomic.AddInt64(&f.healthyCalls, 1)
+	} else {
+		atomic.AddInt64(&f.unhealthyCalls, 1)
+	}
+}
+
 // --- Test Stubs ---
 
 func defaultEndpoint() fwkdl.Endpoint {
@@ -154,4 +171,44 @@ func TestCollectorStartSourceValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCollectorReportsEndpointHealth(t *testing.T) {
+	t.Run("healthy on successful collection", func(t *testing.T) {
+		pool := &FakePoolInfo{}
+		source := &datasourcemocks.MetricsDataSource{}
+		c := NewCollector(pool)
+		ticker := mocks.NewTicker()
+
+		require.NoError(t, c.Start(context.Background(), ticker, endpoint, []fwkdl.PollingDataSource{source}, nil))
+		ticker.Tick()
+
+		require.Eventually(t, func() bool {
+			return atomic.LoadInt64(&pool.healthyCalls) >= 1
+		}, 1*time.Second, 2*time.Millisecond, "expected EndpointSetHealthy(true) to be called")
+
+		assert.Equal(t, int64(0), atomic.LoadInt64(&pool.unhealthyCalls))
+		require.NoError(t, c.Stop())
+	})
+
+	t.Run("unhealthy on failed collection", func(t *testing.T) {
+		pool := &FakePoolInfo{}
+		source := &datasourcemocks.MetricsDataSource{
+			Errors: map[types.NamespacedName]error{
+				endpoint.GetMetadata().NamespacedName: assert.AnError,
+			},
+		}
+		c := NewCollector(pool)
+		ticker := mocks.NewTicker()
+
+		require.NoError(t, c.Start(context.Background(), ticker, endpoint, []fwkdl.PollingDataSource{source}, nil))
+		ticker.Tick()
+
+		require.Eventually(t, func() bool {
+			return atomic.LoadInt64(&pool.unhealthyCalls) >= 1
+		}, 1*time.Second, 2*time.Millisecond, "expected EndpointSetHealthy(false) to be called")
+
+		assert.Equal(t, int64(0), atomic.LoadInt64(&pool.healthyCalls))
+		require.NoError(t, c.Stop())
+	})
 }
