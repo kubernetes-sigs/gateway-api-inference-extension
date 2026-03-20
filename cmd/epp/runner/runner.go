@@ -506,7 +506,6 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 
 	loader.RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
-	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
 
 	r.registerInTreePlugins()
 
@@ -557,11 +556,7 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)
 	}
-	// TODO(#1970): Remove feature gate check once prepare data plugins are stable.
-	if !r.featureGates[datalayer.PrepareDataPluginsFeatureGate] {
-		// If the feature gate is disabled, clear any prepare data plugins so they are not used.
-		r.requestControlConfig.WithPrepareDataPlugins()
-	}
+	r.requestControlConfig.WithPrepareDataPlugins()
 	// The plugins will be executed in topologically sorted order to ensure that data is produced before it is consumed.
 	r.requestControlConfig.OrderPrepareDataPlugins(dag)
 
