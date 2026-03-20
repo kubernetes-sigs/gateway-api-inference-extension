@@ -1,6 +1,6 @@
-GatewayAPIInferenceExtensionVersion: v1.4.0-rc.2
+GatewayAPIInferenceExtensionVersion: v1.4.0
 apiVersion: gateway.networking.k8s.io/v1
-date: "2026-03-13T03:44:24Z"
+date: "2026-03-20T05:14:59Z"
 gatewayAPIChannel: experimental
 gatewayAPIVersion: v1.5.0
 implementation:
@@ -9,7 +9,7 @@ implementation:
   organization: agentgateway
   project: agentgateway
   url: github.com/agentgateway/agentgateway
-  version: v1.0.0-alpha.4
+  version: v1.0.0
 kind: ConformanceReport
 mode: default
 profiles:
