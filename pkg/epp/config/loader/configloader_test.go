@@ -40,6 +40,8 @@ import (
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
@@ -456,9 +458,28 @@ func TestInstantiateAndConfigure(t *testing.T) {
 
 		// --- Feature Validation: Data Layer ---
 		{
-			name:       "Error (DataLayer) - Missing Data Config",
-			configText: errorMissingDataConfigText,
-			wantErr:    true,
+			name:       "Success (DataLayer) - Auto-populate defaults when data config missing",
+			configText: successDataLayerAutoDefaultText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.Data, "Data config should be auto-populated")
+				require.Len(t, rawCfg.Data.Sources, 1, "Should have one default source")
+				require.Equal(t, "metrics-data-source", rawCfg.Data.Sources[0].PluginRef)
+				require.Len(t, rawCfg.Data.Sources[0].Extractors, 1, "Should have one default extractor")
+				require.Equal(t, "core-metrics-extractor", rawCfg.Data.Sources[0].Extractors[0].PluginRef)
+				require.NotNil(t, cfg.DataConfig, "DataLayer config should be built")
+			},
+		},
+		{
+			name:       "Success (DataLayer) - Explicit data config preserved",
+			configText: successDataLayerExplicitConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.Data, "Data config should be present")
+				require.Len(t, rawCfg.Data.Sources, 1)
+				require.Equal(t, "testSource", rawCfg.Data.Sources[0].PluginRef,
+					"Explicit source should be preserved, not overwritten by defaults")
+			},
 		},
 		{
 			name:       "Error (DataLayer) - Bad Source Reference",
@@ -697,6 +718,8 @@ func registerTestPlugins(t *testing.T) {
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
+	fwkplugin.Register(sourcemetrics.MetricsDataSourceType, sourcemetrics.MetricsDataSourceFactory)
+	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.CoreMetricsExtractorFactory)
 }
 
 func TestValidateSaturationDetector(t *testing.T) {

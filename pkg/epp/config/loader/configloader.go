@@ -265,11 +265,7 @@ func buildParserConfig(rawParserConfig *configapi.ParserConfig, handle fwkplugin
 	}, nil
 }
 
-func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle fwkplugin.Handle) (*datalayer.Config, error) {
-	if dataLayerEnabled && (rawDataConfig == nil || rawDataConfig.Sources == nil) { // enabled but no configuration
-		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
-	}
-
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, _ bool, handle fwkplugin.Handle) (*datalayer.Config, error) {
 	cfg := datalayer.Config{
 		Sources: []datalayer.DataSourceConfig{},
 	}
