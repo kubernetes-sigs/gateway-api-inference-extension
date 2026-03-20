@@ -37,6 +37,18 @@ import (
 
 // --- Mocks ---
 
+type mockSaturationDetector struct {
+	flowcontrol.SaturationDetector
+	SaturationFunc func(ctx context.Context, candidatePods []fwkdl.Endpoint) float64
+}
+
+func (m *mockSaturationDetector) Saturation(ctx context.Context, candidatePods []fwkdl.Endpoint) float64 {
+	if m.SaturationFunc != nil {
+		return m.SaturationFunc(ctx, candidatePods)
+	}
+	return 0.0
+}
+
 type mockFlowController struct {
 	outcome fctypes.QueueOutcome
 	err     error
@@ -111,8 +123,8 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			mockDetector := &mocks.MockSaturationDetector{
-				SaturationFunc: func(context.Context, []fwkdl.Endpoint) float64 {
+			mockDetector := &mockSaturationDetector{
+				SaturationFunc: func(_ context.Context, _ []fwkdl.Endpoint) float64 {
 					if tc.isSaturated {
 						return 1.0
 					}

@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller/internal"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
@@ -69,6 +70,14 @@ func withShardProcessorFactory(factory shardProcessorFactory) flowControllerOpti
 	return func(fc *FlowController) {
 		fc.shardProcessorFactory = factory
 	}
+}
+
+type mockSaturationDetector struct {
+	flowcontrol.SaturationDetector
+}
+
+func (m *mockSaturationDetector) Saturation(_ context.Context, _ []datalayer.Endpoint) float64 {
+	return 0.0
 }
 
 // testHarness holds the `FlowController` and its dependencies under test.
@@ -115,7 +124,7 @@ func newUnitHarness(
 		opt(harnessOpts)
 	}
 
-	mockDetector := &mocks.MockSaturationDetector{}
+	mockDetector := &mockSaturationDetector{}
 	mockPodLocator := &mocks.MockPodLocator{}
 
 	mockProcessorFactory := &mockShardProcessorFactory{
@@ -154,7 +163,7 @@ func newUnitHarness(
 // validating the controller-processor interaction.
 func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, registry *mockRegistryClient) *testHarness {
 	t.Helper()
-	mockDetector := &mocks.MockSaturationDetector{}
+	mockDetector := &mockSaturationDetector{}
 	mockPodLocator := &mocks.MockPodLocator{}
 
 	// Align FakeClock with system time. See explanation in newUnitHarness.
@@ -276,7 +285,7 @@ type mockShardProcessorFactory struct {
 func (f *mockShardProcessorFactory) new(
 	_ context.Context, // The factory does not use the lifecycle context; it's passed to the processor's Run method later.
 	shard contracts.RegistryShard,
-	_ contracts.SaturationDetector,
+	_ flowcontrol.SaturationDetector,
 	_ contracts.PodLocator,
 	_ clock.WithTicker,
 	_ time.Duration,
@@ -1140,7 +1149,7 @@ func TestFlowController_WorkerManagement(t *testing.T) {
 		h.fc.shardProcessorFactory = func(
 			ctx context.Context, // The context created by getOrStartWorker for the potential new processor.
 			shard contracts.RegistryShard,
-			_ contracts.SaturationDetector,
+			_ flowcontrol.SaturationDetector,
 			_ contracts.PodLocator,
 			_ clock.WithTicker,
 			_ time.Duration,

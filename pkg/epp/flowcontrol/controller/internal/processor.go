@@ -67,7 +67,7 @@ var ErrProcessorBusy = errors.New("shard processor is busy")
 type ShardProcessor struct {
 	poolName             string
 	shard                contracts.RegistryShard
-	saturationDetector   contracts.SaturationDetector
+	saturationDetector   flowcontrol.SaturationDetector
 	podLocator           contracts.PodLocator
 	clock                clock.WithTicker
 	cleanupSweepInterval time.Duration
@@ -90,7 +90,7 @@ func NewShardProcessor(
 	ctx context.Context,
 	poolName string,
 	shard contracts.RegistryShard,
-	saturationDetector contracts.SaturationDetector,
+	saturationDetector flowcontrol.SaturationDetector,
 	podLocator contracts.PodLocator,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,

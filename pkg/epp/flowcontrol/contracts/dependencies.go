@@ -31,15 +31,3 @@ type PodLocator interface {
 	// Locate returns a list of pod metrics that match the criteria defined in the request metadata.
 	Locate(ctx context.Context, requestMetadata map[string]any) []fwkdl.Endpoint
 }
-
-// SaturationDetector defines the contract for a component that provides real-time load signals to the FlowController.
-type SaturationDetector interface {
-	// Saturation returns the saturation level of the pool
-	// - A value >= 1.0 indicates that the system is fully saturated.
-	// - A value < 1.0 indicates the ratio of used capacity to total capacity.
-	//
-	// FlowController consumes this signal to make dispatch decisions:
-	// - If Saturation() >= 1.0: Stop dispatching (enforce HoL blocking).
-	// - If Saturation() < 1.0: Continue dispatching.
-	Saturation(ctx context.Context, candidatePods []fwkdl.Endpoint) float64
-}

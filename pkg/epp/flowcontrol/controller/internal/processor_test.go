@@ -58,6 +58,18 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+type mockSaturationDetector struct {
+	flowcontrol.SaturationDetector
+	SaturationFunc func(ctx context.Context, candidatePods []fwkdl.Endpoint) float64
+}
+
+func (m *mockSaturationDetector) Saturation(ctx context.Context, candidatePods []fwkdl.Endpoint) float64 {
+	if m.SaturationFunc != nil {
+		return m.SaturationFunc(ctx, candidatePods)
+	}
+	return 0.0
+}
+
 // testHarness provides a unified, mock-based testing environment for the ShardProcessor. It centralizes all mock state
 // and provides helper methods for setting up tests and managing the processor's lifecycle.
 type testHarness struct {
@@ -74,7 +86,7 @@ type testHarness struct {
 	processor          *ShardProcessor
 	clock              *testclock.FakeClock
 	logger             logr.Logger
-	saturationDetector *mocks.MockSaturationDetector
+	saturationDetector *mockSaturationDetector
 	podLocator         *mocks.MockPodLocator
 
 	// --- Centralized Mock State ---
@@ -95,7 +107,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		MockRegistryShard:  &mocks.MockRegistryShard{},
 		clock:              testclock.NewFakeClock(time.Now()),
 		logger:             logr.Discard(),
-		saturationDetector: &mocks.MockSaturationDetector{},
+		saturationDetector: &mockSaturationDetector{},
 		podLocator:         &mocks.MockPodLocator{Pods: []fwkdl.Endpoint{&metrics.FakePodMetrics{}}},
 		startSignal:        make(chan struct{}),
 		queues:             make(map[flowcontrol.FlowKey]*mocks.MockManagedQueue),
