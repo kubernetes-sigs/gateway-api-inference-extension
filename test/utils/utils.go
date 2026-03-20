@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -83,6 +84,30 @@ func NewTestConfig(nsName string, k8sContext string) *TestConfig {
 	kubeCli, err := kubernetes.NewForConfig(cfg)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(kubeCli).NotTo(gomega.BeNil())
+
+	// Log cluster context information for debugging.
+	ginkgo.By(fmt.Sprintf("API server endpoint: %s", cfg.Host))
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	if k8sContext != "" {
+		configOverrides.CurrentContext = k8sContext
+	}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	rawConfig, err := kubeConfig.RawConfig()
+	if err == nil {
+		ctxName := rawConfig.CurrentContext
+		if k8sContext != "" {
+			ctxName = k8sContext
+		}
+		ginkgo.By(fmt.Sprintf("Kubeconfig context: %s", ctxName))
+		if ctx, ok := rawConfig.Contexts[ctxName]; ok {
+			ginkgo.By(fmt.Sprintf("Cluster: %s, AuthInfo: %s", ctx.Cluster, ctx.AuthInfo))
+		}
+	}
+	serverVersion, err := kubeCli.Discovery().ServerVersion()
+	if err == nil {
+		ginkgo.By(fmt.Sprintf("Kubernetes server version: %s", serverVersion.GitVersion))
+	}
 
 	return &TestConfig{
 		Context:           context.Background(),
@@ -398,8 +423,12 @@ func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructur
 		objNames = append(objNames, kind+"/"+name)
 
 		err := testConfig.K8sClient.Create(testConfig.Context, unstrObj, &client.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred(),
-			fmt.Sprintf("Failed to create %s %s", kind, name))
+		if apierrors.IsAlreadyExists(err) {
+			ginkgo.By(fmt.Sprintf("%s %s already exists, skipping creation", kind, name))
+		} else {
+			gomega.Expect(err).NotTo(gomega.HaveOccurred(),
+				fmt.Sprintf("Failed to create %s %s", kind, name))
+		}
 
 		clientObj := getClientObject(kind)
 		EventuallyExists(testConfig, func() error {
@@ -504,6 +533,22 @@ func ReadYaml(filePath string) []string {
 
 	// Split multiple docs, if needed
 	return strings.Split(string(yamlBytes), "\n---")
+}
+
+// ValidateCRDsEstablished verifies that each of the given CRD names is established in the cluster.
+func ValidateCRDsEstablished(testConfig *TestConfig, crdNames []string) {
+	for _, name := range crdNames {
+		crd := &apiextv1.CustomResourceDefinition{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+		}
+		EventuallyExists(testConfig, func() error {
+			return testConfig.K8sClient.Get(testConfig.Context,
+				types.NamespacedName{Name: name}, crd)
+		})
+		CRDEstablished(testConfig, crd)
+	}
 }
 
 func getClientObject(kind string) client.Object {

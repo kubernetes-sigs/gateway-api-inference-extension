@@ -85,6 +85,15 @@ var (
 	// Required for exec'ing in curl pod
 	e2eImage              string
 	leaderElectionEnabled bool
+
+	// expectedCRDs lists the CRD names that must be established after kustomize apply.
+	expectedCRDs = []string{
+		"inferencepools.inference.networking.x-k8s.io",
+		"inferencepools.inference.networking.k8s.io",
+		"inferenceobjectives.inference.networking.x-k8s.io",
+		"inferencemodelrewrites.inference.networking.x-k8s.io",
+		"inferencepoolimports.inference.networking.x-k8s.io",
+	}
 )
 
 func TestAPIs(t *testing.T) {
@@ -128,6 +137,7 @@ func setupInfra() {
 		createHfSecret(testConfig, modelServerSecretManifest)
 	}
 	testutils.CreateCrdsFromKustomize(testConfig, crdKustomizePath)
+	testutils.ValidateCRDsEstablished(testConfig, expectedCRDs)
 
 	inferExtManifestPath := inferExtManifestDefault
 	if leaderElectionEnabled {
