@@ -160,7 +160,9 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 					},
 				},
 			},
-			expected: 5,
+			// PromptText() joins messages with a trailing space separator ("Hi Hello " = 9 chars),
+			// so the estimate is higher than summing per-message lengths individually (7 chars).
+			expected: 8,
 		},
 		{
 			name: "Chat Completions with empty messages",
@@ -172,6 +174,43 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 				},
 			},
 			expected: 3,
+		},
+		{
+			name: "Responses API with string input",
+			request: &framework.LLMRequest{
+				Body: &framework.LLMRequestBody{
+					Responses: &framework.ResponsesRequest{
+						Input: "Tell me a story about a brave knight.",
+					},
+				},
+			},
+			expected: 23,
+		},
+		{
+			name: "Responses API with structured input",
+			request: &framework.LLMRequest{
+				Body: &framework.LLMRequestBody{
+					Responses: &framework.ResponsesRequest{
+						Input: []any{
+							map[string]any{"role": "user", "content": "Hello"},
+						},
+					},
+				},
+			},
+			expected: 23,
+		},
+		{
+			name: "Conversations API",
+			request: &framework.LLMRequest{
+				Body: &framework.LLMRequestBody{
+					Conversations: &framework.ConversationsRequest{
+						Items: []framework.ConversationItem{
+							{Type: "message", Role: "user", Content: "Hi there"},
+						},
+					},
+				},
+			},
+			expected: 35,
 		},
 	}
 
