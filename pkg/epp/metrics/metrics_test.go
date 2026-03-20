@@ -1135,6 +1135,114 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 	}
 }
 
+func TestClassifySLO(t *testing.T) {
+	testCases := []struct {
+		raw      string
+		expected string
+	}{
+		{"", SLOClassNone},
+		{"not-a-number", SLOClassNone},
+		{"-1", SLOClassNone},
+		{"0", SLOClassTight},
+		{"50", SLOClassTight},
+		{"199", SLOClassTight},
+		{"200", SLOClassModerate},
+		{"500", SLOClassModerate},
+		{"1000", SLOClassModerate},
+		{"1001", SLOClassRelaxed},
+		{"5000", SLOClassRelaxed},
+	}
+	for _, tc := range testCases {
+		t.Run("raw="+tc.raw, func(t *testing.T) {
+			require.Equal(t, tc.expected, ClassifySLO(tc.raw))
+		})
+	}
+}
+
+func TestFlowControlSLOQueueDurationMetric(t *testing.T) {
+	Reset()
+
+	const pool = "pool-1"
+
+	records := []struct {
+		sloClass string
+		outcome  string
+		duration time.Duration
+	}{
+		{sloClass: SLOClassTight, outcome: "Dispatched", duration: 5 * time.Millisecond},
+		{sloClass: SLOClassTight, outcome: "Dispatched", duration: 15 * time.Millisecond},
+		{sloClass: SLOClassModerate, outcome: "Dispatched", duration: 50 * time.Millisecond},
+		{sloClass: SLOClassNone, outcome: "RejectedCapacity", duration: 2 * time.Millisecond},
+		{sloClass: SLOClassRelaxed, outcome: "Dispatched", duration: 200 * time.Millisecond},
+	}
+
+	for _, rec := range records {
+		RecordFlowControlSLORequestQueueDuration(rec.sloClass, rec.outcome, pool, rec.duration)
+	}
+
+	testCases := []struct {
+		name        string
+		labels      prometheus.Labels
+		expectCount uint64
+		expectSum   float64
+	}{
+		{
+			name: "tight, dispatched",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassTight,
+				"outcome":        "Dispatched",
+				"inference_pool": pool,
+			},
+			expectCount: 2,
+			expectSum:   0.02, // 0.005 + 0.015
+		},
+		{
+			name: "moderate, dispatched",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassModerate,
+				"outcome":        "Dispatched",
+				"inference_pool": pool,
+			},
+			expectCount: 1,
+			expectSum:   0.05,
+		},
+		{
+			name: "none, rejected",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassNone,
+				"outcome":        "RejectedCapacity",
+				"inference_pool": pool,
+			},
+			expectCount: 1,
+			expectSum:   0.002,
+		},
+		{
+			name: "relaxed, dispatched",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassRelaxed,
+				"outcome":        "Dispatched",
+				"inference_pool": pool,
+			},
+			expectCount: 1,
+			expectSum:   0.2,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := []string{
+				tc.labels["slo_class"],
+				tc.labels["outcome"],
+				tc.labels["inference_pool"],
+			}
+			hist, err := getHistogramVecLabelValues(t, flowControlSLORequestQueueDuration, labels...)
+			require.NoError(t, err, "Failed to get histogram for labels %v", tc.labels)
+			require.Equal(t, tc.expectCount, hist.GetSampleCount(), "Sample count mismatch for labels %v", tc.labels)
+			require.InDelta(t, tc.expectSum, hist.GetSampleSum(), 0.00001, "Sample sum mismatch for labels %v", tc.labels)
+		})
+	}
+}
+
 func TestFlowControlQueueSizeMetric(t *testing.T) {
 	Reset()
 

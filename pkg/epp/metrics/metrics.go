@@ -18,6 +18,7 @@ package metrics
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"time"
 
@@ -392,6 +393,18 @@ var (
 		append([]string{"fairness_id", "priority", "outcome", "inference_pool"}, modelLabels...),
 	)
 
+	flowControlSLORequestQueueDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: inferenceExtension,
+			Name:      "flow_control_slo_request_queue_duration_seconds",
+			Help:      metricsutil.HelpMsgWithStability("Distribution of the total time requests spend in the EPP flow control layer, partitioned by SLO class.", compbasemetrics.ALPHA),
+			Buckets: []float64{
+				0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
+			},
+		},
+		[]string{"slo_class", "outcome", "inference_pool"},
+	)
+
 	flowControlDispatchCycleDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
@@ -495,6 +508,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(prefixCacheHitRatio)
 		metrics.Registry.MustRegister(prefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
+		metrics.Registry.MustRegister(flowControlSLORequestQueueDuration)
 		metrics.Registry.MustRegister(flowControlDispatchCycleDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
 		metrics.Registry.MustRegister(flowControlQueueBytes)
@@ -545,6 +559,7 @@ func Reset() {
 	prefixCacheHitRatio.Reset()
 	prefixCacheHitLength.Reset()
 	flowControlRequestQueueDuration.Reset()
+	flowControlSLORequestQueueDuration.Reset()
 	flowControlQueueSize.Reset()
 	flowControlQueueBytes.Reset()
 	flowControlPoolSaturation.Reset()
@@ -840,6 +855,47 @@ func RecordFlowControlRequestQueueDuration(
 		fairnessID, priority, outcome,
 		inferencePool,
 		modelName, targetModelName,
+	).Observe(duration.Seconds())
+}
+
+// SLO class constants used as label values for the flow_control_slo_request_queue_duration_seconds metric.
+// They bucket the raw millisecond SLO header values into a bounded set to keep Prometheus cardinality safe.
+const (
+	SLOClassNone     = "none"
+	SLOClassTight    = "tight"    // < 200 ms
+	SLOClassModerate = "moderate" // 200–1000 ms
+	SLOClassRelaxed  = "relaxed"  // > 1000 ms
+)
+
+// ClassifySLO maps a raw SLO header value (in milliseconds) to a bounded SLO class label.
+// Returns SLOClassNone when the header is absent or unparseable.
+func ClassifySLO(rawHeaderValue string) string {
+	if rawHeaderValue == "" {
+		return SLOClassNone
+	}
+	ms, err := strconv.ParseInt(rawHeaderValue, 10, 64)
+	if err != nil || ms < 0 {
+		return SLOClassNone
+	}
+	switch {
+	case ms < 200:
+		return SLOClassTight
+	case ms <= 1000:
+		return SLOClassModerate
+	default:
+		return SLOClassRelaxed
+	}
+}
+
+// RecordFlowControlSLORequestQueueDuration records the queue duration for a request partitioned by its
+// SLO class (derived from the x-slo-ttft-ms header). This is a dedicated metric separate from the
+// operational flowControlRequestQueueDuration to avoid cardinality issues with raw SLO values.
+func RecordFlowControlSLORequestQueueDuration(
+	sloClass, outcome, inferencePool string,
+	duration time.Duration,
+) {
+	flowControlSLORequestQueueDuration.WithLabelValues(
+		sloClass, outcome, inferencePool,
 	).Observe(duration.Seconds())
 }
 

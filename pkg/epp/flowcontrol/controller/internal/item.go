@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
@@ -146,6 +147,9 @@ func (fi *FlowItem) FinalizeWithOutcome(outcome types.QueueOutcome, err error) {
 	})
 }
 
+// sloTTFTHeader is the request header carrying the TTFT SLO target in milliseconds.
+const sloTTFTHeader = "x-slo-ttft-ms"
+
 // finalizeInternal is the core finalization logic. It must be called within the sync.Once.Do block.
 // It captures the state, stores it atomically, and signals the Done channel.
 func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
@@ -159,14 +163,29 @@ func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
 
 	duration := time.Since(fi.enqueueTime)
 	flowKey := fi.originalRequest.FlowKey()
+	outcomeStr := outcome.String()
 	metrics.RecordFlowControlRequestQueueDuration(
-		flowKey.ID, strconv.Itoa(flowKey.Priority), outcome.String(),
+		flowKey.ID, strconv.Itoa(flowKey.Priority), outcomeStr,
 		fi.originalRequest.InferencePoolName(),
 		fi.OriginalRequest().ModelName(), fi.OriginalRequest().TargetModelName(),
 		duration)
 
+	sloClass := metrics.ClassifySLO(extractSLOTTFTHeader(fi.originalRequest))
+	metrics.RecordFlowControlSLORequestQueueDuration(
+		sloClass, outcomeStr, fi.originalRequest.InferencePoolName(),
+		duration)
+
 	fi.done <- finalState
 	close(fi.done)
+}
+
+// extractSLOTTFTHeader reads the x-slo-ttft-ms header value from the request's inference headers.
+func extractSLOTTFTHeader(req flowcontrol.FlowControlRequest) string {
+	infReq := req.InferenceRequest()
+	if infReq == nil || infReq.Headers == nil {
+		return ""
+	}
+	return request.GetHeader(infReq.Headers, sloTTFTHeader)
 }
 
 // inferOutcome determines the correct QueueOutcome and Error based on the cause of finalization and whether the item
