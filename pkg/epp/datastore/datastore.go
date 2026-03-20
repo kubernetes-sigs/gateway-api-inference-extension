@@ -333,6 +333,9 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
 		if !ok {
 			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
+			if ep == nil {
+				continue
+			}
 			ds.pods.Store(endpointMetadata.NamespacedName, ep)
 			result = false
 		} else {

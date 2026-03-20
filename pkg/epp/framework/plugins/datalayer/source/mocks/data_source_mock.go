@@ -19,6 +19,7 @@ package mocks
 import (
 	"context"
 	"reflect"
+	"sync"
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,6 +32,7 @@ var _ fwkdl.DataSource = (*MetricsDataSource)(nil)
 var _ fwkdl.PollingDataSource = (*MetricsDataSource)(nil)
 
 type MetricsDataSource struct {
+	mu        sync.RWMutex
 	typedName plugin.TypedName
 	CallCount int64
 	Metrics   map[types.NamespacedName]*fwkdl.Metrics
@@ -56,8 +58,17 @@ func (fds *MetricsDataSource) ExtractorType() reflect.Type {
 func (fds *MetricsDataSource) Extractors() []string                 { return []string{} }
 func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
 
+// SetMetrics replaces the Metrics map in a thread-safe manner.
+func (fds *MetricsDataSource) SetMetrics(metrics map[types.NamespacedName]*fwkdl.Metrics) {
+	fds.mu.Lock()
+	defer fds.mu.Unlock()
+	fds.Metrics = metrics
+}
+
 func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.CallCount, 1)
+	fds.mu.RLock()
+	defer fds.mu.RUnlock()
 	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
 		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
 			ep.UpdateMetrics(metrics)
