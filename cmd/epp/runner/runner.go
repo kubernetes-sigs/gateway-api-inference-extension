@@ -60,7 +60,7 @@ import (
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/preparedata"
+	dlprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/prefix"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
@@ -466,11 +466,8 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(ordering.FCFSOrderingPolicyType, ordering.FCFSOrderingPolicyFactory)
 	fwkplugin.Register(ordering.EDFOrderingPolicyType, ordering.EDFOrderingPolicyFactory)
 	fwkplugin.Register(ordering.SLODeadlineOrderingPolicyType, ordering.SLODeadlineOrderingPolicyFactory)
-	// RequestDataProducer plugins
-	// Note: the plugin type chosen here is PrefixCachePluginType because the parameters are received as parameters of the prefix-cache-scorer plugin,
-	// and the PrefixCachePlugin depends on the data produced by ApproxPrefixCache RequestDataProducer.
-	// This implementation keeps the configuration yaml backwards compatible so that users don't need to change their config when we introduce the new ApproxPrefixCache preparedata plugin.
-	fwkplugin.Register(attrprefix.PrefixCachePluginType, preparedata.ApproxPrefixCacheFactory)
+	fwkplugin.Register(attrprefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
+	fwkplugin.Register(dlprefix.ApproxPrefixCachePlugin, dlprefix.ApproxPrefixCacheFactory)
 	// Latency predictor plugins
 	fwkplugin.Register(predictedlatency.PredictedLatencyPluginType, predictedlatency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
@@ -556,7 +553,6 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)
 	}
-	r.requestControlConfig.WithPrepareDataPlugins()
 	// The plugins will be executed in topologically sorted order to ensure that data is produced before it is consumed.
 	r.requestControlConfig.OrderPrepareDataPlugins(dag)
 

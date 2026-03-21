@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/preparedata"
+	dlprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/prefix"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -439,7 +439,7 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 		return 0.0
 	}
 
-	prefixCacheState, ok := stateData.(*preparedata.SchedulingContextState)
+	prefixCacheState, ok := stateData.(*dlprefix.SchedulingContextState)
 	if !ok {
 		// This should not happen if the plugin is configured correctly.
 		log.FromContext(ctx).Error(fmt.Errorf("unexpected state type: %T", stateData), "failed to read prefix cache state")
@@ -453,7 +453,7 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 		return 0.0
 	}
 
-	matchLen := prefixCacheState.PrefixCacheServers[preparedata.ServerID(endpoint.GetMetadata().NamespacedName)]
+	matchLen := prefixCacheState.PrefixCacheServers[dlprefix.ServerID(endpoint.GetMetadata().NamespacedName)]
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
 }

@@ -29,12 +29,12 @@ import (
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/preparedata"
+	dlprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	schedprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
 )
 
@@ -42,7 +42,7 @@ import (
 func TestSchedule(t *testing.T) {
 	kvCacheUtilizationScorer := kvcacheutilization.NewKVCacheUtilizationScorer()
 	queueingScorer := queuedepth.NewQueueScorer()
-	prefixCacheScorer, err := prefix.New(context.Background(), preparedata.DefaultConfig, nil)
+	prefixCacheScorer, err := schedprefix.New(context.Background(), dlprefix.DefaultConfig, nil)
 	assert.NoError(t, err)
 	loraAffinityScorer := loraaffinity.NewLoraAffinityScorer()
 

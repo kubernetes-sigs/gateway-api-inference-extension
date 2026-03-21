@@ -26,11 +26,11 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/preparedata"
+	dlprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/prefix"
 )
 
 func TestPrefixPluginScore(t *testing.T) {
-	p, _ := New(context.Background(), preparedata.Config{AutoTune: false, BlockSizeTokens: 1}, nil)
+	p, _ := New(context.Background(), dlprefix.Config{AutoTune: false, BlockSizeTokens: 1}, nil)
 	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, fwkdl.NewMetrics(), nil)
 	endpoint1.Put(attrprefix.PrefixCacheMatchInfoKey, attrprefix.NewPrefixCacheMatchInfo(5, 10, 1))
 
@@ -45,7 +45,7 @@ func TestPrefixPluginScore(t *testing.T) {
 }
 
 func TestPrefixPluginValidation(t *testing.T) {
-	validConfigs := []preparedata.Config{{
+	validConfigs := []dlprefix.Config{{
 		AutoTune:        false,
 		BlockSizeTokens: 1,
 	}, {
@@ -54,7 +54,7 @@ func TestPrefixPluginValidation(t *testing.T) {
 		BlockSizeTokens: 1,
 	}}
 	// This should be invalid based on current New implementation which only checks BlockSize > 0 && BlockSizeTokens <= 0
-	invalidConfigs := []preparedata.Config{{
+	invalidConfigs := []dlprefix.Config{{
 		AutoTune:  false,
 		BlockSize: 1,
 	}}

@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package preparedata
+package prefix
 
 import (
-	"context"
 	"time"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -51,17 +50,6 @@ type ServerID k8stypes.NamespacedName
 func (s ServerID) String() string {
 	return k8stypes.NamespacedName(s).String()
 }
-
-// PrefixScorer is an interface for prefix scorer plugins that share the same Indexer.
-type PrefixScorer interface {
-	plugin.Plugin
-	Indexer() Indexer
-	SetIndexer(Indexer)
-}
-
-// ScorerFactory is a variable that holds the factory function for the prefix scorer plugin.
-// This is used to avoid circular dependency between preparedata and prefix packages.
-var ScorerFactory func(ctx context.Context, config Config, indexer Indexer) (PrefixScorer, error)
 
 // SchedulingContextState is the state of this plugin to be used during a scheduling cycle.
 type SchedulingContextState struct {
