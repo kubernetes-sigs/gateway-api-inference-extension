@@ -33,14 +33,10 @@ var _ contracts.ActiveFlowConnection = &connection{}
 
 // Shards returns a stable snapshot of accessors for all internal state shards.
 func (c *connection) ActiveShards() []contracts.RegistryShard {
-	c.registry.mu.RLock()
-	defer c.registry.mu.RUnlock()
-
 	// Return a copy to ensure the caller cannot modify the registry's internal slice.
-	shardsCopy := make([]contracts.RegistryShard, len(c.registry.activeShards))
-	for i, s := range c.registry.activeShards {
-		shardsCopy[i] = s
-	}
+	shardsCopy := make([]contracts.RegistryShard, 1)
+	shardsCopy[0] = c.registry.shard
+
 	return shardsCopy
 }
 
