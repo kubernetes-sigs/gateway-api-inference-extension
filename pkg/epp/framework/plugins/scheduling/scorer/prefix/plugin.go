@@ -143,8 +143,13 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 
 // New initializes a new prefix Plugin.
 func New(ctx context.Context, config dlprefix.Config, indexer dlprefix.Indexer, pluginState *plugin.PluginState) (*Plugin, error) {
+	//nolint:staticcheck // BlockSize is deprecated, but we check it here to provide a migration path for users.
 	if config.BlockSize > 0 && config.BlockSizeTokens <= 0 {
-		return nil, fmt.Errorf("BlockSize is deprecated, use BlockSizeTokens instead")
+		return nil, fmt.Errorf("invalid configuration: BlockSize (%d) is deprecated; please use BlockSizeTokens instead to define the cache block size in tokens", config.BlockSize)
+	}
+
+	if !config.AutoTune && config.BlockSizeTokens <= 0 {
+		return nil, fmt.Errorf("invalid configuration: BlockSizeTokens must be > 0 when AutoTune is disabled (current value: %d)", config.BlockSizeTokens)
 	}
 
 	if indexer == nil {

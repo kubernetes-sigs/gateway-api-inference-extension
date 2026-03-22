@@ -60,6 +60,15 @@ func (p *PrepareData) Produces() map[string]any {
 func NewPrepareData(ctx context.Context, config Config, indexer Indexer, pluginState *plugin.PluginState) (*PrepareData, error) {
 	log.FromContext(ctx).V(logutil.DEFAULT).Info("Prefix PrepareData initialized", "config", config)
 
+	//nolint:staticcheck // BlockSize is deprecated, but we check it here to provide a migration path for users.
+	if config.BlockSize > 0 && config.BlockSizeTokens <= 0 {
+		return nil, fmt.Errorf("invalid configuration: BlockSize (%d) is deprecated; please use BlockSizeTokens instead to define the cache block size in tokens", config.BlockSize)
+	}
+
+	if !config.AutoTune && config.BlockSizeTokens <= 0 {
+		return nil, fmt.Errorf("invalid configuration: BlockSizeTokens must be > 0 when AutoTune is disabled (current value: %d)", config.BlockSizeTokens)
+	}
+
 	if indexer == nil {
 		indexer = NewIndexer(ctx, config.LRUCapacityPerServer)
 	}

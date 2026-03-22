@@ -121,7 +121,7 @@ type Config struct {
 var DefaultConfig = Config{
 	AutoTune:               true,
 	BlockSize:              0,
-	BlockSizeTokens:        0,
+	BlockSizeTokens:        DefaultBlockSizeTokens,
 	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
 	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
 }

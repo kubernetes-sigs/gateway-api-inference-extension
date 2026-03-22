@@ -52,11 +52,16 @@ func TestPrefixPluginValidation(t *testing.T) {
 		AutoTune:        false,
 		BlockSize:       1,
 		BlockSizeTokens: 1,
+	}, {
+		AutoTune:        true,
+		BlockSizeTokens: 0,
 	}}
-	// This should be invalid based on current New implementation which only checks BlockSize > 0 && BlockSizeTokens <= 0
 	invalidConfigs := []dlprefix.Config{{
 		AutoTune:  false,
 		BlockSize: 1,
+	}, {
+		AutoTune:        false,
+		BlockSizeTokens: 0,
 	}}
 
 	for _, config := range validConfigs {

@@ -47,6 +47,13 @@ func HashPrompt(ctx context.Context, request *scheduling.LLMRequest, blockSizeTo
 	// convert block size from tokens to characters
 	cacheBlockSizeChars := blockSizeTokens * averageCharactersPerToken
 
+	if cacheBlockSizeChars <= 0 {
+		loggerDebug.Info("Skipping prefix hashing: block size in characters must be positive",
+			"blockSizeTokens", blockSizeTokens,
+			"cacheBlockSizeChars", cacheBlockSizeChars)
+		return nil
+	}
+
 	if len(userInput) < cacheBlockSizeChars {
 		loggerDebug.Info("Request body too small for prefix cache", "size", len(userInput), "block size in chars", cacheBlockSizeChars)
 		return nil
