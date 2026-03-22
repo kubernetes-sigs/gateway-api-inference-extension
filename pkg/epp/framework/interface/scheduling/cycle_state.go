@@ -34,10 +34,12 @@ func NewCycleState() *CycleState {
 // trusted.
 // Note: CycleState uses a sync.Map to back the storage, because it is thread safe. It's aimed to optimize for the "write once and read many times" scenarios.
 //
-// Deprecated: Use plugin.PluginState for per-request state management or
-// Data Layer attributes for sharing data between PrepareData and Scheduling phases.
-// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/XXXX):
-// Remove CycleState once all plugins are migrated to PluginState or Data Layer attributes.
+// CycleState is possibly being deprecated in favor of plugin.PluginState
+// for per-request state management or Data Layer attributes for sharing data
+// between PrepareData and Scheduling phases.
+// See https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2657 for the ongoing discussion.
+// TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2657):
+// Remove CycleState once all plugins are migrated and the discussion is finalized.
 type CycleState struct {
 	// key: StateKey, value: StateData
 	storage sync.Map
