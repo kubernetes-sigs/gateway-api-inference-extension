@@ -87,7 +87,7 @@ type Config struct {
 	// The input prompt is broken into sizes of BlockSizeTokens to calculate block hashes. Requests
 	// with length shorter than the block size will be ignored.
 	BlockSizeTokens int `json:"blockSizeTokens"`
-	// Depricated: Legacy block size defined in number of characters.
+	// Deprecated: Legacy block size defined in number of characters.
 	// In case only BlockSize is defined in the configuration - plugin initialization will fail.
 	// In case both BlockSize and BlockSizeTokens are defined - BlockSizeTokens is used.
 	BlockSize int `json:"blockSize"`
@@ -185,7 +185,7 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 func New(ctx context.Context, config Config) (*Plugin, error) {
 	// invalid configuration: only BlockSize is defined
 	if config.BlockSize > 0 && config.BlockSizeTokens <= 0 {
-		err := errors.New("BlockSize is depricated, use BlockSizeTokens instead, the value should be defined in tokens")
+		err := errors.New("BlockSize is deprecated, use BlockSizeTokens instead, the value should be defined in tokens")
 		log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "invalid prefix plugin configuration")
 		return nil, err
 	}
