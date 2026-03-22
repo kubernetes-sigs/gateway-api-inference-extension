@@ -72,22 +72,17 @@ func (p *pipeline) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
 // using the same factory functions the configloader invokes, with JSON parameters as
 // they would appear under the plugin's `parameters` field in EndpointPickerConfig YAML.
 //
-// sourceParams and extractorParams may be nil to use built-in defaults.
-func buildSourceAndExtractor(t *testing.T, serverURL string, sourceParams, extractorParams map[string]any) (*pipeline, error) {
+// extractorParams may be nil to use built-in defaults.
+func buildSourceAndExtractor(t *testing.T, serverURL string, extractorParams map[string]any) (*pipeline, error) {
 	t.Helper()
 
 	parsedURL, err := url.Parse(serverURL)
 	require.NoError(t, err, "failed to parse server URL")
 
-	// Always inject scheme and path matching the test server.
-	if sourceParams == nil {
-		sourceParams = map[string]any{}
-	}
-	if _, ok := sourceParams["scheme"]; !ok {
-		sourceParams["scheme"] = parsedURL.Scheme
-	}
-	if _, ok := sourceParams["path"]; !ok {
-		sourceParams["path"] = parsedURL.Path
+	// Inject scheme and path matching the test server.
+	sourceParams := map[string]any{
+		"scheme": parsedURL.Scheme,
+		"path":   parsedURL.Path,
 	}
 
 	rawSourceParams, err := json.Marshal(sourceParams)
@@ -161,7 +156,7 @@ func TestMetricsExtractionDefaultConfig(t *testing.T) {
 	})
 	defer srv.Close()
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil, nil)
+	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -227,7 +222,7 @@ func TestMetricsExtractionLoRADisabledViaConfig(t *testing.T) {
 		},
 	}
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil, extractorParams)
+	dataSource, err := buildSourceAndExtractor(t, srv.URL, extractorParams)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -295,7 +290,7 @@ func TestMetricsExtractionMissingMetricFamilyReturnsError(t *testing.T) {
 			defer srv.Close()
 
 			// Use defaults so all five vLLM specs are active.
-			dataSource, err := buildSourceAndExtractor(t, srv.URL, nil, nil)
+			dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
 			require.NoError(t, err)
 
 			ctx := context.Background()
@@ -340,7 +335,7 @@ func TestMetricsExtractionDisabledSpecNoError(t *testing.T) {
 		},
 	}
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil, extractorParams)
+	dataSource, err := buildSourceAndExtractor(t, srv.URL, extractorParams)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -358,7 +353,7 @@ func TestMetricsExtractionServerError(t *testing.T) {
 	srv := createMockServer([]MetricMock{})
 	srv.Close() // close immediately — all requests will fail
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil, nil)
+	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -377,7 +372,7 @@ func TestMetricsExtractionJoinedErrors(t *testing.T) {
 	})
 	defer srv.Close()
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil, nil)
+	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
 	require.NoError(t, err)
 
 	ctx := context.Background()
