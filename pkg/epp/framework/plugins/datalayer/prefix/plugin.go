@@ -35,9 +35,10 @@ var (
 
 // PrepareData is a plugin that prepares data consumed by approx prefix cache aware scheduling.
 type PrepareData struct {
-	typedName plugin.TypedName
-	config    Config
-	indexer   Indexer
+	typedName   plugin.TypedName
+	config      Config
+	indexer     Indexer
+	pluginState *plugin.PluginState
 }
 
 // TypedName returns the type and name of the plugin.
@@ -56,18 +57,35 @@ func (p *PrepareData) Produces() map[string]any {
 }
 
 // NewPrepareData initializes a new PrepareData and returns its pointer.
-func NewPrepareData(ctx context.Context, config Config, indexer Indexer) (*PrepareData, error) {
+func NewPrepareData(ctx context.Context, config Config, indexer Indexer, pluginState *plugin.PluginState) (*PrepareData, error) {
 	log.FromContext(ctx).V(logutil.DEFAULT).Info("Prefix PrepareData initialized", "config", config)
+
+	if indexer == nil {
+		indexer = NewIndexer(ctx, config.LRUCapacityPerServer)
+	}
+
+	// If pluginState is nil, we initialize it here. This ensures that the state object
+	// (and its background cleanup goroutine) is created exactly once during the plugin's construction.
+	if pluginState == nil {
+		pluginState = plugin.NewPluginState(ctx)
+	}
+
 	return &PrepareData{
-		typedName: plugin.TypedName{Type: attrprefix.PrefixCachePluginType, Name: ApproxPrefixCachePlugin},
-		config:    config,
-		indexer:   indexer,
+		typedName:   plugin.TypedName{Type: attrprefix.PrefixCachePluginType, Name: ApproxPrefixCachePlugin},
+		config:      config,
+		indexer:     indexer,
+		pluginState: pluginState,
 	}, nil
 }
 
 // Indexer returns the shared indexer.
 func (p *PrepareData) Indexer() Indexer {
 	return p.indexer
+}
+
+// PluginState returns the shared plugin state.
+func (p *PrepareData) PluginState() *plugin.PluginState {
+	return p.pluginState
 }
 
 // PrepareRequestData is called by the director before scheduling requests.
@@ -87,9 +105,9 @@ func (p *PrepareData) PrepareRequestData(ctx context.Context, request *framework
 		PrefixCacheServers: prefixCacheServers,
 	}
 
-	// Store the state in cycle state for later use in PreRequest.
+	// Store the state in shared plugin state for later use in PreRequest.
 	// NOTE: We use the prefix plugin's type name as part of the key so that the scorer can read it.
-	plugin.NewPluginState(ctx).Write(request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType), state)
+	p.pluginState.Write(request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType), state)
 
 	return nil
 }
@@ -139,7 +157,8 @@ func ApproxPrefixCacheFactory(name string, rawParameters json.RawMessage, handle
 
 	// Share the indexer with the prefix scorer plugin.
 	indexer := NewIndexer(handle.Context(), parameters.LRUCapacityPerServer)
-	p, err := NewPrepareData(handle.Context(), parameters, indexer)
+	// pluginState will be initialized by NewPrepareData as we pass nil here.
+	p, err := NewPrepareData(handle.Context(), parameters, indexer, nil)
 	if err != nil {
 		return nil, err
 	}

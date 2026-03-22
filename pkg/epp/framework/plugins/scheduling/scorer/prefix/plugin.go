@@ -103,7 +103,7 @@ type Plugin struct {
 	typedName   plugin.TypedName
 	config      dlprefix.Config
 	indexer     dlprefix.Indexer
-	pluginState plugin.PluginState
+	pluginState *plugin.PluginState
 	wg          sync.WaitGroup // Used for waiting on async cache updates in tests.
 }
 
@@ -122,15 +122,17 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 		}
 	}
 
-	// Share the indexer with the prefix prepare data plugin.
+	// Share the indexer and plugin state with the prefix prepare data plugin.
 	// If it doesn't exist, this will create it.
 	prepareDataPlugin, err := plugin.PluginByType[*dlprefix.PrepareData](handle, dlprefix.ApproxPrefixCachePlugin)
 	var indexer dlprefix.Indexer
+	var pluginState *plugin.PluginState
 	if err == nil {
 		indexer = prepareDataPlugin.Indexer()
+		pluginState = prepareDataPlugin.PluginState()
 	}
 
-	p, err := New(handle.Context(), parameters, indexer)
+	p, err := New(handle.Context(), parameters, indexer, pluginState)
 	if err != nil {
 		return nil, err
 	}
@@ -140,13 +142,19 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 }
 
 // New initializes a new prefix Plugin.
-func New(ctx context.Context, config dlprefix.Config, indexer dlprefix.Indexer) (*Plugin, error) {
+func New(ctx context.Context, config dlprefix.Config, indexer dlprefix.Indexer, pluginState *plugin.PluginState) (*Plugin, error) {
 	if config.BlockSize > 0 && config.BlockSizeTokens <= 0 {
 		return nil, fmt.Errorf("BlockSize is deprecated, use BlockSizeTokens instead")
 	}
 
 	if indexer == nil {
 		indexer = dlprefix.NewIndexer(ctx, config.LRUCapacityPerServer)
+	}
+
+	// If pluginState is nil, we initialize it here. This ensures that the state object
+	// (and its background cleanup goroutine) is created exactly once during the plugin's construction.
+	if pluginState == nil {
+		pluginState = plugin.NewPluginState(ctx)
 	}
 
 	return &Plugin{
@@ -156,7 +164,7 @@ func New(ctx context.Context, config dlprefix.Config, indexer dlprefix.Indexer) 
 		},
 		config:      config,
 		indexer:     indexer,
-		pluginState: *plugin.NewPluginState(ctx),
+		pluginState: pluginState,
 	}, nil
 }
 
@@ -240,7 +248,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 	}
 
 	// Read state saved during PrepareRequestData.
-	state, err := plugin.ReadPluginStateKey[*dlprefix.SchedulingContextState](&p.pluginState, request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType))
+	state, err := plugin.ReadPluginStateKey[*dlprefix.SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType))
 	p.pluginState.Delete(request.RequestId)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)

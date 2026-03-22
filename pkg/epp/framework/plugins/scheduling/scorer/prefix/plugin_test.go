@@ -30,7 +30,7 @@ import (
 )
 
 func TestPrefixPluginScore(t *testing.T) {
-	p, _ := New(context.Background(), dlprefix.Config{AutoTune: false, BlockSizeTokens: 1}, nil)
+	p, _ := New(context.Background(), dlprefix.Config{AutoTune: false, BlockSizeTokens: 1}, nil, nil)
 	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, fwkdl.NewMetrics(), nil)
 	endpoint1.Put(attrprefix.PrefixCacheMatchInfoKey, attrprefix.NewPrefixCacheMatchInfo(5, 10, 1))
 
@@ -60,12 +60,12 @@ func TestPrefixPluginValidation(t *testing.T) {
 	}}
 
 	for _, config := range validConfigs {
-		_, err := New(context.Background(), config, nil)
+		_, err := New(context.Background(), config, nil, nil)
 		assert.NoError(t, err)
 	}
 
 	for _, config := range invalidConfigs {
-		_, err := New(context.Background(), config, nil)
+		_, err := New(context.Background(), config, nil, nil)
 		assert.Error(t, err)
 	}
 }
