@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
@@ -276,6 +277,12 @@ func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEna
 
 	if rawDataConfig == nil { // metrics data collection not enabled and no additional configuration
 		return &cfg, nil
+	}
+
+	if dataLayerEnabled && len(rawDataConfig.Sources) == 0 {
+		log.FromContext(handle.Context()).Info(
+			"Warning: data layer is enabled but no sources are configured — no metrics will be collected",
+		)
 	}
 
 	for _, source := range rawDataConfig.Sources {
