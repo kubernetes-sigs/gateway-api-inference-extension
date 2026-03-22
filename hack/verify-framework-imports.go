@@ -72,6 +72,9 @@ var currentCodeExceptionMap = map[string][]string{
 	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/prediction.go": {
 		"sidecars/latencypredictorasync",
 	},
+	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/prediction_test.go": {
+		"sidecars/latencypredictorasync",
+	},
 	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/requestcontrol_hooks.go": {
 		"pkg/epp/metrics",
 		"pkg/epp/util/request",
