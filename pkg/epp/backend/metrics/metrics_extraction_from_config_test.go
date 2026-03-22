@@ -48,12 +48,32 @@ import (
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
+// pipeline wraps a PollingDataSource and an Extractor, calling both in sequence.
+// This replicates what the Collector does at runtime, allowing tests to exercise
+// the full fetch→extract path without a running Collector.
+type pipeline struct {
+	source    fwkdl.PollingDataSource
+	extractor fwkdl.Extractor
+}
+
+// Poll fetches raw data from the source then passes it to the extractor.
+func (p *pipeline) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
+	data, err := p.source.Poll(ctx, ep)
+	if err != nil {
+		return err
+	}
+	if data == nil {
+		return nil
+	}
+	return p.extractor.Extract(ctx, data, ep)
+}
+
 // buildSourceAndExtractor creates and wires a MetricsDataSource and a CoreMetricsExtractor
 // using the same factory functions the configloader invokes, with JSON parameters as
 // they would appear under the plugin's `parameters` field in EndpointPickerConfig YAML.
 //
 // sourceParams and extractorParams may be nil to use built-in defaults.
-func buildSourceAndExtractor(t *testing.T, serverURL string, sourceParams, extractorParams map[string]any) (fwkdl.PollingDataSource, error) {
+func buildSourceAndExtractor(t *testing.T, serverURL string, sourceParams, extractorParams map[string]any) (*pipeline, error) {
 	t.Helper()
 
 	parsedURL, err := url.Parse(serverURL)
@@ -77,7 +97,7 @@ func buildSourceAndExtractor(t *testing.T, serverURL string, sourceParams, extra
 	sourcePlug, err := sourcemetrics.MetricsDataSourceFactory(
 		"metrics-data-source",
 		rawSourceParams,
-		nil, // no handle needed: factory only uses handle for deprecated CLI-flag path
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -95,7 +115,7 @@ func buildSourceAndExtractor(t *testing.T, serverURL string, sourceParams, extra
 	extractorPlug, err := metricextractor.CoreMetricsExtractorFactory(
 		"core-metrics-extractor",
 		rawExtractorParams,
-		nil, // nil → logNilSpecs uses logr.Discard(); pass a real handle in logging tests
+		nil, // nil → logNilSpecs uses logr.Discard()
 	)
 	if err != nil {
 		return nil, err
@@ -103,8 +123,7 @@ func buildSourceAndExtractor(t *testing.T, serverURL string, sourceParams, extra
 	extractor, ok := extractorPlug.(fwkdl.Extractor)
 	require.True(t, ok, "expected Extractor")
 
-	require.NoError(t, dataSource.AddExtractor(extractor))
-	return dataSource, nil
+	return &pipeline{source: dataSource, extractor: extractor}, nil
 }
 
 // newEndpointAt creates a fwkdl.Endpoint with the given host (host:port) and optional labels.
@@ -199,7 +218,7 @@ func TestMetricsExtractionLoRADisabledViaConfig(t *testing.T) {
 		"engineConfigs": []map[string]any{
 			{
 				"name":                "vllm",
-				"queuedRequestsSpec": "vllm:num_requests_waiting",
+				"queuedRequestsSpec":  "vllm:num_requests_waiting",
 				"runningRequestsSpec": "vllm:num_requests_running",
 				"kvUsageSpec":         "vllm:kv_cache_usage_perc",
 				"loraSpec":            "", // disabled
@@ -239,8 +258,8 @@ func TestMetricsExtractionLoRADisabledViaConfig(t *testing.T) {
 func TestMetricsExtractionMissingMetricFamilyReturnsError(t *testing.T) {
 	tests := []struct {
 		name           string
-		served         []MetricMock   // metrics the server exposes
-		wantErrContain string         // substring expected in Poll's error
+		served         []MetricMock                     // metrics the server exposes
+		wantErrContain string                           // substring expected in Poll's error
 		wantMetrics    func(*testing.T, *fwkdl.Metrics) // partial assertions on extracted values
 	}{
 		{
@@ -310,8 +329,8 @@ func TestMetricsExtractionDisabledSpecNoError(t *testing.T) {
 	extractorParams := map[string]any{
 		"engineConfigs": []map[string]any{
 			{
-				"name":     "vllm",
-				"loraSpec": "",      // disabled
+				"name":          "vllm",
+				"loraSpec":      "", // disabled
 				"cacheInfoSpec": "", // disabled
 				// queue, running, kv-usage also omitted (empty → nil → skipped)
 				"queuedRequestsSpec":  "",
