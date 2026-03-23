@@ -26,6 +26,8 @@ import (
 	"k8s.io/utils/ptr"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/usagelimits"
+	flowcontrolif "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
@@ -49,6 +51,23 @@ func TestNewConfigFromAPI(t *testing.T) {
 			Type: ordering.FCFSOrderingPolicyType,
 		},
 	})
+	handle.AddPlugin(usagelimits.NoopUsageLimitPolicyType, usagelimits.NoopPolicy())
+
+	// A func-based custom policy that always returns 0.8 — demonstrates that users can define
+	// their policy in the standard plugins section and reference it via UsageLimit.PluginRef.
+	const funcPolicyName = "func-policy"
+	handle.AddPlugin(funcPolicyName, usagelimits.NewPolicyFunc(funcPolicyName, func(_ context.Context, _ float64, priorities []int) []float64 {
+		result := make([]float64, len(priorities))
+		for i := range result {
+			result[i] = 0.8
+		}
+		return result
+	}))
+
+	// A hand-rolled struct implementing UsageLimitPolicy — demonstrates that any struct
+	// satisfying the interface can be registered and resolved, without relying on usagelimits helpers.
+	const structPolicyName = "struct-policy"
+	handle.AddPlugin(structPolicyName, &constantPointEightPolicy{})
 
 	testCases := []struct {
 		name        string
@@ -79,6 +98,76 @@ func TestNewConfigFromAPI(t *testing.T) {
 					"MaxBytes should be correctly translated from resource.Quantity in API to uint64 in internal config")
 			},
 		},
+		{
+			name:      "Success - Default UsageLimitPolicy when UsageLimit is nil",
+			apiConfig: nil,
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.UsageLimitPolicy, "UsageLimitPolicy should be resolved even when not explicitly configured")
+				ceilings := cfg.UsageLimitPolicy.ComputeLimit(context.Background(), 0.5, []int{0})
+				assert.Equal(t, []float64{1.0}, ceilings, "Default noop policy should return 1.0 (no gating)")
+			},
+		},
+		{
+			name: "Success - UsageLimitPolicyRef is resolved",
+			apiConfig: &configapi.FlowControlConfig{
+				UsageLimit: &configapi.UsageLimitConfig{
+					PluginRef: usagelimits.NoopUsageLimitPolicyType,
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.UsageLimitPolicy, "UsageLimitPolicy should be resolved from the handle")
+				ceilings := cfg.UsageLimitPolicy.ComputeLimit(context.Background(), 0.5, []int{0})
+				assert.Equal(t, []float64{1.0}, ceilings, "Noop policy should return 1.0 (no gating)")
+			},
+		},
+		{
+			name: "Success - Func-based UsageLimitPolicy resolved via PluginRef",
+			apiConfig: &configapi.FlowControlConfig{
+				UsageLimit: &configapi.UsageLimitConfig{
+					PluginRef: funcPolicyName,
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.UsageLimitPolicy)
+				ctx := context.Background()
+				for _, tc := range []struct {
+					name       string
+					priority   int
+					saturation float64
+				}{
+					{"zero saturation", 0, 0.0},
+					{"half saturation", 1, 0.5},
+					{"full saturation", 5, 1.0},
+				} {
+					assert.Equal(t, []float64{0.8}, cfg.UsageLimitPolicy.ComputeLimit(ctx, tc.saturation, []int{tc.priority}),
+						"func-based policy should return 0.8 at %s", tc.name)
+				}
+			},
+		},
+		{
+			name: "Success - Struct-based UsageLimitPolicy resolved via PluginRef",
+			apiConfig: &configapi.FlowControlConfig{
+				UsageLimit: &configapi.UsageLimitConfig{
+					PluginRef: structPolicyName,
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.UsageLimitPolicy)
+				ctx := context.Background()
+				for _, tc := range []struct {
+					name       string
+					priority   int
+					saturation float64
+				}{
+					{"zero saturation", 0, 0.0},
+					{"half saturation", 1, 0.5},
+					{"full saturation", 5, 1.0},
+				} {
+					assert.Equal(t, []float64{0.8}, cfg.UsageLimitPolicy.ComputeLimit(ctx, tc.saturation, []int{tc.priority}),
+						"struct-based policy should return 0.8 at %s", tc.name)
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -96,3 +185,26 @@ func TestNewConfigFromAPI(t *testing.T) {
 		})
 	}
 }
+
+// constantPointEightPolicy is a hand-rolled UsageLimitPolicy implementation that always returns 0.8.
+// It exists to show that any struct satisfying the interface can be registered and resolved,
+// without relying on the usagelimits.NewPolicyFunc helper.
+type constantPointEightPolicy struct{}
+
+func (p *constantPointEightPolicy) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{
+		Type: "constant-point-eight-policy-type",
+		Name: "constant-point-eight-policy",
+	}
+}
+
+func (p *constantPointEightPolicy) ComputeLimit(_ context.Context, _ float64, priorities []int) []float64 {
+	result := make([]float64, len(priorities))
+	for i := range result {
+		result[i] = 0.8
+	}
+	return result
+}
+
+// compile-time check that constantPointEightPolicy satisfies the interface.
+var _ flowcontrolif.UsageLimitPolicy = (*constantPointEightPolicy)(nil)

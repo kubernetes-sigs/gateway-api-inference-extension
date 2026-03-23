@@ -67,6 +67,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/usagelimits"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
@@ -273,7 +274,7 @@ func setupBenchmarkHarness(
 		}
 	}
 
-	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, reg, detector, &mocks.MockPodLocator{})
+	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, reg, detector, &mocks.MockPodLocator{}, usagelimits.NoopPolicy())
 	if err != nil {
 		b.Fatalf("Failed to init FlowController: %v", err)
 	}

@@ -69,6 +69,7 @@ type ShardProcessor struct {
 	shard                contracts.RegistryShard
 	saturationDetector   contracts.SaturationDetector
 	podLocator           contracts.PodLocator
+	usageLimitPolicy     flowcontrol.UsageLimitPolicy
 	clock                clock.WithTicker
 	cleanupSweepInterval time.Duration
 	logger               logr.Logger
@@ -92,6 +93,7 @@ func NewShardProcessor(
 	shard contracts.RegistryShard,
 	saturationDetector contracts.SaturationDetector,
 	podLocator contracts.PodLocator,
+	usageLimitPolicy flowcontrol.UsageLimitPolicy,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -102,6 +104,7 @@ func NewShardProcessor(
 		poolName:             poolName,
 		saturationDetector:   saturationDetector,
 		podLocator:           podLocator,
+		usageLimitPolicy:     usageLimitPolicy,
 		clock:                clock,
 		cleanupSweepInterval: cleanupSweepInterval,
 		logger:               logger,
@@ -320,15 +323,10 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	// Record pool saturation metric
 	metrics.RecordFlowControlPoolSaturation(sp.poolName, saturation)
 
-	// --- Viability Check (Pool-Wide Saturation) ---
-	if saturation >= 1.0 {
-		sp.logger.V(logutil.DEBUG).Info("Pool is saturated; enforcing HoL blocking.",
-			"poolName", sp.poolName)
-		// Short-circuit
-		return false
-	}
+	priorities := sp.shard.AllOrderedPriorityLevels()
+	ceilings := sp.usageLimitPolicy.ComputeLimit(ctx, saturation, priorities)
 
-	for _, priority := range sp.shard.AllOrderedPriorityLevels() {
+	for i, priority := range priorities {
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
 			sp.logger.Error(err, "Failed to get PriorityBandAccessor, skipping band", "priority", priority)
@@ -345,7 +343,16 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			continue
 		}
 
+		// --- Viability Check (Saturation/HoL Blocking) ---
 		req := item.OriginalRequest()
+		usageLimit := ceilings[i]
+		if saturation >= usageLimit {
+			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
+				"flowKey", req.FlowKey(), "reqID", req.ID(), "usageLimit", usageLimit)
+			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
+			// lower-priority work might exacerbate the saturation affecting high-priority work.
+			return false
+		}
 
 		// --- Dispatch ---
 		if err := sp.dispatchItem(item); err != nil {
