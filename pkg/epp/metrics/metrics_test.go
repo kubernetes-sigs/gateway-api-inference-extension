@@ -1146,9 +1146,15 @@ func TestClassifySLO(t *testing.T) {
 		{"0", SLOClassTight},
 		{"50", SLOClassTight},
 		{"199", SLOClassTight},
-		{"200", SLOClassModerate},
-		{"500", SLOClassModerate},
-		{"1000", SLOClassModerate},
+		{"200", SLOClassMS200to399},
+		{"399", SLOClassMS200to399},
+		{"400", SLOClassMS400to599},
+		{"500", SLOClassMS400to599},
+		{"599", SLOClassMS400to599},
+		{"600", SLOClassMS600to799},
+		{"799", SLOClassMS600to799},
+		{"800", SLOClassMS800to1000},
+		{"1000", SLOClassMS800to1000},
 		{"1001", SLOClassRelaxed},
 		{"5000", SLOClassRelaxed},
 	}
@@ -1171,7 +1177,7 @@ func TestFlowControlSLOQueueDurationMetric(t *testing.T) {
 	}{
 		{sloClass: SLOClassTight, outcome: "Dispatched", duration: 5 * time.Millisecond},
 		{sloClass: SLOClassTight, outcome: "Dispatched", duration: 15 * time.Millisecond},
-		{sloClass: SLOClassModerate, outcome: "Dispatched", duration: 50 * time.Millisecond},
+		{sloClass: SLOClassMS400to599, outcome: "Dispatched", duration: 50 * time.Millisecond},
 		{sloClass: SLOClassNone, outcome: "RejectedCapacity", duration: 2 * time.Millisecond},
 		{sloClass: SLOClassRelaxed, outcome: "Dispatched", duration: 200 * time.Millisecond},
 	}
@@ -1197,9 +1203,9 @@ func TestFlowControlSLOQueueDurationMetric(t *testing.T) {
 			expectSum:   0.02, // 0.005 + 0.015
 		},
 		{
-			name: "moderate, dispatched",
+			name: "ms_400_599, dispatched",
 			labels: prometheus.Labels{
-				"slo_class":      SLOClassModerate,
+				"slo_class":      SLOClassMS400to599,
 				"outcome":        "Dispatched",
 				"inference_pool": pool,
 			},

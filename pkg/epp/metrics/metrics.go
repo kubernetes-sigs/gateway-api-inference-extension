@@ -861,10 +861,14 @@ func RecordFlowControlRequestQueueDuration(
 // SLO class constants used as label values for the flow_control_slo_request_queue_duration_seconds metric.
 // They bucket the raw millisecond SLO header values into a bounded set to keep Prometheus cardinality safe.
 const (
-	SLOClassNone     = "none"
-	SLOClassTight    = "tight"    // < 200 ms
-	SLOClassModerate = "moderate" // 200–1000 ms
-	SLOClassRelaxed  = "relaxed"  // > 1000 ms
+	SLOClassNone  = "none"
+	SLOClassTight = "tight" // < 200 ms
+	// Four bands for 200–1000 ms (200 ms wide, last band includes 1000).
+	SLOClassMS200to399  = "ms_200_399"
+	SLOClassMS400to599  = "ms_400_599"
+	SLOClassMS600to799  = "ms_600_799"
+	SLOClassMS800to1000 = "ms_800_1000"
+	SLOClassRelaxed     = "relaxed" // > 1000 ms
 )
 
 // ClassifySLO maps a raw SLO header value (in milliseconds) to a bounded SLO class label.
@@ -880,8 +884,14 @@ func ClassifySLO(rawHeaderValue string) string {
 	switch {
 	case ms < 200:
 		return SLOClassTight
+	case ms < 400:
+		return SLOClassMS200to399
+	case ms < 600:
+		return SLOClassMS400to599
+	case ms < 800:
+		return SLOClassMS600to799
 	case ms <= 1000:
-		return SLOClassModerate
+		return SLOClassMS800to1000
 	default:
 		return SLOClassRelaxed
 	}
