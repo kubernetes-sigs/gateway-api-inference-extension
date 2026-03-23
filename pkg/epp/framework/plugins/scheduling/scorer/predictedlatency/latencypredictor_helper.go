@@ -60,39 +60,6 @@ func buildPredictionRequest(
 	}
 }
 
-// buildTrainingEntry constructs a training entry from actual latency measurements.
-// If endpointRoleLabel is configured, it extracts the role from the endpoint's labels and
-// populates the PodType field, enabling role-specific model training.
-func buildTrainingEntry(
-	endpointRoleLabel string,
-	targetEndpointMetadata *fwkdl.EndpointMetadata,
-	metrics *fwkdl.Metrics,
-	prompt string,
-	actualTTFT float64,
-	actualTPOT float64,
-	timestamp time.Time,
-	generatedTokens int,
-	prefixCacheScore float64,
-) latencypredictor.TrainingEntry {
-	podType := ""
-	if endpointRoleLabel != "" && targetEndpointMetadata != nil && targetEndpointMetadata.Labels != nil {
-		podType = targetEndpointMetadata.Labels[endpointRoleLabel]
-	}
-
-	return latencypredictor.TrainingEntry{
-		KVCachePercentage:  metrics.KVCacheUsagePercent,
-		InputTokenLength:   len(strings.Fields(prompt)), // Simple word-based tokenization
-		ActualTTFT:         actualTTFT,
-		ActualTPOT:         actualTPOT,
-		Timestamp:          timestamp,
-		NumRequestWaiting:  metrics.WaitingQueueSize,
-		NumRequestRunning:  metrics.RunningRequestsSize,
-		NumTokensGenerated: generatedTokens,
-		PrefixCacheScore:   prefixCacheScore,
-		PodType:            podType,
-	}
-}
-
 // refreshLastSeenMetrics updates predictedLatencyCtx.LastSeenMetrics for both primary and Experimental_DefaultPrefillProfile.
 func refreshLastSeenMetrics(ctx context.Context, predictedLatencyCtx *predictedLatencyCtx) {
 	if sr := predictedLatencyCtx.schedulingResult; sr != nil {
@@ -179,7 +146,6 @@ func processFirstTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
 	streamingMode bool,
-	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
 	now time.Time,
 	samplingMean float64,
@@ -201,7 +167,7 @@ func processFirstTokenForLatencyPrediction(
 				"ttft_ms", predictedLatencyCtx.ttft,
 				"prefillPod", prefillTargetMetadata.NamespacedName.Name,
 				"prefixCacheScore", prefillPrefixCacheScore)
-			recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, prefillMetrics, prefillTargetMetadata, now, prefillPrefixCacheScore)
+			recordTTFTTrainingData(ctx, predictor, predictedLatencyCtx, prefillMetrics, now, prefillPrefixCacheScore)
 		}
 	} else {
 		// Monolithic mode: record TTFT for the single pod
@@ -213,7 +179,7 @@ func processFirstTokenForLatencyPrediction(
 		targetEndpointMetadata := predictedLatencyCtx.targetMetadata
 		prefixCacheScore := predictedLatencyCtx.prefixCacheScoresForEndpoints[targetEndpointMetadata.NamespacedName.Name]
 		logger.V(logutil.DEBUG).Info("Recording TTFT training data", "ttft_ms", predictedLatencyCtx.ttft, "predicted_ttft_ms", predictedLatencyCtx.predictedTTFT, "prefixCacheScore", prefixCacheScore)
-		recordTTFTTrainingData(ctx, predictor, endpointRoleLabel, predictedLatencyCtx, m, targetEndpointMetadata, now, prefixCacheScore)
+		recordTTFTTrainingData(ctx, predictor, predictedLatencyCtx, m, now, prefixCacheScore)
 	}
 
 	if streamingMode {
@@ -238,10 +204,8 @@ func initializeSampler(ctx context.Context, predictedLatencyCtx *predictedLatenc
 func recordTTFTTrainingData(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
 	m *fwkdl.Metrics,
-	targetEndpointMetadata *fwkdl.EndpointMetadata,
 	now time.Time,
 	prefixCacheScore float64,
 ) {
@@ -301,9 +265,7 @@ func predictFirstTPOT(
 func processTokenForLatencyPrediction(
 	ctx context.Context,
 	predictor latencypredictor.PredictorInterface,
-	endpointRoleLabel string,
 	predictedLatencyCtx *predictedLatencyCtx,
-	targetEndpointMetadata *fwkdl.EndpointMetadata,
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,

@@ -107,6 +107,7 @@ func TestComplete(t *testing.T) {
 			zapLogLevelFlag := fs.Lookup(ZapLogLevelFlagName)
 			if zapLogLevelFlag == nil {
 				t.Fatal("zap-log-level flag not found")
+				return
 			}
 			if !zapLogLevelFlag.Changed {
 				t.Error("Expected zap-log-level flag to be marked as changed after Complete()")

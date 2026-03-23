@@ -97,9 +97,12 @@ func newPredictedLatencyContext(request *schedulingtypes.InferenceRequest) *pred
 		if request.LLM.Body.Completions != nil {
 			promptText = request.LLM.Body.Completions.Prompt
 		} else if request.LLM.Body.ChatCompletions != nil {
+			var builder strings.Builder
 			for _, msg := range request.LLM.Body.ChatCompletions.Messages {
-				promptText += msg.Content.PlainText() + " "
+				builder.WriteString(msg.Content.PlainText())
+				builder.WriteString(" ")
 			}
+			promptText = builder.String()
 		}
 	}
 
@@ -241,9 +244,9 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 	}
 
 	if predictedLatencyCtx.ttft == 0 {
-		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	} else {
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 }
@@ -276,7 +279,7 @@ func (t *PredictedLatency) ResponseComplete(ctx context.Context, request *schedu
 		}
 	} else {
 		// This will be executed only if the predictedLatencyCtx.ttft is populated. Thus, this will be only populated for the token in the streaming response.
-		processTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.EndpointRoleLabel, predictedLatencyCtx, targetMetadata, now, t.config.SamplingMean, t.config.MaxSampledTokens)
+		processTokenForLatencyPrediction(ctx, t.latencypredictor, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxSampledTokens)
 	}
 
 	if predictedLatencyCtx.avgTPOT > 0 {
