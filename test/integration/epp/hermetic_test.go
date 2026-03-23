@@ -50,10 +50,6 @@ import (
 )
 
 const (
-	modelMyModel                    = "my-model"
-	modelMyModelTarget              = "my-model-12345"
-	modelSQLLora                    = "sql-lora"
-	modelSQLLoraTarget              = "sql-lora-1fdg2"
 	modelSheddable                  = "sql-lora-sheddable"
 	modelSheddableTarget            = "sql-lora-1fdg3"
 	modelDirect                     = "direct-model"
