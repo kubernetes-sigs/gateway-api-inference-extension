@@ -41,7 +41,7 @@ func makeConfigMap(name, baseModel, adaptersYAML string) *corev1.ConfigMap {
 }
 
 func TestConfigMapUpdateOrAddIfNotExist(t *testing.T) {
-	as := newAdaptersStore()
+	as := NewAdaptersStore()
 	cm := makeConfigMap(cmName, "  "+baseModel+"  ", "-  a1  \n- \n- a2\n")
 
 	err := as.configMapUpdateOrAddIfNotExist(cm)
@@ -68,7 +68,7 @@ func TestConfigMapUpdateOrAddIfNotExist(t *testing.T) {
 }
 
 func TestConfigMapUpdateOrAddIfNotExist_UpdateAdapters(t *testing.T) {
-	as := newAdaptersStore()
+	as := NewAdaptersStore()
 	cm := makeConfigMap(cmName, baseModel, "- a1\n- a2\n")
 	if err := as.configMapUpdateOrAddIfNotExist(cm); err != nil {
 		t.Fatalf("configMapUpdateOrAddIfNotExist() error = %v", err)
@@ -123,7 +123,7 @@ func TestConfigMapUpdateOrAddIfNotExist_InvalidConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			as := newAdaptersStore()
+			as := NewAdaptersStore()
 			if err := as.configMapUpdateOrAddIfNotExist(tt.cm); err == nil {
 				t.Fatalf("expected error, got nil")
 			}
@@ -139,7 +139,7 @@ func TestConfigMapUpdateOrAddIfNotExist_InvalidConfig(t *testing.T) {
 }
 
 func TestConfigMapDelete(t *testing.T) {
-	as := newAdaptersStore()
+	as := NewAdaptersStore()
 	cm := makeConfigMap(cmName, baseModel, "- a1\n- a2\n")
 	if err := as.configMapUpdateOrAddIfNotExist(cm); err != nil {
 		t.Fatalf("configMapUpdateOrAddIfNotExist() error = %v", err)
@@ -163,7 +163,7 @@ func TestConfigMapDelete(t *testing.T) {
 }
 
 func TestConfigMapDelete_NoExistingConfigMap(t *testing.T) {
-	as := newAdaptersStore()
+	as := NewAdaptersStore()
 	cm := makeConfigMap(cmName, baseModel, "- a1\n")
 
 	as.configMapDelete(cm)
@@ -174,7 +174,7 @@ func TestConfigMapDelete_NoExistingConfigMap(t *testing.T) {
 }
 
 func TestConfigMapDelete_MissingBaseModel(t *testing.T) {
-	as := newAdaptersStore()
+	as := NewAdaptersStore()
 	cm := makeConfigMap(cmName, baseModel, "- a1\n")
 	if err := as.configMapUpdateOrAddIfNotExist(cm); err != nil {
 		t.Fatalf("configMapUpdateOrAddIfNotExist() error = %v", err)
@@ -192,7 +192,7 @@ func TestConfigMapDelete_MissingBaseModel(t *testing.T) {
 }
 
 func TestGetBaseModel_ConcurrentRace(t *testing.T) {
-	as := newAdaptersStore()
+	as := NewAdaptersStore()
 	cm := makeConfigMap(cmName, baseModel, "- a1\n")
 
 	go func() {
@@ -207,7 +207,7 @@ func TestGetBaseModel_ConcurrentRace(t *testing.T) {
 }
 
 func TestConfigMapDelete_BaseModelCount(t *testing.T) {
-	as := newAdaptersStore()
+	as := NewAdaptersStore()
 	cm1 := makeConfigMap(cmName, baseModel, "- a1\n")
 	cm2 := makeConfigMap("cm-2", baseModel, "- a2\n")
 

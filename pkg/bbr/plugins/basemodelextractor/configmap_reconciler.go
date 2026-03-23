@@ -27,12 +27,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-type configMapReconciler struct {
+// ConfigMapReconciler watches ConfigMap objects and updates the AdaptersStore
+// with adapter-to-base-model mappings parsed from each ConfigMap's data.
+type ConfigMapReconciler struct {
 	client.Reader
-	adaptersStore adaptersStore
+	AdaptersStore AdaptersStore
 }
 
-func (c *configMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (c *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling ConfigMap")
 
@@ -44,12 +46,12 @@ func (c *configMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	if errors.IsNotFound(err) || !configmap.DeletionTimestamp.IsZero() {
 		// ConfigMap object got deleted or is marked for deletion.
-		c.adaptersStore.configMapDelete(configmap)
+		c.AdaptersStore.configMapDelete(configmap)
 		return ctrl.Result{}, nil
 	}
 
 	// otherwise, add or update the entries of the configmap
-	if err := c.adaptersStore.configMapUpdateOrAddIfNotExist(configmap); err != nil {
+	if err := c.AdaptersStore.configMapUpdateOrAddIfNotExist(configmap); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to add or update ConfigMap - %w", err)
 	}
 

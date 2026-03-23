@@ -41,7 +41,7 @@ const (
 func TestBaseModelToHeaderPlugin_TypedName(t *testing.T) {
 	p := &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: "test-plugin"},
-		adaptersStore: newAdaptersStore(),
+		AdaptersStore: NewAdaptersStore(),
 	}
 
 	got := p.TypedName()
@@ -57,7 +57,7 @@ func TestBaseModelToHeaderPlugin_TypedName(t *testing.T) {
 func TestBaseModelToHeaderPlugin_WithName(t *testing.T) {
 	p := &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: "original"},
-		adaptersStore: newAdaptersStore(),
+		AdaptersStore: NewAdaptersStore(),
 	}
 
 	p = p.WithName("new-name")
@@ -144,7 +144,7 @@ func TestBaseModelToHeaderPluginFactory(t *testing.T) {
 // with various scenarios specific to base model extraction.
 func TestBaseModelToHeaderPlugin_ProcessRequest(t *testing.T) {
 	// Setup adaptersStore with test data
-	store := newAdaptersStore()
+	store := NewAdaptersStore()
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cm",
@@ -161,7 +161,7 @@ func TestBaseModelToHeaderPlugin_ProcessRequest(t *testing.T) {
 
 	p := &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: "test"},
-		adaptersStore: store,
+		AdaptersStore: store,
 	}
 
 	tests := []struct {
@@ -290,7 +290,7 @@ func TestBaseModelToHeaderPlugin_ProcessRequest(t *testing.T) {
 // are properly tracked in the mutated headers map.
 func TestBaseModelToHeaderPlugin_ProcessRequest_MutatedHeaders(t *testing.T) {
 	// Setup adaptersStore with test data
-	store := newAdaptersStore()
+	store := NewAdaptersStore()
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cm",
@@ -307,7 +307,7 @@ func TestBaseModelToHeaderPlugin_ProcessRequest_MutatedHeaders(t *testing.T) {
 
 	p := &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: "test"},
-		adaptersStore: store,
+		AdaptersStore: store,
 	}
 
 	request := framework.NewInferenceRequest()

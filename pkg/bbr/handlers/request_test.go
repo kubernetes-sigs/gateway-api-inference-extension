@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/test"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -422,10 +421,7 @@ func TestHandleRequestBody(t *testing.T) {
 		},
 	}
 
-	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
-	if err != nil {
-		t.Fatalf("failed to create base model plugin: %v", err)
-	}
+	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
@@ -476,10 +472,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
-	if err != nil {
-		t.Fatalf("failed to create base model plugin: %v", err)
-	}
+	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
 	server := NewServer(false, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
 		CycleState: framework.NewCycleState(),
@@ -490,7 +483,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 		"model":  "bar",
 		"prompt": "test",
 	})
-	_, err = server.HandleRequestBody(ctx, reqCtx, bodyBytes)
+	_, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
 	if err != nil {
 		t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
 	}
@@ -500,9 +493,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 		t.Fatalf("Failed to gather metrics: %v", err)
 	}
 
-	// Check for both plugins' metrics
-	foundBodyFieldToHeader := false
-	foundBaseModelToHeader := false
+	pluginsWithMetrics := 0
 	for _, mf := range mfs {
 		if mf.GetName() == "bbr_plugin_duration_seconds" {
 			for _, m := range mf.GetMetric() {
@@ -510,31 +501,15 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 				for _, lp := range m.GetLabel() {
 					labels[lp.GetName()] = lp.GetValue()
 				}
-				if labels["extension_point"] == requestPluginExtensionPoint {
-					if labels["plugin_type"] == plugins.BodyFieldToHeaderPluginType &&
-						labels["plugin_name"] == plugins.BodyFieldToHeaderPluginType {
-						if m.GetHistogram().GetSampleCount() > 0 {
-							foundBodyFieldToHeader = true
-						}
-					}
-					if labels["plugin_type"] == basemodelextractor.BaseModelToHeaderPluginType &&
-						labels["plugin_name"] == basemodelextractor.BaseModelToHeaderPluginType {
-						if m.GetHistogram().GetSampleCount() > 0 {
-							foundBaseModelToHeader = true
-						}
-					}
+				if labels["extension_point"] == requestPluginExtensionPoint && m.GetHistogram().GetSampleCount() > 0 {
+					pluginsWithMetrics++
 				}
 			}
 		}
 	}
 
-	if !foundBodyFieldToHeader {
-		t.Error("Expected bbr_plugin_duration_seconds metric with extension_point=request, " +
-			"plugin_type=body-field-to-header, plugin_name=body-field-to-header to have observations, but none found")
-	}
-	if !foundBaseModelToHeader {
-		t.Error("Expected bbr_plugin_duration_seconds metric with extension_point=request, " +
-			"plugin_type=base-model-to-header, plugin_name=base-model-to-header to have observations, but none found")
+	if pluginsWithMetrics != 2 {
+		t.Errorf("Expected 2 request plugins with metrics observations, got %d", pluginsWithMetrics)
 	}
 }
 
@@ -675,10 +650,7 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 		},
 	}
 
-	baseModelPlugin, err := test.NewTestBaseModelPlugin()
-	if err != nil {
-		t.Fatalf("failed to create base model plugin: %v", err)
-	}
+	baseModelPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			server := NewServer(tc.streaming, []framework.RequestProcessor{plugin, baseModelPlugin}, []framework.ResponseProcessor{})

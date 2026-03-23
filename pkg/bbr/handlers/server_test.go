@@ -29,7 +29,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/test"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
@@ -130,10 +130,7 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 			},
 		},
 	}
-	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
-	if err != nil {
-		t.Fatalf("failed to create base model plugin: %v", err)
-	}
+	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
 			modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)

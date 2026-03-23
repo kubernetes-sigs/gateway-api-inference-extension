@@ -43,7 +43,7 @@ var _ framework.RequestProcessor = &BaseModelToHeaderPlugin{}
 
 type BaseModelToHeaderPlugin struct {
 	typedName     plugin.TypedName
-	adaptersStore adaptersStore
+	AdaptersStore AdaptersStore
 }
 
 // BaseModelToHeaderPluginFactory defines the factory function for BaseModelToHeaderPlugin
@@ -56,13 +56,13 @@ func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle frame
 	return plugin.WithName(name), nil
 }
 
-// NewBaseModelToHeaderPlugin returns a concrete *BaseModelToHeaderPlugin with an initialized adaptersStore.
+// NewBaseModelToHeaderPlugin returns a *BaseModelToHeaderPlugin with an initialized AdaptersStore.
 func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clientReader client.Reader) (*BaseModelToHeaderPlugin, error) {
 	reconcilerBuidler := reconcilerBuilder()
-	adaptersStore := newAdaptersStore()
-	configMapReconciler := &configMapReconciler{
+	adaptersStore := NewAdaptersStore()
+	configMapReconciler := &ConfigMapReconciler{
 		Reader:        clientReader,
-		adaptersStore: adaptersStore,
+		AdaptersStore: adaptersStore,
 	}
 
 	if err := reconcilerBuidler.For(&corev1.ConfigMap{}).Complete(configMapReconciler); err != nil {
@@ -71,7 +71,7 @@ func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clien
 
 	return &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: BaseModelToHeaderPluginType},
-		adaptersStore: adaptersStore,
+		AdaptersStore: adaptersStore,
 	}, nil
 }
 
@@ -103,19 +103,12 @@ func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framewo
 
 	targetModel := fmt.Sprintf("%v", rawFieldValue) // convert any type to string
 
-	// Look up base model using configured adaptersStore
+	// Look up base model using configured AdaptersStore
 	// If baseModel is empty, it means the model is neither a LoRA adapter nor a registered base model
-	baseModel := p.adaptersStore.getBaseModel(targetModel)
+	baseModel := p.AdaptersStore.getBaseModel(targetModel)
 
 	// Set model headers for routing (empty string is valid)
 	request.SetHeader(baseModelHeader, baseModel)
 	log.FromContext(ctx).V(logutil.VERBOSE).Info("updated base model header based on the request target model", "targetModel", targetModel, "baseModel", baseModel)
 	return nil
-}
-
-// GetReconciler returns a configMapReconciler that can be registered with a controller manager.
-func (p *BaseModelToHeaderPlugin) GetReconciler() *configMapReconciler {
-	return &configMapReconciler{
-		adaptersStore: p.adaptersStore,
-	}
 }
