@@ -39,23 +39,24 @@ const testPluginValue = "done"
 // fakeResponsePlugin implements framework.PayloadProcessor for testing response plugin execution.
 type fakeResponsePlugin struct {
 	name     string
-	mutateFn func(ctx context.Context, response *framework.InferenceResponse) error
+	mutateFn func(ctx context.Context, cycleState *framework.CycleState, response *framework.InferenceResponse) error
 }
 
 func (p *fakeResponsePlugin) TypedName() epp.TypedName {
 	return epp.TypedName{Type: "fake", Name: p.name}
 }
 
-func (p *fakeResponsePlugin) ProcessResponse(ctx context.Context, response *framework.InferenceResponse) error {
-	return p.mutateFn(ctx, response)
+func (p *fakeResponsePlugin) ProcessResponse(ctx context.Context, cycleState *framework.CycleState, response *framework.InferenceResponse) error {
+	return p.mutateFn(ctx, cycleState, response)
 }
 
 var _ framework.ResponseProcessor = &fakeResponsePlugin{}
 
 func newTestRequestContext() *RequestContext {
 	return &RequestContext{
-		Request:  framework.NewInferenceRequest(),
-		Response: framework.NewInferenceResponse(),
+		CycleState: framework.NewCycleState(),
+		Request:    framework.NewInferenceRequest(),
+		Response:   framework.NewInferenceResponse(),
 	}
 }
 
@@ -126,7 +127,7 @@ func TestHandleResponseBody_SinglePlugin(t *testing.T) {
 
 	mutatePlugin := &fakeResponsePlugin{
 		name: "mutator",
-		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, response *framework.InferenceResponse) error {
 			response.SetBodyField("mutated", true)
 			return nil
 		},
@@ -159,14 +160,14 @@ func TestHandleResponseBody_MultiplePlugins(t *testing.T) {
 
 	plugin1 := &fakeResponsePlugin{
 		name: "plugin1",
-		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, response *framework.InferenceResponse) error {
 			response.SetBodyField("p1", testPluginValue)
 			return nil
 		},
 	}
 	plugin2 := &fakeResponsePlugin{
 		name: "plugin2",
-		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, response *framework.InferenceResponse) error {
 			response.SetBodyField("p2", testPluginValue)
 			return nil
 		},
@@ -200,7 +201,7 @@ func TestHandleResponseBody_PluginError(t *testing.T) {
 
 	failingPlugin := &fakeResponsePlugin{
 		name: "failing",
-		mutateFn: func(_ context.Context, _ *framework.InferenceResponse) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, _ *framework.InferenceResponse) error {
 			return errors.New("failed to execute plugin")
 		},
 	}
@@ -222,7 +223,7 @@ func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 
 	mutatePlugin := &fakeResponsePlugin{
 		name: "mutator",
-		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, response *framework.InferenceResponse) error {
 			response.SetBodyField("mutated", true)
 			return nil
 		},
@@ -286,7 +287,7 @@ func TestHandleResponseBody_PluginNoBodyMutation(t *testing.T) {
 
 	headerOnlyPlugin := &fakeResponsePlugin{
 		name: "header-only",
-		mutateFn: func(_ context.Context, response *framework.InferenceResponse) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, response *framework.InferenceResponse) error {
 			response.SetHeader("X-Custom-Response", "added")
 			return nil
 		},

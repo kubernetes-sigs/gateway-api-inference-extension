@@ -34,18 +34,19 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -142,12 +143,12 @@ func TestLoadRawConfiguration(t *testing.T) {
 				FeatureGates: configapi.FeatureGates{},
 				Plugins: []configapi.PluginSpec{
 					{
-						Name: scorer.QueueScorerType,
-						Type: scorer.QueueScorerType,
+						Name: queuedepth.QueueScorerType,
+						Type: queuedepth.QueueScorerType,
 					},
 					{
-						Name: scorer.KvCacheUtilizationScorerType,
-						Type: scorer.KvCacheUtilizationScorerType,
+						Name: kvcacheutilization.KvCacheUtilizationScorerType,
+						Type: kvcacheutilization.KvCacheUtilizationScorerType,
 					},
 					{
 						Name: prefix.PrefixCachePluginType,
@@ -159,11 +160,11 @@ func TestLoadRawConfiguration(t *testing.T) {
 						Name: "default",
 						Plugins: []configapi.SchedulingPlugin{
 							{
-								PluginRef: scorer.QueueScorerType,
+								PluginRef: queuedepth.QueueScorerType,
 								Weight:    &queueScorerWeight,
 							},
 							{
-								PluginRef: scorer.KvCacheUtilizationScorerType,
+								PluginRef: kvcacheutilization.KvCacheUtilizationScorerType,
 								Weight:    &kvCacheUtilizationScorerWeight,
 							},
 							{
@@ -664,7 +665,7 @@ func (m *mockSource) ExtractorType() reflect.Type {
 type mockExtractor struct{ mockPlugin }
 
 func (m *mockExtractor) ExpectedInputType() reflect.Type {
-	return reflect.TypeOf("")
+	return reflect.TypeFor[string]()
 }
 
 func (m *mockExtractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) error {

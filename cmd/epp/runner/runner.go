@@ -55,28 +55,31 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/predictedlatency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/runningrequests"
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics/collectors"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/concurrencydetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
@@ -121,6 +124,7 @@ type Runner struct {
 	schedulerConfig      *scheduling.SchedulerConfig
 	customCollectors     []prometheus.Collector
 	parser               fwkrh.Parser
+	dlRuntime            *datalayer.Runtime
 
 	testOverrideSkipNameValidation bool
 }
@@ -321,7 +325,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
 	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
-	if err := r.setupDataLayer(datalayerMetricsEnabled, eppConfig.DataConfig, epf, mgr); err != nil {
+	if err := r.configureAndStartDatalayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
 	}
@@ -450,10 +454,10 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(picker.RandomPickerType, picker.RandomPickerFactory)
 	fwkplugin.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
-	fwkplugin.Register(scorer.KvCacheUtilizationScorerType, scorer.KvCacheUtilizationScorerFactory)
-	fwkplugin.Register(scorer.QueueScorerType, scorer.QueueScorerFactory)
-	fwkplugin.Register(scorer.RunningRequestsSizeScorerType, scorer.RunningRequestsSizeScorerFactory)
-	fwkplugin.Register(scorer.LoraAffinityScorerType, scorer.LoraAffinityScorerFactory)
+	fwkplugin.Register(kvcacheutilization.KvCacheUtilizationScorerType, kvcacheutilization.KvCacheUtilizationScorerFactory)
+	fwkplugin.Register(queuedepth.QueueScorerType, queuedepth.QueueScorerFactory)
+	fwkplugin.Register(runningrequests.RunningRequestsSizeScorerType, runningrequests.RunningRequestsSizeScorerFactory)
+	fwkplugin.Register(loraaffinity.LoraAffinityScorerType, loraaffinity.LoraAffinityScorerFactory)
 	// Flow Control plugins
 	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, fairness.GlobalStrictFairnessPolicyFactory)
 	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
@@ -474,6 +478,9 @@ func (r *Runner) registerInTreePlugins() {
 	// register request control pluigns
 	fwkplugin.Register(requestattributereporter.RequestAttributeReporterType, requestattributereporter.RequestAttributeReporterPluginFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
+	// register saturation detector plugins
+	fwkplugin.Register(concurrencydetector.ConcurrencyDetectorType, concurrencydetector.ConcurrencyDetectorFactory)
+	fwkplugin.Register(utilizationdetector.UtilizationDetectorType, utilizationdetector.UtilizationDetectorFactory)
 }
 
 func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver.Options) (*configapi.EndpointPickerConfig, error) {
@@ -596,49 +603,26 @@ func (r *Runner) applyDeprecatedSaturationConfig(cfg *config.Config) {
 	}
 }
 
-func (r *Runner) setupDataLayer(enableNewMetrics bool, cfg *datalayer.Config,
-	epf datalayer.EndpointFactory, mgr ctrl.Manager) error {
-	disallowedMetricsExtractor := ""
-	if !enableNewMetrics { // using backend.PodMetrics, disallow datalayer's metrics data source/extractor
-		disallowedMetricsExtractor = extractormetrics.MetricsExtractorType
+func (r *Runner) configureAndStartDatalayer(ctx context.Context, enableNewMetrics bool, cfg *datalayer.Config, mgr ctrl.Manager) error {
+	disallowedExtractorType := ""
+	if !enableNewMetrics {
+		disallowedExtractorType = extractormetrics.MetricsExtractorType
 	}
 
-	if err := datalayer.WithConfig(cfg, disallowedMetricsExtractor); err != nil {
+	if err := r.dlRuntime.Configure(cfg, enableNewMetrics, disallowedExtractorType, setupLog); err != nil {
 		return err
 	}
 
-	allSources := datalayer.GetSources()
-	if enableNewMetrics && len(allSources) == 0 {
-		return errors.New("data layer enabled but no data sources configured")
-	}
-
-	// Partition sources: poll-based go to the endpoint factory, notification
-	// sources get bound to the manager's watch/reconciliation loops.
-	var collectors []fwkdl.DataSource
-	for _, src := range allSources {
-		if notifySrc, ok := src.(fwkdl.NotificationSource); ok {
-			if err := datalayer.BindNotificationSource(notifySrc, mgr); err != nil {
-				return fmt.Errorf("failed to bind notification source %s: %w", notifySrc.TypedName(), err)
-			}
-			setupLog.Info("notification source bound", "source", notifySrc.TypedName().String(), "gvk", notifySrc.GVK())
-		} else if _, isPolling := src.(fwkdl.PollingDataSource); isPolling {
-			collectors = append(collectors, src)
-		} else {
-			return fmt.Errorf("skipping unknown datasource plugin type %s", src.TypedName().String())
-		}
-	}
-
-	epf.SetSources(collectors)
-
-	for _, src := range allSources { // log data layer configuration
-		setupLog.Info("data layer configuration", "source", src.TypedName().String(), "extractors", src.Extractors())
+	if err := r.dlRuntime.Start(ctx, mgr); err != nil {
+		return err
 	}
 	return nil
 }
 
 func (r *Runner) setupMetricsCollection(enableNewMetrics bool, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) datalayer.EndpointFactory {
+	r.dlRuntime = datalayer.NewRuntime(opts.RefreshMetricsInterval)
 	if enableNewMetrics {
-		return datalayer.NewEndpointFactory(nil, opts.RefreshMetricsInterval)
+		return r.dlRuntime
 	}
 	return backendmetrics.NewPodMetricsFactory(pmc, opts.RefreshMetricsInterval)
 }

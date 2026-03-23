@@ -96,7 +96,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Set the Agentgateway version and install the Agentgateway CRDs:
 
          ```bash
-         AGW_VERSION=v1.0.0-alpha.4
+         AGW_VERSION=v1.0.0
          helm upgrade -i --create-namespace --namespace agentgateway-system --version $AGW_VERSION agentgateway-crds oci://cr.agentgateway.dev/charts/agentgateway-crds
          ```
 

@@ -27,12 +27,12 @@ import (
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 

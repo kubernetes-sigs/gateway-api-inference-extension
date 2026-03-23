@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/test"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -421,13 +422,17 @@ func TestHandleRequestBody(t *testing.T) {
 		},
 	}
 
+	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-			baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 			server := NewServer(test.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: framework.NewInferenceRequest(),
+				CycleState: framework.NewCycleState(),
+				Request:    framework.NewInferenceRequest(),
 			}
 			bodyBytes, _ := json.Marshal(test.body)
 			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
@@ -471,17 +476,21 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	modelToHeaderPlugin, _ := plugins.NewBodyFieldToHeaderPlugin(ModelField, ModelHeader)
-	baseModelToHeaderPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
+	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
 	server := NewServer(false, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
-		Request: framework.NewInferenceRequest(),
+		CycleState: framework.NewCycleState(),
+		Request:    framework.NewInferenceRequest(),
 	}
 
 	bodyBytes, _ := json.Marshal(map[string]any{
 		"model":  "bar",
 		"prompt": "test",
 	})
-	_, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)
+	_, err = server.HandleRequestBody(ctx, reqCtx, bodyBytes)
 	if err != nil {
 		t.Fatalf("HandleRequestBody returned unexpected error: %v", err)
 	}
@@ -539,15 +548,15 @@ func mapToBytes(t *testing.T, m map[string]any) []byte {
 
 type bodyMutatingPlugin struct {
 	name     string
-	mutateFn func(ctx context.Context, request *framework.InferenceRequest) error
+	mutateFn func(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error
 }
 
 func (p *bodyMutatingPlugin) TypedName() epp.TypedName {
 	return epp.TypedName{Type: "fake", Name: p.name}
 }
 
-func (p *bodyMutatingPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) error {
-	return p.mutateFn(ctx, request)
+func (p *bodyMutatingPlugin) ProcessRequest(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest) error {
+	return p.mutateFn(ctx, cycleState, request)
 }
 
 var _ framework.RequestProcessor = &bodyMutatingPlugin{}
@@ -558,7 +567,7 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 
 	plugin := &bodyMutatingPlugin{
 		name: "body-mutator",
-		mutateFn: func(_ context.Context, request *framework.InferenceRequest) error {
+		mutateFn: func(_ context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
 			request.SetBodyField("injected", "value")
 			return nil
 		},
@@ -666,12 +675,16 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 		},
 	}
 
+	baseModelPlugin, err := test.NewTestBaseModelPlugin()
+	if err != nil {
+		t.Fatalf("failed to create base model plugin: %v", err)
+	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			baseModelPlugin := basemodelextractor.NewBaseModelToHeaderPlugin()
 			server := NewServer(tc.streaming, []framework.RequestProcessor{plugin, baseModelPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
-				Request: framework.NewInferenceRequest(),
+				CycleState: framework.NewCycleState(),
+				Request:    framework.NewInferenceRequest(),
 			}
 			bodyBytes, _ := json.Marshal(tc.body)
 			resp, err := server.HandleRequestBody(ctx, reqCtx, bodyBytes)

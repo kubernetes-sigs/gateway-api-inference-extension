@@ -2,9 +2,9 @@
 
 ## Table of Contents
 
-| Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                                |
-|--------------------------|----------------|------------------------|---------|-------------------------------------------------------|
-| v1.4.0-rc.2              | Gateway        | [v1.0.0-alpha.4](https://github.com/agentgateway/agentgateway/releases/tag/v1.0.0-alpha.4) | default | [inference-v1.0.0-alpha.4 report](./inference-v1.0.0-alpha.4-report.yaml) |
+| Extension Version Tested | Profile Tested | Implementation Version | Mode    | Report                                      |
+|--------------------------|----------------|------------------------|---------|---------------------------------------------|
+| v1.4.0                   | Gateway        | [v1.0.0](https://github.com/agentgateway/agentgateway/releases/tag/v1.0.0) | default | [inference-v1.0.0 report](./inference-v1.0.0-report.yaml) |
 
 ## Reproduce
 
@@ -15,7 +15,7 @@ This follows the upstream [Agentgateway Gateway API conformance report](https://
 1. Clone the agentgateway repository and check out the tested release:
 
    ```sh
-   export VERSION=v1.0.0-alpha.4
+   export VERSION=v1.0.0
    git clone https://github.com/agentgateway/agentgateway.git
    cd agentgateway
    git checkout tags/$VERSION
@@ -24,7 +24,7 @@ This follows the upstream [Agentgateway Gateway API conformance report](https://
 2. Bootstrap a KinD cluster with the required Gateway API and Gateway API Inference Extension components:
 
    ```sh
-   export GIE_CRD_VERSION=v1.4.0-rc.2
+   export GIE_CRD_VERSION=v1.4.0
    ./controller/test/setup/setup-kind-ci.sh
    ```
 

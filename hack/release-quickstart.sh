@@ -77,14 +77,16 @@ sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-in
 # -----------------------------------------------------------------------------
 #TODO: Put all helm values files into an array to loop over
 EPP_HELM="config/charts/inferencepool/values.yaml"
+LATENCY_ROUTING_HELM="config/charts/epplib/values.yaml"
 BBR_HELM="config/charts/body-based-routing/values.yaml"
 STANDALONE_HELM="config/charts/standalone/values.yaml"
 CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
 CONFORMANCE_EPP_STAGING_IMAGE="us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp"
-echo "Updating ${EPP_HELM}, ${BBR_HELM}, ${STANDALONE_HELM} and ${CONFORMANCE_MANIFESTS} ..."
+echo "Updating ${EPP_HELM}, ${LATENCY_ROUTING_HELM}, ${BBR_HELM}, ${STANDALONE_HELM} and ${CONFORMANCE_MANIFESTS} ..."
 
 # Update the container tag.
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
+sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$LATENCY_ROUTING_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$STANDALONE_HELM"
 # Update the conformance EPP image from the staging `main` tag to the release tag.
@@ -94,6 +96,7 @@ sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inferen
 
 # Update the container registry.
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP_HELM"
+sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$LATENCY_ROUTING_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$BBR_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$STANDALONE_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$CONFORMANCE_MANIFESTS"
@@ -128,19 +131,14 @@ sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "
 # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
 sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
 
-# Update the container tag for lora-syncer in vLLM CPU and GPU deployment manifests.
-sed -i.bak -E "s|(gateway-api-inference-extension/lora-syncer:)[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
-# Update the container image pull policy for lora-syncer in vLLM CPU and GPU deployment manifests.
-sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/lora-syncer/{n;s/Always/IfNotPresent/;}' "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
-
-# Update the container registry for lora-syncer in vLLM CPU and GPU deployment manifests.
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$VLLM_GPU_DEPLOY" "$VLLM_CPU_DEPLOY"
+# lora-syncer is deprecated and no longer receives release-tagged images.
+# Keep the manifests pinned to the latest promoted public image.
 
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
-git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
+git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

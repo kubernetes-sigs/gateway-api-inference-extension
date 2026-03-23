@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -72,6 +73,7 @@ type Config struct {
 	EpsilonExploreNeg         float64       `json:"epsilonExploreNeg,omitempty"`
 	AffinityGateTau           float64       `json:"affinityGateTau,omitempty"`
 	AffinityGateTauGlobal     float64       `json:"affinityGateTauGlobal,omitempty"`
+	AffinityMaxTTFTPenaltyMs  float64       `json:"affinityMaxTTFTPenaltyMs,omitempty"`
 	ContextTTL                time.Duration `json:"contextTTL,omitempty"`
 	SelectionMode             string        `json:"selectionMode,omitempty"`
 	StreamingMode             bool          `json:"streamingMode,omitempty"`
@@ -94,6 +96,7 @@ var DefaultConfig = Config{
 	EpsilonExploreNeg:         0.01,
 	AffinityGateTau:           0.80,
 	AffinityGateTauGlobal:     0.99,
+	AffinityMaxTTFTPenaltyMs:  5000.0,
 	ContextTTL:                5 * time.Minute,
 	SelectionMode:             "linear",
 	StreamingMode:             true,
@@ -155,6 +158,9 @@ func (c *Config) validate() error {
 	}
 	if c.AffinityGateTauGlobal < 0 || c.AffinityGateTauGlobal > 1 {
 		errs = append(errs, fmt.Errorf("affinityGateTauGlobal must be in (0, 1], got %f", c.AffinityGateTauGlobal))
+	}
+	if c.AffinityMaxTTFTPenaltyMs < 0 {
+		errs = append(errs, fmt.Errorf("affinityMaxTTFTPenaltyMs must be >= 0, got %f", c.AffinityMaxTTFTPenaltyMs))
 	}
 
 	if len(errs) > 0 {
@@ -272,6 +278,37 @@ func (s *PredictedLatency) epsilonGreedyAffinityGate(
 		logger.V(logutil.DEBUG).Info("ε-greedy: exploring (ignoring affinity gate)",
 			"path", label, "epsilon", s.config.EpsilonExploreSticky, "eligibleCount", len(eligible))
 		return candidates, false
+	}
+
+	// Load gate: compare the best sticky pod's predicted TTFT against the
+	// best overall pod's predicted TTFT.  The predictor already credits the
+	// prefix-cache benefit, so a positive delta means queuing cost exceeds
+	// cache savings — break stickiness.
+	if s.config.AffinityMaxTTFTPenaltyMs > 0 {
+		bestTTFTAll := math.MaxFloat64
+		for _, p := range candidates {
+			if p.TTFT > 0 && p.TTFT < bestTTFTAll {
+				bestTTFTAll = p.TTFT
+			}
+		}
+		bestTTFTSticky := math.MaxFloat64
+		for _, p := range eligible {
+			if p.TTFT > 0 && p.TTFT < bestTTFTSticky {
+				bestTTFTSticky = p.TTFT
+			}
+		}
+		if bestTTFTAll < math.MaxFloat64 && bestTTFTSticky < math.MaxFloat64 {
+			penalty := bestTTFTSticky - bestTTFTAll
+			if penalty > s.config.AffinityMaxTTFTPenaltyMs {
+				logger.V(logutil.DEBUG).Info("Affinity load gate: TTFT penalty too high, breaking stickiness",
+					"path", label,
+					"bestStickyTTFT", bestTTFTSticky,
+					"bestOverallTTFT", bestTTFTAll,
+					"penaltyMs", penalty,
+					"maxPenaltyMs", s.config.AffinityMaxTTFTPenaltyMs)
+				return candidates, false
+			}
+		}
 	}
 
 	logger.V(logutil.DEBUG).Info("ε-greedy: exploiting (apply affinity gate)",

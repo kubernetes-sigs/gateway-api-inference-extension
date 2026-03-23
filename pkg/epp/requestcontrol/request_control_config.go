@@ -27,9 +27,8 @@ func NewConfig() *Config {
 		admissionPlugins:         []fwk.AdmissionPlugin{},
 		prepareDataPlugins:       []fwk.PrepareDataPlugin{},
 		preRequestPlugins:        []fwk.PreRequest{},
-		responseReceivedPlugins:  []fwk.ResponseReceived{},
-		responseStreamingPlugins: []fwk.ResponseStreaming{},
-		responseCompletePlugins:  []fwk.ResponseComplete{},
+		responseReceivedPlugins:  []fwk.ResponseHeader{},
+		responseStreamingPlugins: []fwk.ResponseBody{},
 	}
 }
 
@@ -38,9 +37,8 @@ type Config struct {
 	admissionPlugins         []fwk.AdmissionPlugin
 	prepareDataPlugins       []fwk.PrepareDataPlugin
 	preRequestPlugins        []fwk.PreRequest
-	responseReceivedPlugins  []fwk.ResponseReceived
-	responseStreamingPlugins []fwk.ResponseStreaming
-	responseCompletePlugins  []fwk.ResponseComplete
+	responseReceivedPlugins  []fwk.ResponseHeader
+	responseStreamingPlugins []fwk.ResponseBody
 }
 
 // WithPreRequestPlugins sets the given plugins as the PreRequest plugins.
@@ -52,22 +50,15 @@ func (c *Config) WithPreRequestPlugins(plugins ...fwk.PreRequest) *Config {
 
 // WithResponseReceivedPlugins sets the given plugins as the ResponseReceived plugins.
 // If the Config has ResponseReceived plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseReceivedPlugins(plugins ...fwk.ResponseReceived) *Config {
+func (c *Config) WithResponseReceivedPlugins(plugins ...fwk.ResponseHeader) *Config {
 	c.responseReceivedPlugins = plugins
 	return c
 }
 
 // WithResponseStreamingPlugins sets the given plugins as the ResponseStreaming plugins.
 // If the Config has ResponseStreaming plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseStreamingPlugins(plugins ...fwk.ResponseStreaming) *Config {
+func (c *Config) WithResponseStreamingPlugins(plugins ...fwk.ResponseBody) *Config {
 	c.responseStreamingPlugins = plugins
-	return c
-}
-
-// WithResponseCompletePlugins sets the given plugins as the ResponseComplete plugins.
-// If the Config has ResponseComplete plugins already, this call replaces the existing plugins with the given ones.
-func (c *Config) WithResponseCompletePlugins(plugins ...fwk.ResponseComplete) *Config {
-	c.responseCompletePlugins = plugins
 	return c
 }
 
@@ -91,14 +82,11 @@ func (c *Config) AddPlugins(pluginObjects ...plugin.Plugin) {
 		if preRequestPlugin, ok := plugin.(fwk.PreRequest); ok {
 			c.preRequestPlugins = append(c.preRequestPlugins, preRequestPlugin)
 		}
-		if responseReceivedPlugin, ok := plugin.(fwk.ResponseReceived); ok {
+		if responseReceivedPlugin, ok := plugin.(fwk.ResponseHeader); ok {
 			c.responseReceivedPlugins = append(c.responseReceivedPlugins, responseReceivedPlugin)
 		}
-		if responseStreamingPlugin, ok := plugin.(fwk.ResponseStreaming); ok {
+		if responseStreamingPlugin, ok := plugin.(fwk.ResponseBody); ok {
 			c.responseStreamingPlugins = append(c.responseStreamingPlugins, responseStreamingPlugin)
-		}
-		if responseCompletePlugin, ok := plugin.(fwk.ResponseComplete); ok {
-			c.responseCompletePlugins = append(c.responseCompletePlugins, responseCompletePlugin)
 		}
 		if prepareDataPlugin, ok := plugin.(fwk.PrepareDataPlugin); ok {
 			c.prepareDataPlugins = append(c.prepareDataPlugins, prepareDataPlugin)

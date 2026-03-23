@@ -21,6 +21,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
@@ -44,16 +47,32 @@ type BaseModelToHeaderPlugin struct {
 }
 
 // BaseModelToHeaderPluginFactory defines the factory function for BaseModelToHeaderPlugin
-func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage) (framework.BBRPlugin, error) {
-	return NewBaseModelToHeaderPlugin().WithName(name), nil
+func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle framework.Handle) (framework.BBRPlugin, error) {
+	plugin, err := NewBaseModelToHeaderPlugin(handle.ReconcilerBuilder, handle.ClientReader())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create plugin '%s' - %w", BaseModelToHeaderPluginType, err)
+	}
+
+	return plugin.WithName(name), nil
 }
 
 // NewBaseModelToHeaderPlugin returns a concrete *BaseModelToHeaderPlugin with an initialized adaptersStore.
-func NewBaseModelToHeaderPlugin() *BaseModelToHeaderPlugin {
+func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clientReader client.Reader) (*BaseModelToHeaderPlugin, error) {
+	reconcilerBuidler := reconcilerBuilder()
+	adaptersStore := newAdaptersStore()
+	configMapReconciler := &configMapReconciler{
+		Reader:        clientReader,
+		adaptersStore: adaptersStore,
+	}
+
+	if err := reconcilerBuidler.For(&corev1.ConfigMap{}).Complete(configMapReconciler); err != nil {
+		return nil, fmt.Errorf("failed to register configmap reconciler for plugin '%s' - %w", BaseModelToHeaderPluginType, err)
+	}
+
 	return &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: BaseModelToHeaderPluginType},
-		adaptersStore: newAdaptersStore(),
-	}
+		adaptersStore: adaptersStore,
+	}, nil
 }
 
 // TypedName returns the type and name tuple of this plugin instance.
@@ -68,7 +87,7 @@ func (p *BaseModelToHeaderPlugin) WithName(name string) *BaseModelToHeaderPlugin
 }
 
 // ProcessRequest sets base model name on the header
-func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) error {
+func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
 	if request == nil || request.Headers == nil || request.Body == nil {
 		return nil // this shouldn't happen
 	}

@@ -29,6 +29,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
 	fctypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -62,13 +63,13 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 		},
 	}
 
-	mockPods := []backendmetrics.PodMetrics{&backendmetrics.FakePodMetrics{}}
+	mockPods := []fwkdl.Endpoint{&backendmetrics.FakePodMetrics{}}
 
 	testCases := []struct {
 		name            string
 		priority        int
 		isSaturated     bool
-		locatorPods     []backendmetrics.PodMetrics
+		locatorPods     []fwkdl.Endpoint
 		expectErr       bool
 		expectErrCode   string
 		expectErrSubstr string
@@ -100,7 +101,7 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 			name:            "sheddable_no_pods_reject",
 			priority:        -1,
 			isSaturated:     true,
-			locatorPods:     []backendmetrics.PodMetrics{},
+			locatorPods:     []fwkdl.Endpoint{},
 			expectErr:       true,
 			expectErrCode:   errcommon.ResourceExhausted,
 			expectErrSubstr: "system saturated, sheddable request dropped",
@@ -111,7 +112,7 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			mockDetector := &mocks.MockSaturationDetector{
-				SaturationFunc: func(context.Context, []backendmetrics.PodMetrics) float64 {
+				SaturationFunc: func(context.Context, []fwkdl.Endpoint) float64 {
 					if tc.isSaturated {
 						return 1.0
 					}

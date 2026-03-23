@@ -46,7 +46,7 @@ type BodyFieldToHeaderConfig struct {
 }
 
 // BodyFieldToHeaderPluginFactory defines the factory function for NewBodyFieldToHeaderPlugin.
-func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage) (framework.BBRPlugin, error) {
+func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage, _ framework.Handle) (framework.BBRPlugin, error) {
 	var config BodyFieldToHeaderConfig
 
 	if len(rawParameters) > 0 {
@@ -102,7 +102,7 @@ func (p *BodyFieldToHeaderPlugin) WithName(name string) *BodyFieldToHeaderPlugin
 }
 
 // ProcessRequest extracts value from a given body field and sets it as HTTP header.
-func (p *BodyFieldToHeaderPlugin) ProcessRequest(ctx context.Context, request *framework.InferenceRequest) error {
+func (p *BodyFieldToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
 	if request == nil || request.Headers == nil || request.Body == nil {
 		return nil // this shouldn't happen
 	}

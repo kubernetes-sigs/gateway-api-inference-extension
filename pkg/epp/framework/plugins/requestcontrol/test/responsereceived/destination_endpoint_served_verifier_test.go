@@ -78,7 +78,7 @@ func TestDestinationEndpointServedVerifier_ResponseReceived(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			plugin := NewDestinationEndpointServedVerifier().WithName("test-verifier")
 
-			plugin.ResponseReceived(context.Background(), nil, tc.response, nil)
+			plugin.ResponseHeader(context.Background(), nil, tc.response, nil)
 
 			actualHeader, ok := tc.response.Headers[test.ConformanceTestResultHeader]
 			require.True(t, ok, "Expected header %s to be set", test.ConformanceTestResultHeader)

@@ -68,6 +68,7 @@ type Server struct {
 type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
+	CycleState                *framework.CycleState
 	Request                   *framework.InferenceRequest
 	Response                  *framework.InferenceResponse
 }
@@ -91,8 +92,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	loggerVerbose.Info("Processing")
 
 	reqCtx := &RequestContext{
-		Request:  framework.NewInferenceRequest(),
-		Response: framework.NewInferenceResponse(),
+		CycleState: framework.NewCycleState(),
+		Request:    framework.NewInferenceRequest(),
+		Response:   framework.NewInferenceResponse(),
 	}
 	var body []byte
 	respStreamedBody := &streamedBody{}

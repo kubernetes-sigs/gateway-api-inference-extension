@@ -68,9 +68,9 @@ The BBR extracts the model name from the request body, does a lookup of the base
                 {
                   "Qwen/Qwen3-32B": "Qwen/Qwen3-32B",
                   "food-review-1": "Qwen/Qwen3-32B",
-                  "deepseek-ai/DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
-                  "ski-resorts": "deepseek-ai/DeepSeek-V3.2",
-                  "movie-critique": "deepseek-ai/DeepSeek-V3.2",
+                  "deepseek/DeepSeek-r1": "deepseek/DeepSeek-r1",
+                  "ski-resorts": "deepseek/DeepSeek-r1",
+                  "movie-critique": "deepseek/DeepSeek-r1",
                 }[json(request.body).model]
     ```
 
@@ -85,7 +85,7 @@ The BBR extracts the model name from the request body, does a lookup of the base
 ### Serving a Second Model Server
 
 The example uses a vLLM simulator since this is the least common denominator configuration that can be run in every environment.
-The manifest uses `deepseek-ai/DeepSeek-V3.2` as base model with two LoRA adapters `ski-resorts` and `movie-critique`.
+The manifest uses `deepseek/DeepSeek-r1` as base model with two LoRA adapters `ski-resorts` and `movie-critique`.
 
 Deploy the second model server along with a mapping from LoRA adapters to the base model:
 
@@ -108,12 +108,12 @@ Set the Helm chart version (unless already set).
 
       ```bash
       export GATEWAY_PROVIDER=gke
-      helm install vllm-deepseek-v3.2 \
+      helm install vllm-deepseek-r1 \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-v3.2 \
+      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=deepseek-ai/DeepSeek-V3.2 \
+      --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -122,12 +122,12 @@ Set the Helm chart version (unless already set).
 
       ```bash
       export GATEWAY_PROVIDER=istio
-      helm install vllm-deepseek-v3.2 \
+      helm install vllm-deepseek-r1 \
       --dependency-update \
-      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-v3.2 \
+      --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
       --set provider.name=$GATEWAY_PROVIDER \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=deepseek-ai/DeepSeek-V3.2 \
+      --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -264,7 +264,7 @@ First, make sure that the setup works as before by sending a request to the LoRA
           curl -X POST -i ${IP}:${PORT}/v1/chat/completions \
                -H "Content-Type: application/json" \
                -d '{
-                      "model": "deepseek-ai/DeepSeek-V3.2",
+                      "model": "deepseek/DeepSeek-r1",
                       "max_tokens": 100,
                       "temperature": 0,
                       "messages": [
@@ -353,7 +353,7 @@ First, make sure that the setup works as before by sending a request to the LoRA
            curl -X POST -i ${IP}:${PORT}/v1/completions \
                 -H "Content-Type: application/json" \
                 -d '{
-                       "model": "deepseek-ai/DeepSeek-V3.2",
+                       "model": "deepseek/DeepSeek-r1",
                        "prompt": "What is the best ski resort in Austria?",
                        "max_tokens": 20,
                        "temperature": 0
