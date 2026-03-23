@@ -212,7 +212,6 @@ func (b *mockDataSourceBackend) SetPodMetrics(m map[types.NamespacedName]*fwkdl.
 	b.fakePmc.SetRes(m)
 }
 
-
 // TestHarness encapsulates the environment for a single isolated EPP test run.
 // It manages the lifecycle of the controller manager, the EPP server, and the K8s namespace.
 type TestHarness struct {
@@ -312,7 +311,6 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		)
 		otel.SetTracerProvider(tp)
 	}
-
 
 	mgrCtx, mgrCancel := context.WithCancel(ctx)
 
