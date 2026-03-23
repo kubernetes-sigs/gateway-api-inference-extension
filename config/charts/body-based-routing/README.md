@@ -82,7 +82,7 @@ The following table list the configurable parameters of the chart.
 | `bbr.image.tag`              | Image tag.                                                                                                        |
 | `bbr.image.pullPolicy`       | Image pull policy for the container. Possible values: `Always`, `IfNotPresent`, or `Never`. Defaults to `Always`. |
 | `bbr.flags`                  | map of flags which are passed through to bbr. Refer to [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/bbr/runner/runner.go) for complete list. |
-| `bbr.plugins`   |  Custom ordered plugins array to set for BBR. each plugin have fields: type, name and optionally json (which represents parameters of the plugin). If not specified, BBR will use by default the `body-field-to-header` to extract the `model field`, and `base-model-to-header` (in that order).  |
+| `bbr.plugins`   |  Custom ordered plugins array to set for BBR. each plugin have fields: type, name and optionally json (which represents parameters of the plugin). If not specified, BBR will use by default the `body-field-to-header` to extract the `model` field, and `base-model-to-header` (in that order).  |
 | `provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.     |
 | `inferenceGateway.name`      | The name of the Gateway. Defaults to `inference-gateway`.                                                                                 
 
