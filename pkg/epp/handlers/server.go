@@ -203,7 +203,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return nil
 		}
 		if recvErr != nil {
-			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
+			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", recvErr)
 		}
 
 		reqCtx.Request.Metadata = envoy.ExtractMetadataValues(req)
