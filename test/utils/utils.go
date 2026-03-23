@@ -85,8 +85,7 @@ func NewTestConfig(nsName string, k8sContext string) *TestConfig {
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(kubeCli).NotTo(gomega.BeNil())
 
-	// Log cluster context information for debugging.
-	ginkgo.By(fmt.Sprintf("API server endpoint: %s", cfg.Host))
+	ginkgo.By("API server endpoint: " + cfg.Host)
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	configOverrides := &clientcmd.ConfigOverrides{}
 	if k8sContext != "" {
@@ -99,14 +98,14 @@ func NewTestConfig(nsName string, k8sContext string) *TestConfig {
 		if k8sContext != "" {
 			ctxName = k8sContext
 		}
-		ginkgo.By(fmt.Sprintf("Kubeconfig context: %s", ctxName))
+		ginkgo.By("Kubeconfig context: " + ctxName)
 		if ctx, ok := rawConfig.Contexts[ctxName]; ok {
 			ginkgo.By(fmt.Sprintf("Cluster: %s, AuthInfo: %s", ctx.Cluster, ctx.AuthInfo))
 		}
 	}
 	serverVersion, err := kubeCli.Discovery().ServerVersion()
 	if err == nil {
-		ginkgo.By(fmt.Sprintf("Kubernetes server version: %s", serverVersion.GitVersion))
+		ginkgo.By("Kubernetes server version: " + serverVersion.GitVersion)
 	}
 
 	return &TestConfig{
@@ -543,10 +542,6 @@ func ValidateCRDsEstablished(testConfig *TestConfig, crdNames []string) {
 				Name: name,
 			},
 		}
-		EventuallyExists(testConfig, func() error {
-			return testConfig.K8sClient.Get(testConfig.Context,
-				types.NamespacedName{Name: name}, crd)
-		})
 		CRDEstablished(testConfig, crd)
 	}
 }
