@@ -22,6 +22,7 @@ import (
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -31,8 +32,9 @@ const FeatureGate = "flowControl"
 // It embeds the configurations for the controller and the registry, providing a single point of entry for validation
 // and initialization.
 type Config struct {
-	Controller *controller.Config
-	Registry   *registry.Config
+	Controller       *controller.Config
+	Registry         *registry.Config
+	UsageLimitPolicy flowcontrol.UsageLimitPolicy
 }
 
 // NewConfigFromAPI creates a new Config by translating the top-level API configuration.
@@ -45,8 +47,30 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller config: %w", err)
 	}
-	return &Config{
-		Controller: ctrlCfg,
-		Registry:   registryConfig,
-	}, nil
+	usageLimitPolicy, err := ensureUsageLimitPolicy(apiConfig, handle)
+	if err != nil {
+		return nil, err
+	}
+	cfg := &Config{
+		Controller:       ctrlCfg,
+		Registry:         registryConfig,
+		UsageLimitPolicy: usageLimitPolicy,
+	}
+	return cfg, nil
+}
+
+func ensureUsageLimitPolicy(apiConfig *configapi.FlowControlConfig, handle plugin.Handle) (flowcontrol.UsageLimitPolicy, error) {
+	ref := registry.DefaultUsageLimitPolicyRef
+	if apiConfig != nil && apiConfig.UsageLimit != nil {
+		ref = apiConfig.UsageLimit.PluginRef
+	}
+	p := handle.Plugin(ref)
+	if p == nil {
+		return nil, fmt.Errorf("usage limit policy plugin '%s' not found", ref)
+	}
+	usageLimitPolicy, ok := p.(flowcontrol.UsageLimitPolicy)
+	if !ok {
+		return nil, fmt.Errorf("plugin '%s' does not implement UsageLimitPolicy", ref)
+	}
+	return usageLimitPolicy, nil
 }

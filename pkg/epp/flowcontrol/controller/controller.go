@@ -64,6 +64,7 @@ type shardProcessorFactory func(
 	shard contracts.RegistryShard,
 	saturationDetector flowcontrol.SaturationDetector,
 	podLocator contracts.PodLocator,
+	usageLimitPolicy flowcontrol.UsageLimitPolicy,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -100,6 +101,7 @@ type FlowController struct {
 	registry              registryClient
 	saturationDetector    flowcontrol.SaturationDetector
 	podLocator            contracts.PodLocator
+	usageLimitPolicy      flowcontrol.UsageLimitPolicy
 	clock                 clock.WithTicker
 	logger                logr.Logger
 	shardProcessorFactory shardProcessorFactory
@@ -133,6 +135,7 @@ func NewFlowController(
 	registry contracts.FlowRegistry,
 	sd flowcontrol.SaturationDetector,
 	podLocator contracts.PodLocator,
+	usageLimitPolicy flowcontrol.UsageLimitPolicy,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
@@ -140,6 +143,7 @@ func NewFlowController(
 		registry:           registry,
 		saturationDetector: sd,
 		podLocator:         podLocator,
+		usageLimitPolicy:   usageLimitPolicy,
 		clock:              clock.RealClock{},
 		logger:             log.FromContext(ctx).WithName("flow-controller"),
 		parentCtx:          ctx,
@@ -150,6 +154,7 @@ func NewFlowController(
 		shard contracts.RegistryShard,
 		saturationDetector flowcontrol.SaturationDetector,
 		podLocator contracts.PodLocator,
+		usageLimitPolicy flowcontrol.UsageLimitPolicy,
 		clock clock.WithTicker,
 		cleanupSweepInterval time.Duration,
 		enqueueChannelBufferSize int,
@@ -161,6 +166,7 @@ func NewFlowController(
 			shard,
 			saturationDetector,
 			podLocator,
+			usageLimitPolicy,
 			clock,
 			cleanupSweepInterval,
 			enqueueChannelBufferSize,
@@ -487,6 +493,7 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 		shard,
 		fc.saturationDetector,
 		fc.podLocator,
+		fc.usageLimitPolicy,
 		fc.clock,
 		fc.config.ExpiryCleanupInterval,
 		fc.config.EnqueueChannelBufferSize,
