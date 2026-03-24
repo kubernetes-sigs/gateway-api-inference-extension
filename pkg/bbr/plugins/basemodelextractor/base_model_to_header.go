@@ -58,14 +58,13 @@ func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle frame
 
 // NewBaseModelToHeaderPlugin returns a *BaseModelToHeaderPlugin with an initialized AdaptersStore.
 func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clientReader client.Reader) (*BaseModelToHeaderPlugin, error) {
-	reconcilerBuidler := reconcilerBuilder()
 	adaptersStore := NewAdaptersStore()
 	configMapReconciler := &ConfigMapReconciler{
 		Reader:        clientReader,
 		AdaptersStore: adaptersStore,
 	}
 
-	if err := reconcilerBuidler.For(&corev1.ConfigMap{}).Complete(configMapReconciler); err != nil {
+	if err := reconcilerBuilder().For(&corev1.ConfigMap{}).WithEventFilter(bbrManagedPredicate()).Complete(configMapReconciler); err != nil {
 		return nil, fmt.Errorf("failed to register configmap reconciler for plugin '%s' - %w", BaseModelToHeaderPluginType, err)
 	}
 

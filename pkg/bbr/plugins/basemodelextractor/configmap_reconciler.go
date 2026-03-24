@@ -24,8 +24,29 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
+
+const bbrManagedLabel = "inference.networking.k8s.io/bbr-managed"
+
+func hasBbrManagedLabel(object client.Object) bool {
+	return object.GetLabels()[bbrManagedLabel] == "true"
+}
+
+// bbrManagedPredicate filters events to only ConfigMaps labeled with
+// "inference.networking.k8s.io/bbr-managed" = "true".
+func bbrManagedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool { return hasBbrManagedLabel(e.Object) },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return hasBbrManagedLabel(e.ObjectOld) || hasBbrManagedLabel(e.ObjectNew)
+		},
+		DeleteFunc:  func(e event.DeleteEvent) bool { return hasBbrManagedLabel(e.Object) },
+		GenericFunc: func(e event.GenericEvent) bool { return hasBbrManagedLabel(e.Object) },
+	}
+}
 
 // ConfigMapReconciler watches ConfigMap objects and updates the AdaptersStore
 // with adapter-to-base-model mappings parsed from each ConfigMap's data.
@@ -44,7 +65,7 @@ func (c *ConfigMapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, fmt.Errorf("unable to get ConfigMap - %w", err)
 	}
 
-	if errors.IsNotFound(err) || !configmap.DeletionTimestamp.IsZero() {
+	if errors.IsNotFound(err) || !configmap.DeletionTimestamp.IsZero() || !hasBbrManagedLabel(configmap) {
 		// ConfigMap object got deleted or is marked for deletion.
 		c.AdaptersStore.configMapDelete(configmap)
 		return ctrl.Result{}, nil

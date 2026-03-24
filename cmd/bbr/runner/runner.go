@@ -26,13 +26,10 @@ import (
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -147,17 +144,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return nil
 		}(),
 	}
-	// label "inference.networking.k8s.io/bbr-managed" = "true" is used for server-side filtering of configmaps.
-	// only the configmap objects with this label will be tracked by bbr.
-	cacheOptions := cache.Options{
-		ByObject: map[client.Object]cache.ByObject{
-			&corev1.ConfigMap{}: {
-				Label: labels.SelectorFromSet(labels.Set{
-					"inference.networking.k8s.io/bbr-managed": "true",
-				}),
-			},
-		},
-	}
+	cacheOptions := cache.Options{}
 	// Apply namespace filtering only if env var is set.
 	namespace := os.Getenv("NAMESPACE")
 	if namespace != "" {
