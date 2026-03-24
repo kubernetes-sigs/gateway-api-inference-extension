@@ -190,7 +190,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 			},
 			wantResponses: ExpectReject(
 				envoyTypePb.StatusCode_BadRequest,
-				"inference error: BadRequest - error unmarshaling request bodyMap",
+				"inference error: BadRequest - error unmarshaling request bodyMap:",
 			),
 		},
 		{
