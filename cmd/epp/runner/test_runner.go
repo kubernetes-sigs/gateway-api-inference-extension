@@ -45,7 +45,7 @@ func NewTestRunnerSetup(
 
 	if mockDataSource != nil {
 		mockType := mockDataSource.TypedName().Type
-		fwkplugin.Register(mockType, func(_ string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		fwkplugin.Register(mockType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 			return mockDataSource, nil
 		})
 		defer delete(fwkplugin.Registry, mockType)

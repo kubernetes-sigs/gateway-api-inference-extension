@@ -39,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	metricsutils "k8s.io/component-base/metrics/testutil"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -127,7 +128,7 @@ const (
 	strategyWithCRD standaloneStrategy = "with_crd" // Standalone but watching CRDs
 )
 
-// HarnessConfig holds configuration options for the Harness.
+// HarnessConfig holds configuration options for the TestHarness.
 type HarnessConfig struct {
 	// runMode is the master switch. It tells you explicitly what the config is for.
 	runMode runMode
@@ -187,7 +188,7 @@ func WithDataLayer() HarnessOption {
 // metricsBackend abstracts how pod metrics are injected into the test environment.
 // The standard harness uses FakePodMetricsClient; the datalayer harness uses a mock DataSource.
 type metricsBackend interface {
-	SetPodMetrics(metrics map[types.NamespacedName]*fwkdl.Metrics)
+	SetPodMetrics(m map[types.NamespacedName]*fwkdl.Metrics)
 }
 
 // fakePmcBackend wraps FakePodMetricsClient to implement metricsBackend.
@@ -195,8 +196,8 @@ type fakePmcBackend struct {
 	fakePmc *backendmetrics.FakePodMetricsClient
 }
 
-func (b *fakePmcBackend) SetPodMetrics(metrics map[types.NamespacedName]*fwkdl.Metrics) {
-	b.fakePmc.SetRes(metrics)
+func (b *fakePmcBackend) SetPodMetrics(m map[types.NamespacedName]*fwkdl.Metrics) {
+	b.fakePmc.SetRes(m)
 }
 
 // mockDataSourceBackend wraps the mock DataSource to implement metricsBackend.
@@ -277,11 +278,15 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 
 	fakePmc := &backendmetrics.FakePodMetricsClient{}
 	var backend metricsBackend
-	var mgr interface{ Start(context.Context) error }
+	var mgr ctrl.Manager
 	var dataStore datastore.Datastore
 	var err error
 
 	if config.useDataLayer {
+		// Shorten the Prometheus refresh interval so WaitForReadyPodsMetric (10s timeout)
+		// has many opportunities to observe the metric update instead of only ~2.
+		eppOptions.RefreshPrometheusMetricsInterval = 500 * time.Millisecond
+
 		// Data layer path: create mock data source and wire it in.
 		mockDataSource := dlmocks.NewDataSource(plugin.TypedName{
 			Type: mockDataSourceType,
@@ -290,10 +295,6 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		mgr, dataStore, err = eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc, mockDataSource)
 		require.NoError(t, err, "failed to create manager")
 		backend = &mockDataSourceBackend{mockDataSource: mockDataSource, fakePmc: fakePmc}
-
-		// Shorten the Prometheus refresh interval so WaitForReadyPodsMetric (10s timeout)
-		// has many opportunities to observe the metric update instead of only ~2.
-		eppOptions.RefreshPrometheusMetricsInterval = 500 * time.Millisecond
 	} else {
 		// Standard path: use FakePodMetricsClient directly.
 		mgr, dataStore, err = eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc, nil)
