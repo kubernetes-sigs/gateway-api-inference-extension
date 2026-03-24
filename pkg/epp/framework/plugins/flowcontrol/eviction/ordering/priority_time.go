@@ -24,7 +24,7 @@ import (
 )
 
 // PriorityThenTimeOrderingType evicts the lowest priority request first,
-// breaking ties by oldest dispatch time.
+// breaking ties by newest dispatch time (least KV-cache investment).
 const PriorityThenTimeOrderingType = "eviction-priority-then-time-ordering"
 
 func init() {
@@ -41,7 +41,8 @@ func PriorityThenTimeOrderingFactory(name string, _ json.RawMessage, _ plugin.Ha
 }
 
 // PriorityThenTimeOrdering evicts the lowest priority request first.
-// When priorities are equal, the oldest dispatched request is evicted first.
+// When priorities are equal, the newest dispatched request is evicted first
+// to minimize wasted KV-cache investment.
 type PriorityThenTimeOrdering struct {
 	name string
 }
@@ -56,5 +57,5 @@ func (p *PriorityThenTimeOrdering) Less(a, b *flowcontrol.EvictionItem) bool {
 	if a.Priority != b.Priority {
 		return a.Priority < b.Priority
 	}
-	return a.DispatchTime.Before(b.DispatchTime)
+	return a.DispatchTime.After(b.DispatchTime)
 }

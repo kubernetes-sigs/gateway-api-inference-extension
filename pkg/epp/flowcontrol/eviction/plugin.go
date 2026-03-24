@@ -91,6 +91,14 @@ func (p *Plugin) PreRequest(
 
 	p.queue.Track(item)
 
+	// Bind untrack to the request context's lifetime as a safety net.
+	// If the client disconnects and ResponseBody(EndOfStream) never fires,
+	// ctx.Done() ensures the request is still cleaned up. Untrack is idempotent.
+	go func() {
+		<-ctx.Done()
+		p.queue.Untrack(requestID)
+	}()
+
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Tracked in-flight request",
 		"requestID", requestID,
 		"priority", item.Priority,
@@ -125,25 +133,32 @@ func (p *Plugin) ResponseBody(
 		"inFlight", p.queue.InFlightLen())
 }
 
-// EvictN pops the n most-evictable requests and aborts them on the model server.
+// EvictN attempts to evict up to n requests from the eviction queue.
+// Each request is only removed from tracking after a successful abort. If the abort fails,
+// the request remains in the queue for a future eviction attempt.
 // Returns the request IDs that were successfully aborted.
 func (p *Plugin) EvictN(ctx context.Context, n int) ([]string, error) {
-	items := p.queue.PopN(n)
-	if len(items) == 0 {
-		return nil, nil
-	}
-
 	logger := log.FromContext(ctx)
-	aborted := make([]string, 0, len(items))
-	for _, item := range items {
+	aborted := make([]string, 0, n)
+
+	for range n {
+		items := p.queue.PopN(1)
+		if len(items) == 0 {
+			break
+		}
+		item := items[0]
+
 		if err := p.aborter.Abort(ctx, item); err != nil {
-			logger.Error(err, "Failed to abort request", "requestID", item.RequestID, "targetURL", item.TargetURL)
+			logger.Error(err, "Failed to abort request, re-tracking", "requestID", item.RequestID, "targetURL", item.TargetURL)
+			p.queue.Track(item)
 			continue
 		}
 		aborted = append(aborted, item.RequestID)
 	}
 
-	logger.Info("Eviction complete", "requested", n, "aborted", len(aborted))
+	if len(aborted) > 0 {
+		logger.Info("Eviction complete", "requested", n, "aborted", len(aborted))
+	}
 	return aborted, nil
 }
 

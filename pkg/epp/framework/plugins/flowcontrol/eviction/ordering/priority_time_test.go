@@ -43,8 +43,8 @@ func TestPriorityThenTimeOrdering_Less(t *testing.T) {
 	}{
 		{"lower priority evicted first", itemLowPriOld, itemMidPri, true},
 		{"higher priority not evicted first", itemHighPri, itemMidPri, false},
-		{"same priority older evicted first", itemLowPriOld, itemLowPriNew, true},
-		{"same priority newer not evicted first", itemLowPriNew, itemLowPriOld, false},
+		{"same priority newer evicted first", itemLowPriNew, itemLowPriOld, true},
+		{"same priority older not evicted first", itemLowPriOld, itemLowPriNew, false},
 		{"same item no preference", itemMidPri, itemMidPri, false},
 	}
 

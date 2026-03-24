@@ -41,7 +41,7 @@ func (t *testOrdering) Less(a, b *flowcontrol.EvictionItem) bool {
 	if a.Priority != b.Priority {
 		return a.Priority < b.Priority
 	}
-	return a.DispatchTime.Before(b.DispatchTime)
+	return a.DispatchTime.After(b.DispatchTime)
 }
 
 type testFilter struct {
@@ -155,9 +155,9 @@ func TestEvictionQueue_PopN_TiebreakByDispatchTime(t *testing.T) {
 	evicted := q.PopN(3)
 	require.Len(t, evicted, 3)
 
-	assert.Equal(t, "oldest", evicted[0].RequestID)
+	assert.Equal(t, "newer", evicted[0].RequestID)
 	assert.Equal(t, "middle", evicted[1].RequestID)
-	assert.Equal(t, "newer", evicted[2].RequestID)
+	assert.Equal(t, "oldest", evicted[2].RequestID)
 }
 
 func TestEvictionQueue_PopN_Bounds(t *testing.T) {
