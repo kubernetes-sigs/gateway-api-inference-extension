@@ -89,9 +89,6 @@ import (
 )
 
 const (
-	// enableExperimentalDatalayerV2 defines the environment variable used as feature flag for the pluggable data layer.
-	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
-	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
 	// enableExperimentalFlowControlLayer defines the environment variable used as a feature flag for the pluggable flow
 	// control layer.
 	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
@@ -229,7 +226,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		setupLog.Error(err, "Failed to parse configuration")
 		return nil, nil, err
 	}
-	useNewMetrics := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.DisableDataLayerFeatureGate]
+	useNewMetrics := !r.featureGates[datalayer.DisableDataLayerFeatureGate]
 	epf := r.setupMetricsCollection(useNewMetrics, opts, pmc)
 	gknn, err := extractGKNN(opts.PoolName, opts.PoolGroup, opts.PoolNamespace, opts.EndpointSelector)
 	if err != nil {
@@ -321,7 +318,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	// Data layer is enabled by default (unless explicitly disabled)
 	// Support both old "dataLayer" gate (for backward compatibility) and new "disableDataLayer" gate
-	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.DisableDataLayerFeatureGate]
+	datalayerMetricsEnabled := !r.featureGates[datalayer.DisableDataLayerFeatureGate]
 	if err := r.configureAndStartDatalayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
@@ -508,8 +505,15 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	r.featureGates = featureGates
 
 	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] {
-		setupLog.Info("Warning: The 'dataLayer' feature gate is deprecated and will be removed in a future version. " +
-			"The data layer is now enabled by default. To disable it, use the 'disableDataLayer' feature gate.")
+		setupLog.Info("Warning: The 'dataLayer' feature gate is deprecated and has no effect. " +
+			"The data layer is now enabled by default. Remove it from your config. " +
+			"To disable the data layer, use the 'disableDataLayer' feature gate.")
+	}
+
+	if r.featureGates[datalayer.DisableDataLayerFeatureGate] {
+		setupLog.Info("Data layer: DISABLED (opt-out via 'disableDataLayer' feature gate)")
+	} else {
+		setupLog.Info("Data layer: ENABLED (default)")
 	}
 
 	return rawConfig, nil
@@ -531,7 +535,6 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
 
-	applyDeprecatedEnvFeatureGate(enableExperimentalDatalayerV2, "Data Layer V2", datalayer.ExperimentalDatalayerFeatureGate, rawConfig)
 	applyDeprecatedEnvFeatureGate(enableExperimentalFlowControlLayer, "Flow Control layer", flowcontrol.FeatureGate, rawConfig)
 
 	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds))

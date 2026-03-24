@@ -109,9 +109,13 @@ func InstantiateAndConfigure(
 	}
 
 	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
-	dataConfig, err := buildDataLayerConfig(rawConfig.Data, handle)
-	if err != nil {
-		return nil, fmt.Errorf("data layer config build failed: %w", err)
+	var dataConfig *datalayer.Config
+	if !featureGates[datalayer.DisableDataLayerFeatureGate] {
+		var err error
+		dataConfig, err = buildDataLayerConfig(rawConfig.Data, handle)
+		if err != nil {
+			return nil, fmt.Errorf("data layer config build failed: %w", err)
+		}
 	}
 
 	var flowControlConfig *flowcontrol.Config

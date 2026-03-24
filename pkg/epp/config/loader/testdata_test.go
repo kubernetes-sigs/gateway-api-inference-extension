@@ -474,7 +474,7 @@ schedulingProfiles:
 `
 
 // successDataLayerAutoDefaultText has the datalayer enabled without data config.
-// The loader should auto-populate default metrics-data-source + core-metrics-extractor.
+// The loader should auto-populate default datalayer plugins.
 // successDataLayerAutoDefaultText has NO featureGates — datalayer is enabled by default.
 const successDataLayerAutoDefaultText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1

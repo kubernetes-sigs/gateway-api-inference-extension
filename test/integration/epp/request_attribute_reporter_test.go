@@ -52,6 +52,8 @@ schedulingProfiles:
       - pluginRef: total-tokens-cost-reporter
 parser:
   pluginRef: openai-parser
+featureGates:
+  - disableDataLayer
 `
 
 func TestRequestAttributeReporter(t *testing.T) {

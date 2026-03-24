@@ -218,10 +218,7 @@ func ensureSchedulingLayer(
 }
 
 // ensureFlowControlLayer guarantees that the flow control subsystem is structurally complete.
-func ensureFlowControlLayer(
-	cfg *configapi.EndpointPickerConfig,
-	handle fwkplugin.Handle,
-	allPlugins map[string]fwkplugin.Plugin,
+func ensureFlowControlLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle, allPlugins map[string]fwkplugin.Plugin,
 ) error {
 	if _, ok := allPlugins[registry.DefaultOrderingPolicyRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, registry.DefaultOrderingPolicyRef); err != nil {
