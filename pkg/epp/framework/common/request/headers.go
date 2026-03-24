@@ -18,6 +18,12 @@ package request
 
 import "strings"
 
+// Well-known inference request header names (SLO targets in milliseconds).
+const (
+	TTFTSLOMsHeaderKey = "x-slo-ttft-ms"
+	TPOTSLOMsHeaderKey = "x-slo-tpot-ms"
+)
+
 // GetHeader returns the value for key from headers, with case-insensitive lookup.
 func GetHeader(headers map[string]string, key string) string {
 	if v, ok := headers[key]; ok {

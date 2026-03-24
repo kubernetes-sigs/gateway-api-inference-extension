@@ -25,7 +25,7 @@ import (
 func TestGetHeader(t *testing.T) {
 	headers := map[string]string{"X-SLO-TTFT-MS": "42", "Other": "x"}
 	assert.Equal(t, "42", GetHeader(headers, "X-SLO-TTFT-MS"))
-	assert.Equal(t, "42", GetHeader(headers, "x-slo-ttft-ms"))
+	assert.Equal(t, "42", GetHeader(headers, TTFTSLOMsHeaderKey))
 	assert.Equal(t, "", GetHeader(headers, "missing"))
 	assert.Equal(t, "", GetHeader(nil, "k"))
 }

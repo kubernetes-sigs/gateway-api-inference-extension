@@ -26,6 +26,7 @@ import (
 
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	fwkrequest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/common/request"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -34,14 +35,14 @@ func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedul
 	var err error
 
 	// Get Request SLOs from request header
-	predictedLatencyCtx.ttftSLO, err = parseFloatHeader(*request, ttftSLOHeaderKey)
+	predictedLatencyCtx.ttftSLO, err = parseFloatHeader(*request, fwkrequest.TTFTSLOMsHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", ttftSLOHeaderKey, err)}, "PredictedLatency: Error parsing TTFT SLO from header")
+		logger.V(logutil.DEBUG).Error(errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", fwkrequest.TTFTSLOMsHeaderKey, err)}, "PredictedLatency: Error parsing TTFT SLO from header")
 	}
 
-	predictedLatencyCtx.avgTPOTSLO, err = parseFloatHeader(*request, tpotSLOHeaderKey)
+	predictedLatencyCtx.avgTPOTSLO, err = parseFloatHeader(*request, fwkrequest.TPOTSLOMsHeaderKey)
 	if err != nil {
-		logger.V(logutil.DEBUG).Error(errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", tpotSLOHeaderKey, err)}, "PredictedLatency: Error parsing TPOT SLO from header")
+		logger.V(logutil.DEBUG).Error(errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("%v must be a float: %v", fwkrequest.TPOTSLOMsHeaderKey, err)}, "PredictedLatency: Error parsing TPOT SLO from header")
 	}
 }
 

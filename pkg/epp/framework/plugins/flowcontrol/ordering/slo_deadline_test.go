@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fwkrequest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -52,7 +53,7 @@ func TestSLODeadlinePolicy_RequiredQueueCapabilities(t *testing.T) {
 func makeSLOItem(id string, received time.Time, sloTTFTMs string) flowcontrol.QueueItemAccessor {
 	req := mocks.NewMockFlowControlRequest(10, id, testFlowKey)
 	req.ReceivedTimestampV = received
-	req.InferenceRequestV = &scheduling.LLMRequest{Headers: map[string]string{sloTtftHeader: sloTTFTMs}}
+	req.InferenceRequestV = &scheduling.LLMRequest{Headers: map[string]string{fwkrequest.TTFTSLOMsHeaderKey: sloTTFTMs}}
 	return &mocks.MockQueueItemAccessor{
 		EffectiveTTLV:    0,
 		OriginalRequestV: req,
@@ -113,7 +114,7 @@ func TestCalculateSLODeadline(t *testing.T) {
 	// Valid header
 	reqValid := mocks.NewMockFlowControlRequest(1, "valid", testFlowKey)
 	reqValid.ReceivedTimestampV = now
-	reqValid.InferenceRequestV = &scheduling.LLMRequest{Headers: map[string]string{sloTtftHeader: "200"}}
+	reqValid.InferenceRequestV = &scheduling.LLMRequest{Headers: map[string]string{fwkrequest.TTFTSLOMsHeaderKey: "200"}}
 	accValid := &mocks.MockQueueItemAccessor{OriginalRequestV: reqValid}
 	deadline := calculateSLODeadline(accValid)
 	assert.Equal(t, now.Add(200*time.Millisecond), deadline)
@@ -130,7 +131,7 @@ func TestCalculateSLODeadline(t *testing.T) {
 
 	// Invalid value
 	reqInvalid := mocks.NewMockFlowControlRequest(3, "inv", testFlowKey)
-	reqInvalid.InferenceRequestV = &scheduling.LLMRequest{Headers: map[string]string{sloTtftHeader: "x"}}
+	reqInvalid.InferenceRequestV = &scheduling.LLMRequest{Headers: map[string]string{fwkrequest.TTFTSLOMsHeaderKey: "x"}}
 	accInvalid := &mocks.MockQueueItemAccessor{OriginalRequestV: reqInvalid}
 	assert.Equal(t, sloMaxDeadlineTime, calculateSLODeadline(accInvalid))
 

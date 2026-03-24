@@ -898,7 +898,7 @@ func ClassifySLO(rawHeaderValue string) string {
 }
 
 // RecordFlowControlSLORequestQueueDuration records the queue duration for a request partitioned by its
-// SLO class (derived from the x-slo-ttft-ms header). This is a dedicated metric separate from the
+// SLO class (derived from the TTFT SLO header; see framework/common/request.TTFTSLOMsHeaderKey). This is a dedicated metric separate from the
 // operational flowControlRequestQueueDuration to avoid cardinality issues with raw SLO values.
 func RecordFlowControlSLORequestQueueDuration(
 	sloClass, outcome, inferencePool string,

@@ -147,9 +147,6 @@ func (fi *FlowItem) FinalizeWithOutcome(outcome types.QueueOutcome, err error) {
 	})
 }
 
-// sloTTFTHeader is the request header carrying the TTFT SLO target in milliseconds.
-const sloTTFTHeader = "x-slo-ttft-ms"
-
 // finalizeInternal is the core finalization logic. It must be called within the sync.Once.Do block.
 // It captures the state, stores it atomically, and signals the Done channel.
 func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
@@ -179,13 +176,13 @@ func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
 	close(fi.done)
 }
 
-// extractSLOTTFTHeader reads the x-slo-ttft-ms header value from the request's inference headers.
+// extractSLOTTFTHeader reads the TTFT SLO header (request.TTFTSLOMsHeaderKey) from the request's inference headers.
 func extractSLOTTFTHeader(req flowcontrol.FlowControlRequest) string {
 	infReq := req.InferenceRequest()
 	if infReq == nil || infReq.Headers == nil {
 		return ""
 	}
-	return request.GetHeader(infReq.Headers, sloTTFTHeader)
+	return request.GetHeader(infReq.Headers, request.TTFTSLOMsHeaderKey)
 }
 
 // inferOutcome determines the correct QueueOutcome and Error based on the cause of finalization and whether the item
