@@ -29,6 +29,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/common"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -152,7 +153,7 @@ func TestBaseModelToHeaderPlugin_ProcessRequest(t *testing.T) {
 		},
 		Data: map[string]string{
 			"baseModel": testBaseModel,
-			"adapters":  "- " + testAdapter + "\n- another-adapter",
+			"adapters":  "- " + testAdapter,
 		},
 	}
 	if err := store.configMapUpdateOrAddIfNotExist(cm); err != nil {
@@ -278,8 +279,8 @@ func TestBaseModelToHeaderPlugin_ProcessRequest(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if tt.wantHeader != "" && tt.request != nil && tt.request.Headers != nil {
-				if got := tt.request.Headers[baseModelHeader]; got != tt.wantHeader {
-					t.Errorf("Headers[%q] = %q, want %q", baseModelHeader, got, tt.wantHeader)
+				if got := tt.request.Headers[common.BaseModelHeader]; got != tt.wantHeader {
+					t.Errorf("Headers[%q] = %q, want %q", common.BaseModelHeader, got, tt.wantHeader)
 				}
 			}
 		})
@@ -318,7 +319,7 @@ func TestBaseModelToHeaderPlugin_ProcessRequest_MutatedHeaders(t *testing.T) {
 	}
 
 	mutated := request.MutatedHeaders()
-	if got, ok := mutated[baseModelHeader]; !ok || got != testBaseModel {
-		t.Errorf("MutatedHeaders()[%q] = %q, %v; want %q, true", baseModelHeader, got, ok, testBaseModel)
+	if got, ok := mutated[common.BaseModelHeader]; !ok || got != testBaseModel {
+		t.Errorf("MutatedHeaders()[%q] = %q, %v; want %q, true", common.BaseModelHeader, got, ok, testBaseModel)
 	}
 }
