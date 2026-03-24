@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
-<<<<<<< HEAD
 const (
 	// vLLM default token block size is 16 tokens
 	DefaultBlockSizeTokens = 16
@@ -61,13 +60,8 @@ const (
 	Experimental_DefaultPrefillProfile = "prefill"
 
 	PrefixCachePluginType = "prefix-cache-scorer"
-)
 
-const (
 	PodActiveCheckInterval = 2 * time.Minute
-
-	// An estimated average characters per token, used since the request we cached is not tokenized.
-	averageCharactersPerToken = 4
 )
 
 var DefaultConfig = Config{
@@ -96,8 +90,6 @@ type Config struct {
 	LRUCapacityPerServer int `json:"lruCapacityPerServer"`
 }
 
-=======
->>>>>>> d3581269 (Restructure PrepareData hook for prefix cache plugin)
 // Plugin implements the prefix cache aware scoring and pre-request logic.
 type Plugin struct {
 	typedName   plugin.TypedName
