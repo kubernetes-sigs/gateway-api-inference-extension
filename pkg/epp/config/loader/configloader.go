@@ -109,7 +109,7 @@ func InstantiateAndConfigure(
 	}
 
 	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
-	dataConfig, err := buildDataLayerConfig(rawConfig.Data, featureGates[datalayer.ExperimentalDatalayerFeatureGate], handle)
+	dataConfig, err := buildDataLayerConfig(rawConfig.Data, handle)
 	if err != nil {
 		return nil, fmt.Errorf("data layer config build failed: %w", err)
 	}
@@ -265,7 +265,7 @@ func buildParserConfig(rawParserConfig *configapi.ParserConfig, handle fwkplugin
 	}, nil
 }
 
-func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, _ bool, handle fwkplugin.Handle) (*datalayer.Config, error) {
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, handle fwkplugin.Handle) (*datalayer.Config, error) {
 	cfg := datalayer.Config{
 		Sources: []datalayer.DataSourceConfig{},
 	}

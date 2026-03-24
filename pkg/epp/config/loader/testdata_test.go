@@ -475,6 +475,7 @@ schedulingProfiles:
 
 // successDataLayerAutoDefaultText has the datalayer enabled without data config.
 // The loader should auto-populate default metrics-data-source + core-metrics-extractor.
+// successDataLayerAutoDefaultText has NO featureGates — datalayer is enabled by default.
 const successDataLayerAutoDefaultText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
@@ -485,8 +486,21 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
+`
+
+// successDataLayerDisabledText opts out of the datalayer via the disableDataLayer gate.
+const successDataLayerDisabledText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
 featureGates:
-- dataLayer
+- disableDataLayer
 `
 
 // successDataLayerExplicitConfigText has the datalayer enabled with explicit data config.

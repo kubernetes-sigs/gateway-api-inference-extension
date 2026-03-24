@@ -229,8 +229,8 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		setupLog.Error(err, "Failed to parse configuration")
 		return nil, nil, err
 	}
-
-	epf := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts, pmc)
+	useNewMetrics := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.DisableDataLayerFeatureGate]
+	epf := r.setupMetricsCollection(useNewMetrics, opts, pmc)
 	gknn, err := extractGKNN(opts.PoolName, opts.PoolGroup, opts.PoolNamespace, opts.EndpointSelector)
 	if err != nil {
 		setupLog.Error(err, "Failed to extract GKNN")
@@ -319,7 +319,9 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
+	// Data layer is enabled by default (unless explicitly disabled)
+	// Support both old "dataLayer" gate (for backward compatibility) and new "disableDataLayer" gate
+	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.DisableDataLayerFeatureGate]
 	if err := r.configureAndStartDatalayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
@@ -370,7 +372,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		Director:                         director,
 		Parser:                           r.parser,
 		SaturationDetector:               eppConfig.SaturationDetector,
-		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
+		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.DisableDataLayerFeatureGate],
 	}
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
@@ -492,6 +494,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	}
 
 	loader.RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	loader.RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
 	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
 
@@ -503,6 +506,11 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	}
 
 	r.featureGates = featureGates
+
+	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] {
+		setupLog.Info("Warning: The 'dataLayer' feature gate is deprecated and will be removed in a future version. " +
+			"The data layer is now enabled by default. To disable it, use the 'disableDataLayer' feature gate.")
+	}
 
 	return rawConfig, nil
 }
