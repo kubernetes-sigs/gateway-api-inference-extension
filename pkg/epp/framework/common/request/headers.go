@@ -19,7 +19,9 @@ package request
 import "strings"
 
 const (
+	// TTFTSLOMsHeaderKey is the request header name for SLO time-to-first-token in milliseconds.
 	TTFTSLOMsHeaderKey = "x-slo-ttft-ms"
+	// TPOTSLOMsHeaderKey is the request header name for SLO time-per-output-token in milliseconds.
 	TPOTSLOMsHeaderKey = "x-slo-tpot-ms"
 )
 
