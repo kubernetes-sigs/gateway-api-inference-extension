@@ -18,7 +18,6 @@ package request
 
 import "strings"
 
-// Well-known inference request header names (SLO targets in milliseconds).
 const (
 	TTFTSLOMsHeaderKey = "x-slo-ttft-ms"
 	TPOTSLOMsHeaderKey = "x-slo-tpot-ms"

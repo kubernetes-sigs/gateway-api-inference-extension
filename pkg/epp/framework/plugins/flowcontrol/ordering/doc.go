@@ -53,7 +53,7 @@ limitations under the License.
 //     This maximizes the number of requests served before their deadlines expire.
 //
 //   - SLO Deadline ("slo-deadline-ordering-policy"): Orders requests by an SLO-based (service level objective) deadline
-//     computed as ReceivedTimestamp + the TTFT SLO header in milliseconds (see framework/common/request.TTFTSLOMsHeaderKey).
+//     computed as ReceivedTimestamp + x-slo-ttft-ms header (interpreted as milliseconds).
 //     Requests without a valid header are scheduled after SLO-bound requests.
 //     This maximizes the number of requests served before the deadlines computed on the defined SLO expire.
 package ordering

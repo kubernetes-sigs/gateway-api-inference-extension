@@ -859,16 +859,15 @@ func RecordFlowControlRequestQueueDuration(
 }
 
 // SLO class constants used as label values for the flow_control_slo_request_queue_duration_seconds metric.
-// They bucket the raw millisecond SLO header values into a bounded set to keep Prometheus cardinality safe.
+// They bucket the raw millisecond SLO header values into a bounded set.
 const (
-	SLOClassNone  = "none"
-	SLOClassTight = "tight" // < 200 ms
-	// Four bands for 200–1000 ms (200 ms wide, last band includes 1000).
+	SLOClassNone        = "none"
+	SLOClassBelowMS200  = "below_ms_200"
 	SLOClassMS200to399  = "ms_200_399"
 	SLOClassMS400to599  = "ms_400_599"
 	SLOClassMS600to799  = "ms_600_799"
 	SLOClassMS800to1000 = "ms_800_1000"
-	SLOClassRelaxed     = "relaxed" // > 1000 ms
+	SLOClassAboveMS1000 = "above_ms_1000"
 )
 
 // ClassifySLO maps a raw SLO header value (in milliseconds) to a bounded SLO class label.
@@ -883,7 +882,7 @@ func ClassifySLO(rawHeaderValue string) string {
 	}
 	switch {
 	case ms < 200:
-		return SLOClassTight
+		return SLOClassBelowMS200
 	case ms < 400:
 		return SLOClassMS200to399
 	case ms < 600:
@@ -893,13 +892,12 @@ func ClassifySLO(rawHeaderValue string) string {
 	case ms <= 1000:
 		return SLOClassMS800to1000
 	default:
-		return SLOClassRelaxed
+		return SLOClassAboveMS1000
 	}
 }
 
 // RecordFlowControlSLORequestQueueDuration records the queue duration for a request partitioned by its
-// SLO class (derived from the TTFT SLO header; see framework/common/request.TTFTSLOMsHeaderKey). This is a dedicated metric separate from the
-// operational flowControlRequestQueueDuration to avoid cardinality issues with raw SLO values.
+// SLO class (derived from the TTFT SLO header "x-slo-ttft-ms").
 func RecordFlowControlSLORequestQueueDuration(
 	sloClass, outcome, inferencePool string,
 	duration time.Duration,

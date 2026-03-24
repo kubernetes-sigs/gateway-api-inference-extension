@@ -30,8 +30,8 @@ import (
 const (
 	// SLODeadlineOrderingPolicyType orders requests by an SLO-based deadline
 	//
-	// It selects the request with the earliest SLO-based deadline, computed as ReceivedTimestamp plus the TTFT SLO header value (request.TTFTSLOMsHeaderKey, milliseconds).
-	// Requests without a valid TTFT SLO header are treated as having no deadline and are scheduled after SLO-bound requests,
+	// It selects the request with the earliest SLO-based deadline, computed as `ReceivedTimestamp() + x-slo-ttft-ms header (interpreted as milliseconds)`.
+	// Requests without a valid x-slo-ttft-ms header are treated as having no deadline and are scheduled after SLO-bound requests,
 	// with FCFS as a tie-breaker.
 	SLODeadlineOrderingPolicyType = "slo-deadline-ordering-policy"
 )
@@ -77,7 +77,7 @@ func (p *sloDeadlinePolicy) TypedName() plugin.TypedName {
 
 var sloMaxDeadlineTime = time.Unix(0, 1<<63-1)
 
-// calculateSLODeadline computes the SLO-based deadline for a request: ReceivedTimestamp + TTFT SLO header (ms).
+// calculateSLODeadline computes the SLO-based deadline for a request: ReceivedTimestamp + x-slo-ttft-ms (ms).
 // The header is read from the InferenceRequest()'s headers. If the header is missing, empty, or invalid,
 // the request is assigned a far-future deadline so it sorts after SLO-bound requests.
 func calculateSLODeadline(item flowcontrol.QueueItemAccessor) time.Time {

@@ -167,7 +167,7 @@ func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
 		fi.OriginalRequest().ModelName(), fi.OriginalRequest().TargetModelName(),
 		duration)
 
-	sloClass := metrics.ClassifySLO(extractSLOTTFTHeader(fi.originalRequest))
+	sloClass := metrics.ClassifySLO(extractHeader(fi.originalRequest, request.TTFTSLOMsHeaderKey))
 	metrics.RecordFlowControlSLORequestQueueDuration(
 		sloClass, outcomeStr, fi.originalRequest.InferencePoolName(),
 		duration)
@@ -176,13 +176,12 @@ func (fi *FlowItem) finalizeInternal(outcome types.QueueOutcome, err error) {
 	close(fi.done)
 }
 
-// extractSLOTTFTHeader reads the TTFT SLO header (request.TTFTSLOMsHeaderKey) from the request's inference headers.
-func extractSLOTTFTHeader(req flowcontrol.FlowControlRequest) string {
+func extractHeader(req flowcontrol.FlowControlRequest, name string) string {
 	infReq := req.InferenceRequest()
 	if infReq == nil || infReq.Headers == nil {
 		return ""
 	}
-	return request.GetHeader(infReq.Headers, request.TTFTSLOMsHeaderKey)
+	return request.GetHeader(infReq.Headers, name)
 }
 
 // inferOutcome determines the correct QueueOutcome and Error based on the cause of finalization and whether the item
