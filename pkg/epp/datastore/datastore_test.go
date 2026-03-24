@@ -366,9 +366,12 @@ func TestMetrics(t *testing.T) {
 		// Create the datalayer factory with config inside t.Run to get access to t
 		var datalayerFactory datalayer.EndpointFactory
 		t.Run(test.name, func(t *testing.T) {
+			mockDS := &mocks.MetricsDataSource{}
+			mockDS.SetMetrics(test.metrics)
+			mockDS.SetErrors(test.err)
 			datalayerFactory = datalayer.NewTestRuntimeWithConfig(t, period, &datalayer.Config{
 				Sources: []datalayer.DataSourceConfig{
-					{Plugin: &mocks.MetricsDataSource{Metrics: test.metrics, Errors: test.err}},
+					{Plugin: mockDS},
 				},
 			})
 			backendFactory := backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: test.metrics, Err: test.err}, period)

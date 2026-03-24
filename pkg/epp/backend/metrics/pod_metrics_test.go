@@ -72,9 +72,7 @@ func TestMetricsRefresh(t *testing.T) {
 			setupFn: func(t *testing.T) (datalayer.EndpointFactory, func(map[types.NamespacedName]*MetricsState)) {
 				pmc := &FakePodMetricsClient{}
 				pmf := NewPodMetricsFactory(pmc, interval)
-				setMetrics := func(m map[types.NamespacedName]*MetricsState) {
-					pmc.SetRes(m)
-				}
+				setMetrics := pmc.SetRes
 				return pmf, setMetrics
 			},
 		},
@@ -87,9 +85,8 @@ func TestMetricsRefresh(t *testing.T) {
 						{Plugin: mockDS},
 					},
 				})
-				setMetrics := func(m map[types.NamespacedName]*MetricsState) {
-					mockDS.SetMetrics(m)
-				}
+				setMetrics := mockDS.SetMetrics
+
 				return factory, setMetrics
 			},
 		},
