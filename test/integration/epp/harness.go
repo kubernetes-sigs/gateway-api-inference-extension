@@ -164,8 +164,6 @@ func (b *fakePmcBackend) SetPodMetrics(m map[types.NamespacedName]*fwkdl.Metrics
 }
 
 // mockDataSourceBackend wraps the mock DataSource to implement metricsBackend.
-// It also sets metrics on the legacy FakePodMetricsClient because Prometheus metrics
-// (e.g. inference_pool_ready_pods) are still populated by the legacy refresh loop.
 type mockDataSourceBackend struct {
 	mockDataSource *dlmocks.MetricsDataSource
 	fakePmc        *backendmetrics.FakePodMetricsClient
