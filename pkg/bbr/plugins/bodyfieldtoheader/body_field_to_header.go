@@ -32,6 +32,7 @@ import (
 
 const (
 	BodyFieldToHeaderPluginType = "body-field-to-header"
+	ModelHeader                 = "X-Gateway-Model-Name"
 )
 
 // compile-time type validation

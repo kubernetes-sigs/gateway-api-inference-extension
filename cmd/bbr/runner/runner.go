@@ -39,13 +39,14 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/bodyfieldtoheader"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/common"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/tracing"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
+
+const modelField = "model"
 
 var setupLog = ctrl.Log.WithName("setup")
 
@@ -176,7 +177,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
 
-		modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(common.ModelField, common.ModelHeader)
+		modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
 		if err != nil {
 			setupLog.Error(err, "Failed to create plugin", "pluginType", bodyfieldtoheader.BodyFieldToHeaderPluginType)
 			return err

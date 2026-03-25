@@ -34,11 +34,12 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/bodyfieldtoheader"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/common"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
+
+const modelField = "model"
 
 func TestHandleRequestHeaders(t *testing.T) {
 	tests := []struct {
@@ -225,13 +226,13 @@ func TestHandleRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      common.ModelHeader,
+												Key:      bodyfieldtoheader.ModelHeader,
 												RawValue: []byte("1"),
 											},
 										},
 										{
 											Header: &basepb.HeaderValue{
-												Key:      common.BaseModelHeader,
+												Key:      basemodelextractor.BaseModelHeader,
 												RawValue: []byte(""),
 											},
 										},
@@ -259,13 +260,13 @@ func TestHandleRequestBody(t *testing.T) {
 									SetHeaders: []*basepb.HeaderValueOption{
 										{
 											Header: &basepb.HeaderValue{
-												Key:      common.ModelHeader,
+												Key:      bodyfieldtoheader.ModelHeader,
 												RawValue: []byte("foo"),
 											},
 										},
 										{
 											Header: &basepb.HeaderValue{
-												Key:      common.BaseModelHeader,
+												Key:      basemodelextractor.BaseModelHeader,
 												RawValue: []byte(""),
 											},
 										},
@@ -302,13 +303,13 @@ func TestHandleRequestBody(t *testing.T) {
 											},
 											{
 												Header: &basepb.HeaderValue{
-													Key:      common.ModelHeader,
+													Key:      bodyfieldtoheader.ModelHeader,
 													RawValue: []byte("foo"),
 												},
 											},
 											{
 												Header: &basepb.HeaderValue{
-													Key:      common.BaseModelHeader,
+													Key:      basemodelextractor.BaseModelHeader,
 													RawValue: []byte(""),
 												},
 											},
@@ -369,13 +370,13 @@ func TestHandleRequestBody(t *testing.T) {
 											},
 											{
 												Header: &basepb.HeaderValue{
-													Key:      common.ModelHeader,
+													Key:      bodyfieldtoheader.ModelHeader,
 													RawValue: []byte("foo"),
 												},
 											},
 											{
 												Header: &basepb.HeaderValue{
-													Key:      common.BaseModelHeader,
+													Key:      basemodelextractor.BaseModelHeader,
 													RawValue: []byte(""),
 												},
 											},
@@ -425,7 +426,7 @@ func TestHandleRequestBody(t *testing.T) {
 	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			modelToHeaderPlugin, _ := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(common.ModelField, common.ModelHeader)
+			modelToHeaderPlugin, _ := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
 			server := NewServer(test.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 			reqCtx := &RequestContext{
 				CycleState: framework.NewCycleState(),
@@ -472,7 +473,7 @@ func TestHandleRequestBodyWithPluginMetrics(t *testing.T) {
 	metrics.Register()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
-	modelToHeaderPlugin, _ := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(common.ModelField, common.ModelHeader)
+	modelToHeaderPlugin, _ := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
 	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
 	server := NewServer(false, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 	reqCtx := &RequestContext{
@@ -572,7 +573,7 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 										SetHeaders: []*basepb.HeaderValueOption{
 											{
 												Header: &basepb.HeaderValue{
-													Key:      common.BaseModelHeader,
+													Key:      basemodelextractor.BaseModelHeader,
 													RawValue: []byte(""),
 												},
 											},
@@ -614,7 +615,7 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 										SetHeaders: []*basepb.HeaderValueOption{
 											{
 												Header: &basepb.HeaderValue{
-													Key:      common.BaseModelHeader,
+													Key:      basemodelextractor.BaseModelHeader,
 													RawValue: []byte(""),
 												},
 											},
