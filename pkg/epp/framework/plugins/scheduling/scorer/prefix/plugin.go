@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
-	dlprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/prefix"
+	prepdataprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/preparerequestdata/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
@@ -64,37 +64,11 @@ const (
 	PodActiveCheckInterval = 2 * time.Minute
 )
 
-var DefaultConfig = Config{
-	AutoTune:               true,
-	BlockSize:              0,
-	BlockSizeTokens:        0,
-	MaxPrefixBlocksToMatch: DefaultMaxPrefixBlocks,
-	LRUCapacityPerServer:   DefaultLRUCapacityPerServer,
-}
-
-type Config struct {
-	// If set to true, the plugin will automatically adjust the configuration based on various
-	// metrics from the model servers.
-	AutoTune bool `json:"autoTune"`
-	// The input prompt is broken into sizes of BlockSizeTokens to calculate block hashes. Requests
-	// with length shorter than the block size will be ignored.
-	BlockSizeTokens int `json:"blockSizeTokens"`
-	// Deprecated: Legacy block size defined in number of characters.
-	// In case only BlockSize is defined in the configuration - plugin initialization will fail.
-	// In case both BlockSize and BlockSizeTokens are defined - BlockSizeTokens is used.
-	BlockSize int `json:"blockSize"`
-	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match. Input beyond this limit will
-	// be ignored.
-	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
-	// Max capacity size of the LRU indexer in number of entries per server (pod).
-	LRUCapacityPerServer int `json:"lruCapacityPerServer"`
-}
-
 // Plugin implements the prefix cache aware scoring and pre-request logic.
 type Plugin struct {
 	typedName   plugin.TypedName
-	config      dlprefix.Config
-	indexer     dlprefix.Indexer
+	config      prepdataprefix.Config
+	indexer     prepdataprefix.Indexer
 	pluginState *plugin.PluginState
 	wg          sync.WaitGroup // Used for waiting on async cache updates in tests.
 }
@@ -107,7 +81,7 @@ var (
 
 // PrefixCachePluginFactory defines the factory function for the Prefix plugin.
 func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
-	parameters := dlprefix.DefaultConfig
+	parameters := prepdataprefix.DefaultConfig
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to parse %s plugin parameters: %w", attrprefix.PrefixCachePluginType, err)
@@ -116,8 +90,8 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 
 	// Share the indexer and plugin state with the prefix prepare data plugin.
 	// If it doesn't exist, this will create it.
-	prepareDataPlugin, err := plugin.PluginByType[*dlprefix.PrepareData](handle, dlprefix.ApproxPrefixCachePlugin)
-	var indexer dlprefix.Indexer
+	prepareDataPlugin, err := plugin.PluginByType[*prepdataprefix.PrepareData](handle, prepdataprefix.ApproxPrefixCachePlugin)
+	var indexer prepdataprefix.Indexer
 	var pluginState *plugin.PluginState
 	if err == nil {
 		indexer = prepareDataPlugin.Indexer()
@@ -134,7 +108,7 @@ func PrefixCachePluginFactory(name string, rawParameters json.RawMessage, handle
 }
 
 // New initializes a new prefix Plugin.
-func New(ctx context.Context, config dlprefix.Config, indexer dlprefix.Indexer, pluginState *plugin.PluginState) (*Plugin, error) {
+func New(ctx context.Context, config prepdataprefix.Config, indexer prepdataprefix.Indexer, pluginState *plugin.PluginState) (*Plugin, error) {
 	//nolint:staticcheck // BlockSize is deprecated, but we check it here to provide a migration path for users.
 	if config.BlockSize > 0 && config.BlockSizeTokens <= 0 {
 		return nil, fmt.Errorf("invalid configuration: BlockSize (%d) is deprecated; please use BlockSizeTokens instead to define the cache block size in tokens", config.BlockSize)
@@ -145,7 +119,7 @@ func New(ctx context.Context, config dlprefix.Config, indexer dlprefix.Indexer, 
 	}
 
 	if indexer == nil {
-		indexer = dlprefix.NewIndexer(ctx, config.LRUCapacityPerServer)
+		indexer = prepdataprefix.NewIndexer(ctx, config.LRUCapacityPerServer)
 	}
 
 	// If pluginState is nil, we initialize it here. This ensures that the state object
@@ -166,12 +140,12 @@ func New(ctx context.Context, config dlprefix.Config, indexer dlprefix.Indexer, 
 }
 
 // Indexer returns the shared indexer.
-func (p *Plugin) Indexer() dlprefix.Indexer {
+func (p *Plugin) Indexer() prepdataprefix.Indexer {
 	return p.indexer
 }
 
 // SetIndexer sets the shared indexer.
-func (p *Plugin) SetIndexer(indexer dlprefix.Indexer) {
+func (p *Plugin) SetIndexer(indexer prepdataprefix.Indexer) {
 	p.indexer = indexer
 }
 
@@ -237,15 +211,15 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 	}
 
 	targetEndpoint := primaryProfileResult.TargetEndpoints[0]
-	servers := []dlprefix.Server{p.makeServer(targetEndpoint)}
+	servers := []prepdataprefix.Server{p.makeServer(targetEndpoint)}
 
 	// Also record for prefill node if present in P/D disaggregated mode.
-	if pr, exists := schedulingResult.ProfileResults[dlprefix.Experimental_DefaultPrefillProfile]; exists && len(pr.TargetEndpoints) > 0 {
+	if pr, exists := schedulingResult.ProfileResults[prepdataprefix.Experimental_DefaultPrefillProfile]; exists && len(pr.TargetEndpoints) > 0 {
 		servers = append(servers, p.makeServer(pr.TargetEndpoints[0]))
 	}
 
 	// Read state saved during PrepareRequestData.
-	state, err := plugin.ReadPluginStateKey[*dlprefix.SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType))
+	state, err := plugin.ReadPluginStateKey[*prepdataprefix.SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType))
 	p.pluginState.Delete(request.RequestId)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
@@ -263,27 +237,27 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 
 	// Record metrics.
 	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[dlprefix.ServerID(targetEndpoint.GetMetadata().NamespacedName)]
+	matchLen := state.PrefixCacheServers[prepdataprefix.ServerID(targetEndpoint.GetMetadata().NamespacedName)]
 	blockSize := p.GetBlockSize(primaryProfileResult.TargetEndpoints)
-	avgChars := dlprefix.AverageCharactersPerToken()
+	avgChars := prepdataprefix.AverageCharactersPerToken()
 
 	metrics.RecordPrefixCacheMatch(matchLen*blockSize*avgChars, total*blockSize*avgChars)
 }
 
-func (p *Plugin) makeServer(targetEndpoint framework.Endpoint) dlprefix.Server {
-	gpuBlocks := dlprefix.DefaultLRUCapacityPerServer
+func (p *Plugin) makeServer(targetEndpoint framework.Endpoint) prepdataprefix.Server {
+	gpuBlocks := prepdataprefix.DefaultLRUCapacityPerServer
 	if p.config.AutoTune && targetEndpoint.GetMetrics().CacheNumGPUBlocks > 0 {
 		gpuBlocks = targetEndpoint.GetMetrics().CacheNumGPUBlocks
 	}
-	return dlprefix.Server{
-		ServerID:       dlprefix.ServerID(targetEndpoint.GetMetadata().NamespacedName),
+	return prepdataprefix.Server{
+		ServerID:       prepdataprefix.ServerID(targetEndpoint.GetMetadata().NamespacedName),
 		NumOfGPUBlocks: gpuBlocks,
 	}
 }
 
 // CleanUpInactivePods starts a goroutine that periodically removes inactive pods from the indexer.
 func (p *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) {
-	ticker := time.NewTicker(dlprefix.PodActiveCheckInterval)
+	ticker := time.NewTicker(prepdataprefix.PodActiveCheckInterval)
 	defer ticker.Stop()
 
 	for {
@@ -292,9 +266,9 @@ func (p *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 			return
 		case <-ticker.C:
 			podNames := handle.PodList()
-			activePods := make(map[dlprefix.ServerID]struct{}, len(podNames))
+			activePods := make(map[prepdataprefix.ServerID]struct{}, len(podNames))
 			for _, nsn := range podNames {
-				activePods[dlprefix.ServerID(nsn)] = struct{}{}
+				activePods[prepdataprefix.ServerID(nsn)] = struct{}{}
 			}
 
 			for _, pod := range p.indexer.Pods() {

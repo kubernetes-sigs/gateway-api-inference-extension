@@ -26,11 +26,11 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
-	dlprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/prefix"
+	prepdataprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/preparerequestdata/approximateprefix"
 )
 
 func TestPrefixPluginScore(t *testing.T) {
-	p, _ := New(context.Background(), dlprefix.Config{AutoTune: false, BlockSizeTokens: 1}, nil, nil)
+	p, _ := New(context.Background(), prepdataprefix.Config{AutoTune: false, BlockSizeTokens: 1}, nil, nil)
 	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, fwkdl.NewMetrics(), nil)
 	endpoint1.Put(attrprefix.PrefixCacheMatchInfoKey, attrprefix.NewPrefixCacheMatchInfo(5, 10, 1))
 
@@ -45,7 +45,7 @@ func TestPrefixPluginScore(t *testing.T) {
 }
 
 func TestPrefixPluginValidation(t *testing.T) {
-	validConfigs := []dlprefix.Config{{
+	validConfigs := []prepdataprefix.Config{{
 		AutoTune:        false,
 		BlockSizeTokens: 1,
 	}, {
@@ -56,7 +56,7 @@ func TestPrefixPluginValidation(t *testing.T) {
 		AutoTune:        true,
 		BlockSizeTokens: 0,
 	}}
-	invalidConfigs := []dlprefix.Config{{
+	invalidConfigs := []prepdataprefix.Config{{
 		AutoTune:  false,
 		BlockSize: 1,
 	}, {
