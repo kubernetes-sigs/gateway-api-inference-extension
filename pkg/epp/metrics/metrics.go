@@ -435,7 +435,7 @@ var (
 			Name:      "flow_control_queue_size",
 			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer.", compbasemetrics.ALPHA),
 		},
-		append([]string{"fairness_id", "priority", "inference_pool"}, modelLabels...),
+		append([]string{"fairness_id", "priority", "inference_pool", "slo_class"}, modelLabels...),
 	)
 
 	flowControlQueueBytes = prometheus.NewGaugeVec(
@@ -444,7 +444,7 @@ var (
 			Name:      "flow_control_queue_bytes",
 			Help:      metricsutil.HelpMsgWithStability("Current number of bytes associated with requests actively managed by the EPP flow control layer.", compbasemetrics.ALPHA),
 		},
-		append([]string{"fairness_id", "priority", "inference_pool"}, modelLabels...),
+		append([]string{"fairness_id", "priority", "inference_pool", "slo_class"}, modelLabels...),
 	)
 
 	flowControlPoolSaturation = prometheus.NewGaugeVec(
@@ -923,23 +923,23 @@ func RecordFlowControlRequestEnqueueDuration(
 }
 
 // IncFlowControlQueueSize increments the Flow Control queue size gauge.
-func IncFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, targetModelName string) {
-	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Inc()
+func IncFlowControlQueueSize(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName).Inc()
 }
 
 // DecFlowControlQueueSize decrements the Flow Control queue size gauge.
-func DecFlowControlQueueSize(fairnessID, priority, inferencePool, modelName, targetModelName string) {
-	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Dec()
+func DecFlowControlQueueSize(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName string) {
+	flowControlQueueSize.WithLabelValues(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName).Dec()
 }
 
 // AddFlowControlQueueBytes increments the Flow Control queue bytes gauge.
-func AddFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, targetModelName string, bytes uint64) {
-	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Add(float64(bytes))
+func AddFlowControlQueueBytes(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName string, bytes uint64) {
+	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName).Add(float64(bytes))
 }
 
 // SubFlowControlQueueBytes decrements the Flow Control queue bytes gauge.
-func SubFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, targetModelName string, bytes uint64) {
-	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, modelName, targetModelName).Sub(float64(bytes))
+func SubFlowControlQueueBytes(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName string, bytes uint64) {
+	flowControlQueueBytes.WithLabelValues(fairnessID, priority, inferencePool, sloClass, modelName, targetModelName).Sub(float64(bytes))
 }
 
 // RecordFlowControlPoolSaturation records the current saturation level for an inference pool.

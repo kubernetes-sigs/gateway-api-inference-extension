@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller/internal"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
+	fwkrequest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
@@ -218,21 +219,26 @@ func (fc *FlowController) EnqueueAndWait(
 	flowKey := req.FlowKey()
 	priority := strconv.Itoa(flowKey.Priority)
 	reqBytes := req.ByteSize()
+	sloClass := metrics.ClassifySLO(extractHeader(req, fwkrequest.TTFTSLOMsHeaderKey))
 	metrics.IncFlowControlQueueSize(
 		flowKey.ID, priority,
 		req.InferencePoolName(),
+		sloClass,
 		req.ModelName(), req.TargetModelName())
 	defer metrics.DecFlowControlQueueSize(
 		flowKey.ID, priority,
 		req.InferencePoolName(),
+		sloClass,
 		req.ModelName(), req.TargetModelName())
 	metrics.AddFlowControlQueueBytes(
 		flowKey.ID, priority,
 		req.InferencePoolName(),
+		sloClass,
 		req.ModelName(), req.TargetModelName(), reqBytes)
 	defer metrics.SubFlowControlQueueBytes(
 		flowKey.ID, priority,
 		req.InferencePoolName(),
+		sloClass,
 		req.ModelName(), req.TargetModelName(), reqBytes)
 
 	// 1. Create the derived context that governs this request's lifecycle (Parent Cancellation + TTL).
@@ -295,6 +301,14 @@ func (fc *FlowController) EnqueueAndWait(
 	}
 
 	return finalOutcome, err
+}
+
+func extractHeader(req flowcontrol.FlowControlRequest, name string) string {
+	infReq := req.InferenceRequest()
+	if infReq == nil || infReq.Headers == nil {
+		return ""
+	}
+	return fwkrequest.GetHeader(infReq.Headers, name)
 }
 
 var errNoShards = errors.New("no viable active shards available")

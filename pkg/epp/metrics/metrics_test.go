@@ -1253,36 +1253,37 @@ func TestFlowControlQueueSizeMetric(t *testing.T) {
 	Reset()
 
 	const (
-		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		pool     = "pool-1"
+		model    = "llama-2"
+		target   = "llama-base"
+		sloClass = SLOClassNone
 	)
 
 	// Basic Inc/Dec
-	IncFlowControlQueueSize("user-a", "100", pool, model, target)
-	val, err := testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, model, target))
+	IncFlowControlQueueSize("user-a", "100", pool, sloClass, model, target)
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
 	require.Equal(t, 1.0, val, "Gauge value should be 1 after Inc for user-a/100")
 
-	DecFlowControlQueueSize("user-a", "100", pool, model, target)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, model, target))
+	DecFlowControlQueueSize("user-a", "100", pool, sloClass, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Dec")
 	require.Equal(t, 0.0, val, "Gauge value should be 0 after Dec for user-a/100")
 
 	// Multiple labels
-	IncFlowControlQueueSize("user-b", "200", pool, model, target)
-	IncFlowControlQueueSize("user-b", "200", pool, model, target)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, model, target))
+	IncFlowControlQueueSize("user-b", "200", pool, sloClass, model, target)
+	IncFlowControlQueueSize("user-b", "200", pool, sloClass, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200")
 	require.Equal(t, 2.0, val, "Gauge value should be 2 for user-b/200")
 
-	DecFlowControlQueueSize("user-b", "200", pool, model, target)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, model, target))
+	DecFlowControlQueueSize("user-b", "200", pool, sloClass, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Dec")
 	require.Equal(t, 1.0, val, "Gauge value should be 1 for user-b/200 after one Dec")
 
 	// Non-existent labels
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100", pool, model, target))
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }
@@ -1291,36 +1292,37 @@ func TestFlowControlQueueBytesMetric(t *testing.T) {
 	Reset()
 
 	const (
-		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		pool     = "pool-1"
+		model    = "llama-2"
+		target   = "llama-base"
+		sloClass = SLOClassNone
 	)
 
 	// Basic Inc/Dec
-	AddFlowControlQueueBytes("user-a", "100", pool, model, target, 32)
-	val, err := testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	AddFlowControlQueueBytes("user-a", "100", pool, sloClass, model, target, 32)
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
 	require.Equal(t, 32.0, val, "Gauge value should be 32 after Add for user-a/100")
 
-	SubFlowControlQueueBytes("user-a", "100", pool, model, target, 32)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	SubFlowControlQueueBytes("user-a", "100", pool, sloClass, model, target, 32)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Sub")
 	require.Equal(t, 0.0, val, "Gauge value should be 0 after Sub for user-a/100")
 
 	// Multiple labels
-	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 32)
-	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 16)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	AddFlowControlQueueBytes("user-b", "200", pool, sloClass, model, target, 32)
+	AddFlowControlQueueBytes("user-b", "200", pool, sloClass, model, target, 16)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200")
 	require.Equal(t, 48.0, val, "Gauge value should be 48 for user-b/200")
 
-	SubFlowControlQueueBytes("user-b", "200", pool, model, target, 48)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	SubFlowControlQueueBytes("user-b", "200", pool, sloClass, model, target, 48)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Sub")
 	require.Equal(t, 0.0, val, "Gauge value should be 0 for user-b/200 after one Sub")
 
 	// Non-existent labels
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, model, target))
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }
