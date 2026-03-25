@@ -187,37 +187,102 @@ func (d *Detector) Filter(
 	return filtered
 }
 
-// PreRequest increments the atomic in-flight counter for the target endpoint.
-// We assume the scheduling result is valid based on the Director's contract.
+// PreRequest increments the atomic in-flight counter for all target endpoints.
 func (d *Detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
-	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String()
-	if *d.config.ConcurrencyMode == Tokens {
-		tokens := d.tokenEstimator.Estimate(request)
-		d.tokenTracker.add(eid, tokens)
-	} else {
-		d.requestTracker.inc(eid)
+	if result == nil || len(result.ProfileResults) == 0 {
+		return
+	}
+
+	for _, profileResult := range result.ProfileResults {
+		if profileResult == nil {
+			continue
+		}
+		for _, endpoint := range profileResult.TargetEndpoints {
+			if endpoint == nil || endpoint.GetMetadata() == nil {
+				continue
+			}
+			eid := endpoint.GetMetadata().NamespacedName.String()
+			if *d.config.ConcurrencyMode == Tokens {
+				tokens := d.tokenEstimator.Estimate(request)
+				d.tokenTracker.add(eid, tokens)
+			} else {
+				d.requestTracker.inc(eid)
+			}
+		}
 	}
 }
 
-// ResponseBody decrements the atomic in-flight counter for the target endpoint when the response is endOfStream.
-// For token mode, the estimate is recalculated from the request; request may be nil in some paths and
-// TokenEstimator.Estimate returns 0 in that case (may contribute to drift).
+// ResponseBody decrements the atomic in-flight counter for all involved target endpoints.
 func (d *Detector) ResponseBody(
 	_ context.Context,
 	request *framework.LLMRequest,
 	resp *requestcontrol.Response,
 	targetEndpoint *fwkdl.EndpointMetadata,
 ) {
-	if targetEndpoint == nil || resp == nil || !resp.EndOfStream {
+	if request == nil || resp == nil || request.SchedulingResult == nil {
 		return
 	}
-	eid := targetEndpoint.NamespacedName.String()
-	if *d.config.ConcurrencyMode == Tokens {
-		tokens := d.tokenEstimator.Estimate(request)
-		d.tokenTracker.add(eid, -tokens)
-	} else {
-		d.requestTracker.dec(eid)
+
+	// 1. Early Prefill Release (on first chunk)
+	if !resp.EndOfStream && !request.WasPrefillReleased {
+		// Identify the prefill pod (associated with the primary profile)
+		primaryResult := request.SchedulingResult.ProfileResults[request.SchedulingResult.PrimaryProfileName]
+		if primaryResult != nil && len(primaryResult.TargetEndpoints) > 0 {
+			prefillEndpoint := primaryResult.TargetEndpoints[0]
+			if prefillEndpoint != nil && prefillEndpoint.GetMetadata() != nil {
+				eid := prefillEndpoint.GetMetadata().NamespacedName.String()
+				if *d.config.ConcurrencyMode == Tokens {
+					tokens := d.tokenEstimator.Estimate(request)
+					d.tokenTracker.add(eid, -tokens)
+				} else {
+					d.requestTracker.dec(eid)
+				}
+				request.WasPrefillReleased = true
+			}
+		}
 	}
+
+	// 2. Full Cleanup (on completion)
+	if resp.EndOfStream {
+		for _, profileResult := range request.SchedulingResult.ProfileResults {
+			if profileResult == nil {
+				continue
+			}
+			for _, endpoint := range profileResult.TargetEndpoints {
+				if endpoint == nil || endpoint.GetMetadata() == nil {
+					continue
+				}
+				eid := endpoint.GetMetadata().NamespacedName.String()
+
+				// Skip if this is the prefill pod and it was already released
+				if request.WasPrefillReleased {
+					primaryResult := request.SchedulingResult.ProfileResults[request.SchedulingResult.PrimaryProfileName]
+					if primaryResult != nil && len(primaryResult.TargetEndpoints) > 0 {
+						if eid == primaryResult.TargetEndpoints[0].GetMetadata().NamespacedName.String() {
+							continue
+						}
+					}
+				}
+
+				if *d.config.ConcurrencyMode == Tokens {
+					tokens := d.tokenEstimator.Estimate(request)
+					d.tokenTracker.add(eid, -tokens)
+				} else {
+					d.requestTracker.dec(eid)
+				}
+			}
+		}
+	}
+}
+
+// GetInFlightTokens returns the current number of in-flight tokens for the given endpoint.
+func (d *Detector) GetInFlightTokens(endpointID string) int64 {
+	return d.tokenTracker.get(endpointID)
+}
+
+// GetInFlightRequests returns the current number of in-flight requests for the given endpoint.
+func (d *Detector) GetInFlightRequests(endpointID string) int64 {
+	return d.requestTracker.get(endpointID)
 }
 
 // DeleteEndpoint removes an endpoint from the concurrency tracker to prevent memory leaks.

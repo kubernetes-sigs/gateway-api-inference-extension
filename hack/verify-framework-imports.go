@@ -96,6 +96,13 @@ var currentCodeExceptionMap = map[string][]string{
 	"pkg/epp/framework/plugins/scheduling/scorer/prefix/plugin.go": {
 		"pkg/epp/metrics",
 	},
+	"pkg/epp/framework/plugins/scheduling/scorer/tokenload/token_load.go": {
+		"pkg/epp/saturationdetector/framework/plugins/concurrencydetector",
+		"pkg/epp/util/env",
+	},
+	"pkg/epp/framework/plugins/scheduling/scorer/tokenload/token_load_test.go": {
+		"pkg/epp/saturationdetector/framework/plugins/concurrencydetector",
+	},
 }
 
 func init() {
