@@ -277,7 +277,8 @@ type testCase struct {
 }
 
 // commonTestCases returns the test cases shared between the standard and data layer test suites.
-func commonTestCases() []testCase {
+// prio adjusts expected priority label values based on execution context (e.g. 0 in NoCRD mode).
+func commonTestCases(prio func(int) int) []testCase {
 	return []testCase{
 		{
 			name:     "select lower queue and kv cache",
@@ -289,7 +290,7 @@ func commonTestCases() []testCase {
 			},
 			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelMyModelTarget, "test1"),
 			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelMyModel, modelMyModelTarget, 0)),
+				"inference_objective_request_total": cleanMetric(metricReqTotal(modelMyModel, modelMyModelTarget, prio(2))),
 				"inference_pool_ready_pods":         cleanMetric(metricReadyPods(3)),
 			},
 			wantSpans: []string{"gateway.request", "gateway.request_orchestration"},
@@ -304,7 +305,7 @@ func commonTestCases() []testCase {
 			},
 			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
 			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget, 0)),
+				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget, prio(2))),
 			},
 		},
 		{
