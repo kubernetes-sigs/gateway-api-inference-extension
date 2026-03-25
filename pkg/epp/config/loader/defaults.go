@@ -218,8 +218,7 @@ func ensureSchedulingLayer(
 }
 
 // ensureFlowControlLayer guarantees that the flow control subsystem is structurally complete.
-func ensureFlowControlLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle, allPlugins map[string]fwkplugin.Plugin,
-) error {
+func ensureFlowControlLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle, allPlugins map[string]fwkplugin.Plugin) error {
 	if _, ok := allPlugins[registry.DefaultOrderingPolicyRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, registry.DefaultOrderingPolicyRef); err != nil {
 			return err
@@ -254,7 +253,6 @@ func ensureParser(
 	return nil
 }
 
-<<<<<<< HEAD
 // ensureSaturationDetector guarantees that saturation detector is configured.
 // If the saturation detector is not set, the utilization detector is configured by default.
 func ensureSaturationDetector(
@@ -283,17 +281,9 @@ func ensureSaturationDetector(
 	return nil
 }
 
-// ensureDataLayer guarantees that the data layer is configured when the dataLayer feature gate is enabled.
-// If the feature gate is enabled but no data section is provided, the default metrics-data-source and core-metrics-extractor plugins are injected.
-=======
 // ensureDataLayer guarantees that the data layer is configured unless explicitly disabled.
 // If no data section is provided, the default plugins are added.
->>>>>>> 899a9484 (Enable datalayer by default, DisableDataLayerFeatureGate to fallback and use legacy backend/metrics)
-func ensureDataLayer(
-	cfg *configapi.EndpointPickerConfig,
-	handle fwkplugin.Handle,
-	allPlugins map[string]fwkplugin.Plugin,
-) error {
+func ensureDataLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle, allPlugins map[string]fwkplugin.Plugin) error {
 	if slices.Contains(cfg.FeatureGates, datalayer.DisableDataLayerFeatureGate) {
 		return nil
 	}

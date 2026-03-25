@@ -316,8 +316,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	// Data layer is enabled by default (unless explicitly disabled)
-	// Support both old "dataLayer" gate (for backward compatibility) and new "disableDataLayer" gate
+	// Data layer is enabled by default; opt out by setting the 'disableDataLayer' feature gate.
 	datalayerMetricsEnabled := !r.featureGates[datalayer.DisableDataLayerFeatureGate]
 	if err := r.configureAndStartDatalayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
@@ -505,8 +504,8 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	r.featureGates = featureGates
 
 	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] {
-		setupLog.Info("Warning: The 'dataLayer' feature gate is deprecated and has no effect. " +
-			"The data layer is now enabled by default. Remove it from your config. " +
+		setupLog.Info("The data layer is now enabled by default. " +
+			"Please remove the 'dataLayer' feature gate from your config. " +
 			"To disable the data layer, use the 'disableDataLayer' feature gate.")
 	}
 
