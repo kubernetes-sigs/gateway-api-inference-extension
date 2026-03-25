@@ -30,6 +30,7 @@ type Indexer interface {
 	Add(hashes []BlockHash, server Server)
 	RemovePod(server ServerID)
 	Pods() []ServerID
+	SetMetricsReporter(reporter MetricsReporter)
 }
 
 // PodSet holds a set of pods that may have a specific prefix hash.

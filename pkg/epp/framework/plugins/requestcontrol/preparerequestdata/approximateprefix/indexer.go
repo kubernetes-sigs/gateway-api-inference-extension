@@ -25,8 +25,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
+
+// MetricsReporter is an interface for reporting metrics from the indexer.
+type MetricsReporter interface {
+	RecordPrefixCacheSize(size int64)
+	RecordPrefixCacheMatch(matchedTokens, totalTokens int)
+}
 
 // indexer implements the Indexer interface.
 type indexer struct {
@@ -34,14 +39,16 @@ type indexer struct {
 	hashToPods     map[BlockHash]PodSet                         // the lookup data structure to find pods that have the BlockHash cached
 	podToLRU       map[ServerID]*lru.Cache[BlockHash, struct{}] // key is pod namespacedName, value is an LRU cache
 	defaultLRUSize int
+	metrics        MetricsReporter
 }
 
 // NewIndexer initializes an indexer with size limits and starts cache size reporting.
-func NewIndexer(ctx context.Context, defaultLRUSize int) Indexer {
+func NewIndexer(ctx context.Context, defaultLRUSize int, metrics MetricsReporter) Indexer {
 	i := &indexer{
 		hashToPods:     make(map[BlockHash]PodSet),
 		podToLRU:       make(map[ServerID]*lru.Cache[BlockHash, struct{}]),
 		defaultLRUSize: defaultLRUSize,
+		metrics:        metrics,
 	}
 
 	go i.reportLRUSize(ctx, time.Second)
@@ -151,7 +158,9 @@ func (i *indexer) reportOnce(ctx context.Context) {
 		avg = float64(totalEntries) / float64(numPods)
 	}
 
-	metrics.RecordPrefixCacheSize(int64(totalEntries))
+	if i.metrics != nil {
+		i.metrics.RecordPrefixCacheSize(int64(totalEntries))
+	}
 	log.FromContext(ctx).V(logutil.TRACE).Info("Prefix cache state",
 		"total entries", totalEntries,
 		"# pods", numPods,
@@ -190,4 +199,10 @@ func (i *indexer) Pods() []ServerID {
 		pods = append(pods, pod)
 	}
 	return pods
+}
+
+func (i *indexer) SetMetricsReporter(reporter MetricsReporter) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.metrics = reporter
 }

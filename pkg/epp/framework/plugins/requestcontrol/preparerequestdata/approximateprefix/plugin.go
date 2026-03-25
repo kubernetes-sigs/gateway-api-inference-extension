@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -32,6 +34,7 @@ import (
 
 var (
 	_ requestcontrol.PrepareDataPlugin = &PrepareData{}
+	_ requestcontrol.PreRequest        = &PrepareData{}
 )
 
 // PrepareData is a plugin that prepares data consumed by approx prefix cache aware scheduling.
@@ -40,6 +43,8 @@ type PrepareData struct {
 	config      Config
 	indexer     Indexer
 	pluginState *plugin.PluginState
+	metrics     MetricsReporter
+	wg          sync.WaitGroup // Used for waiting on async cache updates in tests.
 }
 
 // TypedName returns the type and name of the plugin.
@@ -57,8 +62,8 @@ func (p *PrepareData) Produces() map[string]any {
 	return map[string]any{attrprefix.PrefixCacheMatchInfoKey: attrprefix.PrefixCacheMatchInfo{}}
 }
 
-// NewPrepareData initializes a new PrepareData and returns its pointer.
-func NewPrepareData(ctx context.Context, config Config, indexer Indexer, pluginState *plugin.PluginState) (*PrepareData, error) {
+// NewPrepareData returns a new PrepareData plugin.
+func NewPrepareData(ctx context.Context, config Config, handle plugin.Handle, pluginState *plugin.PluginState, metrics MetricsReporter) (*PrepareData, error) {
 	log.FromContext(ctx).V(logutil.DEFAULT).Info("Prefix PrepareData initialized", "config", config)
 
 	//nolint:staticcheck // BlockSize is deprecated, but we check it here to provide a migration path for users.
@@ -70,9 +75,7 @@ func NewPrepareData(ctx context.Context, config Config, indexer Indexer, pluginS
 		return nil, fmt.Errorf("invalid configuration: BlockSizeTokens must be > 0 when AutoTune is disabled (current value: %d)", config.BlockSizeTokens)
 	}
 
-	if indexer == nil {
-		indexer = NewIndexer(ctx, config.LRUCapacityPerServer)
-	}
+	indexer := NewIndexer(ctx, config.LRUCapacityPerServer, metrics)
 
 	// If pluginState is nil, we initialize it here. This ensures that the state object
 	// (and its background cleanup goroutine) is created exactly once during the plugin's construction.
@@ -80,12 +83,48 @@ func NewPrepareData(ctx context.Context, config Config, indexer Indexer, pluginS
 		pluginState = plugin.NewPluginState(ctx)
 	}
 
-	return &PrepareData{
-		typedName:   plugin.TypedName{Type: attrprefix.PrefixCachePluginType, Name: ApproxPrefixCachePlugin},
+	p := &PrepareData{
+		typedName: plugin.TypedName{
+			Type: attrprefix.PrefixCachePluginType,
+			Name: ApproxPrefixCachePlugin,
+		},
 		config:      config,
 		indexer:     indexer,
 		pluginState: pluginState,
-	}, nil
+		metrics:     metrics,
+	}
+
+	if handle != nil {
+		go p.CleanUpInactivePods(ctx, handle)
+	}
+
+	return p, nil
+}
+
+// CleanUpInactivePods starts a goroutine that periodically removes inactive pods from the indexer.
+func (p *PrepareData) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) {
+	ticker := time.NewTicker(PodActiveCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			podNames := handle.PodList()
+			activePods := make(map[ServerID]struct{}, len(podNames))
+			for _, nsn := range podNames {
+				activePods[ServerID(nsn)] = struct{}{}
+			}
+
+			for _, pod := range p.indexer.Pods() {
+				if _, ok := activePods[pod]; !ok {
+					p.indexer.RemovePod(pod)
+					log.FromContext(ctx).V(logutil.VERBOSE).Info("Removed pod not in active set", "pod", pod)
+				}
+			}
+		}
+	}
 }
 
 // Indexer returns the shared indexer.
@@ -96,6 +135,11 @@ func (p *PrepareData) Indexer() Indexer {
 // PluginState returns the shared plugin state.
 func (p *PrepareData) PluginState() *plugin.PluginState {
 	return p.pluginState
+}
+
+// SetMetricsReporter sets the metrics reporter for the plugin.
+func (p *PrepareData) SetMetricsReporter(reporter MetricsReporter) {
+	p.metrics = reporter
 }
 
 // PrepareRequestData is called by the director before scheduling requests.
@@ -120,6 +164,60 @@ func (p *PrepareData) PrepareRequestData(ctx context.Context, request *framework
 	p.pluginState.Write(request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType), state)
 
 	return nil
+}
+
+// PreRequest records in the shared indexer the result of the scheduling selection.
+// It updates the indexer with the prefix hashes for the selected endpoint(s).
+func (p *PrepareData) PreRequest(ctx context.Context, request *framework.LLMRequest, schedulingResult *framework.SchedulingResult) {
+	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
+	if len(primaryProfileResult.TargetEndpoints) == 0 {
+		return
+	}
+
+	targetEndpoint := primaryProfileResult.TargetEndpoints[0]
+	servers := []Server{p.makeServer(targetEndpoint)}
+
+	// Also record for prefill node if present in P/D disaggregated mode.
+	if pr, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && len(pr.TargetEndpoints) > 0 {
+		servers = append(servers, p.makeServer(pr.TargetEndpoints[0]))
+	}
+
+	// Read state saved during PrepareRequestData.
+	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType))
+	p.pluginState.Delete(request.RequestId)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)
+		return
+	}
+
+	// Update indexer asynchronously to avoid blocking the request path.
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		for _, s := range servers {
+			p.indexer.Add(state.PrefixHashes, s)
+		}
+	}()
+
+	// Record metrics.
+	if p.metrics != nil {
+		total := len(state.PrefixHashes)
+		matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
+		blockSize := p.GetBlockSize(primaryProfileResult.TargetEndpoints)
+		avgChars := AverageCharactersPerToken()
+		p.metrics.RecordPrefixCacheMatch(matchLen*blockSize*avgChars, total*blockSize*avgChars)
+	}
+}
+
+func (p *PrepareData) makeServer(targetEndpoint framework.Endpoint) Server {
+	gpuBlocks := DefaultLRUCapacityPerServer
+	if p.config.AutoTune && targetEndpoint.GetMetrics().CacheNumGPUBlocks > 0 {
+		gpuBlocks = targetEndpoint.GetMetrics().CacheNumGPUBlocks
+	}
+	return Server{
+		ServerID:       ServerID(targetEndpoint.GetMetadata().NamespacedName),
+		NumOfGPUBlocks: gpuBlocks,
+	}
 }
 
 // matchLongestPrefix returns a map of servers and length of prefix that each server caches, prefix length is defined in blocks.
@@ -165,10 +263,8 @@ func ApproxPrefixCacheFactory(name string, rawParameters json.RawMessage, handle
 		}
 	}
 
-	// Share the indexer with the prefix scorer plugin.
-	indexer := NewIndexer(handle.Context(), parameters.LRUCapacityPerServer)
 	// pluginState will be initialized by NewPrepareData as we pass nil here.
-	p, err := NewPrepareData(handle.Context(), parameters, indexer, nil)
+	p, err := NewPrepareData(handle.Context(), parameters, handle, nil, nil)
 	if err != nil {
 		return nil, err
 	}
