@@ -170,11 +170,11 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplug
 		}
 
 		handle.AddPlugin(spec.Name, plugin)
-		// If the prefix cache plugin is configured, we enforce the corresponding prepare data plugin.
+		// If the prefix cache plugin is configured, we create the corresponding prepare data plugin.
 		// This is necessary because the prefix cache scorer plugin relies on the prepare data plugin to populate its state.
 		// This is due to historical reasons where the scorer plugin was developed before the prepare data plugin,
 		// and we want to avoid breaking existing configurations that only specify the scorer plugin.
-		if spec.Name == attrprefix.PrefixCachePluginType {
+		if spec.Name == attrprefix.PrefixCachePluginType && handle.Plugin(prepdataprefix.ApproxPrefixCachePlugin) == nil {
 			plugin, err := prepdataprefix.ApproxPrefixCacheFactory(prepdataprefix.ApproxPrefixCachePlugin, spec.Parameters, handle)
 			if err != nil {
 				return fmt.Errorf("failed to create ApproxPrefixCache plugin for prefix cache plugin '%s': %w", spec.Name, err)

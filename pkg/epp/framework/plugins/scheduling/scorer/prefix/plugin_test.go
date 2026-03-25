@@ -41,5 +41,4 @@ func TestPrefixPluginScore(t *testing.T) {
 
 	assert.Equal(t, 0.5, scores[endpoint1])
 	assert.Equal(t, 0.2, scores[endpoint2])
-	}
-
+}

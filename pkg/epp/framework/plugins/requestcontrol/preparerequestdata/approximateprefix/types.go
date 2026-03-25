@@ -77,6 +77,12 @@ func (s *SchedulingContextState) Clone() plugin.StateData {
 
 const (
 	// Experimental_DefaultPrefillProfile is a hardcoded profile name for prefill nodes.
+	// In P/D disaggregation mode, the prefill and decode are usually represented as two different
+	// scheduling profiles to pick the prefill and decode endpoints. This constant defines the
+	// prefill profile name to ensure that the index is updated for the prefill endpoint and not
+	// only for the primary endpoint that will initially handle the request.
+	// This is hardcoded for now until we land on a canonical approach for plugins to identify
+	// prefill and decode endpoints (See https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2080)
 	Experimental_DefaultPrefillProfile = "prefill"
 
 	// ApproxPrefixCachePlugin is the name of the data preparation plugin.
@@ -89,9 +95,21 @@ const (
 	DefaultBlockSizeTokens = 16
 
 	// DefaultMaxPrefixBlocks is the maximum number of blocks to match.
+	// Two long requests with the same prefix up to this limit will be indistinguishable.
+	// This parameter provides a trade-off between cache size, prefix matching speed and matching
+	// accuracy. Use a small value if most requests are short to reduce cache size and speed up the
+	// matching process. Use a large value if most requests are long to increase the matching accuracy.
 	DefaultMaxPrefixBlocks = 256
 
 	// DefaultLRUCapacityPerServer is the default capacity of the LRU indexer per server.
+	// The indexer is an approximation to the actual prefix LRU cache state on the model servers per server (pod).
+	// A small capacity ensures a high accuracy of cache hit on the model server, but it will
+	// increase the chance of false negatives. A high capacity does the opposite.
+	// To properly size this, consider the sum of the total number of cache entries on all model
+	// servers. Consider the llama3 8B model on a H100 80GB GPUs. The size of the model weight is
+	// about 16GB. The remaining HBM used for caching prefixes is 64GB. Each
+	// token is about 128KB in size, so we can cache 500K tokens. Using the default block size of 16
+	// in vLLM, we will have 250K / 16 = 31.25K blocks.
 	DefaultLRUCapacityPerServer = 31250
 
 	// averageCharactersPerToken is an estimated average characters per token.
