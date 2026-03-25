@@ -33,13 +33,7 @@ import (
 // non-nil, its plugin type is registered as a factory that returns the provided instance, so the
 // YAML config can reference it by type name and the runner wires it into the endpoint factory
 // automatically. Pass nil to fall back to the legacy metrics system with pmc.
-func NewTestRunnerSetup(
-	ctx context.Context,
-	cfg *rest.Config,
-	opts *runserver.Options,
-	pmc backendmetrics.PodMetricsClient,
-	mockDataSource fwkdl.DataSource,
-) (ctrl.Manager, datastore.Datastore, error) {
+func NewTestRunnerSetup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient, mockDataSource fwkdl.DataSource) (ctrl.Manager, datastore.Datastore, error) {
 	runner := NewRunner()
 	runner.testOverrideSkipNameValidation = true
 

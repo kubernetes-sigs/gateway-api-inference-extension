@@ -18,6 +18,7 @@ package epp
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strings"
 	"testing"
@@ -69,54 +70,16 @@ var (
 
 const (
 	testPoolName = "vllm-llama3-8b-instruct-pool"
-	testConfig   = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-  - type: queue-scorer
-  - type: kv-cache-utilization-scorer
-  - type: prefix-cache-scorer
-  - type: lora-affinity-scorer
-  - type: openai-parser
-schedulingProfiles:
-  - name: default
-    plugins:
-      - pluginRef: queue-scorer
-      - pluginRef: kv-cache-utilization-scorer
-      - pluginRef: prefix-cache-scorer
-      - pluginRef: lora-affinity-scorer
-parser:
-  pluginRef: openai-parser
-`
 
 	// mockDataSourceType is the plugin type name used for the mock data source in integration tests.
 	mockDataSourceType = "mock-metrics-source"
-
-	// testDLConfig configures the data layer using the mock data source type.
-	testDLConfig = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-  - type: queue-scorer
-  - type: kv-cache-utilization-scorer
-  - type: prefix-cache-scorer
-  - type: lora-affinity-scorer
-  - type: openai-parser
-  - type: mock-metrics-source
-schedulingProfiles:
-  - name: default
-    plugins:
-      - pluginRef: queue-scorer
-      - pluginRef: kv-cache-utilization-scorer
-      - pluginRef: prefix-cache-scorer
-      - pluginRef: lora-affinity-scorer
-parser:
-  pluginRef: openai-parser
-data:
-  sources:
-  - pluginRef: mock-metrics-source
-`
 )
+
+//go:embed testdata/default-config.yaml
+var testConfig string
+
+//go:embed testdata/datalayer-config.yaml
+var testDLConfig string
 
 type runMode string
 type standaloneStrategy string
