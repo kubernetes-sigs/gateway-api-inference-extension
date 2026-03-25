@@ -93,8 +93,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		Request:    framework.NewInferenceRequest(),
 		Response:   framework.NewInferenceResponse(),
 	}
-	var body []byte
-	respStreamedBody := &streamedBody{}
+
+	var requestBody []byte
+	var responseBody []byte
 
 	for {
 		select {
@@ -120,42 +121,52 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				loggerVerbose = logger.V(logutil.VERBOSE)
 				ctx = log.IntoContext(ctx, logger)
 			}
-
 			if s.streaming && !v.RequestHeaders.GetEndOfStream() {
-				// Capture headers now, but defer the response until body arrives.
-				_, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
-				loggerVerbose.Info("Captured headers, deferring response until body arrives...")
+				_ = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
+				loggerVerbose.Info("captured request headers, deferring response until body arrives...")
 			} else {
-				responses, err = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
+				responses = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
+				loggerVerbose.Info("processing request headers complete")
 			}
 		case *extProcPb.ProcessingRequest_RequestBody:
-			loggerVerbose.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
-			body = append(body, v.RequestBody.Body...)
+			loggerVerbose.Info("Incoming request body chunk", "EoS", v.RequestBody.EndOfStream)
+			requestBody = append(requestBody, v.RequestBody.Body...)
 			if s.streaming && !v.RequestBody.EndOfStream {
 				continue
 			}
-			responses, err = s.HandleRequestBody(ctx, reqCtx, body)
-			loggerVerbose.Info("Processing complete body")
+			responses, err = s.HandleRequestBody(ctx, reqCtx, requestBody)
+			loggerVerbose.Info("processing request body complete")
 		case *extProcPb.ProcessingRequest_RequestTrailers:
-			responses, err = s.HandleRequestTrailers(req.GetRequestTrailers())
+			responses, err = s.HandleRequestTrailers(v.RequestTrailers)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
-			responses, err = s.HandleResponseHeaders(reqCtx, req.GetResponseHeaders())
+			if s.streaming && !v.ResponseHeaders.GetEndOfStream() {
+				_ = s.HandleResponseHeaders(reqCtx, v.ResponseHeaders)
+				loggerVerbose.Info("captured response headers, deferring response until body arrives...")
+			} else {
+				responses = s.HandleResponseHeaders(reqCtx, v.ResponseHeaders)
+				loggerVerbose.Info("processing response headers complete")
+			}
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
-			responses, err = s.processResponseBody(ctx, reqCtx, req.GetResponseBody(), respStreamedBody)
+			responseBody = append(responseBody, v.ResponseBody.Body...)
+			if s.streaming && !v.ResponseBody.EndOfStream {
+				continue
+			}
+			responses, err = s.HandleResponseBody(ctx, reqCtx, responseBody)
+			loggerVerbose.Info("processing response body complete")
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
-			responses, err = s.HandleResponseTrailers(req.GetResponseTrailers())
+			responses, err = s.HandleResponseTrailers(v.ResponseTrailers)
 		default:
-			logger.V(logutil.DEFAULT).Error(nil, "Unknown Request type", "request", v)
+			logger.V(logutil.DEFAULT).Error(nil, "unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")
 		}
 
 		// Handle the err and fire an immediate response.
 		if err != nil {
 			if logger.V(logutil.DEBUG).Enabled() {
-				logger.V(logutil.DEBUG).Error(err, "Failed to process request", "request", req)
+				logger.V(logutil.DEBUG).Error(err, "failed to process request", "request", req)
 			} else {
-				logger.V(logutil.DEFAULT).Error(err, "Failed to process request")
+				logger.V(logutil.DEFAULT).Error(err, "failed to process request")
 			}
 			resp, err := errcommon.BuildErrResponse(err)
 			if err != nil {
@@ -169,38 +180,10 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		}
 
 		for _, resp := range responses {
-			if logger.V(logutil.DEBUG).Enabled() {
-				logger.V(logutil.DEBUG).Info("Response generated", "response", resp)
-			} else {
-				loggerVerbose.Info("Response generated")
-			}
 			if err := srv.Send(resp); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Send failed")
+				logger.V(logutil.DEFAULT).Error(err, "send failed")
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 		}
 	}
-}
-
-type streamedBody struct {
-	body []byte
-}
-
-func (s *Server) processResponseBody(ctx context.Context, reqCtx *RequestContext, body *extProcPb.HttpBody, streamedRespBody *streamedBody) ([]*extProcPb.ProcessingResponse, error) {
-	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
-
-	var responseBodyBytes []byte
-	if s.streaming {
-		streamedRespBody.body = append(streamedRespBody.body, body.Body...)
-		if body.EndOfStream {
-			loggerVerbose.Info("Flushing response stream buffer")
-			responseBodyBytes = streamedRespBody.body
-		} else {
-			return nil, nil
-		}
-	} else {
-		responseBodyBytes = body.GetBody()
-	}
-
-	return s.HandleResponseBody(ctx, reqCtx, responseBodyBytes)
 }

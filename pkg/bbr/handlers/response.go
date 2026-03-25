@@ -34,27 +34,20 @@ import (
 
 // HandleResponseHeaders extracts response headers into reqCtx and returns
 // the ext-proc header response.
-func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) []*eppb.ProcessingResponse {
 	if headers != nil && headers.Headers != nil {
 		for _, header := range headers.Headers.Headers {
 			reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
 		}
 	}
 
-	if !s.streaming || headers.GetEndOfStream() {
-		return []*eppb.ProcessingResponse{
-			{
-				Response: &eppb.ProcessingResponse_ResponseHeaders{
-					ResponseHeaders: &eppb.HeadersResponse{},
-				},
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{},
 			},
-		}, nil
+		},
 	}
-
-	// In streaming mode with a body pending, defer the response —
-	// HandleResponseBody will send it together with the body response,
-	// mirroring the request-side pattern.
-	return nil, nil
 }
 
 // HandleResponseBody handles response bodies by executing response plugins in order.

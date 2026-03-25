@@ -144,7 +144,7 @@ func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBy
 
 // HandleRequestHeaders extracts request headers into reqCtx and returns
 // the ext-proc header response.
-func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) []*eppb.ProcessingResponse {
 	reqCtx.RequestReceivedTimestamp = time.Now()
 
 	if headers != nil && headers.Headers != nil {
@@ -159,7 +159,7 @@ func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.Http
 				RequestHeaders: &eppb.HeadersResponse{},
 			},
 		},
-	}, nil
+	}
 }
 
 // HandleRequestTrailers handles request trailers.

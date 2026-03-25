@@ -120,11 +120,7 @@ func TestHandleRequestHeaders(t *testing.T) {
 				Request: framework.NewInferenceRequest(),
 			}
 
-			resp, err := server.HandleRequestHeaders(reqCtx, tc.headers)
-			if err != nil {
-				t.Fatalf("HandleRequestHeaders returned unexpected error: %v", err)
-			}
-
+			resp := server.HandleRequestHeaders(reqCtx, tc.headers)
 			if reqCtx.RequestReceivedTimestamp.IsZero() {
 				t.Error("RequestReceivedTimestamp was not set")
 			}

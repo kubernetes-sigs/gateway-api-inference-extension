@@ -249,39 +249,6 @@ func TestHandleResponseBody_StreamingWithPlugin(t *testing.T) {
 	}
 }
 
-func TestProcessResponseBody_Streaming(t *testing.T) {
-	ctx := logutil.NewTestLoggerIntoContext(context.Background())
-
-	server := NewServer(true, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
-
-	chunk1 := &extProcPb.HttpBody{
-		Body: []byte(`{"choices":[{"te`),
-	}
-	chunk2 := &extProcPb.HttpBody{
-		Body:        []byte(`xt":"Hello!"}]}`),
-		EndOfStream: true,
-	}
-
-	reqCtx := newTestRequestContext()
-	respStreamedBody := &streamedBody{}
-
-	resp1, err := server.processResponseBody(ctx, reqCtx, chunk1, respStreamedBody)
-	if err != nil {
-		t.Fatalf("processResponseBody chunk1 returned unexpected error: %v", err)
-	}
-	if resp1 != nil {
-		t.Fatalf("processResponseBody chunk1 should return nil while buffering, got: %v", resp1)
-	}
-
-	resp2, err := server.processResponseBody(ctx, reqCtx, chunk2, respStreamedBody)
-	if err != nil {
-		t.Fatalf("processResponseBody chunk2 returned unexpected error: %v", err)
-	}
-	if resp2 == nil {
-		t.Fatal("processResponseBody chunk2 should return a response on EoS")
-	}
-}
-
 func TestHandleResponseBody_PluginNoBodyMutation(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
