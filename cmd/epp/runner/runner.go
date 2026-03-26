@@ -58,11 +58,13 @@ import (
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	prepdataprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/preparerequestdata/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
@@ -450,7 +452,7 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 
 // registerInTreePlugins registers the factory functions of all known plugins
 func (r *Runner) registerInTreePlugins() {
-	fwkplugin.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
+	fwkplugin.Register(attrprefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(picker.RandomPickerType, picker.RandomPickerFactory)
 	fwkplugin.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
@@ -465,6 +467,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(ordering.FCFSOrderingPolicyType, ordering.FCFSOrderingPolicyFactory)
 	fwkplugin.Register(ordering.EDFOrderingPolicyType, ordering.EDFOrderingPolicyFactory)
 	fwkplugin.Register(ordering.SLODeadlineOrderingPolicyType, ordering.SLODeadlineOrderingPolicyFactory)
+	fwkplugin.Register(prepdataprefix.ApproxPrefixCachePlugin, prepdataprefix.ApproxPrefixCacheFactory)
 	// Latency predictor plugins
 	fwkplugin.Register(predictedlatency.PredictedLatencyPluginType, predictedlatency.PredictedLatencyFactory)
 	// register filter for test purpose only (used in conformance tests)
@@ -501,7 +504,6 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 
 	loader.RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
-	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
 
 	r.registerInTreePlugins()
 
@@ -551,11 +553,6 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)
-	}
-	// TODO(#1970): Remove feature gate check once prepare data plugins are stable.
-	if !r.featureGates[datalayer.PrepareDataPluginsFeatureGate] {
-		// If the feature gate is disabled, clear any prepare data plugins so they are not used.
-		r.requestControlConfig.WithPrepareDataPlugins()
 	}
 	// The plugins will be executed in topologically sorted order to ensure that data is produced before it is consumed.
 	r.requestControlConfig.OrderPrepareDataPlugins(dag)

@@ -356,7 +356,30 @@ func NewEndpoint(meta *fwkdl.EndpointMetadata, metrics *fwkdl.Metrics, attr fwkd
 func EndpointComparer(a, b Endpoint) bool {
 	a_ep := a.(*endpoint)
 	b_ep := b.(*endpoint)
-	return reflect.DeepEqual(a_ep, b_ep)
+
+	if !reflect.DeepEqual(a_ep.EndpointMetadata, b_ep.EndpointMetadata) {
+		return false
+	}
+	if !reflect.DeepEqual(a_ep.Metrics, b_ep.Metrics) {
+		return false
+	}
+
+	// Compare keys and values in AttributeMap for both endpoints. DeepEqual is not used here because the order of keys may differ.
+	a_keys := a_ep.Keys()
+	b_keys := b_ep.Keys()
+	if len(a_keys) != len(b_keys) {
+		return false
+	}
+
+	for _, k := range a_keys {
+		v1, ok1 := a_ep.Get(k)
+		v2, ok2 := b_ep.Get(k)
+		if !ok1 || !ok2 || !reflect.DeepEqual(v1, v2) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func ScoredEndpointComparer(a, b ScoredEndpoint) bool {

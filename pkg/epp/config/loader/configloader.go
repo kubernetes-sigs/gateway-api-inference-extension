@@ -34,6 +34,8 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
+	prepdataprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/preparerequestdata/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
@@ -161,14 +163,26 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplug
 		if !ok {
 			return fmt.Errorf("plugin type '%s' is not registered", spec.Type)
 		}
-
+		// Note: if factory is for approx_prefix_cache prepare data plugin, pass the scorer parameters for backward compatibility.
 		plugin, err := factory(spec.Name, spec.Parameters, handle)
 		if err != nil {
 			return fmt.Errorf("failed to create plugin '%s' (type: %s): %w", spec.Name, spec.Type, err)
 		}
 
 		handle.AddPlugin(spec.Name, plugin)
+		// If the prefix cache plugin is configured, we create the corresponding prepare data plugin.
+		// This is necessary because the prefix cache scorer plugin relies on the prepare data plugin to populate its state.
+		// This is due to historical reasons where the scorer plugin was developed before the prepare data plugin,
+		// and we want to avoid breaking existing configurations that only specify the scorer plugin.
+		if spec.Name == attrprefix.PrefixCachePluginType && handle.Plugin(prepdataprefix.ApproxPrefixCachePlugin) == nil {
+			plugin, err := prepdataprefix.ApproxPrefixCacheFactory(prepdataprefix.ApproxPrefixCachePlugin, spec.Parameters, handle)
+			if err != nil {
+				return fmt.Errorf("failed to create ApproxPrefixCache plugin for prefix cache plugin '%s': %w", spec.Name, err)
+			}
+			handle.AddPlugin(prepdataprefix.ApproxPrefixCachePlugin, plugin)
+		}
 	}
+
 	return nil
 }
 

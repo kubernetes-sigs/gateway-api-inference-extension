@@ -39,13 +39,14 @@ import (
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	_ "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -151,8 +152,8 @@ func TestLoadRawConfiguration(t *testing.T) {
 						Type: kvcacheutilization.KvCacheUtilizationScorerType,
 					},
 					{
-						Name: prefix.PrefixCachePluginType,
-						Type: prefix.PrefixCachePluginType,
+						Name: attrprefix.PrefixCachePluginType,
+						Type: attrprefix.PrefixCachePluginType,
 					},
 				},
 				SchedulingProfiles: []configapi.SchedulingProfile{
@@ -168,7 +169,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 								Weight:    &kvCacheUtilizationScorerWeight,
 							},
 							{
-								PluginRef: prefix.PrefixCachePluginType,
+								PluginRef: attrprefix.PrefixCachePluginType,
 								Weight:    &prefixCacheScorerWeight,
 							},
 						},
