@@ -405,6 +405,15 @@ var (
 		[]string{"slo_class", "outcome", "inference_pool"},
 	)
 
+	flowControlSLOIncomingRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: inferenceExtension,
+			Name:      "flow_control_slo_incoming_requests_total",
+			Help:      metricsutil.HelpMsgWithStability("Total number of requests that entered the EPP flow control layer via EnqueueAndWait.", compbasemetrics.ALPHA),
+		},
+		[]string{"slo_class", "inference_pool"},
+	)
+
 	flowControlDispatchCycleDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
@@ -509,6 +518,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(prefixCacheHitLength)
 		metrics.Registry.MustRegister(flowControlRequestQueueDuration)
 		metrics.Registry.MustRegister(flowControlSLORequestQueueDuration)
+		metrics.Registry.MustRegister(flowControlSLOIncomingRequestsTotal)
 		metrics.Registry.MustRegister(flowControlDispatchCycleDuration)
 		metrics.Registry.MustRegister(flowControlQueueSize)
 		metrics.Registry.MustRegister(flowControlQueueBytes)
@@ -560,6 +570,7 @@ func Reset() {
 	prefixCacheHitLength.Reset()
 	flowControlRequestQueueDuration.Reset()
 	flowControlSLORequestQueueDuration.Reset()
+	flowControlSLOIncomingRequestsTotal.Reset()
 	flowControlQueueSize.Reset()
 	flowControlQueueBytes.Reset()
 	flowControlPoolSaturation.Reset()
@@ -858,8 +869,7 @@ func RecordFlowControlRequestQueueDuration(
 	).Observe(duration.Seconds())
 }
 
-// SLO class constants used as label values for the flow_control_slo_request_queue_duration_seconds metric.
-// They bucket the raw millisecond SLO header values into a bounded set.
+// SLO class constants label for flow control SLO metrics (bounded buckets for the TTFT SLO header in ms).
 const (
 	SLOClassNone        = "none"
 	SLOClassBelowMS200  = "below_ms_200"
@@ -905,6 +915,11 @@ func RecordFlowControlSLORequestQueueDuration(
 	flowControlSLORequestQueueDuration.WithLabelValues(
 		sloClass, outcome, inferencePool,
 	).Observe(duration.Seconds())
+}
+
+// RecordFlowControlSLOIncomingRequest increments the count of requests that entered flow control at EnqueueAndWait.
+func RecordFlowControlSLOIncomingRequest(sloClass, inferencePool string) {
+	flowControlSLOIncomingRequestsTotal.WithLabelValues(sloClass, inferencePool).Inc()
 }
 
 // RecordFlowControlDispatchCycleDuration records the duration of a dispatch cycle in the Flow Control layer.

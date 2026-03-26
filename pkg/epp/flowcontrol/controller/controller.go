@@ -220,6 +220,7 @@ func (fc *FlowController) EnqueueAndWait(
 	priority := strconv.Itoa(flowKey.Priority)
 	reqBytes := req.ByteSize()
 	sloClass := metrics.ClassifySLO(extractHeader(req, fwkrequest.TTFTSLOMsHeaderKey))
+	metrics.RecordFlowControlSLOIncomingRequest(sloClass, req.InferencePoolName())
 	metrics.IncFlowControlQueueSize(
 		flowKey.ID, priority,
 		req.InferencePoolName(),

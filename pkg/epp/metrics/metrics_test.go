@@ -1165,6 +1165,47 @@ func TestClassifySLO(t *testing.T) {
 	}
 }
 
+func TestFlowControlSLOIncomingRequestsTotalMetric(t *testing.T) {
+	Reset()
+
+	const pool = "pool-1"
+
+	RecordFlowControlSLOIncomingRequest(SLOClassBelowMS200, pool)
+	RecordFlowControlSLOIncomingRequest(SLOClassBelowMS200, pool)
+	RecordFlowControlSLOIncomingRequest(SLOClassMS400to599, pool)
+	RecordFlowControlSLOIncomingRequest(SLOClassNone, "pool-2")
+
+	testCases := []struct {
+		name        string
+		labels      prometheus.Labels
+		expectCount float64
+	}{
+		{
+			name:        "below_ms_200, pool-1",
+			labels:      prometheus.Labels{"slo_class": SLOClassBelowMS200, "inference_pool": pool},
+			expectCount: 2,
+		},
+		{
+			name:        "ms_400_599, pool-1",
+			labels:      prometheus.Labels{"slo_class": SLOClassMS400to599, "inference_pool": pool},
+			expectCount: 1,
+		},
+		{
+			name:        "none, pool-2",
+			labels:      prometheus.Labels{"slo_class": SLOClassNone, "inference_pool": "pool-2"},
+			expectCount: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			val, err := testutil.GetCounterMetricValue(flowControlSLOIncomingRequestsTotal.With(tc.labels))
+			require.NoError(t, err, "Failed to get counter value for labels %v", tc.labels)
+			require.Equal(t, tc.expectCount, val, "Counter value mismatch for labels %v", tc.labels)
+		})
+	}
+}
+
 func TestFlowControlSLOQueueDurationMetric(t *testing.T) {
 	Reset()
 
