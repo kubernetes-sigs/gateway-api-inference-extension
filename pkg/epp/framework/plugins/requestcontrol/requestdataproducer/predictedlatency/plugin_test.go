@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package latencypredictor
+package predictedlatency
 
 import (
 	"context"
@@ -154,8 +154,8 @@ func TestPredictedLatency_TypedName(t *testing.T) {
 	router := NewPredictedLatency(cfg, predictor)
 
 	tn := router.TypedName()
-	assert.Equal(t, "latency-predictor-producer", tn.Type, "Type should be latency-predictor")
-	assert.Equal(t, "latency-predictor-producer", tn.Name, "Default name should be latency-predictor")
+	assert.Equal(t, "predicted-latency-producer", tn.Type, "Type should be latency-predictor")
+	assert.Equal(t, "predicted-latency-producer", tn.Name, "Default name should be latency-predictor")
 }
 
 func TestPredictedLatency_WithName(t *testing.T) {
@@ -167,7 +167,7 @@ func TestPredictedLatency_WithName(t *testing.T) {
 	router = router.WithName(customName)
 
 	tn := router.TypedName()
-	assert.Equal(t, "latency-predictor-producer", tn.Type, "Type should remain latency-predictor")
+	assert.Equal(t, "predicted-latency-producer", tn.Type, "Type should remain latency-predictor")
 	assert.Equal(t, customName, tn.Name, "Name should be updated to custom name")
 }
 

@@ -1,4 +1,4 @@
-# Latency Predictor Plugin (`latency-predictor`)
+# Predicted Latency Producer (`predicted-latency-producer`)
 
 Trains XGBoost models via a sidecar and generates per-endpoint TTFT/TPOT predictions.
 
@@ -9,10 +9,12 @@ PrepareDataPlugin, PreRequest, ResponseHeader, ResponseBody, Producer, Consumer
 ## Responsibilities
 
 - Bulk predictions during `PrepareRequestData` (writes `LatencyPredictionInfo` to endpoint attributes)
+- SLO headroom calculation per endpoint: `headroom = SLO - predicted_latency` (used by downstream scorer and admission plugins)
 - TTFT training data collection on first token / EOS
 - TPOT training data collection at EOS (streaming mode)
-- Per-endpoint running request queue tracking
+- Per-endpoint running request queue tracking (TPOT SLO priority queue)
 - Prefix cache score forwarding from `PrefixCacheMatchInfo` attributes
+- TPOT neutralization for prefill endpoints in disaggregated serving
 - E2E latency metrics when `streamingMode=false`
 
 ## Config

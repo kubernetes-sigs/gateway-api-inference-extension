@@ -22,7 +22,7 @@ limitations under the License.
 //
 // Requests are added in PreRequest (after scheduling) and removed in
 // ResponseBody at EOS or on TTL eviction.
-package latencypredictor
+package predictedlatency
 
 import (
 	"container/heap"

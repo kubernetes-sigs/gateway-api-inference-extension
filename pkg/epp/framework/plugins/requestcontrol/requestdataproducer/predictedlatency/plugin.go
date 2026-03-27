@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package latencypredictor
+package predictedlatency
 
 import (
 	"context"
@@ -45,7 +45,7 @@ import (
 const (
 	// LatencyDataProviderPluginType is the plugin type for the latency predictor.
 	// It trains XGBoost models via the sidecar and generates predictions for scoring.
-	LatencyDataProviderPluginType = "latency-predictor-producer"
+	LatencyDataProviderPluginType = "predicted-latency-producer"
 
 	// TTFTSLOHeaderKey is the header key for the TTFT SLO.
 	TTFTSLOHeaderKey = "x-slo-ttft-ms"
