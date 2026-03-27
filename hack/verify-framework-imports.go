@@ -47,6 +47,8 @@ var (
 // These are utility packages that the framework is permitted to import.
 var globalExceptions = []string{
 	"pkg/common/observability/logging",
+	"pkg/common/error",
+	"pkg/common/request",
 }
 
 // currentCodeExceptionMap maps existing violation in files to their allowed import exceptions.
@@ -95,6 +97,30 @@ var currentCodeExceptionMap = map[string][]string{
 	},
 	"pkg/epp/framework/plugins/scheduling/scorer/prefix/plugin.go": {
 		"pkg/epp/metrics",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/plugin.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/plugin_test.go": {
+		"sidecars/latencypredictorasync",
+		"test/utils",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/prediction.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/prediction_test.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/requestcontrol_hooks.go": {
+		"pkg/epp/metrics",
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/training.go": {
+		"pkg/epp/metrics",
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/training_test.go": {
+		"sidecars/latencypredictorasync",
 	},
 }
 
