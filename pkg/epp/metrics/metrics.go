@@ -43,13 +43,11 @@ const (
 	typePredictedTPOT          = "predicted_tpot"
 	typeTPOTPredictionDuration = "tpot_prediction_duration"
 	typeTPOTSLOViolation       = "tpot_slo_violation"
-	typeTPOTSLOThreshold       = "tpot_slo_threshold"
 
 	typeTTFT                   = "ttft"
 	typePredictedTTFT          = "predicted_ttft"
 	typeTTFTPredictionDuration = "ttft_prediction_duration"
 	typeTTFTSLOViolation       = "ttft_slo_violation"
-	typeTTFTSLOThreshold       = "ttft_slo_threshold"
 )
 
 var (
@@ -883,18 +881,6 @@ func SubFlowControlQueueBytes(fairnessID, priority, inferencePool, modelName, ta
 // RecordFlowControlPoolSaturation records the current saturation level for an inference pool.
 func RecordFlowControlPoolSaturation(inferencePool string, saturation float64) {
 	flowControlPoolSaturation.WithLabelValues(inferencePool).Set(saturation)
-}
-
-// SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
-// This allows dynamic threshold management and makes the threshold visible in metrics.
-func SetTTFTSLOThreshold(modelName, targetModelName string, threshold float64) {
-	inferenceGauges.WithLabelValues(modelName, targetModelName, typeTTFTSLOThreshold).Set(threshold)
-}
-
-// SetTPOTSLOThreshold sets the TPOT SLO threshold for a model.
-// This allows dynamic threshold management and makes the threshold visible in metrics.
-func SetTPOTSLOThreshold(modelName, targetModelName string, threshold float64) {
-	inferenceGauges.WithLabelValues(modelName, targetModelName, typeTPOTSLOThreshold).Set(threshold)
 }
 
 // RecordInferenceModelRewriteDecision records the routing decision for InferenceModelRewrite.

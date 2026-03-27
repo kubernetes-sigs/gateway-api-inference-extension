@@ -498,25 +498,6 @@ func CreateObjsFromYaml(testConfig *TestConfig, docs []string) []string {
 	return createAndVerifyObjs(testConfig, objs)
 }
 
-// DeleteObjects deletes  set of Kubernetes objects in the form of kind/name
-func DeleteObjects(testConfig *TestConfig, kindAndNames []string) {
-	for _, kindAndName := range kindAndNames {
-		split := strings.Split(kindAndName, "/")
-		clientObj := getClientObject(split[0])
-		err := testConfig.K8sClient.Get(testConfig.Context,
-			types.NamespacedName{Namespace: testConfig.NsName, Name: split[1]}, clientObj)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		err = testConfig.K8sClient.Delete(testConfig.Context, clientObj)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Eventually(func() bool {
-			clientObj := getClientObject(split[0])
-			err := testConfig.K8sClient.Get(testConfig.Context,
-				types.NamespacedName{Namespace: testConfig.NsName, Name: split[1]}, clientObj)
-			return apierrors.IsNotFound(err)
-		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.BeTrue())
-	}
-}
-
 // ApplyYAMLFile reads a file containing YAML (possibly multiple docs)
 // and applies each object to the cluster.
 func ApplyYAMLFile(testConfig *TestConfig, filePath string) []string {

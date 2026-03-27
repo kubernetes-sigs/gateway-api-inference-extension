@@ -42,27 +42,6 @@ type MockFlowControlRequest struct {
 // MockRequestOption is a functional option for configuring a MockFlowControlRequest.
 type MockRequestOption func(*MockFlowControlRequest)
 
-// WithInferencePoolName sets the InferencePoolName for the mock request.
-func WithInferencePoolName(name string) MockRequestOption {
-	return func(m *MockFlowControlRequest) {
-		m.InferencePoolNameV = name
-	}
-}
-
-// WithModelName sets the ModelName for the mock request.
-func WithModelName(name string) MockRequestOption {
-	return func(m *MockFlowControlRequest) {
-		m.ModelNameV = name
-	}
-}
-
-// WithTargetModelName sets the TargetModelName for the mock request.
-func WithTargetModelName(name string) MockRequestOption {
-	return func(m *MockFlowControlRequest) {
-		m.TargetModelNameV = name
-	}
-}
-
 // NewMockFlowControlRequest creates a new MockFlowControlRequest instance with optional configuration.
 func NewMockFlowControlRequest(
 	byteSize uint64,

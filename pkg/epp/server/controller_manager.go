@@ -29,7 +29,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -112,15 +111,6 @@ func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restCon
 
 	manager, err := ctrl.NewManager(restConfig, opt)
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to create controller manager: %v", err)
-	}
-	return manager, nil
-}
-
-// NewManagerWithOptions creates a new controller manager with injectable options.
-func NewManagerWithOptions(restConfig *rest.Config, opts manager.Options) (ctrl.Manager, error) {
-	manager, err := ctrl.NewManager(restConfig, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller manager: %v", err)
 	}

@@ -72,13 +72,6 @@ type Runner struct {
 	customCollectors []prometheus.Collector
 }
 
-// WithExecutableName sets the name of the executable containing the runner.
-// The name is used in the version log upon startup and is otherwise opaque.
-func (r *Runner) WithExecutableName(exeName string) *Runner {
-	r.bbrExecutableName = exeName
-	return r
-}
-
 func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runner {
 	r.customCollectors = collectors
 	return r
