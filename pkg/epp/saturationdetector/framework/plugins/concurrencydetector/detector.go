@@ -13,7 +13,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
+// Package concurrencydetector implements a synchronous saturation detector and scheduling filter
+// for LLM routing. It actively tracks in-flight requests and tokens using an open-loop accounting
+// mechanism to provide instantaneous backpressure and protect endpoints from sudden traffic bursts.
+//
+// For detailed architectural trade-offs and configuration, see the package README.
 package concurrencydetector
 
 import (
@@ -27,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
