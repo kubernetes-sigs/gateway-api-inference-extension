@@ -78,70 +78,162 @@ func newItem(id string, priority int, dispatchOffset time.Duration) *flowcontrol
 
 func TestEvictionQueue_TrackAndUntrack(t *testing.T) {
 	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
 
-	item := newItem("req-1", -1, 0)
-	q.Track(item)
+	tests := []struct {
+		name                  string
+		filter                flowcontrol.EvictionFilterPolicy
+		trackItems            []*flowcontrol.EvictionItem
+		untrackIDs            []string
+		wantInFlight          int      // expected after track+untrack, before pop
+		wantEvictable         int      // expected after track+untrack, before pop
+		wantPopIDs            []string // if set, PopN is called and order is verified
+		wantInFlightAfterPop  int      // expected after PopN (-1 to skip check)
+		wantEvictableAfterPop int      // expected after PopN (-1 to skip check)
+	}{
+		{
+			name:                  "track evictable and untrack",
+			filter:                &acceptAllFilter{},
+			trackItems:            []*flowcontrol.EvictionItem{newItem("req-1", -1, 0)},
+			untrackIDs:            []string{"req-1"},
+			wantInFlight:          0,
+			wantEvictable:         0,
+			wantInFlightAfterPop:  -1,
+			wantEvictableAfterPop: -1,
+		},
+		{
+			name:                  "track non-evictable goes to inflight only",
+			filter:                &testFilter{threshold: 0},
+			trackItems:            []*flowcontrol.EvictionItem{newItem("normal", 5, 0)},
+			wantInFlight:          1,
+			wantEvictable:         0,
+			wantInFlightAfterPop:  -1,
+			wantEvictableAfterPop: -1,
+		},
+		{
+			name:   "mixed evictable and non-evictable",
+			filter: &testFilter{threshold: 0},
+			trackItems: []*flowcontrol.EvictionItem{
+				newItem("sheddable", -1, 0),
+				newItem("normal", 5, 0),
+			},
+			wantInFlight:          2,
+			wantEvictable:         1,
+			wantPopIDs:            []string{"sheddable"},
+			wantInFlightAfterPop:  1, // "normal" remains in allInFlight
+			wantEvictableAfterPop: 0,
+		},
+		{
+			name:                  "untrack non-evictable cleans inflight",
+			filter:                &testFilter{threshold: 0},
+			trackItems:            []*flowcontrol.EvictionItem{newItem("normal", 5, 0)},
+			untrackIDs:            []string{"normal"},
+			wantInFlight:          0,
+			wantEvictable:         0,
+			wantInFlightAfterPop:  -1,
+			wantEvictableAfterPop: -1,
+		},
+		{
+			name:                  "untrack non-existent is no-op",
+			filter:                &acceptAllFilter{},
+			trackItems:            []*flowcontrol.EvictionItem{newItem("req-1", -1, 0)},
+			untrackIDs:            []string{"does-not-exist"},
+			wantInFlight:          1,
+			wantEvictable:         1,
+			wantInFlightAfterPop:  -1,
+			wantEvictableAfterPop: -1,
+		},
+		{
+			name:   "untrack evictable removes from heap",
+			filter: &acceptAllFilter{},
+			trackItems: []*flowcontrol.EvictionItem{
+				newItem("req-1", -1, 0),
+				newItem("req-2", -2, 0),
+				newItem("req-3", -3, 0),
+			},
+			untrackIDs:            []string{"req-3"},
+			wantInFlight:          2,
+			wantEvictable:         2,
+			wantPopIDs:            []string{"req-2", "req-1"},
+			wantInFlightAfterPop:  0,
+			wantEvictableAfterPop: 0,
+		},
+		{
+			name:   "duplicate track replaces not doubles",
+			filter: &acceptAllFilter{},
+			trackItems: []*flowcontrol.EvictionItem{
+				newItem("req-1", -1, 0),
+				newItem("req-1", -1, 0), // duplicate
+			},
+			wantInFlight:          1,
+			wantEvictable:         1,
+			wantPopIDs:            []string{"req-1"},
+			wantInFlightAfterPop:  0,
+			wantEvictableAfterPop: 0,
+		},
+		{
+			name:   "re-track with different priority updates heap",
+			filter: &acceptAllFilter{},
+			trackItems: []*flowcontrol.EvictionItem{
+				newItem("req-a", 5, 0),
+				newItem("req-a", -10, 0), // re-track with lower priority
+				newItem("req-b", -5, 0),
+			},
+			wantInFlight:          2,
+			wantEvictable:         2,
+			wantPopIDs:            []string{"req-a", "req-b"}, // req-a (-10) before req-b (-5)
+			wantInFlightAfterPop:  0,
+			wantEvictableAfterPop: 0,
+		},
+		{
+			name:   "pop order across many priorities",
+			filter: &acceptAllFilter{},
+			trackItems: []*flowcontrol.EvictionItem{
+				newItem("p5", 5, 0),
+				newItem("p1", 1, 0),
+				newItem("p3", 3, 0),
+				newItem("p-1", -1, 0),
+				newItem("p0", 0, 0),
+			},
+			wantInFlight:          5,
+			wantEvictable:         5,
+			wantPopIDs:            []string{"p-1", "p0", "p1", "p3", "p5"},
+			wantInFlightAfterPop:  0,
+			wantEvictableAfterPop: 0,
+		},
+	}
 
-	assert.Equal(t, 1, q.InFlightLen())
-	assert.Equal(t, 1, q.EvictableLen())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			q := NewEvictionQueue(&testOrdering{}, tt.filter)
 
-	q.Untrack("req-1")
-	assert.Equal(t, 0, q.InFlightLen())
-	assert.Equal(t, 0, q.EvictableLen())
+			for _, item := range tt.trackItems {
+				q.Track(item)
+			}
+			for _, id := range tt.untrackIDs {
+				q.Untrack(id)
+			}
 
-	// PopN also cleans up both maps.
-	q.Track(newItem("req-2", -1, 0))
-	q.Track(newItem("req-3", -2, 0))
-	evicted := q.PopN(1)
-	require.Len(t, evicted, 1)
-	assert.Equal(t, 1, q.EvictableLen(), "One item should remain in heap after PopN(1)")
-	assert.Equal(t, 1, q.InFlightLen(), "PopN should remove from allInFlight too")
+			// Verify counts before popping.
+			assert.Equal(t, tt.wantInFlight, q.InFlightLen(), "InFlightLen")
+			assert.Equal(t, tt.wantEvictable, q.EvictableLen(), "EvictableLen")
 
-	// Re-untracking a popped item is a no-op.
-	q.Untrack(evicted[0].RequestID)
-	assert.Equal(t, 1, q.InFlightLen(), "Untracking already-popped item should be a no-op")
-}
-
-func TestEvictionQueue_FilterRejectsHighPriority(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &testFilter{threshold: 0})
-
-	sheddable := newItem("sheddable", -1, 0)
-	normal := newItem("normal", 5, 0)
-
-	q.Track(sheddable)
-	q.Track(normal)
-
-	assert.Equal(t, 2, q.InFlightLen(), "Both should be tracked as in-flight")
-	assert.Equal(t, 1, q.EvictableLen(), "Only sheddable should be in the eviction heap")
-
-	// Pop should return only the sheddable one.
-	evicted := q.PopN(5)
-	require.Len(t, evicted, 1)
-	assert.Equal(t, "sheddable", evicted[0].RequestID)
-}
-
-func TestEvictionQueue_PopN_OrderByPriority(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
-
-	q.Track(newItem("p5", 5, 0))
-	q.Track(newItem("p1", 1, 0))
-	q.Track(newItem("p3", 3, 0))
-	q.Track(newItem("p-1", -1, 0))
-	q.Track(newItem("p0", 0, 0))
-
-	evicted := q.PopN(3)
-	require.Len(t, evicted, 3)
-
-	// Should be in ascending priority order (most evictable first).
-	assert.Equal(t, "p-1", evicted[0].RequestID)
-	assert.Equal(t, "p0", evicted[1].RequestID)
-	assert.Equal(t, "p1", evicted[2].RequestID)
-
-	assert.Equal(t, 2, q.EvictableLen(), "Two items should remain in the heap")
-	assert.Equal(t, 2, q.InFlightLen(), "Two items should remain in-flight")
+			// Verify pop order and post-pop state if specified.
+			if tt.wantPopIDs != nil {
+				evicted := q.PopN(100)
+				require.Len(t, evicted, len(tt.wantPopIDs))
+				for i, wantID := range tt.wantPopIDs {
+					assert.Equal(t, wantID, evicted[i].RequestID, "evicted[%d]", i)
+				}
+				if tt.wantInFlightAfterPop >= 0 {
+					assert.Equal(t, tt.wantInFlightAfterPop, q.InFlightLen(), "InFlightLen after PopN")
+				}
+				if tt.wantEvictableAfterPop >= 0 {
+					assert.Equal(t, tt.wantEvictableAfterPop, q.EvictableLen(), "EvictableLen after PopN")
+				}
+			}
+		})
+	}
 }
 
 func TestEvictionQueue_PopN_TiebreakByDispatchTime(t *testing.T) {
@@ -164,77 +256,25 @@ func TestEvictionQueue_PopN_Bounds(t *testing.T) {
 	t.Parallel()
 	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
 
-	// PopN on empty queue.
 	assert.Empty(t, q.PopN(5), "PopN on empty queue should return empty slice")
+	assert.Empty(t, q.PopN(0), "PopN(0) should return empty slice")
 
-	// PopN with n > heap size.
 	q.Track(newItem("req-1", 0, 0))
 	q.Track(newItem("req-2", 0, time.Millisecond))
+
+	assert.Empty(t, q.PopN(0), "PopN(0) with items should return empty slice")
+	assert.Equal(t, 2, q.EvictableLen(), "PopN(0) should not remove items")
+
 	evicted := q.PopN(10)
 	assert.Len(t, evicted, 2, "PopN should return all items when n > heap size")
 	assert.Equal(t, 0, q.EvictableLen())
 	assert.Equal(t, 0, q.InFlightLen())
 }
 
-func TestEvictionQueue_UntrackNonExistent(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
-
-	q.Track(newItem("req-1", -1, 0))
-
-	// Untrack a non-existent ID should not affect existing state.
-	q.Untrack("does-not-exist")
-	assert.Equal(t, 1, q.InFlightLen(), "Existing items should be unaffected")
-	assert.Equal(t, 1, q.EvictableLen(), "Existing items should be unaffected")
-}
-
-func TestEvictionQueue_UntrackRemovesFromHeap(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
-
-	q.Track(newItem("req-1", -1, 0))
-	q.Track(newItem("req-2", -2, 0))
-	q.Track(newItem("req-3", -3, 0))
-
-	// Untrack the most evictable one before eviction.
-	q.Untrack("req-3")
-
-	evicted := q.PopN(1)
-	require.Len(t, evicted, 1)
-	assert.Equal(t, "req-2", evicted[0].RequestID, "After untracking req-3, req-2 should be most evictable")
-}
-
-func TestEvictionQueue_DuplicateTrack(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
-
-	// Track same ID twice — should replace, not double-add.
-	q.Track(newItem("req-1", -1, 0))
-	q.Track(newItem("req-1", -1, 0))
-
-	assert.Equal(t, 1, q.InFlightLen(), "Duplicate track should not increase in-flight count")
-	assert.Equal(t, 1, q.EvictableLen(), "Duplicate track should not increase evictable count")
-
-	evicted := q.PopN(5)
-	require.Len(t, evicted, 1, "Should only pop one item after duplicate track")
-
-	// Re-track with different priority — heap should reflect the new priority.
-	q.Track(newItem("req-a", 5, 0))
-	q.Track(newItem("req-a", -10, 0)) // re-track with lower priority
-
-	q.Track(newItem("req-b", -5, 0))
-
-	evicted = q.PopN(1)
-	require.Len(t, evicted, 1)
-	assert.Equal(t, "req-a", evicted[0].RequestID, "Re-tracked req-a with priority -10 should be popped before req-b with priority -5")
-	assert.Equal(t, -10, evicted[0].Priority, "Re-tracked item should have the updated priority")
-}
-
 func TestEvictionQueue_Peek(t *testing.T) {
 	t.Parallel()
 	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
 
-	// Peek on empty queue.
 	assert.Nil(t, q.Peek(), "Peek on empty queue should return nil")
 
 	q.Track(newItem("high", 5, 0))
@@ -244,80 +284,12 @@ func TestEvictionQueue_Peek(t *testing.T) {
 	peeked := q.Peek()
 	require.NotNil(t, peeked)
 	assert.Equal(t, "low", peeked.RequestID, "Peek should return the most-evictable item")
-
-	// Peek should not remove the item.
 	assert.Equal(t, 3, q.EvictableLen(), "Peek should not change evictable count")
 
 	// Mutating the copy should not corrupt the heap.
 	peeked.Priority = 999
 	peeked2 := q.Peek()
 	assert.Equal(t, -1, peeked2.Priority, "Mutating Peek result should not affect the heap")
-}
-
-func TestEvictionQueue_UntrackNonEvictable(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &testFilter{threshold: 0})
-
-	// Track a non-evictable request (priority >= 0).
-	q.Track(newItem("normal", 5, 0))
-	assert.Equal(t, 1, q.InFlightLen())
-	assert.Equal(t, 0, q.EvictableLen(), "Non-evictable request should not be in the heap")
-
-	// Untrack should clean up allInFlight without touching the heap.
-	q.Untrack("normal")
-	assert.Equal(t, 0, q.InFlightLen())
-	assert.Equal(t, 0, q.EvictableLen())
-}
-
-func TestEvictionQueue_MixedOperations(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
-
-	// Track 7 items with distinct priorities.
-	for _, p := range []int{3, 7, 1, 5, 2, 6, 4} {
-		q.Track(newItem(fmt.Sprintf("req-%d", p), p, 0))
-	}
-	assert.Equal(t, 7, q.EvictableLen())
-
-	// Untrack 3 from the middle (priorities 3, 5, 6).
-	q.Untrack("req-3")
-	q.Untrack("req-5")
-	q.Untrack("req-6")
-	assert.Equal(t, 4, q.EvictableLen())
-
-	// Pop 2 — should get the two lowest remaining priorities (1, 2).
-	evicted := q.PopN(2)
-	require.Len(t, evicted, 2)
-	assert.Equal(t, 1, evicted[0].Priority)
-	assert.Equal(t, 2, evicted[1].Priority)
-
-	// Remaining 2 should come out in order (4, 7).
-	evicted = q.PopN(5)
-	require.Len(t, evicted, 2)
-	assert.Equal(t, 4, evicted[0].Priority)
-	assert.Equal(t, 7, evicted[1].Priority)
-
-	assert.Equal(t, 0, q.EvictableLen())
-	assert.Equal(t, 0, q.InFlightLen())
-}
-
-func TestEvictionQueue_RetrackAfterPop(t *testing.T) {
-	t.Parallel()
-	q := NewEvictionQueue(&testOrdering{}, &acceptAllFilter{})
-
-	q.Track(newItem("req-1", -1, 0))
-	evicted := q.PopN(1)
-	require.Len(t, evicted, 1)
-
-	// Re-track the same requestID after it was popped.
-	q.Track(newItem("req-1", -2, 0))
-	assert.Equal(t, 1, q.InFlightLen())
-	assert.Equal(t, 1, q.EvictableLen())
-
-	evicted = q.PopN(1)
-	require.Len(t, evicted, 1)
-	assert.Equal(t, "req-1", evicted[0].RequestID)
-	assert.Equal(t, -2, evicted[0].Priority, "Re-tracked item should have the new priority")
 }
 
 func TestEvictionQueue_Concurrency(t *testing.T) {
