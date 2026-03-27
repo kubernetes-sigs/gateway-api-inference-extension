@@ -14,7 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package predictedlatency
+// running_request_tpot_slo_queue.go tracks in-flight requests per endpoint,
+// ordered by their TPOT SLO. This allows the predictor to quickly determine
+// the tightest (minimum) TPOT SLO among all running requests on an endpoint,
+// which is used as input to the latency prediction model. The count of running
+// requests is also used by the scorer for idle pod detection.
+//
+// Requests are added in PreRequest (after scheduling) and removed in
+// ResponseBody at EOS or on TTL eviction.
+package latencypredictor
 
 import (
 	"container/heap"
@@ -28,7 +36,7 @@ import (
 // The index is needed by heap.Remove and is maintained by the heap.Interface methods.
 type request struct {
 	id    string  // Unique identifier
-	tpot  float64 // The priority value (lower is higher priority)
+	tpot  float64 // TPOT SLO for this request (used as priority — lower SLO = higher priority)
 	index int
 }
 

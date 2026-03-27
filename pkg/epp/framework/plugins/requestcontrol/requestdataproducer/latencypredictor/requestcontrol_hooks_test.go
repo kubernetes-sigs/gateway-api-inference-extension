@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package predictedlatency
+package latencypredictor
 
 import (
 	"context"
@@ -58,13 +58,15 @@ func createTestSchedulingResult(metadata *fwkdl.EndpointMetadata) *schedulingtyp
 }
 
 func createTestRouter() *PredictedLatency {
+	cfg := DefaultConfig
+	cfg.StreamingMode = true
 	return &PredictedLatency{
 		sloContextStore: ttlcache.New(
-			ttlcache.WithTTL[string, *predictedLatencyCtx](DefaultConfig.ContextTTL),
+			ttlcache.WithTTL[string, *predictedLatencyCtx](cfg.ContextTTL),
 		),
 		// runningRequestLists is a sync.Map and needs no initialization
 		latencypredictor: nil,
-		config:           DefaultConfig,
+		config:           cfg,
 	}
 }
 
@@ -816,7 +818,7 @@ func TestPredictedLatencyContext_Fields(t *testing.T) {
 	assert.Zero(t, ctx.avgTPOT)
 	assert.Nil(t, ctx.targetMetadata)
 	assert.Nil(t, ctx.schedulingResult)
-	assert.Nil(t, ctx.tokenSampler)
+	assert.Nil(t, ctx.decodeTokenSampler)
 	assert.Equal(t, "test prompt", ctx.promptText)
 }
 

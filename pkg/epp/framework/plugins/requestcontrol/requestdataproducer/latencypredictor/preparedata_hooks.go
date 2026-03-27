@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package predictedlatency
+package latencypredictor
 
 import (
 	"context"
@@ -23,12 +23,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrlatency "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/latency"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
 
-// PrepareRequestData prepares the SLO context for the request, including parsing SLO headers and gathering prefix cache scores abds generating predictions.
+var _ requestcontrol.PrepareDataPlugin = &PredictedLatency{}
+
+// PrepareRequestData prepares the SLO context for the request, including
+// parsing SLO headers, gathering prefix cache scores, and generating predictions.
 func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
 	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request)
@@ -52,21 +56,27 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		}
 		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
 	}
+	if !s.config.PredictInPrepareData {
+		logger.V(logutil.DEBUG).Info("PredictInPrepareData disabled, skipping predictions")
+		s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
+		return nil
+	}
+
 	predictions, err := s.generatePredictions(ctx, predictedLatencyCtx, endpoints)
 	if err == nil && len(predictions) == len(endpoints) {
 		s.updateRequestContextWithPredictions(predictedLatencyCtx, predictions)
-		s.updateHasValidPod(ctx, predictedLatencyCtx, endpoints)
 
 		// Store predictions in endpoint attributes
 		for _, pred := range predictions {
 			if pred.Endpoint != nil {
-				latencyInfo := attrlatency.NewLatencyPredictionInfo(
+				latencyInfo := attrlatency.NewLatencyPredictionInfoWithDispatch(
 					pred.TTFTValid,
 					pred.TPOTValid,
 					pred.TTFTHeadroom,
 					pred.Headroom, // Maps to TPOTHeadroom
 					pred.TTFT,
 					pred.TPOT,
+					s.getEndpointRunningRequestCount(pred.Endpoint),
 				)
 				pred.Endpoint.Put(attrlatency.LatencyPredictionInfoKey, latencyInfo)
 				logger.V(logutil.DEBUG).Info("Stored latency prediction in endpoint",

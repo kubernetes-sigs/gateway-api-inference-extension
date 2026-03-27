@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package predictedlatency
+package latencypredictor
 
 import (
 	"hash/fnv"
@@ -23,17 +23,17 @@ import (
 	"time"
 )
 
-// tokenSampler handles Poisson-distributed sampling for predictions only
+// decodeTokenSampler handles Poisson-distributed sampling for predictions only
 // Training happens on every token regardless of sampling
-type tokenSampler struct {
-	rng             *rand.Rand
-	nextSampleToken int
-	samplingMean    float64
-	maxSamples      int
-	sampleCount     int
+type decodeTokenSampler struct {
+	rng                                *rand.Rand
+	nextSampleToken                    int
+	samplingMean                       float64
+	maxDecodeTokenSamplesForPrediction int
+	sampleCount                        int
 }
 
-func newTokenSampler(requestID string, samplingMean float64, maxSamples int) *tokenSampler {
+func newDecodeTokenSampler(requestID string, samplingMean float64, maxDecodeTokenSamplesForPrediction int) *decodeTokenSampler {
 	// Use request ID hash as seed for reproducibility
 	seed := int64(0)
 	if requestID != "" {
@@ -45,10 +45,10 @@ func newTokenSampler(requestID string, samplingMean float64, maxSamples int) *to
 		seed = time.Now().UnixNano()
 	}
 
-	sampler := &tokenSampler{
-		rng:          rand.New(rand.NewSource(seed)),
-		samplingMean: samplingMean,
-		maxSamples:   maxSamples,
+	sampler := &decodeTokenSampler{
+		rng:                                rand.New(rand.NewSource(seed)),
+		samplingMean:                       samplingMean,
+		maxDecodeTokenSamplesForPrediction: maxDecodeTokenSamplesForPrediction,
 	}
 
 	// Set first sample token (skip token 1 since that's TTFT)
@@ -58,7 +58,7 @@ func newTokenSampler(requestID string, samplingMean float64, maxSamples int) *to
 }
 
 // poissonNext generates the next interval using Poisson distribution
-func (ts *tokenSampler) poissonNext() int {
+func (ts *decodeTokenSampler) poissonNext() int {
 	lambda := ts.samplingMean
 	if lambda <= 0 {
 		return 1
@@ -87,25 +87,25 @@ func (ts *tokenSampler) poissonNext() int {
 }
 
 // shouldPredict determines if we should make a prediction for the current token
-func (ts *tokenSampler) shouldPredict(currentToken int) bool {
-	return currentToken == ts.nextSampleToken && ts.sampleCount < ts.maxSamples
+func (ts *decodeTokenSampler) shouldPredict(currentToken int) bool {
+	return currentToken == ts.nextSampleToken && ts.sampleCount < ts.maxDecodeTokenSamplesForPrediction
 }
 
 // recordPrediction records that a prediction was made and calculates the next sample token
-func (ts *tokenSampler) recordPrediction(currentToken int) {
-	if ts.sampleCount >= ts.maxSamples {
+func (ts *decodeTokenSampler) recordPrediction(currentToken int) {
+	if ts.sampleCount >= ts.maxDecodeTokenSamplesForPrediction {
 		return
 	}
 
 	ts.sampleCount++
 
-	if ts.sampleCount < ts.maxSamples {
+	if ts.sampleCount < ts.maxDecodeTokenSamplesForPrediction {
 		interval := ts.poissonNext()
 		ts.nextSampleToken = currentToken + interval
 	}
 }
 
 // getNextSampleToken returns the next token to predict for
-func (ts *tokenSampler) getNextSampleToken() int {
+func (ts *decodeTokenSampler) getNextSampleToken() int {
 	return ts.nextSampleToken
 }

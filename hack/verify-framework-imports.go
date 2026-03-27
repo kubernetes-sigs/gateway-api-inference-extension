@@ -96,6 +96,37 @@ var currentCodeExceptionMap = map[string][]string{
 	"pkg/epp/framework/plugins/scheduling/scorer/prefix/plugin.go": {
 		"pkg/epp/metrics",
 	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/plugin.go": {
+		"pkg/common/error",
+		"pkg/common/request",
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/plugin_test.go": {
+		"pkg/common/request",
+		"sidecars/latencypredictorasync",
+		"test/utils",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/prediction.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/prediction_test.go": {
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/requestcontrol_hooks.go": {
+		"pkg/common/request",
+		"pkg/epp/metrics",
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/requestcontrol_hooks_test.go": {
+		"pkg/common/request",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/training.go": {
+		"pkg/epp/metrics",
+		"sidecars/latencypredictorasync",
+	},
+	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/latencypredictor/training_test.go": {
+		"sidecars/latencypredictorasync",
+	},
 }
 
 func init() {
