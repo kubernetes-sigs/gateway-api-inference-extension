@@ -93,7 +93,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		Response:   framework.NewInferenceResponse(),
 		CycleState: framework.NewCycleState(),
 	}
-
+	// TODO set a max cap on these.
+	// both requestBody and responseBody accumulate without an upper bound.
+	// An arbitrarily large body can OOM the code.
 	var requestBody []byte
 	var responseBody []byte
 
