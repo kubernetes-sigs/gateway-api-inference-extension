@@ -43,12 +43,14 @@ const modelField = "model"
 
 func TestHandleRequestHeaders(t *testing.T) {
 	tests := []struct {
-		name        string
-		headers     *extProcPb.HttpHeaders
-		wantHeaders map[string]string
+		name         string
+		headers      *extProcPb.HttpHeaders
+		streaming    bool
+		wantHeaders  map[string]string
+		wantResponse []*extProcPb.ProcessingResponse
 	}{
 		{
-			name: "extracts headers",
+			name: "headers response in non-streaming",
 			headers: &extProcPb.HttpHeaders{
 				Headers: &basepb.HeaderMap{
 					Headers: []*basepb.HeaderValue{
@@ -57,9 +59,50 @@ func TestHandleRequestHeaders(t *testing.T) {
 					},
 				},
 			},
+			streaming: false,
 			wantHeaders: map[string]string{
 				"content-type": "application/json",
 				"x-request-id": "abc-123",
+			},
+			wantResponse: []*extProcPb.ProcessingResponse{
+				{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
+			},
+		},
+		{
+			name: "extracts headers in streaming, but not end of stream",
+			headers: &extProcPb.HttpHeaders{
+				Headers: &basepb.HeaderMap{
+					Headers: []*basepb.HeaderValue{
+						{Key: "content-type", RawValue: []byte("application/json")},
+						{Key: "x-request-id", RawValue: []byte("abc-123")},
+					},
+				},
+			},
+			streaming: true,
+			wantHeaders: map[string]string{
+				"content-type": "application/json",
+				"x-request-id": "abc-123",
+			},
+			wantResponse: nil,
+		},
+		{
+			name: "extracts headers in streaming and end of stream",
+			headers: &extProcPb.HttpHeaders{
+				Headers: &basepb.HeaderMap{
+					Headers: []*basepb.HeaderValue{
+						{Key: "content-type", RawValue: []byte("application/json")},
+						{Key: "x-request-id", RawValue: []byte("abc-123")},
+					},
+				},
+				EndOfStream: true,
+			},
+			streaming: true,
+			wantHeaders: map[string]string{
+				"content-type": "application/json",
+				"x-request-id": "abc-123",
+			},
+			wantResponse: []*extProcPb.ProcessingResponse{
+				{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
 			},
 		},
 		{
@@ -71,8 +114,12 @@ func TestHandleRequestHeaders(t *testing.T) {
 					},
 				},
 			},
+			streaming: false,
 			wantHeaders: map[string]string{
 				"x-test": "raw",
+			},
+			wantResponse: []*extProcPb.ProcessingResponse{
+				{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
 			},
 		},
 		{
@@ -84,20 +131,33 @@ func TestHandleRequestHeaders(t *testing.T) {
 					},
 				},
 			},
+			streaming: false,
 			wantHeaders: map[string]string{
 				"x-test": "plain",
+			},
+			wantResponse: []*extProcPb.ProcessingResponse{
+				{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
 			},
 		},
 		{
 			name:        "nil headers",
 			headers:     nil,
+			streaming:   false,
 			wantHeaders: map[string]string{},
+			wantResponse: []*extProcPb.ProcessingResponse{
+				{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
+			},
 		},
 		{
 			name:        "nil header map",
 			headers:     &extProcPb.HttpHeaders{},
+			streaming:   false,
 			wantHeaders: map[string]string{},
+			wantResponse: []*extProcPb.ProcessingResponse{
+				{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
+			},
 		},
+
 		{
 			name: "empty header map",
 			headers: &extProcPb.HttpHeaders{
@@ -105,12 +165,12 @@ func TestHandleRequestHeaders(t *testing.T) {
 					Headers: []*basepb.HeaderValue{},
 				},
 			},
+			streaming:   false,
 			wantHeaders: map[string]string{},
+			wantResponse: []*extProcPb.ProcessingResponse{
+				{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
+			},
 		},
-	}
-
-	wantResp := []*extProcPb.ProcessingResponse{
-		{Response: &extProcPb.ProcessingResponse_RequestHeaders{RequestHeaders: &extProcPb.HeadersResponse{}}},
 	}
 
 	for _, tc := range tests {
@@ -120,12 +180,12 @@ func TestHandleRequestHeaders(t *testing.T) {
 				Request: framework.NewInferenceRequest(),
 			}
 
-			resp := server.HandleRequestHeaders(reqCtx, tc.headers)
+			resp := server.HandleRequestHeaders(context.Background(), reqCtx, tc.headers, tc.streaming)
 			if reqCtx.RequestReceivedTimestamp.IsZero() {
 				t.Error("RequestReceivedTimestamp was not set")
 			}
 
-			if diff := cmp.Diff(wantResp, resp, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.wantResponse, resp, protocmp.Transform()); diff != "" {
 				t.Errorf("HandleRequestHeaders response diff(-want, +got): %v", diff)
 			}
 

@@ -121,13 +121,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 				loggerVerbose = logger.V(logutil.VERBOSE)
 				ctx = log.IntoContext(ctx, logger)
 			}
-			if s.streaming && !v.RequestHeaders.GetEndOfStream() {
-				_ = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
-				loggerVerbose.Info("captured request headers, deferring response until body arrives...")
-			} else {
-				responses = s.HandleRequestHeaders(reqCtx, v.RequestHeaders)
-				loggerVerbose.Info("processing request headers complete")
-			}
+			responses = s.HandleRequestHeaders(ctx, reqCtx, v.RequestHeaders, s.streaming)
+			loggerVerbose.Info("processing request headers complete")
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerVerbose.Info("Incoming request body chunk", "EoS", v.RequestBody.EndOfStream)
 			requestBody = append(requestBody, v.RequestBody.Body...)
@@ -139,13 +134,8 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		case *extProcPb.ProcessingRequest_RequestTrailers:
 			responses, err = s.HandleRequestTrailers(v.RequestTrailers)
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
-			if s.streaming && !v.ResponseHeaders.GetEndOfStream() {
-				_ = s.HandleResponseHeaders(reqCtx, v.ResponseHeaders)
-				loggerVerbose.Info("captured response headers, deferring response until body arrives...")
-			} else {
-				responses = s.HandleResponseHeaders(reqCtx, v.ResponseHeaders)
-				loggerVerbose.Info("processing response headers complete")
-			}
+			responses = s.HandleResponseHeaders(ctx, reqCtx, v.ResponseHeaders, s.streaming)
+			loggerVerbose.Info("processing response headers complete")
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			loggerVerbose.Info("Incoming response body chunk", "EoS", v.ResponseBody.EndOfStream)
 			responseBody = append(responseBody, v.ResponseBody.Body...)

@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/bodyfieldtoheader"
 	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 func TestHandleRequestBodyStreaming(t *testing.T) {
@@ -149,6 +150,106 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 			envoytest.SortSetHeadersInResponses(got)
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
+	}
+}
+
+func TestHandleResponseBody_Streaming(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	wantFullBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
+
+	ref := NewServer(true, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+	want, err := ref.HandleResponseBody(ctx, newTestRequestContext(), wantFullBody)
+	if err != nil {
+		t.Fatalf("reference HandleResponseBody: %v", err)
+	}
+
+	type chunk struct {
+		body        []byte
+		endOfStream bool
+	}
+	tests := []struct {
+		name   string
+		chunks []chunk
+	}{
+		{
+			name: "single chunk with EoS",
+			chunks: []chunk{
+				{body: wantFullBody, endOfStream: true},
+			},
+		},
+		{
+			name: "split JSON across two chunks, EoS on last",
+			chunks: []chunk{
+				{body: []byte(`{"choices":[{"te`), endOfStream: false},
+				{body: []byte(`xt":"Hello!"}]}`), endOfStream: true},
+			},
+		},
+		{
+			name: "fragmented: three chunks, EoS on last",
+			chunks: []chunk{
+				{body: []byte(`{"choices":`), endOfStream: false},
+				{body: []byte(`[{"text":"Hello!"}]`), endOfStream: false},
+				{body: []byte(`}`), endOfStream: true},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			streamCtx, cancel := context.WithCancel(logutil.NewTestLoggerIntoContext(context.Background()))
+			srv := NewServer(true, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+			testListener, errChan := utils.SetupTestStreamingServer(t, streamCtx, srv)
+			process, conn := utils.GetStreamingServerClient(streamCtx, t)
+			defer conn.Close()
+			defer func() {
+				cancel()
+				<-errChan
+				testListener.Close()
+			}()
+
+			respHdrs := utils.BuildEnvoyGRPCHeaders(map[string]string{
+				"x-test":       "body",
+				":method":      "POST",
+				"content-type": "text/event-stream",
+			}, true)
+			request := &extProcPb.ProcessingRequest{
+				Request: &extProcPb.ProcessingRequest_ResponseHeaders{
+					ResponseHeaders: respHdrs,
+				},
+			}
+			if err := process.Send(request); err != nil {
+				t.Fatalf("send response headers: %v", err)
+			}
+
+			for _, c := range tc.chunks {
+				request = &extProcPb.ProcessingRequest{
+					Request: &extProcPb.ProcessingRequest_ResponseBody{
+						ResponseBody: &extProcPb.HttpBody{
+							Body:        c.body,
+							EndOfStream: c.endOfStream,
+						},
+					},
+				}
+				if err := process.Send(request); err != nil {
+					t.Fatalf("send response body chunk: %v", err)
+				}
+			}
+
+			var got []*extProcPb.ProcessingResponse
+			for range want {
+				msg, err := process.Recv()
+				if err != nil {
+					t.Fatalf("recv response phase: %v", err)
+				}
+				got = append(got, msg)
+			}
+
+			envoytest.SortSetHeadersInResponses(want)
+			envoytest.SortSetHeadersInResponses(got)
+			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("unexpected ProcessingResponse after buffered streaming response body, diff(-want, +got): %s", diff)
 			}
 		})
 	}

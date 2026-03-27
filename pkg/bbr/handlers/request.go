@@ -33,6 +33,32 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
+// HandleRequestHeaders extracts request headers into reqCtx and returns
+// the ext-proc header response.
+func (s *Server) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, headers *eppb.HttpHeaders, streaming bool) []*eppb.ProcessingResponse {
+	reqCtx.RequestReceivedTimestamp = time.Now()
+
+	if headers != nil && headers.Headers != nil {
+		for _, header := range headers.Headers.Headers {
+			reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
+		}
+	}
+
+	if streaming && !headers.GetEndOfStream() {
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("captured request headers, deferring response until body arrives...")
+		return nil
+	}
+	// if we're here, that means we're in non-streaming, or we're in streaming and got end of stream(means no body).
+	// in both cases we can return HeadersResponse
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &eppb.HeadersResponse{},
+			},
+		},
+	}
+}
+
 // HandleRequestBody parses the raw body bytes into reqCtx.Request.Body and processes the request.
 func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
 	var ret []*eppb.ProcessingResponse
@@ -140,26 +166,6 @@ func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBy
 		})
 	}
 	return responses
-}
-
-// HandleRequestHeaders extracts request headers into reqCtx and returns
-// the ext-proc header response.
-func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) []*eppb.ProcessingResponse {
-	reqCtx.RequestReceivedTimestamp = time.Now()
-
-	if headers != nil && headers.Headers != nil {
-		for _, header := range headers.Headers.Headers {
-			reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
-		}
-	}
-
-	return []*eppb.ProcessingResponse{
-		{
-			Response: &eppb.ProcessingResponse_RequestHeaders{
-				RequestHeaders: &eppb.HeadersResponse{},
-			},
-		},
-	}
 }
 
 // HandleRequestTrailers handles request trailers.

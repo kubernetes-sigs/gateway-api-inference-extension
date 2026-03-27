@@ -34,13 +34,19 @@ import (
 
 // HandleResponseHeaders extracts response headers into reqCtx and returns
 // the ext-proc header response.
-func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) []*eppb.ProcessingResponse {
+func (s *Server) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, headers *eppb.HttpHeaders, streaming bool) []*eppb.ProcessingResponse {
 	if headers != nil && headers.Headers != nil {
 		for _, header := range headers.Headers.Headers {
 			reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
 		}
 	}
 
+	if streaming && !headers.GetEndOfStream() {
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("captured response headers, deferring response until body arrives...")
+		return nil
+	}
+	// if we're here, that means we're in non-streaming, or we're in streaming and got end of stream(means no body).
+	// in both cases we can return HeadersResponse
 	return []*eppb.ProcessingResponse{
 		{
 			Response: &eppb.ProcessingResponse_ResponseHeaders{
