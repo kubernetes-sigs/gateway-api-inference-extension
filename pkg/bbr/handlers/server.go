@@ -89,9 +89,9 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	loggerVerbose.Info("Processing")
 
 	reqCtx := &RequestContext{
-		CycleState: framework.NewCycleState(),
 		Request:    framework.NewInferenceRequest(),
 		Response:   framework.NewInferenceResponse(),
+		CycleState: framework.NewCycleState(),
 	}
 
 	var requestBody []byte
