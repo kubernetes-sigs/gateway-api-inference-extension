@@ -22,7 +22,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -156,9 +156,7 @@ func main() {
 	// ---------------------------------------------------------------
 	// Goroutine 1: Continuously send training data in parallel
 	// ---------------------------------------------------------------
-	generatorWg.Add(1)
-	go func() {
-		defer generatorWg.Done()
+	generatorWg.Go(func() {
 
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		trainingTicker := time.NewTicker(time.Duration(trainingIntervalMs) * time.Millisecond)
@@ -189,7 +187,7 @@ func main() {
 				}
 			}
 		}
-	}()
+	})
 
 	// ---------------------------------------------------------------
 	// Goroutine 2: Generate prediction requests at target QPS.
@@ -200,13 +198,11 @@ func main() {
 	// which calls Wait() and fires one request. This accurately sustains
 	// rates well above 10k QPS.
 	// ---------------------------------------------------------------
-	numWorkers := testQPS / 100 // one worker per 100 QPS; min resolution per worker = 10ms
-	if numWorkers < 10 {
-		numWorkers = 10
-	}
-	if numWorkers > 500 {
-		numWorkers = 500
-	}
+	numWorkers := min(
+		// one worker per 100 QPS; min resolution per worker = 10ms
+		max(
+
+			testQPS/100, 10), 500)
 	// Burst = numWorkers so at most one token per worker fires immediately at
 	// start, giving a clean ramp-up rather than a 10% spike.
 	limiter := rate.NewLimiter(rate.Limit(testQPS), numWorkers)
@@ -223,13 +219,11 @@ func main() {
 		case <-testCtx.Done():
 			return
 		}
-		requestWg.Add(1)
-		go func() {
-			defer requestWg.Done()
+		requestWg.Go(func() {
 			defer func() { <-inFlightSem }()
 
 			requests := make([]latencypredictorasync.PredictionRequest, numEndpointsPerRequest)
-			for i := 0; i < numEndpointsPerRequest; i++ {
+			for i := range numEndpointsPerRequest {
 				requests[i] = latencypredictorasync.PredictionRequest{
 					KVCachePercentage:     float64(i%10) * 0.1,
 					InputTokenLength:      512 + i*64,
@@ -276,13 +270,11 @@ func main() {
 			predMetrics.LatenciesMutex.Lock()
 			predMetrics.Latencies = append(predMetrics.Latencies, latency)
 			predMetrics.LatenciesMutex.Unlock()
-		}()
+		})
 	}
 
-	for w := 0; w < numWorkers; w++ {
-		generatorWg.Add(1)
-		go func() {
-			defer generatorWg.Done()
+	for range numWorkers {
+		generatorWg.Go(func() {
 			for {
 				if err := limiter.Wait(testCtx); err != nil {
 					return // context cancelled or deadline exceeded
@@ -292,15 +284,13 @@ func main() {
 				}
 				dispatchRequest()
 			}
-		}()
+		})
 	}
 
 	// ---------------------------------------------------------------
 	// Goroutine 3: Periodic stats printer
 	// ---------------------------------------------------------------
-	generatorWg.Add(1)
-	go func() {
-		defer generatorWg.Done()
+	generatorWg.Go(func() {
 
 		statsTicker := time.NewTicker(10 * time.Second)
 		defer statsTicker.Stop()
@@ -342,7 +332,7 @@ func main() {
 					"train_fail", trainFail)
 			}
 		}
-	}()
+	})
 
 	// Wait for generators to finish (test duration elapsed)
 	generatorWg.Wait()
@@ -354,9 +344,7 @@ func main() {
 	// Calculate percentiles
 	// ---------------------------------------------------------------
 	predMetrics.LatenciesMutex.Lock()
-	sort.Slice(predMetrics.Latencies, func(i, j int) bool {
-		return predMetrics.Latencies[i] < predMetrics.Latencies[j]
-	})
+	slices.Sort(predMetrics.Latencies)
 	var p50, p99, p999 int64
 	n := len(predMetrics.Latencies)
 	if n > 0 {
@@ -446,7 +434,7 @@ func main() {
 func generateTrainingBatch(rng *rand.Rand, batchSize int) []latencypredictorasync.TrainingEntry {
 	entries := make([]latencypredictorasync.TrainingEntry, batchSize)
 
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		inputTokens := 128 + rng.Intn(2048)
 		// Pick queue bucket uniformly across all 5 buckets: [0], [1-2], [3-5], [6-10], [11+]
 		var numWaiting int

@@ -233,9 +233,7 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 			normalizedDAG := make(map[string][]string)
 			maps.Copy(normalizedDAG, dag)
 			normalizedExpectedDAG := make(map[string][]string)
-			for k, v := range tc.expectedDAG {
-				normalizedExpectedDAG[k] = v
-			}
+			maps.Copy(normalizedExpectedDAG, tc.expectedDAG)
 
 			if diff := cmp.Diff(normalizedExpectedDAG, normalizedDAG); diff != "" {
 				t.Errorf("prepareDataGraph() mismatch (-want +got):\n%s", diff)

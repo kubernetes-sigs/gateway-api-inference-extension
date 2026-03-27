@@ -519,7 +519,7 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	// discarded, leaving the system state clean.
 	allComponents := make(map[flowcontrol.FlowKey][]flowComponents)
 	var rangeErr error
-	fr.flowStates.Range(func(key, _ interface{}) bool {
+	fr.flowStates.Range(func(key, _ any) bool {
 		flowKey := key.(flowcontrol.FlowKey)
 		components, err := fr.buildFlowComponents(flowKey, len(newShards))
 		if err != nil {

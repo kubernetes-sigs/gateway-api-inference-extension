@@ -97,7 +97,7 @@ func TestNotifyReturnsNilOnSkip(t *testing.T) {
 
 // marshalParams is a test helper that marshals parameters to JSON.
 // Returns nil for nil params.
-func marshalParams(t *testing.T, params interface{}) json.RawMessage {
+func marshalParams(t *testing.T, params any) json.RawMessage {
 	t.Helper()
 	if params == nil {
 		return nil
@@ -127,7 +127,7 @@ func TestNotificationSourceFactory(t *testing.T) {
 	testCases := []struct {
 		name          string
 		pluginName    string
-		params        interface{}
+		params        any
 		expectedError string // empty = no error expected, non-empty = error containing this text
 		wantGVK       schema.GroupVersionKind
 		wantName      string

@@ -92,7 +92,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 			name: "responses request with non-string input",
 			body: &LLMRequestBody{
 				Responses: &ResponsesRequest{
-					Input: map[string]interface{}{"key": "value"},
+					Input: map[string]any{"key": "value"},
 				},
 			},
 			expected: `{"key":"value"}`,

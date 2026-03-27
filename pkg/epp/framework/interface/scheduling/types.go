@@ -170,15 +170,15 @@ func (r *CompletionsRequest) String() string {
 // API spec.
 type ChatCompletionsRequest struct {
 	/* parameters from the official OpenAI chat-completions API */
-	Messages []Message     `json:"messages,omitempty"`
-	Tools    []interface{} `json:"tools,omitempty"`
+	Messages []Message `json:"messages,omitempty"`
+	Tools    []any     `json:"tools,omitempty"`
 	/* parameters from the HuggingFace transformers chat-templates API */
-	Documents                 []interface{}          `json:"documents,omitempty"`
-	ChatTemplate              string                 `json:"chat_template,omitempty"`
-	ReturnAssistantTokensMask bool                   `json:"return_assistant_tokens_mask,omitempty"`
-	ContinueFinalMessage      bool                   `json:"continue_final_message,omitempty"`
-	AddGenerationPrompt       bool                   `json:"add_generation_prompt,omitempty"`
-	ChatTemplateKWArgs        map[string]interface{} `json:"chat_template_kwargs,omitempty"`
+	Documents                 []any          `json:"documents,omitempty"`
+	ChatTemplate              string         `json:"chat_template,omitempty"`
+	ReturnAssistantTokensMask bool           `json:"return_assistant_tokens_mask,omitempty"`
+	ContinueFinalMessage      bool           `json:"continue_final_message,omitempty"`
+	AddGenerationPrompt       bool           `json:"add_generation_prompt,omitempty"`
+	ChatTemplateKWArgs        map[string]any `json:"chat_template_kwargs,omitempty"`
 	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
 	CacheSalt string `json:"cache_salt,omitempty"`
 }
@@ -198,11 +198,11 @@ func (r *ChatCompletionsRequest) String() string {
 // ResponsesRequest represents the OpenAI /v1/responses request body structure
 type ResponsesRequest struct {
 	// Input can be either a string or an array of conversation items
-	Input interface{} `json:"input,omitempty"`
+	Input any `json:"input,omitempty"`
 	// Instructions provides optional system-level guidance
-	Instructions interface{} `json:"instructions,omitempty"`
+	Instructions any `json:"instructions,omitempty"`
 	// Tools field for function calling capabilities
-	Tools interface{} `json:"tools,omitempty"`
+	Tools any `json:"tools,omitempty"`
 	// CacheSalt isolates prefix caches for security
 	CacheSalt string `json:"cache_salt,omitempty"`
 }
@@ -219,7 +219,7 @@ type ConversationsRequest struct {
 	// Items is the array of conversation items (messages, files, etc.)
 	Items []ConversationItem `json:"items,omitempty"`
 	// Metadata provides additional context for the conversation
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 	// CacheSalt isolates prefix caches for security
 	CacheSalt string `json:"cache_salt,omitempty"`
 }
@@ -235,7 +235,7 @@ func (c *ConversationsRequest) String() string {
 // Input can be a string or array of strings; see https://platform.openai.com/docs/api-reference/embeddings.
 type EmbeddingsRequest struct {
 	// Input is the text to embed (string or array of strings).
-	Input interface{} `json:"input,omitempty"`
+	Input any `json:"input,omitempty"`
 	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
 	CacheSalt string `json:"cache_salt,omitempty"`
 }
@@ -254,7 +254,7 @@ type ConversationItem struct {
 	// Role specifies the role (user, assistant, system)
 	Role string `json:"role,omitempty"`
 	// Content contains the item content
-	Content interface{} `json:"content,omitempty"`
+	Content any `json:"content,omitempty"`
 }
 
 // Message represents a single message in a chat-completions request.
@@ -262,7 +262,7 @@ type Message struct {
 	// Role is the message Role, optional values are 'user', 'assistant', ...
 	Role string `json:"role,omitempty"`
 	// Content defines text of this message
-	Content Content `json:"content,omitempty"`
+	Content Content `json:"content"`
 }
 
 type Content struct {
@@ -273,9 +273,9 @@ type Content struct {
 type ContentBlock struct {
 	Type       string     `json:"type"`
 	Text       string     `json:"text,omitempty"`
-	ImageURL   ImageBlock `json:"image_url,omitempty"`
-	InputAudio AudioBlock `json:"input_audio,omitempty"`
-	VideoURL   VideoBlock `json:"video_url,omitempty"`
+	ImageURL   ImageBlock `json:"image_url"`
+	InputAudio AudioBlock `json:"input_audio"`
+	VideoURL   VideoBlock `json:"video_url"`
 }
 
 type ImageBlock struct {

@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -145,9 +146,7 @@ func (s *SchedulingContextState) Clone() plugin.StateData {
 	prefixHashes := make([]BlockHash, len(s.PrefixHashes))
 	copy(prefixHashes, s.PrefixHashes)
 	prefixCacheServers := make(map[ServerID]int, len(s.PrefixCacheServers))
-	for key, value := range s.PrefixCacheServers {
-		prefixCacheServers[key] = value
-	}
+	maps.Copy(prefixCacheServers, s.PrefixCacheServers)
 
 	return &SchedulingContextState{
 		PrefixHashes:       prefixHashes,
@@ -318,13 +317,11 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 	// TODO: look into making this entire function async, none of this needs to be done in-band
 	// The PR that introduces this change is meant as a cherrypick, so it was minimally invasive.
 	// WaitGroup is added to the Plugin struct to allow waiting in tests.
-	p.wg.Add(1)
-	go func() {
+	p.wg.Go(func() {
 		for _, s := range servers {
 			p.indexer.Add(state.PrefixHashes, s)
 		}
-		p.wg.Done()
-	}()
+	})
 
 	total := len(state.PrefixHashes)
 	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
@@ -457,24 +454,24 @@ func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
 
 	case request.Body.Responses != nil:
 		// Handle responses API - use ordered slice to ensure deterministic marshaling
-		var combined []map[string]interface{}
+		var combined []map[string]any
 
 		// 1. Instructions (if present)
 		if request.Body.Responses.Instructions != nil {
-			combined = append(combined, map[string]interface{}{
+			combined = append(combined, map[string]any{
 				"instructions": request.Body.Responses.Instructions,
 			})
 		}
 
 		// 2. Tools (if present)
 		if request.Body.Responses.Tools != nil {
-			combined = append(combined, map[string]interface{}{
+			combined = append(combined, map[string]any{
 				"tools": request.Body.Responses.Tools,
 			})
 		}
 
 		// 3. Input (always present)
-		combined = append(combined, map[string]interface{}{
+		combined = append(combined, map[string]any{
 			"input": request.Body.Responses.Input,
 		})
 

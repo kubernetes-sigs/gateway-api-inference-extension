@@ -58,14 +58,14 @@ func TestPoolGet_NoDeadlockWithConcurrentWrite(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			ds.mu.Lock()
 			ds.pool = pool
 			ds.mu.Unlock()
 		}
 	}()
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		_, _ = ds.PoolGet()
 	}
 
@@ -375,8 +375,7 @@ func TestMetrics(t *testing.T) {
 			factories := []datalayer.EndpointFactory{backendFactory, datalayerFactory}
 
 			for _, epf := range factories {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
+				ctx := t.Context()
 				// Set up the scheme.
 				scheme := runtime.NewScheme()
 				_ = clientgoscheme.AddToScheme(scheme)

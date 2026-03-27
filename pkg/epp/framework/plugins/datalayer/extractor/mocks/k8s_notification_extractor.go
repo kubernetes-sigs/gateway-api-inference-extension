@@ -62,7 +62,7 @@ func (m *NotificationExtractor) TypedName() fwkplugin.TypedName {
 }
 
 func (m *NotificationExtractor) ExpectedInputType() reflect.Type {
-	return reflect.TypeOf(fwkdl.NotificationEvent{})
+	return reflect.TypeFor[fwkdl.NotificationEvent]()
 }
 
 // Extract is the Extractor interface method — no-op for notification extractors.
@@ -120,7 +120,7 @@ func NewExtractor(name string, inputType reflect.Type) *Extractor {
 
 // NewPollingExtractor creates a mock extractor for polling data sources (Metrics type).
 func NewPollingExtractor(name string) *Extractor {
-	return NewExtractor(name, reflect.TypeOf(fwkdl.Metrics{}))
+	return NewExtractor(name, reflect.TypeFor[fwkdl.Metrics]())
 }
 
 // WithExtractError configures the extractor to return an error.

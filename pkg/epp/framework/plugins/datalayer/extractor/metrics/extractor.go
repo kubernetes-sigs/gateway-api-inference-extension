@@ -250,7 +250,7 @@ func populateCacheInfoMetrics(clone *fwkdl.Metrics, metric *dto.Metric, errs *[]
 
 // addAdapters splits a comma-separated adapter list and stores keys with default value 0.
 func addAdapters(m map[string]int, csv string) {
-	for _, name := range strings.Split(csv, ",") {
+	for name := range strings.SplitSeq(csv, ",") {
 		if trimmed := strings.TrimSpace(name); trimmed != "" {
 			m[trimmed] = 0
 		}
