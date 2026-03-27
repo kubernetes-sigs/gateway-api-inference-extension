@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package requestcontrol contains helpers to decouple latency-predictor logic.
-package predictedlatency
+package latencypredictor
 
 import (
 	"context"
@@ -91,6 +91,17 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, predictedLat
 		podMinTPOTSLO := s.getEndpointMinTPOTSLO(endpoint)
 		predResult.TTFTValid, predResult.TPOTValid, predResult.IsValid, predResult.Headroom, predResult.TTFTHeadroom = s.validatePrediction(prediction, predictedLatencyCtx, podMinTPOTSLO)
 
+		// Neutralize TPOT when it's not meaningful:
+		// - Non-streaming mode: TPOT is never trained (no per-token observations)
+		// - Disaggregated prefill: prefill pods don't generate tokens
+		// Setting TPOTValid=true and Headroom=0 prevents untrained TPOT
+		// predictions from polluting scoring, tier classification, or admission.
+		if !s.config.StreamingMode || hasPrefillRole(s.config.EndpointRoleLabel, endpoint) {
+			predResult.TPOTValid = true
+			predResult.Headroom = 0
+			predResult.IsValid = predResult.TTFTValid
+		}
+
 		logger.V(logutil.DEBUG).Info("Prediction for scheduling",
 			"endpoint", endpoint.GetMetadata().String(),
 			"prefixCacheScore", predResult.PrefixCacheScore,
@@ -104,7 +115,7 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, predictedLat
 			"ttftHeadroom", predResult.TTFTHeadroom,
 			"tpotValid", predResult.TPOTValid,
 			"ttftValid", predResult.TTFTValid,
-			"headroomStrategy", s.headroomStrategy)
+		)
 
 		predictions = append(predictions, predResult)
 	}
@@ -152,4 +163,13 @@ func (s *PredictedLatency) validatePrediction(
 	isValid = ttftOk && tpotOk
 
 	return
+}
+
+// hasPrefillRole returns true if the endpoint has the prefill role label set.
+func hasPrefillRole(roleLabel string, endpoint schedulingtypes.Endpoint) bool {
+	if roleLabel == "" {
+		return false
+	}
+	labels := endpoint.GetMetadata().Labels
+	return labels != nil && labels[roleLabel] == "prefill"
 }
