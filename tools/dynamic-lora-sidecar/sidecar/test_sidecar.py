@@ -139,6 +139,7 @@ class LoraReconcilerTest(unittest.TestCase):
         with patch("builtins.open", mock_file):
             with patch.object(LoraReconciler, "is_server_healthy", return_value=True):
                 mock_post.return_value = getMockResponse()
+                registered = self.reconciler.registered_adapters
                 # loading a new adapter
                 adapter = EXIST_ADAPTERS[0]
                 url = "http://localhost:8000/v1/load_lora_adapter"
@@ -147,10 +148,10 @@ class LoraReconcilerTest(unittest.TestCase):
                     "lora_path": adapter.source,
                     "base_model_name": adapter.base_model,
                 }
-                self.reconciler.load_adapter(adapter)
+                self.reconciler.load_adapter(adapter, registered)
                 # adapter 2 already exists `id:already_exists`
                 already_exists = EXIST_ADAPTERS[2]
-                self.reconciler.load_adapter(already_exists)
+                self.reconciler.load_adapter(already_exists, registered)
                 mock_post.assert_called_once_with(url, json=payload)
 
     @patch("sidecar.requests.get")
@@ -163,12 +164,13 @@ class LoraReconcilerTest(unittest.TestCase):
         with patch("builtins.open", mock_file):
             with patch.object(LoraReconciler, "is_server_healthy", return_value=True):
                 mock_post.return_value = getMockResponse()
+                registered = self.reconciler.registered_adapters
                 # unloading an existing adapter `id:to_remove`
                 adapter = NOT_EXIST_ADAPTERS[2]
-                self.reconciler.unload_adapter(adapter)
+                self.reconciler.unload_adapter(adapter, registered)
                 payload = {"lora_name": adapter.id}
                 adapter = NOT_EXIST_ADAPTERS[0]
-                self.reconciler.unload_adapter(adapter)
+                self.reconciler.unload_adapter(adapter, registered)
                 mock_post.assert_called_once_with(
                     "http://localhost:8000/v1/unload_lora_adapter",
                     json=payload,
@@ -208,14 +210,20 @@ class LoraReconcilerTest(unittest.TestCase):
                         self.assertEqual(mock_unload.call_count, 2, "Expected 2 unload adapter calls")
                         
                         # Check that the adapters with the correct IDs were loaded
-                        loaded_ids = [call.args[0].id for call in mock_load.call_args_list]
+                        loaded_ids = [c.args[0].id for c in mock_load.call_args_list]
                         self.assertIn("sql-lora-v1", loaded_ids, "sql-lora-v1 should have been loaded")
                         self.assertIn("already_exists", loaded_ids, "already_exists should have been loaded")
-                        
+                        # Verify registered set was passed
+                        for c in mock_load.call_args_list:
+                            self.assertIsInstance(c.args[1], set, "registered set should be passed to load_adapter")
+
                         # Check that the adapters with the correct IDs were unloaded
-                        unloaded_ids = [call.args[0].id for call in mock_unload.call_args_list]
+                        unloaded_ids = [c.args[0].id for c in mock_unload.call_args_list]
                         self.assertIn("sql-lora-v2", unloaded_ids, "sql-lora-v2 should have been unloaded")
                         self.assertIn("to_remove", unloaded_ids, "to_remove should have been unloaded")
+                        # Verify registered set was passed
+                        for c in mock_unload.call_args_list:
+                            self.assertIsInstance(c.args[1], set, "registered set should be passed to unload_adapter")
 
     def test_health_check_settings(self):
         """Test that health check settings are properly initialized from command line args"""
