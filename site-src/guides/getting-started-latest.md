@@ -110,15 +110,13 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
       1. Requirements
 
-         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed (Standard or Experimental channel).
-         - A Kubernetes cluster with LoadBalancer or NodePort access.
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
       1. Install NGINX Gateway Fabric with the Inference Extension enabled by setting the `nginxGateway.gwAPIInferenceExtension.enable=true` Helm value
 
          ```bash
-         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --dependency-update --set nginxGateway.gwAPIInferenceExtension.enable=true
+         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginxGateway.gwAPIInferenceExtension.enable=true
          ```
-         This enables NGINX Gateway Fabric to watch and manage Inference Extension resources such as InferencePool and InferenceObjective.
 
 ### Deploy an Inference Gateway
 
@@ -184,8 +182,6 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "NGINX Gateway Fabric"
 
-      NGINX Gateway Fabric is an implementation of the Gateway API that supports the Inference Extension. Follow these steps to deploy an Inference Gateway using NGINX Gateway Fabric.
-
       1. Deploy the Gateway
 
          ```bash
@@ -200,7 +196,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
       
-       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
+       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/)
 
 ### Deploy the InferencePool and Endpoint Picker Extension
 
