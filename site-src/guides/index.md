@@ -196,7 +196,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
       1. Deploy the Gateway
 
          ```bash
-         kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/nginxgatewayfabric/gateway.yaml
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/gateway/nginxgatewayfabric/gateway.yaml
          ```
 
       1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
