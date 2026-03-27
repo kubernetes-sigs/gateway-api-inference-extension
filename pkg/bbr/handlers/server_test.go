@@ -237,7 +237,7 @@ func TestHandleResponseBody_Streaming(t *testing.T) {
 				}
 			}
 
-			got := make([]*extProcPb.ProcessingResponse, 0)
+			got := make([]*extProcPb.ProcessingResponse, 0, len(want))
 			for range want {
 				msg, err := process.Recv()
 				if err != nil {
