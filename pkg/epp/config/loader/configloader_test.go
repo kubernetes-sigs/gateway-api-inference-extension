@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkflowcontrol "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -47,7 +48,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -109,10 +109,8 @@ func TestLoadRawConfiguration(t *testing.T) {
 					datalayer.ExperimentalDatalayerFeatureGate,
 					flowcontrol.FeatureGate,
 				},
-				SaturationDetector: &configapi.SaturationDetector{
-					QueueDepthThreshold:       10,
-					KVCacheUtilThreshold:      0.8,
-					MetricsStalenessThreshold: metav1.Duration{Duration: 100 * time.Millisecond},
+				SaturationDetector: &configapi.SaturationDetectorConfig{
+					PluginRef: "utilization-detector",
 				},
 			},
 			wantErr: false,
@@ -245,6 +243,9 @@ func TestInstantiateAndConfigure(t *testing.T) {
 				require.Equal(t, "testScorer", scorerRef.PluginRef)
 				require.NotNil(t, scorerRef.Weight)
 				require.Equal(t, 50.0, *scorerRef.Weight, "Explicit weight of 50.0 should be preserved")
+
+				// 4. Verify SaturationDetector Defaulting
+				require.NotNil(t, cfg.SaturationDetector, "SaturationDetector should be defaulted if unspecified")
 			},
 		},
 		{
@@ -493,6 +494,11 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			configText: errorParserWrongPluginNameText,
 			wantErr:    true,
 		},
+		{
+			name:       "Error - Undefined Saturation Detector Plugin",
+			configText: errorUndefinedSaturationDetectorPluginText,
+			wantErr:    true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -521,62 +527,6 @@ func TestInstantiateAndConfigure(t *testing.T) {
 
 			if tc.validate != nil {
 				tc.validate(t, handle, rawConfig, cfg)
-			}
-		})
-	}
-}
-
-// Verify the SaturationConfig builder specifically.
-func TestBuildSaturationConfig(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    *configapi.SaturationDetector
-		expected *utilizationdetector.Config
-	}{
-		{
-			name: "Valid Configuration",
-			input: &configapi.SaturationDetector{
-				QueueDepthThreshold:       20,
-				KVCacheUtilThreshold:      0.9,
-				MetricsStalenessThreshold: metav1.Duration{Duration: 500 * time.Millisecond},
-			},
-			expected: &utilizationdetector.Config{
-				QueueDepthThreshold:       20,
-				KVCacheUtilThreshold:      0.9,
-				MetricsStalenessThreshold: 500 * time.Millisecond,
-			},
-		},
-		{
-			name:  "Nil Input (Defaults)",
-			input: nil,
-			expected: &utilizationdetector.Config{
-				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
-			},
-		},
-		{
-			name: "Invalid Values (Fallback to Defaults)",
-			input: &configapi.SaturationDetector{
-				QueueDepthThreshold:       -5,
-				KVCacheUtilThreshold:      1.5,
-				MetricsStalenessThreshold: metav1.Duration{Duration: -10 * time.Second},
-			},
-			expected: &utilizationdetector.Config{
-				QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
-				KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
-				MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := buildSaturationConfig(tc.input)
-			if diff := cmp.Diff(tc.expected, got); diff != "" {
-				t.Errorf("buildSaturationConfig mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -641,6 +591,16 @@ func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *fr
 // Mock Source
 type mockSource struct{ mockPlugin }
 
+// Mock SaturationDetector
+type mockSaturationDetector struct{ mockPlugin }
+
+// compile-time type assertion
+var _ fwkflowcontrol.SaturationDetector = &mockSaturationDetector{}
+
+func (m *mockSaturationDetector) Saturation(ctx context.Context, endpoints []fwkdl.Endpoint) float64 {
+	return 0.5
+}
+
 func (m *mockSource) AddExtractor(_ fwkdl.Extractor) error {
 	return nil
 }
@@ -702,6 +662,10 @@ func registerTestPlugins(t *testing.T) {
 		return &mockScorer{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testScorerType}}}, nil
 	})
 
+	fwkplugin.Register("utilization-detector", func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+		return &mockSaturationDetector{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: "utilization-detector"}}}, nil
+	})
+
 	fwkplugin.Register(testPickerType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		return &mockPicker{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testPickerType}}}, nil
 	})
@@ -733,4 +697,108 @@ func registerTestPlugins(t *testing.T) {
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
+}
+
+func TestValidateSaturationDetector(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cfg     *configapi.EndpointPickerConfig
+		wantErr bool
+	}{
+		{
+			name:    "Nil config",
+			cfg:     &configapi.EndpointPickerConfig{}, // SaturationDetector is nil
+			wantErr: false,
+		},
+		{
+			name: "Nil SaturationDetector",
+			cfg: &configapi.EndpointPickerConfig{
+				SaturationDetector: nil,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Empty PluginRef",
+			cfg: &configapi.EndpointPickerConfig{
+				SaturationDetector: &configapi.SaturationDetectorConfig{
+					PluginRef: "",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Valid PluginRef",
+			cfg: &configapi.EndpointPickerConfig{
+				Plugins: []configapi.PluginSpec{
+					{Name: "valid-plugin", Type: "valid-type"},
+				},
+				SaturationDetector: &configapi.SaturationDetectorConfig{
+					PluginRef: "valid-plugin",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Invalid PluginRef",
+			cfg: &configapi.EndpointPickerConfig{
+				Plugins: []configapi.PluginSpec{
+					{Name: "other-plugin", Type: "valid-type"},
+				},
+				SaturationDetector: &configapi.SaturationDetectorConfig{
+					PluginRef: "valid-plugin",
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateSaturationDetector(tc.cfg)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestEnsureSaturationDetector(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Plugin in allPlugins", func(t *testing.T) {
+		cfg := &configapi.EndpointPickerConfig{
+			SaturationDetector: &configapi.SaturationDetectorConfig{
+				PluginRef: "existing-plugin",
+			},
+		}
+		handle := utils.NewTestHandle(context.Background())
+		allPlugins := map[string]fwkplugin.Plugin{
+			"existing-plugin": &mockSaturationDetector{},
+		}
+
+		err := ensureSaturationDetector(cfg, handle, allPlugins)
+		require.NoError(t, err)
+		require.Equal(t, "existing-plugin", cfg.SaturationDetector.PluginRef)
+	})
+
+	t.Run("Empty PluginRef in allPlugins", func(t *testing.T) {
+		cfg := &configapi.EndpointPickerConfig{
+			SaturationDetector: &configapi.SaturationDetectorConfig{
+				PluginRef: "",
+			},
+		}
+		handle := utils.NewTestHandle(context.Background())
+		allPlugins := map[string]fwkplugin.Plugin{
+			"utilization-detector": &mockSaturationDetector{},
+		}
+
+		err := ensureSaturationDetector(cfg, handle, allPlugins)
+		require.NoError(t, err)
+		require.Equal(t, "utilization-detector", cfg.SaturationDetector.PluginRef)
+	})
 }

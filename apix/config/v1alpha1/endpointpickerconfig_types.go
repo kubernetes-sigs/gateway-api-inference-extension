@@ -50,9 +50,9 @@ type EndpointPickerConfig struct {
 	SchedulingProfiles []SchedulingProfile `json:"schedulingProfiles"`
 
 	// +optional
-	// SaturationDetector when present specifies the configuration of the
-	// Saturation detector. If not present, default values are used.
-	SaturationDetector *SaturationDetector `json:"saturationDetector,omitempty"`
+	// SaturationDetector specifies which saturation detector plugin to use for both Admission and
+	// Flow Control. If omitted, "utilization-detector" is used by default.
+	SaturationDetector *SaturationDetectorConfig `json:"saturationDetector,omitempty"`
 
 	// +optional
 	// Data configures the DataLayer. It is required if the new DataLayer is enabled.
@@ -195,41 +195,20 @@ func (fg FeatureGates) String() string {
 	return "{" + result + "}"
 }
 
-// SaturationDetector
-type SaturationDetector struct {
+// SaturationDetectorConfig contains the configuration for a saturation detector.
+type SaturationDetectorConfig struct {
 	// +optional
-	// QueueDepthThreshold defines the backend waiting queue size above which a
-	// pod is considered to have insufficient capacity for new requests.
-	QueueDepthThreshold int `json:"queueDepthThreshold,omitempty"`
-
-	// +optional
-	// KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
-	// which a pod is considered to have insufficient capacity.
-	KVCacheUtilThreshold float64 `json:"kvCacheUtilThreshold,omitempty"`
-
-	// +optional
-	// MetricsStalenessThreshold defines how old a pod's metrics can be.
-	// If a pod's metrics are older than this, it might be excluded from
-	// "good capacity" considerations or treated as having no capacity for
-	// safety.
-	MetricsStalenessThreshold metav1.Duration `json:"metricsStalenessThreshold,omitempty"`
+	// PluginRef specifies the name of the plugin instance to use for saturation detection.
+	// The reference is to the name of an entry of the Plugins defined in the configuration's Plugins section.
+	// If unspecified, "utilization-detector" is used by default.
+	PluginRef string `json:"pluginRef,omitempty"`
 }
 
-func (sd *SaturationDetector) String() string {
-	if sd == nil {
+func (sdc *SaturationDetectorConfig) String() string {
+	if sdc == nil {
 		return nilString
 	}
-	var parts []string
-	if sd.QueueDepthThreshold != 0 {
-		parts = append(parts, fmt.Sprintf("QueueDepthThreshold: %d", sd.QueueDepthThreshold))
-	}
-	if sd.KVCacheUtilThreshold != 0.0 {
-		parts = append(parts, fmt.Sprintf("KVCacheUtilThreshold: %.2f", sd.KVCacheUtilThreshold))
-	}
-	if sd.MetricsStalenessThreshold.Duration != 0 {
-		parts = append(parts, fmt.Sprintf("MetricsStalenessThreshold: %s", sd.MetricsStalenessThreshold.Duration))
-	}
-	return "{" + strings.Join(parts, ", ") + "}"
+	return fmt.Sprintf("{PluginRef: %s}", sdc.PluginRef)
 }
 
 // DataLayerConfig contains the configuration of the DataLayer feature

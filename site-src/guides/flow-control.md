@@ -68,31 +68,54 @@ featureGates:
 # ...
 ```
 
-### 2. Tuning the [Saturation Detector](epp-configuration/config-text.md#saturation-detector-configuration) (The "Healthy Buffer")
+### 2. Tuning the [Saturation Detector](./epp-configuration/config-text.md#saturation-detector-plugins) (The "Healthy Buffer")
 
-The effectiveness of the Flow Control layer depends entirely on the Saturation Detector. The configuration resides in the `EndpointPickerConfig.saturationDetector` block. You must tune these settings to maintain a small, "healthy buffer" of requests on the model servers—enough to form efficient batches, but no more.
+The effectiveness of the Flow Control layer depends entirely on the Saturation Detector. Your goal is to tune these settings to maintain a small, "healthy buffer" of requests on the model servers—enough to form efficient continuous batches, but no more.
 
-* `queueDepthThreshold` (Integer, Default: `5`): Controls the allowed size of the queue *on the model servers themselves*.
-  * **For Maximum Throughput:** Set a small non-zero value (e.g., 1-2x your max batch size).
-  * **For Maximum Fairness/Control:** Set to `1`. This forces nearly all queuing into the EPP, ensuring maximum EPP control.
-* `kvCacheUtilThreshold` (Float, Default: `0.8`): The maximum KV-cache utilization allowed before the pool is considered saturated.
-* `metricsStalenessThreshold` (Duration, Default: `200ms`): Maximum age of an endpoint's metrics before it's treated as unknown capacity.
+To customize these thresholds, define the plugin parameters in the global `plugins` list and reference that plugin in your `saturationDetector` block. When tuning the default `utilization-detector`, consider the following:
 
-Example:
+* **`queueDepthThreshold` (Default: `5`)**: Controls the allowed size of the pending queue *on the model servers themselves*.
+  * **For Maximum Throughput:** Set a small, non-zero value (e.g., a fraction of your max batch size) to ensure the GPU is never starved for work.
+  * **For Maximum Fairness/Control:** Set this to `1`. This forces nearly all queuing to happen centrally inside the EPP, ensuring maximum control over priority, fairness, and late-binding routing.
+* **`kvCacheUtilThreshold` (Default: `0.8`)**: The maximum KV-cache memory utilization allowed before the pool is considered saturated and EPP queueing engages.
+
+**Example:**
 ```yaml
+plugins:
+- type: utilization-detector
+  parameters:
+    queueDepthThreshold: 2 # Controls allowed size of queue on model servers (Default: 5)
+    kvCacheUtilThreshold: 0.85 # Max KV-cache utilization allowed before saturation (Default: 0.8)
 saturationDetector:
-  queueDepthThreshold: 2
-  kvCacheUtilThreshold: 0.85
-  metricsStalenessThreshold: 200ms
+  pluginRef: utilization-detector
+```
+
+#### Alternative: Concurrency Detector Tuning
+
+If you are using the alternative `concurrency-detector`, your buffer is dictated by the maximum active request limits rather than hardware telemetry.
+
+We recommend setting `maxConcurrency` to 110% of your model server's active batch capacity to provide a 10% local queue buffer. This allows the continuous batching engine to perform optimally, providing it with a steady stream of requests to pull into the next batch without creating massive local queues. For example, if your model server's max active batch size is `100`, set `maxConcurrency` to `110`.
+
+**Example:**
+```yaml
+plugins:
+- type: concurrency-detector
+  parameters:
+    concurrencyMode: "requests"
+    maxConcurrency: 110 # 100 active batch size + 10 buffered requests
+saturationDetector:
+  pluginRef: concurrency-detector
 ```
 
 ### 3. [Priority Bands and Capacity Config](epp-configuration/config-text.md#priority-band-configuration)
+
 Use the `EndpointPickerConfig.flowControl` configuration block to define your dynamic priority bands and global capacity constraints.
 
 ```yaml
 flowControl:
   # maxBytes limits the aggregate HTTP payload size of all pending requests held in
   # the EPP's memory. (Note: This bounds proxy memory footprint, not GPU VRAM or Tokens).
+  # Supports both plain integers (bytes) and Kubernetes Quantity format (e.g., 10Gi, 512Mi).
   maxBytes: 1000000000 # 1GB total HTTP payload capacity limit
   defaultRequestTTL: 30s # Fallback TTL if client doesn't specify one
   priorityBands:

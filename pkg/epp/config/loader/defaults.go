@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 )
 
 // DefaultScorerWeight is the weight used for scorers referenced in the configuration without explicit weights.
@@ -108,6 +109,9 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle fwkplugin.H
 	}
 	if err := ensureParser(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply parser defaults: %w", err)
+	}
+	if err := ensureSaturationDetector(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply saturation detector defaults: %w", err)
 	}
 	return nil
 }
@@ -224,6 +228,34 @@ func ensureParser(
 	if _, ok := allPlugins[parserConfig.PluginRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, openai.OpenAIParserType); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// ensureSaturationDetector guarantees that saturation detector is configured.
+// If the saturation detector is not set, the utilization detector is configured by default.
+func ensureSaturationDetector(
+	cfg *configapi.EndpointPickerConfig,
+	handle fwkplugin.Handle,
+	allPlugins map[string]fwkplugin.Plugin,
+) error {
+	sdConfig := cfg.SaturationDetector
+	if sdConfig == nil {
+		sdConfig = &configapi.SaturationDetectorConfig{
+			PluginRef: utilizationdetector.UtilizationDetectorType,
+		}
+		cfg.SaturationDetector = sdConfig
+	}
+	if sdConfig.PluginRef == "" {
+		sdConfig.PluginRef = utilizationdetector.UtilizationDetectorType
+	}
+
+	if sdConfig.PluginRef == utilizationdetector.UtilizationDetectorType {
+		if _, ok := allPlugins[sdConfig.PluginRef]; !ok {
+			if err := registerDefaultPlugin(cfg, handle, utilizationdetector.UtilizationDetectorType); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

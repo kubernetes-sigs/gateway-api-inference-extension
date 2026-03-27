@@ -40,10 +40,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	datalayerlogger "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/logger"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fwkflowcontrol "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
@@ -60,7 +60,7 @@ type ExtProcServerRunner struct {
 	MetricsStalenessThreshold        time.Duration
 	Director                         *requestcontrol.Director
 	Parser                           fwkrh.Parser
-	SaturationDetector               *utilizationdetector.Detector
+	SaturationDetector               fwkflowcontrol.SaturationDetector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
 }
 

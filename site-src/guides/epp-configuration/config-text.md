@@ -339,7 +339,36 @@ An Ordering Policy that orders requests by an SLO-based deadline, computed from 
 - *Type*: slo-deadline-ordering-policy
 - *Parameters*: none
 
+### Saturation Detector Plugins
+
+> **Note:** To see how to reference these plugins in your configuration, see [Saturation Detector Configuration](#saturation-detector-configuration).
+
+These plugins are used to interpret system load and protect endpoints from overload. They are referenced in the `saturationDetector` section.
+
+#### Utilization Detector Plugin
+
+This is the default saturation detector. It closed-loop reacts to telemetry emitted by individual model servers. It evaluates queue depth and KV cache utilization against user thresholds to score global saturation.
+
+- **Type**: `utilization-detector`
+- **Parameters**:
+  - `queueDepthThreshold` (`int`): Target waiting queue depth limit. Serves as the "ideal" queue capacity for a single endpoint. Must be > 0. (Default: `5`)
+  - `kvCacheUtilThreshold` (`float64`): Target KV cache memory utilization limit, expressed as a fraction. Must be in `(0.0, 1.0]`. (Default: `0.8`)
+  - `metricsStalenessThreshold` (`string` duration): Maximum age of metrics before an endpoint is considered stale (e.g., `"150ms"`). Must be > 0. (Default: `"200ms"`)
+  - `headroom` (`float64`): Allowed burst capacity above the ideal thresholds, expressed as a fraction (e.g., `0.2` for 20%). Must be >= 0.0. (Default: `0.0`)
+
+#### Concurrency Detector Plugin
+
+Synchronous saturation detection mechanism based on active in-flight request accounting. Open-loop calculation of pool load with local endpoint limiting.
+
+- **Type**: `concurrency-detector`
+- **Parameters**:
+  - `concurrencyMode` (`string`): Evaluation mode. Valid values are `"requests"` or `"tokens"`. (Default: `"requests"`)
+  - `maxConcurrency` (`int64`): Maximum requests in flight. Serves as the "ideal" request capacity for a single endpoint. Must be > 0. (Default: `100`)
+  - `maxTokenConcurrency` (`int64`): Maximum tokens in flight. The "tokens" mode equivalent of `maxConcurrency`. Must be > 0. (Default: `1000000`)
+  - `headroom` (`float64`): Allowed burst capacity above the ideal threshold, expressed as a fraction (e.g., `0.2` for 20%). Must be >= 0.0. (Default: `0.0`)
+
 ## Scheduling Profiles
+
 
 The `schedulingProfiles` section defines the set of scheduling profiles that can be used in scheduling
 requests to pods. If one is not defined, a default one named `default` will be added and will reference all of
@@ -368,36 +397,31 @@ Each entry in the schedulingProfile's plugins section has the following fields:
 
 ## Saturation Detector Configuration
 
-The Saturation Detector is used to determine if the the cluster is overloaded, i.e. saturated. When
-the cluster is saturated special actions will be taken depending what has been enabled. At this time, sheddable requests will be dropped.
+> **Note:** For a full list of available plugins and their parameters, see [Saturation Detector Plugins](#saturation-detector-plugins).
 
-The Saturation Detector determines that the cluster is saturated by looking at the following metrics provided by the inference servers:
+The Saturation Detector acts as a safety valve, continuously evaluating if the backend `InferencePool` is overloaded. It protects the pool from overload, ensuring that endpoints operate within their optimal capacity limits.
 
-- Backend waiting queue size
-- KV cache utilization
-- Metrics staleness
+How the gateway reacts to a "saturated" signal depends strictly on the `flowControl` feature gate:
 
-The Saturation Detector is configured via the `saturationDetector` section of the overall configuration.
+* **Flow Control Enabled**: The Saturation Detector acts as the gatekeeper for the gateway's centralized queues. When the pool is saturated, the gateway pauses dispatching and safely buffers incoming requests in memory (respecting priority and fairness policies) until capacity frees up on the backends.
+* **Flow Control Disabled (Default)**: The gateway lacks centralized queuing. When the pool is saturated, the gateway immediately rejects (HTTP 503) incoming "sheddable" requests (those with a negative priority) to protect the backends. All other requests are passed directly to the model servers. For more details, see the [Priority and Capacity](../../concepts/priority-and-capacity.md) guide.
+
+The Saturation Detector is configured via the `saturationDetector` section by referencing a plugin defined in the global `plugins` list.
+
 It has the following form:
 
 ```yaml
+plugins:
+- type: utilization-detector
+  parameters:
+    queueDepthThreshold: 8
 saturationDetector:
-  queueDepthThreshold: 8
-  kvCacheUtilThreshold: 0.75
-  metricsStalenessThreshold: 150ms
+  pluginRef: utilization-detector
 ```
 
-The various sub-fields of the `saturationDetector` section are:
+The fields in the `saturationDetector` section are:
 
-- The `queueDepthThreshold` field which defines the backend waiting queue size above which a
-pod is considered to have insufficient capacity for new requests. This field is optional, if
-omitted a value of `5` will be used.
-- The `kvCacheUtilThreshold` field which defines the KV cache utilization (0.0 to 1.0) above
-which a pod is considered to have insufficient capacity. This field is optional, if omitted
-a value of `0.8` will be used.
-- The `metricsStalenessThreshold` field which defines how old a pod's metrics can be. If a pod's
-metrics are older than this, it might be excluded from "good capacity" considerations or treated
-as having no capacity for safety. This field is optional, if omitted a value of `200ms` will be used.
+- `pluginRef`: The name of the plugin instance to use for saturation detection. If omitted or empty, the system defaults to using the `utilization-detector`. *Note: If a `utilization-detector` is not explicitly defined in your `plugins` array, the gateway will automatically instantiate one under the hood using standard default parameters.*
 
 ## [Flow Control Configuration](../flow-control.md)
 
