@@ -209,14 +209,14 @@ func TestHandleResponseBody_Streaming(t *testing.T) {
 				testListener.Close()
 			}()
 
-			respHdrs := utils.BuildEnvoyGRPCHeaders(map[string]string{
+			respHeaders := utils.BuildEnvoyGRPCHeaders(map[string]string{
 				"x-test":       "body",
 				":method":      "POST",
 				"content-type": "text/event-stream",
 			}, true)
 			request := &extProcPb.ProcessingRequest{
 				Request: &extProcPb.ProcessingRequest_ResponseHeaders{
-					ResponseHeaders: respHdrs,
+					ResponseHeaders: respHeaders,
 				},
 			}
 			if err := process.Send(request); err != nil {
@@ -237,7 +237,7 @@ func TestHandleResponseBody_Streaming(t *testing.T) {
 				}
 			}
 
-			var got []*extProcPb.ProcessingResponse
+			got := make([]*extProcPb.ProcessingResponse, 0)
 			for range want {
 				msg, err := process.Recv()
 				if err != nil {
