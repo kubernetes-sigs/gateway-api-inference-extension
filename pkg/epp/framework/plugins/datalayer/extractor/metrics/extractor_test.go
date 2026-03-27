@@ -462,6 +462,14 @@ func TestCoreMetricsExtractorFactoryDefaultEngine(t *testing.T) {
 			wantErr:      false,
 			checkDefault: "vllm",
 		},
+		{
+			name: "trtllm-serve as default engine",
+			params: map[string]any{
+				"defaultEngine": "trtllm-serve",
+			},
+			wantErr:      false,
+			checkDefault: "trtllm-serve",
+		},
 	}
 
 	for _, tt := range tests {

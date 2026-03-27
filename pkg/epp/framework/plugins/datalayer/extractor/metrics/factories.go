@@ -55,12 +55,12 @@ type (
 		// Can be any engine name from EngineConfigs. Defaults to "vllm".
 		DefaultEngine string `json:"defaultEngine"`
 		// EngineConfigs defines metric specifications for specific engine types.
-		// Built-in vLLM and SGLang configs are automatically appended if not explicitly defined.
+		// Built-in configs (vLLM, SGLang, trtllm-serve) are automatically appended if not explicitly defined.
 		EngineConfigs []engineConfigParams `json:"engineConfigs"`
 	}
 )
 
-// Default engine configurations for vLLM and SGLang.
+// Default engine configurations for vLLM, SGLang, and trtllm-serve.
 var defaultEngineConfigs = []engineConfigParams{
 	{
 		Name:                "vllm",
@@ -77,6 +77,14 @@ var defaultEngineConfigs = []engineConfigParams{
 		KVUsageSpec:         "sglang:token_usage",
 		LoRASpec:            "",
 		CacheInfoSpec:       "",
+	},
+	{
+		Name:                "trtllm-serve",
+		QueuedRequestsSpec:  "trtllm_num_requests_waiting",
+		RunningRequestsSpec: "trtllm_num_requests_running",
+		KVUsageSpec:         "trtllm_kv_cache_utilization",
+		LoRASpec:            "",
+		CacheInfoSpec:       "trtllm_cache_config_info",
 	},
 }
 
