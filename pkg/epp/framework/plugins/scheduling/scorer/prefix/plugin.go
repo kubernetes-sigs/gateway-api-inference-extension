@@ -38,6 +38,11 @@ var (
 	_ framework.Scorer = &Plugin{}
 )
 
+const (
+	// Type is the unique identifier for the prefix cache scorer plugin.
+	PrefixCacheScorerPluginType = "prefix-cache-scorer"
+)
+
 // PrefixCachePluginFactory defines the factory function for the Prefix plugin.
 func PrefixCachePluginFactory(name string, _ json.RawMessage, handle plugin.Handle) (plugin.Plugin, error) {
 	p, err := New(handle.Context())
@@ -54,8 +59,8 @@ func PrefixCachePluginFactory(name string, _ json.RawMessage, handle plugin.Hand
 func New(_ context.Context) (*Plugin, error) {
 	return &Plugin{
 		typedName: plugin.TypedName{
-			Type: attrprefix.PrefixCachePluginType,
-			Name: attrprefix.PrefixCachePluginType,
+			Type: PrefixCacheScorerPluginType,
+			Name: PrefixCacheScorerPluginType,
 		},
 	}, nil
 }

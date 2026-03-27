@@ -34,7 +34,6 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 	prepdataprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/preparerequestdata/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -174,7 +173,7 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplug
 		// This is necessary because the prefix cache scorer plugin relies on the prepare data plugin to populate its state.
 		// This is due to historical reasons where the scorer plugin was developed before the prepare data plugin,
 		// and we want to avoid breaking existing configurations that only specify the scorer plugin.
-		if spec.Name == attrprefix.PrefixCachePluginType && handle.Plugin(prepdataprefix.ApproxPrefixCachePlugin) == nil {
+		if spec.Name == prepdataprefix.PrefixCacheDataProducerPluginType && handle.Plugin(prepdataprefix.ApproxPrefixCachePlugin) == nil {
 			plugin, err := prepdataprefix.ApproxPrefixCacheFactory(prepdataprefix.ApproxPrefixCachePlugin, spec.Parameters, handle)
 			if err != nil {
 				return fmt.Errorf("failed to create ApproxPrefixCache plugin for prefix cache plugin '%s': %w", spec.Name, err)

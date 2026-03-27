@@ -32,6 +32,10 @@ import (
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
+const (
+	PrefixCacheDataProducerPluginType = "prefix-cache-data-producer"
+)
+
 var (
 	_ requestcontrol.PrepareDataPlugin = &PrepareData{}
 	_ requestcontrol.PreRequest        = &PrepareData{}
@@ -85,7 +89,7 @@ func NewPrepareData(ctx context.Context, config Config, handle plugin.Handle, pl
 
 	p := &PrepareData{
 		typedName: plugin.TypedName{
-			Type: attrprefix.PrefixCachePluginType,
+			Type: PrefixCacheDataProducerPluginType,
 			Name: ApproxPrefixCachePlugin,
 		},
 		config:      config,
@@ -161,7 +165,7 @@ func (p *PrepareData) PrepareRequestData(ctx context.Context, request *framework
 
 	// Store the state in shared plugin state for later use in PreRequest.
 	// NOTE: We use the prefix plugin's type name as part of the key so that the scorer can read it.
-	p.pluginState.Write(request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType), state)
+	p.pluginState.Write(request.RequestId, plugin.StateKey(PrefixCacheDataProducerPluginType), state)
 
 	return nil
 }
@@ -183,7 +187,7 @@ func (p *PrepareData) PreRequest(ctx context.Context, request *framework.LLMRequ
 	}
 
 	// Read state saved during PrepareRequestData.
-	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType))
+	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.pluginState, request.RequestId, plugin.StateKey(PrefixCacheDataProducerPluginType))
 	p.pluginState.Delete(request.RequestId)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to read prefix plugin state", "requestID", request.RequestId)

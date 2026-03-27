@@ -35,7 +35,6 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 	prepdataprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/preparerequestdata/approximateprefix"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -426,8 +425,8 @@ func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *f
 
 func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleState *framework.CycleState, endpoint framework.Endpoint) float64 {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String())
-	plugintype := attrprefix.PrefixCachePluginType
-	pluginname := attrprefix.PrefixCachePluginType
+	plugintype := prepdataprefix.PrefixCacheDataProducerPluginType
+	pluginname := prepdataprefix.PrefixCacheDataProducerPluginType
 	cycleStateKey := (plugin.TypedName{Type: plugintype, Name: pluginname}).String()
 	stateData, err := cycleState.Read(plugin.StateKey(cycleStateKey))
 

@@ -39,9 +39,9 @@ import (
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	prepdataprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/preparerequestdata/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
@@ -152,8 +152,8 @@ func TestLoadRawConfiguration(t *testing.T) {
 						Type: kvcacheutilization.KvCacheUtilizationScorerType,
 					},
 					{
-						Name: attrprefix.PrefixCachePluginType,
-						Type: attrprefix.PrefixCachePluginType,
+						Name: prepdataprefix.PrefixCacheDataProducerPluginType,
+						Type: prepdataprefix.PrefixCacheDataProducerPluginType,
 					},
 				},
 				SchedulingProfiles: []configapi.SchedulingProfile{
@@ -169,7 +169,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 								Weight:    &kvCacheUtilizationScorerWeight,
 							},
 							{
-								PluginRef: attrprefix.PrefixCachePluginType,
+								PluginRef: prepdataprefix.PrefixCacheDataProducerPluginType,
 								Weight:    &prefixCacheScorerWeight,
 							},
 						},

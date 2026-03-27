@@ -27,7 +27,6 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
 
 func TestPrepareRequestData(t *testing.T) {
@@ -62,7 +61,7 @@ func TestPrepareRequestData(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify state was written to PluginState
-	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.PluginState(), req1.RequestId, plugin.StateKey(attrprefix.PrefixCachePluginType))
+	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.PluginState(), req1.RequestId, plugin.StateKey(PrefixCacheDataProducerPluginType))
 	assert.NoError(t, err)
 	assert.NotNil(t, state)
 	assert.Equal(t, 2, len(state.PrefixHashes)) // "aaaabbbb" with blockSize 4 (1 token * 4 chars) -> 2 blocks
