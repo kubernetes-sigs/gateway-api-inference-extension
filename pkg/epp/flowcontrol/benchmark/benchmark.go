@@ -206,7 +206,7 @@ func setupRegistry(
 
 	for i := 0; i < int(p); i++ {
 		band, err := registry.NewPriorityBandConfig(
-			handle, i, fmt.Sprintf("band-%d", i),
+			handle, i,
 			registry.WithBandMaxBytes(10_000_000_000), // Prevent capacity-based rejections.
 		)
 		if err != nil {

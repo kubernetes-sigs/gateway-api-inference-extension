@@ -248,7 +248,7 @@ func (sp *ShardProcessor) enqueue(item *FlowItem) {
 		return
 	}
 
-	band, err := sp.shard.PriorityBandAccessor(key.Priority)
+	_, err = sp.shard.PriorityBandAccessor(key.Priority)
 	if err != nil {
 		finalErr := fmt.Errorf("configuration error: failed to get priority band for priority %d: %w", key.Priority, err)
 		sp.logger.Error(finalErr, "Rejecting item.", "flowKey", key, "reqID", req.ID())
@@ -260,7 +260,7 @@ func (sp *ShardProcessor) enqueue(item *FlowItem) {
 	// This check is safe because it is performed by the single-writer Run goroutine.
 	if !sp.hasCapacity(key.Priority, req.ByteSize()) {
 		sp.logger.V(logutil.DEBUG).Info("Rejecting request, queue at capacity",
-			"flowKey", key, "reqID", req.ID(), "priorityName", band.PriorityName(), "reqByteSize", req.ByteSize())
+			"flowKey", key, "reqID", req.ID(), "reqByteSize", req.ByteSize())
 		item.FinalizeWithOutcome(types.QueueOutcomeRejectedCapacity, fmt.Errorf("%w: %w",
 			types.ErrRejected, types.ErrQueueAtCapacity))
 		return
@@ -271,12 +271,12 @@ func (sp *ShardProcessor) enqueue(item *FlowItem) {
 	if err := managedQ.Add(item); err != nil {
 		finalErr := fmt.Errorf("failed to add item to queue for flow key %s: %w", key, err)
 		sp.logger.Error(finalErr, "Rejecting item post-admission.",
-			"flowKey", key, "reqID", req.ID(), "priorityName", band.PriorityName())
+			"flowKey", key, "reqID", req.ID())
 		item.FinalizeWithOutcome(types.QueueOutcomeRejectedOther, fmt.Errorf("%w: %w", types.ErrRejected, finalErr))
 		return
 	}
 	sp.logger.V(logutil.TRACE).Info("Item enqueued.",
-		"flowKey", key, "reqID", req.ID(), "priorityName", band.PriorityName())
+		"flowKey", key, "reqID", req.ID())
 }
 
 // hasCapacity checks if the shard and the specific priority band have enough capacity.
@@ -338,7 +338,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		item, err := sp.selectItem(ctx, originalBand)
 		if err != nil {
 			sp.logger.Error(err, "Failed to select item, skipping priority band for this cycle",
-				"priority", priority, "priorityName", originalBand.PriorityName())
+				"priority", priority)
 			continue // Continue to the next band to maximize work conservation.
 		}
 		if item == nil {
@@ -350,7 +350,7 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 		// --- Dispatch ---
 		if err := sp.dispatchItem(item); err != nil {
 			sp.logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle",
-				"flowKey", req.FlowKey(), "reqID", req.ID(), "priorityName", originalBand.PriorityName())
+				"flowKey", req.FlowKey(), "reqID", req.ID())
 			continue // Continue to the next band to maximize work conservation.
 		}
 		return true

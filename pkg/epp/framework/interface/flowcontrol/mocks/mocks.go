@@ -194,16 +194,14 @@ var _ flowcontrol.FlowQueueAccessor = &MockFlowQueueAccessor{}
 // This avoids collision with the interface method of the same name.
 type MockPriorityBandAccessor struct {
 	PriorityV         int
-	PriorityNameV     string
 	PolicyStateV      any
 	FlowKeysFunc      func() []flowcontrol.FlowKey
 	QueueFunc         func(flowID string) flowcontrol.FlowQueueAccessor
 	IterateQueuesFunc func(callback func(flow flowcontrol.FlowQueueAccessor) (keepIterating bool))
 }
 
-func (m *MockPriorityBandAccessor) Priority() int        { return m.PriorityV }
-func (m *MockPriorityBandAccessor) PriorityName() string { return m.PriorityNameV }
-func (m *MockPriorityBandAccessor) PolicyState() any     { return m.PolicyStateV }
+func (m *MockPriorityBandAccessor) Priority() int    { return m.PriorityV }
+func (m *MockPriorityBandAccessor) PolicyState() any { return m.PolicyStateV }
 
 func (m *MockPriorityBandAccessor) FlowKeys() []flowcontrol.FlowKey {
 	if m.FlowKeysFunc != nil {
