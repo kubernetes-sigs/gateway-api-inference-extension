@@ -97,22 +97,20 @@ func (p *Plugin) Score(ctx context.Context, _ *framework.CycleState, _ *framewor
 	logger := log.FromContext(ctx)
 
 	for _, endpoint := range endpoints {
+		// Default to score 0 if PrefixCacheMatchInfo is missing or invalid.
+		scores[endpoint] = 0.0
 		info, ok := endpoint.Get(attrprefix.PrefixCacheMatchInfoKey)
 		if !ok {
 			logger.V(logutil.DEFAULT).Error(nil, "PrefixCacheMatchInfo not found for endpoint, assigning score 0", "endpoint", endpoint)
-			scores[endpoint] = 0.0
 			continue
 		}
 
 		if prefixMatchInfo, ok := info.(*attrprefix.PrefixCacheMatchInfo); ok {
-			if prefixMatchInfo.TotalBlocks() == 0 {
-				scores[endpoint] = 0.0
-			} else {
+			if prefixMatchInfo.TotalBlocks() != 0 {
 				scores[endpoint] = float64(prefixMatchInfo.MatchBlocks()) / float64(prefixMatchInfo.TotalBlocks())
 			}
 		} else {
 			logger.V(logutil.DEFAULT).Error(nil, "PrefixCacheMatchInfo has unexpected type, assigning score 0", "endpoint", endpoint)
-			scores[endpoint] = 0.0
 		}
 	}
 	return scores
