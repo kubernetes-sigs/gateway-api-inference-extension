@@ -335,6 +335,12 @@ type FlowControlConfig struct {
 	// priority levels. Traffic matching these priorities will be handled according to these rules.
 	// If a priority band is not specified, it uses specific defaults.
 	PriorityBands []PriorityBandConfig `json:"priorityBands,omitempty"`
+
+	// +optional
+	// UsageLimit specifies the UsageLimitPolicy plugin to use for adaptive capacity management.
+	// The PluginRef must reference a named plugin instance defined in the top-level Plugins section.
+	// If omitted, a default no-op policy (limit=1.0) is used.
+	UsageLimit *UsageLimitConfig `json:"usageLimit,omitempty"`
 }
 
 func (fcc *FlowControlConfig) String() string {
@@ -359,6 +365,10 @@ func (fcc *FlowControlConfig) String() string {
 
 	if len(fcc.PriorityBands) > 0 {
 		parts = append(parts, fmt.Sprintf("PriorityBands: %v", fcc.PriorityBands))
+	}
+
+	if fcc.UsageLimit != nil {
+		parts = append(parts, fmt.Sprintf("UsageLimit: %v", fcc.UsageLimit))
 	}
 
 	return "{" + strings.Join(parts, ", ") + "}"
@@ -405,4 +415,18 @@ func (pbc PriorityBandConfig) String() string {
 	}
 
 	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+// UsageLimitConfig contains the configuration for a UsageLimitPolicy plugin.
+type UsageLimitConfig struct {
+	// +required
+	// +kubebuilder:validation:Required
+	// PluginRef specifies a particular Plugin instance to be used as the UsageLimitPolicy.
+	// The reference is to the name of an entry of the Plugins defined in the configuration's
+	// Plugins section.
+	PluginRef string `json:"pluginRef"`
+}
+
+func (ulc UsageLimitConfig) String() string {
+	return fmt.Sprintf("{PluginRef: %s}", ulc.PluginRef)
 }
