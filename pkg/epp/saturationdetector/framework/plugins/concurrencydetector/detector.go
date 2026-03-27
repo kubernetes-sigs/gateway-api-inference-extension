@@ -238,6 +238,16 @@ func (d *detector) ResponseBody(
 	}
 }
 
+// GetInFlightTokens returns the current number of in-flight tokens for the given endpoint.
+func (d *Detector) GetInFlightTokens(endpointID string) int64 {
+	return d.tokenTracker.get(endpointID)
+}
+
+// GetInFlightRequests returns the current number of in-flight requests for the given endpoint.
+func (d *Detector) GetInFlightRequests(endpointID string) int64 {
+	return d.requestTracker.get(endpointID)
+}
+
 // DeleteEndpoint removes an endpoint from the concurrency tracker to prevent memory leaks.
 // This should be called by the controller when a backend is removed from the pool.
 func (d *detector) DeleteEndpoint(endpointID string) {
