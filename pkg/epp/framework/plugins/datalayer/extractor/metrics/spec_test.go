@@ -411,7 +411,7 @@ func TestGetLoRAMetric(t *testing.T) {
 				switch label.GetName() {
 				case "running_lora_adapters", "waiting_lora_adapters":
 					if label.GetValue() != "" {
-						for _, adapter := range strings.Split(label.GetValue(), ",") {
+						for adapter := range strings.SplitSeq(label.GetValue(), ",") {
 							adaptersFound[adapter] = 0
 						}
 					}

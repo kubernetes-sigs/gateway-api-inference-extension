@@ -535,9 +535,7 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 
 	var wg sync.WaitGroup
 	for range numWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for q := range tasks {
 				key := q.FlowKey()
 				queueLogger := logger.WithValues(
@@ -551,7 +549,7 @@ func (sp *ShardProcessor) processAllQueuesConcurrently(
 				}
 				processFn(managedQ, queueLogger)
 			}
-		}()
+		})
 	}
 
 	// Feed the channel with all the queues to be processed.

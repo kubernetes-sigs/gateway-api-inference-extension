@@ -48,11 +48,11 @@ func (fds *MetricsDataSource) TypedName() plugin.TypedName {
 }
 
 func (fds *MetricsDataSource) OutputType() reflect.Type {
-	return reflect.TypeOf(fwkdl.Metrics{})
+	return reflect.TypeFor[fwkdl.Metrics]()
 }
 
 func (fds *MetricsDataSource) ExtractorType() reflect.Type {
-	return reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
+	return reflect.TypeFor[fwkdl.Extractor]()
 }
 
 // SetMetrics replaces the metrics map in a thread-safe manner.
@@ -100,11 +100,11 @@ func (m *NotificationSource) TypedName() plugin.TypedName {
 }
 
 func (m *NotificationSource) OutputType() reflect.Type {
-	return reflect.TypeOf(fwkdl.NotificationEvent{})
+	return reflect.TypeFor[fwkdl.NotificationEvent]()
 }
 
 func (m *NotificationSource) ExtractorType() reflect.Type {
-	return reflect.TypeOf((*fwkdl.NotificationExtractor)(nil)).Elem()
+	return reflect.TypeFor[fwkdl.NotificationExtractor]()
 }
 
 func (m *NotificationSource) GVK() schema.GroupVersionKind {

@@ -25,5 +25,5 @@ import (
 type PrometheusMetricMap = map[string]*dto.MetricFamily
 
 var (
-	PrometheusMetricType = reflect.TypeOf(PrometheusMetricMap{})
+	PrometheusMetricType = reflect.TypeFor[PrometheusMetricMap]()
 )

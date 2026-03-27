@@ -18,7 +18,6 @@ limitations under the License.
 package epp
 
 import (
-	"context"
 	"testing"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -467,8 +466,7 @@ func TestFullDuplexStreamed_GRPC_KubeInferenceObjectiveRequest(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			h := NewTestHarness(t, ctx, WithStandardMode(), WithConfigText(testConfigWithVllmGRPCParser)).WithBaseResources()
 

@@ -515,11 +515,9 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 
 	// We won the race. The newWorker was stored. Now, start the processor's long-running goroutine.
 	fc.logger.V(logutil.DEFAULT).Info("Starting new ShardProcessor worker.", "shardID", shard.ID())
-	fc.wg.Add(1)
-	go func() {
-		defer fc.wg.Done()
+	fc.wg.Go(func() {
 		processor.Run(processorCtx)
-	}()
+	})
 
 	return newWorker
 }

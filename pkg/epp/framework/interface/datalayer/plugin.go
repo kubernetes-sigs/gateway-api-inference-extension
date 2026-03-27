@@ -27,9 +27,9 @@ import (
 )
 
 var (
-	ExtractorType             = reflect.TypeOf((*Extractor)(nil)).Elem()
-	NotificationExtractorType = reflect.TypeOf((*NotificationExtractor)(nil)).Elem()
-	NotificationEventType     = reflect.TypeOf(NotificationEvent{})
+	ExtractorType             = reflect.TypeFor[Extractor]()
+	NotificationExtractorType = reflect.TypeFor[NotificationExtractor]()
+	NotificationEventType     = reflect.TypeFor[NotificationEvent]()
 )
 
 // DataSource provides raw data to registered Extractors.

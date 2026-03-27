@@ -156,12 +156,10 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 func (h *testHarness) Start() {
 	h.t.Helper()
 	h.ctx, h.cancel = context.WithCancel(context.Background())
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	h.wg.Go(func() {
 		<-h.startSignal // Wait for the signal to begin execution.
 		h.processor.Run(h.ctx)
-	}()
+	})
 }
 
 // Go unpauses the processor's main Run loop.

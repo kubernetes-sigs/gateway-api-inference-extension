@@ -607,7 +607,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 func randomPrompt(n int) string {
 	runes := []rune("abcdefghijklmnopqrstuvwxyz")
 	var sb strings.Builder
-	for i := 0; i < n; i++ {
+	for range n {
 		sb.WriteRune(runes[rand.Intn(len(runes))])
 	}
 	return sb.String()

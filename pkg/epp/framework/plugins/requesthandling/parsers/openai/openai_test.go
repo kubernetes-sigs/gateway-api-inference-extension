@@ -590,7 +590,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			headers: map[string]string{":path": "/v1/conversations"},
 			body: map[string]any{
 				"model": "gpt-4o",
-				"items": []map[string]interface{}{
+				"items": []map[string]any{
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
@@ -611,7 +611,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			headers: map[string]string{"x-original-path": "/v1/conversations"},
 			body: map[string]any{
 				"model": "gpt-4o",
-				"items": []map[string]interface{}{
+				"items": []map[string]any{
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
@@ -1092,7 +1092,7 @@ func BenchmarkExtractRequestData_Responses(b *testing.B) {
 func BenchmarkExtractRequestData_Conversations(b *testing.B) {
 	body := map[string]any{
 		"model": "gpt-4o",
-		"items": []map[string]interface{}{
+		"items": []map[string]any{
 			{"type": "message", "role": "user", "content": "Hello"},
 		},
 	}
