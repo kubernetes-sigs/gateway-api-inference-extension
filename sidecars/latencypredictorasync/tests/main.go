@@ -198,11 +198,8 @@ func main() {
 	// which calls Wait() and fires one request. This accurately sustains
 	// rates well above 10k QPS.
 	// ---------------------------------------------------------------
-	numWorkers := min(
-		// one worker per 100 QPS; min resolution per worker = 10ms
-		max(
-
-			testQPS/100, 10), 500)
+	// One worker per 100 QPS; min resolution per worker = 10ms.
+	numWorkers := min(max(testQPS/100, 10), 500)
 	// Burst = numWorkers so at most one token per worker fires immediately at
 	// start, giving a clean ramp-up rather than a 10% spike.
 	limiter := rate.NewLimiter(rate.Limit(testQPS), numWorkers)
