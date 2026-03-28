@@ -187,7 +187,7 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 
 	key := endpointMetadata.GetNamespacedName()
 	if _, loaded := r.collectors.LoadOrStore(key, collector); loaded {
-		logger.Info("collector already running for endpoint", "endpoint", key)
+		logger.V(logging.DEFAULT).Info("collector already running for endpoint", "endpoint", key)
 		return nil
 	}
 
