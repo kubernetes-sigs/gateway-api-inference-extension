@@ -169,7 +169,7 @@ func (s *registryShard) addPriorityBand(priority int) {
 
 	bandConfig := s.config.PriorityBands[priority]
 	s.initPriorityBand(bandConfig)
-	s.logger.Info("Dynamically added priority band", "priority", priority)
+	s.logger.V(logging.DEFAULT).Info("Dynamically added priority band", "priority", priority)
 }
 
 // deletePriorityBand removes a priority band from this shard.
@@ -325,7 +325,7 @@ func (s *registryShard) synchronizeFlow(
 func (s *registryShard) deleteFlow(key flowcontrol.FlowKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.logger.Info("Deleting queue instance.", "flowKey", key)
+	s.logger.V(logging.DEFAULT).Info("Deleting queue instance.", "flowKey", key)
 	if val, ok := s.priorityBands.Load(key.Priority); ok {
 		band := val.(*priorityBand)
 		delete(band.queues, key.ID)
