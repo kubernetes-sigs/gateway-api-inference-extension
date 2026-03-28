@@ -342,12 +342,12 @@ func TestGetLatestLoraMetric(t *testing.T) {
 				maxLora := 0
 				for _, label := range loraMetric.GetLabel() {
 					if label.GetName() == "running_lora_adapters" && label.GetValue() != "" {
-						for _, adapter := range strings.Split(label.GetValue(), ",") {
+						for adapter := range strings.SplitSeq(label.GetValue(), ",") {
 							adaptersFound[adapter] = 0
 						}
 					}
 					if label.GetName() == "waiting_lora_adapters" && label.GetValue() != "" {
-						for _, adapter := range strings.Split(label.GetValue(), ",") {
+						for adapter := range strings.SplitSeq(label.GetValue(), ",") {
 							adaptersFound[adapter] = 0 // Overwrite if already present
 						}
 					}

@@ -87,7 +87,7 @@ func TestRuntimePollingDispatch(t *testing.T) {
 			ext := mocks.NewPollingExtractor("test-extractor")
 
 			httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
-				parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
+				parsePrometheusMetrics, reflect.TypeFor[fwkdl.Metrics]())
 			require.NoError(t, err)
 
 			cfg := &datalayer.Config{
@@ -139,7 +139,7 @@ func TestRuntimePollingMultipleExtractors(t *testing.T) {
 	ext2 := mocks.NewPollingExtractor("extractor-2")
 
 	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
-		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
+		parsePrometheusMetrics, reflect.TypeFor[fwkdl.Metrics]())
 	require.NoError(t, err)
 
 	cfg := &datalayer.Config{
@@ -188,7 +188,7 @@ func TestRuntimePollingEndpointLifecycle(t *testing.T) {
 	ext := mocks.NewPollingExtractor("lifecycle-extractor")
 
 	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
-		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
+		parsePrometheusMetrics, reflect.TypeFor[fwkdl.Metrics]())
 	require.NoError(t, err)
 
 	cfg := &datalayer.Config{
@@ -242,7 +242,7 @@ func TestRuntimePollingWithoutExtractors(t *testing.T) {
 	r := datalayer.NewRuntime(50 * time.Millisecond)
 
 	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
-		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
+		parsePrometheusMetrics, reflect.TypeFor[fwkdl.Metrics]())
 	require.NoError(t, err)
 
 	cfg := &datalayer.Config{
@@ -281,7 +281,7 @@ func TestRuntimePollingHTTPError(t *testing.T) {
 	ext := mocks.NewPollingExtractor("error-extractor")
 
 	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
-		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
+		parsePrometheusMetrics, reflect.TypeFor[fwkdl.Metrics]())
 	require.NoError(t, err)
 
 	cfg := &datalayer.Config{

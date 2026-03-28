@@ -18,7 +18,6 @@ limitations under the License.
 package epp
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -420,8 +419,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 						t.Skipf("Skipping test %q: requires CRDs, but running in standalone without crd executionMode", tc.name)
 					}
 
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
+					ctx := t.Context()
 
 					var h *TestHarness
 					var harnessOpts []HarnessOption

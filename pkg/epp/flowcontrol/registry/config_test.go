@@ -406,7 +406,7 @@ func TestConfig_Partition(t *testing.T) {
 
 		var sumGlobal, sumBand1, sumBand2, sumBand3 uint64
 
-		for i := 0; i < totalShards; i++ {
+		for i := range totalShards {
 			shard := cfg.partition(i, totalShards)
 			require.NotNil(t, shard)
 

@@ -61,8 +61,8 @@ func TestIndexer_RemovePodAndEviction(t *testing.T) {
 	server2 := Server{ServerID: ServerID{Namespace: "default", Name: "server2"}}
 
 	// Add indexerSize hashes to both servers
-	var hashes []BlockHash
-	for j := 0; j < indexerSize; j++ {
+	hashes := make([]BlockHash, 0, indexerSize)
+	for j := range indexerSize {
 		h := BlockHash(j)
 		hashes = append(hashes, h)
 		i.Add([]BlockHash{h}, server1)

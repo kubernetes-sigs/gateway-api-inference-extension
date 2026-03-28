@@ -707,7 +707,7 @@ func generateTraffic(
 	var wg sync.WaitGroup
 	errorCh := make(chan error, batches)
 
-	for i := 0; i < batches; i++ {
+	for i := range batches {
 		wg.Add(1)
 		semaphore <- struct{}{}
 

@@ -253,8 +253,8 @@ type ModelCoefficients struct {
 }
 
 type XGBoostTrees struct {
-	TTFTTrees []interface{} `json:"ttft_trees"`
-	TPOTTrees []interface{} `json:"tpot_trees"`
+	TTFTTrees []any `json:"ttft_trees"`
+	TPOTTrees []any `json:"tpot_trees"`
 }
 
 type BucketCounts struct {

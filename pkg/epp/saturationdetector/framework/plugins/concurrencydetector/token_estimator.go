@@ -53,10 +53,7 @@ func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
 	var inputTokens int64
 	switch {
 	case request.RequestSizeBytes > 0:
-		inputTokens = int64(request.RequestSizeBytes) / 4
-		if inputTokens < 1 {
-			inputTokens = 1
-		}
+		inputTokens = max(int64(request.RequestSizeBytes)/4, 1)
 	case request.Body != nil:
 		// Fallback: character count from prompt or chat messages.
 		var chars int

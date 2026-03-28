@@ -17,7 +17,6 @@ limitations under the License.
 package epp
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -55,8 +54,7 @@ parser:
 `
 
 func TestRequestAttributeReporter(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Use our new WithConfigText harness option to provide the custom config.
 	h := NewTestHarness(t, ctx, WithStandardMode(), WithConfigText(requestAttributeReporterTestConfig)).WithBaseResources()

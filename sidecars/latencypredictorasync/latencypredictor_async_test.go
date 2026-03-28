@@ -275,7 +275,7 @@ func testPrediction(t *testing.T, ctx context.Context, predictor *Predictor) {
 
 	// Test multiple predictions to ensure consistency
 	t.Log("Testing multiple predictions with varying prefix cache scores...")
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		testReq := PredictionRequest{
 			KVCachePercentage:  float64(50+i*10) / 100.0, // Convert percentage to fraction
 			InputTokenLength:   256 + i*128,
@@ -305,7 +305,7 @@ func testBulkPredictions(t *testing.T, ctx context.Context, predictor *Predictor
 
 	// Create multiple prediction requests
 	requests := make([]PredictionRequest, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		requests[i] = PredictionRequest{
 			KVCachePercentage:  float64(40+i*5) / 100.0, // 40% to 85%
 			InputTokenLength:   200 + i*50,              // 200 to 650
@@ -374,7 +374,7 @@ func testBulkPredictionsStrict(t *testing.T, ctx context.Context, predictor *Pre
 
 	// Create valid prediction requests
 	requests := make([]PredictionRequest, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		requests[i] = PredictionRequest{
 			KVCachePercentage:  0.6,
 			InputTokenLength:   300 + i*100,
@@ -616,7 +616,7 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 	}
 
 	// Warm up with a few predictions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := predictor.Predict(ctx, req)
 		if err != nil {
 			t.Fatalf("Warmup prediction %d failed: %v", i+1, err)
@@ -633,7 +633,7 @@ func testPredictionPerformance(t *testing.T, ctx context.Context, predictor *Pre
 
 	t.Logf("Running %d prediction performance tests...", numTests)
 
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		// Vary prefix cache score for each test
 		testReq := req
 		testReq.PrefixCacheScore = float64(i) / float64(numTests-1) // 0.0 to 1.0
@@ -700,7 +700,7 @@ func testBulkPredictionPerformance(t *testing.T, ctx context.Context, predictor 
 	// Create batch of prediction requests
 	const batchSize = 20
 	requests := make([]PredictionRequest, batchSize)
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		requests[i] = PredictionRequest{
 			KVCachePercentage:  0.6 + float64(i%5)*0.05,           // Vary between 0.6 and 0.8
 			InputTokenLength:   300 + i*10,                        // Vary input length
@@ -726,7 +726,7 @@ func testBulkPredictionPerformance(t *testing.T, ctx context.Context, predictor 
 
 	t.Logf("Running %d bulk prediction performance tests with %d requests each...", numTests, batchSize)
 
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		start := time.Now()
 
 		response, err := predictor.PredictBulk(ctx, requests)
@@ -862,7 +862,7 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 	}
 
 	// Warm up
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := httpPredictor.Predict(ctx, req)
 		if err != nil {
 			t.Fatalf("HTTP warmup prediction %d failed: %v", i+1, err)
@@ -878,7 +878,7 @@ func testHTTPOnlyPerformance(t *testing.T, ctx context.Context) {
 
 	t.Logf("Running %d HTTP-only prediction tests...", numTests)
 
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		// Vary prefix cache for each test
 		testReq := req
 		testReq.PrefixCacheScore = 0.5 + (float64(i)/float64(numTests-1))*0.5 // 0.5 to 1.0
@@ -1073,7 +1073,7 @@ func testHTTPOnlyPrediction(t *testing.T, ctx context.Context) {
 
 	// Test multiple HTTP-only predictions with varying prefix cache
 	t.Log("Testing multiple HTTP-only predictions with different prefix cache scores...")
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testReq := PredictionRequest{
 			KVCachePercentage:  float64(30+i*20) / 100.0,
 			InputTokenLength:   128 + i*256,
@@ -1118,7 +1118,7 @@ func testLoadBalancing(t *testing.T, ctx context.Context, predictor *Predictor) 
 	}
 
 	successfulPredictions := 0
-	for i := 0; i < numPredictions; i++ {
+	for i := range numPredictions {
 		// Vary prefix cache score across requests
 		testReq := req
 		testReq.PrefixCacheScore = 0.5 + (float64(i)/float64(numPredictions-1))*0.5 // 0.5 to 1.0
@@ -1310,7 +1310,7 @@ func testXGBoostJSONStructure(t *testing.T, ctx context.Context, predictor *Pred
 	t.Logf("First TTFT tree structure: %T", firstTree)
 
 	// Convert to map to examine fields
-	if treeMap, ok := firstTree.(map[string]interface{}); ok {
+	if treeMap, ok := firstTree.(map[string]any); ok {
 		t.Log("First tree fields:")
 		for key, value := range treeMap {
 			switch key {
@@ -1318,12 +1318,12 @@ func testXGBoostJSONStructure(t *testing.T, ctx context.Context, predictor *Pred
 				t.Logf("  %s: %T = %v", key, value, value)
 			case "children":
 				if value != nil {
-					if children, ok := value.([]interface{}); ok {
+					if children, ok := value.([]any); ok {
 						// This is the unique execution path for valid children
 						t.Logf("  %s: []interface{} with %d children", key, len(children))
 						// Examine first child
 						if len(children) > 0 {
-							if childMap, ok := children[0].(map[string]interface{}); ok {
+							if childMap, ok := children[0].(map[string]any); ok {
 								for childKey, childValue := range childMap {
 									if childKey == "split" {
 										t.Logf("    child[0].%s: %T = %v", childKey, childValue, childValue)
@@ -1356,7 +1356,7 @@ func testXGBoostJSONStructure(t *testing.T, ctx context.Context, predictor *Pred
 }
 
 // Helper function to test the conversion logic
-func testConvertXGBoostJSON(t *testing.T, tree interface{}) {
+func testConvertXGBoostJSON(t *testing.T, tree any) {
 	featureMap := map[string]int{
 		"kv_cache_percentage":  0,
 		"input_token_length":   1,
@@ -1368,7 +1368,7 @@ func testConvertXGBoostJSON(t *testing.T, tree interface{}) {
 
 	t.Log("Testing XGBoost JSON conversion...")
 
-	treeMap, ok := tree.(map[string]interface{})
+	treeMap, ok := tree.(map[string]any)
 	if !ok {
 		t.Log("Tree is not a map[string]interface{}")
 		return
@@ -1556,7 +1556,7 @@ func generateTrainingEntries(count int) []TrainingEntry {
 	entries := make([]TrainingEntry, count)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		// Generate TTFT and TPOT using a simple equation based on features, plus some noise
 		kv := rng.Float64() // 0.0 to 1.0
 		inputLen := rng.Intn(2048) + 1
@@ -1637,7 +1637,7 @@ func BenchmarkPrediction(b *testing.B) {
 	}
 
 	// Wait for predictor to be ready
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if predictor.IsReady() {
 			break
 		}
@@ -1713,7 +1713,7 @@ func BenchmarkBulkPrediction(b *testing.B) {
 		b.Fatalf("Failed to start predictor: %v", err)
 	}
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if predictor.IsReady() {
 			break
 		}
@@ -1723,7 +1723,7 @@ func BenchmarkBulkPrediction(b *testing.B) {
 	// Create batch of requests
 	const batchSize = 20
 	requests := make([]PredictionRequest, batchSize)
-	for i := 0; i < batchSize; i++ {
+	for i := range batchSize {
 		requests[i] = PredictionRequest{
 			KVCachePercentage:  0.6 + float64(i%5)*0.05,
 			InputTokenLength:   300 + i*10,
@@ -1956,7 +1956,7 @@ func TestPrefixCacheIntegration(t *testing.T) {
 
 	// Test training entries with prefix cache can be created and validated
 	entries := make([]TrainingEntry, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		entry, err := NewTrainingEntry(
 			float64(i)/10.0,   // kv_cache_percentage
 			100+i*50,          // input_token_length
@@ -1985,7 +1985,7 @@ func TestPrefixCacheIntegration(t *testing.T) {
 
 	// Test prediction requests with prefix cache can be created and validated
 	requests := make([]PredictionRequest, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		req, err := NewPredictionRequest(
 			float64(i*20)/100.0, // kv_cache_percentage
 			200+i*100,           // input_token_length

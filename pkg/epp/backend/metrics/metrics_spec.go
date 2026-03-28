@@ -63,8 +63,8 @@ func stringToMetricSpec(specStr string) (*MetricSpec, error) {
 		labelStr := specStr[start+1 : end]
 
 		// Split into individual label pairs
-		labelPairs := strings.Split(labelStr, ",")
-		for _, pair := range labelPairs {
+		labelPairs := strings.SplitSeq(labelStr, ",")
+		for pair := range labelPairs {
 			pair = strings.TrimSpace(pair)
 			parts := strings.Split(pair, "=")
 			if len(parts) != 2 {

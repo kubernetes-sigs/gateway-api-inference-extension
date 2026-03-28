@@ -872,10 +872,8 @@ func TestPredictedLatency_ConcurrentContextAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	numGoroutines := 100
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 
 			requestID := uuid.New().String()
 			request := createTestLLMRequest(requestID, 100, 50)
@@ -891,7 +889,7 @@ func TestPredictedLatency_ConcurrentContextAccess(t *testing.T) {
 
 			// Delete context
 			router.deletePredictedLatencyContextForRequest(request)
-		}()
+		})
 	}
 
 	wg.Wait()
