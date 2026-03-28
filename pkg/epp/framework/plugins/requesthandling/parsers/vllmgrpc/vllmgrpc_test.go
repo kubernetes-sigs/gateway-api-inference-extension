@@ -27,9 +27,7 @@ import (
 
 	// Note: Adjust these imports if your local aliases differ
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	pb "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/gen"
 )
 
@@ -89,7 +87,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 		reqMsg        *pb.GenerateRequest
 		malformedData []byte
 		wantErr       bool
-		want          *scheduling.LLMRequestBody
+		want          *fwkrh.RequestBody
 	}{
 		{
 			name: "Valid Text Request",
@@ -98,8 +96,8 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 					Text: "Hello world",
 				},
 			},
-			want: &scheduling.LLMRequestBody{
-				Completions: &scheduling.CompletionsRequest{
+			want: &fwkrh.RequestBody{
+				Completions: &fwkrh.CompletionsRequest{
 					Prompt: "Hello world",
 				},
 				ParsedBody: &pb.GenerateRequest{
@@ -118,8 +116,8 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 					},
 				},
 			},
-			want: &scheduling.LLMRequestBody{
-				Completions: &scheduling.CompletionsRequest{
+			want: &fwkrh.RequestBody{
+				Completions: &fwkrh.CompletionsRequest{
 					Prompt: "Tokenized hello",
 				},
 				ParsedBody: &pb.GenerateRequest{
@@ -154,8 +152,8 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				},
 				Stream: true,
 			},
-			want: &scheduling.LLMRequestBody{
-				Completions: &scheduling.CompletionsRequest{
+			want: &fwkrh.RequestBody{
+				Completions: &fwkrh.CompletionsRequest{
 					Prompt: "Hello world",
 				},
 				ParsedBody: &pb.GenerateRequest{
@@ -218,11 +216,11 @@ func TestVllmGRPCParser_ParseResponse(t *testing.T) {
 				},
 			},
 			want: &fwkrh.ParsedResponse{
-				Usage: &fwkrc.Usage{
+				Usage: &fwkrh.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 5,
 					TotalTokens:      15,
-					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+					PromptTokenDetails: &fwkrh.PromptTokenDetails{
 						CachedTokens: 2,
 					},
 				},
@@ -241,11 +239,11 @@ func TestVllmGRPCParser_ParseResponse(t *testing.T) {
 				},
 			},
 			want: &fwkrh.ParsedResponse{
-				Usage: &fwkrc.Usage{
+				Usage: &fwkrh.Usage{
 					PromptTokens:     20,
 					CompletionTokens: 15,
 					TotalTokens:      35,
-					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+					PromptTokenDetails: &fwkrh.PromptTokenDetails{
 						CachedTokens: 5,
 					},
 				},

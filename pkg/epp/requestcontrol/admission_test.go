@@ -21,6 +21,8 @@ import (
 	"errors"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +33,6 @@ import (
 	fctypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 )
 
@@ -69,7 +70,9 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	reqCtx := &handlers.RequestContext{
-		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		SchedulingRequest: &requesthandling.InferenceRequest{
+			LLM: &requesthandling.LLMRequest{RequestId: "test-req"},
+		},
 		Request: &handlers.Request{
 			Metadata: map[string]any{},
 		},
@@ -180,7 +183,7 @@ func TestFlowControlRequestAdapter(t *testing.T) {
 				fairnessID:       tc.fairnessID,
 				priority:         tc.priority,
 				requestByteSize:  tc.requestByteSize,
-				inferenceRequest: &schedulingtypes.LLMRequest{RequestId: tc.requestID},
+				inferenceRequest: &requesthandling.InferenceRequest{LLM: &requesthandling.LLMRequest{RequestId: tc.requestID}},
 			}
 
 			assert.Equal(t, tc.requestID, fcReq.ID(), "ID() mismatch")
@@ -195,7 +198,9 @@ func TestFlowControlAdmissionController_Admit(t *testing.T) {
 	t.Parallel()
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	reqCtx := &handlers.RequestContext{
-		SchedulingRequest: &schedulingtypes.LLMRequest{RequestId: "test-req"},
+		SchedulingRequest: &requesthandling.InferenceRequest{
+			LLM: &requesthandling.LLMRequest{RequestId: "test-req"},
+		},
 		Request: &handlers.Request{
 			Metadata: map[string]any{},
 		},

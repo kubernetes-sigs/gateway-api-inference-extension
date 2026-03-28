@@ -167,9 +167,6 @@ func TestValidatePrediction_PrefillEndpointNeutralizeTPOT(t *testing.T) {
 	// But generatePredictions applies the override for prefill endpoints.
 	// Test the override logic directly:
 	predResult := endpointPredictionResult{
-		Endpoint:  prefillEp,
-		TTFT:      50,
-		TPOT:      999,
 		TTFTValid: true,
 		TPOTValid: false,
 		IsValid:   false,
@@ -191,7 +188,6 @@ func TestValidatePrediction_PrefillEndpointNeutralizeTPOT(t *testing.T) {
 
 	// Decode endpoint should NOT be neutralized
 	decodeResult := endpointPredictionResult{
-		Endpoint:  decodeEp,
 		TTFTValid: true,
 		TPOTValid: false,
 		IsValid:   false,

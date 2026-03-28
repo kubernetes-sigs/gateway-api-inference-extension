@@ -29,6 +29,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -315,7 +316,7 @@ func TestDetector_TokenSaturation(t *testing.T) {
 
 	tests := []struct {
 		name               string
-		requests           []*schedulingtypes.LLMRequest
+		requests           []*fwkrh.InferenceRequest
 		candidateEndpoints []string
 		wantSaturation     float64
 	}{
@@ -327,7 +328,7 @@ func TestDetector_TokenSaturation(t *testing.T) {
 		},
 		{
 			name: "single_endpoint_partial_tokens",
-			requests: []*schedulingtypes.LLMRequest{
+			requests: []*fwkrh.InferenceRequest{
 				makeTokenRequest("r1", "1234"), // 3 tokens with default estimator
 			},
 			candidateEndpoints: []string{"endpoint-a"},
@@ -335,10 +336,10 @@ func TestDetector_TokenSaturation(t *testing.T) {
 		},
 		{
 			name: "single_endpoint_half_full",
-			requests: func() []*schedulingtypes.LLMRequest {
+			requests: func() []*fwkrh.InferenceRequest {
 				// "1234567890123456" (16 chars) = 10 tokens. 5 requests = 50 tokens.
 				prompt := "1234567890123456"
-				reqs := make([]*schedulingtypes.LLMRequest, 0, 5)
+				reqs := make([]*fwkrh.InferenceRequest, 0, 5)
 				for i := range 5 {
 					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
 				}
@@ -349,10 +350,10 @@ func TestDetector_TokenSaturation(t *testing.T) {
 		},
 		{
 			name: "single_endpoint_full",
-			requests: func() []*schedulingtypes.LLMRequest {
+			requests: func() []*fwkrh.InferenceRequest {
 				// 10 tokens per request * 10 requests = 100 tokens.
 				prompt := "1234567890123456"
-				reqs := make([]*schedulingtypes.LLMRequest, 0, 10)
+				reqs := make([]*fwkrh.InferenceRequest, 0, 10)
 				for i := range 10 {
 					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
 				}
@@ -363,10 +364,10 @@ func TestDetector_TokenSaturation(t *testing.T) {
 		},
 		{
 			name: "multiple_endpoints_mixed_token_load",
-			requests: func() []*schedulingtypes.LLMRequest {
+			requests: func() []*fwkrh.InferenceRequest {
 				// endpoint-a: 50 tokens, endpoint-b: 0 (driveTokenLoad targets endpoint-a only)
 				prompt := "1234567890123456"
-				reqs := make([]*schedulingtypes.LLMRequest, 0, 5)
+				reqs := make([]*fwkrh.InferenceRequest, 0, 5)
 				for i := range 5 {
 					reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
 				}
@@ -414,7 +415,7 @@ func TestDetector_TokenFilter(t *testing.T) {
 	// Drive 110 tokens (just below 120 burst limit) -> endpoint should pass filter
 	// "1234567890123456" = 10 tokens. 11 requests = 110 tokens.
 	prompt := "1234567890123456"
-	reqs := make([]*schedulingtypes.LLMRequest, 0, 11)
+	reqs := make([]*fwkrh.InferenceRequest, 0, 11)
 	for i := range 11 {
 		reqs = append(reqs, makeTokenRequest(fmt.Sprintf("r%d", i+1), prompt))
 	}
@@ -424,7 +425,7 @@ func TestDetector_TokenFilter(t *testing.T) {
 	require.Len(t, kept, 1, "endpoint should pass filter below burst limit")
 
 	// Add one more request to reach 120 tokens -> filtered out
-	driveTokenLoad(ctx, detector, endpointName, []*schedulingtypes.LLMRequest{
+	driveTokenLoad(ctx, detector, endpointName, []*fwkrh.InferenceRequest{
 		makeTokenRequest("r12", prompt),
 	})
 	kept = detector.Filter(ctx, nil, nil, endpoints)
@@ -482,7 +483,7 @@ func TestDetector_TokenDeleteEndpoint(t *testing.T) {
 	candidates := []datalayer.Endpoint{newFakeEndpoint(endpointName)}
 
 	req := makeTokenRequest("req1", "1234567890123456")
-	req.RequestId = "req1"
+	req.LLM.RequestId = "req1"
 	detector.PreRequest(ctx, req, makeSchedulingResult(endpointName))
 	require.InDelta(t, 0.1, detector.Saturation(ctx, candidates), 1e-6)
 
@@ -594,21 +595,23 @@ func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
 func (f *stubSchedulingEndpoint) GetMetadata() *datalayer.EndpointMetadata { return f.metadata }
 
 // makeTokenRequest creates an LLMRequest with a prompt.
-func makeTokenRequest(requestID, prompt string) *schedulingtypes.LLMRequest {
-	return &schedulingtypes.LLMRequest{
-		RequestId: requestID,
-		Body: &schedulingtypes.LLMRequestBody{
-			Completions: &schedulingtypes.CompletionsRequest{Prompt: prompt},
+func makeTokenRequest(requestID, prompt string) *fwkrh.InferenceRequest {
+	return &fwkrh.InferenceRequest{
+		LLM: &fwkrh.LLMRequest{
+			RequestId: requestID,
+			Body: &fwkrh.RequestBody{
+				Completions: &fwkrh.CompletionsRequest{Prompt: prompt},
+			},
 		},
 	}
 }
 
 // driveTokenLoad drives token based load by issuing PreRequest with the given requests.
-func driveTokenLoad(ctx context.Context, detector *detector, endpointName string, requests []*schedulingtypes.LLMRequest) {
+func driveTokenLoad(ctx context.Context, detector *detector, endpointName string, requests []*fwkrh.InferenceRequest) {
 	res := makeSchedulingResult(endpointName)
 	for i, req := range requests {
-		if req != nil && req.RequestId == "" {
-			req.RequestId = fmt.Sprintf("req%d", i+1)
+		if req != nil && req.LLM != nil && req.LLM.RequestId == "" {
+			req.LLM.RequestId = fmt.Sprintf("req%d", i+1)
 		}
 		detector.PreRequest(ctx, req, res)
 	}

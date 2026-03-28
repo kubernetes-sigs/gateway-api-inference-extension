@@ -23,27 +23,18 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+
 	fwkfcmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksch "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
-
-const mockProducedDataKey = "mockProducedData"
 
 type mockPrepareRequestDataP struct {
 	name     string
 	produces map[string]any
 	consumes map[string]any
-}
-
-type mockProducedDataType struct {
-	value int
-}
-
-func (m *mockProducedDataType) Clone() fwkdl.Cloneable {
-	return &mockProducedDataType{value: m.value}
 }
 
 func (m *mockPrepareRequestDataP) TypedName() fwkplugin.TypedName {
@@ -58,8 +49,8 @@ func (m *mockPrepareRequestDataP) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *fwksch.LLMRequest, endpoints []fwksch.Endpoint) error {
-	endpoints[0].Put(mockProducedDataKey, &mockProducedDataType{value: 42})
+func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *requesthandling.InferenceRequest, endpoints []fwksch.Endpoint) error {
+
 	return nil
 }
 

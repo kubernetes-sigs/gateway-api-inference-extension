@@ -31,6 +31,7 @@ import (
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -88,7 +89,7 @@ func TestNewPredictedLatencyContext(t *testing.T) {
 }
 
 func TestNewPredictedLatencyContext_NilBody(t *testing.T) {
-	request := &schedulingtypes.LLMRequest{
+	request := &fwkrh.LLMRequest{
 		Headers: map[string]string{reqcommon.RequestIdHeaderKey: "test-nil-body"},
 		Body:    nil,
 	}
@@ -103,7 +104,7 @@ func TestNewPredictedLatencyContext_ChatCompletionsPrompt(t *testing.T) {
 	ctx := newPredictedLatencyContext(request)
 
 	assert.NotNil(t, ctx)
-	assert.Equal(t, "You are a helpful assistant. Tell me a joke. ", ctx.promptText)
+	assert.Equal(t, "You are a helpful assistant. Tell me a joke.", ctx.promptText)
 }
 
 func TestPredictedLatency_SetAndGetSLOContext(t *testing.T) {
@@ -154,7 +155,7 @@ func TestPredictedLatency_PreRequest_NoSchedulingResult(t *testing.T) {
 	request := createTestLLMRequest("test", 100, 50)
 
 	// Call PreRequest with nil scheduling result
-	router.PreRequest(ctx, request, nil)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request}, nil)
 
 	// Should not create SLO context
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -171,7 +172,7 @@ func TestPredictedLatency_PreRequest_EmptySchedulingResult(t *testing.T) {
 	}
 
 	// Call PreRequest with empty scheduling result
-	router.PreRequest(ctx, request, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request}, schedulingResult)
 
 	// Should not create SLO context
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -197,7 +198,7 @@ func TestPredictedLatency_PreRequest_Success(t *testing.T) {
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, newRequestPriorityQueue())
 
 	beforeTime := time.Now()
-	router.PreRequest(ctx, request, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request}, schedulingResult)
 	afterTime := time.Now()
 
 	// Verify SLO context was updated
@@ -227,7 +228,7 @@ func TestPredictedLatency_PreRequest_AddsToQueue(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// PreRequest should create the queue
-	router.PreRequest(ctx, request, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request}, schedulingResult)
 
 	// Verify queue was created and request was added
 	value, exists := router.runningRequestLists.Load(endpoint.GetMetadata().NamespacedName)
@@ -257,10 +258,10 @@ func TestPredictedLatency_PreRequest_QueueAlreadyExists(t *testing.T) {
 	predictedLatencyCtx2.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request2, predictedLatencyCtx2)
 	// Add first request
-	router.PreRequest(ctx, request1, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request1}, schedulingResult)
 
 	// Add second request to same pod
-	router.PreRequest(ctx, request2, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request2}, schedulingResult)
 
 	// Verify both are in the same queue
 	value, exists := router.runningRequestLists.Load(endpoint.GetMetadata().NamespacedName)
@@ -337,7 +338,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_NilPredictor(t *testing.T) 
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic and should return early
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Context should still exist
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -384,7 +385,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FirstToken(t *testing.T) {
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
 
 	beforeTime := time.Now()
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 	afterTime := time.Now()
 
 	// Verify first token timestamp was set
@@ -419,7 +420,7 @@ func TestPredictedLatency_NonStreamingMode_ResponseBody_FirstToken(t *testing.T)
 
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Verify that in non-streaming mode it returns early and does NOT set ttft or lastTokenTimestamp
 	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
@@ -470,7 +471,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_SubsequentTokens(t *testing
 	queue.Add(request.Headers[reqcommon.RequestIdHeaderKey], 50.0)
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
 
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Verify token timestamp was updated
 	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
@@ -497,7 +498,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_QueueNotFound(t 
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, newRequestPriorityQueue())
 
 	// Should handle gracefully when request is not in queue
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Context should be deleted
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -514,7 +515,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_NoContext(t *testing.T) {
 	response := &requestcontrol.Response{}
 
 	// Don't set SLO context - should handle gracefully
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Should not panic
 
@@ -546,7 +547,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_Success(t *testi
 	predictedLatencyCtx.targetMetadata = endpoint.GetMetadata()
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Verify context was deleted
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -569,7 +570,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_NilPredictor(t *
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Context should still exist (deletion happens only with predictor)
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -589,7 +590,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_NoPod(t *testing
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should not panic with nil pod
-	router.ResponseBody(ctx, request, response, nil)
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, nil)
 
 	// Context should still exist (deletion happens only with validpod.GetPod())
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -607,7 +608,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_NoContext(t *tes
 	response := &requestcontrol.Response{EndOfStream: true}
 
 	// Don't set SLO context - should handle gracefully
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 }
 
 func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_WithMetrics(t *testing.T) {
@@ -636,7 +637,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_WithMetrics(t *t
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should record metrics without panicking
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Verify cleanup
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -665,7 +666,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken_NoSLOs(t *testin
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// Should handle missing SLOs gracefully
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Verify cleanup
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -698,7 +699,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_FinalToken(t *testing.T) {
 	queue.Add(request.Headers[reqcommon.RequestIdHeaderKey], 50.0)
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
 
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Context should be deleted when EndOfStream is reached
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -731,7 +732,7 @@ func TestPredictedLatency_StreamingMode_ResponseBody_SingleChunk(t *testing.T) {
 	queue.Add(request.Headers[reqcommon.RequestIdHeaderKey], 50.0)
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
 
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Context should be deleted when EndOfStream is reached
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -764,7 +765,7 @@ func TestPredictedLatency_NonStreamingMode_ResponseBody_FinalToken(t *testing.T)
 	queue.Add(request.Headers[reqcommon.RequestIdHeaderKey], 50.0)
 	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
 
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Context should be deleted when EndOfStream is reached
 	_, err := router.getPredictedLatencyContextForRequest(request)
@@ -914,16 +915,16 @@ func TestPredictedLatency_MultipleRequests_SamePod(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set SLO contexts
-	for _, req := range []*schedulingtypes.LLMRequest{request1, request2, request3} {
+	for _, req := range []*fwkrh.LLMRequest{request1, request2, request3} {
 		predictedLatencyCtx := newPredictedLatencyContext(req)
 		predictedLatencyCtx.avgTPOTSLO = 50
 		router.setPredictedLatencyContextForRequest(req, predictedLatencyCtx)
 	}
 
 	// Add all requests
-	router.PreRequest(ctx, request1, schedulingResult)
-	router.PreRequest(ctx, request2, schedulingResult)
-	router.PreRequest(ctx, request3, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request1}, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request2}, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request3}, schedulingResult)
 
 	// Verify queue has all requests
 	value, exists := router.runningRequestLists.Load(endpoint.GetMetadata().NamespacedName)
@@ -949,7 +950,7 @@ func TestPredictedLatency_RequestLifecycle_ResponseEndOfStream(t *testing.T) {
 	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 
 	// 1. PreRequest
-	router.PreRequest(ctx, request, schedulingResult)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request}, schedulingResult)
 
 	// Verify context exists
 	retrievedCtx, err := router.getPredictedLatencyContextForRequest(request)
@@ -960,21 +961,21 @@ func TestPredictedLatency_RequestLifecycle_ResponseEndOfStream(t *testing.T) {
 	router.ResponseHeader(ctx, request, response, endpoint.GetMetadata())
 
 	// 3. ResponseBody (first token)
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// 4. ResponseBody (subsequent tokens)
 	retrievedCtx, _ = router.getPredictedLatencyContextForRequest(request)
 	retrievedCtx.ttft = 100 // Mark first token received
 	router.setPredictedLatencyContextForRequest(request, retrievedCtx)
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
-	// 5. ResponseComplete
+	// 5. ResponseBody
 	retrievedCtx, _ = router.getPredictedLatencyContextForRequest(request)
 	retrievedCtx.ttft = 80
 	retrievedCtx.avgTPOT = 30
 	response = &requestcontrol.Response{EndOfStream: true}
 	router.setPredictedLatencyContextForRequest(request, retrievedCtx)
-	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+	router.ResponseBody(ctx, &fwkrh.InferenceRequest{LLM: request}, response, endpoint.GetMetadata())
 
 	// Verify context was cleaned up
 	_, err = router.getPredictedLatencyContextForRequest(request)
@@ -1006,8 +1007,8 @@ func TestPredictedLatency_MultipleRequests_DifferentPods(t *testing.T) {
 	predictedLatencyCtx2.avgTPOTSLO = 50
 	router.setPredictedLatencyContextForRequest(request2, predictedLatencyCtx2)
 	// Add requests to different pods
-	router.PreRequest(ctx, request1, schedulingResult1)
-	router.PreRequest(ctx, request2, schedulingResult2)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request1}, schedulingResult1)
+	router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request2}, schedulingResult2)
 
 	// Verify separate queues were created
 	value1, exists1 := router.runningRequestLists.Load(endpoint1.GetMetadata().NamespacedName)
@@ -1083,7 +1084,7 @@ func BenchmarkPredictedLatency_PreRequest(b *testing.B) {
 		predictedLatencyCtx := newPredictedLatencyContext(request)
 		predictedLatencyCtx.avgTPOTSLO = 50
 		router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
-		router.PreRequest(ctx, request, schedulingResult)
+		router.PreRequest(ctx, &fwkrh.InferenceRequest{LLM: request}, schedulingResult)
 	}
 }
 

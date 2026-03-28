@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -59,16 +61,18 @@ func TestSchedule(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     *fwksched.LLMRequest
+		req     *requesthandling.InferenceRequest
 		input   []fwksched.Endpoint
 		wantRes *fwksched.SchedulingResult
 		err     bool
 	}{
 		{
 			name: "no candidate endpoints",
-			req: &fwksched.LLMRequest{
-				RequestId:   uuid.NewString(),
-				TargetModel: "any-model",
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
+					RequestId:   uuid.NewString(),
+					TargetModel: "any-model",
+				},
 			},
 			input:   []fwksched.Endpoint{},
 			wantRes: nil,
@@ -76,9 +80,11 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "finds optimal endpoint",
-			req: &fwksched.LLMRequest{
-				RequestId:   uuid.NewString(),
-				TargetModel: "critical",
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
+					RequestId:   uuid.NewString(),
+					TargetModel: "critical",
+				},
 			},
 			// pod2 will be picked because it has relatively low queue size, with the requested
 			// model being active, and has low KV cache.

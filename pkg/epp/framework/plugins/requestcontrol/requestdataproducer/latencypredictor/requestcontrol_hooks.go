@@ -29,6 +29,7 @@ import (
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
@@ -40,7 +41,7 @@ var _ requestcontrol.ResponseBody = &PredictedLatency{}
 
 // --- RequestControl Hooks ---
 
-func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult) {
+func (t *PredictedLatency) PreRequest(ctx context.Context, request *fwkrh.InferenceRequest, schedulingResult *schedulingtypes.SchedulingResult) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.PreRequest: request is nil, skipping")
@@ -62,20 +63,20 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 		Namespace: targetMetadata.NamespacedName.Namespace,
 	}
 
-	logger.V(logutil.TRACE).Info("request ID for SLO tracking", "requestID", request.Headers[reqcommon.RequestIdHeaderKey], "endpointName", endpointName)
-	if request.Headers[reqcommon.RequestIdHeaderKey] == "" {
+	logger.V(logutil.TRACE).Info("request ID for SLO tracking", "requestID", request.LLM.Headers[reqcommon.RequestIdHeaderKey], "endpointName", endpointName)
+	if request.LLM.Headers[reqcommon.RequestIdHeaderKey] == "" {
 		logger.V(logutil.DEBUG).Error(errors.New("missing request ID"), "PredictedLatency.PreRequest: Request is missing request ID header")
 		return
 	}
 
-	id := request.Headers[reqcommon.RequestIdHeaderKey]
+	id := request.LLM.Headers[reqcommon.RequestIdHeaderKey]
 
 	actual, _ := t.runningRequestLists.LoadOrStore(endpointName, newRequestPriorityQueue())
 	endpointRequestList := actual.(*requestPriorityQueue)
 
-	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
+	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request.LLM)
 	if err != nil {
-		id := request.Headers[reqcommon.RequestIdHeaderKey]
+		id := request.LLM.Headers[reqcommon.RequestIdHeaderKey]
 		logger.V(logutil.DEBUG).Info("PredictedLatency.PreRequest: Failed to get SLO context for request", "error", err, "requestID", id)
 		return
 	}
@@ -110,7 +111,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	processPreRequestForLatencyPrediction(ctx, predictedLatencyCtx)
 }
 
-func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *fwkrh.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
@@ -119,7 +120,7 @@ func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *scheduli
 }
 
 // ResponseBody handles both per-chunk processing and request completion logic.
-func (t *PredictedLatency) ResponseBody(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseBody(ctx context.Context, request *fwkrh.InferenceRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseBody: request is nil, skipping")
@@ -130,9 +131,9 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 	}
 
 	now := time.Now()
-	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request)
+	predictedLatencyCtx, err := t.getPredictedLatencyContextForRequest(request.LLM)
 	if err != nil {
-		id := request.Headers[reqcommon.RequestIdHeaderKey]
+		id := request.LLM.Headers[reqcommon.RequestIdHeaderKey]
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseBody: Failed to get SLO context", "error", err, "requestID", id)
 		return
 	}
@@ -161,10 +162,10 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 		if predictedLatencyCtx.ttft > 0 {
 			// In non-streaming mode, TTFT represents full e2e latency.
 			logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTTFT", predictedLatencyCtx.ttft, "avgPredictedTTFT", predictedLatencyCtx.predictedTTFT)
-			metrics.RecordRequestTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft/1000)
-			metrics.RecordRequestPredictedTTFT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.predictedTTFT/1000)
+			metrics.RecordRequestTTFT(ctx, predictedLatencyCtx.incomingModelName, request.LLM.TargetModel, predictedLatencyCtx.ttft/1000)
+			metrics.RecordRequestPredictedTTFT(ctx, predictedLatencyCtx.incomingModelName, request.LLM.TargetModel, predictedLatencyCtx.predictedTTFT/1000)
 			if predictedLatencyCtx.ttftSLO > 0 {
-				metrics.RecordRequestTTFTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.ttft, predictedLatencyCtx.ttftSLO)
+				metrics.RecordRequestTTFTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.LLM.TargetModel, predictedLatencyCtx.ttft, predictedLatencyCtx.ttftSLO)
 			}
 		}
 
@@ -175,10 +176,10 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 
 		if predictedLatencyCtx.avgTPOT > 0 {
 			logger.V(logutil.TRACE).Info("Averages calculated", "avgActualTPOT", predictedLatencyCtx.avgTPOT, "avgPredictedTPOT", predictedLatencyCtx.avgPredictedTPOT)
-			metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT/1000)
-			metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
+			metrics.RecordRequestTPOT(ctx, predictedLatencyCtx.incomingModelName, request.LLM.TargetModel, predictedLatencyCtx.avgTPOT/1000)
+			metrics.RecordRequestPredictedTPOT(ctx, predictedLatencyCtx.incomingModelName, request.LLM.TargetModel, predictedLatencyCtx.avgPredictedTPOT/1000)
 			if predictedLatencyCtx.avgTPOTSLO > 0 {
-				metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
+				metrics.RecordRequestTPOTWithSLO(ctx, predictedLatencyCtx.incomingModelName, request.LLM.TargetModel, predictedLatencyCtx.avgTPOT, predictedLatencyCtx.avgTPOTSLO)
 			}
 
 			if m, err := getLatestMetricsForProfile(predictedLatencyCtx, ""); err == nil {
@@ -212,9 +213,9 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 			t.prefillTokensInFlight.Delete(decodePodKey)
 		}
 
-		id := request.Headers[reqcommon.RequestIdHeaderKey]
+		id := request.LLM.Headers[reqcommon.RequestIdHeaderKey]
 		t.removeRequestFromQueue(id, predictedLatencyCtx)
-		t.deletePredictedLatencyContextForRequest(request)
+		t.deletePredictedLatencyContextForRequest(request.LLM)
 	}
 }
 

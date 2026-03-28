@@ -65,6 +65,7 @@ func TestCertReloader_InitialLoad(t *testing.T) {
 	loadedCert := reloader.Get()
 	if loadedCert == nil {
 		t.Fatal("expected certificate to be loaded")
+		return
 	}
 
 	// Verify it's the correct certificate by checking serial number

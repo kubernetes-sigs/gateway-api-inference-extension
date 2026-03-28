@@ -30,6 +30,7 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
@@ -84,17 +85,19 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
-	req1 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaaaa",
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "aaaaaa",
+				},
 			},
 		},
 	}
 	scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req1, endpoints)
-	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -117,17 +120,19 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
-	req2 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model2",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "bbbbbb",
+	req2 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model2",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "bbbbbb",
+				},
 			},
 		},
 	}
 	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req2, endpoints)
-	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 6, hash block size is 4, the last 2 characters are ignored.
@@ -148,17 +153,19 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Third request shares partial prefix with first one.
-	req3 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbb",
+	req3 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "aaaabbbb",
+				},
 			},
 		},
 	}
 	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req3, endpoints)
-	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -179,17 +186,19 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin.wg.Wait()
 
 	// 4th request is same as req3 except the model is different, still no match.
-	req4 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model-new",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbb",
+	req4 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model-new",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "aaaabbbb",
+				},
 			},
 		},
 	}
 	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req4, endpoints)
-	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req4.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 8, hash block size is 4, so 2 hashes will be calculated.
@@ -209,17 +218,19 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin.wg.Wait()
 
 	// 5th request shares partial prefix with 3rd one.
-	req5 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbbcccc",
+	req5 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "aaaabbbbcccc",
+				},
 			},
 		},
 	}
 	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req5, endpoints)
-	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req5.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Input size is 12, hash block size is 4, so 3 hashes will be calculated.
@@ -252,20 +263,22 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1}
 
 	// Test with chat completions request
-	req1 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			ChatCompletions: &fwksched.ChatCompletionsRequest{
-				Messages: []fwksched.Message{
-					{Role: "user", Content: fwksched.Content{Raw: "hello world"}},
-					{Role: "assistant", Content: fwksched.Content{Raw: "hi there"}},
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				ChatCompletions: &requesthandling.ChatCompletionsRequest{
+					Messages: []requesthandling.Message{
+						{Role: "user", Content: requesthandling.Content{Raw: "hello world"}},
+						{Role: "assistant", Content: requesthandling.Content{Raw: "hi there"}},
+					},
 				},
 			},
 		},
 	}
 	scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req1, endpoints)
-	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Chat completions - Hashes %+v, cached servers: %+v", state.PrefixHashes, state.PrefixCacheServers)
 	// Should have some hashes for the JSON-encoded messages
@@ -289,20 +302,22 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
-	req1 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			ChatCompletions: &fwksched.ChatCompletionsRequest{
-				Messages: []fwksched.Message{
-					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				ChatCompletions: &requesthandling.ChatCompletionsRequest{
+					Messages: []requesthandling.Message{
+						{Role: "system", Content: requesthandling.Content{Raw: "You are a helpful assistant"}},
+						{Role: "user", Content: requesthandling.Content{Raw: "Hello, how are you?"}},
+					},
 				},
 			},
 		},
 	}
 	scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req1, endpoints)
-	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req1.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Initial conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	initialHashCount := len(state.PrefixHashes)
@@ -322,22 +337,24 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Second request adds assistant response and new user message (conversation grows)
-	req2 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			ChatCompletions: &fwksched.ChatCompletionsRequest{
-				Messages: []fwksched.Message{
-					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
-					{Role: "assistant", Content: fwksched.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Can you explain how prefix caching works?"}},
+	req2 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				ChatCompletions: &requesthandling.ChatCompletionsRequest{
+					Messages: []requesthandling.Message{
+						{Role: "system", Content: requesthandling.Content{Raw: "You are a helpful assistant"}},
+						{Role: "user", Content: requesthandling.Content{Raw: "Hello, how are you?"}},
+						{Role: "assistant", Content: requesthandling.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
+						{Role: "user", Content: requesthandling.Content{Raw: "Can you explain how prefix caching works?"}},
+					},
 				},
 			},
 		},
 	}
 	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req2, endpoints)
-	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req2.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Extended conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	extendedHashCount := len(state.PrefixHashes)
@@ -355,24 +372,26 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Third request continues the conversation even further
-	req3 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			ChatCompletions: &fwksched.ChatCompletionsRequest{
-				Messages: []fwksched.Message{
-					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
-					{Role: "assistant", Content: fwksched.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Can you explain how prefix caching works?"}},
-					{Role: "assistant", Content: fwksched.Content{Raw: "Prefix caching is a technique where..."}},
-					{Role: "user", Content: fwksched.Content{Raw: "That's very helpful, thank you!"}},
+	req3 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				ChatCompletions: &requesthandling.ChatCompletionsRequest{
+					Messages: []requesthandling.Message{
+						{Role: "system", Content: requesthandling.Content{Raw: "You are a helpful assistant"}},
+						{Role: "user", Content: requesthandling.Content{Raw: "Hello, how are you?"}},
+						{Role: "assistant", Content: requesthandling.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
+						{Role: "user", Content: requesthandling.Content{Raw: "Can you explain how prefix caching works?"}},
+						{Role: "assistant", Content: requesthandling.Content{Raw: "Prefix caching is a technique where..."}},
+						{Role: "user", Content: requesthandling.Content{Raw: "That's very helpful, thank you!"}},
+					},
 				},
 			},
 		},
 	}
 	scores = plugin.Score(context.Background(), fwksched.NewCycleState(), req3, endpoints)
-	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+	state, err = fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req3.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 	assert.NoError(t, err)
 	t.Logf("Long conversation - Hashes %+v, cached servers: %+v", len(state.PrefixHashes), state.PrefixCacheServers)
 	longHashCount := len(state.PrefixHashes)
@@ -417,12 +436,14 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			}, nil, nil)
 
 			endpoints := []fwksched.Endpoint{endpoint}
-			req := &fwksched.LLMRequest{
-				RequestId:   uuid.NewString(),
-				TargetModel: "model-stress",
-				Body: &fwksched.LLMRequestBody{
-					Completions: &fwksched.CompletionsRequest{
-						Prompt: prompt,
+			req := &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
+					RequestId:   uuid.NewString(),
+					TargetModel: "model-stress",
+					Body: &requesthandling.RequestBody{
+						Completions: &requesthandling.CompletionsRequest{
+							Prompt: prompt,
+						},
 					},
 				},
 			}
@@ -433,7 +454,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			_ = scores // Use the result to prevent optimization
 
 			// Clean up state for next iteration
-			plugin.pluginState.Delete(req.RequestId)
+			plugin.pluginState.Delete(req.LLM.RequestId)
 		})
 
 	}
@@ -518,15 +539,17 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		}, nil)
 	endpoints := []fwksched.Endpoint{endpoint}
 
-	req := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				// Length 128 chars.
-				// If AutoTune=true (block size 64): 2 blocks
-				// If AutoTune=false (block size 32): 4 blocks
-				Prompt: strings.Repeat("a", 128),
+	req := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					// Length 128 chars.
+					// If AutoTune=true (block size 64): 2 blocks
+					// If AutoTune=false (block size 32): 4 blocks
+					Prompt: strings.Repeat("a", 128),
+				},
 			},
 		},
 	}
@@ -546,7 +569,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
 		// Block size from pod is 16 tokens * 4 = 64 chars.
 		// Prompt is 128 chars.
@@ -578,11 +601,11 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 1. Verify Score uses config BlockSize
-		req.RequestId = uuid.NewString() // New request ID
+		req.LLM.RequestId = uuid.NewString() // New request ID
 		scores := plugin.Score(context.Background(), fwksched.NewCycleState(), req, endpoints)
 		_ = scores
 
-		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
+		state, err := fwkplugin.ReadPluginStateKey[*SchedulingContextState](plugin.pluginState, req.LLM.RequestId, fwkplugin.StateKey(plugin.TypedName().String()))
 		assert.NoError(t, err)
 		// Block size from config is 8 tokens (32 chars).
 		// Prompt is 128 chars.
@@ -627,12 +650,14 @@ func TestPrepareRequestData(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.
-	req1 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbb",
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "aaaabbbb",
+				},
 			},
 		},
 	}
@@ -647,12 +672,14 @@ func TestPrepareRequestData(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Second request that shares a prefix.
-	req2 := &fwksched.LLMRequest{
-		RequestId:   uuid.NewString(),
-		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaacccc",
+	req2 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
+			RequestId:   uuid.NewString(),
+			TargetModel: "test-model1",
+			Body: &requesthandling.RequestBody{
+				Completions: &requesthandling.CompletionsRequest{
+					Prompt: "aaaacccc",
+				},
 			},
 		},
 	}
@@ -703,8 +730,8 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 	for _, scenario := range scenarios {
 		b.Run(fmt.Sprintf("messages_%d_length_%d", scenario.messageCount, scenario.messageLength), func(b *testing.B) {
 			// Generate messages for this scenario
-			messages := make([]fwksched.Message, scenario.messageCount)
-			messages[0] = fwksched.Message{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}}
+			messages := make([]requesthandling.Message, scenario.messageCount)
+			messages[0] = requesthandling.Message{Role: "system", Content: requesthandling.Content{Raw: "You are a helpful assistant."}}
 
 			for i := 1; i < scenario.messageCount; i++ {
 				role := "user"
@@ -712,7 +739,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 					role = "assistant"
 				}
 				content := randomPrompt(scenario.messageLength)
-				messages[i] = fwksched.Message{Role: role, Content: fwksched.Content{Raw: content}}
+				messages[i] = requesthandling.Message{Role: role, Content: requesthandling.Content{Raw: content}}
 			}
 
 			endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
@@ -722,12 +749,14 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			}, nil, nil)
 			endpoints := []fwksched.Endpoint{endpoint}
 
-			req := &fwksched.LLMRequest{
-				RequestId:   uuid.NewString(),
-				TargetModel: "chat-model-stress",
-				Body: &fwksched.LLMRequestBody{
-					ChatCompletions: &fwksched.ChatCompletionsRequest{
-						Messages: messages,
+			req := &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
+					RequestId:   uuid.NewString(),
+					TargetModel: "chat-model-stress",
+					Body: &requesthandling.RequestBody{
+						ChatCompletions: &requesthandling.ChatCompletionsRequest{
+							Messages: messages,
+						},
 					},
 				},
 			}
@@ -739,7 +768,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 				_ = scores // Use the result to prevent optimization
 
 				// Clean up state for next iteration
-				plugin.pluginState.Delete(req.RequestId)
+				plugin.pluginState.Delete(req.LLM.RequestId)
 			}
 		})
 	}

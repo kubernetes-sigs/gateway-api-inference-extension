@@ -27,7 +27,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 )
 
 func TestPluginCreation(t *testing.T) {
@@ -169,6 +169,7 @@ func TestPluginCreation(t *testing.T) {
 			}
 			if plugin == nil {
 				t.Fatalf("New() returned nil plugin without error")
+				return
 			}
 
 			attributeKey := plugin.config.Attributes[0].Key
@@ -199,7 +200,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: fwkrh.Usage{
 					PromptTokens: 15,
 				},
 			},
@@ -231,7 +232,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: fwkrh.Usage{
 					PromptTokens: 0,
 				},
 			},
@@ -251,7 +252,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: fwkrh.Usage{
 					PromptTokens: 10,
 				},
 				DynamicMetadata: &structpb.Struct{
@@ -280,7 +281,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: fwkrh.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -299,7 +300,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: fwkrh.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -318,7 +319,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: fwkrh.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -337,7 +338,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{}, // Empty usage
+				Usage: fwkrh.Usage{}, // Empty usage
 			},
 			wantResult: nil, // Expect early return for zero value
 		},
@@ -354,7 +355,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: fwkrh.Usage{
 					CompletionTokens: 25,
 				},
 			},
@@ -390,10 +391,12 @@ func TestValueReporting(t *testing.T) {
 				t.Fatalf("Failed to create plugin: %v", err)
 			}
 
-			plugin.ResponseBody(context.Background(), &scheduling.LLMRequest{}, currentResponse, &datalayer.EndpointMetadata{})
+			plugin.ResponseBody(context.Background(), &fwkrh.InferenceRequest{
+				LLM: &fwkrh.LLMRequest{},
+			}, currentResponse, &datalayer.EndpointMetadata{})
 
 			if diff := cmp.Diff(tt.wantResult, currentResponse.DynamicMetadata, protocmp.Transform()); diff != "" {
-				t.Errorf("ResponseComplete() DynamicMetadata mismatch (-want +got):\n%s", diff)
+				t.Errorf("ResponseBody() DynamicMetadata mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

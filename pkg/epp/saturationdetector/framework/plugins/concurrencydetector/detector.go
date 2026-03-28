@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -148,7 +149,7 @@ func (d *detector) Saturation(_ context.Context, endpoints []datalayer.Endpoint)
 func (d *detector) Filter(
 	_ context.Context,
 	_ *framework.CycleState,
-	_ *framework.LLMRequest,
+	_ *fwkrh.InferenceRequest,
 	endpoints []framework.Endpoint,
 ) []framework.Endpoint {
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.
@@ -178,10 +179,14 @@ func (d *detector) Filter(
 
 // PreRequest increments the atomic in-flight counter for the target endpoint.
 // We assume the scheduling result is valid based on the Director's contract.
-func (d *detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
+func (d *detector) PreRequest(_ context.Context, request *fwkrh.InferenceRequest, result *framework.SchedulingResult) {
 	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String()
 	if d.config.mode == modeTokens {
-		tokens := d.tokenEstimator.Estimate(request)
+		var req *fwkrh.LLMRequest
+		if request != nil {
+			req = request.LLM
+		}
+		tokens := d.tokenEstimator.Estimate(req)
 		d.tokenTracker.add(eid, tokens)
 	} else {
 		d.requestTracker.inc(eid)
@@ -193,7 +198,7 @@ func (d *detector) PreRequest(_ context.Context, request *framework.LLMRequest, 
 // TokenEstimator.Estimate returns 0 in that case (may contribute to drift).
 func (d *detector) ResponseBody(
 	_ context.Context,
-	request *framework.LLMRequest,
+	request *fwkrh.InferenceRequest,
 	resp *requestcontrol.Response,
 	targetEndpoint *datalayer.EndpointMetadata,
 ) {
@@ -202,7 +207,11 @@ func (d *detector) ResponseBody(
 	}
 	eid := targetEndpoint.NamespacedName.String()
 	if d.config.mode == modeTokens {
-		tokens := d.tokenEstimator.Estimate(request)
+		var req *fwkrh.LLMRequest
+		if request != nil {
+			req = request.LLM
+		}
+		tokens := d.tokenEstimator.Estimate(req)
 		d.tokenTracker.add(eid, -tokens)
 	} else {
 		d.requestTracker.dec(eid)

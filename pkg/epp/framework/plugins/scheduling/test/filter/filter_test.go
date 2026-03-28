@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/google/go-cmp/cmp"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
@@ -30,13 +32,15 @@ import (
 func TestFilter(t *testing.T) {
 	tests := []struct {
 		name   string
-		req    *fwksched.LLMRequest
+		req    *requesthandling.InferenceRequest
 		input  []fwksched.Endpoint
 		output []fwksched.Endpoint
 	}{
 		{
 			name: "header unset in request",
-			req:  &fwksched.LLMRequest{}, // Deliberately unset
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{},
+			}, // Deliberately unset
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
 			},
@@ -44,7 +48,9 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "header set but no IP match",
-			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.99"}},
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.99"}},
+			},
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
 			},
@@ -52,7 +58,9 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "IP-only header matches pod (port-agnostic)",
-			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1"}},
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1"}},
+			},
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
 			},
@@ -62,7 +70,9 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "IP:port header matches exact port",
-			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:3002"}},
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:3002"}},
+			},
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
@@ -74,7 +84,9 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "IP:port header with non-matching port produces no match",
-			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:9999"}},
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.1:9999"}},
+			},
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3002"}, nil, nil),
 			},
@@ -82,7 +94,9 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "multiple header values (IP and IP:port) produce multiple matches in order and deduped",
-			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.3:3004, 10.0.0.2, 10.0.0.3"}},
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "10.0.0.3:3004, 10.0.0.2, 10.0.0.3"}},
+			},
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.1", Port: "3000"}, nil, nil),
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "10.0.0.2", Port: "3002"}, nil, nil),
@@ -95,7 +109,9 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "IPv6 with brackets and port",
-			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "[fd00::1]:3002"}},
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "[fd00::1]:3002"}},
+			},
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}, nil, nil),
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3002"}, nil, nil),
@@ -106,7 +122,9 @@ func TestFilter(t *testing.T) {
 		},
 		{
 			name: "IPv6 bare address (no port)",
-			req:  &fwksched.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "fd00::2"}},
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{Headers: map[string]string{test.HeaderTestEppEndPointSelectionKey: "fd00::2"}},
+			},
 			input: []fwksched.Endpoint{
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::1", Port: "3002"}, nil, nil),
 				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Address: "fd00::2", Port: "3004"}, nil, nil),

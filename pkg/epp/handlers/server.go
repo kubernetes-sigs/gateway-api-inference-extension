@@ -39,9 +39,7 @@ import (
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
@@ -89,14 +87,14 @@ type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
-	Usage                     fwkrq.Usage
+	Usage                     fwkrh.Usage
 	ResponseSize              int
 	ResponseComplete          bool
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
 
-	SchedulingRequest *schedulingtypes.LLMRequest
+	SchedulingRequest *fwkrh.InferenceRequest
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
@@ -244,8 +242,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					break
 				}
 
-				if reqCtx.SchedulingRequest != nil && reqCtx.SchedulingRequest.Body != nil {
-					reqCtx.modelServerStreaming = reqCtx.SchedulingRequest.Body.Stream
+				if reqCtx.SchedulingRequest != nil && reqCtx.SchedulingRequest.LLM != nil && reqCtx.SchedulingRequest.LLM.Body != nil {
+					reqCtx.modelServerStreaming = reqCtx.SchedulingRequest.LLM.Body.Stream
 				}
 
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)

@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/jellydator/ttlcache/v3"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -358,7 +360,7 @@ func (s *PredictedLatency) scoreWithoutPredictions(
 	return scores
 }
 
-func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleState, request *requesthandling.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	if s.latencypredictor == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency: no predictor configured, returning nil scores")
@@ -414,7 +416,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleStat
 	return scores
 }
 
-func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *framework.LLMRequest) *predictedLatencyCtx {
+func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *requesthandling.InferenceRequest) *predictedLatencyCtx {
 	sloCtx, err := t.getPredictedLatencyContextForRequest(request)
 	if err != nil {
 		sloCtx = newPredictedLatencyContext(request)

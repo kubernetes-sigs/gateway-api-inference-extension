@@ -89,10 +89,10 @@ func calculateSLODeadline(item flowcontrol.QueueItemAccessor) time.Time {
 		return sloMaxDeadlineTime
 	}
 	infReq := req.InferenceRequest()
-	if infReq == nil || infReq.Headers == nil {
+	if infReq == nil || infReq.LLM == nil || infReq.LLM.Headers == nil {
 		return sloMaxDeadlineTime
 	}
-	sloTtft := request.GetHeader(infReq.Headers, sloTtftHeader)
+	sloTtft := request.GetHeader(infReq.LLM.Headers, sloTtftHeader)
 	if sloTtft == "" {
 		return sloMaxDeadlineTime
 	}

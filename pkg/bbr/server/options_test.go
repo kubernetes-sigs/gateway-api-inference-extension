@@ -218,6 +218,7 @@ func TestCompleteDerivesZapLogLevel(t *testing.T) {
 	zapFlag := fs.Lookup(logging.ZapLogLevelFlagName)
 	if zapFlag == nil {
 		t.Fatal("Expected zap-log-level flag to exist after AddFlags")
+		return
 	}
 	if !zapFlag.Changed {
 		t.Error("Expected zap-log-level flag to be marked as Changed after Complete()")

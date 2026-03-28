@@ -28,6 +28,7 @@ import (
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -113,26 +114,26 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 	)
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
-		Completions: &fwksched.CompletionsRequest{
+func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwkrh.LLMRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwkrh.RequestBody{
+		Completions: &fwkrh.CompletionsRequest{
 			Prompt: "test prompt",
 		},
 	})
 }
 
-func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
-		ChatCompletions: &fwksched.ChatCompletionsRequest{
-			Messages: []fwksched.Message{
-				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
-				{Role: "user", Content: fwksched.Content{Raw: "Tell me a joke."}},
+func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwkrh.LLMRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwkrh.RequestBody{
+		ChatCompletions: &fwkrh.ChatCompletionsRequest{
+			Messages: []fwkrh.Message{
+				{Role: "system", Content: fwkrh.Content{Raw: "You are a helpful assistant."}},
+				{Role: "user", Content: fwkrh.Content{Raw: "Tell me a joke."}},
 			},
 		},
 	})
 }
 
-func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.LLMRequestBody) *fwksched.LLMRequest {
+func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwkrh.RequestBody) *fwkrh.LLMRequest {
 	headers := make(map[string]string)
 	headers[reqcommon.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -142,7 +143,7 @@ func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
 
-	return &fwksched.LLMRequest{
+	return &fwkrh.LLMRequest{
 		Headers: headers,
 		Body:    body,
 	}
@@ -382,7 +383,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 	requestID := "test-req-id"
 	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
 
-	req := &fwksched.LLMRequest{
+	req := &fwkrh.LLMRequest{
 		Headers: map[string]string{
 			reqcommon.RequestIdHeaderKey: requestID,
 		},

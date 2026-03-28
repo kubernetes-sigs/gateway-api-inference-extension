@@ -20,6 +20,8 @@ import (
 	"context"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -28,7 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
@@ -73,7 +74,7 @@ func rejectIfSheddableAndSaturated(
 	if requtil.IsSheddable(priority) {
 		if sd.Saturation(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) >= 1.0 {
 			logger.V(logutil.TRACE).Info("Request rejected: system saturated and request is sheddable",
-				"requestID", reqCtx.SchedulingRequest.RequestId)
+				"requestID", reqCtx.SchedulingRequest.LLM.RequestId)
 			return errcommon.Error{
 				Code: errcommon.ResourceExhausted,
 				Msg:  "system saturated, sheddable request dropped",
@@ -123,7 +124,7 @@ func (lac *LegacyAdmissionController) Admit(
 	); err != nil {
 		return err
 	}
-	logger.V(logutil.TRACE).Info("Request admitted", "requestID", reqCtx.SchedulingRequest.RequestId)
+	logger.V(logutil.TRACE).Info("Request admitted", "requestID", reqCtx.SchedulingRequest.LLM.RequestId)
 	return nil
 }
 
@@ -153,7 +154,7 @@ func (fcac *FlowControlAdmissionController) Admit(
 ) error {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.TRACE).Info("Executing FlowControlAdmissionController",
-		"requestID", reqCtx.SchedulingRequest.RequestId, "priority", priority, "fairnessID", reqCtx.FairnessID)
+		"requestID", reqCtx.SchedulingRequest.LLM.RequestId, "priority", priority, "fairnessID", reqCtx.FairnessID)
 
 	fcReq := &flowControlRequest{
 		fairnessID:        reqCtx.FairnessID,
@@ -168,7 +169,7 @@ func (fcac *FlowControlAdmissionController) Admit(
 
 	outcome, err := fcac.flowController.EnqueueAndWait(ctx, fcReq)
 	logger.V(logutil.DEBUG).Info("Flow control outcome",
-		"requestID", reqCtx.SchedulingRequest.RequestId, "outcome", outcome, "error", err)
+		"requestID", reqCtx.SchedulingRequest.LLM.RequestId, "outcome", outcome, "error", err)
 	return translateFlowControlOutcome(outcome, err)
 }
 
@@ -177,7 +178,7 @@ type flowControlRequest struct {
 	fairnessID        string
 	priority          int
 	requestByteSize   uint64
-	inferenceRequest  *scheduling.LLMRequest
+	inferenceRequest  *requesthandling.InferenceRequest
 	receivedTimestamp time.Time
 	reqMetadata       map[string]any
 	inferencePoolName string
@@ -187,23 +188,25 @@ type flowControlRequest struct {
 var _ flowcontrol.FlowControlRequest = &flowControlRequest{}
 
 func (r *flowControlRequest) ID() string {
-	if r.inferenceRequest == nil {
+	if r.inferenceRequest == nil || r.inferenceRequest.LLM == nil {
 		return ""
 	}
-	return r.inferenceRequest.RequestId
+	return r.inferenceRequest.LLM.RequestId
 }
-func (r *flowControlRequest) InitialEffectiveTTL() time.Duration       { return 0 } // Use controller default.
-func (r *flowControlRequest) ByteSize() uint64                         { return r.requestByteSize }
-func (r *flowControlRequest) InferenceRequest() *scheduling.LLMRequest { return r.inferenceRequest }
-func (r *flowControlRequest) ReceivedTimestamp() time.Time             { return r.receivedTimestamp }
-func (r *flowControlRequest) GetMetadata() map[string]any              { return r.reqMetadata }
-func (r *flowControlRequest) InferencePoolName() string                { return r.inferencePoolName }
-func (r *flowControlRequest) ModelName() string                        { return r.modelName }
+func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
+func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
+func (r *flowControlRequest) InferenceRequest() *requesthandling.InferenceRequest {
+	return r.inferenceRequest
+}
+func (r *flowControlRequest) ReceivedTimestamp() time.Time { return r.receivedTimestamp }
+func (r *flowControlRequest) GetMetadata() map[string]any  { return r.reqMetadata }
+func (r *flowControlRequest) InferencePoolName() string    { return r.inferencePoolName }
+func (r *flowControlRequest) ModelName() string            { return r.modelName }
 func (r *flowControlRequest) TargetModelName() string {
-	if r.inferenceRequest == nil {
+	if r.inferenceRequest == nil || r.inferenceRequest.LLM == nil {
 		return ""
 	}
-	return r.inferenceRequest.TargetModel
+	return r.inferenceRequest.LLM.TargetModel
 }
 func (r *flowControlRequest) FlowKey() flowcontrol.FlowKey {
 	return flowcontrol.FlowKey{ID: r.fairnessID, Priority: r.priority}

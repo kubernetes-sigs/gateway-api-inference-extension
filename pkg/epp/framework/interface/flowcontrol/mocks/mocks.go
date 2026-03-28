@@ -20,16 +20,17 @@ import (
 	"context"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // MockFlowControlRequest provides a mock implementation of the FlowControlRequest interface.
 type MockFlowControlRequest struct {
 	FlowKeyV             flowcontrol.FlowKey
 	ByteSizeV            uint64
-	InferenceRequestV    *scheduling.LLMRequest
+	InferenceRequestV    *requesthandling.InferenceRequest
 	ReceivedTimestampV   time.Time
 	InitialEffectiveTTLV time.Duration
 	IDV                  string
@@ -86,7 +87,7 @@ func NewMockFlowControlRequest(
 
 func (m *MockFlowControlRequest) FlowKey() flowcontrol.FlowKey { return m.FlowKeyV }
 func (m *MockFlowControlRequest) ByteSize() uint64             { return m.ByteSizeV }
-func (m *MockFlowControlRequest) InferenceRequest() *scheduling.LLMRequest {
+func (m *MockFlowControlRequest) InferenceRequest() *requesthandling.InferenceRequest {
 	return m.InferenceRequestV
 }
 func (m *MockFlowControlRequest) ReceivedTimestamp() time.Time       { return m.ReceivedTimestampV }

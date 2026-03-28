@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -30,13 +32,15 @@ import (
 func TestLoraAffinityScorer(t *testing.T) {
 	tests := []struct {
 		name                   string
-		request                *fwksched.LLMRequest
+		request                *requesthandling.InferenceRequest
 		endpoints              []fwksched.Endpoint
 		expectedScoresEndpoint map[string]float64 // Map of endpoint name to expected score
 	}{
 		{
-			name:    "Target model is active",
-			request: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			name: "Target model is active",
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
+			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
@@ -51,8 +55,10 @@ func TestLoraAffinityScorer(t *testing.T) {
 			},
 		},
 		{
-			name:    "Target model is waiting",
-			request: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			name: "Target model is waiting",
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
+			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
@@ -67,8 +73,10 @@ func TestLoraAffinityScorer(t *testing.T) {
 			},
 		},
 		{
-			name:    "Endpoints have no space for new model",
-			request: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			name: "Endpoints have no space for new model",
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
+			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
@@ -91,8 +99,10 @@ func TestLoraAffinityScorer(t *testing.T) {
 			},
 		},
 		{
-			name:    "Multipleendpoints with mixed active and waiting models",
-			request: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			name: "Multipleendpoints with mixed active and waiting models",
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
+			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
 					&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
@@ -139,8 +149,10 @@ func TestLoraAffinityScorer(t *testing.T) {
 			},
 		},
 		{
-			name:                   "Empty pods slice",
-			request:                &fwksched.LLMRequest{TargetModel: "modelA"},
+			name: "Empty pods slice",
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "modelA"},
+			},
 			endpoints:              []fwksched.Endpoint{},
 			expectedScoresEndpoint: map[string]float64{}, // No pods, no scores
 		},

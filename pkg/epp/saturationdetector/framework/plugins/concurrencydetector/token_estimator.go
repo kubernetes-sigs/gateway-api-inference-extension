@@ -19,12 +19,12 @@ package concurrencydetector
 import (
 	"math"
 
-	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 )
 
 // TokenEstimator estimates the number of tokens for an LLM request.
 type TokenEstimator interface {
-	Estimate(request *framework.LLMRequest) int64
+	Estimate(request *requesthandling.LLMRequest) int64
 }
 
 // SimpleTokenEstimator estimates tokens from character count. tokens = characters / CharactersPerToken.
@@ -45,7 +45,7 @@ func NewSimpleTokenEstimator() TokenEstimator {
 // When RequestSizeBytes is set, input tokens are derived from request size (~4 bytes per token)
 // to avoid allocations. Otherwise, input tokens are estimated from prompt/message character count
 // using CharactersPerToken; output tokens are estimated as inputTokens * OutputRatio.
-func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
+func (e *SimpleTokenEstimator) Estimate(request *requesthandling.LLMRequest) int64 {
 	if request == nil {
 		return 0
 	}

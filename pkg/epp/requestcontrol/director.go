@@ -30,7 +30,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -66,7 +65,7 @@ type Datastore interface {
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidateEndpoints []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *fwkrh.InferenceRequest, candidatePods []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
 }
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
@@ -144,8 +143,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
-	reqCtx.Priority = *infObjective.Spec.Priority
-	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
+	requestObjectives := fwkrh.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
 	span.SetAttributes(
 		attribute.String("target_model", reqCtx.TargetModelName),
@@ -153,13 +151,14 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	)
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
-	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
-		RequestId:        reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
-		TargetModel:      reqCtx.TargetModelName,
-		Body:             llmRequestBody,
-		Headers:          reqCtx.Request.Headers,
-		Objectives:       requestObjectives,
-		RequestSizeBytes: reqCtx.RequestSize,
+	reqCtx.SchedulingRequest = &fwkrh.InferenceRequest{
+		LLM: &fwkrh.LLMRequest{
+			RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
+			TargetModel: reqCtx.TargetModelName,
+			Body:        llmRequestBody,
+			Headers:     reqCtx.Request.Headers,
+			Objectives:  requestObjectives,
+		},
 	}
 
 	logger = logger.WithValues("objectiveKey", reqCtx.ObjectiveKey, "incomingModelName", reqCtx.IncomingModelName, "targetModelName", reqCtx.TargetModelName, "priority", infObjective.Spec.Priority)
@@ -208,22 +207,21 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwksched.LLMRequestBody, error) {
+// processRequestBody unmarshals RawBody to mutate it (for JSON), then parses it using Parser
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwkrh.RequestBody, error) {
+	bodyMap := make(map[string]any)
+	if err := json.Unmarshal(reqCtx.Request.RawBody, &bodyMap); err == nil {
+		if err := d.mutateAndRepackage(ctx, reqCtx, bodyMap); err != nil {
+			return nil, err
+		}
+	} else {
+		// Possibly protobuf or other format, skip mutation
+		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+	}
+
 	llmRequestBody, err := parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
 	if err != nil {
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
-	}
-
-	switch v := llmRequestBody.ParsedBody.(type) {
-	case proto.Message:
-		// Protos are not currently mutated, return as-is.
-		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
-	case map[string]any:
-		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
 	}
 	return llmRequestBody, nil
 }
@@ -238,14 +236,14 @@ func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.Requ
 	}
 
 	// Marshal back to bytes so downstream ExtProc filters see the updated model
-	requestBodyBytes, err := json.Marshal(bodyMap)
+	llmRequestBodyBytes, err := json.Marshal(bodyMap)
 	if err != nil {
 		logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
 		return errcommon.Error{Code: errcommon.Internal, Msg: "Error marshalling request body"}
 	}
 
-	reqCtx.Request.RawBody = requestBodyBytes
-	reqCtx.RequestSize = len(requestBodyBytes)
+	reqCtx.Request.RawBody = llmRequestBodyBytes
+	reqCtx.RequestSize = len(llmRequestBodyBytes)
 
 	return nil
 }
@@ -349,7 +347,7 @@ func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.Re
 	}
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
-	d.runResponseHeaderPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	d.runResponseReceivedPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 	return reqCtx
 }
 
@@ -364,7 +362,7 @@ func (d *Director) HandleResponseBody(ctx context.Context, reqCtx *handlers.Requ
 		EndOfStream: endOfStream,
 		Usage:       reqCtx.Usage,
 	}
-	d.runResponseBodyPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	d.runResponseStreamingPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 	reqCtx.Response.DynamicMetadata = response.DynamicMetadata
 	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
 	return reqCtx
@@ -380,7 +378,7 @@ func (d *Director) GetRandomEndpoint() *fwkdl.EndpointMetadata {
 	return pod.GetMetadata()
 }
 
-func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.LLMRequest,
+func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwkrh.InferenceRequest,
 	schedulingResult *fwksched.SchedulingResult) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
@@ -393,7 +391,7 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.L
 }
 
 func (d *Director) runPrepareDataPlugins(ctx context.Context,
-	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) error {
+	request *fwkrh.InferenceRequest, endpoints []fwksched.Endpoint) error {
 	if len(d.requestControlPlugins.prepareDataPlugins) == 0 {
 		return nil
 	}
@@ -401,7 +399,7 @@ func (d *Director) runPrepareDataPlugins(ctx context.Context,
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
-	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) bool {
+	request *fwkrh.InferenceRequest, endpoints []fwksched.Endpoint) bool {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.admissionPlugins {
 		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
@@ -414,18 +412,18 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 	return true
 }
 
-func (d *Director) runResponseHeaderPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *fwkrh.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running ResponseReceived plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.ResponseHeader(ctx, request, response, targetEndpoint)
+		plugin.ResponseHeader(ctx, request.LLM, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(fwk.ResponseReceivedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running ResponseReceived plugin successfully", "plugin", plugin.TypedName())
 	}
 }
 
-func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *fwkrh.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
 		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())
