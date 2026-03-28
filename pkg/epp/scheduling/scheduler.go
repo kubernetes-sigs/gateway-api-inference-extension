@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
@@ -51,7 +52,7 @@ type Scheduler struct {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, request *framework.InferenceRequest, candidateEndpoints []framework.Endpoint) (result *framework.SchedulingResult, err error) {
+func (s *Scheduler) Schedule(ctx context.Context, request *requesthandling.InferenceRequest, candidateEndpoints []framework.Endpoint) (result *framework.SchedulingResult, err error) {
 	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
 
 	scheduleStart := time.Now()

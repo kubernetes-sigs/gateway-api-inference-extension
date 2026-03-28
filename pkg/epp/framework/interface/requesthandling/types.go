@@ -37,6 +37,16 @@ type RequestBody struct {
 	Responses *ResponsesRequest `json:"responses,omitempty"`
 	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
+	// EmbeddingsRequest is the representation of the OpenAI /v1/embeddings request body.
+	Embeddings *EmbeddingsRequest `json:"embeddings,omitempty"`
+	// ParsedBody contains the unmarshaled request payload.
+	// Note: Because this handles multiple protocols, this field is strictly expected
+	// to be either a map[string]any (for HTTP/JSON) or a proto.Message (for gRPC).
+	ParsedBody any `json:"-"`
+
+	// Stream indicates whether the request specifies a streaming response (e.g., via a stream field).
+	// This typically implies the model server's response will be streamed.
+	Stream bool `json:"-"`
 }
 
 func (r *RequestBody) CacheSalt() string {
@@ -51,6 +61,28 @@ func (r *RequestBody) CacheSalt() string {
 	}
 	if r.Completions != nil {
 		return r.Completions.CacheSalt
+	}
+	return ""
+}
+
+// PromptText returns the aggregated prompt or message content of the request.
+// It simplifies logic for extracting text from Completions vs ChatCompletions Requests.
+func (r *RequestBody) PromptText() string {
+	if r == nil {
+		return ""
+	}
+	if r.Completions != nil {
+		return r.Completions.Prompt
+	}
+	if r.ChatCompletions != nil {
+		var contentBuilder strings.Builder
+		for idx, msg := range r.ChatCompletions.Messages {
+			contentBuilder.WriteString(msg.Content.PlainText())
+			if idx < len(r.ChatCompletions.Messages)-1 {
+				contentBuilder.WriteString(" ")
+			}
+		}
+		return contentBuilder.String()
 	}
 	return ""
 }
@@ -139,6 +171,22 @@ func (c *ConversationsRequest) String() string {
 		return nilString
 	}
 	return fmt.Sprintf("{ItemsCount: %d}", len(c.Items))
+}
+
+// EmbeddingsRequest represents the OpenAI /v1/embeddings request body structure.
+// Input can be a string or array of strings; see https://platform.openai.com/docs/api-reference/embeddings.
+type EmbeddingsRequest struct {
+	// Input is the text to embed (string or array of strings).
+	Input interface{} `json:"input,omitempty"`
+	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
+	CacheSalt string `json:"cache_salt,omitempty"`
+}
+
+func (e *EmbeddingsRequest) String() string {
+	if e == nil {
+		return nilString
+	}
+	return fmt.Sprintf("{InputType: %T}", e.Input)
 }
 
 // ConversationItem represents a single item in a conversation
@@ -237,4 +285,54 @@ type Usage struct {
 
 type PromptTokenDetails struct {
 	CachedTokens int `json:"cached_tokens"`
+}
+
+// RequestObjectives represents the scheduling objectives parsed from the InferenceObjectiveSpec, to be
+// used in scheduling decisions.
+type RequestObjectives struct {
+	Priority int
+}
+
+// LLMRequest is a structured representation of the fields we parse out of the
+// LLMRequest body.
+type LLMRequest struct {
+	// RequestId is the Envoy generated Id for the request being processed
+	RequestId string
+	// TargetModel is the final target model after traffic split.
+	TargetModel string
+	// Data contains the request-body fields that we parse out as user input.
+	Body *RequestBody
+	// Headers is a map of the request headers.
+	Headers map[string]string
+	// Request Objective
+	Objectives RequestObjectives
+	// RequestSizeBytes is the size of the raw request body in bytes when available.
+	// Used for token estimation (e.g. inputTokens ≈ RequestSizeBytes/4) without parsing body or calling PlainText().
+	RequestSizeBytes int
+	// TokenizedPrompt contains the tokenization results if external tokenization is enabled.
+	// This is nil if tokenization was not performed or if the tokenizer is not configured.
+	TokenizedPrompt *TokenizedPrompt
+}
+
+// TokenizedPrompt contains the result of tokenizing the request prompt.
+// It is populated by external tokenization plugins (e.g., via a PrepareData plugin)
+// and consumed by scheduling plugins that benefit from actual token data
+// (e.g., prefix cache scoring, latency prediction).
+type TokenizedPrompt struct {
+	// TokenIDs are the token IDs for the prompt.
+	TokenIDs []uint32
+}
+
+type InferenceRequest struct {
+	LLM        *LLMRequest
+	ParsedBody any `json:"-"`
+}
+
+func (r *InferenceRequest) String() string {
+	if r == nil || r.LLM == nil {
+		return nilString
+	}
+
+	return fmt.Sprintf("RequestID: %s, TargetModel: %s, Body: %v, Headers: %v",
+		r.LLM.RequestId, r.LLM.TargetModel, r.LLM.Body, r.LLM.Headers)
 }

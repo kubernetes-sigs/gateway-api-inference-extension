@@ -20,13 +20,14 @@ package predictedlatency
 import (
 	"strconv"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 // parseFloatHeader retrieves a header by name, parses it as a float64,
 // and returns the value or an error if the header is missing or invalid.
-func parseFloatHeader(request schedulingtypes.InferenceRequest, headerName string) (float64, error) {
+func parseFloatHeader(request requesthandling.InferenceRequest, headerName string) (float64, error) {
 	// 1. Get header value from the map
 	headerValue, ok := request.LLM.Headers[headerName]
 	if !ok {

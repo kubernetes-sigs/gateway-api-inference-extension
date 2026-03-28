@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/cespare/xxhash/v2"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -244,7 +246,7 @@ func (p *Plugin) Consumes() map[string]any {
 }
 
 // PrepareRequestData hashes prompt, finds longest prefix match and stores it in endpoint as attribute.
-func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.InferenceRequest, endpoints []framework.Endpoint) error {
+func (p *Plugin) PrepareRequestData(ctx context.Context, request *requesthandling.InferenceRequest, endpoints []framework.Endpoint) error {
 	blockSize := getBlockSize(endpoints, p.config)
 	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	state := &SchedulingContextState{
@@ -264,7 +266,7 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.Infe
 }
 
 // Score returns the scoring result for the given list of pods based on context.
-func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, request *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, request *requesthandling.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	// pre score step, hashing prompt and find longest prefix match.
 	blockSize := getBlockSize(endpoints, p.config)
 	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
@@ -298,7 +300,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 }
 
 // PreRequest records in the plugin cache the result of the scheduling selection.
-func (p *Plugin) PreRequest(ctx context.Context, request *framework.InferenceRequest, schedulingResult *framework.SchedulingResult) {
+func (p *Plugin) PreRequest(ctx context.Context, request *requesthandling.InferenceRequest, schedulingResult *framework.SchedulingResult) {
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]
 	targetEndpoint := primaryProfileResult.TargetEndpoints[0] // get the first endpoint of the primary profile
 	servers := []Server{p.makeServer(targetEndpoint)}
@@ -396,7 +398,7 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 // hashPrompt divides the prompt into blocks and calculate the prefix cache for each block.
 // hash[0] is calculated including the model name and cache_salt(if provided), since different models generally don't share prefix cache.
 // For block i, hash(i) = hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *framework.InferenceRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
+func hashPrompt(ctx context.Context, request *requesthandling.InferenceRequest, blockSizeTokens int, maxPrefixBlocks int) []BlockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.LLM.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
@@ -449,7 +451,7 @@ func toBytes(i BlockHash) []byte {
 	return bytes
 }
 
-func getUserInputBytes(request *framework.InferenceRequest) ([]byte, error) {
+func getUserInputBytes(request *requesthandling.InferenceRequest) ([]byte, error) {
 	switch {
 	case request.LLM.Body.Conversations != nil:
 		// Handle conversations API - marshal the entire items slice for cache key generation
@@ -488,9 +490,9 @@ func getUserInputBytes(request *framework.InferenceRequest) ([]byte, error) {
 		// Handle completions API (maintain backward compatibility)
 		return []byte(request.LLM.Body.Completions.Prompt), nil
 
-	case request.Body.Embeddings != nil:
+	case request.LLM.Body.Embeddings != nil:
 		// Handle embeddings API - marshal input for cache key generation
-		return json.Marshal(request.Body.Embeddings.Input)
+		return json.Marshal(request.LLM.Body.Embeddings.Input)
 
 	default:
 		return nil, errors.New("invalid request body: no recognized API format found")

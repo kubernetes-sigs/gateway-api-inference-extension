@@ -20,6 +20,8 @@ package predictedlatency
 import (
 	"context"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -42,7 +44,7 @@ type endpointPredictionResult struct {
 }
 
 // generatePredictions creates prediction results for all candidate pods
-func (s *PredictedLatency) generatePredictions(ctx context.Context, request *schedulingtypes.InferenceRequest, predictedLatencyCtx *predictedLatencyCtx, candidateEndpoints []schedulingtypes.Endpoint) ([]endpointPredictionResult, error) {
+func (s *PredictedLatency) generatePredictions(ctx context.Context, request *requesthandling.InferenceRequest, predictedLatencyCtx *predictedLatencyCtx, candidateEndpoints []schedulingtypes.Endpoint) ([]endpointPredictionResult, error) {
 	logger := log.FromContext(ctx)
 	predictions := make([]endpointPredictionResult, 0, len(candidateEndpoints))
 

@@ -27,9 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	pb "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/gen"
 )
 
@@ -72,7 +70,7 @@ func (p *VllmGRPCParser) TypedName() fwkplugin.TypedName {
 }
 
 // ParseRequest parses the gRPC request body and headers and returns an LLMRequestBody.
-func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
+func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*fwkrh.RequestBody, error) {
 	logger := log.FromContext(ctx)
 
 	extractedBody, err := convertToLLMRequestBody(body)
@@ -122,12 +120,12 @@ func (p *VllmGRPCParser) ParseResponse(ctx context.Context, body []byte, headers
 	return result, nil
 }
 
-func requestControlUsage(promptToken, completionToken, cachedToken int) *requestcontrol.Usage {
-	return &requestcontrol.Usage{
+func requestControlUsage(promptToken, completionToken, cachedToken int) *fwkrh.Usage {
+	return &fwkrh.Usage{
 		PromptTokens:     promptToken,
 		CompletionTokens: completionToken,
 		TotalTokens:      promptToken + completionToken,
-		PromptTokenDetails: &requestcontrol.PromptTokenDetails{
+		PromptTokenDetails: &fwkrh.PromptTokenDetails{
 			CachedTokens: cachedToken,
 		},
 	}
@@ -146,23 +144,23 @@ func toGenerateResponse(payload []byte, resp *pb.GenerateResponse) error {
 	return proto.Unmarshal(parsedPayload, resp)
 }
 
-func convertToLLMRequestBody(payload []byte) (*scheduling.LLMRequestBody, error) {
+func convertToLLMRequestBody(payload []byte) (*fwkrh.RequestBody, error) {
 	pbReq := &pb.GenerateRequest{}
 	if err := toGenerateRequest(payload, pbReq); err != nil {
 		return nil, err
 	}
-	var body *scheduling.LLMRequestBody
+	var body *fwkrh.RequestBody
 	switch pbReq.Input.(type) {
 	case *pb.GenerateRequest_Text:
-		body = &scheduling.LLMRequestBody{
-			Completions: &scheduling.CompletionsRequest{
+		body = &fwkrh.RequestBody{
+			Completions: &fwkrh.CompletionsRequest{
 				Prompt: pbReq.GetText(),
 			},
 			ParsedBody: pbReq,
 		}
 	case *pb.GenerateRequest_Tokenized:
-		body = &scheduling.LLMRequestBody{
-			Completions: &scheduling.CompletionsRequest{
+		body = &fwkrh.RequestBody{
+			Completions: &fwkrh.CompletionsRequest{
 				Prompt: pbReq.GetTokenized().OriginalText,
 			},
 			ParsedBody: pbReq,

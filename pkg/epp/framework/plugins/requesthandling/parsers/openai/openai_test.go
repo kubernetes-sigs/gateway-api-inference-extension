@@ -495,9 +495,9 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				},
 				"stream": true,
 			},
-			want: &scheduling.LLMRequestBody{
-				ChatCompletions: &scheduling.ChatCompletionsRequest{
-					Messages: []scheduling.Message{{Role: "user", Content: scheduling.Content{Raw: "hello"}}},
+			want: &fwkrh.RequestBody{
+				ChatCompletions: &fwkrh.ChatCompletionsRequest{
+					Messages: []fwkrh.Message{{Role: "user", Content: fwkrh.Content{Raw: "hello"}}},
 				},
 				ParsedBody: map[string]any{
 					"model": "test",
@@ -517,8 +517,8 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": "The food was delicious and the waiter...",
 			},
-			want: &scheduling.LLMRequestBody{
-				Embeddings: &scheduling.EmbeddingsRequest{
+			want: &fwkrh.RequestBody{
+				Embeddings: &fwkrh.EmbeddingsRequest{
 					Input: "The food was delicious and the waiter...",
 				},
 				ParsedBody: map[string]any{
@@ -534,8 +534,8 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": []any{"First document", "Second document"},
 			},
-			want: &scheduling.LLMRequestBody{
-				Embeddings: &scheduling.EmbeddingsRequest{
+			want: &fwkrh.RequestBody{
+				Embeddings: &fwkrh.EmbeddingsRequest{
 					Input: []any{"First document", "Second document"},
 				},
 				ParsedBody: map[string]any{
@@ -552,8 +552,8 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"input":      "embed this text",
 				"cache_salt": "embeddings-salt-123",
 			},
-			want: &scheduling.LLMRequestBody{
-				Embeddings: &scheduling.EmbeddingsRequest{
+			want: &fwkrh.RequestBody{
+				Embeddings: &fwkrh.EmbeddingsRequest{
 					Input:     "embed this text",
 					CacheSalt: "embeddings-salt-123",
 				},
@@ -571,8 +571,8 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": "text to embed",
 			},
-			want: &scheduling.LLMRequestBody{
-				Embeddings: &scheduling.EmbeddingsRequest{
+			want: &fwkrh.RequestBody{
+				Embeddings: &fwkrh.EmbeddingsRequest{
 					Input: "text to embed",
 				},
 				ParsedBody: map[string]any{

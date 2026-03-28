@@ -27,6 +27,7 @@ import (
 	fwkfcmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksch "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -48,7 +49,7 @@ func (m *mockPrepareRequestDataP) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *fwksch.InferenceRequest, endpoints []fwksch.Endpoint) error {
+func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *requesthandling.InferenceRequest, endpoints []fwksch.Endpoint) error {
 
 	return nil
 }

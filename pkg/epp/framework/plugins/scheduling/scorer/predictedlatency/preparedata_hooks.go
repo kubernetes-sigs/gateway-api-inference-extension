@@ -20,6 +20,8 @@ import (
 	"context"
 	"math"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -29,7 +31,7 @@ import (
 )
 
 // PrepareRequestData prepares the SLO context for the request, including parsing SLO headers and gathering prefix cache scores abds generating predictions.
-func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
+func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *requesthandling.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
 	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request)
 

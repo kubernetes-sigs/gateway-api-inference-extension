@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -142,7 +144,7 @@ func (d *Detector) Saturation(_ context.Context, candidates []datalayer.Endpoint
 func (d *Detector) Filter(
 	_ context.Context,
 	_ *framework.CycleState,
-	_ *framework.InferenceRequest,
+	_ *requesthandling.InferenceRequest,
 	endpoints []framework.Endpoint,
 ) []framework.Endpoint {
 	qLimit := float64(d.config.QueueDepthThreshold) * (1.0 + d.config.Headroom)

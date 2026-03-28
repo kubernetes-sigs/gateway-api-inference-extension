@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/google/cel-go/cel"
 	"google.golang.org/protobuf/types/known/structpb"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -30,7 +32,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -150,8 +151,8 @@ func (c *Plugin) TypedName() plugin.TypedName {
 	return c.typedName
 }
 
-// ResponseComplete implements the requestcontrol.ResponseComplete interface.
-func (c *Plugin) ResponseComplete(ctx context.Context, request *scheduling.InferenceRequest, response *requestcontrol.Response,
+// ResponseBody implements the requestcontrol.ResponseBody interface.
+func (c *Plugin) ResponseBody(ctx context.Context, request *requesthandling.InferenceRequest, response *requestcontrol.Response,
 	_ *datalayer.EndpointMetadata) {
 	// Convert the request usage Go struct into a protobuf struct so that it can be used as a CEL variable.
 	celData, err := c.getCelData(response)

@@ -36,7 +36,6 @@ const (
 	embeddingsAPI      = "embeddings"
 
 	streamingRespPrefix = "data: "
-	streamingEndMsg     = "data: [DONE]"
 
 	// OpenAI API object types
 	objectTypeResponse            = "response"
@@ -216,9 +215,9 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*fwkrh.Reque
 		return nil, errors.New("invalid completions request: must have prompt field")
 
 	case embeddingsAPI:
-		var embeddings scheduling.EmbeddingsRequest
+		var embeddings fwkrh.EmbeddingsRequest
 		if err := json.Unmarshal(rawBody, &embeddings); err == nil && embeddings.Input != nil {
-			return &scheduling.LLMRequestBody{Embeddings: &embeddings}, nil
+			return &fwkrh.RequestBody{Embeddings: &embeddings}, nil
 		}
 		return nil, errors.New("invalid embeddings request: must have input field")
 

@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/stretchr/testify/assert"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
@@ -73,8 +75,8 @@ func TestRunningRequestsSizeScorer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{},
+			scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{},
 			}, test.endpoints)
 
 			for i, endpoint := range test.endpoints {

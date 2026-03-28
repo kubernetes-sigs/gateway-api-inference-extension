@@ -20,12 +20,13 @@ import (
 	"testing"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestSLODeadlinePolicy_Name(t *testing.T) {
@@ -52,7 +53,7 @@ func TestSLODeadlinePolicy_RequiredQueueCapabilities(t *testing.T) {
 func makeSLOItem(id string, received time.Time, sloTTFTMs string) flowcontrol.QueueItemAccessor {
 	req := mocks.NewMockFlowControlRequest(10, id, testFlowKey)
 	req.ReceivedTimestampV = received
-	req.InferenceRequestV = &scheduling.InferenceRequest{LLM: &scheduling.LLMRequest{Headers: map[string]string{sloTtftHeader: sloTTFTMs}}}
+	req.InferenceRequestV = &requesthandling.InferenceRequest{LLM: &requesthandling.LLMRequest{Headers: map[string]string{sloTtftHeader: sloTTFTMs}}}
 	return &mocks.MockQueueItemAccessor{
 		EffectiveTTLV:    0,
 		OriginalRequestV: req,
@@ -74,7 +75,7 @@ func TestSLODeadline_Less(t *testing.T) {
 	// D: no header → far-future deadline
 	reqD := mocks.NewMockFlowControlRequest(10, "d", testFlowKey)
 	reqD.ReceivedTimestampV = now
-	reqD.InferenceRequestV = &scheduling.InferenceRequest{LLM: &scheduling.LLMRequest{Headers: map[string]string{}}}
+	reqD.InferenceRequestV = &requesthandling.InferenceRequest{LLM: &requesthandling.LLMRequest{Headers: map[string]string{}}}
 	itemD := &mocks.MockQueueItemAccessor{EffectiveTTLV: 0, OriginalRequestV: reqD}
 	// E: same deadline as B (received 1s earlier + 1050ms SLO = now+50ms), earlier ReceivedTimestamp → wins tie-breaker
 	itemE := makeSLOItem("e", now.Add(-time.Second), "1050")
@@ -113,24 +114,24 @@ func TestCalculateSLODeadline(t *testing.T) {
 	// Valid header
 	reqValid := mocks.NewMockFlowControlRequest(1, "valid", testFlowKey)
 	reqValid.ReceivedTimestampV = now
-	reqValid.InferenceRequestV = &scheduling.InferenceRequest{LLM: &scheduling.LLMRequest{Headers: map[string]string{sloTtftHeader: "200"}}}
+	reqValid.InferenceRequestV = &requesthandling.InferenceRequest{LLM: &requesthandling.LLMRequest{Headers: map[string]string{sloTtftHeader: "200"}}}
 	accValid := &mocks.MockQueueItemAccessor{OriginalRequestV: reqValid}
 	deadline := calculateSLODeadline(accValid)
 	assert.Equal(t, now.Add(200*time.Millisecond), deadline)
 
 	// Missing header
 	reqNoHeader := mocks.NewMockFlowControlRequest(2, "no", testFlowKey)
-	reqNoHeader.InferenceRequestV = &scheduling.InferenceRequest{LLM: &scheduling.LLMRequest{Headers: map[string]string{}}}
+	reqNoHeader.InferenceRequestV = &requesthandling.InferenceRequest{LLM: &requesthandling.LLMRequest{Headers: map[string]string{}}}
 	accNoHeader := &mocks.MockQueueItemAccessor{OriginalRequestV: reqNoHeader}
 	assert.Equal(t, sloMaxDeadlineTime, calculateSLODeadline(accNoHeader))
 
-	reqNoHeader.InferenceRequestV = &scheduling.InferenceRequest{LLM: &scheduling.LLMRequest{Headers: map[string]string{"x-some-header": "200"}}}
+	reqNoHeader.InferenceRequestV = &requesthandling.InferenceRequest{LLM: &requesthandling.LLMRequest{Headers: map[string]string{"x-some-header": "200"}}}
 	accNoHeader = &mocks.MockQueueItemAccessor{OriginalRequestV: reqNoHeader}
 	assert.Equal(t, sloMaxDeadlineTime, calculateSLODeadline(accNoHeader))
 
 	// Invalid value
 	reqInvalid := mocks.NewMockFlowControlRequest(3, "inv", testFlowKey)
-	reqInvalid.InferenceRequestV = &scheduling.InferenceRequest{LLM: &scheduling.LLMRequest{Headers: map[string]string{sloTtftHeader: "x"}}}
+	reqInvalid.InferenceRequestV = &requesthandling.InferenceRequest{LLM: &requesthandling.LLMRequest{Headers: map[string]string{sloTtftHeader: "x"}}}
 	accInvalid := &mocks.MockQueueItemAccessor{OriginalRequestV: reqInvalid}
 	assert.Equal(t, sloMaxDeadlineTime, calculateSLODeadline(accInvalid))
 

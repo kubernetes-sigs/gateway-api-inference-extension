@@ -22,6 +22,8 @@ import (
 	"net"
 	"strings"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
@@ -67,7 +69,7 @@ func (f *HeaderBasedTestingFilter) WithName(name string) *HeaderBasedTestingFilt
 // Filter selects endpoints whose IP or IP:port matches any value in the
 // "test-epp-endpoint-selection" header. Values may be "IP" or "IP:port".
 // If a port is provided, only an exact IP:port match is accepted.
-func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *framework.CycleState, request *framework.InferenceRequest, endpoints []framework.Endpoint) []framework.Endpoint {
+func (f *HeaderBasedTestingFilter) Filter(_ context.Context, _ *framework.CycleState, request *requesthandling.InferenceRequest, endpoints []framework.Endpoint) []framework.Endpoint {
 	hv, ok := request.LLM.Headers[test.HeaderTestEppEndPointSelectionKey]
 	if !ok || strings.TrimSpace(hv) == "" {
 		return []framework.Endpoint{}

@@ -22,11 +22,12 @@ import (
 	"strings"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 
-	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -126,8 +127,8 @@ func TestBulkPredictWithMetrics_WithPredictedLatencyCtx(t *testing.T) {
 	prefixCacheScores := []float64{0.0}
 
 	plCtx := &predictedLatencyCtx{
-		schedulingRequest: schedulingtypes.InferenceRequest{
-			LLM: &schedulingtypes.LLMRequest{
+		schedulingRequest: requesthandling.InferenceRequest{
+			LLM: &requesthandling.LLMRequest{
 				TargetModel: "test-model",
 			},
 		},

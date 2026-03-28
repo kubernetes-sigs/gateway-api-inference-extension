@@ -24,6 +24,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrlatency "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/latency"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
@@ -33,11 +34,11 @@ var _ requestcontrol.PrepareDataPlugin = &PredictedLatency{}
 
 // PrepareRequestData prepares the SLO context for the request, including
 // parsing SLO headers, gathering prefix cache scores, and generating predictions.
-func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *requesthandling.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
-	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request)
+	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request.LLM)
 
-	s.parseSLOHeaders(ctx, request, predictedLatencyCtx)
+	s.parseSLOHeaders(ctx, request.LLM, predictedLatencyCtx)
 	var prefixCacheScore float64
 	for _, endpoint := range endpoints {
 
@@ -58,7 +59,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 	}
 	if !s.config.PredictInPrepareData {
 		logger.V(logutil.DEBUG).Info("PredictInPrepareData disabled, skipping predictions")
-		s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
+		s.setPredictedLatencyContextForRequest(request.LLM, predictedLatencyCtx)
 		return nil
 	}
 
@@ -91,7 +92,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		}
 	}
 
-	s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
+	s.setPredictedLatencyContextForRequest(request.LLM, predictedLatencyCtx)
 	return nil
 }
 

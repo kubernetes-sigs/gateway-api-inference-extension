@@ -27,58 +27,6 @@ import (
 
 const nilString = "<nil>"
 
-// RequestObjectives represents the scheduling objectives parsed from the InferenceObjectiveSpec, to be used in scheduling decisions.
-type RequestObjectives struct {
-	Priority int
-}
-
-// LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
-type LLMRequest struct {
-	// RequestId is the Envoy generated Id for the request being processed
-	RequestId string
-	// TargetModel is the final target model after traffic split.
-	TargetModel string
-	// Data contains the request-body fields that we parse out as user input.
-	Body *requesthandling.RequestBody
-	// Headers is a map of the request headers.
-	Headers map[string]string
-	// Request Objective
-	Objectives RequestObjectives
-	// RequestSizeBytes is the size of the raw request body in bytes when available.
-	// Used for token estimation (e.g. inputTokens ≈ RequestSizeBytes/4) without parsing body or calling PlainText().
-	RequestSizeBytes int
-	// TokenizedPrompt contains the tokenization results if external tokenization is enabled.
-	// This is nil if tokenization was not performed or if the tokenizer is not configured.
-	TokenizedPrompt *TokenizedPrompt
-}
-
-// TokenizedPrompt contains the result of tokenizing the request prompt.
-// It is populated by external tokenization plugins (e.g., via a PrepareData plugin)
-// and consumed by scheduling plugins that benefit from actual token data
-// (e.g., prefix cache scoring, latency prediction).
-type TokenizedPrompt struct {
-	// TokenIDs are the token IDs for the prompt.
-	TokenIDs []uint32
-}
-
-type InferenceRequest struct {
-	LLM        *LLMRequest
-	ParsedBody any `json:"-"`
-
-	// Stream indicates whether the request specifies a streaming response (e.g., via a stream field).
-	// This typically implies the model server's response will be streamed.
-	Stream bool `json:"-"`
-}
-
-func (r *InferenceRequest) String() string {
-	if r == nil || r.LLM == nil {
-		return nilString
-	}
-
-	return fmt.Sprintf("RequestID: %s, TargetModel: %s, Body: %s, Headers: %v",
-		r.LLM.RequestId, r.LLM.TargetModel, r.LLM.Body, r.LLM.Headers)
-}
-
 type Endpoint interface {
 	GetMetadata() *fwkdl.EndpointMetadata
 	GetMetrics() *fwkdl.Metrics
@@ -149,5 +97,5 @@ type SchedulingResult struct {
 }
 
 type SchedulerProfile interface {
-	Run(ctx context.Context, request *InferenceRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error)
+	Run(ctx context.Context, request *requesthandling.InferenceRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error)
 }

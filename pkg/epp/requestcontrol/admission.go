@@ -20,6 +20,8 @@ import (
 	"context"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -28,7 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/types"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	requtil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/request"
 )
@@ -177,7 +178,7 @@ type flowControlRequest struct {
 	fairnessID        string
 	priority          int
 	requestByteSize   uint64
-	inferenceRequest  *scheduling.InferenceRequest
+	inferenceRequest  *requesthandling.InferenceRequest
 	receivedTimestamp time.Time
 	reqMetadata       map[string]any
 	inferencePoolName string
@@ -194,7 +195,7 @@ func (r *flowControlRequest) ID() string {
 }
 func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
 func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
-func (r *flowControlRequest) InferenceRequest() *scheduling.InferenceRequest {
+func (r *flowControlRequest) InferenceRequest() *requesthandling.InferenceRequest {
 	return r.inferenceRequest
 }
 func (r *flowControlRequest) ReceivedTimestamp() time.Time { return r.receivedTimestamp }

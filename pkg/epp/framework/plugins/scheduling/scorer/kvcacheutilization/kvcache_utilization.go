@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
@@ -73,7 +75,7 @@ func (s *KVCacheUtilizationScorer) WithName(name string) *KVCacheUtilizationScor
 }
 
 // Score returns the scoring result for the given list of endpoints based on context.
-func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *framework.CycleState, _ *requesthandling.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = 1 - endpoint.GetMetrics().KVCacheUsagePercent

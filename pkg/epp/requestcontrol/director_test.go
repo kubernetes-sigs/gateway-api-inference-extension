@@ -75,7 +75,7 @@ type mockScheduler struct {
 	dataProduced    bool // denotes whether data production is expected.
 }
 
-func (m *mockScheduler) Schedule(_ context.Context, _ *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) (*fwksched.SchedulingResult, error) {
+func (m *mockScheduler) Schedule(_ context.Context, _ *fwkrh.InferenceRequest, endpoints []fwksched.Endpoint) (*fwksched.SchedulingResult, error) {
 	if endpoints != nil && m.dataProduced {
 		data, ok := endpoints[0].Get(mockProducedDataKey)
 		if !ok || data.(mockProducedDataType).value != 42 {
@@ -125,7 +125,7 @@ func (m *mockPrepareDataPlugin) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) error {
+func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *fwkrh.InferenceRequest, endpoints []fwksched.Endpoint) error {
 	endpoints[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
 	return nil
 }
@@ -154,7 +154,7 @@ func (m *mockAdmissionPlugin) TypedName() fwkplugin.TypedName {
 	return m.typedName
 }
 
-func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) error {
+func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *fwkrh.InferenceRequest, endpoints []fwksched.Endpoint) error {
 	return m.denialError
 }
 
@@ -323,7 +323,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:      objectiveName,
 				TargetModelName:   model,
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -348,7 +348,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:      model,
 				TargetModelName:   modelRewritten,
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -377,7 +377,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			initialTargetModelName: model,
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName:   model,
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -407,7 +407,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName:   model,
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -437,7 +437,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			},
 			wantReqCtx: &handlers.RequestContext{
 				TargetModelName:   model,
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -493,7 +493,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:      objectiveName,
 				TargetModelName:   model,
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -517,7 +517,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:      objectiveNameResolve,
 				TargetModelName:   "resolved-target-model-A",
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -538,7 +538,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 			wantReqCtx: &handlers.RequestContext{
 				ObjectiveKey:      "food-review-1",
 				TargetModelName:   "food-review-1",
-				SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+				SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 				TargetPod: &fwkdl.EndpointMetadata{
 					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
 					Address:        "192.168.1.100",
@@ -1096,7 +1096,7 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 			Headers: map[string]string{"X-Test-Response-Header": "TestValue"},
 		},
 
-		SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+		SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 		TargetPod:         &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
@@ -1131,7 +1131,7 @@ func TestDirector_HandleResponseBody(t *testing.T) {
 		Response: &handlers.Response{
 			Headers: map[string]string{"X-Test-Streaming-Header": "StreamValue"},
 		},
-		SchedulingRequest: &fwksched.InferenceRequest{LLM: &fwksched.LLMRequest{}},
+		SchedulingRequest: &fwkrh.InferenceRequest{LLM: &fwkrh.LLMRequest{}},
 		TargetPod:         &fwkdl.EndpointMetadata{NamespacedName: types.NamespacedName{Namespace: "namespace1", Name: "test-pod-name"}},
 	}
 
@@ -1195,12 +1195,12 @@ func (p *testResponseStreaming) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseReceived) ResponseHeader(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseReceived) ResponseHeader(_ context.Context, _ *fwkrh.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseComplete(_ context.Context, _ *fwksched.InferenceRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseStreaming) ResponseBody(_ context.Context, _ *fwkrh.InferenceRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.respsOnStreaming = append(p.respsOnStreaming, response)
 	p.targetPodsOnStreaming = append(p.targetPodsOnStreaming, targetPod.NamespacedName.String())
 

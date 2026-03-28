@@ -85,8 +85,8 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
-	req1 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -120,8 +120,8 @@ func TestPrefixPluginCompletion(t *testing.T) {
 
 	// Second request doesn't share any prefix with first one. It should be added to the cache but
 	// the pod score should be 0.
-	req2 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req2 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model2",
 			Body: &requesthandling.RequestBody{
@@ -153,8 +153,8 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Third request shares partial prefix with first one.
-	req3 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req3 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -186,8 +186,8 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin.wg.Wait()
 
 	// 4th request is same as req3 except the model is different, still no match.
-	req4 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req4 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model-new",
 			Body: &requesthandling.RequestBody{
@@ -218,8 +218,8 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin.wg.Wait()
 
 	// 5th request shares partial prefix with 3rd one.
-	req5 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req5 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -263,8 +263,8 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1}
 
 	// Test with chat completions request
-	req1 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -302,8 +302,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
-	req1 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -337,8 +337,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Second request adds assistant response and new user message (conversation grows)
-	req2 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req2 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -372,8 +372,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Third request continues the conversation even further
-	req3 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req3 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -436,8 +436,8 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			}, nil, nil)
 
 			endpoints := []fwksched.Endpoint{endpoint}
-			req := &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{
+			req := &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
 					RequestId:   uuid.NewString(),
 					TargetModel: "model-stress",
 					Body: &requesthandling.RequestBody{
@@ -539,8 +539,8 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		}, nil)
 	endpoints := []fwksched.Endpoint{endpoint}
 
-	req := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model",
 			Body: &requesthandling.RequestBody{
@@ -650,8 +650,8 @@ func TestPrepareRequestData(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.
-	req1 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req1 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -672,8 +672,8 @@ func TestPrepareRequestData(t *testing.T) {
 	plugin.wg.Wait()
 
 	// Second request that shares a prefix.
-	req2 := &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	req2 := &requesthandling.InferenceRequest{
+		LLM: &requesthandling.LLMRequest{
 			RequestId:   uuid.NewString(),
 			TargetModel: "test-model1",
 			Body: &requesthandling.RequestBody{
@@ -749,8 +749,8 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			}, nil, nil)
 			endpoints := []fwksched.Endpoint{endpoint}
 
-			req := &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{
+			req := &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
 					RequestId:   uuid.NewString(),
 					TargetModel: "chat-model-stress",
 					Body: &requesthandling.RequestBody{

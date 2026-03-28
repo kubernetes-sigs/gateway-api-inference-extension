@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestPluginCreation(t *testing.T) {
@@ -392,12 +391,12 @@ func TestValueReporting(t *testing.T) {
 				t.Fatalf("Failed to create plugin: %v", err)
 			}
 
-			plugin.ResponseComplete(context.Background(), &scheduling.InferenceRequest{
-				LLM: &scheduling.LLMRequest{},
+			plugin.ResponseBody(context.Background(), &fwkrh.InferenceRequest{
+				LLM: &fwkrh.LLMRequest{},
 			}, currentResponse, &datalayer.EndpointMetadata{})
 
 			if diff := cmp.Diff(tt.wantResult, currentResponse.DynamicMetadata, protocmp.Transform()); diff != "" {
-				t.Errorf("ResponseComplete() DynamicMetadata mismatch (-want +got):\n%s", diff)
+				t.Errorf("ResponseBody() DynamicMetadata mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

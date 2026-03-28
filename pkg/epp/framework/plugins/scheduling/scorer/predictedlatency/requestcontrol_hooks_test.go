@@ -88,8 +88,8 @@ func TestNewPredictedLatencyContext(t *testing.T) {
 }
 
 func TestNewPredictedLatencyContext_NilBody(t *testing.T) {
-	request := &schedulingtypes.InferenceRequest{
-		LLM: &schedulingtypes.LLMRequest{
+	request := &fwkrh.InferenceRequest{
+		LLM: &fwkrh.LLMRequest{
 			Headers: map[string]string{reqcommon.RequestIdHeaderKey: "test-nil-body"},
 			Body:    nil,
 		},
@@ -924,7 +924,7 @@ func TestPredictedLatency_MultipleRequests_SamePod(t *testing.T) {
 	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
 
 	// Create and set SLO contexts
-	for _, req := range []*schedulingtypes.InferenceRequest{request1, request2, request3} {
+	for _, req := range []*fwkrh.InferenceRequest{request1, request2, request3} {
 		predictedLatencyCtx := newPredictedLatencyContext(req)
 		predictedLatencyCtx.avgTPOTSLO = 50
 		router.setPredictedLatencyContextForRequest(req, predictedLatencyCtx)

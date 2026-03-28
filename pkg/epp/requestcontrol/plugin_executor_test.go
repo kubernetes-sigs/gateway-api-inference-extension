@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/stretchr/testify/assert"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwk "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
@@ -42,7 +44,7 @@ func (m *mockPrepareRequestDataPlugin) TypedName() fwkplugin.TypedName {
 	return fwkplugin.TypedName{Type: "mock", Name: m.name}
 }
 
-func (m *mockPrepareRequestDataPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
+func (m *mockPrepareRequestDataPlugin) PrepareRequestData(ctx context.Context, request *requesthandling.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
 	m.executed = true
 	if m.delay > 0 {
 		select {
@@ -144,8 +146,8 @@ func TestPrepareDataPluginsWithTimeout(t *testing.T) {
 			ctx, cancel := tc.ctxFn()
 			defer cancel()
 
-			err := prepareDataPluginsWithTimeout(tc.timeout, tc.plugins, ctx, &schedulingtypes.InferenceRequest{
-				LLM: &schedulingtypes.LLMRequest{},
+			err := prepareDataPluginsWithTimeout(tc.timeout, tc.plugins, ctx, &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{},
 			}, nil)
 
 			if tc.expectSuccess {
@@ -170,7 +172,7 @@ type dagTestPlugin struct {
 	mu       sync.Mutex
 }
 
-func (p *dagTestPlugin) PrepareRequestData(ctx context.Context, request *schedulingtypes.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
+func (p *dagTestPlugin) PrepareRequestData(ctx context.Context, request *requesthandling.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.execTime = time.Now()
@@ -282,8 +284,8 @@ func TestExecutePluginsAsDAG(t *testing.T) {
 				plugin.execTime = time.Time{}
 			}
 
-			err := executePluginsAsDAG(tc.plugins, context.Background(), &schedulingtypes.InferenceRequest{
-				LLM: &schedulingtypes.LLMRequest{},
+			err := executePluginsAsDAG(tc.plugins, context.Background(), &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{},
 			}, nil)
 
 			if tc.expectErr {

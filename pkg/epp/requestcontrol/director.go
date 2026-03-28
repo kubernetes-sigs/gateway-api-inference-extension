@@ -65,7 +65,7 @@ type Datastore interface {
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *fwksched.InferenceRequest, candidatePods []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *fwkrh.InferenceRequest, candidatePods []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
 }
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
@@ -143,8 +143,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
-	reqCtx.Priority = *infObjective.Spec.Priority
-	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
+	requestObjectives := fwkrh.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
 	span.SetAttributes(
 		attribute.String("target_model", reqCtx.TargetModelName),
@@ -152,8 +151,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	)
 
 	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
-	reqCtx.SchedulingRequest = &fwksched.InferenceRequest{
-		LLM: &fwksched.LLMRequest{
+	reqCtx.SchedulingRequest = &fwkrh.InferenceRequest{
+		LLM: &fwkrh.LLMRequest{
 			RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 			TargetModel: reqCtx.TargetModelName,
 			Body:        llmRequestBody,
@@ -379,7 +378,7 @@ func (d *Director) GetRandomEndpoint() *fwkdl.EndpointMetadata {
 	return pod.GetMetadata()
 }
 
-func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.InferenceRequest,
+func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwkrh.InferenceRequest,
 	schedulingResult *fwksched.SchedulingResult) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
@@ -392,7 +391,7 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.I
 }
 
 func (d *Director) runPrepareDataPlugins(ctx context.Context,
-	request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) error {
+	request *fwkrh.InferenceRequest, endpoints []fwksched.Endpoint) error {
 	if len(d.requestControlPlugins.prepareDataPlugins) == 0 {
 		return nil
 	}
@@ -400,7 +399,7 @@ func (d *Director) runPrepareDataPlugins(ctx context.Context,
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
-	request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) bool {
+	request *fwkrh.InferenceRequest, endpoints []fwksched.Endpoint) bool {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.admissionPlugins {
 		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
@@ -413,7 +412,7 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 	return true
 }
 
-func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *fwksched.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *fwkrh.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running ResponseReceived plugin", "plugin", plugin.TypedName())
@@ -424,12 +423,12 @@ func (d *Director) runResponseReceivedPlugins(ctx context.Context, request *fwks
 	}
 }
 
-func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *fwksched.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseStreamingPlugins(ctx context.Context, request *fwkrh.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
 		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())
 		before := time.Now()
-		plugin.ResponseComplete(ctx, request, response, targetEndpoint)
+		plugin.ResponseBody(ctx, request, response, targetEndpoint)
 		metrics.RecordPluginProcessingLatency(fwk.ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerTrace.Info("Completed running ResponseStreaming plugin successfully", "plugin", plugin.TypedName())
 	}

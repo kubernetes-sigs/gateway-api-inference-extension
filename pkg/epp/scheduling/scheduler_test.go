@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -59,15 +61,15 @@ func TestSchedule(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     *fwksched.InferenceRequest
+		req     *requesthandling.InferenceRequest
 		input   []fwksched.Endpoint
 		wantRes *fwksched.SchedulingResult
 		err     bool
 	}{
 		{
 			name: "no candidate endpoints",
-			req: &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
 					RequestId:   uuid.NewString(),
 					TargetModel: "any-model",
 				},
@@ -78,8 +80,8 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "finds optimal endpoint",
-			req: &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{
+			req: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{
 					RequestId:   uuid.NewString(),
 					TargetModel: "critical",
 				},

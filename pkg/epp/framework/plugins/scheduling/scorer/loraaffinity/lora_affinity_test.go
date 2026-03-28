@@ -20,6 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+
 	"github.com/stretchr/testify/assert"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
@@ -30,14 +32,14 @@ import (
 func TestLoraAffinityScorer(t *testing.T) {
 	tests := []struct {
 		name                   string
-		request                *fwksched.InferenceRequest
+		request                *requesthandling.InferenceRequest
 		endpoints              []fwksched.Endpoint
 		expectedScoresEndpoint map[string]float64 // Map of endpoint name to expected score
 	}{
 		{
 			name: "Target model is active",
-			request: &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
 			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
@@ -54,8 +56,8 @@ func TestLoraAffinityScorer(t *testing.T) {
 		},
 		{
 			name: "Target model is waiting",
-			request: &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
 			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
@@ -72,8 +74,8 @@ func TestLoraAffinityScorer(t *testing.T) {
 		},
 		{
 			name: "Endpoints have no space for new model",
-			request: &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
 			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
@@ -98,8 +100,8 @@ func TestLoraAffinityScorer(t *testing.T) {
 		},
 		{
 			name: "Multipleendpoints with mixed active and waiting models",
-			request: &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{TargetModel: "active-model-1"},
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "active-model-1"},
 			},
 			endpoints: []fwksched.Endpoint{
 				fwksched.NewEndpoint(
@@ -148,8 +150,8 @@ func TestLoraAffinityScorer(t *testing.T) {
 		},
 		{
 			name: "Empty pods slice",
-			request: &fwksched.InferenceRequest{
-				LLM: &fwksched.LLMRequest{TargetModel: "modelA"},
+			request: &requesthandling.InferenceRequest{
+				LLM: &requesthandling.LLMRequest{TargetModel: "modelA"},
 			},
 			endpoints:              []fwksched.Endpoint{},
 			expectedScoresEndpoint: map[string]float64{}, // No pods, no scores
