@@ -60,7 +60,7 @@ func TestBodyMutation_Unary(t *testing.T) {
 
 	plugin := &bodyMutatingPlugin{fieldName: "injected", fieldValue: "test-value"}
 	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
-	h := NewBBRHarnessWithPlugins(t, ctx, false, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin})
+	h := NewBBRHarnessWithPlugins(t, ctx, false, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin}, nil)
 
 	body := map[string]any{"prompt": "hello"}
 	bodyBytes, _ := json.Marshal(body)
@@ -127,7 +127,7 @@ func TestBodyMutation_Streaming(t *testing.T) {
 
 	plugin := &bodyMutatingPlugin{fieldName: "injected", fieldValue: "test-value"}
 	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
-	h := NewBBRHarnessWithPlugins(t, ctx, true, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin})
+	h := NewBBRHarnessWithPlugins(t, ctx, true, []framework.RequestProcessor{plugin, baseModelToHeaderPlugin}, nil)
 
 	body := map[string]any{"prompt": "hello"}
 	bodyBytes, _ := json.Marshal(body)
