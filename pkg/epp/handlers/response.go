@@ -45,6 +45,8 @@ func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *Reques
 	logger := log.FromContext(ctx)
 	logger.V(logutil.DEBUG).Info("HandleResponseBody is triggered", "len(responseBytes)", len(responseBytes), "endOfStream", endOfStream)
 
+	reqCtx.ResponseSize += len(responseBytes)
+
 	parsedResp, err := s.parser.ParseResponse(ctx, responseBytes, reqCtx.Response.Headers, endOfStream)
 	if err != nil {
 		logger.Error(err, "parsing response")

@@ -362,3 +362,53 @@ func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
 	assert.NotContains(t, gotHeaders, metadata.DestinationEndpointKey)
 	assert.NotContains(t, gotHeaders, "content-length")
 }
+
+func TestResponseSizeAccumulation(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	tests := []struct {
+		name             string
+		chunks           [][]byte
+		wantResponseSize int
+	}{
+		{
+			name:             "single chunk",
+			chunks:           [][]byte{[]byte("hello world")},
+			wantResponseSize: 11,
+		},
+		{
+			name:             "multiple chunks",
+			chunks:           [][]byte{[]byte("chunk1"), []byte("chunk2"), []byte("chunk3")},
+			wantResponseSize: 18,
+		},
+		{
+			name:             "empty chunk",
+			chunks:           [][]byte{[]byte("")},
+			wantResponseSize: 0,
+		},
+		{
+			name:             "mixed chunks with empty",
+			chunks:           [][]byte{[]byte("data"), []byte(""), []byte("more")},
+			wantResponseSize: 8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &StreamingServer{
+				parser:   openai.NewOpenAIParser(),
+				director: &mockDirector{},
+			}
+			reqCtx := &RequestContext{
+				Response: &Response{
+					Headers: map[string]string{},
+				},
+			}
+			for i, chunk := range tt.chunks {
+				endOfStream := i == len(tt.chunks)-1
+				server.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
+			}
+			assert.Equal(t, tt.wantResponseSize, reqCtx.ResponseSize)
+		})
+	}
+}
