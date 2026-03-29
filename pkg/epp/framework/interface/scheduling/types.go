@@ -101,7 +101,7 @@ type LLMRequestBody struct {
 func (r *LLMRequestBody) PromptText() string {
 	switch {
 	case r.Completions != nil:
-		return r.Completions.Prompt
+		return r.Completions.Prompt.PlainText()
 	case r.ChatCompletions != nil:
 		var sb strings.Builder
 		for _, msg := range r.ChatCompletions.Messages {
@@ -145,13 +145,52 @@ func (r *LLMRequestBody) CacheSalt() string {
 	return ""
 }
 
+// Prompt represents the prompt field in a /v1/completions request.
+// Per the OpenAI spec it can be a string or an array of strings.
+// See https://platform.openai.com/docs/api-reference/completions/create#completions-create-prompt
+type Prompt struct {
+	Raw     string
+	Strings []string
+}
+
+func (p *Prompt) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		return json.Unmarshal(data, &p.Raw)
+	}
+	if len(data) > 0 && data[0] == '[' {
+		return json.Unmarshal(data, &p.Strings)
+	}
+	return errors.New("prompt: must be a string or an array of strings")
+}
+
+func (p Prompt) MarshalJSON() ([]byte, error) {
+	if p.Raw != "" {
+		return json.Marshal(p.Raw)
+	}
+	if p.Strings != nil {
+		return json.Marshal(p.Strings)
+	}
+	return json.Marshal("")
+}
+
+func (p Prompt) PlainText() string {
+	if p.Raw != "" {
+		return p.Raw
+	}
+	return strings.Join(p.Strings, " ")
+}
+
+func (p Prompt) IsEmpty() bool {
+	return p.Raw == "" && len(p.Strings) == 0
+}
+
 // CompletionsRequest is a structured representation of the fields we parse out of the /v1/completions request
 // body. For detailed body fields, please refer to https://platform.openai.com/docs/api-reference/completions.
 // This struct includes fields usable for plugins and scheduling decisions - and not the entire
 // API spec.
 type CompletionsRequest struct {
-	// Prompt is the prompt that was sent in the request body.
-	Prompt string `json:"prompt,omitempty"`
+	// Prompt is the prompt(s) sent in the request body; can be a string or an array of strings.
+	Prompt Prompt `json:"prompt"`
 	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
 	CacheSalt string `json:"cache_salt,omitempty"`
 }
@@ -161,7 +200,7 @@ func (r *CompletionsRequest) String() string {
 		return nilString
 	}
 
-	return fmt.Sprintf("{PromptLength: %d}", len(r.Prompt))
+	return fmt.Sprintf("{PromptLength: %d}", len(r.Prompt.PlainText()))
 }
 
 // ChatCompletionsRequest is a structured representation of the fields we parse out of the v1/chat/completions
