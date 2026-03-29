@@ -368,7 +368,7 @@ func (p *Plugin) matchLongestPrefix(ctx context.Context, hashes []BlockHash) map
 
 // CleanUpInactivePods starts a goroutine that watches for inactive pods.
 func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) {
-	logger := log.FromContext(ctx).V(logutil.DEFAULT)
+	logger := log.FromContext(ctx).V(logutil.VERBOSE)
 	ticker := time.NewTicker(PodActiveCheckInterval)
 	defer ticker.Stop()
 

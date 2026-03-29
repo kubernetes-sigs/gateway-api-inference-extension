@@ -129,7 +129,7 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 						data, err := src.Poll(ctx, endpoint)
 						cancel()
 						if err != nil {
-							logger.V(logging.DEFAULT).Error(err, "poll failed", "source", src.TypedName())
+							logger.Error(err, "poll failed", "source", src.TypedName())
 							continue
 						}
 						srcName := src.TypedName().Name
