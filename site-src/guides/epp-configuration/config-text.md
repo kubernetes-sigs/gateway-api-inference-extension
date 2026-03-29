@@ -347,6 +347,8 @@ These plugins are used to interpret system load and protect endpoints from overl
 
 #### Utilization Detector Plugin
 
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/flowcontrol/saturationdetection/utilizationdetector) Link**
+
 This is the default saturation detector. It closed-loop reacts to telemetry emitted by individual model servers. It evaluates queue depth and KV cache utilization against user thresholds to score global saturation.
 
 - **Type**: `utilization-detector`
@@ -357,6 +359,8 @@ This is the default saturation detector. It closed-loop reacts to telemetry emit
   - `headroom` (`float64`): Allowed burst capacity above the ideal thresholds, expressed as a fraction (e.g., `0.2` for 20%). Must be >= 0.0. (Default: `0.0`)
 
 #### Concurrency Detector Plugin
+
+**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/flowcontrol/saturationdetection/concurrencydetector) Link**
 
 Synchronous saturation detection mechanism based on active in-flight request accounting. Open-loop calculation of pool load with local endpoint limiting.
 
