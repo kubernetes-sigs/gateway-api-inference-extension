@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -1202,16 +1203,23 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 
 	// HandleResponseHeader runs plugins asynchronously, so wait for completion.
 	require.Eventually(t, func() bool {
+		pr1.mu.Lock()
+		defer pr1.mu.Unlock()
 		return pr1.lastRespOnResponse != nil
 	}, time.Second, 10*time.Millisecond, "response header plugin should have been called")
 
-	if diff := cmp.Diff("test-req-id-for-response", pr1.lastRespOnResponse.RequestId); diff != "" {
+	pr1.mu.Lock()
+	lastResp := pr1.lastRespOnResponse
+	lastTargetPod := pr1.lastTargetPodOnResponse
+	pr1.mu.Unlock()
+
+	if diff := cmp.Diff("test-req-id-for-response", lastResp.RequestId); diff != "" {
 		t.Errorf("Scheduler.OnResponse RequestId mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(reqCtx.Response.Headers, pr1.lastRespOnResponse.Headers); diff != "" {
+	if diff := cmp.Diff(reqCtx.Response.Headers, lastResp.Headers); diff != "" {
 		t.Errorf("Scheduler.OnResponse Headers mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff("namespace1/test-pod-name", pr1.lastTargetPodOnResponse); diff != "" {
+	if diff := cmp.Diff("namespace1/test-pod-name", lastTargetPod); diff != "" {
 		t.Errorf("Scheduler.OnResponse TargetPodName mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -1242,24 +1250,111 @@ func TestDirector_HandleResponseBody(t *testing.T) {
 
 	// Intermediate chunks (endOfStream=false) run asynchronously, wait for them.
 	require.Eventually(t, func() bool {
+		ps1.mu.Lock()
+		defer ps1.mu.Unlock()
 		return len(ps1.respsOnStreaming) >= 2
 	}, time.Second, 10*time.Millisecond, "async response body plugins should have been called for intermediate chunks")
 
-	// Final chunk (endOfStream=true) runs synchronously.
+	// Final chunk (endOfStream=true) runs synchronously (drains queue first).
 	director.HandleResponseBody(ctx, reqCtx, true)
 
-	assert.Equal(t, 3, len(ps1.respsOnStreaming), "Should have received 3 streaming calls")
+	ps1.mu.Lock()
+	resps := make([]*fwk.Response, len(ps1.respsOnStreaming))
+	copy(resps, ps1.respsOnStreaming)
+	targetPods := make([]string, len(ps1.targetPodsOnStreaming))
+	copy(targetPods, ps1.targetPodsOnStreaming)
+	ps1.mu.Unlock()
 
-	for i, resp := range ps1.respsOnStreaming {
+	assert.Equal(t, 3, len(resps), "Should have received 3 streaming calls")
+
+	for i, resp := range resps {
 		assert.Equal(t, "test-req-id-for-streaming", resp.RequestId)
 		assert.Equal(t, reqCtx.Response.Headers, resp.Headers)
-		assert.Equal(t, "namespace1/test-pod-name", ps1.targetPodsOnStreaming[i])
+		assert.Equal(t, "namespace1/test-pod-name", targetPods[i])
 		if i < 2 {
 			assert.False(t, resp.EndOfStream, "EndOfStream should be false for chunk %d", i)
 		} else {
 			assert.True(t, resp.EndOfStream, "EndOfStream should be true for last chunk")
 		}
 	}
+}
+
+func TestDirector_HandleResponseBody_ChunkOrdering(t *testing.T) {
+	// orderTrackingPlugin records the RequestId of each chunk it processes.
+	// Since we set a unique RequestId per chunk, the recorded order lets us
+	// verify that chunks are processed in the exact order they were sent,
+	// even though they go through the async queue.
+	plugin := &orderTrackingPlugin{
+		typedName: fwkplugin.TypedName{Type: "order-tracker", Name: "order-tracker"},
+	}
+
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	director := NewDirectorWithConfig(ds, &mockScheduler{}, nil, nil, NewConfig().WithResponseStreamingPlugins(plugin))
+
+	const numChunks = 50
+
+	for i := range numChunks {
+		reqCtx := &handlers.RequestContext{
+			Request: &handlers.Request{
+				Headers: map[string]string{
+					// All chunks share the same request ID so they go through the same queue.
+					reqcommon.RequestIdHeaderKey: "ordering-test-request",
+				},
+			},
+			Response: &handlers.Response{
+				Headers: map[string]string{},
+			},
+			TargetPod: &fwkdl.EndpointMetadata{},
+			Usage:     fwkrh.Usage{CompletionTokens: i},
+		}
+		director.HandleResponseBody(ctx, reqCtx, false)
+	}
+
+	// Send final chunk to drain the queue.
+	finalReqCtx := &handlers.RequestContext{
+		Request: &handlers.Request{
+			Headers: map[string]string{
+				reqcommon.RequestIdHeaderKey: "ordering-test-request",
+			},
+		},
+		Response: &handlers.Response{
+			Headers: map[string]string{},
+		},
+		TargetPod: &fwkdl.EndpointMetadata{},
+		Usage:     fwkrh.Usage{CompletionTokens: numChunks},
+	}
+	director.HandleResponseBody(ctx, finalReqCtx, true)
+
+	// Total calls: numChunks async + 1 sync final.
+	plugin.mu.Lock()
+	tokenCounts := make([]int, len(plugin.observedTokenCounts))
+	copy(tokenCounts, plugin.observedTokenCounts)
+	plugin.mu.Unlock()
+
+	require.Equal(t, numChunks+1, len(tokenCounts), "should have received all chunk calls")
+
+	// Verify ordering: each chunk's CompletionTokens should appear in the order 0, 1, 2, ..., numChunks.
+	for i, tokens := range tokenCounts {
+		assert.Equal(t, i, tokens, "chunk %d was processed out of order", i)
+	}
+}
+
+// orderTrackingPlugin records the CompletionTokens from each ResponseBody call to verify ordering.
+type orderTrackingPlugin struct {
+	mu                  sync.Mutex
+	typedName           fwkplugin.TypedName
+	observedTokenCounts []int
+}
+
+func (p *orderTrackingPlugin) TypedName() fwkplugin.TypedName {
+	return p.typedName
+}
+
+func (p *orderTrackingPlugin) ResponseBody(_ context.Context, _ *fwksched.InferenceRequest, response *fwk.Response, _ *fwkdl.EndpointMetadata) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.observedTokenCounts = append(p.observedTokenCounts, response.Usage.CompletionTokens)
 }
 
 const (
@@ -1269,12 +1364,14 @@ const (
 )
 
 type testResponseReceived struct {
+	mu                      sync.Mutex
 	typedName               fwkplugin.TypedName
 	lastRespOnResponse      *fwk.Response
 	lastTargetPodOnResponse string
 }
 
 type testResponseStreaming struct {
+	mu                    sync.Mutex
 	typedName             fwkplugin.TypedName
 	respsOnStreaming      []*fwk.Response
 	targetPodsOnStreaming []string
@@ -1305,11 +1402,15 @@ func (p *testResponseStreaming) TypedName() fwkplugin.TypedName {
 }
 
 func (p *testResponseReceived) ResponseHeader(_ context.Context, _ *fwksched.InferenceRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
 func (p *testResponseStreaming) ResponseBody(_ context.Context, _ *fwksched.InferenceRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.respsOnStreaming = append(p.respsOnStreaming, response)
 	p.targetPodsOnStreaming = append(p.targetPodsOnStreaming, targetPod.NamespacedName.String())
 
