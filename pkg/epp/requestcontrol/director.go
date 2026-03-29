@@ -341,6 +341,8 @@ func (d *Director) toSchedulerEndpoints(endpoints []fwkdl.Endpoint) []fwksched.E
 }
 
 // HandleResponseHeader is called when the response headers are received.
+// Response header plugins are run asynchronously since they do not produce data
+// that is needed by the caller before the next processing step.
 func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.RequestContext) *handlers.RequestContext {
 	response := &fwk.Response{
 		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
@@ -349,12 +351,17 @@ func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.Re
 	}
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
-	d.runResponseHeaderPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	d.runResponseHeaderPluginsAsync(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 	return reqCtx
 }
 
 // HandleResponseBody is invoked by the director for every chunk received in a streaming
 // response, or exactly once for a non-streaming response.
+//
+// For intermediate streaming chunks (endOfStream=false), response body plugins are run
+// asynchronously to avoid adding latency to every chunk. For the final chunk
+// (endOfStream=true), plugins run synchronously because they may produce DynamicMetadata
+// that must be attached to the ext_proc response sent back to Envoy.
 func (d *Director) HandleResponseBody(ctx context.Context, reqCtx *handlers.RequestContext, endOfStream bool) *handlers.RequestContext {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
@@ -364,8 +371,14 @@ func (d *Director) HandleResponseBody(ctx context.Context, reqCtx *handlers.Requ
 		EndOfStream: endOfStream,
 		Usage:       reqCtx.Usage,
 	}
-	d.runResponseBodyPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
-	reqCtx.Response.DynamicMetadata = response.DynamicMetadata
+	if endOfStream {
+		// Final chunk: run synchronously so DynamicMetadata is available for the response.
+		d.runResponseBodyPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+		reqCtx.Response.DynamicMetadata = response.DynamicMetadata
+	} else {
+		// Intermediate chunk: run asynchronously to avoid blocking the stream.
+		d.runResponseBodyPluginsAsync(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	}
 	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
 	return reqCtx
 }
@@ -425,6 +438,14 @@ func (d *Director) runResponseHeaderPlugins(ctx context.Context, request *fwksch
 	}
 }
 
+// runResponseHeaderPluginsAsync runs all response header plugins in a goroutine.
+func (d *Director) runResponseHeaderPluginsAsync(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+	if len(d.requestControlPlugins.responseReceivedPlugins) == 0 {
+		return
+	}
+	go d.runResponseHeaderPlugins(ctx, request, response, targetEndpoint)
+}
+
 func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
@@ -434,4 +455,12 @@ func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched
 		metrics.RecordPluginProcessingLatency(fwk.ResponseStreamingExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerTrace.Info("Completed running ResponseStreaming plugin successfully", "plugin", plugin.TypedName())
 	}
+}
+
+// runResponseBodyPluginsAsync runs all response body plugins in a goroutine.
+func (d *Director) runResponseBodyPluginsAsync(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+	if len(d.requestControlPlugins.responseStreamingPlugins) == 0 {
+		return
+	}
+	go d.runResponseBodyPlugins(ctx, request, response, targetEndpoint)
 }

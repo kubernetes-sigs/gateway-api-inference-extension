@@ -28,6 +28,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1093,6 +1094,11 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 
 	director.HandleResponseHeader(ctx, reqCtx)
 
+	// HandleResponseHeader runs plugins asynchronously, so wait for completion.
+	require.Eventually(t, func() bool {
+		return pr1.lastRespOnResponse != nil
+	}, time.Second, 10*time.Millisecond, "response header plugin should have been called")
+
 	if diff := cmp.Diff("test-req-id-for-response", pr1.lastRespOnResponse.RequestId); diff != "" {
 		t.Errorf("Scheduler.OnResponse RequestId mismatch (-want +got):\n%s", diff)
 	}
@@ -1127,6 +1133,13 @@ func TestDirector_HandleResponseBody(t *testing.T) {
 
 	director.HandleResponseBody(ctx, reqCtx, false)
 	director.HandleResponseBody(ctx, reqCtx, false)
+
+	// Intermediate chunks (endOfStream=false) run asynchronously, wait for them.
+	require.Eventually(t, func() bool {
+		return len(ps1.respsOnStreaming) >= 2
+	}, time.Second, 10*time.Millisecond, "async response body plugins should have been called for intermediate chunks")
+
+	// Final chunk (endOfStream=true) runs synchronously.
 	director.HandleResponseBody(ctx, reqCtx, true)
 
 	assert.Equal(t, 3, len(ps1.respsOnStreaming), "Should have received 3 streaming calls")
