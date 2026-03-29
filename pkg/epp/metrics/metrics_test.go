@@ -48,6 +48,7 @@ const (
 	runningRequestsMetric              = inferenceObjectiveComponent + "_running_requests"
 	kvCacheAvgUsageMetric              = inferencePoolComponent + "_average_kv_cache_utilization"
 	queueAvgSizeMetric                 = inferencePoolComponent + "_average_queue_size"
+	runningRequestsAvgMetric           = inferencePoolComponent + "_average_running_requests"
 )
 
 func TestMain(m *testing.M) {
@@ -531,22 +532,25 @@ func TestRunningRequestsMetrics(t *testing.T) {
 func TestInferencePoolMetrics(t *testing.T) {
 	Reset()
 	scenarios := []struct {
-		name         string
-		poolName     string
-		kvCacheAvg   float64
-		queueSizeAvg float64
+		name               string
+		poolName           string
+		kvCacheAvg         float64
+		queueSizeAvg       float64
+		runningRequestsAvg float64
 	}{
 		{
-			name:         "basic test",
-			poolName:     "p1",
-			kvCacheAvg:   0.3,
-			queueSizeAvg: 0.4,
+			name:               "basic test",
+			poolName:           "p1",
+			kvCacheAvg:         0.3,
+			queueSizeAvg:       0.4,
+			runningRequestsAvg: 0.5,
 		},
 	}
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			RecordInferencePoolAvgKVCache(scenario.poolName, scenario.kvCacheAvg)
 			RecordInferencePoolAvgQueueSize(scenario.poolName, scenario.queueSizeAvg)
+			RecordInferencePoolAvgRunningRequests(scenario.poolName, scenario.runningRequestsAvg)
 
 			wantKVCache, err := os.Open("testdata/kv_cache_avg_metrics")
 			defer func() {
@@ -571,6 +575,19 @@ func TestInferencePoolMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := testutil.GatherAndCompare(metrics.Registry, wantQueueSize, queueAvgSizeMetric); err != nil {
+				t.Error(err)
+			}
+
+			wantRunningRequests, err := os.Open("testdata/running_requests_avg_metrics")
+			defer func() {
+				if err := wantRunningRequests.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRunningRequests, runningRequestsAvgMetric); err != nil {
 				t.Error(err)
 			}
 		})

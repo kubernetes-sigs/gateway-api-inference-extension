@@ -292,6 +292,15 @@ var (
 		poolLabels,
 	)
 
+	inferencePoolAvgRunningRequests = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: inferencePoolComponent,
+			Name:      "average_running_requests",
+			Help:      metricsutil.HelpMsgWithStability("The average number of running requests across model servers in the pool.", compbasemetrics.ALPHA),
+		},
+		poolLabels,
+	)
+
 	inferencePoolReadyPods = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: inferencePoolComponent,
@@ -486,6 +495,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(normalizedTimePerOutputToken)
 		metrics.Registry.MustRegister(inferencePoolAvgKVCache)
 		metrics.Registry.MustRegister(inferencePoolAvgQueueSize)
+		metrics.Registry.MustRegister(inferencePoolAvgRunningRequests)
 		metrics.Registry.MustRegister(inferencePoolReadyPods)
 		metrics.Registry.MustRegister(schedulerE2ELatency)
 		metrics.Registry.MustRegister(schedulerAttemptsTotal)
@@ -536,6 +546,7 @@ func Reset() {
 	normalizedTimePerOutputToken.Reset()
 	inferencePoolAvgKVCache.Reset()
 	inferencePoolAvgQueueSize.Reset()
+	inferencePoolAvgRunningRequests.Reset()
 	inferencePoolReadyPods.Reset()
 	schedulerE2ELatency.Reset()
 	schedulerAttemptsTotal.Reset()
@@ -761,6 +772,10 @@ func RecordInferencePoolAvgKVCache(name string, utilization float64) {
 
 func RecordInferencePoolAvgQueueSize(name string, queueSize float64) {
 	inferencePoolAvgQueueSize.WithLabelValues(name).Set(queueSize)
+}
+
+func RecordInferencePoolAvgRunningRequests(name string, runningRequests float64) {
+	inferencePoolAvgRunningRequests.WithLabelValues(name).Set(runningRequests)
 }
 
 func RecordInferencePoolReadyPods(name string, runningPods float64) {
