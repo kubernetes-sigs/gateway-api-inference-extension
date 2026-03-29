@@ -598,7 +598,7 @@ func makeTokenRequest(requestID, prompt string) *schedulingtypes.LLMRequest {
 	return &schedulingtypes.LLMRequest{
 		RequestId: requestID,
 		Body: &schedulingtypes.LLMRequestBody{
-			Completions: &schedulingtypes.CompletionsRequest{Prompt: prompt},
+			Completions: &schedulingtypes.CompletionsRequest{Prompt: schedulingtypes.Prompt{Raw: prompt}},
 		},
 	}
 }
