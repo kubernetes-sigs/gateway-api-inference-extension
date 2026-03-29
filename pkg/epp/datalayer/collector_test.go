@@ -196,8 +196,7 @@ func TestCollectorLogsFirstPollError(t *testing.T) {
 		return atomic.LoadInt64(&src.CallCount) == 3
 	}, 1*time.Second, 2*time.Millisecond, "expected 3 poll calls")
 
-	require.NoError(t, c.Stop())
-	time.Sleep(10 * time.Millisecond) // let goroutine exit
+	require.NoError(t, c.Stop()) // Stop waits for the goroutine to exit
 
 	// Error is recorded exactly once regardless of how many ticks delivered it.
 	key := src.TypedName().String()
@@ -229,8 +228,7 @@ func TestCollectorLogsRecoveryAfterError(t *testing.T) {
 		return atomic.LoadInt64(&src.CallCount) == 4
 	}, 1*time.Second, 2*time.Millisecond, "expected 4 total poll calls after recovery")
 
-	require.NoError(t, c.Stop())
-	time.Sleep(10 * time.Millisecond) // let goroutine exit
+	require.NoError(t, c.Stop()) // Stop waits for the goroutine to exit
 
 	// After recovery the entry exists but holds nil.
 	key := src.TypedName().String()

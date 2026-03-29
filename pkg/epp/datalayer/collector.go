@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -74,6 +75,10 @@ type Collector struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 
+	// done is closed when the collection goroutine exits, allowing Stop to block until it is safe
+	// to inspect internal state (e.g., in tests).
+	done chan struct{}
+
 	// lastPollErrors and lastExtractErrors track the last error per source/extractor
 	// for change-only logging. Only accessed from the collection goroutine — no synchronization required.
 	lastPollErrors    map[string]error
@@ -83,6 +88,7 @@ type Collector struct {
 // NewCollector returns a new collector.
 func NewCollector() *Collector {
 	return &Collector{
+		done:              make(chan struct{}),
 		lastPollErrors:    make(map[string]error),
 		lastExtractErrors: make(map[string]error),
 	}
@@ -121,6 +127,7 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 			defer func() {
 				logger.V(logging.DEFAULT).Info("terminating collection")
 				ticker.Stop()
+				close(c.done)
 			}()
 
 			close(ready) // signal ready to accept ticks
@@ -131,38 +138,23 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 					return
 				case <-ticker.Channel():
 					for _, src := range sources {
+						tn := src.TypedName()
+						key := tn.String()
+
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
 						data, err := src.Poll(ctx, endpoint)
-						cancel() // release the ctx timeout resources
+						cancel()
 
-						key := src.TypedName().String()
-						prev, seen := c.lastPollErrors[key]
-						if (!seen && err != nil) || (seen && (err != nil) != (prev != nil)) {
-							if err != nil {
-								logger.Error(err, "poll failed", "source", key)
-							} else {
-								logger.V(logging.DEFAULT).Info("poll recovered", "source", key)
-							}
-							c.lastPollErrors[key] = err
-						}
+						logErrorTransition(logger, c.lastPollErrors, key, "poll", "source", err)
 						if err != nil {
 							continue
 						}
 
-						srcName := src.TypedName().Name
-						if srcExtractors, ok := exts[srcName]; ok && data != nil {
+						if srcExtractors, ok := exts[tn.Name]; ok && data != nil {
 							for _, ext := range srcExtractors {
 								extKey := ext.TypedName().String()
 								extErr := ext.Extract(ctx, data, endpoint)
-								extPrev, extSeen := c.lastExtractErrors[extKey]
-								if (!extSeen && extErr != nil) || (extSeen && (extErr != nil) != (extPrev != nil)) {
-									if extErr != nil {
-										logger.Error(extErr, "extract failed", "extractor", extKey)
-									} else {
-										logger.V(logging.DEFAULT).Info("extract recovered", "extractor", extKey)
-									}
-									c.lastExtractErrors[extKey] = extErr
-								}
+								logErrorTransition(logger, c.lastExtractErrors, extKey, "extract", "extractor", extErr)
 							}
 						}
 					}
@@ -191,7 +183,7 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 	}
 }
 
-// Stop terminates the collector.
+// Stop terminates the collector and waits for the collection goroutine to exit.
 func (c *Collector) Stop() error {
 	if c.ctx == nil || c.cancel == nil {
 		return errors.New("collector stop called before start")
@@ -206,5 +198,20 @@ func (c *Collector) Stop() error {
 	if !stopped {
 		return errors.New("collector stop called multiple times")
 	}
+	<-c.done
 	return nil
+}
+
+// logErrorTransition logs only when the error state transitions (nil→non-nil or non-nil→nil).
+// errs is updated in place. verb is the operation name ("poll"/"extract"); fieldName is the log key.
+func logErrorTransition(logger logr.Logger, errs map[string]error, key, verb, fieldName string, err error) {
+	prev, seen := errs[key]
+	if (err != nil) != (seen && prev != nil) {
+		if err != nil {
+			logger.Error(err, verb+" failed", fieldName, key)
+		} else {
+			logger.V(logging.DEFAULT).Info(verb+" recovered", fieldName, key)
+		}
+		errs[key] = err
+	}
 }

@@ -281,7 +281,7 @@ func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEna
 
 	if dataLayerEnabled && len(rawDataConfig.Sources) == 0 {
 		log.FromContext(handle.Context()).Info(
-			"Warning: data layer is enabled but no sources are configured — no metrics will be collected",
+			"data layer enabled with no sources configured, no metrics will be collected",
 		)
 	}
 
