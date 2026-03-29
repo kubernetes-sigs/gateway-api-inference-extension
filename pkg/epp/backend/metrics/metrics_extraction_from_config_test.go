@@ -34,7 +34,6 @@ package metrics
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -385,7 +384,6 @@ func TestMetricsExtractionJoinedErrors(t *testing.T) {
 
 	// errors.Join produces a newline-separated message; all absent families are named.
 	errMsg := pollErr.Error()
-	assert.True(t, errors.Is(pollErr, pollErr), "error chain should be non-nil")
 	assert.True(t, strings.Contains(errMsg, "num_requests_running") ||
 		strings.Contains(errMsg, "kv_cache_usage_perc"),
 		"error message should name at least one missing family: %s", errMsg)
