@@ -185,14 +185,14 @@ func convertToLLMRequestBody(payload []byte) (*scheduling.LLMRequestBody, error)
 	case *pb.GenerateRequest_Text:
 		body = &scheduling.LLMRequestBody{
 			Completions: &scheduling.CompletionsRequest{
-				Prompt: pbReq.GetText(),
+				Prompt: scheduling.Prompt{Raw: pbReq.GetText()},
 			},
 			Payload: scheduling.PayloadProto{Message: pbReq},
 		}
 	case *pb.GenerateRequest_Tokenized:
 		body = &scheduling.LLMRequestBody{
 			Completions: &scheduling.CompletionsRequest{
-				Prompt: pbReq.GetTokenized().OriginalText,
+				Prompt: scheduling.Prompt{Raw: pbReq.GetTokenized().OriginalText},
 			},
 			Payload: scheduling.PayloadProto{Message: pbReq},
 		}

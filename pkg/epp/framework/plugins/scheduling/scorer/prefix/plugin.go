@@ -486,7 +486,7 @@ func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
 
 	case request.Body.Completions != nil:
 		// Handle completions API (maintain backward compatibility)
-		return []byte(request.Body.Completions.Prompt), nil
+		return []byte(request.Body.Completions.Prompt.PlainText()), nil
 
 	case request.Body.Embeddings != nil:
 		// Handle embeddings API - marshal input for cache key generation
