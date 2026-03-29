@@ -213,7 +213,7 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.
 
 	case completionsAPI:
 		var completions scheduling.CompletionsRequest
-		if err := json.Unmarshal(rawBody, &completions); err == nil && completions.Prompt != "" {
+		if err := json.Unmarshal(rawBody, &completions); err == nil && !completions.Prompt.IsEmpty() {
 			return &scheduling.LLMRequestBody{Completions: &completions}, nil
 		}
 		return nil, errors.New("invalid completions request: must have prompt field")
