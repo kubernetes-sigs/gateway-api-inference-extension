@@ -1,0 +1,162 @@
+name: Latency Predictor CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'latencypredictor/**'
+  push:
+    branches: [main]
+    paths:
+      - 'latencypredictor/**'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    env:
+      GCP_PROJECT_ID: llm-d-scale
+      GKE_CLUSTER_NAME: llm-d-e2e-us-east5
+      GKE_CLUSTER_ZONE: us-east5
+      NAMESPACE: latency-predictor-ci
+      REGISTRY: ghcr.io/${{ github.repository }}
+      TRAINING_IMAGE: latency-training-server
+      PREDICTION_IMAGE: latency-prediction-server
+      TEST_IMAGE: latency-prediction-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tags
+        id: tag
+        run: |
+          SHA_TAG="sha-${GITHUB_SHA::7}"
+          echo "sha=$SHA_TAG" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "pr=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud CLI and kubectl
+        uses: google-github-actions/setup-gcloud@cb1e50a9932213ecece00a606661ae9ca44f3397
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          install_components: 'kubectl,gke-gcloud-auth-plugin'
+
+      - name: Build and push training server image
+        uses: docker/build-push-action@v6
+        with:
+          context: latencypredictor
+          file: latencypredictor/Dockerfile-training
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.TRAINING_IMAGE }}:${{ steps.tag.outputs.sha }}
+            ${{ steps.tag.outputs.pr && format('{0}/{1}:{2}', env.REGISTRY, env.TRAINING_IMAGE, steps.tag.outputs.pr) || '' }}
+          cache-from: type=gha,scope=training
+          cache-to: type=gha,mode=max,scope=training
+
+      - name: Build and push prediction server image
+        uses: docker/build-push-action@v6
+        with:
+          context: latencypredictor
+          file: latencypredictor/Dockerfile-prediction
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PREDICTION_IMAGE }}:${{ steps.tag.outputs.sha }}
+            ${{ steps.tag.outputs.pr && format('{0}/{1}:{2}', env.REGISTRY, env.PREDICTION_IMAGE, steps.tag.outputs.pr) || '' }}
+          cache-from: type=gha,scope=prediction
+          cache-to: type=gha,mode=max,scope=prediction
+
+      - name: Build and push test image
+        uses: docker/build-push-action@v6
+        with:
+          context: latencypredictor
+          file: latencypredictor/Dockerfile-test
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.TEST_IMAGE }}:${{ steps.tag.outputs.sha }}
+            ${{ steps.tag.outputs.pr && format('{0}/{1}:{2}', env.REGISTRY, env.TEST_IMAGE, steps.tag.outputs.pr) || '' }}
+          cache-from: type=gha,scope=test
+          cache-to: type=gha,mode=max,scope=test
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials "${{ env.GKE_CLUSTER_NAME }}" \
+            --zone "${{ env.GKE_CLUSTER_ZONE }}"
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace "${NAMESPACE}" || echo "Namespace already exists"
+
+      - name: Deploy latency predictor from manifests
+        run: |
+          cd latencypredictor/manifests
+          kustomize edit set image \
+            "placeholder-for-training-server-image=${{ env.REGISTRY }}/${{ env.TRAINING_IMAGE }}:${{ steps.tag.outputs.sha }}" \
+            "placeholder-for-prediction-server-image=${{ env.REGISTRY }}/${{ env.PREDICTION_IMAGE }}:${{ steps.tag.outputs.sha }}" \
+            "placeholder-for-test-image=${{ env.REGISTRY }}/${{ env.TEST_IMAGE }}:${{ steps.tag.outputs.sha }}"
+          kubectl apply -k . -n "${NAMESPACE}"
+
+      - name: Wait for training server to be ready
+        run: |
+          kubectl rollout status deployment/training-server-deployment \
+            -n "${NAMESPACE}" --timeout=300s
+
+      - name: Wait for prediction server to be ready
+        run: |
+          kubectl rollout status deployment/prediction-server-deployment \
+            -n "${NAMESPACE}" --timeout=300s
+
+      - name: Deploy test job
+        run: |
+          cd latencypredictor/manifests
+          sed -i 's|# - test-dual-server-deployment.yaml|- test-dual-server-deployment.yaml|' kustomization.yaml
+          kubectl delete job latency-predictor-test -n "${NAMESPACE}" --ignore-not-found=true
+          kubectl apply -k . -n "${NAMESPACE}"
+
+      - name: Wait for test job to complete
+        run: |
+          kubectl wait --for=condition=complete job/latency-predictor-test \
+            -n "${NAMESPACE}" --timeout=600s
+
+      - name: Show test job logs
+        if: always()
+        run: |
+          kubectl logs job/latency-predictor-test -n "${NAMESPACE}" || true
+
+      - name: Show deployment status
+        if: always()
+        run: |
+          echo "=== Deployments ==="
+          kubectl get deployments -n "${NAMESPACE}" || true
+          echo ""
+          echo "=== Pods ==="
+          kubectl get pods -n "${NAMESPACE}" || true
+          echo ""
+          echo "=== Services ==="
+          kubectl get svc -n "${NAMESPACE}" || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kubectl delete namespace "${NAMESPACE}" --ignore-not-found=true
