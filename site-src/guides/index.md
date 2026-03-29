@@ -8,6 +8,10 @@
 
 --8<-- "site-src/_includes/prereqs.md"
 
+### Verify Prerequisites
+
+--8<-- "site-src/_includes/verify-prereqs.md"
+
 ## **Steps**
 
 ### Set Latest Release Variable
@@ -52,13 +56,21 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${IGW_LATEST_RELEASE}/manifests.yaml
 ```
 
+Verify the CRDs were installed successfully:
+
+```bash
+kubectl get crds | grep inference.networking.k8s.io
+```
+
+You should see output listing the inference-related CRDs.
+
 ### Install the Gateway
 
    Choose one of the following options to install Gateway.
 
 === "GKE"
 
-      Nothing to install here, you can move to the next [section](#deploy-the-inferencepool-and-endpoint-picker-extension)
+      GKE comes with Gateway API support built-in, so you can skip this step and move to the next [section](#deploy-an-inference-gateway).
 
 === "Istio"
 
