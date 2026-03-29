@@ -102,7 +102,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "Hello world",
+					Prompt: scheduling.Prompt{Raw: "Hello world"},
 				},
 				Payload: scheduling.PayloadProto{
 					Message: &pb.GenerateRequest{
@@ -126,7 +126,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "Tokenized hello",
+					Prompt: scheduling.Prompt{Raw: "Tokenized hello"},
 				},
 				Payload: scheduling.PayloadProto{
 					Message: &pb.GenerateRequest{
@@ -166,7 +166,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 			want: &scheduling.LLMRequestBody{
 				Stream: true,
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "Hello world",
+					Prompt: scheduling.Prompt{Raw: "Hello world"},
 				},
 				Payload: scheduling.PayloadProto{
 					Message: &pb.GenerateRequest{

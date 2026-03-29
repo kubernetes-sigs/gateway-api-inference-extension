@@ -89,7 +89,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &fwksched.LLMRequestBody{
 			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaaaa",
+				Prompt: fwksched.Prompt{Raw: "aaaaaa"},
 			},
 		},
 	}
@@ -122,7 +122,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		TargetModel: "test-model2",
 		Body: &fwksched.LLMRequestBody{
 			Completions: &fwksched.CompletionsRequest{
-				Prompt: "bbbbbb",
+				Prompt: fwksched.Prompt{Raw: "bbbbbb"},
 			},
 		},
 	}
@@ -153,7 +153,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &fwksched.LLMRequestBody{
 			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbb",
+				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
 			},
 		},
 	}
@@ -184,7 +184,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		TargetModel: "test-model-new",
 		Body: &fwksched.LLMRequestBody{
 			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbb",
+				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
 			},
 		},
 	}
@@ -214,7 +214,7 @@ func TestPrefixPluginCompletion(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &fwksched.LLMRequestBody{
 			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbbcccc",
+				Prompt: fwksched.Prompt{Raw: "aaaabbbbcccc"},
 			},
 		},
 	}
@@ -422,7 +422,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 				TargetModel: "model-stress",
 				Body: &fwksched.LLMRequestBody{
 					Completions: &fwksched.CompletionsRequest{
-						Prompt: prompt,
+						Prompt: fwksched.Prompt{Raw: prompt},
 					},
 				},
 			}
@@ -526,7 +526,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 				// Length 128 chars.
 				// If AutoTune=true (block size 64): 2 blocks
 				// If AutoTune=false (block size 32): 4 blocks
-				Prompt: strings.Repeat("a", 128),
+				Prompt: fwksched.Prompt{Raw: strings.Repeat("a", 128)},
 			},
 		},
 	}
@@ -632,7 +632,7 @@ func TestPrepareRequestData(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &fwksched.LLMRequestBody{
 			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaabbbb",
+				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
 			},
 		},
 	}
@@ -652,7 +652,7 @@ func TestPrepareRequestData(t *testing.T) {
 		TargetModel: "test-model1",
 		Body: &fwksched.LLMRequestBody{
 			Completions: &fwksched.CompletionsRequest{
-				Prompt: "aaaacccc",
+				Prompt: fwksched.Prompt{Raw: "aaaacccc"},
 			},
 		},
 	}
