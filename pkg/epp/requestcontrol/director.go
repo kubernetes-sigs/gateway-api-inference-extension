@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -89,6 +90,22 @@ func NewDirectorWithConfig(
 	}
 }
 
+// responseBodyWork represents a unit of work to be processed by the async response body queue.
+type responseBodyWork struct {
+	ctx            context.Context
+	request        *fwksched.LLMRequest
+	response       *fwk.Response
+	targetEndpoint *fwkdl.EndpointMetadata
+}
+
+// responseBodyQueue is a per-request async queue for processing response body plugin calls.
+// It ensures chunks are processed in order via a channel while keeping plugin execution
+// off the critical streaming path.
+type responseBodyQueue struct {
+	ch   chan responseBodyWork
+	done chan struct{} // closed when the processing goroutine exits
+}
+
 // Director orchestrates the request handling flow after initial parsing by the handler.
 // Its responsibilities include:
 // - Retrieving request metadata and relevant objectives.
@@ -109,6 +126,11 @@ type Director struct {
 	// and value types cannot be nil
 	defaultPriority int
 	parser          fwkrh.Parser
+
+	// responseBodyQueues maps request IDs to their async processing channels.
+	// Each request gets a dedicated channel and goroutine to ensure chunks are
+	// processed in order while not blocking the streaming response path.
+	responseBodyQueues sync.Map
 }
 
 // getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
@@ -358,26 +380,58 @@ func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.Re
 // HandleResponseBody is invoked by the director for every chunk received in a streaming
 // response, or exactly once for a non-streaming response.
 //
-// For intermediate streaming chunks (endOfStream=false), response body plugins are run
-// asynchronously to avoid adding latency to every chunk. For the final chunk
-// (endOfStream=true), plugins run synchronously because they may produce DynamicMetadata
-// that must be attached to the ext_proc response sent back to Envoy.
+// For intermediate streaming chunks (endOfStream=false), the work is sent to a per-request
+// async queue (channel + goroutine) so plugins run off the critical path while preserving
+// chunk ordering. For the final chunk (endOfStream=true), the queue is drained first, then
+// plugins run synchronously because they may produce DynamicMetadata that must be attached
+// to the ext_proc response sent back to Envoy.
 func (d *Director) HandleResponseBody(ctx context.Context, reqCtx *handlers.RequestContext, endOfStream bool) *handlers.RequestContext {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
+
+	if len(d.requestControlPlugins.responseStreamingPlugins) == 0 {
+		logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
+		return reqCtx
+	}
+
 	response := &fwk.Response{
 		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
 		EndOfStream: endOfStream,
 		Usage:       reqCtx.Usage,
 	}
+	requestId := reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey]
+
 	if endOfStream {
-		// Final chunk: run synchronously so DynamicMetadata is available for the response.
+		// Drain the async queue: close the channel and wait for the goroutine to finish
+		// processing all previously queued chunks before running the final chunk synchronously.
+		if val, ok := d.responseBodyQueues.LoadAndDelete(requestId); ok {
+			q := val.(*responseBodyQueue)
+			close(q.ch)
+			<-q.done // wait for all queued chunks to be processed
+		}
+		// Run the final chunk synchronously so DynamicMetadata is available for the response.
 		d.runResponseBodyPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 		reqCtx.Response.DynamicMetadata = response.DynamicMetadata
 	} else {
-		// Intermediate chunk: run asynchronously to avoid blocking the stream.
-		d.runResponseBodyPluginsAsync(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+		// Get or create the async queue for this request.
+		work := responseBodyWork{
+			ctx:            ctx,
+			request:        reqCtx.SchedulingRequest,
+			response:       response,
+			targetEndpoint: reqCtx.TargetPod,
+		}
+		if val, ok := d.responseBodyQueues.Load(requestId); ok {
+			val.(*responseBodyQueue).ch <- work
+		} else {
+			q := &responseBodyQueue{
+				ch:   make(chan responseBodyWork, 100),
+				done: make(chan struct{}),
+			}
+			d.responseBodyQueues.Store(requestId, q)
+			go d.processResponseBodyQueue(q)
+			q.ch <- work
+		}
 	}
 	logger.V(logutil.TRACE).Info("Exiting HandleResponseBodyChunk")
 	return reqCtx
@@ -457,10 +511,12 @@ func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched
 	}
 }
 
-// runResponseBodyPluginsAsync runs all response body plugins in a goroutine.
-func (d *Director) runResponseBodyPluginsAsync(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
-	if len(d.requestControlPlugins.responseStreamingPlugins) == 0 {
-		return
+// processResponseBodyQueue reads work items from the queue channel and runs response body
+// plugins for each one sequentially. It exits when the channel is closed and signals
+// completion by closing q.done.
+func (d *Director) processResponseBodyQueue(q *responseBodyQueue) {
+	defer close(q.done)
+	for work := range q.ch {
+		d.runResponseBodyPlugins(work.ctx, work.request, work.response, work.targetEndpoint)
 	}
-	go d.runResponseBodyPlugins(ctx, request, response, targetEndpoint)
 }
