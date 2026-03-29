@@ -124,6 +124,28 @@ type Runner struct {
 	testOverrideSkipNameValidation bool
 }
 
+// WithExecutableName sets the name of the executable containing the runner.
+// The name is used in the version log upon startup and is otherwise opaque.
+func (r *Runner) WithExecutableName(exeName string) *Runner {
+	r.eppExecutableName = exeName
+	return r
+}
+
+func (r *Runner) WithRequestControlConfig(requestControlConfig *requestcontrol.Config) *Runner {
+	r.requestControlConfig = requestControlConfig
+	return r
+}
+
+func (r *Runner) WithSchedulerConfig(schedulerConfig *scheduling.SchedulerConfig) *Runner {
+	r.schedulerConfig = schedulerConfig
+	return r
+}
+
+func (r *Runner) WithCustomCollectors(collectors ...prometheus.Collector) *Runner {
+	r.customCollectors = collectors
+	return r
+}
+
 func (r *Runner) Run(ctx context.Context) error {
 	// Setup a very basic logger in case command line argument parsing fails
 	logutil.InitSetupLogging()

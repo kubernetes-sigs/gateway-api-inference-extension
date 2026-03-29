@@ -18,6 +18,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -105,4 +106,19 @@ func NewEppHandle(ctx context.Context, podList PodListFunc) Handle {
 		},
 		podList: podList,
 	}
+}
+
+// PluginByType retrieves the specified plugin by name and verifies its type
+func PluginByType[P Plugin](handlePlugins HandlePlugins, name string) (P, error) {
+	var zero P
+
+	rawPlugin := handlePlugins.Plugin(name)
+	if rawPlugin == nil {
+		return zero, fmt.Errorf("there is no plugin with the name '%s' defined", name)
+	}
+	plugin, ok := rawPlugin.(P)
+	if !ok {
+		return zero, fmt.Errorf("the plugin with the name '%s' is not an instance of %T", name, zero)
+	}
+	return plugin, nil
 }
