@@ -5,7 +5,5 @@
     Create a Hugging Face secret to download the model [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct).
     You'll need a Hugging Face account and access token - see the [Hugging Face security tokens documentation](https://huggingface.co/docs/hub/security-tokens) for setup instructions.
     Ensure that the token grants access to this model (you may need to request access for gated models).
-    
-    > **Note:** If you don't have GPUs available, consider using the CPU-based or vLLM Simulator deployment options below.
 
     Deploy a sample vLLM deployment with the proper protocol to work with the LLM Instance Gateway.
