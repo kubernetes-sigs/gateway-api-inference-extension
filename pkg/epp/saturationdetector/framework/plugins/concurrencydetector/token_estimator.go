@@ -62,7 +62,7 @@ func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
 		var chars int
 		switch {
 		case request.Body.Completions != nil:
-			chars = len(request.Body.Completions.Prompt)
+			chars = len(request.Body.Completions.Prompt.PlainText())
 		case request.Body.ChatCompletions != nil:
 			for _, m := range request.Body.ChatCompletions.Messages {
 				chars += len(m.Content.PlainText())

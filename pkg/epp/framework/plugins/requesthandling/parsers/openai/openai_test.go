@@ -61,13 +61,56 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "test prompt",
+					Prompt: scheduling.Prompt{Raw: "test prompt"},
 				},
 				ParsedBody: map[string]any{
 					"model":  "test",
 					"prompt": "test prompt",
 				},
 			},
+		},
+		{
+			name:    "completions request with array of strings prompt",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": []any{"Why is the sky blue?"},
+			},
+			want: &scheduling.LLMRequestBody{
+				Completions: &scheduling.CompletionsRequest{
+					Prompt: scheduling.Prompt{Strings: []string{"Why is the sky blue?"}},
+				},
+				ParsedBody: map[string]any{
+					"model":  "test",
+					"prompt": []any{"Why is the sky blue?"},
+				},
+			},
+		},
+		{
+			name:    "completions request with multiple strings in prompt array",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": []any{"prompt1", "prompt2"},
+			},
+			want: &scheduling.LLMRequestBody{
+				Completions: &scheduling.CompletionsRequest{
+					Prompt: scheduling.Prompt{Strings: []string{"prompt1", "prompt2"}},
+				},
+				ParsedBody: map[string]any{
+					"model":  "test",
+					"prompt": []any{"prompt1", "prompt2"},
+				},
+			},
+		},
+		{
+			name:    "completions request with empty string array prompt rejected",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": []any{},
+			},
+			wantErr: true,
 		},
 		{
 			name:    "chat completions request body",
@@ -445,7 +488,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt:    "test prompt",
+					Prompt:    scheduling.Prompt{Raw: "test prompt"},
 					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 				},
 				ParsedBody: map[string]any{
@@ -595,7 +638,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "test prompt",
+					Prompt: scheduling.Prompt{Raw: "test prompt"},
 				},
 				ParsedBody: map[string]any{
 					"model":  "gpt-4o",

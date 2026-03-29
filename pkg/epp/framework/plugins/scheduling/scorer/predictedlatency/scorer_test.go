@@ -123,7 +123,7 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
 	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
 		Completions: &fwksched.CompletionsRequest{
-			Prompt: "test prompt",
+			Prompt: fwksched.Prompt{Raw: "test prompt"},
 		},
 	})
 }

@@ -54,7 +54,7 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 			request: &framework.LLMRequest{
 				Body: &framework.LLMRequestBody{
 					Completions: &framework.CompletionsRequest{
-						Prompt: "123",
+						Prompt: framework.Prompt{Raw: "123"},
 					},
 				},
 			},
@@ -65,7 +65,7 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 			request: &framework.LLMRequest{
 				Body: &framework.LLMRequestBody{
 					Completions: &framework.CompletionsRequest{
-						Prompt: "Hello, world!",
+						Prompt: framework.Prompt{Raw: "Hello, world!"},
 					},
 				},
 			},
@@ -76,7 +76,7 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 			request: &framework.LLMRequest{
 				Body: &framework.LLMRequestBody{
 					Completions: &framework.CompletionsRequest{
-						Prompt: "",
+						Prompt: framework.Prompt{},
 					},
 				},
 			},
@@ -87,7 +87,7 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 			request: &framework.LLMRequest{
 				Body: &framework.LLMRequestBody{
 					Completions: &framework.CompletionsRequest{
-						Prompt: "1234",
+						Prompt: framework.Prompt{Raw: "1234"},
 					},
 				},
 			},
@@ -199,7 +199,7 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 			request: &framework.LLMRequest{
 				Body: &framework.LLMRequestBody{
 					Completions: &framework.CompletionsRequest{
-						Prompt: "",
+						Prompt: framework.Prompt{},
 					},
 				},
 			},
@@ -210,7 +210,7 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 			request: &framework.LLMRequest{
 				Body: &framework.LLMRequestBody{
 					Completions: &framework.CompletionsRequest{
-						Prompt: "1234",
+						Prompt: framework.Prompt{Raw: "1234"},
 					},
 				},
 			},
@@ -221,7 +221,7 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 			request: &framework.LLMRequest{
 				Body: &framework.LLMRequestBody{
 					Completions: &framework.CompletionsRequest{
-						Prompt: "This is a longer message.",
+						Prompt: framework.Prompt{Raw: "This is a longer message."},
 					},
 				},
 			},

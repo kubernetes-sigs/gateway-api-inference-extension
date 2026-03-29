@@ -100,7 +100,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "Hello world",
+					Prompt: scheduling.Prompt{Raw: "Hello world"},
 				},
 				ParsedBody: &pb.GenerateRequest{
 					Input: &pb.GenerateRequest_Text{
@@ -120,7 +120,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "Tokenized hello",
+					Prompt: scheduling.Prompt{Raw: "Tokenized hello"},
 				},
 				ParsedBody: &pb.GenerateRequest{
 					Input: &pb.GenerateRequest_Tokenized{
@@ -156,7 +156,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "Hello world",
+					Prompt: scheduling.Prompt{Raw: "Hello world"},
 				},
 				ParsedBody: &pb.GenerateRequest{
 					Input: &pb.GenerateRequest_Text{
