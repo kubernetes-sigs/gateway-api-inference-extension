@@ -120,13 +120,15 @@ func refreshPrometheusMetrics(logger logr.Logger, datastore datalayer.PoolInfo, 
 	totals := calculateTotals(podMetrics)
 
 	metrics.RecordInferencePoolAvgKVCache(pool.Name, totals.kvCache/float64(podCount))
-	metrics.RecordInferencePoolAvgQueueSize(pool.Name, float64(totals.queueSize/podCount))
+	metrics.RecordInferencePoolAvgQueueSize(pool.Name, float64(totals.queueSize)/float64(podCount))
+	metrics.RecordInferencePoolAvgRunningRequests(pool.Name, float64(totals.runningRequests)/float64(podCount))
 }
 
 // totals holds aggregated metric values
 type totals struct {
-	kvCache   float64
-	queueSize int
+	kvCache         float64
+	queueSize       int
+	runningRequests int
 }
 
 func calculateTotals(endpoints []fwkdl.Endpoint) totals {
@@ -135,6 +137,7 @@ func calculateTotals(endpoints []fwkdl.Endpoint) totals {
 		metrics := pod.GetMetrics()
 		result.kvCache += metrics.KVCacheUsagePercent
 		result.queueSize += metrics.WaitingQueueSize
+		result.runningRequests += metrics.RunningRequestsSize
 	}
 	return result
 }
