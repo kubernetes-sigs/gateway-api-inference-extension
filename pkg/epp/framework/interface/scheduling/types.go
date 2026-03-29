@@ -29,6 +29,12 @@ import (
 
 const nilString = "<nil>"
 
+// Modality identifies the type of multimodal content in a prompt.
+type Modality string
+
+// ModalityImage is the only currently supported modality.
+const ModalityImage Modality = "image"
+
 // RequestObjectives represents the scheduling objectives parsed from the InferenceObjectiveSpec, to be used in scheduling decisions.
 type RequestObjectives struct {
 	Priority int
@@ -59,8 +65,25 @@ type LLMRequest struct {
 // and consumed by scheduling plugins that benefit from actual token data
 // (e.g., prefix cache scoring, latency prediction).
 type TokenizedPrompt struct {
-	// TokenIDs are the token IDs for the prompt.
+	// TokenIDs are the token IDs for the prompt, including multimodal placeholder tokens.
 	TokenIDs []uint32
+	// MultiModalFeatures holds one entry per multimodal item in prompt order.
+	// Nil if the prompt contains no multimodal content.
+	MultiModalFeatures []MultiModalFeature
+}
+
+// MultiModalFeature holds all data needed for precise prefix-cache scoring of a single
+// multimodal item. Items are ordered by token position within the prompt.
+// Currently only ModalityImage is supported.
+type MultiModalFeature struct {
+	// Modality identifies the type of content.
+	Modality Modality
+	// Hash is the content hash of the item, used for KV-cache reuse across requests.
+	Hash string
+	// Offset is the index of the first placeholder token for this item in TokenIDs.
+	Offset int
+	// Length is the number of placeholder tokens this item occupies in TokenIDs.
+	Length int
 }
 
 func (r *LLMRequest) String() string {
