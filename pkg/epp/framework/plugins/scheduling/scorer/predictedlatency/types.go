@@ -37,11 +37,6 @@ const (
 	headroomStrategyCompositeLeast headroomStrategy = "composite-least"
 	headroomStrategyCompositeMost  headroomStrategy = "composite-most"
 	headroomStrategyCompositeOnly  headroomStrategy = "composite-only"
-
-	// TTFT header string
-	ttftSLOHeaderKey = "x-slo-ttft-ms"
-	// TPOT header string
-	tpotSLOHeaderKey = "x-slo-tpot-ms"
 )
 
 const (

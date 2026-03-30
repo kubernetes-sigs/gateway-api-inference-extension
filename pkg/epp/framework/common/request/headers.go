@@ -18,6 +18,13 @@ package request
 
 import "strings"
 
+const (
+	// TTFTSLOMsHeaderKey is the request header name for SLO time-to-first-token in milliseconds.
+	TTFTSLOMsHeaderKey = "x-slo-ttft-ms"
+	// TPOTSLOMsHeaderKey is the request header name for SLO time-per-output-token in milliseconds.
+	TPOTSLOMsHeaderKey = "x-slo-tpot-ms"
+)
+
 // GetHeader returns the value for key from headers, with case-insensitive lookup.
 func GetHeader(headers map[string]string, key string) string {
 	if v, ok := headers[key]; ok {

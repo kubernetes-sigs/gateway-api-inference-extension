@@ -1135,40 +1135,196 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 	}
 }
 
+func TestClassifySLO(t *testing.T) {
+	testCases := []struct {
+		raw      string
+		expected string
+	}{
+		{"", SLOClassNone},
+		{"not-a-number", SLOClassNone},
+		{"-1", SLOClassNone},
+		{"0", SLOClassBelowMS200},
+		{"50", SLOClassBelowMS200},
+		{"199", SLOClassBelowMS200},
+		{"200", SLOClassMS200to399},
+		{"399", SLOClassMS200to399},
+		{"400", SLOClassMS400to599},
+		{"500", SLOClassMS400to599},
+		{"599", SLOClassMS400to599},
+		{"600", SLOClassMS600to799},
+		{"799", SLOClassMS600to799},
+		{"800", SLOClassMS800to1000},
+		{"1000", SLOClassMS800to1000},
+		{"1001", SLOClassAboveMS1000},
+		{"5000", SLOClassAboveMS1000},
+	}
+	for _, tc := range testCases {
+		t.Run("raw="+tc.raw, func(t *testing.T) {
+			require.Equal(t, tc.expected, ClassifySLO(tc.raw))
+		})
+	}
+}
+
+func TestFlowControlSLOIncomingRequestsTotalMetric(t *testing.T) {
+	Reset()
+
+	const pool = "pool-1"
+
+	RecordFlowControlSLOIncomingRequest(SLOClassBelowMS200, pool)
+	RecordFlowControlSLOIncomingRequest(SLOClassBelowMS200, pool)
+	RecordFlowControlSLOIncomingRequest(SLOClassMS400to599, pool)
+	RecordFlowControlSLOIncomingRequest(SLOClassNone, "pool-2")
+
+	testCases := []struct {
+		name        string
+		labels      prometheus.Labels
+		expectCount float64
+	}{
+		{
+			name:        "below_ms_200, pool-1",
+			labels:      prometheus.Labels{"slo_class": SLOClassBelowMS200, "inference_pool": pool},
+			expectCount: 2,
+		},
+		{
+			name:        "ms_400_599, pool-1",
+			labels:      prometheus.Labels{"slo_class": SLOClassMS400to599, "inference_pool": pool},
+			expectCount: 1,
+		},
+		{
+			name:        "none, pool-2",
+			labels:      prometheus.Labels{"slo_class": SLOClassNone, "inference_pool": "pool-2"},
+			expectCount: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			val, err := testutil.GetCounterMetricValue(flowControlSLOIncomingRequestsTotal.With(tc.labels))
+			require.NoError(t, err, "Failed to get counter value for labels %v", tc.labels)
+			require.Equal(t, tc.expectCount, val, "Counter value mismatch for labels %v", tc.labels)
+		})
+	}
+}
+
+func TestFlowControlSLOQueueDurationMetric(t *testing.T) {
+	Reset()
+
+	const pool = "pool-1"
+
+	records := []struct {
+		sloClass string
+		outcome  string
+		duration time.Duration
+	}{
+		{sloClass: SLOClassBelowMS200, outcome: "Dispatched", duration: 5 * time.Millisecond},
+		{sloClass: SLOClassBelowMS200, outcome: "Dispatched", duration: 15 * time.Millisecond},
+		{sloClass: SLOClassMS400to599, outcome: "Dispatched", duration: 50 * time.Millisecond},
+		{sloClass: SLOClassNone, outcome: "RejectedCapacity", duration: 2 * time.Millisecond},
+		{sloClass: SLOClassAboveMS1000, outcome: "Dispatched", duration: 200 * time.Millisecond},
+	}
+
+	for _, rec := range records {
+		RecordFlowControlSLORequestQueueDuration(rec.sloClass, rec.outcome, pool, rec.duration)
+	}
+
+	testCases := []struct {
+		name        string
+		labels      prometheus.Labels
+		expectCount uint64
+		expectSum   float64
+	}{
+		{
+			name: "below_ms_200, dispatched",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassBelowMS200,
+				"outcome":        "Dispatched",
+				"inference_pool": pool,
+			},
+			expectCount: 2,
+			expectSum:   0.02, // 0.005 + 0.015
+		},
+		{
+			name: "ms_400_599, dispatched",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassMS400to599,
+				"outcome":        "Dispatched",
+				"inference_pool": pool,
+			},
+			expectCount: 1,
+			expectSum:   0.05,
+		},
+		{
+			name: "none, rejected",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassNone,
+				"outcome":        "RejectedCapacity",
+				"inference_pool": pool,
+			},
+			expectCount: 1,
+			expectSum:   0.002,
+		},
+		{
+			name: "above_ms_1000, dispatched",
+			labels: prometheus.Labels{
+				"slo_class":      SLOClassAboveMS1000,
+				"outcome":        "Dispatched",
+				"inference_pool": pool,
+			},
+			expectCount: 1,
+			expectSum:   0.2,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := []string{
+				tc.labels["slo_class"],
+				tc.labels["outcome"],
+				tc.labels["inference_pool"],
+			}
+			hist, err := getHistogramVecLabelValues(t, flowControlSLORequestQueueDuration, labels...)
+			require.NoError(t, err, "Failed to get histogram for labels %v", tc.labels)
+			require.Equal(t, tc.expectCount, hist.GetSampleCount(), "Sample count mismatch for labels %v", tc.labels)
+			require.InDelta(t, tc.expectSum, hist.GetSampleSum(), 0.00001, "Sample sum mismatch for labels %v", tc.labels)
+		})
+	}
+}
+
 func TestFlowControlQueueSizeMetric(t *testing.T) {
 	Reset()
 
 	const (
-		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		pool     = "pool-1"
+		model    = "llama-2"
+		target   = "llama-base"
+		sloClass = SLOClassNone
 	)
 
 	// Basic Inc/Dec
-	IncFlowControlQueueSize("user-a", "100", pool, model, target)
-	val, err := testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, model, target))
+	IncFlowControlQueueSize("user-a", "100", pool, sloClass, model, target)
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
 	require.Equal(t, 1.0, val, "Gauge value should be 1 after Inc for user-a/100")
 
-	DecFlowControlQueueSize("user-a", "100", pool, model, target)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, model, target))
+	DecFlowControlQueueSize("user-a", "100", pool, sloClass, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Dec")
 	require.Equal(t, 0.0, val, "Gauge value should be 0 after Dec for user-a/100")
 
 	// Multiple labels
-	IncFlowControlQueueSize("user-b", "200", pool, model, target)
-	IncFlowControlQueueSize("user-b", "200", pool, model, target)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, model, target))
+	IncFlowControlQueueSize("user-b", "200", pool, sloClass, model, target)
+	IncFlowControlQueueSize("user-b", "200", pool, sloClass, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200")
 	require.Equal(t, 2.0, val, "Gauge value should be 2 for user-b/200")
 
-	DecFlowControlQueueSize("user-b", "200", pool, model, target)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, model, target))
+	DecFlowControlQueueSize("user-b", "200", pool, sloClass, model, target)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Dec")
 	require.Equal(t, 1.0, val, "Gauge value should be 1 for user-b/200 after one Dec")
 
 	// Non-existent labels
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100", pool, model, target))
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueSize.WithLabelValues("user-c", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }
@@ -1177,36 +1333,37 @@ func TestFlowControlQueueBytesMetric(t *testing.T) {
 	Reset()
 
 	const (
-		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		pool     = "pool-1"
+		model    = "llama-2"
+		target   = "llama-base"
+		sloClass = SLOClassNone
 	)
 
 	// Basic Inc/Dec
-	AddFlowControlQueueBytes("user-a", "100", pool, model, target, 32)
-	val, err := testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	AddFlowControlQueueBytes("user-a", "100", pool, sloClass, model, target, 32)
+	val, err := testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Inc")
 	require.Equal(t, 32.0, val, "Gauge value should be 32 after Add for user-a/100")
 
-	SubFlowControlQueueBytes("user-a", "100", pool, model, target, 32)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, model, target))
+	SubFlowControlQueueBytes("user-a", "100", pool, sloClass, model, target, 32)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-a", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-a/100 after Sub")
 	require.Equal(t, 0.0, val, "Gauge value should be 0 after Sub for user-a/100")
 
 	// Multiple labels
-	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 32)
-	AddFlowControlQueueBytes("user-b", "200", pool, model, target, 16)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	AddFlowControlQueueBytes("user-b", "200", pool, sloClass, model, target, 32)
+	AddFlowControlQueueBytes("user-b", "200", pool, sloClass, model, target, 16)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200")
 	require.Equal(t, 48.0, val, "Gauge value should be 48 for user-b/200")
 
-	SubFlowControlQueueBytes("user-b", "200", pool, model, target, 48)
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, model, target))
+	SubFlowControlQueueBytes("user-b", "200", pool, sloClass, model, target, 48)
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-b", "200", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for user-b/200 after one Sub")
 	require.Equal(t, 0.0, val, "Gauge value should be 0 for user-b/200 after one Sub")
 
 	// Non-existent labels
-	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, model, target))
+	val, err = testutil.GetGaugeMetricValue(flowControlQueueBytes.WithLabelValues("user-c", "100", pool, sloClass, model, target))
 	require.NoError(t, err, "Failed to get gauge value for non-existent user-c/100")
 	require.Equal(t, 0.0, val, "Gauge value for non-existent labels should be 0")
 }
