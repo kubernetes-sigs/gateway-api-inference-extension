@@ -236,13 +236,13 @@ class LoraReconciler:
             time.sleep(self.health_check_interval.seconds)
         return False
 
-    def load_adapter(self, adapter: LoraAdapter) -> None | str:
+    def load_adapter(self, adapter: LoraAdapter, registered: set) -> None | str:
         """Sends a request to load the specified model."""
-        if adapter in self.registered_adapters:
+        if adapter in registered:
             logging.info(
                 f"{adapter.id} already present on model server {self.model_server}"
             )
-            return
+            return None
         url = f"http://{self.model_server}/v1/load_lora_adapter"
         payload = {
             "lora_name": adapter.id,
@@ -258,13 +258,13 @@ class LoraReconciler:
             logging.error(f"error loading model {adapter.id}: {e}")
             return f"error loading model {adapter.id}: {e}"
 
-    def unload_adapter(self, adapter: LoraAdapter) -> None | str:
+    def unload_adapter(self, adapter: LoraAdapter, registered: set) -> None | str:
         """Sends a request to unload the specified model."""
-        if adapter not in self.registered_adapters:
+        if adapter not in registered:
             logging.info(
                 f"{adapter.id} already doesn't exist on model server {self.model_server}"
             )
-            return
+            return None
         url = f"http://{self.model_server}/v1/unload_lora_adapter"
         payload = {"lora_name": adapter.id}
         try:
@@ -281,31 +281,40 @@ class LoraReconciler:
         logging.info(
             f"reconciling model server {self.model_server} with config stored at {self.config_file}"
         )
-        
+
         if not self.is_server_healthy:
             logging.error(f"vllm server at {self.model_server} not healthy")
             return
-        invalid_adapters = ", ".join(
-            str(a.id)
-            for a in self.ensure_exist_adapters & self.ensure_not_exist_adapters
-        )
-        logging.warning(
-            f"skipped adapters found in both `ensureExist` and `ensureNotExist` {invalid_adapters}"
-        )
+
+        # Fetch registered adapters once to avoid redundant API calls per adapter.
+        registered = self.registered_adapters
+
+        conflicting = self.ensure_exist_adapters & self.ensure_not_exist_adapters
+        if conflicting:
+            invalid_adapters = ", ".join(str(a.id) for a in conflicting)
+            logging.warning(
+                f"skipped adapters found in both `ensureExist` and `ensureNotExist`: {invalid_adapters}"
+            )
+
         adapters_to_load = self.ensure_exist_adapters - self.ensure_not_exist_adapters
         adapters_to_load_id = ", ".join(str(a.id) for a in adapters_to_load)
-        logging.info(f"adapter to load {adapters_to_load_id}")
+        logging.info(f"adapters to load: {adapters_to_load_id}")
         for adapter in adapters_to_load:
-            err = self.load_adapter(adapter)
-            if err is None:
-                self.update_adapter_status_metrics(adapter.id, is_loaded=True)
+            err = self.load_adapter(adapter, registered)
+            if err is not None:
+                logging.error(f"skipping adapter {adapter.id} due to load failure, will retry next reconcile")
+                continue
+            self.update_adapter_status_metrics(adapter.id, is_loaded=True)
+
         adapters_to_unload = self.ensure_not_exist_adapters - self.ensure_exist_adapters
         adapters_to_unload_id = ", ".join(str(a.id) for a in adapters_to_unload)
-        logging.info(f"adapters to unload {adapters_to_unload_id}")
+        logging.info(f"adapters to unload: {adapters_to_unload_id}")
         for adapter in adapters_to_unload:
-            err = self.unload_adapter(adapter)
-            if err is None:
-                self.update_adapter_status_metrics(adapter.id, is_loaded=False)
+            err = self.unload_adapter(adapter, registered)
+            if err is not None:
+                logging.error(f"skipping adapter {adapter.id} due to unload failure, will retry next reconcile")
+                continue
+            self.update_adapter_status_metrics(adapter.id, is_loaded=False)
 
     def update_adapter_status_metrics(self, adapter_id: str, is_loaded: bool):
         """Update adapter status metrics"""
