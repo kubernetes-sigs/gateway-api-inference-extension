@@ -26,9 +26,8 @@ spec:
           - "--enable-lora"
           - "--max-loras"
           - "4"
-          - "--lora-modules"
-          - '{"name": "small-segment-lora-0", "path": "ttt421/nec119-small-segment-lora", "base_model_name": "Qwen/Qwen3-32B"}'
-          - '{"name": "small-segment-lora-1", "path": "ttt421/nec119-small-segment-lora", "base_model_name": "Qwen/Qwen3-32B"}'
+          - "--max-model-len"
+          - "16384"
           env:
             - name: PORT
               value: "8000"
@@ -36,6 +35,10 @@ spec:
               value: "true"
             - name: VLLM_CPU_KVCACHE_SPACE
               value: "4"
+            - name: VLLM_PLUGINS
+              value: "lora_filesystem_resolver"
+            - name: VLLM_LORA_RESOLVER_CACHE_DIR
+              value: "/adapters"
           ports:
             - containerPort: 8000
               name: http
@@ -62,11 +65,13 @@ spec:
             timeoutSeconds: 1
           resources:
              limits:
-               cpu: "12"
-               memory: "9000Mi"
+               cpu: "16"
+               memory: "100Gi"
+               ephemeral-storage: "100Gi"
              requests:
-               cpu: "12"
-               memory: "9000Mi"
+               cpu: "16"
+               memory: "100Gi"
+               ephemeral-storage: "100Gi"
           volumeMounts:
             - mountPath: /data
               name: data
@@ -75,18 +80,23 @@ spec:
             - name: adapters
               mountPath: "/adapters"
       initContainers:
-        - name: lora-adapter-syncer
-          tty: true
-          stdin: true
-          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.2.1
-          restartPolicy: Always
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
-              value: "/config/configmap.yaml"
-          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
-          - name: config-volume
-            mountPath:  /config
+        - name: pull-lora
+          image: alpine/git
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            mkdir -p /adapters/small-segment-lora
+            mkdir -p /adapters/cad-fabricator
+            git clone --depth 1 https://huggingface.co/ttt421/nec119-small-segment-lora /adapters/small-segment-lora
+            git clone --depth 1 https://huggingface.co/SriSanth2345/Qwen-1.5B-Tweet-Generations /adapters/cad-fabricator
+          volumeMounts:
+            - name: adapters
+              mountPath: /adapters
+          resources:
+            limits:
+              ephemeral-storage: "10Gi"
+            requests:
+              ephemeral-storage: "10Gi"
       restartPolicy: Always
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
@@ -98,24 +108,3 @@ spec:
             medium: Memory
         - name: adapters
           emptyDir: {}
-        - name: config-volume
-          configMap:
-            name: vllm-qwen-adapters
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vllm-qwen-adapters
-data:
-  configmap.yaml: |
-      vLLMLoRAConfig:
-        name: vllm-qwen3-32b
-        port: 8000
-        ensureExist:
-          models:
-          - base-model: Qwen/Qwen3-32B
-            id: small-segment-lora
-            source: ttt421/nec119-small-segment-lora
-          - base-model: Qwen/Qwen2.5-1.5B
-            id: cad-fabricator
-            source: SriSanth2345/Qwen-1.5B-Tweet-Generations

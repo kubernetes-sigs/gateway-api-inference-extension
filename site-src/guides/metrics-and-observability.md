@@ -4,26 +4,20 @@ This guide describes the current state of exposed metrics and how to scrape them
 
 ## Requirements
 
-=== "EPP"
+To have response metrics, ensure the body mode is set to `Buffered` or `Streamed` (this should be the default behavior for all implementations).
 
-      To have response metrics, ensure the body mode is set to `Buffered` or `Streamed` (this should be the default behavior for all implementations).
+If you want to include usage metrics for vLLM model server streaming request, send the request with `include_usage`:
 
-      If you want to include usage metrics for vLLM model server streaming request, send the request with `include_usage`:
-
-      ```
-      curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-      "model": "small-segment-lora",
-      "prompt": "whats your fav movie?",
-      "max_tokens": 10,
-      "temperature": 0,
-      "stream": true,
-      "stream_options": {"include_usage": true}
-      }'
-      ```
-
-=== "Dynamic LoRA Adapter Sidecar"
-
-      To have response metrics, ensure the vLLM model server is configured with the dynamic LoRA adapter as a sidecar container and a ConfigMap to configure which models to load/unload. See [this doc](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/tools/dynamic-lora-sidecar#example-configuration) for an example.
+```bash
+curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
+"model": "small-segment-lora",
+"prompt": "whats your fav movie?",
+"max_tokens": 10,
+"temperature": 0,
+"stream": true,
+"stream_options": {"include_usage": true}
+}'
+```
 
 
 ## Exposed metrics
@@ -49,12 +43,6 @@ This guide describes the current state of exposed metrics and how to scrape them
 | inference_extension_scheduler_attempts_total | Counter          | Total number of scheduling attempts.                              | `status`=&lt;success\|failure&gt; <br> `target_model_name`=&lt;target-model-name&gt; <br> `pod_name`=&lt;pod-name&gt; <br> `namespace`=&lt;namespace&gt; <br> `port`=&lt;port&gt; | ALPHA       |
 
 
-### Dynamic LoRA Adapter Sidecar
-
-| **Metric name**            | **Metric Type**  | <div style="width:200px">**Description**</div>   | <div style="width:250px">**Labels**</div> | **Status**  |
-|:---------------------------|:-----------------|:-------------------------------------------------|:------------------------------------------|:------------|
-| lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter-id&gt;         | ALPHA       |
-
 ### Flow Control Metrics
 
 These metrics provide insights into the [Flow Control layer](flow-control.md) within the EPP when enabled.
@@ -74,7 +62,6 @@ These metrics provide insights into the [Flow Control layer](flow-control.md) wi
 The metrics endpoints are exposed on different ports by default:
 
 - EPP exposes the metrics endpoint at port 9090
-- Dynamic LoRA adapter sidecar exposes the metrics endpoint at port 8080
 
 To scrape metrics, the client needs a ClusterRole with the following rule:
 `nonResourceURLs: "/metrics", verbs: get`.

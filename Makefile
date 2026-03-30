@@ -28,7 +28,6 @@ PLATFORMS ?= linux/$(TARGETARCH)
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
-SYNCER_IMAGE_BUILD_EXTRA_OPTS ?=
 BBR_IMAGE_BUILD_EXTRA_OPTS ?=
 LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS ?=
 LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS ?=
@@ -49,10 +48,6 @@ E2E_IMAGE ?= $(IMAGE_TAG)
 # it is possible though to run e2e tests against clusters other than kind. in such a case, it is the user's responsibility to load
 # the image into the cluster.
 E2E_USE_KIND ?= true
-
-SYNCER_IMAGE_NAME := lora-syncer
-SYNCER_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(SYNCER_IMAGE_NAME)
-SYNCER_IMAGE_TAG ?= $(SYNCER_IMAGE_REPO):$(GIT_TAG)
 
 BBR_IMAGE_NAME := bbr
 BBR_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(BBR_IMAGE_NAME)
@@ -79,7 +74,6 @@ endif
 BUILD_REF ?= $(shell git describe --abbrev=0 2>/dev/null)
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
-SYNCER_IMAGE_EXTRA_TAG ?= $(SYNCER_IMAGE_REPO):$(EXTRA_TAG)
 BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
 LATENCY_TRAINING_IMAGE_EXTRA_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(EXTRA_TAG)
 LATENCY_PREDICTION_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_IMAGE_REPO):$(EXTRA_TAG)
@@ -88,7 +82,6 @@ BUILD_REF = $(EXTRA_TAG)
 endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
-SYNCER_IMAGE_BUILD_EXTRA_OPTS += -t $(SYNCER_IMAGE_EXTRA_TAG)
 BBR_IMAGE_BUILD_EXTRA_OPTS += -t $(BBR_IMAGE_EXTRA_TAG)
 LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_TRAINING_IMAGE_EXTRA_TAG)
 LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_IMAGE_EXTRA_TAG)
@@ -269,30 +262,6 @@ image-load: image-build
 image-kind: image-build ## Build the EPP image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
 	kind load docker-image $(IMAGE_TAG) --name $(KIND_CLUSTER)
 
-##@ Lora Syncer
-
-.PHONY: syncer-image-local-build
-syncer-image-local-build:
-	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
-	$(MAKE) image-build PUSH=$(PUSH)
-	$(DOCKER_BUILDX_CMD) rm $$BUILDER
-
-.PHONY: syncer-image-local-push
-syncer-image-local-push: PUSH=--push
-syncer-image-local-push: syncer-image-local-build
-
-.PHONY: syncer-image-build
-syncer-image-build:
-	$ cd $(CURDIR)/tools/dynamic-lora-sidecar && $(IMAGE_BUILD_CMD) -t $(SYNCER_IMAGE_TAG) \
-		--platform=$(PLATFORMS) \
-		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
-		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
-		$(PUSH) \
-		$(SYNCER_IMAGE_BUILD_EXTRA_OPTS) ./
-
-.PHONY: syncer-image-push
-syncer-image-push: PUSH=--push
-syncer-image-push: syncer-image-build
 
 ##@ Body-based Routing extension
 

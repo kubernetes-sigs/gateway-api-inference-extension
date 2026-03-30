@@ -131,9 +131,6 @@ sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "
 # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
 sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
 
-# lora-syncer is deprecated and no longer receives release-tagged images.
-# Keep the manifests pinned to the latest promoted public image.
-
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------

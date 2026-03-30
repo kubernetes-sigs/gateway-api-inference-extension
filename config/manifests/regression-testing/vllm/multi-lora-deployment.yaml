@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai:v0.8.5"
+          image: "vllm/vllm-openai:v0.15.1"
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
@@ -31,11 +31,11 @@ spec:
           - "--max-cpu-loras"
           - "15"
           - "--compilation-config"
-          - "3"
+          - '{"mode": 3}'
           - "--max-lora-rank"
           - "8"
           - "--max-num-seqs"
-          - "2048"
+          - "256"
           - "--max-model-len"
           - "2048"
           - "--no-enable-prefix-caching"
@@ -48,7 +48,11 @@ spec:
                   name: hf-token
                   key: token
             - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
-              value: "false"
+              value: "true"
+            - name: VLLM_PLUGINS
+              value: "lora_filesystem_resolver"
+            - name: VLLM_LORA_RESOLVER_CACHE_DIR
+              value: "/adapters"
           ports:
             - containerPort: 8000
               name: http
@@ -59,7 +63,7 @@ spec:
               # to give upstream gateways a chance to take us out of rotation. The time we wait
               # is dependent on the time it takes for all upstreams to completely remove us from
               # rotation. Older or simpler load balancers might take upwards of 30s, but we expect
-              # our deployment to run behind a modern gateway like Envoy which is designed to 
+              # our deployment to run behind a modern gateway like Envoy which is designed to
               # probe for readiness aggressively.
               sleep:
                 # Upstream gateway probers for health should be set on a low period, such as 5s,
@@ -68,7 +72,7 @@ spec:
                 # as load balancers may have internal delays, and we don't want to drop requests
                 # normally, so we're often aiming to set this value to a p99 propagation latency
                 # of readiness -> load balancer taking backend out of rotation, not the average.
-                # 
+                #
                 # This value is generally stable and must often be experimentally determined on
                 # for a given load balancer and health check period. We set the value here to
                 # the highest value we observe on a supported load balancer, and we recommend
@@ -121,12 +125,12 @@ spec:
             # to the maximum possible time we believe loading a model will take. In our
             # default configuration we are downloading a model from HuggingFace, which may
             # take a long time, then the model must load into the accelerator. We choose
-            # 10 minutes as a reasonable maximum startup time before giving up and attempting
+            # 30 minutes as a reasonable maximum startup time before giving up and attempting
             # to restart the pod.
             #
-            # IMPORTANT: If the core model takes more than 10 minutes to load, pods will crash
+            # IMPORTANT: If the core model takes more than 30 minutes to load, pods will crash
             # loop forever. Be sure to set this appropriately.
-            failureThreshold: 600
+            failureThreshold: 1800
             # Set delay to start low so that if the base model changes to something smaller
             # or an optimization is deployed, we don't wait unneccesarily.
             initialDelaySeconds: 2
@@ -152,18 +156,29 @@ spec:
             - name: adapters
               mountPath: "/adapters"
       initContainers:
-        - name: lora-adapter-syncer
-          tty: true
-          stdin: true 
-          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.2.1
-          restartPolicy: Always
-          imagePullPolicy: IfNotPresent
-          env: 
-            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
-              value: "/config/configmap.yaml"
-          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
-          - name: config-volume
-            mountPath:  /config
+        - name: pull-lora
+          image: alpine/git
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            if [ -n "$HUGGING_FACE_HUB_TOKEN" ]; then
+              git clone --depth 1 https://oauth2:$HUGGING_FACE_HUB_TOKEN@huggingface.co/nvidia/llama-3.1-nemoguard-8b-topic-control /tmp/adapter
+            else
+              git clone --depth 1 https://huggingface.co/nvidia/llama-3.1-nemoguard-8b-topic-control /tmp/adapter
+            fi
+            for i in $(seq 0 14); do
+              mkdir -p /adapters/adapter-$i
+              cp -a /tmp/adapter/. /adapters/adapter-$i/
+            done
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+          volumeMounts:
+            - name: adapters
+              mountPath: /adapters
       restartPolicy: Always
 
       # vLLM allows VLLM_PORT to be specified as an environment variable, but a user might
@@ -184,7 +199,7 @@ spec:
       #
       # For most models you can derive an upper bound for the maximum drain latency as
       # follows:
-      # 
+      #
       #   1. Identify the maximum context length the model was trained on, or the maximum
       #      allowed length of output tokens configured on vLLM (llama2-7b was trained to
       #      4k context length, while llama3-8b was trained to 128k).
@@ -198,7 +213,7 @@ spec:
       #      SIGTERM (for this model that is about 4096 / 10 ~ 40s)
       #   4. If there are any requests generating prompt tokens that will delay when those
       #      output tokens start, and prompt token generation is roughly 6x faster than
-      #      compute-bound output token generation, so add 20% to the time from above (40s + 
+      #      compute-bound output token generation, so add 20% to the time from above (40s +
       #      16s ~ 55s)
       #
       # Thus we think it will take us at worst about 55s to complete the longest possible
@@ -217,7 +232,7 @@ spec:
       # stuck or hung process (a possibility due to a GPU crash), there is operational safety
       # in keeping the value roughly proportional to the time to finish serving. There is also
       # value in adding a bit of extra time to deal with unexpectedly long workloads.
-      #   
+      #
       #   6. Add a 50% safety buffer to this time since the operational impact should be low
       #      (85s * 1.5 ~ 130s)
       #
@@ -238,52 +253,7 @@ spec:
             medium: Memory
         - name: adapters
           emptyDir: {}
-        - name: config-volume
-          configMap:
-            name: vllm-llama3-8b-instruct-adapters
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vllm-llama3-8b-instruct-adapters
-data:
-  configmap.yaml: |
-      vLLMLoRAConfig:
-        name: vllm-llama3.1-8b-instruct
-        port: 8000
-        defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
-        ensureExist:
-          models:
-          - id: adapter-0
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-1
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-2
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-3
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-4
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-5
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control 
-          - id: adapter-6
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-7
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-8
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-9
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-10  
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-11 
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-12 
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-13
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
-          - id: adapter-14  
-            source: nvidia/llama-3.1-nemoguard-8b-topic-control
+
 
 
 
