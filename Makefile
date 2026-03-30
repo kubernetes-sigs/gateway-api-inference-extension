@@ -204,7 +204,7 @@ api-lint: golangci-api-lint
 	$(GOLANGCI_API_LINT) run -c .golangci-kal.yml --timeout 15m0s ./...
 
 .PHONY: verify
-verify: vet fmt-verify generate ci-lint api-lint verify-all verify-fw-imports
+verify: vet fmt-verify generate ci-lint api-lint verify-all verify-fw-imports verify-component-imports
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
@@ -216,6 +216,13 @@ verify-crds: kubectl-validate
 .PHONY: verify-fw-imports
 verify-fw-imports:
 	go run hack/verify-framework-imports.go
+
+# Verify EPP and BBR do not have cross-component imports.
+# Known exceptions are listed in the script and reported as warnings.
+# New violations fail the check, preventing additional cross-imports.
+.PHONY: verify-component-imports
+verify-component-imports:
+	go run hack/verify-component-imports.go
 
 #If you are running in local and your helm dependency is outdated, you can run `make verify-helm-charts MODE=local`
 .PHONY: verify-helm-charts
