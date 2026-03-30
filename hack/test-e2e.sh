@@ -16,6 +16,27 @@
 
 set -euox pipefail
 
+COMPONENT=${COMPONENT:-epp}
+
+case "$COMPONENT" in
+  epp)
+    COMPONENT_IMAGE="${E2E_IMAGE}"
+    IMAGE_MAKE_VAR="IMAGE_TAG"
+    IMAGE_MAKE_TARGET="image-kind"
+    TEST_PATH="./test/e2e/epp/"
+    ;;
+  bbr)
+    COMPONENT_IMAGE="${BBR_E2E_IMAGE}"
+    IMAGE_MAKE_VAR="BBR_IMAGE_TAG"
+    IMAGE_MAKE_TARGET="bbr-image-kind"
+    TEST_PATH="./test/e2e/bbr/"
+    ;;
+  *)
+    echo "Unknown component: $COMPONENT. Supported: epp, bbr"
+    exit 1
+    ;;
+esac
+
 install_kind() {
   if ! command -v kind &>/dev/null; then
     echo "kind not found, installing..."
@@ -29,17 +50,22 @@ install_kind() {
   fi
 }
 
+load_image() {
+  local cluster=$1
+  env "KIND_CLUSTER=${cluster}" "${IMAGE_MAKE_VAR}=${COMPONENT_IMAGE}" make "${IMAGE_MAKE_TARGET}"
+}
+
 if [ "$USE_KIND" = "true" ]; then
   install_kind # make sure kind cli is installed
   if ! kubectl config current-context >/dev/null 2>&1; then # if no active kind cluster found
     echo "No active kubecontext found. creating a kind cluster for running the tests..."
     kind create cluster --name inference-e2e
-    KIND_CLUSTER=inference-e2e IMAGE_TAG=${E2E_IMAGE} make image-kind
+    load_image inference-e2e
   else 
     current_context=$(kubectl config current-context)
     current_kind_cluster="${current_context#kind-}"
     echo "Found an active kind cluster ${current_kind_cluster} for running the tests..."
-    KIND_CLUSTER=${current_kind_cluster} IMAGE_TAG=${E2E_IMAGE} make image-kind
+    load_image "${current_kind_cluster}"
   fi 
 else 
   # don't use kind. it's the caller responsibility to load the image into the cluster, we just run the tests.
@@ -50,5 +76,5 @@ else
   fi
 fi
 
-echo "Found an active cluster. Running Go e2e tests in ./epp..."
-go test ./test/e2e/epp/ -v -ginkgo.v
+echo "Found an active cluster. Running ${COMPONENT} e2e tests..."
+go test "${TEST_PATH}" -v -ginkgo.v
