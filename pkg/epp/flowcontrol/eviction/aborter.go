@@ -18,6 +18,8 @@ package eviction
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -31,13 +33,41 @@ type Aborter interface {
 }
 
 // NoOpAborter logs the eviction but does not abort the request on the model server.
-// This is the default aborter until a general-purpose abort mechanism is available
-// (e.g., vLLM exposes /v1/abort_requests for all request types, or Envoy ext_proc
-// supports downstream connection termination).
 type NoOpAborter struct{}
 
 func (a *NoOpAborter) Abort(ctx context.Context, item *flowcontrol.EvictionItem) error {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Eviction selected request for abort (no-op: abort mechanism not available)",
+		"requestID", item.RequestID,
+		"priority", item.Priority,
+		"targetURL", item.TargetURL)
+	return nil
+}
+
+// ImmediateResponseAborter aborts requests by closing the EvictionItem's AbortCh.
+// The ext_proc Process() goroutine selects on this channel and sends an ImmediateResponse
+// to Envoy when it is closed, causing Envoy to reset the upstream connection to the model server.
+type ImmediateResponseAborter struct {
+	// closeOnce tracks which channels have been closed to prevent double-close panics.
+	closeOnce sync.Map // requestID → *sync.Once
+}
+
+// NewImmediateResponseAborter creates an ImmediateResponseAborter.
+func NewImmediateResponseAborter() *ImmediateResponseAborter {
+	return &ImmediateResponseAborter{}
+}
+
+func (a *ImmediateResponseAborter) Abort(ctx context.Context, item *flowcontrol.EvictionItem) error {
+	if item.AbortCh == nil {
+		return fmt.Errorf("eviction item %s has no abort channel", item.RequestID)
+	}
+
+	// Use sync.Once to safely close the channel exactly once.
+	once, _ := a.closeOnce.LoadOrStore(item.RequestID, &sync.Once{})
+	once.(*sync.Once).Do(func() {
+		close(item.AbortCh)
+	})
+
+	log.FromContext(ctx).Info("Abort signal sent",
 		"requestID", item.RequestID,
 		"priority", item.Priority,
 		"targetURL", item.TargetURL)

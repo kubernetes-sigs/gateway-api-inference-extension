@@ -19,11 +19,13 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -46,12 +48,25 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
 
+// AbortChannelLookup is an optional interface for looking up abort channels by request ID.
+// When set on the StreamingServer, the Process() loop will select on the abort channel
+// to support eviction of in-flight requests via ext_proc ImmediateResponse.
+type AbortChannelLookup interface {
+	Get(requestID string) chan struct{}
+	Deregister(requestID string)
+}
+
 func NewStreamingServer(datastore Datastore, director Director, parser fwkrh.Parser) *StreamingServer {
 	return &StreamingServer{
 		director:  director,
 		datastore: datastore,
 		parser:    parser,
 	}
+}
+
+// SetAbortChannelLookup sets the abort channel lookup for eviction support.
+func (s *StreamingServer) SetAbortChannelLookup(lookup AbortChannelLookup) {
+	s.abortLookup = lookup
 }
 
 type Director interface {
@@ -68,9 +83,10 @@ type Datastore interface {
 // Server implements the Envoy external processing server.
 // https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto
 type StreamingServer struct {
-	datastore Datastore
-	director  Director
-	parser    fwkrh.Parser
+	datastore   Datastore
+	director    Director
+	parser      fwkrh.Parser
+	abortLookup AbortChannelLookup // optional, set for eviction support
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
@@ -166,12 +182,18 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	}
 
 	var body []byte
+	var abortCh chan struct{} // set after HandleRequest if eviction is enabled
+	var abortRequestID string
 
 	// Create error handling var as each request should only report once for
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
 	// such errors might happen even though response is processed.
 	var err error
 	defer func() {
+		// Clean up abort channel registration on exit.
+		if s.abortLookup != nil && abortRequestID != "" {
+			s.abortLookup.Deregister(abortRequestID)
+		}
 		if reqCtx.ResponseStatusCode != "" {
 			metrics.RecordRequestErrCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseStatusCode)
 		} else if err != nil {
@@ -198,7 +220,21 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		default:
 		}
 
-		req, recvErr := srv.Recv()
+		// If an abort channel is set (request dispatched + eviction enabled),
+		// use non-blocking receive to simultaneously listen for eviction signals.
+		var req *extProcPb.ProcessingRequest
+		var recvErr error
+
+		if abortCh != nil {
+			req, recvErr, err = s.recvOrAbort(srv, abortCh)
+			if err != nil {
+				// Eviction triggered — ImmediateResponse already sent.
+				return nil
+			}
+		} else {
+			req, recvErr = srv.Recv()
+		}
+
 		if recvErr == io.EOF || status.Code(recvErr) == codes.Canceled {
 			return nil
 		}
@@ -249,6 +285,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				if err != nil {
 					logger.Error(err, "Error handling request")
 					break
+				}
+
+				// After scheduling, look up the abort channel for eviction support.
+				if s.abortLookup != nil {
+					abortRequestID = reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey]
+					abortCh = s.abortLookup.Get(abortRequestID)
 				}
 
 				if reqCtx.SchedulingRequest != nil && reqCtx.SchedulingRequest.Body != nil {
@@ -332,6 +374,49 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		}
 	}
 }
+
+// recvResult holds the result of a non-blocking srv.Recv() call.
+type recvResult struct {
+	req *extProcPb.ProcessingRequest
+	err error
+}
+
+// recvOrAbort wraps srv.Recv() in a goroutine and selects between receiving the next
+// ext_proc message and an eviction abort signal. If the abort channel is closed,
+// it sends an ImmediateResponse(503) to Envoy and returns a sentinel error.
+func (s *StreamingServer) recvOrAbort(
+	srv extProcPb.ExternalProcessor_ProcessServer,
+	abortCh chan struct{},
+) (*extProcPb.ProcessingRequest, error, error) {
+	recvCh := make(chan recvResult, 1)
+	go func() {
+		req, err := srv.Recv()
+		recvCh <- recvResult{req: req, err: err}
+	}()
+
+	select {
+	case result := <-recvCh:
+		return result.req, result.err, nil
+	case <-abortCh:
+		// Eviction triggered — send ImmediateResponse to reset the upstream connection.
+		sendErr := srv.Send(&extProcPb.ProcessingResponse{
+			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+				ImmediateResponse: &extProcPb.ImmediateResponse{
+					Status: &envoyTypePb.HttpStatus{
+						Code: envoyTypePb.StatusCode_ServiceUnavailable,
+					},
+					Body: []byte("request evicted by flow control"),
+				},
+			},
+		})
+		if sendErr != nil {
+			return nil, nil, sendErr
+		}
+		return nil, nil, errEvicted
+	}
+}
+
+var errEvicted = errors.New("request evicted")
 
 // finishResponse ensures all post-response logic, such as metric recording
 // and state updates, is executed exactly once for the request lifecycle.

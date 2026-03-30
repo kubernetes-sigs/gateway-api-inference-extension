@@ -39,6 +39,9 @@ type EvictionItem struct {
 	Request *scheduling.InferenceRequest
 	// TargetEndpoint is the metadata of the endpoint serving this request.
 	TargetEndpoint *datalayer.EndpointMetadata
+	// AbortCh is closed by the aborter to signal the ext_proc Process() goroutine
+	// to send an ImmediateResponse and terminate the request.
+	AbortCh chan struct{}
 }
 
 // EvictionOrderingPolicy determines which in-flight request gets evicted first.

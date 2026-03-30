@@ -37,8 +37,9 @@ var _ requestcontrol.ResponseBodyProcessor = &Plugin{}
 
 // Plugin tracks in-flight requests via RequestControl hooks and provides eviction capability.
 type Plugin struct {
-	queue   *EvictionQueue
-	aborter Aborter
+	queue         *EvictionQueue
+	aborter       Aborter
+	abortRegistry *AbortRegistry
 }
 
 // NewPlugin creates an eviction plugin with the given policies and aborter.
@@ -48,9 +49,16 @@ func NewPlugin(
 	aborter Aborter,
 ) *Plugin {
 	return &Plugin{
-		queue:   NewEvictionQueue(ordering, filter),
-		aborter: aborter,
+		queue:         NewEvictionQueue(ordering, filter),
+		aborter:       aborter,
+		abortRegistry: NewAbortRegistry(),
 	}
+}
+
+// AbortRegistry returns the shared abort registry.
+// The ext_proc Process() goroutine uses this to look up abort channels for dispatched requests.
+func (p *Plugin) AbortRegistry() *AbortRegistry {
+	return p.abortRegistry
 }
 
 func (p *Plugin) TypedName() plugin.TypedName {
@@ -80,6 +88,8 @@ func (p *Plugin) PreRequest(
 		return
 	}
 
+	abortCh := make(chan struct{})
+
 	item := &flowcontrol.EvictionItem{
 		RequestID:      requestID,
 		Priority:       request.Objectives.Priority,
@@ -87,9 +97,11 @@ func (p *Plugin) PreRequest(
 		TargetURL:      "http://" + net.JoinHostPort(metadata.GetIPAddress(), metadata.GetPort()),
 		Request:        request,
 		TargetEndpoint: metadata,
+		AbortCh:        abortCh,
 	}
 
 	p.queue.Track(item)
+	p.abortRegistry.Register(requestID, abortCh)
 
 	// Bind untrack to the request context's lifetime as a safety net.
 	// If the client disconnects and ResponseBody(EndOfStream) never fires,
@@ -97,6 +109,7 @@ func (p *Plugin) PreRequest(
 	go func() {
 		<-ctx.Done()
 		p.queue.Untrack(requestID)
+		p.abortRegistry.Deregister(requestID)
 	}()
 
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Tracked in-flight request",
@@ -126,6 +139,7 @@ func (p *Plugin) ResponseBody(
 	}
 
 	p.queue.Untrack(requestID)
+	p.abortRegistry.Deregister(requestID)
 
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Untracked completed request",
 		"requestID", requestID,
