@@ -58,18 +58,9 @@ func (e *SimpleTokenEstimator) Estimate(request *framework.LLMRequest) int64 {
 			inputTokens = 1
 		}
 	case request.Body != nil:
-		// Fallback: character count from prompt or chat messages.
-		var chars int
-		switch {
-		case request.Body.Completions != nil:
-			chars = len(request.Body.Completions.Prompt)
-		case request.Body.ChatCompletions != nil:
-			for _, m := range request.Body.ChatCompletions.Messages {
-				chars += len(m.Content.PlainText())
-			}
-		default:
-			chars = 0
-		}
+		// Fallback: character count from prompt text across all API types
+		// (completions, chat/completions, responses, conversations).
+		chars := len(request.Body.PromptText())
 		inputTokens = int64(math.Max(1, math.Round(float64(chars)/e.CharactersPerToken)))
 	default:
 		return 0
