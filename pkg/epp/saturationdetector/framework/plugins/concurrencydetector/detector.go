@@ -122,7 +122,7 @@ func (d *detector) Saturation(_ context.Context, endpoints []datalayer.Endpoint)
 		if e.GetMetadata() == nil {
 			continue
 		}
-		endpointID := e.GetMetadata().NamespacedName.String()
+		endpointID := e.GetMetadata().Key.String()
 
 		if d.config.mode == modeTokens {
 			tokenCount := d.tokenTracker.get(endpointID)
@@ -162,7 +162,7 @@ func (d *detector) Filter(
 	}
 
 	for _, e := range endpoints {
-		endpointID := e.GetMetadata().NamespacedName.String()
+		endpointID := e.GetMetadata().Key.String()
 		if d.config.mode == modeTokens {
 			if d.tokenTracker.get(endpointID) < limit {
 				filtered = append(filtered, e)
@@ -179,7 +179,7 @@ func (d *detector) Filter(
 // PreRequest increments the atomic in-flight counter for the target endpoint.
 // We assume the scheduling result is valid based on the Director's contract.
 func (d *detector) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
-	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().NamespacedName.String()
+	eid := result.ProfileResults[result.PrimaryProfileName].TargetEndpoints[0].GetMetadata().Key.String()
 	if d.config.mode == modeTokens {
 		tokens := d.tokenEstimator.Estimate(request)
 		d.tokenTracker.add(eid, tokens)
@@ -200,7 +200,7 @@ func (d *detector) ResponseBody(
 	if targetEndpoint == nil || resp == nil || !resp.EndOfStream {
 		return
 	}
-	eid := targetEndpoint.NamespacedName.String()
+	eid := targetEndpoint.Key.String()
 	if d.config.mode == modeTokens {
 		tokens := d.tokenEstimator.Estimate(request)
 		d.tokenTracker.add(eid, -tokens)

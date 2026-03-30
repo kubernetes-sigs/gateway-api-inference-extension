@@ -22,7 +22,6 @@ import (
 	"math"
 	"math/rand"
 
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -293,10 +292,7 @@ func (s *PredictedLatency) handleNegativeHeadroomEndpointsHierarchical(
 }
 
 func (s *PredictedLatency) getEndpointMinTPOTSLO(endpoint schedulingtypes.Endpoint) float64 {
-	endpointName := types.NamespacedName{
-		Name:      endpoint.GetMetadata().NamespacedName.Name,
-		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
-	}
+	endpointName := endpoint.GetMetadata().GetNamespacedName()
 
 	if runningReqs := s.getRunningRequestList(endpointName); runningReqs != nil && runningReqs.GetSize() > 0 {
 		if topReq := runningReqs.Peek(); topReq != nil {
@@ -307,10 +303,7 @@ func (s *PredictedLatency) getEndpointMinTPOTSLO(endpoint schedulingtypes.Endpoi
 }
 
 func (s *PredictedLatency) getEndpointRunningRequestCount(endpoint schedulingtypes.Endpoint) int {
-	endpointName := types.NamespacedName{
-		Name:      endpoint.GetMetadata().NamespacedName.Name,
-		Namespace: endpoint.GetMetadata().NamespacedName.Namespace,
-	}
+	endpointName := endpoint.GetMetadata().GetNamespacedName()
 
 	if runningReqs := s.getRunningRequestList(endpointName); runningReqs != nil {
 		return runningReqs.GetSize()

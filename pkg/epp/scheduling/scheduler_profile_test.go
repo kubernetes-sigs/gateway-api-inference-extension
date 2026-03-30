@@ -26,6 +26,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
@@ -47,7 +48,7 @@ func TestSchedulePlugins(t *testing.T) {
 	}
 	pickerPlugin := &testPlugin{
 		TypeRes: "picker",
-		PickRes: k8stypes.NamespacedName{Name: "pod1"},
+		PickRes: plugin.NewEndPointKey("pod1", "ns", 8000),
 	}
 
 	tests := []struct {
@@ -67,11 +68,11 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin),
 			input: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "ns", 8000)}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "ns", 8000)}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod3", "ns", 8000)}, nil, nil),
 			},
-			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1"},
+			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1", Namespace: "ns"},
 			targetEndpointScore: 1.1,
 			numEndpointsToScore: 2,
 			err:                 false,
@@ -83,11 +84,11 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 60), NewWeightedScorer(tp2, 40)).
 				WithPicker(pickerPlugin),
 			input: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "ns", 8000)}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "ns", 8000)}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod3", "ns", 8000)}, nil, nil),
 			},
-			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1"},
+			wantTargetEndpoint:  k8stypes.NamespacedName{Name: "pod1", Namespace: "ns"},
 			targetEndpointScore: 50,
 			numEndpointsToScore: 2,
 			err:                 false,
@@ -99,9 +100,9 @@ func TestSchedulePlugins(t *testing.T) {
 				WithScorers(NewWeightedScorer(tp1, 1), NewWeightedScorer(tp2, 1)).
 				WithPicker(pickerPlugin),
 			input: []fwksched.Endpoint{
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil),
-				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "ns", 8000)}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "ns", 8000)}, nil, nil),
+				fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod3", "ns", 8000)}, nil, nil),
 			},
 			numEndpointsToScore: 0,
 			err:                 true, // no available endpoints to server after filter all
@@ -139,7 +140,7 @@ func TestSchedulePlugins(t *testing.T) {
 			// Validate output
 			wantRes := &fwksched.ProfileRunResult{
 				TargetEndpoints: []fwksched.Endpoint{
-					fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: test.wantTargetEndpoint}, nil, nil),
+					fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey(test.wantTargetEndpoint.Name, test.wantTargetEndpoint.Namespace, 8000)}, nil, nil),
 				},
 			}
 
@@ -192,7 +193,7 @@ type testPlugin struct {
 	FilterRes             []k8stypes.NamespacedName
 	PickCallCount         int
 	NumOfPickerCandidates int
-	PickRes               k8stypes.NamespacedName
+	PickRes               fwkplugin.EndPointKey
 	WinnerEndpointScore   float64
 }
 
@@ -226,7 +227,7 @@ func (tp *testPlugin) Pick(_ context.Context, _ *fwksched.CycleState, scoredEndp
 
 	winnerEndpoints := []fwksched.Endpoint{}
 	for _, scoredEndpoint := range scoredEndpoints {
-		if scoredEndpoint.GetMetadata().NamespacedName.String() == tp.PickRes.String() {
+		if scoredEndpoint.GetMetadata().Key.String() == tp.PickRes.String() {
 			winnerEndpoints = append(winnerEndpoints, scoredEndpoint.Endpoint)
 			tp.WinnerEndpointScore = scoredEndpoint.Score
 		}
@@ -384,7 +385,7 @@ func TestRunWithOutOfRangeScores(t *testing.T) {
 	}
 	pickerPlugin := &testPlugin{
 		TypeRes: "picker",
-		PickRes: k8stypes.NamespacedName{Name: "pod1"},
+		PickRes: plugin.NewEndPointKey("pod1", "ns", 8000),
 	}
 
 	profile := NewSchedulerProfile().
@@ -393,7 +394,7 @@ func TestRunWithOutOfRangeScores(t *testing.T) {
 		WithPicker(pickerPlugin)
 
 	input := []fwksched.Endpoint{
-		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
+		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "ns", 8000)}, nil, nil),
 	}
 
 	request := &fwksched.LLMRequest{
@@ -429,7 +430,7 @@ func findEndpoints(endpoints []fwksched.Endpoint, names ...k8stypes.NamespacedNa
 	res := []fwksched.Endpoint{}
 	for _, endpoint := range endpoints {
 		for _, name := range names {
-			if endpoint.GetMetadata().NamespacedName.String() == name.String() {
+			if endpoint.GetMetadata().GetNamespacedName().Name == name.Name {
 				res = append(res, endpoint)
 			}
 		}

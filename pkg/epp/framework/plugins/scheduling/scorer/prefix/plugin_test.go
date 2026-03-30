@@ -25,7 +25,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -78,9 +77,9 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, fwkdl.NewMetrics(), nil)
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, fwkdl.NewMetrics(), nil)
-	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, fwkdl.NewMetrics(), nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "default", 0)}, fwkdl.NewMetrics(), nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "default", 0)}, fwkdl.NewMetrics(), nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod3", "default", 0)}, fwkdl.NewMetrics(), nil)
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
@@ -248,7 +247,7 @@ func TestPrefixPluginChatCompletions(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &fwkdl.Metrics{}, nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "default", 0)}, &fwkdl.Metrics{}, nil)
 	endpoints := []fwksched.Endpoint{endpoint1}
 
 	// Test with chat completions request
@@ -284,8 +283,8 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, &fwkdl.Metrics{}, nil)
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, &fwkdl.Metrics{}, nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "default", 0)}, &fwkdl.Metrics{}, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "default", 0)}, &fwkdl.Metrics{}, nil)
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request with initial conversation
@@ -345,7 +344,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// Calculate expected score - pod1 should have cached the initial prefix
-	cachedBlocks := state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().NamespacedName)]
+	cachedBlocks := state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().Key)]
 	expectedScore := float64(cachedBlocks) / float64(extendedHashCount)
 	assert.Equal(t, expectedScore, scores[endpoint1], "endpoint1 should have prefix cache hit")
 	assert.Equal(t, float64(0), scores[endpoint2], "endpoint2 should have no cache hit")
@@ -380,7 +379,7 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	assert.Greater(t, len(state.PrefixCacheServers), 0, "should have cached servers from prefix match")
 
 	// endpoint1 should have an even higher cache hit rate now
-	cachedBlocks = state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().NamespacedName)]
+	cachedBlocks = state.PrefixCacheServers[ServerID(endpoint1.GetMetadata().Key)]
 	expectedScore = float64(cachedBlocks) / float64(longHashCount)
 	assert.Equal(t, expectedScore, scores[endpoint1], "endpoint1 should have higher prefix cache hit")
 	assert.Greater(t, scores[endpoint1], float64(0.5), "cache hit rate should be substantial for growing conversation")
@@ -411,9 +410,7 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			// Generate increasing-length random prompts
 			prompt := randomPrompt(4 + v)
 			endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
-				NamespacedName: k8stypes.NamespacedName{
-					Name: fmt.Sprintf("random-pod-%d", v),
-				},
+				Key: fwkplugin.NewEndPointKey(fmt.Sprintf("random-pod-%d", v), "default", 0),
 			}, nil, nil)
 
 			endpoints := []fwksched.Endpoint{endpoint}
@@ -511,7 +508,7 @@ func TestNew_InvalidConfigFallbacks(t *testing.T) {
 func TestPrefixPluginAutoTune(t *testing.T) {
 	// Setup common test data
 	podName := "pod-autotune"
-	endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: podName}},
+	endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey(podName, "default", 0)},
 		&fwkdl.Metrics{
 			CacheBlockSize:    16,   // 16 tokens * 4 chars/token = 64 chars per block
 			CacheNumGPUBlocks: 1000, // 1000 blocks capacity
@@ -564,7 +561,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		plugin.wg.Wait()
 
 		// Check indexer state
-		assert.Contains(t, plugin.indexer.Pods(), ServerID(endpoint.GetMetadata().NamespacedName))
+		assert.Contains(t, plugin.indexer.Pods(), ServerID(endpoint.GetMetadata().Key))
 	})
 
 	t.Run("AutoTune Disabled", func(t *testing.T) {
@@ -599,7 +596,7 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		plugin.PreRequest(context.Background(), req, schedulingResult)
 		plugin.wg.Wait()
 
-		assert.Contains(t, plugin.indexer.Pods(), ServerID(endpoint.GetMetadata().NamespacedName))
+		assert.Contains(t, plugin.indexer.Pods(), ServerID(endpoint.GetMetadata().Key))
 	})
 }
 
@@ -622,8 +619,8 @@ func TestPrepareRequestData(t *testing.T) {
 	plugin, err := New(context.Background(), config)
 	assert.NoError(t, err)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, fwkdl.NewMetrics(), fwkdl.NewAttributes())
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, fwkdl.NewMetrics(), fwkdl.NewAttributes())
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "default", 0)}, fwkdl.NewMetrics(), fwkdl.NewAttributes())
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "default", 0)}, fwkdl.NewMetrics(), fwkdl.NewAttributes())
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.
@@ -716,9 +713,7 @@ func BenchmarkPrefixPluginChatCompletionsStress(b *testing.B) {
 			}
 
 			endpoint := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
-				NamespacedName: k8stypes.NamespacedName{
-					Name: fmt.Sprintf("chat-pod-%d-%d", scenario.messageCount, scenario.messageLength),
-				},
+				Key: fwkplugin.NewEndPointKey(fmt.Sprintf("chat-pod-%d-%d", scenario.messageCount, scenario.messageLength), "default", 0),
 			}, nil, nil)
 			endpoints := []fwksched.Endpoint{endpoint}
 

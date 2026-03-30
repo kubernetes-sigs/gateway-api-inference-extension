@@ -21,9 +21,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"k8s.io/apimachinery/pkg/types"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/http"
 )
 
@@ -41,10 +41,7 @@ func TestDatasource(t *testing.T) {
 
 	ctx := context.Background()
 	endpoint := fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
-		NamespacedName: types.NamespacedName{
-			Name:      "pod1",
-			Namespace: "default",
-		},
+		Key: plugin.NewEndPointKey("pod1", "default", 8000),
 		Address: "1.2.3.4:5678",
 	}, nil)
 	_, err = source.Poll(ctx, endpoint)

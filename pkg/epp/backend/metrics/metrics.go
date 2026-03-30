@@ -120,14 +120,14 @@ func (p *PodMetricsClientImpl) FetchMetrics(ctx context.Context, metadata *fwkdl
 	}
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", metadata.NamespacedName, err)
+		return nil, fmt.Errorf("failed to fetch metrics from %s: %w", &metadata.Key, err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code from %s: %v", metadata.NamespacedName, resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code from %s: %v", &metadata.Key, resp.StatusCode)
 	}
 
 	parser := expfmt.NewTextParser(model.LegacyValidation)

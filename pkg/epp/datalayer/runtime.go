@@ -185,15 +185,15 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 	endpoint := fwkdl.NewEndpoint(endpointMetadata, nil)
 	collector := NewCollector()
 
-	key := endpointMetadata.GetNamespacedName()
+	key := endpointMetadata.Key
 	if _, loaded := r.collectors.LoadOrStore(key, collector); loaded {
-		logger.Info("collector already running for endpoint", "endpoint", key)
+		logger.Info("collector already running for endpoint", "endpoint", key.String())
 		return nil
 	}
 
 	ticker := NewTimeTicker(r.pollingInterval)
 	if err := collector.Start(ctx, ticker, endpoint, pollers, extractors); err != nil {
-		logger.Error(err, "failed to start collector for endpoint", "endpoint", key)
+		logger.Error(err, "failed to start collector for endpoint", "endpoint", key.String())
 		r.collectors.Delete(key)
 		return nil
 	}
@@ -203,7 +203,7 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 
 // ReleaseEndpoint terminates polling for data on the given endpoint.
 func (r *Runtime) ReleaseEndpoint(ep fwkdl.Endpoint) {
-	key := ep.GetMetadata().GetNamespacedName()
+	key := ep.GetMetadata().Key
 
 	if value, ok := r.collectors.LoadAndDelete(key); ok {
 		collector := value.(*Collector)

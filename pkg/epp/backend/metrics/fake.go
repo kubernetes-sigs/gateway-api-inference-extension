@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // FakePodMetrics is an implementation of PodMetrics that doesn't run the async refresh loop.
@@ -66,35 +66,35 @@ func (fpm *FakePodMetrics) UpdateMetrics(updated *MetricsState) {
 
 type FakePodMetricsClient struct {
 	errMu sync.RWMutex
-	Err   map[types.NamespacedName]error
+	Err   map[plugin.EndPointKey]error
 	resMu sync.RWMutex
-	Res   map[types.NamespacedName]*MetricsState
+	Res   map[plugin.EndPointKey]*MetricsState
 }
 
-func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, pod *fwkdl.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
+func (f *FakePodMetricsClient) FetchMetrics(ctx context.Context, endPoint *fwkdl.EndpointMetadata, existing *MetricsState) (*MetricsState, error) {
 	f.errMu.RLock()
-	err, ok := f.Err[pod.NamespacedName]
+	err, ok := f.Err[endPoint.Key]
 	f.errMu.RUnlock()
 	if ok {
 		return nil, err
 	}
 	f.resMu.RLock()
-	res, ok := f.Res[pod.NamespacedName]
+	res, ok := f.Res[endPoint.Key]
 	f.resMu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("no pod found: %v", pod.NamespacedName)
+		return nil, fmt.Errorf("no pod found: %v", endPoint.Key)
 	}
 	log.FromContext(ctx).V(logutil.VERBOSE).Info("Fetching metrics for pod", "existing", existing, "new", res)
 	return res.Clone(), nil
 }
 
-func (f *FakePodMetricsClient) SetRes(new map[types.NamespacedName]*MetricsState) {
+func (f *FakePodMetricsClient) SetRes(new map[plugin.EndPointKey]*MetricsState) {
 	f.resMu.Lock()
 	defer f.resMu.Unlock()
 	f.Res = new
 }
 
-func (f *FakePodMetricsClient) SetErr(new map[types.NamespacedName]error) {
+func (f *FakePodMetricsClient) SetErr(new map[plugin.EndPointKey]error) {
 	f.errMu.Lock()
 	defer f.errMu.Unlock()
 	f.Err = new

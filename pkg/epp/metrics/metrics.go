@@ -787,7 +787,7 @@ func RecordSchedulerAttempt(err error, targetModelName string, result *schedulin
 			if len(primaryResults.TargetEndpoints) > 0 {
 				metadata := primaryResults.TargetEndpoints[0].GetMetadata()
 				if metadata != nil {
-					schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, metadata.PodName, metadata.NamespacedName.Namespace, metadata.Port).Inc()
+					schedulerAttemptsTotal.WithLabelValues(SchedulerStatusSuccess, targetModelName, metadata.PodName, metadata.GetNamespacedName().Namespace, metadata.Port).Inc()
 					return
 				}
 			}

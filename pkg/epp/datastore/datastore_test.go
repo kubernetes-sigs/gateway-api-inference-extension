@@ -42,6 +42,7 @@ import (
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	pooltuil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -314,38 +315,38 @@ var (
 func TestMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
-		metrics   map[types.NamespacedName]*fwkdl.Metrics
-		err       map[types.NamespacedName]error
+		metrics   map[plugin.EndPointKey]*fwkdl.Metrics
+		err       map[plugin.EndPointKey]error
 		storePods []*corev1.Pod
 		want      []*fwkdl.Metrics
 		predict   func(fwkdl.Endpoint) bool
 	}{
 		{
 			name: "Probing metrics success",
-			metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
-				pod2NamespacedName: pod2Metrics,
+			metrics: map[plugin.EndPointKey]*fwkdl.Metrics{
+				plugin.NewEndPointKey("pod1", "", 8000): pod1Metrics,
+				plugin.NewEndPointKey("pod2", "", 8000): pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
 			want:      []*fwkdl.Metrics{pod1Metrics, pod2Metrics},
 		},
 		{
 			name: "Only pods in are probed",
-			metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
-				pod2NamespacedName: pod2Metrics,
+			metrics: map[plugin.EndPointKey]*fwkdl.Metrics{
+				plugin.NewEndPointKey("pod1", "", 8000): pod1Metrics,
+				plugin.NewEndPointKey("pod2", "", 8000): pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1},
 			want:      []*fwkdl.Metrics{pod1Metrics},
 		},
 		{
 			name: "Probing metrics error",
-			err: map[types.NamespacedName]error{
-				pod2NamespacedName: errors.New("injected error"),
+			err: map[plugin.EndPointKey]error{
+				plugin.NewEndPointKey("pod2", "", 8000): errors.New("injected error"),
 			},
-			metrics: map[types.NamespacedName]*fwkdl.Metrics{
-				pod1NamespacedName: pod1Metrics,
-				pod2NamespacedName: pod2Metrics,
+			metrics: map[plugin.EndPointKey]*fwkdl.Metrics{
+				plugin.NewEndPointKey("pod1", "", 8000): pod1Metrics,
+				plugin.NewEndPointKey("pod2", "", 8000): pod2Metrics,
 			},
 			storePods: []*corev1.Pod{pod1, pod2},
 			want: []*fwkdl.Metrics{pod1Metrics,
@@ -469,7 +470,7 @@ func TestPods(t *testing.T) {
 				test.op(ctx, ds)
 				var gotPods []*corev1.Pod
 				for _, pm := range ds.PodList(AllPodsPredicate) {
-					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetMetadata().PodName, Namespace: pm.GetMetadata().NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.GetMetadata().GetIPAddress()}}
+					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.GetMetadata().PodName, Namespace: pm.GetMetadata().GetNamespacedName().Namespace}, Status: corev1.PodStatus{PodIP: pm.GetMetadata().GetIPAddress()}}
 					gotPods = append(gotPods, pod)
 				}
 				if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
@@ -509,21 +510,21 @@ func TestTargetPortsChange(t *testing.T) {
 			initialTargetPorts:     []v1.Port{{Number: 8000}, {Number: 8001}},
 			updatedTargetPorts:     []v1.Port{{Number: 8000}},
 			wantEndpointCountAfter: 1,
-			wantEndpointNames:      []string{"pod1-rank-0"},
+			wantEndpointNames:      []string{"default/pod1:8000"},
 		},
 		{
 			name:                   "Shrink from 3 ports to 1 port removes multiple orphaned ranks",
 			initialTargetPorts:     []v1.Port{{Number: 8000}, {Number: 8001}, {Number: 8002}},
 			updatedTargetPorts:     []v1.Port{{Number: 8000}},
 			wantEndpointCountAfter: 1,
-			wantEndpointNames:      []string{"pod1-rank-0"},
+			wantEndpointNames:      []string{"default/pod1:8000"},
 		},
 		{
 			name:                   "Expand from 1 port to 2 ports adds new rank",
 			initialTargetPorts:     []v1.Port{{Number: 8000}},
 			updatedTargetPorts:     []v1.Port{{Number: 8000}, {Number: 8001}},
 			wantEndpointCountAfter: 2,
-			wantEndpointNames:      []string{"pod1-rank-0", "pod1-rank-1"},
+			wantEndpointNames:      []string{"default/pod1:8000", "default/pod1:8001"},
 		},
 	}
 
@@ -570,6 +571,11 @@ func TestTargetPortsChange(t *testing.T) {
 					Selector(map[string]string{"app": "vllm"}).ObjRef()
 				updatedPool.Spec.TargetPorts = test.updatedTargetPorts
 
+				t.Logf("Before updated pool set, ds.pods keys:")
+				for _, ep := range ds.PodList(func(fwkdl.Endpoint) bool { return true }) {
+					t.Logf("  Key: %s", ep.GetMetadata().Key.String())
+				}
+
 				if err := ds.PoolSet(ctx, fakeClient, pooltuil.InferencePoolToEndpointPool(updatedPool)); err != nil {
 					t.Fatalf("Failed to set updated pool: %v", err)
 				}
@@ -583,7 +589,7 @@ func TestTargetPortsChange(t *testing.T) {
 				// Verify endpoint names
 				gotNames := make([]string, 0, len(finalEndpoints))
 				for _, ep := range finalEndpoints {
-					gotNames = append(gotNames, ep.GetMetadata().NamespacedName.Name)
+					gotNames = append(gotNames, ep.GetMetadata().Key.String())
 				}
 				if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 					t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)
@@ -606,11 +612,7 @@ func TestEndpointMetadata(t *testing.T) {
 			existingPods: []*corev1.Pod{},
 			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod1.Name + "-rank-0",
-						Namespace: pod1.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod1.Name, pod1.Namespace, int(inferencePool.Spec.TargetPorts[0].Number)),
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
 					Port:        inferencePoolTargetPort,
@@ -628,11 +630,7 @@ func TestEndpointMetadata(t *testing.T) {
 			existingPods: []*corev1.Pod{},
 			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod1.Name + "-rank-0",
-						Namespace: pod1.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod1.Name, pod1.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[0].Number)),
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort0,
@@ -640,11 +638,7 @@ func TestEndpointMetadata(t *testing.T) {
 					Labels:      map[string]string{},
 				},
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod1.Name + "-rank-1",
-						Namespace: pod1.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod1.Name, pod1.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[1].Number)),
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort1,
@@ -662,11 +656,7 @@ func TestEndpointMetadata(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1},
 			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod1.Name + "-rank-0",
-						Namespace: pod1.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod1.Name, pod1.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[0].Number)),
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort0,
@@ -674,11 +664,7 @@ func TestEndpointMetadata(t *testing.T) {
 					Labels:      map[string]string{},
 				},
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod1.Name + "-rank-1",
-						Namespace: pod1.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod1.Name, pod1.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[1].Number)),
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort1,
@@ -686,11 +672,7 @@ func TestEndpointMetadata(t *testing.T) {
 					Labels:      map[string]string{},
 				},
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod2.Name + "-rank-0",
-						Namespace: pod2.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod2.Name, pod2.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[0].Number)),
 					PodName:     pod2.Name,
 					Address:     pod2.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort0,
@@ -698,11 +680,7 @@ func TestEndpointMetadata(t *testing.T) {
 					Labels:      map[string]string{},
 				},
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod2.Name + "-rank-1",
-						Namespace: pod2.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod2.Name, pod2.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[1].Number)),
 					PodName:     pod2.Name,
 					Address:     pod2.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort1,
@@ -720,11 +698,7 @@ func TestEndpointMetadata(t *testing.T) {
 			existingPods: []*corev1.Pod{pod1, pod2},
 			wantEndpointMetas: []*fwkdl.EndpointMetadata{
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod1.Name + "-rank-0",
-						Namespace: pod1.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod1.Name, pod1.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[0].Number)),
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort0,
@@ -732,11 +706,7 @@ func TestEndpointMetadata(t *testing.T) {
 					Labels:      map[string]string{},
 				},
 				{
-					NamespacedName: types.NamespacedName{
-						Name:      pod1.Name + "-rank-1",
-						Namespace: pod1.Namespace,
-					},
-
+					Key:         plugin.NewEndPointKey(pod1.Name, pod1.Namespace, int(inferencePoolMultiTarget.Spec.TargetPorts[1].Number)),
 					PodName:     pod1.Name,
 					Address:     pod1.Status.PodIP,
 					Port:        inferencePoolMultiTargetPort1,
@@ -774,7 +744,7 @@ func TestEndpointMetadata(t *testing.T) {
 				for _, pm := range ds.PodList(AllPodsPredicate) {
 					gotMetadata = append(gotMetadata, pm.GetMetadata())
 				}
-				if diff := cmp.Diff(test.wantEndpointMetas, gotMetadata, cmpopts.SortSlices(func(a, b *fwkdl.EndpointMetadata) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
+				if diff := cmp.Diff(test.wantEndpointMetas, gotMetadata, cmpopts.SortSlices(func(a, b *fwkdl.EndpointMetadata) bool { return a.Key.String() < b.Key.String() })); diff != "" {
 					t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
 				}
 			})
@@ -855,7 +825,7 @@ func TestActivePortFiltering(t *testing.T) {
 			},
 			pods:              []*corev1.Pod{readyPod1},
 			wantEndpointCount: 2,                                      // Only ports 8000 and 8002 should be active
-			wantEndpointNames: []string{"pod1-rank-0", "pod1-rank-2"}, // ranks 1 and 3 (for ports 8001 and 8003) should be skipped
+			wantEndpointNames: []string{"default/pod1:8000", "default/pod1:8002"}, // ports 8001 and 8003 should be skipped
 		},
 		{
 			name: "Pod without active ports annotation uses all ports",
@@ -938,7 +908,7 @@ func TestActivePortFiltering(t *testing.T) {
 				if test.wantEndpointNames != nil {
 					gotNames := make([]string, 0, len(finalEndpoints))
 					for _, ep := range finalEndpoints {
-						gotNames = append(gotNames, ep.GetMetadata().NamespacedName.Name)
+						gotNames = append(gotNames, ep.GetMetadata().Key.String())
 					}
 					if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 						t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)

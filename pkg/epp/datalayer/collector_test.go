@@ -24,10 +24,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/mocks"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	datasourcemocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
 
@@ -35,10 +35,7 @@ import (
 
 func defaultEndpoint() fwkdl.Endpoint {
 	meta := &fwkdl.EndpointMetadata{
-		NamespacedName: types.NamespacedName{
-			Name:      "pod-name",
-			Namespace: "default",
-		},
+		Key: plugin.NewEndPointKey("pod-name", "default", 5678),
 		Address: "1.2.3.4:5678",
 	}
 	ms := fwkdl.NewEndpoint(meta, nil)

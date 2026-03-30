@@ -23,16 +23,16 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestPickMaxScorePicker(t *testing.T) {
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil)
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil)
-	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "default", 0)}, nil, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "default", 0)}, nil, nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod3", "default", 0)}, nil, nil)
 
 	tests := []struct {
 		name               string
@@ -142,9 +142,9 @@ func TestPickRandomPicker(t *testing.T) {
 		tolerance      = 0.05 // Verify within tolerance ±5%
 	)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil)
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil)
-	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "default", 0)}, nil, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "default", 0)}, nil, nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod3", "default", 0)}, nil, nil)
 
 	tests := []struct {
 		name    string
@@ -206,13 +206,13 @@ func TestPickRandomPicker(t *testing.T) {
 			// should be min(numPods/numCandidates, 1.0), regardless of scores.
 			selectionCounts := make(map[string]int)
 			for _, ep := range test.input {
-				selectionCounts[ep.GetMetadata().NamespacedName.Name] = 0
+				selectionCounts[ep.GetMetadata().GetNamespacedName().Name] = 0
 			}
 
 			for range testIterations {
 				res := test.picker.Pick(context.Background(), fwksched.NewCycleState(), test.input)
 				for _, ep := range res.TargetEndpoints {
-					selectionCounts[ep.GetMetadata().NamespacedName.Name]++
+					selectionCounts[ep.GetMetadata().GetNamespacedName().Name]++
 				}
 			}
 
@@ -234,11 +234,11 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 		tolerance      = 0.05 // Verify within tolerance ±5%
 	)
 
-	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil)
-	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil)
-	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil)
-	endpoint4 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod4"}}, nil, nil)
-	endpoint5 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod5"}}, nil, nil)
+	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod1", "default", 0)}, nil, nil)
+	endpoint2 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod2", "default", 0)}, nil, nil)
+	endpoint3 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod3", "default", 0)}, nil, nil)
+	endpoint4 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod4", "default", 0)}, nil, nil)
+	endpoint5 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{Key: fwkplugin.NewEndPointKey("pod5", "default", 0)}, nil, nil)
 
 	// A-Res algorithm uses U^(1/w) transformation which introduces statistical variance
 	// beyond simple proportional sampling. Generous tolerance is required to prevent
@@ -299,7 +299,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 			// Calculate expected probabilities based on scores
 			expectedProbabilities := make(map[string]float64)
 			for _, endpoint := range test.input {
-				podName := endpoint.GetMetadata().NamespacedName.Name
+				podName := endpoint.GetMetadata().GetNamespacedName().Name
 				if totalScore > 0 {
 					expectedProbabilities[podName] = endpoint.Score / totalScore
 				} else {
@@ -310,7 +310,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 			// Initialize selection counters for each pod
 			selectionCounts := make(map[string]int)
 			for _, endpoint := range test.input {
-				endpointName := endpoint.GetMetadata().NamespacedName.Name
+				endpointName := endpoint.GetMetadata().GetNamespacedName().Name
 				selectionCounts[endpointName] = 0
 			}
 
@@ -319,7 +319,7 @@ func TestPickWeightedRandomPicker(t *testing.T) {
 				result := picker.Pick(context.Background(), fwksched.NewCycleState(), test.input)
 
 				// Count selections for probability analysis
-				selectedEndpointName := result.TargetEndpoints[0].GetMetadata().NamespacedName.Name
+				selectedEndpointName := result.TargetEndpoints[0].GetMetadata().GetNamespacedName().Name
 				selectionCounts[selectedEndpointName]++
 			}
 

@@ -163,7 +163,7 @@ func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *fwksch
 		scores := scorer.Score(ctx, cycleState, request, endpoints)
 		metrics.RecordPluginProcessingLatency(scorerExtensionPoint, scorer.TypedName().Type, scorer.TypedName().Name, time.Since(before))
 		for endpoint, score := range scores { // weight is relative to the sum of weights
-			logger.V(logutil.DEBUG).Info("Calculated score", "plugin", scorer.TypedName(), "endpoint", endpoint.GetMetadata().NamespacedName, "score", score)
+			logger.V(logutil.DEBUG).Info("Calculated score", "plugin", scorer.TypedName(), "endpoint", endpoint.GetMetadata().GetNamespacedName(), "score", score)
 			weightedScorePerEndpoint[endpoint] += enforceScoreRange(score) * scorer.Weight()
 		}
 		logger.V(logutil.DEBUG).Info("Completed running scorer plugin successfully", "plugin", scorer.TypedName())

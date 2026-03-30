@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -33,8 +32,8 @@ var _ fwkdl.PollingDataSource = (*MetricsDataSource)(nil)
 type MetricsDataSource struct {
 	typedName plugin.TypedName
 	CallCount int64
-	Metrics   map[types.NamespacedName]*fwkdl.Metrics
-	Errors    map[types.NamespacedName]error
+	Metrics   map[plugin.EndPointKey]*fwkdl.Metrics
+	Errors    map[plugin.EndPointKey]error
 }
 
 func NewDataSource(typedName plugin.TypedName) *MetricsDataSource {
@@ -58,8 +57,8 @@ func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil
 
 func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.CallCount, 1)
-	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
-		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
+	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().Key]; ok {
+		if _, ok := fds.Errors[ep.GetMetadata().Clone().Key]; !ok {
 			ep.UpdateMetrics(metrics)
 		}
 	}

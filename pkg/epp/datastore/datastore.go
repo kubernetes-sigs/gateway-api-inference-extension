@@ -37,6 +37,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	podutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pod"
 )
 
@@ -300,7 +301,7 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 	}
 	pods := []*fwkdl.EndpointMetadata{}
 	activePorts := extractActivePorts(pod, pool.TargetPorts)
-	for idx, port := range pool.TargetPorts {
+	for _, port := range pool.TargetPorts {
 		if !activePorts.Has(port) {
 			continue
 		}
@@ -310,7 +311,7 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 		}
 		pods = append(pods,
 			&fwkdl.EndpointMetadata{
-				NamespacedName: createEndpointNamespacedName(pod, idx),
+				Key: plugin.NewEndPointKey(pod.Name, pod.Namespace, port),
 				PodName:        pod.Name,
 				Address:        pod.Status.PodIP,
 				Port:           strconv.Itoa(port),
@@ -326,14 +327,12 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 	}
 
 	result := true
-	existingEpSet := sets.Set[types.NamespacedName]{}
 	for _, endpointMetadata := range pods {
-		existingEpSet.Insert(endpointMetadata.NamespacedName)
 		var ep fwkdl.Endpoint
-		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
+		existing, ok := ds.pods.Load(endpointMetadata.Key)
 		if !ok {
 			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
-			ds.pods.Store(endpointMetadata.NamespacedName, ep)
+			ds.pods.Store(endpointMetadata.Key, ep)
 			result = false
 		} else {
 			ep = existing.(fwkdl.Endpoint)
@@ -343,14 +342,14 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 	}
 
 	// remove endpoints that are no longer active in the pool
-	for idx, port := range pool.TargetPorts {
+	for _, port := range pool.TargetPorts {
 		if activePorts.Has(port) {
 			continue
 		}
 
-		namespacedName := createEndpointNamespacedName(pod, idx)
-		if ep, ok := ds.pods.Load(namespacedName); ok {
-			ds.pods.Delete(namespacedName)
+		key := plugin.NewEndPointKey(pod.Name, pod.Namespace, port)
+		if ep, ok := ds.pods.Load(key); ok {
+			ds.pods.Delete(key)
 			ds.epf.ReleaseEndpoint(ep.(fwkdl.Endpoint))
 		}
 	}
@@ -381,15 +380,15 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 
 	// Track active endpoints by their full name (including rank suffix).
 	// This ensures orphaned rank endpoints are removed when targetPorts shrinks.
-	activeEndpoints := sets.New[types.NamespacedName]()
+	activeEndpoints := sets.New[plugin.EndPointKey]()
 	for _, pod := range podList.Items {
 		if !podutil.IsPodReady(&pod) {
 			continue
 		}
 		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
 		// Calculate expected endpoint names based on current targetPorts.
-		for idx := range ds.pool.TargetPorts {
-			activeEndpoints.Insert(createEndpointNamespacedName(&pod, idx))
+		for _, port := range ds.pool.TargetPorts {
+			activeEndpoints.Insert(plugin.NewEndPointKey(pod.Name, pod.Namespace, port))
 		}
 		if !ds.podUpdateOrAddIfNotExist(ctx, &pod, ds.pool) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
@@ -401,7 +400,7 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 	// Remove endpoints that don't belong to the pool, are not ready, or are orphaned ranks.
 	ds.pods.Range(func(k, v any) bool {
 		ep := v.(fwkdl.Endpoint)
-		endpointName := ep.GetMetadata().NamespacedName
+		endpointName := ep.GetMetadata().Key
 		if !activeEndpoints.Has(endpointName) {
 			logger.V(logutil.VERBOSE).Info("Removing endpoint", "endpoint", endpointName)
 			ds.pods.Delete(k)
@@ -432,13 +431,4 @@ func extractActivePorts(pod *corev1.Pod, targetPorts []int) sets.Set[int] {
 		}
 	}
 	return activePorts
-}
-
-// createEndpointNamespacedName creates a namespaced name for an endpoint based on pod and rank index.
-// This ensures consistent naming between PodUpdateOrAddIfNotExist and podResyncAll.
-func createEndpointNamespacedName(pod *corev1.Pod, idx int) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      pod.Name + "-rank-" + strconv.Itoa(idx),
-		Namespace: pod.Namespace,
-	}
 }

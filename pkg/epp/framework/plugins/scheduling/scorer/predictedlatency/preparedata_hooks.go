@@ -41,16 +41,16 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 			prefixCacheInfo := prefixCacheInfoRaw.(*attrprefix.PrefixCacheMatchInfo)
 			prefixCacheScore = float64(prefixCacheInfo.MatchBlocks()) / float64(prefixCacheInfo.TotalBlocks())
 			if !math.IsNaN(prefixCacheScore) {
-				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", endpoint.GetMetadata().NamespacedName.Name, "score", prefixCacheScore)
+				logger.V(logutil.DEBUG).Info("Found prefix cache score in pod attribute", "pod", endpoint.GetMetadata().GetNamespacedName().Name, "score", prefixCacheScore)
 			} else {
 				prefixCacheScore = 0.0
-				logger.V(logutil.DEBUG).Info("Prefix cache score is NaN, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
+				logger.V(logutil.DEBUG).Info("Prefix cache score is NaN, defaulting to 0", "pod", endpoint.GetMetadata().GetNamespacedName().Name)
 			}
 		} else {
-			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", endpoint.GetMetadata().NamespacedName.Name)
+			logger.V(logutil.DEBUG).Info("No prefix cache score found in pod attribute, defaulting to 0", "pod", endpoint.GetMetadata().GetNamespacedName().Name)
 			prefixCacheScore = 0.0
 		}
-		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = prefixCacheScore
+		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().GetNamespacedName().Name] = prefixCacheScore
 	}
 	predictions, err := s.generatePredictions(ctx, predictedLatencyCtx, endpoints)
 	if err == nil && len(predictions) == len(endpoints) {
@@ -70,7 +70,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 				)
 				pred.Endpoint.Put(attrlatency.LatencyPredictionInfoKey, latencyInfo)
 				logger.V(logutil.DEBUG).Info("Stored latency prediction in endpoint",
-					"pod", pred.Endpoint.GetMetadata().NamespacedName.Name,
+					"pod", pred.Endpoint.GetMetadata().GetNamespacedName().Name,
 					"ttft", pred.TTFT,
 					"tpot", pred.TPOT,
 					"ttftValid", pred.TTFTValid,

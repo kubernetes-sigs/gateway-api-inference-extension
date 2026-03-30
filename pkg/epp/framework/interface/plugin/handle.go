@@ -30,8 +30,8 @@ type Handle interface {
 
 	HandlePlugins
 
-	// PodList lists pods.
-	PodList() []types.NamespacedName
+	// EndPointList lists endpoints.
+	EndPointList() []EndPointKey
 }
 
 // HandlePlugins defines a set of APIs to work with instantiated plugins
@@ -49,14 +49,14 @@ type HandlePlugins interface {
 	GetAllPluginsWithNames() map[string]Plugin
 }
 
-// PodListFunc is a function type that filters and returns a list of pod metrics
-type PodListFunc func() []types.NamespacedName
+// EndPointListFunc is a function type that filters and returns a list of pod metrics
+type EndPointListFunc func() []EndPointKey
 
 // eppHandle is an implementation of the interface plugins.Handle
 type eppHandle struct {
 	ctx context.Context
 	HandlePlugins
-	podList PodListFunc
+	endpointList EndPointListFunc
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -93,18 +93,18 @@ func (h *eppHandlePlugins) GetAllPluginsWithNames() map[string]Plugin {
 	return h.plugins
 }
 
-// PodList lists pods.
-func (h *eppHandle) PodList() []types.NamespacedName {
-	return h.podList()
+// EndPointList lists endpoints.
+func (h *eppHandle) EndPointList() []EndPointKey {
+	return h.endpointList()
 }
 
-func NewEppHandle(ctx context.Context, podList PodListFunc) Handle {
+func NewEppHandle(ctx context.Context, endpointList EndPointListFunc) Handle {
 	return &eppHandle{
 		ctx: ctx,
 		HandlePlugins: &eppHandlePlugins{
 			plugins: map[string]Plugin{},
 		},
-		podList: podList,
+		endpointList: endpointList,
 	}
 }
 
@@ -121,4 +121,26 @@ func PluginByType[P Plugin](handlePlugins HandlePlugins, name string) (P, error)
 		return zero, fmt.Errorf("the plugin with the name '%s' is not an instance of %T", name, zero)
 	}
 	return plugin, nil
+}
+
+// EndPointKey is a key for an endpoint.
+type EndPointKey struct {
+	NamespacedName types.NamespacedName
+	Port           int
+}
+
+// String returns the string representation of the EndPointKey in the format "namespace/name:port".
+func (k EndPointKey) String() string {
+	return fmt.Sprintf("%s:%d", k.NamespacedName.String(), k.Port)
+}
+
+// NewEndPointKey creates a new EndPointKey with the given name, namespace, and port.
+func NewEndPointKey(name, namespace string, port int) EndPointKey {
+	return EndPointKey{
+		NamespacedName: types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Port: port,
+	}
 }

@@ -23,8 +23,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -43,10 +43,10 @@ func TestBulkPredictWithMetrics(t *testing.T) {
 	}
 	pods := []*fwkdl.EndpointMetadata{
 		{
-			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+			Key: plugin.NewEndPointKey("pod1", "default", 8000),
 		},
 		{
-			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod2"},
+			Key: plugin.NewEndPointKey("pod2", "default", 8000),
 		},
 	}
 	prompts := []string{"prompt1", "prompt2"}
@@ -73,7 +73,7 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 	}
 	pods := []*fwkdl.EndpointMetadata{
 		{
-			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+			Key: plugin.NewEndPointKey("pod1", "default", 8000),
 		},
 	}
 	prompts := []string{"prompt1"}
@@ -91,7 +91,7 @@ func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 	metricsStates := []*fwkdl.Metrics{{}}
 	pods := []*fwkdl.EndpointMetadata{
 		{
-			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+			Key: plugin.NewEndPointKey("pod1", "default", 8000),
 		},
 	}
 	prompts := []string{"prompt1", "prompt2"} // Mismatch length
@@ -117,7 +117,7 @@ func TestBulkPredictWithMetrics_WithPredictedLatencyCtx(t *testing.T) {
 	}
 	pods := []*fwkdl.EndpointMetadata{
 		{
-			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+			Key: plugin.NewEndPointKey("pod1", "default", 8000),
 		},
 	}
 	prompts := []string{"prompt1"}
@@ -148,7 +148,7 @@ func TestBulkPredictWithMetrics_ChatCompletionsPrompt(t *testing.T) {
 
 	metricsStates := []*fwkdl.Metrics{{KVCacheUsagePercent: 0.5}}
 	pods := []*fwkdl.EndpointMetadata{
-		{NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"}},
+		{Key: plugin.NewEndPointKey("pod1", "default", 8000)},
 	}
 
 	chatBody := &schedulingtypes.LLMRequestBody{
@@ -174,7 +174,7 @@ func TestBulkPredictWithMetrics_NilMetricsState(t *testing.T) {
 	metricsStates := []*fwkdl.Metrics{nil} // Nil metrics state
 	pods := []*fwkdl.EndpointMetadata{
 		{
-			NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+			Key: plugin.NewEndPointKey("pod1", "default", 8000),
 		},
 	}
 	prompts := []string{"prompt1"}

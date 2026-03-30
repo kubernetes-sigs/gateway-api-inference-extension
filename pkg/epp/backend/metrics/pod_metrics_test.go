@@ -23,18 +23,15 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 var (
 	pod1Info = &fwkdl.EndpointMetadata{
-		NamespacedName: types.NamespacedName{
-			Name:      "pod1-rank-0",
-			Namespace: "default",
-		},
+		Key:     plugin.NewEndPointKey("default", "pod1", 9999),
 		PodName: "pod1",
 	}
 	initial = &MetricsState{
@@ -69,7 +66,7 @@ func TestMetricsRefresh(t *testing.T) {
 
 	// Use SetRes to simulate an update of metrics from the pod.
 	// Verify that the metrics are updated.
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: initial})
+	pmc.SetRes(map[plugin.EndPointKey]*MetricsState{pod1Info.Key: initial})
 	condition := func(collect *assert.CollectT) {
 		assert.True(collect, cmp.Equal(pm.GetMetrics(), initial, cmpopts.IgnoreFields(MetricsState{}, "UpdateTime")))
 	}
@@ -79,7 +76,7 @@ func TestMetricsRefresh(t *testing.T) {
 	// new update.
 	pmf.ReleaseEndpoint(pm)
 	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: updated})
+	pmc.SetRes(map[plugin.EndPointKey]*MetricsState{pod1Info.Key: updated})
 	// Still expect the same condition (no metrics update).
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 }

@@ -37,7 +37,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	metricsutils "k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -49,6 +48,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	eppServer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -311,7 +311,7 @@ func (h *TestHarness) WithBaseResources() *TestHarness {
 // WithPods creates pod objects in the API server and configures the fake metrics client.
 func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 	h.t.Helper()
-	metricsMap := make(map[types.NamespacedName]*fwkdl.Metrics)
+	metricsMap := make(map[plugin.EndPointKey]*fwkdl.Metrics)
 
 	// Pre-calculate metrics and register them with the fake client.
 	for _, p := range pods {
@@ -321,7 +321,7 @@ func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 			activeModelsMap[m] = 1
 		}
 
-		metricsMap[types.NamespacedName{Namespace: h.Namespace, Name: metricsKeyName}] = &fwkdl.Metrics{
+		metricsMap[plugin.NewEndPointKey(metricsKeyName, h.Namespace, 8000)] = &fwkdl.Metrics{
 			WaitingQueueSize:    p.queueSize,
 			KVCacheUsagePercent: p.kvCacheUsage,
 			ActiveModels:        activeModelsMap,

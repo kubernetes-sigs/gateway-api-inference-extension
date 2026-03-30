@@ -57,7 +57,7 @@ func (f *PodMetricsFactory) NewEndpoint(parentCtx context.Context, metadata *fwk
 		startOnce: sync.Once{},
 		stopOnce:  sync.Once{},
 		done:      make(chan struct{}),
-		logger:    log.FromContext(parentCtx).WithValues("endpoint", metadata.NamespacedName),
+		logger:    log.FromContext(parentCtx).WithValues("endpoint", metadata.Key),
 	}
 	pm.metadata.Store(metadata)
 	pm.metrics.Store(fwkdl.NewMetrics())

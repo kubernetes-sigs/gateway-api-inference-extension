@@ -198,14 +198,14 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		if plCtx.prefillTokensAtDispatch > 0 || plCtx.prefillTokensAtDispatchOnPrefill > 0 {
 			// Prefill pod: only if not already decremented at TTFT (streaming disaggregated path).
 			if plCtx.prefillTargetMetadata != nil && plCtx.ttft == 0 {
-				prefillPodKey := plCtx.prefillTargetMetadata.NamespacedName.String()
+				prefillPodKey := plCtx.prefillTargetMetadata.Key.String()
 				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, prefillPodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
 					predictedLatency.prefillTokensInFlight.Delete(prefillPodKey)
 				}
 			}
 			// Decode pod.
 			if plCtx.targetMetadata != nil {
-				decodePodKey := plCtx.targetMetadata.NamespacedName.String()
+				decodePodKey := plCtx.targetMetadata.Key.String()
 				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, decodePodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
 					predictedLatency.prefillTokensInFlight.Delete(decodePodKey)
 				}
@@ -339,7 +339,7 @@ func (s *PredictedLatency) scoreWithoutPredictions(
 	// Build prediction results with only prefix cache scores
 	endpointResults := make([]endpointPredictionResult, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		prefixScore := sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name]
+		prefixScore := sloCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().Key.String()]
 		endpointResults = append(endpointResults, endpointPredictionResult{
 			Endpoint:         endpoint,
 			PrefixCacheScore: prefixScore,
@@ -378,7 +378,7 @@ func (s *PredictedLatency) Score(ctx context.Context, state *framework.CycleStat
 	// Extract predictions for filtered endpoints (supports profile-based filtering)
 	allPreds := make([]endpointPredictionResult, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if pred, ok := predictedLatencyCtx.predictionsForScheduling[endpoint.GetMetadata().NamespacedName.Name]; ok {
+		if pred, ok := predictedLatencyCtx.predictionsForScheduling[endpoint.GetMetadata().Key.String()]; ok {
 			allPreds = append(allPreds, pred)
 		}
 	}
@@ -452,7 +452,7 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 		return 0.0
 	}
 
-	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(endpoint.GetMetadata().NamespacedName)]
+	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(endpoint.GetMetadata().Key)]
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
 }

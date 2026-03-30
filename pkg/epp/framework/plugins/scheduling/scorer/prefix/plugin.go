@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash/v2"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -124,10 +123,10 @@ type Server struct {
 	numOfGPUBlocks int
 }
 
-type ServerID k8stypes.NamespacedName
+type ServerID plugin.EndPointKey
 
 func (s ServerID) String() string {
-	return k8stypes.NamespacedName(s).String()
+	return fmt.Sprintf("%s:%d", s.NamespacedName.String(), s.Port)
 }
 
 // compile-time type validation
@@ -254,7 +253,7 @@ func (p *Plugin) PrepareRequestData(ctx context.Context, request *framework.LLMR
 	total := len(state.PrefixHashes)
 
 	for _, endpoint := range endpoints {
-		matchLen := state.PrefixCacheServers[ServerID(endpoint.GetMetadata().NamespacedName)]
+		matchLen := state.PrefixCacheServers[ServerID(endpoint.GetMetadata().Key)]
 		endpoint.Put(attrprefix.PrefixCacheMatchInfoKey, attrprefix.NewPrefixCacheMatchInfo(matchLen, total, blockSize))
 	}
 
@@ -287,7 +286,7 @@ func (p *Plugin) Score(ctx context.Context, cycleState *framework.CycleState, re
 		if total == 0 {
 			return 0
 		}
-		matchLen := state.PrefixCacheServers[ServerID(endpoint.GetMetadata().NamespacedName)]
+		matchLen := state.PrefixCacheServers[ServerID(endpoint.GetMetadata().Key)]
 		return float64(matchLen) / float64(total)
 	}
 
@@ -327,7 +326,7 @@ func (p *Plugin) PreRequest(ctx context.Context, request *framework.LLMRequest, 
 	}()
 
 	total := len(state.PrefixHashes)
-	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
+	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().Key)]
 
 	blockSize := getBlockSize(primaryProfileResult.TargetEndpoints, p.config)
 	// report matched and total prefix length in chars
@@ -340,7 +339,7 @@ func (p *Plugin) makeServer(targetEndpoint framework.Endpoint) Server {
 		gpuBlocks = targetEndpoint.GetMetrics().CacheNumGPUBlocks
 	}
 	return Server{
-		ServerID(targetEndpoint.GetMetadata().NamespacedName),
+		ServerID(targetEndpoint.GetMetadata().Key),
 		gpuBlocks,
 	}
 }
@@ -377,7 +376,7 @@ func (m *Plugin) CleanUpInactivePods(ctx context.Context, handle plugin.Handle) 
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			podNames := handle.PodList()
+			podNames := handle.EndPointList()
 			activePods := make(map[ServerID]struct{}, len(podNames))
 			for _, nsn := range podNames {
 				activePods[ServerID(nsn)] = struct{}{}

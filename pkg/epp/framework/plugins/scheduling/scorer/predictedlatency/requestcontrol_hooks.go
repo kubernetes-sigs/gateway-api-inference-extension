@@ -145,8 +145,8 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	}
 
 	endpointName := types.NamespacedName{
-		Name:      targetMetadata.NamespacedName.Name,
-		Namespace: targetMetadata.NamespacedName.Namespace,
+		Name:      targetMetadata.GetNamespacedName().Name,
+		Namespace: targetMetadata.GetNamespacedName().Namespace,
 	}
 
 	logger.V(logutil.TRACE).Info("request ID for SLO tracking", "requestID", request.Headers[reqcommon.RequestIdHeaderKey], "endpointName", endpointName)
@@ -178,7 +178,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	if prefillResult, exists := schedulingResult.ProfileResults[Experimental_DefaultPrefillProfile]; exists && prefillResult != nil && len(prefillResult.TargetEndpoints) > 0 {
 		prefillMetadata := prefillResult.TargetEndpoints[0].GetMetadata()
 		predictedLatencyCtx.prefillTargetMetadata = prefillMetadata
-		logger.V(logutil.DEBUG).Info("Prefill target identified for request", "requestID", id, "prefillEndpoint", prefillMetadata.NamespacedName.String())
+		logger.V(logutil.DEBUG).Info("Prefill target identified for request", "requestID", id, "prefillEndpoint", prefillMetadata.Key.String())
 	} else {
 		logger.V(logutil.DEBUG).Info("No prefill target identified for request", "requestID", id)
 	}
@@ -192,7 +192,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	// and kv_cache_percentage already captures decode load sufficiently.
 	decodePodKey := endpointName.String()
 	if predictedLatencyCtx.prefillTargetMetadata != nil {
-		prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
+		prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.Key.String()
 		t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
 		predictedLatencyCtx.prefillTokensAtDispatchOnPrefill = t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Load()
 	}
@@ -240,7 +240,7 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 
 			// In disaggregated streaming, prefill is done once TTFT is hit.
 			if predictedLatencyCtx.prefillTargetMetadata != nil {
-				prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
+				prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.GetNamespacedName().String()
 				if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
 					t.prefillTokensInFlight.Delete(prefillPodKey)
 				}
@@ -304,11 +304,11 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 		}
 
 		// Decrement per-pod token-in-flight counters now that the request is complete.
-		decodePodKey := targetMetadata.NamespacedName.String()
+		decodePodKey := targetMetadata.Key.String()
 		// If TTFT was not yet recorded when we entered EOS, the prefill pod counter
 		// was never decremented in ResponseStreaming — decrement it here.
 		if ttftNotYetRecorded && predictedLatencyCtx.prefillTargetMetadata != nil {
-			prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
+			prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.Key.String()
 			if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
 				t.prefillTokensInFlight.Delete(prefillPodKey)
 			}

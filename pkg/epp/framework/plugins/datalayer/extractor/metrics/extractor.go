@@ -158,7 +158,7 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) 
 		}
 	}
 
-	logger := log.FromContext(ctx).WithValues("endpoint", ep.GetMetadata().NamespacedName)
+	logger := log.FromContext(ctx).WithValues("endpoint", ep.GetMetadata().Key)
 	if updated {
 		clone.UpdateTime = time.Now()
 		logger.V(logutil.TRACE).Info("Refreshed metrics", "updated", clone)

@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 const (
@@ -49,7 +50,7 @@ var (
 		},
 	}
 	expected = &EndpointMetadata{
-		NamespacedName: types.NamespacedName{Name: name, Namespace: namespace},
+		Key: plugin.NewEndPointKey(name, namespace, 8000),
 		Address:        podip,
 		Labels:         labels,
 	}
@@ -68,9 +69,12 @@ func TestEndpointMetadataClone(t *testing.T) {
 
 func TestEndpointMetadataString(t *testing.T) {
 	endpointMetadata := EndpointMetadata{
-		NamespacedName: types.NamespacedName{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
+		Key: plugin.EndPointKey{
+			NamespacedName: types.NamespacedName{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+			},
+			Port: 8000,
 		},
 		PodName:     pod.Name,
 		Address:     pod.Status.PodIP,

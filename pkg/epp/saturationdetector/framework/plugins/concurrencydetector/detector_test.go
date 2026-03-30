@@ -24,10 +24,10 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/types"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -163,7 +163,7 @@ func TestDetector_Configuration(t *testing.T) {
 				newStubSchedulingEndpoint(cleanEndpoint),
 			})
 			require.Len(t, kept, 1, "Filter should drop the overloaded endpoint")
-			require.Equal(t, cleanEndpoint, kept[0].GetMetadata().NamespacedName.Name,
+			require.Equal(t, cleanEndpoint, kept[0].GetMetadata().GetNamespacedName().Name,
 				"Filter should retain the clean fallback endpoint")
 		})
 	})
@@ -557,7 +557,8 @@ func driveLoad(ctx context.Context, detector *detector, endpointName string, cou
 }
 
 func fullEndpointName(name string) string {
-	return types.NamespacedName{Name: name, Namespace: "default"}.String()
+	key := plugin.NewEndPointKey(name, "default", 8000)
+	return (&key).String()
 }
 
 // makeSchedulingResult creates a minimal result for PreRequest
@@ -574,7 +575,7 @@ func makeSchedulingResult(endpointName string) *schedulingtypes.SchedulingResult
 
 func newFakeEndpoint(name string) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
-		Metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		Metadata: &datalayer.EndpointMetadata{Key: plugin.NewEndPointKey(name, "default", 8000)},
 	}
 }
 
@@ -587,7 +588,7 @@ type stubSchedulingEndpoint struct {
 
 func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
 	return &stubSchedulingEndpoint{
-		metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
+		metadata: &datalayer.EndpointMetadata{Key: plugin.NewEndPointKey(name, "default", 8000)},
 	}
 }
 

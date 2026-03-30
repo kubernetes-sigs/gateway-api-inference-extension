@@ -56,6 +56,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fccontroller "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/controller"
 	fcregistry "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
@@ -508,13 +509,13 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 }
 
 // Return a function that can be used in the EPP Handle to list pod names.
-func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
-	return func() []types.NamespacedName {
+func makePodListFunc(ds datastore.Datastore) func() []plugin.EndPointKey {
+	return func() []plugin.EndPointKey {
 		pods := ds.PodList(datastore.AllPodsPredicate)
-		names := make([]types.NamespacedName, 0, len(pods))
+		names := make([]plugin.EndPointKey, 0, len(pods))
 
 		for _, p := range pods {
-			names = append(names, p.GetMetadata().NamespacedName)
+			names = append(names, p.GetMetadata().Key)
 		}
 		return names
 	}

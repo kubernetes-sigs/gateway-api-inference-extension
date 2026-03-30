@@ -22,11 +22,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestIndexer_AddAndGet(t *testing.T) {
 	server := Server{
-		ServerID:       ServerID{Namespace: "default", Name: "server1"},
+		ServerID:       ServerID{NamespacedName: types.NamespacedName{Namespace: "default", Name: "server1"}},
 		numOfGPUBlocks: 2,
 	}
 	i := newIndexer(context.Background(), 3) // Initialize with an lruSize greater than server.numOfGPUBlocks to verify server-defined limits take precedence.
@@ -57,8 +58,8 @@ func TestIndexer_RemovePodAndEviction(t *testing.T) {
 
 	i := newIndexer(context.Background(), indexerSize)
 
-	server1 := Server{ServerID: ServerID{Namespace: "default", Name: "server1"}}
-	server2 := Server{ServerID: ServerID{Namespace: "default", Name: "server2"}}
+	server1 := Server{ServerID: ServerID{NamespacedName: types.NamespacedName{Namespace: "default", Name: "server1"}}}
+	server2 := Server{ServerID: ServerID{NamespacedName: types.NamespacedName{Namespace: "default", Name: "server2"}}}
 
 	// Add indexerSize hashes to both servers
 	var hashes []BlockHash
@@ -116,7 +117,7 @@ func TestIndexer_ConcurrentAddRemovePod(t *testing.T) {
 	lruSize := 10
 	for iter := range 100 {
 		i := newIndexer(context.Background(), lruSize)
-		pod := Server{ServerID: ServerID{Namespace: "default", Name: "pod1"}}
+		pod := Server{ServerID: ServerID{NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"}}}
 
 		var wg sync.WaitGroup
 		wg.Add(2)

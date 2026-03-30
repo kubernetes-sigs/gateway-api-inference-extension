@@ -23,10 +23,10 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/types"
 
 	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -34,7 +34,7 @@ import (
 func makePodMetric(name string, queueDepth int, kvUsage float64, updateTime time.Time) *backendmetrics.FakePodMetrics {
 	return &backendmetrics.FakePodMetrics{
 		Metadata: &fwkdl.EndpointMetadata{
-			NamespacedName: types.NamespacedName{Name: name, Namespace: "ns1"},
+			Key: plugin.NewEndPointKey(name, "ns1", 8000),
 		},
 		Metrics: &backendmetrics.MetricsState{
 			WaitingQueueSize:    queueDepth,
@@ -190,7 +190,7 @@ func TestDetector_Saturation(t *testing.T) {
 			pods: []fwkdl.Endpoint{
 				&backendmetrics.FakePodMetrics{
 					Metadata: &fwkdl.EndpointMetadata{
-						NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "ns1"},
+						Key: plugin.NewEndPointKey("pod1", "ns1", 0),
 					},
 					Metrics: nil,
 				},

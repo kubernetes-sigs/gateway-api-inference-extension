@@ -29,10 +29,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/multierr"
 	"google.golang.org/protobuf/proto"
-	"k8s.io/apimachinery/pkg/types"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // --- Test Helpers ---
@@ -581,10 +581,7 @@ func TestFetchMetrics(t *testing.T) {
 		Address:     "127.0.0.1",
 		Port:        "9999",
 		MetricsHost: "127.0.0.1:9999",
-		NamespacedName: types.NamespacedName{
-			Namespace: "test",
-			Name:      "pod",
-		},
+		Key:         plugin.NewEndPointKey("test", "pod", 9999),
 	}
 	existing := &MetricsState{}
 	// No MetricMapping needed for this basic test

@@ -31,6 +31,7 @@ import (
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -107,10 +108,8 @@ func (m *mockPredictor) GetServerStatus(ctx context.Context) (*latencypredictor.
 
 func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, waitingQueueSize int) fwksched.Endpoint {
 	return fwksched.NewEndpoint(&fwkdl.EndpointMetadata{
-		NamespacedName: types.NamespacedName{
-			Name:      name,
-			Namespace: "default",
-		}},
+		Key: plugin.NewEndPointKey(name, "default", 0),
+	},
 		&fwkdl.Metrics{
 			KVCacheUsagePercent: kvCacheUsage,
 			RunningRequestsSize: runningRequestsSize,
@@ -165,7 +164,7 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 
 	// Populate prefix cache scores (default to 0.0 for simplicity)
 	for _, endpoint := range endpoints {
-		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().NamespacedName.Name] = 0.0
+		predictedLatencyCtx.prefixCacheScoresForEndpoints[endpoint.GetMetadata().GetNamespacedName().Name] = 0.0
 	}
 
 	// If we have a predictor, generate predictions for each endpoint
@@ -178,7 +177,7 @@ func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMReque
 
 			predResp, err := predictor.Predict(ctx, predReq)
 			if err == nil {
-				predictions[endpoint.GetMetadata().NamespacedName.Name] = endpointPredictionResult{
+				predictions[endpoint.GetMetadata().GetNamespacedName().Name] = endpointPredictionResult{
 					Endpoint:         endpoint,
 					TTFT:             predResp.TTFT,
 					TPOT:             predResp.TPOT,
@@ -345,7 +344,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			// If we have specific expected scores, verify them
 			if len(tt.expectedScores) > 0 {
 				for _, endpoint := range tt.endpoints {
-					endpointName := endpoint.GetMetadata().NamespacedName.Name
+					endpointName := endpoint.GetMetadata().GetNamespacedName().Name
 					if expectedScore, ok := tt.expectedScores[endpointName]; ok {
 						assert.InDelta(t, expectedScore, scores[endpoint], 0.0001, "Pod %s should have score %f", endpointName, expectedScore)
 					}
@@ -473,10 +472,7 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 		{
 			name: "One running request",
 			setupRequests: func(r *PredictedLatency, p fwksched.Endpoint) {
-				podName := types.NamespacedName{
-					Name:      p.GetMetadata().NamespacedName.Name,
-					Namespace: p.GetMetadata().NamespacedName.Namespace,
-				}
+				podName := p.GetMetadata().GetNamespacedName()
 				queue := newRequestPriorityQueue()
 				queue.Add("req1", 0.04)
 				r.runningRequestLists.Store(podName, queue)
@@ -486,10 +482,7 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 		{
 			name: "Multiple running requests",
 			setupRequests: func(r *PredictedLatency, p fwksched.Endpoint) {
-				endpointName := types.NamespacedName{
-					Name:      p.GetMetadata().NamespacedName.Name,
-					Namespace: p.GetMetadata().NamespacedName.Namespace,
-				}
+				endpointName := p.GetMetadata().GetNamespacedName()
 				queue := newRequestPriorityQueue()
 				queue.Add("req1", 0.04)
 				queue.Add("req2", 0.03)
@@ -530,10 +523,7 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 		{
 			name: "One running request",
 			setupRequests: func(r *PredictedLatency, e fwksched.Endpoint) {
-				endpointName := types.NamespacedName{
-					Name:      e.GetMetadata().NamespacedName.Name,
-					Namespace: e.GetMetadata().NamespacedName.Namespace,
-				}
+				endpointName := e.GetMetadata().GetNamespacedName()
 				queue := newRequestPriorityQueue()
 				queue.Add("req1", 0.04)
 				r.runningRequestLists.Store(endpointName, queue)
@@ -543,10 +533,7 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 		{
 			name: "Multiple running requests - should return minimum",
 			setupRequests: func(r *PredictedLatency, e fwksched.Endpoint) {
-				endpointName := types.NamespacedName{
-					Name:      e.GetMetadata().NamespacedName.Name,
-					Namespace: e.GetMetadata().NamespacedName.Namespace,
-				}
+				endpointName := e.GetMetadata().GetNamespacedName()
 				queue := newRequestPriorityQueue()
 				// Add in any order - heap will maintain minimum at top
 				queue.Add("req1", 0.05)
@@ -778,7 +765,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 	}
 
 	metadata := &fwkdl.EndpointMetadata{
-		NamespacedName: endpointName,
+		Key: plugin.NewEndPointKey(endpointName.Name, endpointName.Namespace, 0),
 	}
 
 	sloCtx := newPredictedLatencyContext(req)
@@ -841,11 +828,11 @@ func TestCompositeLeastVsMost_NegativeHeadroom(t *testing.T) {
 
 	// composite-most should prefer higher composite score (pod-low-kv has
 	// more free KV cache → higher weight).
-	assert.Equal(t, "pod-low-kv", selectedMost.GetMetadata().NamespacedName.Name,
+	assert.Equal(t, "pod-low-kv", selectedMost.GetMetadata().GetNamespacedName().Name,
 		"composite-most should prefer the endpoint with more free KV cache")
 
 	// composite-least inverts the weights, so it should prefer the endpoint
 	// with the lower composite score (pod-high-kv has less free KV cache).
-	assert.Equal(t, "pod-high-kv", selectedLeast.GetMetadata().NamespacedName.Name,
+	assert.Equal(t, "pod-high-kv", selectedLeast.GetMetadata().GetNamespacedName().Name,
 		"composite-least should prefer the endpoint with less free KV cache")
 }

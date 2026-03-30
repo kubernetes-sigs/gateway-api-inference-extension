@@ -116,9 +116,6 @@ func (s *PredictedLatency) removeRequestFromQueue(requestID string, ctx *predict
 	if ctx == nil || ctx.targetMetadata == nil {
 		return
 	}
-	endpointName := types.NamespacedName{
-		Name:      ctx.targetMetadata.NamespacedName.Name,
-		Namespace: ctx.targetMetadata.NamespacedName.Namespace,
-	}
+	endpointName := ctx.targetMetadata.GetNamespacedName()
 	s.removeRequestFromEndpoint(endpointName, requestID)
 }

@@ -129,7 +129,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 		}
 		endpointPool1 := pool.InferencePoolToEndpointPool(pool1)
-		if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool1, wantEndpoints: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+		if diff := diffStore(ds, diffStoreParams{wantPool: endpointPool1, wantEndpoints: []string{"pod1", "pod2"}}); diff != "" {
 			t.Errorf("Unexpected diff (+got/-want): %s", diff)
 		}
 
@@ -147,7 +147,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 		}
 		newEndpointPool1 := pool.InferencePoolToEndpointPool(newPool1)
-		if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5-rank-0"}}); diff != "" {
+		if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5"}}); diff != "" {
 			t.Errorf("Unexpected diff (+got/-want): %s", diff)
 		}
 
@@ -163,7 +163,7 @@ func TestInferencePoolReconciler(t *testing.T) {
 			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 		}
 		newEndpointPool1 = pool.InferencePoolToEndpointPool(newPool1)
-		if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5-rank-0"}}); diff != "" {
+		if diff := diffStore(ds, diffStoreParams{wantPool: newEndpointPool1, wantEndpoints: []string{"pod5"}}); diff != "" {
 			t.Errorf("Unexpected diff (+got/-want): %s", diff)
 		}
 
@@ -201,7 +201,7 @@ func diffStore(store datastore.Datastore, params diffStoreParams) string {
 	}
 	gotEndpoints := []string{}
 	for _, em := range store.PodList(datastore.AllPodsPredicate) {
-		gotEndpoints = append(gotEndpoints, em.GetMetadata().NamespacedName.Name)
+		gotEndpoints = append(gotEndpoints, em.GetMetadata().GetNamespacedName().Name)
 	}
 	if diff := cmp.Diff(params.wantEndpoints, gotEndpoints, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 		return "endpoints:" + diff
@@ -283,7 +283,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 		}
 		endpointPool1 := pool.AlphaInferencePoolToEndpointPool(pool1)
-		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1-rank-0", "pod2-rank-0"}}); diff != "" {
+		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: endpointPool1, wantPods: []string{"pod1", "pod2"}}); diff != "" {
 			t.Errorf("Unexpected diff (+got/-want): %s", diff)
 		}
 
@@ -300,7 +300,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 		}
 		newEndpointPool1 := pool.AlphaInferencePoolToEndpointPool(newPool1)
-		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5"}}); diff != "" {
 			t.Errorf("Unexpected diff (+got/-want): %s", diff)
 		}
 
@@ -316,7 +316,7 @@ func TestXInferencePoolReconciler(t *testing.T) {
 			t.Errorf("Unexpected InferencePool reconcile error: %v", err)
 		}
 		newEndpointPool1 = pool.AlphaInferencePoolToEndpointPool(newPool1)
-		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5-rank-0"}}); diff != "" {
+		if diff := xDiffStore(ds, xDiffStoreParams{wantPool: newEndpointPool1, wantPods: []string{"pod5"}}); diff != "" {
 			t.Errorf("Unexpected diff (+got/-want): %s", diff)
 		}
 
@@ -358,7 +358,7 @@ func xDiffStore(store datastore.Datastore, params xDiffStoreParams) string {
 	}
 	gotPods := []string{}
 	for _, em := range store.PodList(datastore.AllPodsPredicate) {
-		gotPods = append(gotPods, em.GetMetadata().NamespacedName.Name)
+		gotPods = append(gotPods, em.GetMetadata().GetNamespacedName().Name)
 	}
 	if diff := cmp.Diff(params.wantPods, gotPods, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 		return "pods:" + diff

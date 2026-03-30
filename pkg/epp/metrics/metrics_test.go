@@ -26,13 +26,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/component-base/metrics/testutil"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	schedulingframework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -828,9 +828,9 @@ func TestSchedulerAttemptsTotal(t *testing.T) {
 					TargetEndpoints: []schedulingframework.Endpoint{
 						schedulingframework.NewEndpoint(
 							&fwkdl.EndpointMetadata{
-								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
-								PodName:        "pod-1",
-								Port:           "8080",
+								Key:     fwkplugin.NewEndPointKey("pod-1", "ns-1", 8080),
+								PodName: "pod-1",
+								Port:    "8080",
 							},
 							nil, nil,
 						),
@@ -852,17 +852,17 @@ func TestSchedulerAttemptsTotal(t *testing.T) {
 					TargetEndpoints: []schedulingframework.Endpoint{
 						schedulingframework.NewEndpoint(
 							&fwkdl.EndpointMetadata{
-								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
-								PodName:        "pod-1",
-								Port:           "8080",
+								Key:     fwkplugin.NewEndPointKey("pod-1", "ns-1", 8080),
+								PodName: "pod-1",
+								Port:    "8080",
 							},
 							nil, nil,
 						),
 						schedulingframework.NewEndpoint(
 							&fwkdl.EndpointMetadata{
-								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
-								PodName:        "pod-2",
-								Port:           "9090",
+								Key:     fwkplugin.NewEndPointKey("pod-2", "ns-2", 9090),
+								PodName: "pod-2",
+								Port:    "9090",
 							},
 							nil, nil,
 						),
@@ -884,9 +884,9 @@ func TestSchedulerAttemptsTotal(t *testing.T) {
 					TargetEndpoints: []schedulingframework.Endpoint{
 						schedulingframework.NewEndpoint(
 							&fwkdl.EndpointMetadata{
-								NamespacedName: k8stypes.NamespacedName{Name: "pod-1", Namespace: "ns-1"},
-								PodName:        "pod-1",
-								Port:           "8080",
+								Key:     fwkplugin.NewEndPointKey("pod-1", "ns-1", 8080),
+								PodName: "pod-1",
+								Port:    "8080",
 							},
 							nil, nil,
 						),
@@ -901,9 +901,9 @@ func TestSchedulerAttemptsTotal(t *testing.T) {
 					TargetEndpoints: []schedulingframework.Endpoint{
 						schedulingframework.NewEndpoint(
 							&fwkdl.EndpointMetadata{
-								NamespacedName: k8stypes.NamespacedName{Name: "pod-2", Namespace: "ns-2"},
-								PodName:        "pod-2",
-								Port:           "9090",
+								Key:     fwkplugin.NewEndPointKey("pod-2", "ns-2", 9090),
+								PodName: "pod-2",
+								Port:    "9090",
 							},
 							nil, nil,
 						),

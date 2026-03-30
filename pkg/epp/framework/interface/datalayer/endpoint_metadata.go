@@ -20,16 +20,17 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // EndpointMetadata represents the relevant Kubernetes Pod state of an inference server.
 type EndpointMetadata struct {
-	NamespacedName types.NamespacedName
-	PodName        string
-	Address        string
-	Port           string
-	MetricsHost    string
-	Labels         map[string]string
+	Key         plugin.EndPointKey
+	PodName     string
+	Address     string
+	Port        string
+	MetricsHost string
+	Labels      map[string]string
 }
 
 // String returns a string representation of the endpoint.
@@ -51,9 +52,12 @@ func (p *EndpointMetadata) Clone() *EndpointMetadata {
 		clonedLabels[key] = value
 	}
 	return &EndpointMetadata{
-		NamespacedName: types.NamespacedName{
-			Name:      p.NamespacedName.Name,
-			Namespace: p.NamespacedName.Namespace,
+		Key: plugin.EndPointKey{
+			NamespacedName: types.NamespacedName{
+				Name:      p.Key.NamespacedName.Name,
+				Namespace: p.Key.NamespacedName.Namespace,
+			},
+			Port: p.Key.Port,
 		},
 		PodName:     p.PodName,
 		Address:     p.Address,
@@ -65,7 +69,7 @@ func (p *EndpointMetadata) Clone() *EndpointMetadata {
 
 // GetNamespacedName gets the namespace name of the Endpoint.
 func (e *EndpointMetadata) GetNamespacedName() types.NamespacedName {
-	return e.NamespacedName
+	return e.Key.NamespacedName
 }
 
 // GetIPAddress returns the Endpoint's IP address.
