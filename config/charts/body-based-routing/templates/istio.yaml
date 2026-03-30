@@ -18,6 +18,10 @@ spec:
         filterChain:
           filter:
             name: "envoy.filters.network.http_connection_manager"
+            {{- if .Values.provider.istio.envoyFilter.anchorSubFilter }}
+            subFilter:
+              name: {{ .Values.provider.istio.envoyFilter.anchorSubFilter }}
+            {{- end }}
     patch:
       operation: {{ .Values.provider.istio.envoyFilter.operation }}
       value:

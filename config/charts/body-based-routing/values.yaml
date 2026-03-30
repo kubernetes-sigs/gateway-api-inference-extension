@@ -44,6 +44,8 @@ provider:
     envoyFilter:
       # Operation for inserting the ext_proc filter into the Envoy filter chain.
       operation: INSERT_FIRST
+      # Anchor filter for INSERT_BEFORE/INSERT_AFTER (empty = no anchor).
+      anchorSubFilter: ""
 
 inferenceGateway:
   name: inference-gateway
