@@ -333,6 +333,12 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 		existing, ok := ds.pods.Load(endpointMetadata.NamespacedName)
 		if !ok {
 			ep = ds.epf.NewEndpoint(ds.parentCtx, endpointMetadata, ds)
+			if ep == nil {
+				// NewEndpoint returns nil when a collector is already running for this
+				// endpoint (duplicate reconcile race). The existing entry in ds.pods
+				// is still valid; skip re-registering it.
+				continue
+			}
 			ds.pods.Store(endpointMetadata.NamespacedName, ep)
 			result = false
 		} else {
