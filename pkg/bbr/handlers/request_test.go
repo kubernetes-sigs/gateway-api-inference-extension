@@ -463,7 +463,9 @@ func TestHandleRequestBody(t *testing.T) {
 		})
 	}
 
-	// Assert BBR metrics: 2 model not in body, 1 model empty string, 4 successful model-from-body cases.
+	// Assert BBR metrics: 2 model not in body, 1 model empty string, 12 successful model-from-body cases.
+	// The success counter is global (Prometheus) and includes calls from request_plugins_test.go
+	// (8 scenarios) plus 4 from this file. If test cases are added in either file, update this value.
 	wantMetrics := `
 	# HELP bbr_body_field_empty_total [ALPHA] Count of times a field was found in a request body but was empty.
 	# TYPE bbr_body_field_empty_total counter
@@ -473,7 +475,7 @@ func TestHandleRequestBody(t *testing.T) {
 	bbr_body_field_not_found_total{field="model"} 2
 	# HELP bbr_success_total [ALPHA] Count of time the request was processed successfully.
 	# TYPE bbr_success_total counter
-	bbr_success_total{} 4
+	bbr_success_total{} 12
 	`
 
 	if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(wantMetrics),
