@@ -473,19 +473,57 @@ schedulingProfiles:
   - pluginRef: maxScore
 `
 
-// errorMissingDataConfigText has the datalayer enabled without config
-const errorMissingDataConfigText = `
+// successDataLayerAutoDefaultText has the datalayer enabled without data config.
+// The loader should auto-populate default datalayer plugins.
+// successDataLayerAutoDefaultText has NO featureGates — datalayer is enabled by default.
+const successDataLayerAutoDefaultText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-- name: test1
-  type: test-one
-  parameters:
-    threshold: 10
+- name: maxScore
+  type: max-score-picker
 schedulingProfiles:
 - name: default
   plugins:
-  - pluginRef: test1
+  - pluginRef: maxScore
+`
+
+// successDataLayerDisabledText opts out of the datalayer via the disableDataLayer gate.
+const successDataLayerDisabledText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+featureGates:
+- disableDataLayer
+`
+
+// successDataLayerExplicitConfigText has the datalayer enabled with explicit data config.
+// The loader should preserve the user's config and NOT overwrite with defaults.
+const successDataLayerExplicitConfigText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+- name: testSource
+  type: test-source
+- name: testExtractor
+  type: test-extractor
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+data:
+  sources:
+  - pluginRef: testSource
+    extractors:
+    - pluginRef: testExtractor
 featureGates:
 - dataLayer
 `

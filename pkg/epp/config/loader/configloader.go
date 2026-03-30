@@ -109,9 +109,13 @@ func InstantiateAndConfigure(
 	}
 
 	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
-	dataConfig, err := buildDataLayerConfig(rawConfig.Data, featureGates[datalayer.ExperimentalDatalayerFeatureGate], handle)
-	if err != nil {
-		return nil, fmt.Errorf("data layer config build failed: %w", err)
+	var dataConfig *datalayer.Config
+	if !featureGates[datalayer.DisableDataLayerFeatureGate] {
+		var err error
+		dataConfig, err = buildDataLayerConfig(rawConfig.Data, handle)
+		if err != nil {
+			return nil, fmt.Errorf("data layer config build failed: %w", err)
+		}
 	}
 
 	var flowControlConfig *flowcontrol.Config
@@ -265,11 +269,7 @@ func buildParserConfig(rawParserConfig *configapi.ParserConfig, handle fwkplugin
 	}, nil
 }
 
-func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle fwkplugin.Handle) (*datalayer.Config, error) {
-	if dataLayerEnabled && (rawDataConfig == nil || rawDataConfig.Sources == nil) { // enabled but no configuration
-		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
-	}
-
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, handle fwkplugin.Handle) (*datalayer.Config, error) {
 	cfg := datalayer.Config{
 		Sources: []datalayer.DataSourceConfig{},
 	}

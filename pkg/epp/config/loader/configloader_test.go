@@ -40,6 +40,8 @@ import (
 	flowcontrolmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
@@ -69,6 +71,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 
 	// Register known feature gates for validation.
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
 	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	queueScorerWeight := 2.0
@@ -138,7 +141,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 					APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 					Kind:       "EndpointPickerConfig",
 				},
-				FeatureGates: configapi.FeatureGates{},
+				FeatureGates: configapi.FeatureGates{}, // Empty means datalayer enabled (default behavior)
 				Plugins: []configapi.PluginSpec{
 					{
 						Name: queuedepth.QueueScorerType,
@@ -151,6 +154,14 @@ func TestLoadRawConfiguration(t *testing.T) {
 					{
 						Name: prefix.PrefixCachePluginType,
 						Type: prefix.PrefixCachePluginType,
+					},
+					{
+						Name: sourcemetrics.MetricsDataSourceType,
+						Type: sourcemetrics.MetricsDataSourceType,
+					},
+					{
+						Name: extractormetrics.MetricsExtractorType,
+						Type: extractormetrics.MetricsExtractorType,
 					},
 				},
 				SchedulingProfiles: []configapi.SchedulingProfile{
@@ -168,6 +179,16 @@ func TestLoadRawConfiguration(t *testing.T) {
 							{
 								PluginRef: prefix.PrefixCachePluginType,
 								Weight:    &prefixCacheScorerWeight,
+							},
+						},
+					},
+				},
+				Data: &configapi.DataLayerConfig{
+					Sources: []configapi.DataLayerSource{
+						{
+							PluginRef: sourcemetrics.MetricsDataSourceType,
+							Extractors: []configapi.DataLayerExtractor{
+								{PluginRef: extractormetrics.MetricsExtractorType},
 							},
 						},
 					},
@@ -212,6 +233,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	registerTestPlugins(t)
 
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
 	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	tests := []struct {
@@ -456,9 +478,40 @@ func TestInstantiateAndConfigure(t *testing.T) {
 
 		// --- Feature Validation: Data Layer ---
 		{
-			name:       "Error (DataLayer) - Missing Data Config",
-			configText: errorMissingDataConfigText,
-			wantErr:    true,
+			name:       "Success (DataLayer) - Enabled by default with no feature gates",
+			configText: successDataLayerAutoDefaultText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.Data, "Data section should be injected by default")
+				require.Len(t, rawCfg.Data.Sources, 1, "Should have one default source")
+				require.Equal(t, sourcemetrics.MetricsDataSourceType, rawCfg.Data.Sources[0].PluginRef)
+				require.Len(t, rawCfg.Data.Sources[0].Extractors, 1)
+				require.Equal(t, extractormetrics.MetricsExtractorType, rawCfg.Data.Sources[0].Extractors[0].PluginRef)
+				require.NotNil(t, cfg.DataConfig, "DataConfig should be built")
+				require.NotNil(t, handle.Plugin(sourcemetrics.MetricsDataSourceType), "MetricsDataSource plugin should be instantiated")
+				require.NotNil(t, handle.Plugin(extractormetrics.MetricsExtractorType), "MetricsExtractor plugin should be instantiated")
+			},
+		},
+		{
+			name:       "Success (DataLayer) - Disabled via disableDataLayer gate",
+			configText: successDataLayerDisabledText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.Nil(t, rawCfg.Data, "Data section should NOT be injected when datalayer is disabled")
+				require.Nil(t, handle.Plugin(sourcemetrics.MetricsDataSourceType), "MetricsDataSource should not be instantiated")
+				require.Nil(t, handle.Plugin(extractormetrics.MetricsExtractorType), "MetricsExtractor should not be instantiated")
+			},
+		},
+		{
+			name:       "Success (DataLayer) - Explicit data config preserved",
+			configText: successDataLayerExplicitConfigText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.Data, "Data config should be present")
+				require.Len(t, rawCfg.Data.Sources, 1)
+				require.Equal(t, "testSource", rawCfg.Data.Sources[0].PluginRef,
+					"Explicit source should be preserved, not overwritten by defaults")
+			},
 		},
 		{
 			name:       "Error (DataLayer) - Bad Source Reference",
@@ -697,6 +750,9 @@ func registerTestPlugins(t *testing.T) {
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
+	// Datalayer plugins are now defaults; register their real factories.
+	fwkplugin.Register(sourcemetrics.MetricsDataSourceType, sourcemetrics.MetricsDataSourceFactory)
+	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.CoreMetricsExtractorFactory)
 }
 
 func TestValidateSaturationDetector(t *testing.T) {
