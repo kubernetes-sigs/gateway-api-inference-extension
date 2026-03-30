@@ -8,7 +8,7 @@ At this time the YAML file based configuration allows for:
 2. The set of scheduling profiles that define how requests are scheduled to pods.
 3. The configuration of the saturation detector.
 4. The configuration of the Flow Control system.
-5. The configuration of the data layer (experimental).
+5. The configuration of the data layer.
 6. A set of feature gates that are used to enable experimental features.
 
 The YAML file can either be specified as a path to a file or in-line as a parameter.
@@ -483,7 +483,7 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 
 The Data Layer collects metrics and other data used in scheduling decisions made by the various configured
 plugins. The exact data collected varies by the DataSource and Extractors configured. The baseline
-provided in GAIE collect Prometheus metrics from the Model Servers in the InferencePool.
+provided in GAIE collects Prometheus metrics from the Model Servers in the InferencePool.
 
 The Data Layer is configured via the `data` section of the overall configuration. It has the following form:
 
@@ -508,6 +508,150 @@ list has the following field:
 
 **Note**: The names of the plugin instances mentioned above, refer to plugin instances defined in the plugins section
 of the configuration.
+
+### Minimal configuration (core vLLM metrics)
+
+The built-in `metrics-data-source` and `core-metrics-extractor` plugins collect the five vLLM Model
+Server Protocol metrics out of the box - no `parameters` are required:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+  - name: metrics-data-source
+    type: metrics-data-source
+
+  - name: core-metrics-extractor
+    type: core-metrics-extractor
+
+data:
+  sources:
+    - pluginRef: metrics-data-source
+      extractors:
+        - pluginRef: core-metrics-extractor
+
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: queue-depth-scorer
+        weight: 2.0
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2.0
+```
+
+Default metric specs collected for vLLM:
+
+| Field | Default spec |
+|---|---|
+| Queued requests | `vllm:num_requests_waiting` |
+| Running requests | `vllm:num_requests_running` |
+| KV-cache utilization | `vllm:kv_cache_usage_perc` |
+| LoRA adapter info | `vllm:lora_requests_info` |
+| Cache block config | `vllm:cache_config_info` |
+
+SGLang defaults are also built in and selected automatically when a Pod carries the
+`inference.networking.k8s.io/engine-type: sglang` label. The label value or default engine
+can be set by via the [extractor configuration](#core-metrics-extractor-parameters-reference).
+
+### Disabling a specific metric
+
+Set the corresponding spec field to an empty string inside an `engineConfigs` entry.
+
+**Important: `engineConfigs` is full-replacement per engine name.**
+Providing any entry with `name: "vllm"` replaces the _entire_ built-in vllm
+configuration — the built-in defaults for that engine are not merged in.
+You must restate every spec field you still want to collect.
+
+#### Example: disable LoRA collection for vLLM
+
+```yaml
+plugins:
+  - name: core-metrics-extractor
+    type: core-metrics-extractor
+    parameters:
+      engineConfigs:
+        - name: vllm
+          queuedRequestsSpec:  "vllm:num_requests_waiting"
+          runningRequestsSpec: "vllm:num_requests_running"
+          kvUsageSpec:         "vllm:kv_cache_usage_perc"
+          loraSpec:            ""    # empty string disables LoRA extraction
+          cacheInfoSpec:       "vllm:cache_config_info"
+```
+
+When `loraSpec` is empty, no extraction is attempted. Empty strings produce nil metric
+specifications, so you must restate every field you want to keep and not just those being
+changed. At startup the factory logs a `"Not scraping metric"` line for each disabled
+spec so operators can confirm which metrics are intentionally skipped.
+
+
+### `data.sources: []` - empty source list
+
+An explicit `sources: []` (non-nil but empty) is valid and silently disables all metric collection.
+A warning is logged at startup.
+
+This is distinct from `data: null` (or omitting the section entirely), which is an error when the
+datalayer is enabled.
+
+| `data` value | Behavior |
+|---|---|
+| omitted / `null`, datalayer **enabled** (`dataLayer` feature gate) | startup error: _"You must specify the Data section"_ |
+| omitted / `null`, datalayer **disabled** (default) | no error, no collection |
+| `sources: []` (empty list) | warning logged, no collection |
+| `sources` references unknown plugin name | startup error |
+
+### `core-metrics-extractor` parameters reference
+
+All fields are optional and fall back to the built-in vLLM / SGLang defaults.
+
+```yaml
+parameters:
+  # Pod label used to select which engineConfig to apply.
+  # Default: "inference.networking.k8s.io/engine-type"
+  engineLabelKey: "inference.networking.k8s.io/engine-type"
+
+  # Engine to use for Pods without the engineLabelKey label.
+  # Must match a name in engineConfigs. Default: "vllm"
+  defaultEngine: "vllm"
+
+  # Per-engine metric specifications.
+  # Providing an entry for a name blocks the built-in default for that name.
+  # Built-in names: "vllm", "sglang". All others are additive.
+  engineConfigs:
+    - name: vllm
+      queuedRequestsSpec:  "vllm:num_requests_waiting"
+      runningRequestsSpec: "vllm:num_requests_running"
+      kvUsageSpec:         "vllm:kv_cache_usage_perc"
+      loraSpec:            "vllm:lora_requests_info"   # "" to disable
+      cacheInfoSpec:       "vllm:cache_config_info"    # "" to disable
+    - name: sglang
+      queuedRequestsSpec:  "sglang:num_queue_reqs"
+      runningRequestsSpec: "sglang:num_running_reqs"
+      kvUsageSpec:         "sglang:token_usage"
+      loraSpec:            ""   # SGLang has no LoRA metric by default
+      cacheInfoSpec:       ""
+```
+
+Spec strings use PromQL Instant Vector Selector syntax: `family_name{label=value}`.
+Both quoted and unquoted label values are accepted.
+
+### `metrics-data-source` parameters reference
+
+```yaml
+parameters:
+  scheme: "http"    # or "https". Default: "http"
+  path: "/metrics"  # Default: "/metrics"
+  insecureSkipVerify: true  # Default: true
+```
+
+### Error handling
+
+When a metric family is not found in the scraped data, the extractor appends a
+"metric family not found" error to the poll result. The datalayer collector logs this error
+**once** on first occurrence and once when it resolves — repeated identical errors are suppressed.
+This prevents log flooding for persistent conditions such as a missing LoRA metric family on a
+deployment that doesn't load LoRA adapters.
+
+To eliminate the error entirely, disable the spec with an empty string as shown above.
 
 ## Feature Gates
 

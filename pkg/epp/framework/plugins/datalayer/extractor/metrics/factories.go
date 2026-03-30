@@ -21,6 +21,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -115,6 +118,10 @@ func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle
 		}
 	}
 
+	logger := logr.Discard()
+	if handle != nil {
+		logger = log.FromContext(handle.Context())
+	}
 	registry := NewMappingRegistry()
 
 	// Validate and register engine configurations
@@ -137,6 +144,8 @@ func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle
 		if err != nil {
 			return nil, fmt.Errorf("failed to create mapping for engine %q: %w", engineConfig.Name, err)
 		}
+
+		logNilSpecs(logger, engineConfig.Name, mapping)
 
 		// Register by engine name
 		if err := registry.Register(engineConfig.Name, mapping); err != nil {
@@ -168,5 +177,25 @@ func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle
 func defaultExtractorConfigParams() *modelServerExtractorParams {
 	return &modelServerExtractorParams{
 		EngineLabelKey: DefaultEngineTypeLabelKey,
+	}
+}
+
+// logNilSpecs logs an informational message for each metric spec that is nil (i.e., disabled)
+// for the given engine. This mirrors the verifyMetricMapping signal in the legacy metrics path.
+func logNilSpecs(logger logr.Logger, engine string, m *Mapping) {
+	if m.TotalQueuedRequests == nil {
+		logger.Info("Not scraping metric", "engine", engine, "metric", "TotalQueuedRequests")
+	}
+	if m.TotalRunningRequests == nil {
+		logger.Info("Not scraping metric", "engine", engine, "metric", "TotalRunningRequests")
+	}
+	if m.KVCacheUtilization == nil {
+		logger.Info("Not scraping metric", "engine", engine, "metric", "KVCacheUtilization")
+	}
+	if m.LoraRequestInfo == nil {
+		logger.Info("Not scraping metric", "engine", engine, "metric", "LoraRequestInfo")
+	}
+	if m.CacheInfo == nil {
+		logger.Info("Not scraping metric", "engine", engine, "metric", "CacheInfo")
 	}
 }

@@ -532,6 +532,21 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	}
 }
 
+// TestBuildDataLayerConfigEmptySourcesWarning verifies that an empty sources list
+// logs a warning but does not return an error.
+func TestBuildDataLayerConfigEmptySourcesWarning(t *testing.T) {
+	t.Parallel()
+	handle := utils.NewTestHandle(context.Background())
+	cfg, err := buildDataLayerConfig(
+		&configapi.DataLayerConfig{Sources: []configapi.DataLayerSource{}},
+		true, // dataLayerEnabled
+		handle,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.Empty(t, cfg.Sources)
+}
+
 // --- Helpers & Mocks ---
 
 func hasPluginType(handle fwkplugin.Handle, typeName string) bool {
