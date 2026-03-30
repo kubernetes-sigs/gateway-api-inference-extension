@@ -28,6 +28,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1093,6 +1094,11 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 
 	director.HandleResponseHeader(ctx, reqCtx)
 
+	// HandleResponseHeader runs plugins asynchronously, so wait for completion.
+	require.Eventually(t, func() bool {
+		return pr1.lastRespOnResponse != nil
+	}, time.Second, 10*time.Millisecond, "response header plugin should have been called")
+
 	if diff := cmp.Diff("test-req-id-for-response", pr1.lastRespOnResponse.RequestId); diff != "" {
 		t.Errorf("Scheduler.OnResponse RequestId mismatch (-want +got):\n%s", diff)
 	}
@@ -1127,6 +1133,13 @@ func TestDirector_HandleResponseBody(t *testing.T) {
 
 	director.HandleResponseBody(ctx, reqCtx, false)
 	director.HandleResponseBody(ctx, reqCtx, false)
+
+	// Intermediate chunks (endOfStream=false) run asynchronously, wait for them.
+	require.Eventually(t, func() bool {
+		return len(ps1.respsOnStreaming) >= 2
+	}, time.Second, 10*time.Millisecond, "async response body plugins should have been called for intermediate chunks")
+
+	// Final chunk (endOfStream=true) runs synchronously.
 	director.HandleResponseBody(ctx, reqCtx, true)
 
 	assert.Equal(t, 3, len(ps1.respsOnStreaming), "Should have received 3 streaming calls")
@@ -1141,6 +1154,77 @@ func TestDirector_HandleResponseBody(t *testing.T) {
 			assert.True(t, resp.EndOfStream, "EndOfStream should be true for last chunk")
 		}
 	}
+}
+
+func TestDirector_HandleResponseBody_ChunkOrdering(t *testing.T) {
+	// orderTrackingPlugin records the RequestId of each chunk it processes.
+	// Since we set a unique RequestId per chunk, the recorded order lets us
+	// verify that chunks are processed in the exact order they were sent,
+	// even though they go through the async queue.
+	plugin := &orderTrackingPlugin{
+		typedName: fwkplugin.TypedName{Type: "order-tracker", Name: "order-tracker"},
+	}
+
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	ds := datastore.NewDatastore(t.Context(), nil, 0)
+	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	director := NewDirectorWithConfig(ds, &mockScheduler{}, nil, nil, locator, NewConfig().WithResponseStreamingPlugins(plugin))
+
+	const numChunks = 50
+
+	for i := range numChunks {
+		reqCtx := &handlers.RequestContext{
+			Request: &handlers.Request{
+				Headers: map[string]string{
+					// All chunks share the same request ID so they go through the same queue.
+					reqcommon.RequestIdHeaderKey: "ordering-test-request",
+				},
+			},
+			Response: &handlers.Response{
+				Headers: map[string]string{},
+			},
+			TargetPod: &fwkdl.EndpointMetadata{},
+			Usage:     fwk.Usage{CompletionTokens: i},
+		}
+		director.HandleResponseBody(ctx, reqCtx, false)
+	}
+
+	// Send final chunk to drain the queue.
+	finalReqCtx := &handlers.RequestContext{
+		Request: &handlers.Request{
+			Headers: map[string]string{
+				reqcommon.RequestIdHeaderKey: "ordering-test-request",
+			},
+		},
+		Response: &handlers.Response{
+			Headers: map[string]string{},
+		},
+		TargetPod: &fwkdl.EndpointMetadata{},
+		Usage:     fwk.Usage{CompletionTokens: numChunks},
+	}
+	director.HandleResponseBody(ctx, finalReqCtx, true)
+
+	// Total calls: numChunks async + 1 sync final.
+	require.Equal(t, numChunks+1, len(plugin.observedTokenCounts), "should have received all chunk calls")
+
+	// Verify ordering: each chunk's CompletionTokens should appear in the order 0, 1, 2, ..., numChunks.
+	for i, tokens := range plugin.observedTokenCounts {
+		assert.Equal(t, i, tokens, "chunk %d was processed out of order", i)
+	}
+}
+
+// orderTrackingPlugin records the CompletionTokens from each ResponseBody call to verify ordering.
+type orderTrackingPlugin struct {
+	typedName           fwkplugin.TypedName
+	observedTokenCounts []int
+}
+
+func (p *orderTrackingPlugin) TypedName() fwkplugin.TypedName {
+	return p.typedName
+}
+
+func (p *orderTrackingPlugin) ResponseBody(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, _ *fwkdl.EndpointMetadata) {
+	p.observedTokenCounts = append(p.observedTokenCounts, response.Usage.CompletionTokens)
 }
 
 const (
