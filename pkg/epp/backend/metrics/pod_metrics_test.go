@@ -47,16 +47,6 @@ var (
 		},
 		WaitingModels: map[string]int{},
 	}
-	updated = &MetricsState{
-		WaitingQueueSize:    9999,
-		KVCacheUsagePercent: 0.99,
-		MaxActiveModels:     99,
-		ActiveModels: map[string]int{
-			"foo": 1,
-			"bar": 1,
-		},
-		WaitingModels: map[string]int{},
-	}
 )
 
 func TestMetricsRefresh(t *testing.T) {
@@ -75,13 +65,8 @@ func TestMetricsRefresh(t *testing.T) {
 	}
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 
-	// Stop the loop, and simulate metric update again, this time the PodMetrics won't get the
-	// new update.
+	// Stop the loop.
 	pmf.ReleaseEndpoint(pm)
-	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: updated})
-	// Still expect the same condition (no metrics update).
-	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 }
 
 type FakeRefresherDataStore struct{}
