@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   # Authorization Job: Ensures only authorized users can execute workflow
@@ -69,6 +70,7 @@ jobs:
       
     name: Test on ${{ matrix.accelerator.name }}
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -82,10 +84,11 @@ jobs:
       GKE_CLUSTER_ZONE: us-east5
       NAMESPACE: igw-prefix-cache
       GATEWAY: gke-l7-regional-external-managed
-      GATEWAY_TYPE: gke
-      PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch || github.event.issue.number || github.event.number || 'actions' }}
+      GATEWAY_PROVIDER: gke
+      PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch || github.event.issue.number || 'main' }}
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      MODEL: meta-llama/Llama-3.1-8B-Instruct
+      DEPLOYMENT_NAME: vllm-qwen3-32b
+      MODEL: Qwen/Qwen3-32B
       GSA_EMAIL: ${{ secrets.GCS_WORKLOAD_SA }}
       GCS_BUCKET: igw-e2e-benchmark-results
       KSA_NAME: igw-e2e-benchmark-sa
@@ -98,15 +101,11 @@ jobs:
 
       - name: Determine if pr_or_branch is a PR number
         id: check_pr
-        env:
-          PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch }}
         shell: bash
         run: |
-          echo "PR_OR_BRANCH=${PR_OR_BRANCH:-actions}" >> "$GITHUB_ENV"
-          if [[ "$PR_OR_BRANCH" =~ ^[0-9]+$ ]]; then
-            echo "is_pr=true" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" = "pull_request" ]]; then
-            echo "PR_OR_BRANCH=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          VAL="${{ env.PR_OR_BRANCH }}"
+          echo "TARGET=$VAL" >> "$GITHUB_ENV"
+          if [[ "$VAL" =~ ^[0-9]+$ ]]; then
             echo "is_pr=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_pr=false" >> "$GITHUB_OUTPUT"
@@ -115,12 +114,20 @@ jobs:
       - name: Fetch and checkout PR
         if: steps.check_pr.outputs.is_pr == 'true'
         run: |
-          git fetch origin pull/"$PR_OR_BRANCH"/head:pr-"$PR_OR_BRANCH"
-          git checkout pr-"$PR_OR_BRANCH"
+          git fetch origin pull/"$TARGET"/head:pr-"$TARGET"
+          git checkout pr-"$TARGET"
 
       - name: Checkout branch
         if: steps.check_pr.outputs.is_pr == 'false'
-        run: git checkout "$PR_OR_BRANCH"
+        run: |
+          git fetch origin "$TARGET"
+          git checkout "$TARGET"
+
+      - name: Install Python Dependencies
+        run: |
+          cd benchmarking
+          python3 -m venv .venv
+          pip install inference-perf pandas numpy matplotlib
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -157,32 +164,29 @@ jobs:
             --overwrite \
             --namespace "${NAMESPACE}"
 
+      - name: Fetch Latest IGW Release
+        run: |
+          IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gateway-api-inference-extension/releases \
+            | jq -r '.[] | select(.prerelease == false) | .tag_name' \
+            | sort -V \
+            | tail -n1)
+                    
+          echo "IGW_CHART_VERSION=$IGW_LATEST_RELEASE" >> $GITHUB_ENV
+
       - name: Deploy Model Server and CRDs
         run: |
           cd config/manifests/vllm
-          sed -i '/- --model/a\          - --enable-prefix-caching' gpu-deployment.yaml
           echo "Deploying Model Server..."
-          kubectl apply -f gpu-deployment.yaml -n ${NAMESPACE} | tee ~/igw-prefix-cache-deployment.log
+          kubectl apply -f gpu-prefix-cache-deployment.yaml -n ${NAMESPACE} | tee ~/igw-prefix-cache-deployment.log
           echo "Installing CRDs"
-          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.1.0/manifests.yaml
-          echo "---------------------------------------" >> ~/igw-prefix-cache-deployment.log
-
-      - name: Deploy InferencePool and Endpoint Picker Extension
-        run: |
-          export IGW_CHART_VERSION=v1.1.0
-          helm install vllm-llama3-8b-instruct \
-          --namespace $NAMESPACE \
-          --set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
-          --set provider.name=$GATEWAY_TYPE \
-          --version $IGW_CHART_VERSION \
-          oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-prefix-cache-deployment.log
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${IGW_CHART_VERSION}/manifests.yaml
           echo "---------------------------------------" >> ~/igw-prefix-cache-deployment.log
 
       - name: Wait for all pods to be ready
         run: |
           kubectl wait pod \
+            --selector=app=${DEPLOYMENT_NAME} \
             --for=condition=Ready \
-            --all \
             -n "${NAMESPACE}" \
             --timeout=25m
           echo "✅ All pods are ready."
@@ -191,12 +195,8 @@ jobs:
       - name: Deploy Gateway
         run: |
           GATEWAY_NAME=inference-gateway
-          kubectl delete httproute llm-route -n ${NAMESPACE} --ignore-not-found
-          kubectl delete gateway ${GATEWAY_NAME} -n ${NAMESPACE} --ignore-not-found
           echo "Deploying Gateway..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.1.0/config/manifests/gateway/gke/gateway.yaml -n ${NAMESPACE} | tee ~/igw-prefix-cache-deployment.log 
-          echo "Deploying HTTPRoute..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/v1.1.0/config/manifests/gateway/gke/httproute.yaml -n ${NAMESPACE} | tee ~/igw-prefix-cache-deployment.log
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_CHART_VERSION}/config/manifests/gateway/gke/gateway.yaml -n ${NAMESPACE} | tee ~/igw-prefix-cache-deployment.log 
           echo "---------------------------------------" >> ~/igw-prefix-cache-deployment.log
 
       - name: Wait for gateway to be ready
@@ -208,6 +208,32 @@ jobs:
             --timeout=500s
           echo "✅ Gateway is ready."
           kubectl get gateway -n "${NAMESPACE}"
+
+      - name: Deploy InferencePool and Endpoint Picker Extension
+        run: |
+          helm upgrade --install ${DEPLOYMENT_NAME} \
+          --dependency-update \
+          --namespace $NAMESPACE \
+          --set inferencePool.modelServers.matchLabels.app=${DEPLOYMENT_NAME} \
+          --set provider.name=$GATEWAY_PROVIDER \
+          --set experimentalHttpRoute.enabled=true \
+          --version $IGW_CHART_VERSION \
+          oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-prefix-cache-deployment.log
+          echo "---------------------------------------" >> ~/igw-prefix-cache-deployment.log
+
+      - name: Wait for all resources to be ready
+        run: |
+          kubectl rollout status deployment/$DEPLOYMENT_NAME-epp -n $NAMESPACE --timeout=120s
+
+          kubectl wait httproute/${DEPLOYMENT_NAME} \
+            --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
+            -n ${NAMESPACE} \
+            --timeout=5m
+
+          kubectl wait inferencepool/${DEPLOYMENT_NAME} \
+            --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
+            -n ${NAMESPACE} \
+            --timeout=5m
 
       - name: Show deployment status
         run: |
@@ -224,7 +250,7 @@ jobs:
           helm list -n "${NAMESPACE}" || true
           echo ""
           echo "=== Inference Pools ==="
-          kubectl get inferencepools -n "${NAMESPACE}" || true
+          kubectl get inferencepools -n "${NAMESPACE}" -o yaml || true
           echo ""
           echo "=== HTTPRoutes ==="
           kubectl get httproutes -n "${NAMESPACE}" -o yaml || true
@@ -241,6 +267,7 @@ jobs:
       - name: Run benchmarking test
         run: |
           TIMESTAMP=$(date +"%Y-%m-%d-%H-%M-%S")
+          echo "TIMESTAMP=$TIMESTAMP" >> "$GITHUB_ENV"
           cd benchmarking/prefix-cache-aware
           host="${GATEWAY_HOST:-$(kubectl get gateway -n "$NAMESPACE" \
           -o jsonpath='{.items[0].status.addresses[0].value}' 2>/dev/null || true)}"
@@ -250,15 +277,21 @@ jobs:
           fi
           port=80
           svc_host="${host}:${port}"
-          helm install prefix-cache-benchmark ../inference-perf/ -f high-cache-values.yaml \
+          helm upgrade --install prefix-cache-benchmark ../inference-perf/ -f high-cache-values.yaml \
             --namespace "${NAMESPACE}" \
             --create-namespace \
-            --set hfToken="${HF_TOKEN}" \
+            --set token.hfToken="${HF_TOKEN}" \
             --set "config.server.base_url=http://${svc_host}" \
             --set "job.serviceAccountName=$KSA_NAME" \
             --set "job.image.tag=latest" \
             --set "config.storage.google_cloud_storage.bucket_name=${GCS_BUCKET}" \
             --set "config.storage.google_cloud_storage.path=${NAMESPACE}/${TIMESTAMP}" \
+            --set config.data.type=shared_prefix \
+            --set config.data.shared_prefix.num_groups=20 \
+            --set config.data.shared_prefix.num_prompts_per_group=5 \
+            --set config.data.shared_prefix.system_prompt_len=2048 \
+            --set config.data.shared_prefix.question_len=512 \
+            --set config.data.shared_prefix.output_len=256 \
             --set-string 'job.resources.limits.nvidia\.com/gpu=1'
 
       - name: Wait for benchmarking job to finish
@@ -274,6 +307,42 @@ jobs:
             exit 1
           fi
           echo "✅ Benchmarking Job Completed."
+
+      - name: Analyze Benchmarking Results
+        run: |
+          cd benchmarking
+          source .venv/bin/activate
+
+          benchmark_id='prefix-cache' ./download-results.bash gcs $GCS_BUCKET ${NAMESPACE}/${TIMESTAMP}
+          inference-perf --analyze output/default-run/prefix-cache/results/json/${TIMESTAMP}
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarking-artifacts
+          path: benchmarking/output/default-run/prefix-cache/results/json/**/*
+
+      - name: Comment on PR
+        if: steps.check_pr.outputs.is_pr == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cd benchmarking/output/default-run/prefix-cache/results/json/${TIMESTAMP}
+          FILE_LIST=$(ls | sed 's/^/- /')
+
+          COMMENT_BODY=$(cat <<EOF
+          ✅ **Benchmarking Job Completed!**
+          
+          You can find the benchmarking artifacts in the [Workflow Summary](https://github.com{{ github.repository }}/actions/runs/$RUN_ID).
+          
+          **Files generated:**
+          $FILE_LIST
+          EOF
+          )
+
+          gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
 
       - name: Collect and upload Kubernetes pod logs
         if: always()
@@ -308,7 +377,8 @@ jobs:
         if: always()
         run: |
           GATEWAY_NAME=inference-gateway
-          helm uninstall vllm-llama3-8b-instruct -n ${NAMESPACE} --ignore-not-found
+          helm uninstall ${DEPLOYMENT_NAME} -n ${NAMESPACE} --ignore-not-found
           helm uninstall prefix-cache-benchmark -n ${NAMESPACE} --ignore-not-found
           kubectl delete httproute llm-route -n ${NAMESPACE} --ignore-not-found
           kubectl delete gateway ${GATEWAY_NAME} -n ${NAMESPACE} --ignore-not-found
+          kubectl delete deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} --ignore-not-found

@@ -8,7 +8,8 @@ Before you begin, ensure you have the following:
 *   **Helm 3+**: [Installation Guide](https://helm.sh/docs/intro/install/)
 *   **Kubernetes Cluster**: Access to a Kubernetes cluster
 *   **Hugging Face Token Secret**: A Hugging Face token to pull models.
-*   **Gateway Deployed**: Your inference server/gateway must be deployed and accessible within the cluster.
+*.  **Prefix-Cache Model Server Deployed**: Ensure a deployment with prefix-caching enabled. (ex. `gpu-prefix-cache-deployment.yaml`)
+*   **Gateway Deployed**: Your inference server/gateway must be deployed and accessible within the cluster. 
 
 Follow [benchmarking guide](https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark/#benchmark) for more information on how to set up gateway and how to validate benchmark results.
 
@@ -49,7 +50,7 @@ cd gateway-api-inference-extension/benchmarking/prefix-cache-aware
   # Get gateway IP
   GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
   # Get LoadBalancer k8s service IP
-  SVC_IP=$(kubectl get service/vllm-llama3-8b-instruct -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  SVC_IP=$(kubectl get service/vllm-qwen3-32b -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
   echo $GW_IP
   echo $SVC_IP
