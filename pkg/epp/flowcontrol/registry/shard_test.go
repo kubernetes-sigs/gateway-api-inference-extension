@@ -514,3 +514,69 @@ func TestShard_Concurrency_MixedWorkload(t *testing.T) {
 	assert.Zero(t, finalStats.TotalLen, "After all paired add/remove operations, the total length should be zero")
 	assert.Zero(t, finalStats.TotalByteSize, "After all paired add/remove operations, the total byte size should be zero")
 }
+
+// TestShard_Concurrency_AllOrderedPriorityLevels_RaceSafety verifies that AllOrderedPriorityLevels() is safe to call
+// concurrently with addPriorityBand() and deletePriorityBand(). This test is designed to trigger the Go race detector
+// if the implementation returns the internal slice without proper synchronization.
+func TestShard_Concurrency_AllOrderedPriorityLevels_RaceSafety(t *testing.T) {
+	t.Parallel()
+	const (
+		numReaders = 5
+		iterations = 200
+	)
+
+	h := newShardTestHarness(t)
+
+	dynamicPrio := 15
+	newBandCfg, err := NewPriorityBandConfig(newTestPluginsHandle(t), dynamicPrio, "Dynamic-15")
+	require.NoError(t, err)
+	h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
+
+	stopCh := make(chan struct{})
+	var readersWg, writerWg sync.WaitGroup
+
+	// Readers: continuously call AllOrderedPriorityLevels() and iterate
+	readersWg.Add(numReaders)
+	for range numReaders {
+		go func() {
+			defer readersWg.Done()
+			for {
+				select {
+				case <-stopCh:
+					return
+				default:
+					levels := h.shard.AllOrderedPriorityLevels()
+					// Force iteration over the returned slice to surface races on the backing array.
+					sum := 0
+					for _, p := range levels {
+						sum += p
+					}
+				}
+			}
+		}()
+	}
+
+	// Writer: repeatedly add and delete a priority band, modifying orderedPriorityLevels.
+	// deletePriorityBand also removes the config entry, so we must restore it before each add.
+	writerWg.Add(1)
+	go func() {
+		defer writerWg.Done()
+		for range iterations {
+			h.shard.addPriorityBand(dynamicPrio)
+			h.shard.deletePriorityBand(dynamicPrio)
+
+			h.shard.mu.Lock()
+			h.shard.config.PriorityBands[dynamicPrio] = newBandCfg
+			h.shard.mu.Unlock()
+		}
+	}()
+
+	writerWg.Wait()
+	close(stopCh)
+	readersWg.Wait()
+
+	// If we reach here without the race detector firing, the implementation is safe.
+	// Final sanity: dynamic band should be removed, only the original two remain.
+	assert.Equal(t, []int{highPriority, lowPriority}, h.shard.AllOrderedPriorityLevels(),
+		"After all add/delete cycles, only original priority levels should remain")
+}

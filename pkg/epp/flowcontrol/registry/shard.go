@@ -250,10 +250,15 @@ func (s *registryShard) PriorityBandAccessor(priority int) (flowcontrol.Priority
 	return &priorityBandAccessor{shard: s, band: band}, nil
 }
 
-// AllOrderedPriorityLevels returns a cached, sorted slice of all configured priority levels for this shard.
-// This is a lock-free read.
+// AllOrderedPriorityLevels returns a snapshot of all configured priority levels for this shard,
+// sorted in descending order. The returned slice is a copy, safe for the caller to iterate
+// without holding any lock.
 func (s *registryShard) AllOrderedPriorityLevels() []int {
-	return s.orderedPriorityLevels
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]int, len(s.orderedPriorityLevels))
+	copy(result, s.orderedPriorityLevels)
+	return result
 }
 
 // Stats returns a snapshot of the aggregated statistics for this specific shard.
