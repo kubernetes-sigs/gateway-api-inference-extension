@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen-vl-instruct
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-qwen-vl-instruct
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen-vl-instruct
+    spec:
+        containers:
+        - name: vllm-server
+          image: "vllm/vllm-openai:v0.15.1"
+          imagePullPolicy: Always
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+          - "--model"
+          - "Qwen/Qwen2-VL-2B-Instruct"
+          - "--tensor-parallel-size"
+          - "1"
+          - "--port"
+          - "8000"
+          - "--max-num-seq"
+          - "1024"
+          env:
+            - name: VLLM_USE_V1
+              value: "1"
+            - name: PORT
+              value: "8000"
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            periodSeconds: 1
+            successThreshold: 1
+            failureThreshold: 5
+            timeoutSeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            periodSeconds: 1
+            successThreshold: 1
+            failureThreshold: 1
+            timeoutSeconds: 1
+          startupProbe:
+            # Failure threshold is when we believe startup will not happen at all, and is set
+            # to the maximum possible time we believe loading a model will take. In our
+            # default configuration we are downloading a model from HuggingFace, which may
+            # take a long time, then the model must load into the accelerator. We choose
+            # 10 minutes as a reasonable maximum startup time before giving up and attempting
+            # to restart the pod.
+            #
+            # IMPORTANT: If the core model takes more than 10 minutes to load, pods will crash
+            # loop forever. Be sure to set this appropriately.
+            failureThreshold: 600
+            # Set delay to start low so that if the base model changes to something smaller
+            # or an optimization is deployed, we don't wait unneccesarily.
+            initialDelaySeconds: 2
+            # As a startup probe, this stops running and so we can more aggressively probe
+            # even a moderately complex startup - this is a very important workload.
+            periodSeconds: 1
+            httpGet:
+              # vLLM does not start the OpenAI server (and hence make /health available)
+              # until models are loaded. This may not be true for all model servers.
+              path: /health
+              port: http
+              scheme: HTTP
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
