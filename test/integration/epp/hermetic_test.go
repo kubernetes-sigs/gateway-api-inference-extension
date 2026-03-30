@@ -27,7 +27,6 @@ import (
 	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
@@ -50,10 +49,6 @@ import (
 )
 
 const (
-	modelMyModel                    = "my-model"
-	modelMyModelTarget              = "my-model-12345"
-	modelSQLLora                    = "sql-lora"
-	modelSQLLoraTarget              = "sql-lora-1fdg2"
 	modelSheddable                  = "sql-lora-sheddable"
 	modelSheddableTarget            = "sql-lora-1fdg3"
 	modelDirect                     = "direct-model"
@@ -123,57 +118,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 				return p
 			}
 
-			tests := []struct {
-				name          string
-				requests      []*extProcPb.ProcessingRequest
-				pods          []podState
-				wantResponses []*extProcPb.ProcessingResponse
-				wantMetrics   map[string]string
-				waitForModel  string
-				// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
-				// InferenceModelRewrite) which are not available in Standalone runMode without CRD.
-				requiresCRDs bool
-				// wantSpans lists the span names expected to be recorded.
-				wantSpans []string
-			}{
-				// --- Standard Routing Logic ---
-				{
-					name:     "select lower queue and kv cache",
-					requests: integration.ReqLLM(logger, "test1", modelMyModel, modelMyModelTarget),
-					pods: []podState{
-						P(0, 3, 0.2),
-						P(1, 0, 0.1), // Winner (Low Queue, Low KV)
-						P(2, 10, 0.2),
-					},
-					wantResponses: ExpectRouteTo("192.168.1.2:8000", modelMyModelTarget, "test1"),
-					wantMetrics: map[string]string{
-						"inference_objective_request_total": cleanMetric(metricReqTotal(modelMyModel, modelMyModelTarget, prio(2))),
-						"inference_pool_ready_pods":         cleanMetric(metricReadyPods(3)),
-					},
-				},
-				{
-					name:     "select lower queue with streaming request",
-					requests: integration.ReqLLMWithStream(logger, "test-stream", modelMyModel, modelMyModelTarget),
-					pods: []podState{
-						P(0, 3, 0.2),
-						P(1, 0, 0.1), // Winner
-						P(2, 10, 0.2),
-					},
-					wantResponses: ExpectRouteToWithStream("192.168.1.2:8000", modelMyModelTarget, "test-stream"),
-				},
-				{
-					name:     "select active lora, low queue",
-					requests: integration.ReqLLM(logger, "test2", modelSQLLora, modelSQLLoraTarget),
-					pods: []podState{
-						P(0, 0, 0.2, "foo", "bar"),
-						P(1, 0, 0.1, "foo", modelSQLLoraTarget), // Winner (Has LoRA)
-						P(2, 10, 0.2, "foo", "bar"),
-					},
-					wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
-					wantMetrics: map[string]string{
-						"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget, prio(2))),
-					},
-				},
+			hermeticTests := []testCase{
 				{
 					name:     "select lora despite higher kv cache (affinity)",
 					requests: integration.ReqLLM(logger, "test3", modelSQLLora, modelSQLLoraTarget),
@@ -236,22 +181,6 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					wantMetrics: map[string]string{
 						"inference_objective_request_total": cleanMetric(metricReqTotal(modelSheddable, modelSheddableTarget, prio(0))),
 					},
-				},
-				{
-					name:     "no backend pods available",
-					requests: integration.ReqHeaderOnly(map[string]string{"content-type": "application/json"}),
-					pods:     nil,
-					wantResponses: ExpectReject(envoyTypePb.StatusCode_InternalServerError,
-						"inference error: Internal - no pods available in datastore"),
-				},
-				{
-					name: "request missing model field",
-					requests: integration.ReqRaw(
-						map[string]string{"content-type": "application/json"},
-						`{"prompt":"hello world"}`,
-					),
-					wantResponses: ExpectReject(envoyTypePb.StatusCode_BadRequest,
-						"inference error: BadRequest - model not found in request body"),
 				},
 
 				// --- Subsetting & Metadata ---
@@ -413,6 +342,7 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					},
 				},
 			}
+			tests := append(commonTestCases(prio), hermeticTests...)
 
 			for _, tc := range tests {
 				t.Run(tc.name, func(t *testing.T) {

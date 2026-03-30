@@ -30,6 +30,14 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
+// Model name constants shared across test suites.
+const (
+	modelMyModel       = "my-model"
+	modelMyModelTarget = "my-model-12345"
+	modelSQLLora       = "sql-lora"
+	modelSQLLoraTarget = "sql-lora-1fdg2"
+)
+
 // --- Domain Request Builders ---
 
 // ReqSubset creates a request sequence with Envoy Endpoint Metadata.
@@ -249,6 +257,74 @@ func ExpectGRPCStreamResp(chunks ...string) []*extProcPb.ProcessingResponse {
 		res = append(res, integration.NewResponseStreamChunk(chunk, false))
 	}
 	return res
+}
+
+// --- Shared Test Cases ---
+
+// testCase defines a single integration test scenario that can be shared across test suites.
+type testCase struct {
+	name          string
+	requests      []*extProcPb.ProcessingRequest
+	pods          []podState
+	wantResponses []*extProcPb.ProcessingResponse
+	wantMetrics   map[string]string
+	waitForModel  string
+	// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
+	// InferenceModelRewrite) which are not available in Standalone runMode without CRD.
+	requiresCRDs bool
+	// wantSpans lists the span names expected to be recorded (hermetic tests only).
+	wantSpans []string
+}
+
+// commonTestCases returns the test cases shared between the standard and data layer test suites.
+// prio adjusts expected priority label values based on execution context (e.g. 0 in NoCRD mode).
+func commonTestCases(prio func(int) int) []testCase {
+	return []testCase{
+		{
+			name:     "select lower queue and kv cache",
+			requests: integration.ReqLLM(logger, "test1", modelMyModel, modelMyModelTarget),
+			pods: []podState{
+				P(0, 3, 0.2),
+				P(1, 0, 0.1), // Winner (Low Queue, Low KV)
+				P(2, 10, 0.2),
+			},
+			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelMyModelTarget, "test1"),
+			wantMetrics: map[string]string{
+				"inference_objective_request_total": cleanMetric(metricReqTotal(modelMyModel, modelMyModelTarget, prio(2))),
+				"inference_pool_ready_pods":         cleanMetric(metricReadyPods(3)),
+			},
+			wantSpans: []string{"gateway.request", "gateway.request_orchestration"},
+		},
+		{
+			name:     "select active lora, low queue",
+			requests: integration.ReqLLM(logger, "test2", modelSQLLora, modelSQLLoraTarget),
+			pods: []podState{
+				P(0, 0, 0.2, "foo", "bar"),
+				P(1, 0, 0.1, "foo", modelSQLLoraTarget), // Winner (Has LoRA)
+				P(2, 10, 0.2, "foo", "bar"),
+			},
+			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
+			wantMetrics: map[string]string{
+				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget, prio(2))),
+			},
+		},
+		{
+			name:     "no backend pods available",
+			requests: integration.ReqHeaderOnly(map[string]string{"content-type": "application/json"}),
+			pods:     nil,
+			wantResponses: ExpectReject(envoyTypePb.StatusCode_InternalServerError,
+				"inference error: Internal - no pods available in datastore"),
+		},
+		{
+			name: "request missing model field",
+			requests: integration.ReqRaw(
+				map[string]string{"content-type": "application/json"},
+				`{"prompt":"hello world"}`,
+			),
+			wantResponses: ExpectReject(envoyTypePb.StatusCode_BadRequest,
+				"inference error: BadRequest - model not found in request body"),
+		},
+	}
 }
 
 // --- Data Structures & Metrics Helpers ---
