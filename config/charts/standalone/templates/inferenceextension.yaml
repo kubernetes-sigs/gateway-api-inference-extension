@@ -1,3 +1,4 @@
+{{ include "gateway-api-inference-extension.validations.epp.resources" $ }}
 {{ include "inference-extension.config" . }}
 {{ include "inference-extension.deployment" . }}
 {{ include "inference-extension.gke" . }}
