@@ -47,7 +47,7 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/spf13/pflag v1.0.10
 	go.opentelemetry.io/otel/trace v1.42.0
-	golang.org/x/time v0.14.0
+	golang.org/x/time v0.15.0
 	sigs.k8s.io/kustomize/api v0.21.1
 	sigs.k8s.io/kustomize/kyaml v0.21.1
 )
