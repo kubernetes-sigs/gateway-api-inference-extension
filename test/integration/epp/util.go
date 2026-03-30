@@ -30,7 +30,14 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
 
-// --- Domain Request Builders ---
+// buildEnvoyHeaders is a helper to convert a map of strings into Envoy HeaderValues.
+func buildEnvoyHeaders(headers map[string]string) []*envoyCorev3.HeaderValue {
+	hList := make([]*envoyCorev3.HeaderValue, 0, len(headers))
+	for k, v := range headers {
+		hList = append(hList, &envoyCorev3.HeaderValue{Key: k, RawValue: []byte(v)})
+	}
+	return hList
+}
 
 // ReqSubset creates a request sequence with Envoy Endpoint Metadata.
 // This simulates the "Subset Load Balancing" flow where EPP picks a specific pod IP.
@@ -48,13 +55,11 @@ func ReqResponseOnly(
 	reqs := make([]*extProcPb.ProcessingRequest, 0, 1+len(bodyChunks))
 
 	// 1. Response Headers
-	hListResp := make([]*envoyCorev3.HeaderValue, 0, len(respHeaders))
-	for k, v := range respHeaders {
-		hListResp = append(hListResp, &envoyCorev3.HeaderValue{Key: k, RawValue: []byte(v)})
-	}
 	reqs = append(reqs, &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_ResponseHeaders{
-			ResponseHeaders: &extProcPb.HttpHeaders{Headers: &envoyCorev3.HeaderMap{Headers: hListResp}},
+			ResponseHeaders: &extProcPb.HttpHeaders{
+				Headers: &envoyCorev3.HeaderMap{Headers: buildEnvoyHeaders(respHeaders)},
+			},
 		},
 	})
 
@@ -82,13 +87,11 @@ func ReqResponseGRPCWithTailer(
 	reqs := make([]*extProcPb.ProcessingRequest, 0, 1+len(bodyChunks))
 
 	// 1. Response Headers
-	hListResp := make([]*envoyCorev3.HeaderValue, 0, len(respHeaders))
-	for k, v := range respHeaders {
-		hListResp = append(hListResp, &envoyCorev3.HeaderValue{Key: k, RawValue: []byte(v)})
-	}
 	reqs = append(reqs, &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_ResponseHeaders{
-			ResponseHeaders: &extProcPb.HttpHeaders{Headers: &envoyCorev3.HeaderMap{Headers: hListResp}},
+			ResponseHeaders: &extProcPb.HttpHeaders{
+				Headers: &envoyCorev3.HeaderMap{Headers: buildEnvoyHeaders(respHeaders)},
+			},
 		},
 	})
 
@@ -115,73 +118,64 @@ func ReqResponseGRPCWithTailer(
 
 // --- Response Expectations ---
 
+func buildRouteResponse(endpoint, targetModel, prompt string, stream bool) []*extProcPb.ProcessingResponse {
+	bodyMap := map[string]any{
+		"max_tokens": 100, "model": targetModel, "prompt": prompt, "temperature": 0,
+	}
+	if stream {
+		bodyMap["stream"] = true
+	}
+	j, _ := json.Marshal(bodyMap)
+
+	return integration.NewRequestBufferedResponse(
+		endpoint, j,
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
+			Key:      reqcommon.RequestIdHeaderKey,
+			RawValue: []byte("test-request-id"),
+		}},
+	)
+}
+
+func buildGRPCRouteResponse(endpoint, prompt, method string, stream bool) []*extProcPb.ProcessingResponse {
+	req := &pb.GenerateRequest{
+		Input: &pb.GenerateRequest_Text{
+			Text: prompt,
+		},
+		Stream: stream,
+	}
+	j, _ := integration.CreateGrpcPayload(req)
+
+	return integration.NewRequestBufferedResponse(
+		endpoint, j,
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
+			Key:      reqcommon.RequestIdHeaderKey,
+			RawValue: []byte("test-request-id"),
+		}},
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: ":path", RawValue: []byte(method)}},
+	)
+}
+
 // ExpectRouteTo asserts that the request was successfully routed to the specified endpoint and that the body was
 // rewritten to match the target model.
 func ExpectRouteTo(endpoint, targetModel, prompt string) []*extProcPb.ProcessingResponse {
-	// Reconstruct the expected rewritten body.
-	j, _ := json.Marshal(map[string]any{
-		"max_tokens": 100, "model": targetModel, "prompt": prompt, "temperature": 0,
-	})
-	return integration.NewRequestBufferedResponse(
-		endpoint, j,
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-			Key:      reqcommon.RequestIdHeaderKey,
-			RawValue: []byte("test-request-id"),
-		}},
-	)
+	return buildRouteResponse(endpoint, targetModel, prompt, false)
+}
+
+// ExpectRouteToWithStream asserts that the request was successfully routed with streaming enabled.
+func ExpectRouteToWithStream(endpoint, targetModel, prompt string) []*extProcPb.ProcessingResponse {
+	return buildRouteResponse(endpoint, targetModel, prompt, true)
 }
 
 // ExpectGRPCRouteTo asserts that the request was successfully routed to the specified endpoint.
-func ExpectGRPCRouteTo(endpoint, prompt string) []*extProcPb.ProcessingResponse {
-	req := &pb.GenerateRequest{
-		Input: &pb.GenerateRequest_Text{
-			Text: prompt,
-		},
-	}
-	// Reconstruct the expected rewritten body.
-	j, _ := integration.CreateGrpcPayload(req)
-	return integration.NewRequestBufferedResponse(
-		endpoint, j,
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-			Key:      reqcommon.RequestIdHeaderKey,
-			RawValue: []byte("test-request-id"),
-		}},
-	)
+func ExpectGRPCRouteTo(endpoint, prompt, method string) []*extProcPb.ProcessingResponse {
+	return buildGRPCRouteResponse(endpoint, prompt, method, false)
 }
 
-func ExpectRouteToWithStream(endpoint, targetModel, prompt string) []*extProcPb.ProcessingResponse {
-	bodyMap := map[string]any{
-		"max_tokens": 100, "model": targetModel, "prompt": prompt, "temperature": 0, "stream": true,
-	}
-	j, _ := json.Marshal(bodyMap)
-	return integration.NewRequestBufferedResponse(
-		endpoint, j,
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-			Key:      reqcommon.RequestIdHeaderKey,
-			RawValue: []byte("test-request-id"),
-		}},
-	)
-}
-
-func ExpectGRPCRouteToWithStream(endpoint, prompt string) []*extProcPb.ProcessingResponse {
-	req := &pb.GenerateRequest{
-		Input: &pb.GenerateRequest_Text{
-			Text: prompt,
-		},
-		Stream: true,
-	}
-	j, _ := integration.CreateGrpcPayload(req)
-	return integration.NewRequestBufferedResponse(
-		endpoint, j,
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
-		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
-			Key:      reqcommon.RequestIdHeaderKey,
-			RawValue: []byte("test-request-id"),
-		}},
-	)
+// ExpectGRPCRouteToWithStream asserts that the request was successfully routed with streaming enabled.
+func ExpectGRPCRouteToWithStream(endpoint, prompt, method string) []*extProcPb.ProcessingResponse {
+	return buildGRPCRouteResponse(endpoint, prompt, method, true)
 }
 
 // ExpectReject asserts that the EPP immediately rejected the request with the given code and message.
@@ -269,30 +263,27 @@ func P(idx int, q int, kv float64, models ...string) podState {
 type label struct{ name, value string }
 
 func labelsToString(labels []label) string {
-	var sb strings.Builder
+	parts := make([]string, len(labels))
 	for i, l := range labels {
-		if i > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString(fmt.Sprintf("%s=%q", l.name, l.value))
+		parts[i] = fmt.Sprintf("%s=%q", l.name, l.value)
 	}
-	return sb.String()
+	return strings.Join(parts, ",")
 }
 
 func metricReqTotal(model, target string, priority int) string {
 	return fmt.Sprintf(`
-		# HELP inference_objective_request_total [ALPHA] Counter of inference objective requests broken out for each model and target model.
-		# TYPE inference_objective_request_total counter
-		inference_objective_request_total{%s} 1
-		`, labelsToString([]label{{"model_name", model}, {"priority", strconv.Itoa(priority)}, {"target_model_name", target}}))
+    # HELP inference_objective_request_total [ALPHA] Counter of inference objective requests broken out for each model and target model.
+    # TYPE inference_objective_request_total counter
+    inference_objective_request_total{%s} 1
+    `, labelsToString([]label{{"model_name", model}, {"priority", strconv.Itoa(priority)}, {"target_model_name", target}}))
 }
 
 func metricReadyPods(count int) string {
 	return fmt.Sprintf(`
-		# HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
-		# TYPE inference_pool_ready_pods gauge
-		inference_pool_ready_pods{%s} %d
-		`, labelsToString([]label{{"name", testPoolName}}), count)
+    # HELP inference_pool_ready_pods [ALPHA] The number of ready pods in the inference server pool.
+    # TYPE inference_pool_ready_pods gauge
+    inference_pool_ready_pods{%s} %d
+    `, labelsToString([]label{{"name", testPoolName}}), count)
 }
 
 // cleanMetric removes indentation from multiline metric strings and ensures a trailing newline exists, which is

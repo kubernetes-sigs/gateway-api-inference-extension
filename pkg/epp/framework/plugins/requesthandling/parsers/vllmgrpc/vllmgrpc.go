@@ -37,6 +37,10 @@ const (
 	VllmGRPCParserType = "vllmgrpc-parser"
 
 	gRPCPayloadHeaderLen = 5
+
+	methodPathKey    = ":path"
+	vllmGeneratePath = "/vllm.grpc.engine.VllmEngine/Generate"
+	vllmEmbedPath    = "/vllm.grpc.engine.VllmEngine/Embed"
 )
 
 // compile-time type validation
@@ -75,27 +79,52 @@ func (p *VllmGRPCParser) TypedName() fwkplugin.TypedName {
 func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
 	logger := log.FromContext(ctx)
 
-	extractedBody, err := convertToLLMRequestBody(body)
-	if err != nil {
-		return nil, fmt.Errorf("parsing gRPC payload: %w", err)
+	path := headers[methodPathKey]
+	switch path {
+	case vllmEmbedPath:
+		extractedBody, err := convertEmbedToLLMRequestBody(body)
+		if err != nil {
+			return nil, fmt.Errorf("parsing gRPC payload for Embed: %w", err)
+		}
+		logger.V(logutil.TRACE).Info("parsed EmbedRequest")
+		return extractedBody, nil
+	case vllmGeneratePath:
+		extractedBody, err := convertToLLMRequestBody(body)
+		if err != nil {
+			return nil, fmt.Errorf("parsing gRPC payload for Generate: %w", err)
+		}
+		logger.V(logutil.TRACE).Info("parsed GenerateRequest")
+		return extractedBody, nil
+	default:
+		return nil, fmt.Errorf("unsupported gRPC path: %s", headers[":path"])
 	}
-	logger.V(logutil.TRACE).Info("parsed GenerateRequest")
-	return extractedBody, nil
 }
 
 // ParseResponse parses the response body and returns a ParsedResponse
 func (p *VllmGRPCParser) ParseResponse(ctx context.Context, body []byte, headers map[string]string, endofStream bool) (*fwkrh.ParsedResponse, error) {
 	logger := log.FromContext(ctx)
 	resp := &pb.GenerateResponse{}
-	if err := toGenerateResponse(body, resp); err != nil {
-		return nil, fmt.Errorf("failed to parse gRPC response payload: %w", err)
+
+	// Try to parse as GenerateResponse first. If it fails or the response field is nil,
+	// try to parse as EmbedResponse.
+	if err := toGenerateResponse(body, resp); err != nil || resp.Response == nil {
+		embedResp := &pb.EmbedResponse{}
+		if err := toEmbedResponse(body, embedResp); err == nil && (len(embedResp.Embedding) > 0 || embedResp.PromptTokens > 0) {
+			logger.V(logutil.DEBUG).Info("parsed EmbedResponse", "promptTokens", embedResp.PromptTokens)
+			result := &fwkrh.ParsedResponse{}
+			if embedResp.PromptTokens > 0 {
+				result.Usage = &requestcontrol.Usage{
+					PromptTokens:     int(embedResp.PromptTokens),
+					CompletionTokens: 0,
+					TotalTokens:      int(embedResp.PromptTokens),
+				}
+			}
+			return result, nil
+		}
+		return nil, fmt.Errorf("failed to parse gRPC response payload as GenerateResponse or EmbedResponse: %w", err)
 	}
 
 	result := &fwkrh.ParsedResponse{}
-
-	if resp.Response == nil {
-		return nil, errors.New("missing response in GenerateResponse")
-	}
 
 	switch v := resp.Response.(type) {
 	case *pb.GenerateResponse_Chunk:
@@ -204,4 +233,47 @@ func toGenerateRequest(payload []byte, req *pb.GenerateRequest) error {
 	}
 
 	return proto.Unmarshal(parsedPayload, req)
+}
+
+func convertEmbedToLLMRequestBody(payload []byte) (*scheduling.LLMRequestBody, error) {
+	pbReq := &pb.EmbedRequest{}
+	if err := toEmbedRequest(payload, pbReq); err != nil {
+		return nil, err
+	}
+	var body *scheduling.LLMRequestBody
+	if pbReq.Tokenized != nil {
+		body = &scheduling.LLMRequestBody{
+			Embeddings: &scheduling.EmbeddingsRequest{
+				Input: pbReq.GetTokenized().OriginalText,
+			},
+			ParsedBody: pbReq,
+		}
+	} else {
+		return nil, errors.New("missing tokenized input in EmbedRequest")
+	}
+	return body, nil
+}
+
+func toEmbedRequest(payload []byte, req *pb.EmbedRequest) error {
+	parsedPayload, compressed, err := parseGrpcPayload(payload)
+	if err != nil {
+		return errors.New("not able to parse payload")
+	}
+	if compressed {
+		return errors.New("compressed vllmgrpc payload is not supported")
+	}
+
+	return proto.Unmarshal(parsedPayload, req)
+}
+
+func toEmbedResponse(payload []byte, resp *pb.EmbedResponse) error {
+	parsedPayload, compressed, err := parseGrpcPayload(payload)
+	if err != nil {
+		return errors.New("not able to parse payload")
+	}
+	if compressed {
+		return errors.New("compressed vllmgrpc payload is not supported")
+	}
+
+	return proto.Unmarshal(parsedPayload, resp)
 }
