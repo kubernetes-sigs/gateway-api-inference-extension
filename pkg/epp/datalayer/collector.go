@@ -136,7 +136,7 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 						if srcExtractors, ok := exts[srcName]; ok && data != nil {
 							for _, ext := range srcExtractors {
 								if err := ext.Extract(ctx, data, endpoint); err != nil {
-									logger.Error(err, "extract failed", "extractor", ext.TypedName())
+									logger.V(logging.DEFAULT).Error(err, "extract failed", "extractor", ext.TypedName())
 								}
 							}
 						}

@@ -94,7 +94,7 @@ func (rn *notificationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			u.SetNamespace(req.Namespace)
 			event.Type = fwkdl.EventDelete
 		} else {
-			log.Error(err, "failed to fetch resource from cache")
+			log.V(logging.DEFAULT).Error(err, "failed to fetch resource from cache")
 			return ctrl.Result{}, err
 		}
 	}
@@ -107,7 +107,7 @@ func (rn *notificationReconciler) dispatch(ctx context.Context, log logr.Logger,
 
 	processed, err := rn.src.Notify(ctx, *event)
 	if err != nil {
-		log.Error(err, "notifier failed to process event")
+		log.V(logging.DEFAULT).Error(err, "notifier failed to process event")
 		return ctrl.Result{}, err
 	}
 	if processed == nil {
@@ -116,7 +116,7 @@ func (rn *notificationReconciler) dispatch(ctx context.Context, log logr.Logger,
 
 	for _, ext := range rn.extractors {
 		if err := ext.ExtractNotification(ctx, *processed); err != nil {
-			log.Error(err, "extractor failed", "extractor", ext.TypedName())
+			log.V(logging.DEFAULT).Error(err, "extractor failed", "extractor", ext.TypedName())
 		}
 	}
 
