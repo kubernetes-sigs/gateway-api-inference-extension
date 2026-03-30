@@ -74,12 +74,17 @@ type Collector struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 
+	// poolInfo for reporting endpoint health status
+	poolInfo PoolInfo
+
 	// TODO: optional metrics tracking collection (e.g., errors, invocations, ...)
 }
 
 // NewCollector returns a new collector.
-func NewCollector() *Collector {
-	return &Collector{}
+func NewCollector(poolInfo PoolInfo) *Collector {
+	return &Collector{
+		poolInfo: poolInfo,
+	}
 }
 
 // Start initiates data source collection for the endpoint.
@@ -124,11 +129,13 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 				case <-c.ctx.Done(): // per endpoint context cancelled
 					return
 				case <-ticker.Channel():
+					var pollErrs error
 					for _, src := range sources {
 						ctx, cancel := context.WithTimeout(c.ctx, defaultCollectionTimeout)
 						data, err := src.Poll(ctx, endpoint)
 						cancel()
 						if err != nil {
+							pollErrs = errors.Join(pollErrs, err)
 							logger.Error(err, "poll failed", "source", src.TypedName())
 							continue
 						}
@@ -140,6 +147,11 @@ func (c *Collector) startCollection(ctx context.Context, ticker Ticker, ep fwkdl
 								}
 							}
 						}
+					}
+					// Report endpoint health based on poll result only
+					// (extract errors are data processing issues, not endpoint reachability)
+					if c.poolInfo != nil {
+						c.poolInfo.EndpointSetHealthy(endpoint, pollErrs == nil)
 					}
 				}
 			}

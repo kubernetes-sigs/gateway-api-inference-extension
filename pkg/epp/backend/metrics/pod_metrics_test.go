@@ -94,3 +94,7 @@ func (f *FakeRefresherDataStore) PodList(func(fwkdl.Endpoint) bool) []fwkdl.Endp
 	// Not implemented.
 	return nil
 }
+
+func (f *FakeRefresherDataStore) EndpointSetHealthy(_ fwkdl.Endpoint, _ bool) {
+	// Not implemented.
+}

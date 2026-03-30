@@ -38,6 +38,10 @@ const (
 type PoolInfo interface {
 	PoolGet() (*EndpointPool, error)
 	PodList(func(fwkdl.Endpoint) bool) []fwkdl.Endpoint
+	// EndpointSetHealthy marks an endpoint as healthy or unhealthy based on metrics scraping results.
+	// When healthy is false, the endpoint is removed from PodList results.
+	// When healthy is true, the endpoint is added back.
+	EndpointSetHealthy(ep fwkdl.Endpoint, healthy bool)
 }
 
 // EndpointFactory defines an interface for managing Endpoint lifecycle. Specifically,

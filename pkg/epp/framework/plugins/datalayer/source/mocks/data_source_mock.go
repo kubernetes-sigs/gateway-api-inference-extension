@@ -19,6 +19,7 @@ package mocks
 import (
 	"context"
 	"reflect"
+	"sync"
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,6 +36,7 @@ type MetricsDataSource struct {
 	CallCount int64
 	Metrics   map[types.NamespacedName]*fwkdl.Metrics
 	Errors    map[types.NamespacedName]error
+	errMu     sync.RWMutex
 }
 
 func NewDataSource(typedName plugin.TypedName) *MetricsDataSource {
@@ -58,12 +60,27 @@ func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil
 
 func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.CallCount, 1)
-	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
-		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
-			ep.UpdateMetrics(metrics)
-		}
+	nn := ep.GetMetadata().Clone().NamespacedName
+
+	fds.errMu.RLock()
+	epErr, hasError := fds.Errors[nn]
+	fds.errMu.RUnlock()
+
+	if hasError {
+		return nil, epErr
+	}
+
+	if metrics, ok := fds.Metrics[nn]; ok {
+		ep.UpdateMetrics(metrics)
 	}
 	return nil, nil
+}
+
+// SetErrors sets the error map for the fake data source (thread-safe).
+func (fds *MetricsDataSource) SetErrors(errors map[types.NamespacedName]error) {
+	fds.errMu.Lock()
+	defer fds.errMu.Unlock()
+	fds.Errors = errors
 }
 
 // NotificationSource implements both DataSource and NotificationSource for testing.

@@ -154,7 +154,7 @@ func (r *Runtime) Stop() error {
 }
 
 // NewEndpoint sets up data polling on the provided endpoint.
-func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.EndpointMetadata, _ PoolInfo) fwkdl.Endpoint {
+func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.EndpointMetadata, poolInfo PoolInfo) fwkdl.Endpoint {
 	// TODO: should we cache the sources and map after Configure? Or just replace with maps and Mutex?
 	// The code could be simpler and also would benefit from using RLock mutex for concurrent access
 	// (no change expected) instead of using sync.Map (avoid use of Range just to count, more idiomatic code, etc.).
@@ -183,7 +183,7 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 	})
 
 	endpoint := fwkdl.NewEndpoint(endpointMetadata, nil)
-	collector := NewCollector()
+	collector := NewCollector(poolInfo)
 
 	key := endpointMetadata.GetNamespacedName()
 	if _, loaded := r.collectors.LoadOrStore(key, collector); loaded {
