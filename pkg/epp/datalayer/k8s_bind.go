@@ -75,7 +75,7 @@ type notificationReconciler struct {
 	log        logr.Logger
 }
 
-// Reconciler carries out the actual notifcation logic.
+// Reconciler carries out the actual notification logic.
 func (rn *notificationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := rn.log.WithValues("resource", req.NamespacedName, "gvk", rn.gvk.String())
 
