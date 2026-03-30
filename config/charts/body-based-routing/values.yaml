@@ -38,5 +38,12 @@ bbr:
 provider:
   name: none
 
+  # Istio-specific configuration.
+  # This block is only used if name is "istio".
+  istio:
+    envoyFilter:
+      # Operation for inserting the ext_proc filter into the Envoy filter chain.
+      operation: INSERT_FIRST
+
 inferenceGateway:
   name: inference-gateway
