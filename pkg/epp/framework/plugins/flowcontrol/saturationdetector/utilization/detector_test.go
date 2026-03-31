@@ -25,23 +25,36 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
-func makePodMetric(name string, queueDepth int, kvUsage float64, updateTime time.Time) *backendmetrics.FakePodMetrics {
-	return &backendmetrics.FakePodMetrics{
-		Metadata: &fwkdl.EndpointMetadata{
-			NamespacedName: types.NamespacedName{Name: name, Namespace: "ns1"},
-		},
-		Metrics: &backendmetrics.MetricsState{
-			WaitingQueueSize:    queueDepth,
-			KVCacheUsagePercent: kvUsage,
-			UpdateTime:          updateTime,
-		},
+func makePodMetric(name string, queueDepth int, kvUsage float64, updateTime time.Time) fwkdl.Endpoint {
+	meta := &fwkdl.EndpointMetadata{
+		NamespacedName: types.NamespacedName{Name: name, Namespace: "ns1"},
 	}
+	metrics := fwkdl.NewMetrics()
+	metrics.WaitingQueueSize = queueDepth
+	metrics.KVCacheUsagePercent = kvUsage
+	metrics.UpdateTime = updateTime
+	return fwkdl.NewEndpoint(meta, metrics)
+}
+
+func makeSchedulingEndpoint(
+	name string,
+	queueDepth int,
+	kvUsage float64,
+	updateTime time.Time,
+) schedulingtypes.Endpoint {
+	meta := &fwkdl.EndpointMetadata{
+		NamespacedName: types.NamespacedName{Name: name, Namespace: "ns1"},
+	}
+	metrics := fwkdl.NewMetrics()
+	metrics.WaitingQueueSize = queueDepth
+	metrics.KVCacheUsagePercent = kvUsage
+	metrics.UpdateTime = updateTime
+	return schedulingtypes.NewEndpoint(meta, metrics, nil)
 }
 
 // TestUtilizationDetectorFactory evaluates instantiation properties and config parsing constraints.
@@ -105,7 +118,7 @@ func TestUtilizationDetectorFactory(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			plugin, err := UtilizationDetectorFactory("test-util-detector", tc.configJSON, utils.NewTestHandle(t.Context()))
+			plugin, err := UtilizationDetectorFactory("test-util-detector", tc.configJSON, fwkplugin.NewEppHandle(t.Context(), func() []types.NamespacedName { return nil }))
 			if tc.wantError {
 				require.Error(t, err, "Expected initialization to fail on invalid configuration")
 				require.Nil(t, plugin, "Plugin must be nil when initialization fails")
@@ -120,7 +133,8 @@ func TestUtilizationDetectorFactory(t *testing.T) {
 // TestDetector_TypedName provides structural assurance that initialization assigns proper types.
 func TestDetector_TypedName(t *testing.T) {
 	t.Parallel()
-	plugin, err := UtilizationDetectorFactory("test-plugin", []byte(`{}`), utils.NewTestHandle(t.Context()))
+	plugin, err := UtilizationDetectorFactory("test-plugin", []byte(`{}`), fwkplugin.NewEppHandle(
+		t.Context(), func() []types.NamespacedName { return nil }))
 	require.NoError(t, err, "Plugin initialization should succeed")
 	require.Equal(t, "test-plugin", plugin.TypedName().Name,
 		"TypedName must match the name provided during initialization")
@@ -188,12 +202,9 @@ func TestDetector_Saturation(t *testing.T) {
 		{
 			name: "Single pod with nil metrics",
 			pods: []fwkdl.Endpoint{
-				&backendmetrics.FakePodMetrics{
-					Metadata: &fwkdl.EndpointMetadata{
-						NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "ns1"},
-					},
-					Metrics: nil,
-				},
+				fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{
+					NamespacedName: types.NamespacedName{Name: "pod1", Namespace: "ns1"},
+				}, nil),
 			},
 			wantSaturation: 1.0,
 		},
@@ -293,15 +304,15 @@ func TestDetector_Filter(t *testing.T) {
 		{
 			name: "All pass - under thresholds",
 			endpoints: []schedulingtypes.Endpoint{
-				makePodMetric("pod1", 1, 0.1, baseTime),
-				makePodMetric("pod2", 4, 0.7, baseTime),
+				makeSchedulingEndpoint("pod1", 1, 0.1, baseTime),
+				makeSchedulingEndpoint("pod2", 4, 0.7, baseTime),
 			},
 			wantLen: 2,
 		},
 		{
 			name: "Pass - at threshold but under burst",
 			endpoints: []schedulingtypes.Endpoint{
-				makePodMetric("pod1", 5, 0.8, baseTime),
+				makeSchedulingEndpoint("pod1", 5, 0.8, baseTime),
 			},
 			wantLen: 1,
 		},
@@ -309,7 +320,7 @@ func TestDetector_Filter(t *testing.T) {
 			name: "Pass - in headroom burst",
 			endpoints: []schedulingtypes.Endpoint{
 				// Q=5.5 (< 6.0). KV=0.9 (< 0.96).
-				makePodMetric("pod1", 5, 0.9, baseTime),
+				makeSchedulingEndpoint("pod1", 5, 0.9, baseTime),
 			},
 			wantLen: 1,
 		},
@@ -317,9 +328,9 @@ func TestDetector_Filter(t *testing.T) {
 			name: "Filtered - exceeds queue burst",
 			endpoints: []schedulingtypes.Endpoint{
 				// Pod1 (Over): Q=10/5=2.0.
-				makePodMetric("pod1", 7, 0.1, baseTime),
+				makeSchedulingEndpoint("pod1", 7, 0.1, baseTime),
 				// Pod2 (OK): Q=1/5=0.2.
-				makePodMetric("pod2", 1, 0.1, baseTime),
+				makeSchedulingEndpoint("pod2", 1, 0.1, baseTime),
 			},
 			wantLen: 1,
 		},
@@ -327,25 +338,25 @@ func TestDetector_Filter(t *testing.T) {
 			name: "Filtered - exceeds KV burst",
 			endpoints: []schedulingtypes.Endpoint{
 				// Pod1 (Over): KV=0.97/0.9=1.07...
-				makePodMetric("pod1", 1, 0.97, baseTime),
+				makeSchedulingEndpoint("pod1", 1, 0.97, baseTime),
 				// Pod2 (OK): KV=0.5/0.9=0.55...
-				makePodMetric("pod2", 1, 0.5, baseTime),
+				makeSchedulingEndpoint("pod2", 1, 0.5, baseTime),
 			},
 			wantLen: 1,
 		},
 		{
 			name: "Pass - all stale (Fail open at pool level)",
 			endpoints: []schedulingtypes.Endpoint{
-				makePodMetric("pod1", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
-				makePodMetric("pod2", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
+				makeSchedulingEndpoint("pod1", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
+				makeSchedulingEndpoint("pod2", 1, 0.1, baseTime.Add(-200*time.Millisecond)),
 			},
 			wantLen: 2,
 		},
 		{
 			name: "Pass - all saturated (Fail open at pool level)",
 			endpoints: []schedulingtypes.Endpoint{
-				makePodMetric("pod1", 10, 0.1, baseTime),
-				makePodMetric("pod2", 1, 0.99, baseTime),
+				makeSchedulingEndpoint("pod1", 10, 0.1, baseTime),
+				makeSchedulingEndpoint("pod2", 1, 0.99, baseTime),
 			},
 			wantLen: 2,
 		},

@@ -26,11 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 // TestConcurrencyDetectorFactory validates the initialization of the concurrency detector plugin.
@@ -91,7 +90,7 @@ func TestConcurrencyDetectorFactory(t *testing.T) {
 			t.Parallel()
 
 			plugin, err := ConcurrencyDetectorFactory("test-concurrency-detector",
-				tc.configJSON, utils.NewTestHandle(t.Context()))
+				tc.configJSON, fwkplugin.NewEppHandle(t.Context(), func() []types.NamespacedName { return nil }))
 			if tc.wantError {
 				require.Error(t, err, "Expected initialization to fail on invalid configuration")
 				require.Nil(t, plugin, "Plugin must be nil when initialization fails")
@@ -173,7 +172,8 @@ func TestDetector_Configuration(t *testing.T) {
 // correctly during instantiation and accurately reflects the hardcoded concurrency-detector type.
 func TestDetector_TypedName(t *testing.T) {
 	t.Parallel()
-	plugin, err := ConcurrencyDetectorFactory("test-plugin", []byte(`{}`), utils.NewTestHandle(t.Context()))
+	plugin, err := ConcurrencyDetectorFactory("test-plugin", []byte(`{}`), fwkplugin.NewEppHandle(
+		t.Context(), func() []types.NamespacedName { return nil }))
 	require.NoError(t, err, "Plugin initialization should succeed")
 	require.Equal(t, "test-plugin", plugin.TypedName().Name,
 		"TypedName must match the name provided during initialization")
@@ -572,10 +572,8 @@ func makeSchedulingResult(endpointName string) *schedulingtypes.SchedulingResult
 	}
 }
 
-func newFakeEndpoint(name string) *backendmetrics.FakePodMetrics {
-	return &backendmetrics.FakePodMetrics{
-		Metadata: &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}},
-	}
+func newFakeEndpoint(name string) datalayer.Endpoint {
+	return datalayer.NewEndpoint(&datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: name, Namespace: "default"}}, nil)
 }
 
 // stubSchedulingEndpoint mocks schedulingtypes.Endpoint for Filter.
