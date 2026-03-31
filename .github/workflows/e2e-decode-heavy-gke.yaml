@@ -224,8 +224,20 @@ jobs:
 
       - name: Wait for all resources to be ready
         run: |
-          kubectl wait --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True httproute/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=120s
-          kubectl wait --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True inferencepool/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=120s
+          kubectl rollout status deployment/$DEPLOYMENT_NAME-epp -n $NAMESPACE --timeout=120s
+
+          echo "Allow extra time to initialize resources..."
+          sleep 30
+
+          kubectl wait httproute/${DEPLOYMENT_NAME} \
+            --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
+            -n ${NAMESPACE} \
+            --timeout=5m
+
+          kubectl wait inferencepool/${DEPLOYMENT_NAME} \
+            --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
+            -n ${NAMESPACE} \
+            --timeout=5m
 
       - name: Show deployment status
         run: |

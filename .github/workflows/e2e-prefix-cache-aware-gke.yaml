@@ -225,6 +225,9 @@ jobs:
         run: |
           kubectl rollout status deployment/$DEPLOYMENT_NAME-epp -n $NAMESPACE --timeout=120s
 
+          echo "Allow extra time to initialize resources..."
+          sleep 30
+
           kubectl wait httproute/${DEPLOYMENT_NAME} \
             --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
             -n ${NAMESPACE} \
