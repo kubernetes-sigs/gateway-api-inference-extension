@@ -149,7 +149,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
 			responses, err = s.HandleResponseTrailers(v.ResponseTrailers)
 		default:
-			logger.V(logutil.DEFAULT).Error(nil, "unknown Request type", "request", v)
+			logger.Error(nil, "unknown Request type", "request", v)
 			return status.Error(codes.Unknown, "unknown request type")
 		}
 
@@ -158,14 +158,14 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 			if logger.V(logutil.DEBUG).Enabled() {
 				logger.V(logutil.DEBUG).Error(err, "failed to process request", "request", req)
 			} else {
-				logger.V(logutil.DEFAULT).Error(err, "failed to process request")
+				logger.Error(err, "failed to process request")
 			}
 			resp, err := errcommon.BuildErrResponse(err)
 			if err != nil {
 				return err
 			}
 			if sendErr := srv.Send(resp); sendErr != nil {
-				logger.V(logutil.DEFAULT).Error(sendErr, "Send failed")
+				logger.Error(sendErr, "Send failed")
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", sendErr)
 			}
 			return nil
@@ -173,7 +173,7 @@ func (s *Server) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 
 		for _, resp := range responses {
 			if err := srv.Send(resp); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "send failed")
+				logger.Error(err, "send failed")
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 		}

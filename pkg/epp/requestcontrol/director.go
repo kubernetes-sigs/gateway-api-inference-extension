@@ -182,12 +182,12 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
 	if err != nil {
 		// Don't fail the request if PrepareData plugins fail.
-		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
+		logger.Error(err, "failed to prepare per request data")
 	}
 
 	// Run admit request plugins
 	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot) {
-		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
+		logger.Info("Request cannot be admitted")
 		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "request cannot be admitted"}
 	}
 
@@ -241,7 +241,7 @@ func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.Requ
 	// Marshal back to bytes so downstream ExtProc filters see the updated model
 	requestBodyBytes, err := json.Marshal(bodyMap)
 	if err != nil {
-		logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+		logger.Error(err, "Error marshalling request body")
 		return errcommon.Error{Code: errcommon.Internal, Msg: "Error marshalling request body"}
 	}
 

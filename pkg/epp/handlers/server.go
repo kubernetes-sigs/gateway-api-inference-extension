@@ -240,7 +240,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {
-					logger.V(logutil.DEFAULT).Error(err, "Error handling request")
+					logger.Error(err, "Error handling request")
 					break
 				}
 
@@ -305,14 +305,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			if logger.V(logutil.DEBUG).Enabled() {
 				logger.V(logutil.DEBUG).Error(err, "Failed to process request", "request", req)
 			} else {
-				logger.V(logutil.DEFAULT).Error(err, "Failed to process request")
+				logger.Error(err, "Failed to process request")
 			}
 			resp, err := errcommon.BuildErrResponse(err)
 			if err != nil {
 				return err
 			}
 			if err := srv.Send(resp); err != nil {
-				logger.V(logutil.DEFAULT).Error(err, "Send failed")
+				logger.Error(err, "Send failed")
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 			return nil
@@ -350,7 +350,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	if r.RequestState == RequestReceived && r.reqHeaderResp != nil {
 		loggerTrace.Info("Sending request header response", "obj", r.reqHeaderResp)
 		if err := srv.Send(r.reqHeaderResp); err != nil {
-			logger.V(logutil.DEFAULT).Error(err, "error sending response")
+			logger.Error(err, "error sending response")
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 		r.RequestState = HeaderRequestResponseComplete
