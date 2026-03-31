@@ -430,8 +430,8 @@ func CreateAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructur
 	return objNames
 }
 
-func DeleteAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string{
-	objNames := []string{}
+func DeleteAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
+	objNames := make([]string, 0, len(objs))
 	for _, unstrObj := range objs {
 		ginkgo.By(fmt.Sprintf("Deleting GVK: %s", unstrObj.GroupVersionKind()))
 		unstrObj.SetNamespace(testConfig.NsName)
