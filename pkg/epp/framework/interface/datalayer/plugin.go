@@ -30,6 +30,8 @@ var (
 	ExtractorType             = reflect.TypeFor[Extractor]()
 	NotificationExtractorType = reflect.TypeFor[NotificationExtractor]()
 	NotificationEventType     = reflect.TypeFor[NotificationEvent]()
+	EndpointExtractorType     = reflect.TypeFor[EndpointExtractor]()
+	EndpointEventReflectType  = reflect.TypeFor[EndpointEvent]()
 )
 
 // DataSource provides raw data to registered Extractors.
@@ -117,4 +119,32 @@ type NotificationExtractor interface {
 	// ExtractNotification processes a notification event. Called synchronously
 	// by the source in event order.
 	ExtractNotification(ctx context.Context, event NotificationEvent) error
+}
+
+// EndpointEvent carries an endpoint lifecycle event.
+// Reuses EventType: EventAddOrUpdate signals an endpoint was added to the
+// datastore; EventDelete signals an endpoint was removed.
+type EndpointEvent struct {
+	Type     EventType
+	Endpoint Endpoint
+}
+
+// EndpointSource is an event-driven DataSource driven by endpoint lifecycle
+// changes. The Runtime calls NotifyEndpoint when an endpoint is added to or
+// removed from the datastore, then dispatches the (possibly modified) event to
+// registered EndpointExtractors. Return nil to suppress extractor dispatch.
+type EndpointSource interface {
+	DataSource
+	// NotifyEndpoint is called by the Runtime on each endpoint lifecycle event.
+	// Returns the event (possibly modified) for the Runtime to dispatch to extractors.
+	// Returns nil event to signal Runtime to skip extractor dispatch.
+	NotifyEndpoint(ctx context.Context, event EndpointEvent) (*EndpointEvent, error)
+}
+
+// EndpointExtractor processes endpoint lifecycle events pushed from an
+// EndpointSource. Called synchronously by the Runtime in event order.
+type EndpointExtractor interface {
+	Extractor
+	// ExtractEndpoint processes an endpoint lifecycle event.
+	ExtractEndpoint(ctx context.Context, event EndpointEvent) error
 }
