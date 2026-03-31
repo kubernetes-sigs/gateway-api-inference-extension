@@ -790,6 +790,7 @@ func TestFlowControlEnqueueDurationMetric(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			for i := range scenario.priorities {
 				RecordFlowControlRequestEnqueueDuration(
+					"default-fairness",
 					scenario.priorities[i],
 					scenario.outcomes[i],
 					scenario.durations[i],

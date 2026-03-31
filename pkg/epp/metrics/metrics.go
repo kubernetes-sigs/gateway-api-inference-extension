@@ -393,7 +393,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_request_queue_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Distribution of the total time requests spend in the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Distribution of total time requests spend in the Flow Control layer (from enqueue to final outcome).", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
 			},
@@ -405,7 +405,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_dispatch_cycle_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken for each dispatch cycle in the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Distribution of time taken for each internal dispatch cycle in the Flow Control layer.", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
@@ -417,19 +417,19 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_request_enqueue_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken to enqueue requests by the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Distribution of time taken to enqueue requests into the Flow Control layer.", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
 		},
-		[]string{"priority", "outcome"},
+		[]string{"fairness_id", "priority", "outcome"},
 	)
 
 	flowControlQueueSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_queue_size",
-			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Current number of requests actively held in the Flow Control queue.", compbasemetrics.ALPHA),
 		},
 		append([]string{"fairness_id", "priority", "inference_pool"}, modelLabels...),
 	)
@@ -438,7 +438,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_queue_bytes",
-			Help:      metricsutil.HelpMsgWithStability("Current number of bytes associated with requests actively managed by the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Current total size in bytes of requests actively held in the Flow Control queue.", compbasemetrics.ALPHA),
 		},
 		append([]string{"fairness_id", "priority", "inference_pool"}, modelLabels...),
 	)
@@ -863,13 +863,13 @@ func RecordFlowControlDispatchCycleDuration(duration time.Duration) {
 	flowControlDispatchCycleDuration.WithLabelValues().Observe(duration.Seconds())
 }
 
-// RecordFlowControlRequestQueueDuration records the duration a request was in the enqueuing process in the Flow Control layer.
+// RecordFlowControlRequestEnqueueDuration records the duration a request was in the enqueuing process in the Flow Control layer.
 func RecordFlowControlRequestEnqueueDuration(
-	priority string, outcome string,
+	fairnessID string, priority string, outcome string,
 	duration time.Duration,
 ) {
 	flowControlRequestEnqueueDuration.WithLabelValues(
-		priority, outcome,
+		fairnessID, priority, outcome,
 	).Observe(duration.Seconds())
 }
 

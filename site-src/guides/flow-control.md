@@ -11,6 +11,8 @@ By shifting intelligent queuing into the EPP, the Flow Control layer provides th
 3. **Operational Stability:** Smooths out traffic spikes, hides endpoint cold-start times from clients (by queuing requests instead of dropping them), and provides clearer signals for pool autoscaling.
 4. **Centralized Backpressure & Observability:** Model servers protect their hardware during spikes by queuing requests locally. However, requests trapped inside isolated, local queues cannot be dynamically re-routed or preempted by higher-priority traffic, and they do not automatically expose tenant-specific backpressure metrics. By actively monitoring backend saturation signals, the EPP intercepts this backpressure at the proxy layer. Buffering excess load centrally empowers the gateway to enforce global priority, maintain fairness, make optimal late-binding routing decisions, and surface tenant-specific queue metrics that individual downstream endpoints cannot.
 
+![Flow Control Dashboard](../images/flow_control_dashboard.png)
+
 ## Why Flow Control? (The LLM Queuing Problem)
 
 Model servers are highly optimized for a single, local goal: maximizing GPU throughput by building efficient continuous batches. However, they are entirely unaware of global, business-level objectives like tenant fairness or SLAs.

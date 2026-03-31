@@ -226,7 +226,7 @@ func (sp *ShardProcessor) enqueue(item *FlowItem) {
 		if fs := item.FinalState(); fs != nil {
 			outcomeStr = fs.Outcome.String()
 		}
-		metrics.RecordFlowControlRequestEnqueueDuration(priorityStr, outcomeStr, time.Since(startTime))
+		metrics.RecordFlowControlRequestEnqueueDuration(key.ID, priorityStr, outcomeStr, time.Since(startTime))
 	}()
 
 	// --- Optimistic External Finalization Check ---
