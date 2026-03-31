@@ -37,9 +37,11 @@ type Runtime struct {
 
 	pollers          sync.Map // Map of polling sources (key=source name, value=PollingDataSource)
 	notifiers        sync.Map // Map of k8s notification sources (key=source name, value=NotificationSource)
+	endpointSources  sync.Map // Map of endpoint sources (key=source name, value=EndpointSource)
 	sourceExtractors sync.Map // Map sources to extractors (key=source name. value=[]Extractor)
 
-	collectors sync.Map // Per-endpoint poller (key=namespaced name, value=*Collector)
+	collectors sync.Map    // Per-endpoint poller (key=namespaced name, value=*Collector)
+	logger     logr.Logger // Set in Configure; used where no context is available (e.g. ReleaseEndpoint).
 }
 
 const (
@@ -55,6 +57,7 @@ func NewRuntime(pollingInterval time.Duration) *Runtime {
 	}
 	return &Runtime{
 		pollingInterval: interval,
+		logger:          logr.Discard(),
 	}
 }
 
@@ -68,10 +71,12 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 		return nil
 	}
 
+	r.logger = logger
 	logger.Info("Configuring datalayer runtime", "numSources", len(cfg.Sources))
 
 	pollersCount := 0
 	notifiersCount := 0
+	endpointSourcesCount := 0
 	gvkToSource := make(map[string]string, len(cfg.Sources)) // track GVK uniqueness
 
 	for _, srcCfg := range cfg.Sources {
@@ -95,6 +100,9 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 			r.notifiers.Store(srcName, notifier)
 			gvkToSource[gvk] = srcName
 			notifiersCount++
+		} else if epSrc, ok := src.(fwkdl.EndpointSource); ok {
+			r.endpointSources.Store(srcName, epSrc)
+			endpointSourcesCount++
 		} else {
 			return fmt.Errorf("skipping unknown datasource plugin type %s", src.TypedName().String())
 		}
@@ -110,7 +118,7 @@ func (r *Runtime) Configure(cfg *Config, enableNewMetrics bool, disallowedExtrac
 		logger.V(logging.DEFAULT).Info("Source configured", "source", srcName, "extractors", extractorNames)
 	}
 
-	logger.Info("Datalayer runtime configured", "pollers", pollersCount, "notifiers", notifiersCount)
+	logger.Info("Datalayer runtime configured", "pollers", pollersCount, "notifiers", notifiersCount, "endpointSources", endpointSourcesCount)
 	return nil
 }
 
@@ -198,17 +206,53 @@ func (r *Runtime) NewEndpoint(ctx context.Context, endpointMetadata *fwkdl.Endpo
 		return nil
 	}
 
+	r.dispatchEndpointEvent(ctx, logger, fwkdl.EndpointEvent{Type: fwkdl.EventAddOrUpdate, Endpoint: endpoint})
 	return endpoint
 }
 
 // ReleaseEndpoint terminates polling for data on the given endpoint.
 func (r *Runtime) ReleaseEndpoint(ep fwkdl.Endpoint) {
-	key := ep.GetMetadata().GetNamespacedName()
+	r.dispatchEndpointEvent(context.Background(), r.logger, fwkdl.EndpointEvent{Type: fwkdl.EventDelete, Endpoint: ep})
 
+	key := ep.GetMetadata().GetNamespacedName()
 	if value, ok := r.collectors.LoadAndDelete(key); ok {
 		collector := value.(*Collector)
 		_ = collector.Stop()
 	}
+}
+
+// dispatchEndpointEvent routes an endpoint lifecycle event to all registered
+// EndpointSources and their extractors.
+func (r *Runtime) dispatchEndpointEvent(ctx context.Context, logger logr.Logger, event fwkdl.EndpointEvent) {
+	if isEmpty(&r.endpointSources) {
+		return
+	}
+	r.endpointSources.Range(func(key, val any) bool {
+		srcName := key.(string)
+		epSrc := val.(fwkdl.EndpointSource)
+
+		processed, err := epSrc.NotifyEndpoint(ctx, event)
+		if err != nil {
+			logger.Error(err, "endpoint source failed to process event", "source", srcName)
+			return true
+		}
+		if processed == nil {
+			return true
+		}
+
+		rawExts, ok := r.sourceExtractors.Load(srcName)
+		if !ok {
+			return true
+		}
+		for _, ext := range rawExts.([]fwkdl.Extractor) {
+			if epExt, ok := ext.(fwkdl.EndpointExtractor); ok {
+				if err := epExt.ExtractEndpoint(ctx, *processed); err != nil {
+					logger.Error(err, "endpoint extractor failed", "extractor", ext.TypedName())
+				}
+			}
+		}
+		return true
+	})
 }
 
 // validates the compatibility of data source and configured extractors. This includes
@@ -282,3 +326,15 @@ func validateExtractorCompatible(extractorType reflect.Type, expectedInterfaceTy
 	}
 	return nil
 }
+
+// isEmpty reports whether the sync.Map has no entries.
+func isEmpty(m *sync.Map) bool {
+	empty := true
+	m.Range(func(_, _ any) bool {
+		empty = false
+		return false // stop immediately
+	})
+	return empty
+}
+
+var _ EndpointFactory = (*Runtime)(nil)
