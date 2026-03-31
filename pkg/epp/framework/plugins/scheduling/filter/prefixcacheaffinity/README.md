@@ -1,0 +1,34 @@
+# Prefix Cache Affinity Filter (`prefix-cache-affinity-filter`)
+
+Probabilistic filter that narrows candidates to "sticky" endpoints. An endpoint is sticky
+when it has a high prefix cache score for the current request, meaning the request's prompt
+(or most of it) is already cached on that endpoint from a previous request with the same or
+similar prompt. Routing to a sticky endpoint avoids redundant prefill computation, reducing
+TTFT.
+
+Can be instantiated multiple times with different thresholds (e.g., 0.99 for global gate,
+0.80 for within-tier gate).
+
+## Behavior
+
+- Keep only endpoints with prefix cache score >= `tau`
+- If no endpoints pass, all are kept (no-op)
+- With probability `epsilonExplore` (default 1%), skip the gate entirely for exploration
+- TTFT load gate: if best sticky endpoint's predicted TTFT exceeds best non-sticky by
+  more than `maxTTFTPenaltyMs`, break stickiness and keep all endpoints
+- If no endpoints have `LatencyPredictionInfo` (predictions absent), the TTFT load gate
+  is skipped. If no endpoints have `PrefixCacheMatchInfo`, all prefix scores default to 0
+  and no endpoints pass the tau threshold, so all are kept (no-op)
+
+## Config
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `tau` | 0.80 | Prefix cache score threshold for stickiness |
+| `epsilonExplore` | 0.01 | Probability of skipping the gate |
+| `maxTTFTPenaltyMs` | 5000 | Max TTFT penalty (ms) before breaking stickiness. 0 = always stick |
+
+## Dependencies
+
+- Reads `PrefixCacheMatchInfo` from endpoint attributes (from `prefix-cache-scorer`)
+- Reads `LatencyPredictionInfo` for TTFT load gate (from `predicted-latency-producer`)
