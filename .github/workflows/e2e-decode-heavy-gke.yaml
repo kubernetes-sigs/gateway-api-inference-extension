@@ -183,6 +183,18 @@ jobs:
           kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${IGW_CHART_VERSION}/manifests.yaml
           echo "---------------------------------------" >> ~/igw-decode-heavy-deployment.log
 
+      - name: Deploy InferencePool and Endpoint Picker Extension
+        run: |
+          helm upgrade --install ${DEPLOYMENT_NAME} \
+          --dependency-update \
+          --namespace $NAMESPACE \
+          --set inferencePool.modelServers.matchLabels.app=${DEPLOYMENT_NAME} \
+          --set provider.name=$GATEWAY_PROVIDER \
+          --set experimentalHttpRoute.enabled=true \
+          --version $IGW_CHART_VERSION \
+          oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-decode-heavy-deployment.log
+          echo "---------------------------------------" >> ~/igw-decode-heavy-deployment.log
+
       - name: Wait for all pods to be ready
         run: |
           kubectl wait pod \
@@ -210,35 +222,6 @@ jobs:
           echo "✅ Gateway is ready."
           kubectl get gateway -n "${NAMESPACE}"
 
-      - name: Deploy InferencePool and Endpoint Picker Extension
-        run: |
-          helm upgrade --install ${DEPLOYMENT_NAME} \
-          --dependency-update \
-          --namespace $NAMESPACE \
-          --set inferencePool.modelServers.matchLabels.app=${DEPLOYMENT_NAME} \
-          --set provider.name=$GATEWAY_PROVIDER \
-          --set experimentalHttpRoute.enabled=true \
-          --version $IGW_CHART_VERSION \
-          oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-decode-heavy-deployment.log
-          echo "---------------------------------------" >> ~/igw-decode-heavy-deployment.log
-
-      - name: Wait for all resources to be ready
-        run: |
-          kubectl rollout status deployment/$DEPLOYMENT_NAME-epp -n $NAMESPACE --timeout=120s
-
-          echo "Allow extra time to initialize resources..."
-          sleep 30
-
-          kubectl wait httproute/${DEPLOYMENT_NAME} \
-            --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
-            -n ${NAMESPACE} \
-            --timeout=5m
-
-          kubectl wait inferencepool/${DEPLOYMENT_NAME} \
-            --for=jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}'=True \
-            -n ${NAMESPACE} \
-            --timeout=5m
-
       - name: Show deployment status
         run: |
           echo "=== Deployments ==="
@@ -259,14 +242,29 @@ jobs:
           echo "=== HTTPRoutes ==="
           kubectl get httproutes -n "${NAMESPACE}" -o yaml || true
           echo ""
+          echo ""
+          echo "=== Healthchecks ==="
+          kubectl get healthcheckpolicy -n "${NAMESPACE}" -o yaml || true
+          echo ""
+           echo "=== GCPBackendPolicy ==="
+          kubectl get gcpbackendpolicy -n "${NAMESPACE}" -o yaml || true
+          echo ""
           echo "=== Gateway ==="
           kubectl get Gateway -n "${NAMESPACE}" || true
           echo ""
+          echo "---------------------------------------"
+          echo "Giving extra time for resources to initialize..."
+          sleep 30
+          echo "---------------------------------------"
 
+      # This step sometimes fails because gateway is not ready fully. Try a max of 3 times.
       - name: Verify installation and run validation test
-        run: |
-          cd .github/scripts/e2e
-          ./e2e-validate.sh -n "${NAMESPACE}" -v -m ${MODEL}
+        uses: nick-fields/retry@v2
+        with:
+          retry_wait_seconds: 30
+          timeout_minutes: 5
+          max_attempts: 3
+          command: ./.github/scripts/e2e/e2e-validate.sh -n "${NAMESPACE}" -v -m ${MODEL}
 
       - name: Run benchmarking test
         run: |
@@ -311,7 +309,6 @@ jobs:
       - name: Analyze Benchmarking Results
         run: |
           cd benchmarking
-          python3 -m venv .venv
           source .venv/bin/activate
 
           benchmark_id='decode-heavy' ./download-results.bash gcs $GCS_BUCKET ${NAMESPACE}/${TIMESTAMP}
