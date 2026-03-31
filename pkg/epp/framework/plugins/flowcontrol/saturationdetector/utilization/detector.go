@@ -13,12 +13,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-// Package utilizationdetector implements a reactive saturation detector and scheduling filter for
-// LLM routing. It evaluates endpoint telemetry (queue depth and KV cache memory utilization) using
-// a roofline model to determine physical system saturation and apply proportional backpressure.
+// Package utilization implements a reactive saturation detector and scheduling filter for LLM
+// routing. It evaluates endpoint telemetry (queue depth and KV cache memory utilization) using a
+// roofline model to determine physical system saturation and apply proportional backpressure.
 //
 // For detailed architectural trade-offs and configuration, see the package README.
-package utilizationdetector
+package utilization
 
 import (
 	"context"
