@@ -518,11 +518,8 @@ Server Protocol metrics out of the box - no `parameters` are required:
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-  - name: metrics-data-source
-    type: metrics-data-source
-
-  - name: core-metrics-extractor
-    type: core-metrics-extractor
+  - type: metrics-data-source
+  - type: core-metrics-extractor
 
 data:
   sources:
@@ -531,12 +528,8 @@ data:
         - pluginRef: core-metrics-extractor
 
 schedulingProfiles:
-  - name: default
-    plugins:
-      - pluginRef: queue-depth-scorer
-        weight: 2.0
-      - pluginRef: kv-cache-utilization-scorer
-        weight: 2.0
+  ...
+  ...
 ```
 
 Default metric specs collected for vLLM:
