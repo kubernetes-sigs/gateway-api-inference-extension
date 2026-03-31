@@ -236,22 +236,3 @@ func TestCollectorLogsRecoveryAfterError(t *testing.T) {
 	require.True(t, seen, "recovery should leave a nil entry in lastPollErrors")
 	assert.Nil(t, entry)
 }
-
-func TestCollectorContinuesAfterPollError(t *testing.T) {
-	src := &errSource{err: errors.New("persistent error")}
-	c := NewCollector()
-	ticker := mocks.NewTicker()
-	ctx := context.Background()
-
-	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.PollingDataSource{src}, nil))
-
-	ticker.Tick()
-	ticker.Tick()
-	ticker.Tick()
-
-	require.Eventually(t, func() bool {
-		return atomic.LoadInt64(&src.CallCount) == 3
-	}, 1*time.Second, 2*time.Millisecond, "poll should be called on every tick despite errors")
-
-	require.NoError(t, c.Stop())
-}

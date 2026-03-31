@@ -18,8 +18,7 @@ package metrics
 
 // TestMetricsExtractionFromConfig tests the full pipeline:
 //
-//  1. Instantiate data source and extractor via the factory functions
-//     (using the same JSON parameters the configloader passes from YAML).
+//  1. Instantiate data source and extractor via constructor functions.
 //  2. Start an httptest.Server serving Prometheus metrics.
 //  3. Poll the server and verify extracted endpoint metrics.
 //
@@ -30,10 +29,10 @@ package metrics
 //     family name (this is what the collector would log on first occurrence).
 //   - "Not scraping metric" startup logging: factory succeeds and the extractor
 //     silently skips the disabled spec during Poll.
+//   - Multiple extractors: different extractors can extract different subsets from one source.
 
 import (
 	"context"
-	"encoding/json"
 	"net/url"
 	"strings"
 	"testing"
@@ -43,8 +42,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	metricextractor "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
-	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
+	metricsource "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 )
 
 // pipeline wraps a PollingDataSource and an Extractor, calling both in sequence.
@@ -67,57 +65,36 @@ func (p *pipeline) Poll(ctx context.Context, ep fwkdl.Endpoint) error {
 	return p.extractor.Extract(ctx, data, ep)
 }
 
-// buildSourceAndExtractor creates and wires a MetricsDataSource and a CoreMetricsExtractor
-// using the same factory functions the configloader invokes, with JSON parameters as
-// they would appear under the plugin's `parameters` field in EndpointPickerConfig YAML.
-//
-// extractorParams may be nil to use built-in defaults.
-func buildSourceAndExtractor(t *testing.T, serverURL string, extractorParams map[string]any) (*pipeline, error) {
+// buildSource creates a MetricsDataSource pointing at the given server URL.
+func buildSource(t *testing.T, serverURL string) fwkdl.PollingDataSource {
 	t.Helper()
 
 	parsedURL, err := url.Parse(serverURL)
 	require.NoError(t, err, "failed to parse server URL")
 
-	// Inject scheme and path matching the test server.
-	sourceParams := map[string]any{
-		"scheme": parsedURL.Scheme,
-		"path":   parsedURL.Path,
-	}
+	source, err := metricsource.NewHTTPMetricsDataSource(parsedURL.Scheme, parsedURL.Path, "metrics-data-source")
+	require.NoError(t, err, "failed to create metrics data source")
+	return source
+}
 
-	rawSourceParams, err := json.Marshal(sourceParams)
-	require.NoError(t, err, "failed to marshal source params")
+// buildExtractor creates a CoreMetricsExtractor with the given params (nil = defaults).
+func buildExtractor(t *testing.T, params *modelServerExtractorParams) *Extractor {
+	t.Helper()
+	ext, err := newCoreMetricsExtractorPlugin(context.Background(), "core-metrics-extractor", params)
+	require.NoError(t, err, "failed to create extractor")
+	return ext
+}
 
-	// Instantiate the data source — mirrors configloader calling MetricsDataSourceFactory.
-	sourcePlug, err := sourcemetrics.MetricsDataSourceFactory(
-		"metrics-data-source",
-		rawSourceParams,
-		nil,
-	)
+// buildPipeline wires a MetricsDataSource and a CoreMetricsExtractor into a pipeline.
+// params may be nil to use built-in defaults.
+func buildPipeline(t *testing.T, serverURL string, params *modelServerExtractorParams) (*pipeline, error) {
+	t.Helper()
+	source := buildSource(t, serverURL)
+	ext, err := newCoreMetricsExtractorPlugin(context.Background(), "core-metrics-extractor", params)
 	if err != nil {
 		return nil, err
 	}
-	dataSource, ok := sourcePlug.(fwkdl.PollingDataSource)
-	require.True(t, ok, "expected PollingDataSource")
-
-	var rawExtractorParams json.RawMessage
-	if extractorParams != nil {
-		rawExtractorParams, err = json.Marshal(extractorParams)
-		require.NoError(t, err, "failed to marshal extractor params")
-	}
-
-	// Instantiate the extractor — mirrors configloader calling CoreMetricsExtractorFactory.
-	extractorPlug, err := metricextractor.CoreMetricsExtractorFactory(
-		"core-metrics-extractor",
-		rawExtractorParams,
-		nil, // nil → logNilSpecs uses logr.Discard()
-	)
-	if err != nil {
-		return nil, err
-	}
-	extractor, ok := extractorPlug.(fwkdl.Extractor)
-	require.True(t, ok, "expected Extractor")
-
-	return &pipeline{source: dataSource, extractor: extractor}, nil
+	return &pipeline{source: source, extractor: ext}, nil
 }
 
 // newEndpointAt creates a fwkdl.Endpoint with the given host (host:port) and optional labels.
@@ -126,6 +103,14 @@ func newEndpointAt(host string, labels map[string]string) fwkdl.Endpoint {
 		MetricsHost: host,
 		Labels:      labels,
 	}, fwkdl.NewMetrics())
+}
+
+// mustHost is a test helper that parses a URL and returns the host:port portion.
+func mustHost(t *testing.T, rawURL string) string {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	require.NoError(t, err)
+	return u.Host
 }
 
 // TestMetricsExtractionDefaultConfig verifies that the default factory parameters
@@ -155,15 +140,15 @@ func TestMetricsExtractionDefaultConfig(t *testing.T) {
 	})
 	defer srv.Close()
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
+	p, err := buildPipeline(t, srv.URL, nil)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 	ep := newEndpointAt(mustHost(t, srv.URL), map[string]string{
-		metricextractor.DefaultEngineTypeLabelKey: "vllm",
+		DefaultEngineTypeLabelKey: "vllm",
 	})
 
-	require.NoError(t, dataSource.Poll(ctx, ep))
+	require.NoError(t, p.Poll(ctx, ep))
 
 	m := ep.GetMetrics()
 	assert.Equal(t, 7, m.WaitingQueueSize, "WaitingQueueSize")
@@ -178,15 +163,7 @@ func TestMetricsExtractionDefaultConfig(t *testing.T) {
 }
 
 // TestMetricsExtractionLoRADisabledViaConfig verifies the "disable a specific metric"
-// pattern documented for the data section:
-//
-//	engineConfigs:
-//	  - name: vllm
-//	    queuedRequestsSpec: "vllm:num_requests_waiting"
-//	    ...
-//	    loraSpec: ""   # ← empty string disables LoRA extraction
-//
-// With loraSpec: "", the extractor skips LoRA entirely — no extraction attempt,
+// pattern: with loraSpec: "", the extractor skips LoRA entirely — no extraction attempt,
 // no error for the missing/present family, and ActiveModels stays at its zero value.
 func TestMetricsExtractionLoRADisabledViaConfig(t *testing.T) {
 	// Server serves LoRA metrics — but they should be silently ignored.
@@ -207,37 +184,34 @@ func TestMetricsExtractionLoRADisabledViaConfig(t *testing.T) {
 
 	// Override only the vllm engine config — loraSpec is explicitly empty.
 	// All other spec fields must be provided because engineConfigs is full-replacement
-	// per engine name (not a field-level merge); see docs/configuration.md.
-	extractorParams := map[string]any{
-		"engineConfigs": []map[string]any{
+	// per engine name (not a field-level merge).
+	params := &modelServerExtractorParams{
+		EngineConfigs: []engineConfigParams{
 			{
-				"name":                "vllm",
-				"queuedRequestsSpec":  "vllm:num_requests_waiting",
-				"runningRequestsSpec": "vllm:num_requests_running",
-				"kvUsageSpec":         "vllm:kv_cache_usage_perc",
-				"loraSpec":            "", // disabled
-				"cacheInfoSpec":       "",
+				Name:                "vllm",
+				QueuedRequestsSpec:  "vllm:num_requests_waiting",
+				RunningRequestsSpec: "vllm:num_requests_running",
+				KVUsageSpec:         "vllm:kv_cache_usage_perc",
+				LoRASpec:            "", // disabled
+				CacheInfoSpec:       "",
 			},
 		},
 	}
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, extractorParams)
+	p, err := buildPipeline(t, srv.URL, params)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 	ep := newEndpointAt(mustHost(t, srv.URL), map[string]string{
-		metricextractor.DefaultEngineTypeLabelKey: "vllm",
+		DefaultEngineTypeLabelKey: "vllm",
 	})
 
-	// Poll must succeed — no "metric family not found" error for LoRA.
-	require.NoError(t, dataSource.Poll(ctx, ep))
+	require.NoError(t, p.Poll(ctx, ep))
 
 	m := ep.GetMetrics()
 	assert.Equal(t, 5, m.WaitingQueueSize)
 	assert.Equal(t, 2, m.RunningRequestsSize)
 	assert.InDelta(t, 0.3, m.KVCacheUsagePercent, 0.001)
-
-	// LoRA fields remain at zero — no LoRA extraction occurred.
 	assert.Empty(t, m.ActiveModels, "ActiveModels should be empty when loraSpec is disabled")
 	assert.Empty(t, m.WaitingModels)
 	assert.Zero(t, m.MaxActiveModels)
@@ -246,15 +220,14 @@ func TestMetricsExtractionLoRADisabledViaConfig(t *testing.T) {
 // TestMetricsExtractionMissingMetricFamilyReturnsError verifies the error-path behavior:
 // when the server does not serve a metric that the extractor is configured to collect,
 // Poll returns an error whose message names the missing metric family.
-//
-// This is the error that the datalayer Collector (collector.go) logs on the first
-// occurrence; repeated occurrences are suppressed by the change-only logging logic.
 func TestMetricsExtractionMissingMetricFamilyReturnsError(t *testing.T) {
 	tests := []struct {
-		name           string
-		served         []MetricMock                     // metrics the server exposes
-		wantErrContain string                           // substring expected in Poll's error
-		wantMetrics    func(*testing.T, *fwkdl.Metrics) // partial assertions on extracted values
+		name                   string
+		served                 []MetricMock
+		wantErrContain         string
+		wantWaitingQueueSize   int
+		wantRunningRequestSize int
+		wantKVCachePercent     float64
 	}{
 		{
 			name: "LoRA family absent - other metrics still extracted",
@@ -264,22 +237,15 @@ func TestMetricsExtractionMissingMetricFamilyReturnsError(t *testing.T) {
 				{Name: KVCacheMetric, Value: 0.2},
 				// LoRA and CacheInfo deliberately not served
 			},
-			wantErrContain: "lora_requests_info",
-			wantMetrics: func(t *testing.T, m *fwkdl.Metrics) {
-				t.Helper()
-				assert.Equal(t, 4, m.WaitingQueueSize, "WaitingQueueSize still extracted")
-				assert.Equal(t, 1, m.RunningRequestsSize)
-				assert.InDelta(t, 0.2, m.KVCacheUsagePercent, 0.001)
-			},
+			wantErrContain:         "lora_requests_info",
+			wantWaitingQueueSize:   4,
+			wantRunningRequestSize: 1,
+			wantKVCachePercent:     0.2,
 		},
 		{
 			name:           "all metric families absent",
 			served:         []MetricMock{},
 			wantErrContain: "not found",
-			wantMetrics: func(t *testing.T, m *fwkdl.Metrics) {
-				t.Helper()
-				assert.Zero(t, m.WaitingQueueSize, "no extraction should have occurred")
-			},
 		},
 	}
 
@@ -288,114 +254,167 @@ func TestMetricsExtractionMissingMetricFamilyReturnsError(t *testing.T) {
 			srv := createMockServer(tc.served)
 			defer srv.Close()
 
-			// Use defaults so all five vLLM specs are active.
-			dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
+			p, err := buildPipeline(t, srv.URL, nil)
 			require.NoError(t, err)
 
 			ctx := context.Background()
 			ep := newEndpointAt(mustHost(t, srv.URL), map[string]string{
-				metricextractor.DefaultEngineTypeLabelKey: "vllm",
+				DefaultEngineTypeLabelKey: "vllm",
 			})
 
-			pollErr := dataSource.Poll(ctx, ep)
+			pollErr := p.Poll(ctx, ep)
 
 			require.Error(t, pollErr, "expected error for missing metric family")
 			assert.True(t, strings.Contains(pollErr.Error(), tc.wantErrContain),
 				"error %q should contain %q", pollErr.Error(), tc.wantErrContain)
 
-			if tc.wantMetrics != nil {
-				tc.wantMetrics(t, ep.GetMetrics())
-			}
+			m := ep.GetMetrics()
+			assert.Equal(t, tc.wantWaitingQueueSize, m.WaitingQueueSize, "WaitingQueueSize")
+			assert.Equal(t, tc.wantRunningRequestSize, m.RunningRequestsSize, "RunningRequestsSize")
+			assert.InDelta(t, tc.wantKVCachePercent, m.KVCacheUsagePercent, 0.001, "KVCacheUsagePercent")
 		})
 	}
 }
 
-// TestMetricsExtractionDisabledSpecNoError verifies a key invariant:
-// when a metric spec is disabled (loraSpec: ""), Poll must NOT return an error
-// for that metric even when the metric family is absent from the server response.
-// This is what prevents the "metric family not found" error from flooding the log.
+// TestMetricsExtractionDisabledSpecNoError verifies that when all metric specs are
+// disabled (empty strings), Poll does NOT return an error even when the server serves nothing.
 func TestMetricsExtractionDisabledSpecNoError(t *testing.T) {
-	// Server serves nothing — normally this would cause errors for all specs.
 	srv := createMockServer([]MetricMock{})
 	defer srv.Close()
 
-	// Disable ALL optional specs — only verify the nil-spec / no-error contract.
-	extractorParams := map[string]any{
-		"engineConfigs": []map[string]any{
+	params := &modelServerExtractorParams{
+		EngineConfigs: []engineConfigParams{
 			{
-				"name":          "vllm",
-				"loraSpec":      "", // disabled
-				"cacheInfoSpec": "", // disabled
-				// queue, running, kv-usage also omitted (empty → nil → skipped)
-				"queuedRequestsSpec":  "",
-				"runningRequestsSpec": "",
-				"kvUsageSpec":         "",
+				Name:                "vllm",
+				QueuedRequestsSpec:  "",
+				RunningRequestsSpec: "",
+				KVUsageSpec:         "",
+				LoRASpec:            "",
+				CacheInfoSpec:       "",
 			},
 		},
 	}
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, extractorParams)
+	p, err := buildPipeline(t, srv.URL, params)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 	ep := newEndpointAt(mustHost(t, srv.URL), map[string]string{
-		metricextractor.DefaultEngineTypeLabelKey: "vllm",
+		DefaultEngineTypeLabelKey: "vllm",
 	})
 
-	// All specs are nil → no extraction attempted → no error returned.
-	assert.NoError(t, dataSource.Poll(ctx, ep))
+	assert.NoError(t, p.Poll(ctx, ep))
 }
 
-// TestMetricsExtractionServerError verifies that an HTTP error from the server
-// (e.g., server down) propagates as a Poll error.
+// TestMetricsExtractionServerError verifies that an HTTP error from the server propagates as a Poll error.
 func TestMetricsExtractionServerError(t *testing.T) {
 	srv := createMockServer([]MetricMock{})
 	srv.Close() // close immediately — all requests will fail
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
+	p, err := buildPipeline(t, srv.URL, nil)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 	ep := newEndpointAt(mustHost(t, srv.URL), nil)
 
-	pollErr := dataSource.Poll(ctx, ep)
-	require.Error(t, pollErr, "expected error when server is unreachable")
+	require.Error(t, p.Poll(ctx, ep), "expected error when server is unreachable")
 }
 
-// TestMetricsExtractionJoinedErrors verifies that when multiple metric families
-// are absent, errors are joined and all family names are present in the message.
+// TestMetricsExtractionJoinedErrors verifies that when multiple metric families are absent,
+// errors are joined and all family names are present in the message.
 func TestMetricsExtractionJoinedErrors(t *testing.T) {
-	// Server only serves the queue metric; running and kv-cache are absent.
 	srv := createMockServer([]MetricMock{
 		{Name: WaitingMetric, Value: 9},
 	})
 	defer srv.Close()
 
-	dataSource, err := buildSourceAndExtractor(t, srv.URL, nil)
+	p, err := buildPipeline(t, srv.URL, nil)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 	ep := newEndpointAt(mustHost(t, srv.URL), map[string]string{
-		metricextractor.DefaultEngineTypeLabelKey: "vllm",
+		DefaultEngineTypeLabelKey: "vllm",
 	})
 
-	pollErr := dataSource.Poll(ctx, ep)
+	pollErr := p.Poll(ctx, ep)
 	require.Error(t, pollErr)
 
-	// errors.Join produces a newline-separated message; all absent families are named.
 	errMsg := pollErr.Error()
 	assert.True(t, strings.Contains(errMsg, "num_requests_running") ||
 		strings.Contains(errMsg, "kv_cache_usage_perc"),
 		"error message should name at least one missing family: %s", errMsg)
 
-	// The one served metric was still extracted.
 	assert.Equal(t, 9, ep.GetMetrics().WaitingQueueSize)
 }
 
-// mustHost is a test helper that parses a URL and returns the host:port portion.
-func mustHost(t *testing.T, rawURL string) string {
-	t.Helper()
-	u, err := url.Parse(rawURL)
-	require.NoError(t, err)
-	return u.Host
+// TestMetricsExtractionMultipleExtractors verifies that multiple extractors can each
+// extract different subsets of metrics from the same data source output.
+func TestMetricsExtractionMultipleExtractors(t *testing.T) {
+	srv := createMockServer([]MetricMock{
+		{Name: WaitingMetric, Value: 11},
+		{Name: RunningMetric, Value: 5},
+		{Name: KVCacheMetric, Value: 0.75},
+		{
+			Name:  LoRAMetric,
+			Value: float64(time.Now().Unix()),
+			Labels: map[string]string{
+				LoraInfoRunningAdaptersMetricName: "adapter-x",
+				LoraInfoMaxAdaptersMetricName:     "8",
+			},
+		},
+	})
+	defer srv.Close()
+
+	source := buildSource(t, srv.URL)
+
+	// Extractor A: queue + running only
+	extA := buildExtractor(t, &modelServerExtractorParams{
+		EngineConfigs: []engineConfigParams{
+			{
+				Name:                "vllm",
+				QueuedRequestsSpec:  "vllm:num_requests_waiting",
+				RunningRequestsSpec: "vllm:num_requests_running",
+				KVUsageSpec:         "",
+				LoRASpec:            "",
+				CacheInfoSpec:       "",
+			},
+		},
+	})
+
+	// Extractor B: LoRA only
+	extB := buildExtractor(t, &modelServerExtractorParams{
+		EngineConfigs: []engineConfigParams{
+			{
+				Name:                "vllm",
+				QueuedRequestsSpec:  "",
+				RunningRequestsSpec: "",
+				KVUsageSpec:         "",
+				LoRASpec:            "vllm:lora_requests_info",
+				CacheInfoSpec:       "",
+			},
+		},
+	})
+
+	ctx := context.Background()
+	vllmLabels := map[string]string{DefaultEngineTypeLabelKey: "vllm"}
+
+	epA := newEndpointAt(mustHost(t, srv.URL), vllmLabels)
+	epB := newEndpointAt(mustHost(t, srv.URL), vllmLabels)
+
+	pipeA := &pipeline{source: source, extractor: extA}
+	pipeB := &pipeline{source: source, extractor: extB}
+
+	require.NoError(t, pipeA.Poll(ctx, epA))
+	require.NoError(t, pipeB.Poll(ctx, epB))
+
+	mA := epA.GetMetrics()
+	assert.Equal(t, 11, mA.WaitingQueueSize, "extractor A: WaitingQueueSize")
+	assert.Equal(t, 5, mA.RunningRequestsSize, "extractor A: RunningRequestsSize")
+	assert.Zero(t, mA.MaxActiveModels, "extractor A: LoRA should not be extracted")
+	assert.Empty(t, mA.ActiveModels, "extractor A: ActiveModels should be empty")
+
+	mB := epB.GetMetrics()
+	assert.Zero(t, mB.WaitingQueueSize, "extractor B: queue should not be extracted")
+	assert.Equal(t, 8, mB.MaxActiveModels, "extractor B: MaxActiveModels")
+	assert.Contains(t, mB.ActiveModels, "adapter-x", "extractor B: ActiveModels")
 }
