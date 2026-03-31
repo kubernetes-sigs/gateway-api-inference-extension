@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/config"
@@ -113,6 +112,9 @@ func InstantiateAndConfigure(
 	dataConfig, err := buildDataLayerConfig(rawConfig.Data, featureGates[datalayer.ExperimentalDatalayerFeatureGate], handle)
 	if err != nil {
 		return nil, fmt.Errorf("data layer config build failed: %w", err)
+	}
+	if featureGates[datalayer.ExperimentalDatalayerFeatureGate] && len(dataConfig.Sources) == 0 {
+		logger.Info("data layer enabled with no sources configured, no metrics will be collected")
 	}
 
 	var flowControlConfig *flowcontrol.Config
@@ -277,12 +279,6 @@ func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEna
 
 	if rawDataConfig == nil { // metrics data collection not enabled and no additional configuration
 		return &cfg, nil
-	}
-
-	if dataLayerEnabled && len(rawDataConfig.Sources) == 0 {
-		log.FromContext(handle.Context()).Info(
-			"data layer enabled with no sources configured, no metrics will be collected",
-		)
 	}
 
 	for _, source := range rawDataConfig.Sources {

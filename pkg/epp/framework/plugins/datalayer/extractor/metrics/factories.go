@@ -17,11 +17,11 @@ limitations under the License.
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -49,7 +49,7 @@ type (
 		CacheInfoSpec string `json:"cacheInfoSpec"`
 	}
 
-	// Extractor configuration parameters
+	// modelServerExtractorParams holds the configuration parameters for the core metrics extractor plugin.
 	modelServerExtractorParams struct {
 		// EngineLabelKey is the Pod label key used to identify the engine type.
 		// Defaults to "inference.networking.k8s.io/engine-type".
@@ -89,44 +89,54 @@ const defaultEngineName = "vllm"
 // CoreMetricsExtractorFactory is a factory function used to instantiate data layer's metrics
 // Extractor plugins specified in a configuration.
 func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	cfg := defaultExtractorConfigParams()
+	params := defaultExtractorParams()
 
 	if parameters != nil { // overlay the defaults with configured values
-		if err := json.Unmarshal(parameters, cfg); err != nil {
+		if err := json.Unmarshal(parameters, params); err != nil {
 			return nil, err
 		}
 	}
 
-	// Use defaultEngineName if defaultEngine is not specified
-	if cfg.DefaultEngine == "" {
-		cfg.DefaultEngine = defaultEngineName
+	ctx := context.Background()
+	if handle != nil {
+		ctx = handle.Context()
+	}
+	return newCoreMetricsExtractorPlugin(ctx, name, params)
+}
+
+// newCoreMetricsExtractorPlugin constructs a CoreMetricsExtractor from the given parameters.
+// It applies defaults, validates engine configs, builds the mapping registry, and logs any
+// disabled metric specs. Use this function directly in tests to bypass JSON marshaling.
+func newCoreMetricsExtractorPlugin(ctx context.Context, name string, params *modelServerExtractorParams) (*Extractor, error) {
+	if params == nil {
+		params = defaultExtractorParams()
 	}
 
-	// Use DefaultEngineTypeLabelKey if engineLabelKey is not specified
-	if cfg.EngineLabelKey == "" {
-		cfg.EngineLabelKey = DefaultEngineTypeLabelKey
+	// Apply defaults for unset fields
+	if params.DefaultEngine == "" {
+		params.DefaultEngine = defaultEngineName
+	}
+	if params.EngineLabelKey == "" {
+		params.EngineLabelKey = DefaultEngineTypeLabelKey
 	}
 
 	// Append default engine configs (vllm, sglang) if not explicitly defined by user
 	userDefinedEngines := make(map[string]bool)
-	for _, ec := range cfg.EngineConfigs {
+	for _, ec := range params.EngineConfigs {
 		userDefinedEngines[ec.Name] = true
 	}
 	for _, defaultCfg := range defaultEngineConfigs {
 		if !userDefinedEngines[defaultCfg.Name] {
-			cfg.EngineConfigs = append(cfg.EngineConfigs, defaultCfg)
+			params.EngineConfigs = append(params.EngineConfigs, defaultCfg)
 		}
 	}
 
-	logger := logr.Discard()
-	if handle != nil {
-		logger = log.FromContext(handle.Context())
-	}
+	logger := log.FromContext(ctx)
 	registry := NewMappingRegistry()
 
 	// Validate and register engine configurations
 	var defaultMapping *Mapping
-	for _, engineConfig := range cfg.EngineConfigs {
+	for _, engineConfig := range params.EngineConfigs {
 		if engineConfig.Name == "" {
 			return nil, errors.New("engine config name cannot be empty")
 		}
@@ -145,7 +155,7 @@ func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle
 			return nil, fmt.Errorf("failed to create mapping for engine %q: %w", engineConfig.Name, err)
 		}
 
-		logNilSpecs(logger, engineConfig.Name, mapping)
+		logger.Info("Registered engine mapping", "engine", engineConfig.Name, "mapping", mapping)
 
 		// Register by engine name
 		if err := registry.Register(engineConfig.Name, mapping); err != nil {
@@ -153,20 +163,20 @@ func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle
 		}
 
 		// Track the default engine mapping
-		if engineConfig.Name == cfg.DefaultEngine {
+		if engineConfig.Name == params.DefaultEngine {
 			defaultMapping = mapping
 		}
 	}
 
 	// Validate and register the default engine
 	if defaultMapping == nil {
-		return nil, fmt.Errorf("defaultEngine %q not found in engineConfigs", cfg.DefaultEngine)
+		return nil, fmt.Errorf("defaultEngine %q not found in engineConfigs", params.DefaultEngine)
 	}
 	if err := registry.Register(DefaultEngineType, defaultMapping); err != nil {
 		return nil, fmt.Errorf("failed to register default mapping: %w", err)
 	}
 
-	extractor, err := NewCoreMetricsExtractor(registry, cfg.EngineLabelKey)
+	extractor, err := NewCoreMetricsExtractor(registry, params.EngineLabelKey)
 	if err != nil {
 		return nil, err
 	}
@@ -174,28 +184,8 @@ func CoreMetricsExtractorFactory(name string, parameters json.RawMessage, handle
 	return extractor, nil
 }
 
-func defaultExtractorConfigParams() *modelServerExtractorParams {
+func defaultExtractorParams() *modelServerExtractorParams {
 	return &modelServerExtractorParams{
 		EngineLabelKey: DefaultEngineTypeLabelKey,
-	}
-}
-
-// logNilSpecs logs an informational message for each metric spec that is nil (i.e., disabled)
-// for the given engine. This mirrors the verifyMetricMapping signal in the legacy metrics path.
-func logNilSpecs(logger logr.Logger, engine string, m *Mapping) {
-	if m.TotalQueuedRequests == nil {
-		logger.Info("Not scraping metric", "engine", engine, "metric", "TotalQueuedRequests")
-	}
-	if m.TotalRunningRequests == nil {
-		logger.Info("Not scraping metric", "engine", engine, "metric", "TotalRunningRequests")
-	}
-	if m.KVCacheUtilization == nil {
-		logger.Info("Not scraping metric", "engine", engine, "metric", "KVCacheUtilization")
-	}
-	if m.LoraRequestInfo == nil {
-		logger.Info("Not scraping metric", "engine", engine, "metric", "LoraRequestInfo")
-	}
-	if m.CacheInfo == nil {
-		logger.Info("Not scraping metric", "engine", engine, "metric", "CacheInfo")
 	}
 }
