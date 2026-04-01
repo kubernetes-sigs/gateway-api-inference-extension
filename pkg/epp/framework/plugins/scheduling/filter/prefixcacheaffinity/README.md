@@ -15,6 +15,30 @@ If your workload consists of unique, non-overlapping prompts, this filter has no
 because no endpoint will accumulate cache hits, and the filter falls through to keeping all
 candidates (no-op).
 
+## Difference from `prefix-cache-scorer`
+
+The `prefix-cache-scorer` plugin scores endpoints by prefix cache hit ratio. It works with
+any picker, but the choice of picker creates a trade-off:
+
+- **With `max-picker`** (the default): the scorer consistently picks the single
+  highest-scoring endpoint, which maximizes cache hits but causes **hot-spotting** — many
+  concurrent requests with similar prompts all land on the same endpoint, overloading it and
+  degrading TTFT.
+- **With `weighted-random-picker`**: requests spread across endpoints proportional to their
+  cache scores. This avoids hot-spotting but dilutes cache affinity — requests are frequently
+  sent to endpoints with low or zero cache hits, losing the prefill savings that prefix
+  caching provides.
+
+This filter resolves the trade-off by operating as a **pre-filter** rather than a scorer.
+It narrows the candidate set to only the sticky endpoints (those above `affinityThreshold`),
+then passes them to downstream plugins. When paired with `weighted-random-picker`, requests
+are spread across the sticky set — maintaining cache affinity while distributing load. The
+TTFT load gate (`maxTTFTPenaltyMs`) adds automatic back-off: if sticky endpoints become
+overloaded and their predicted TTFT exceeds non-sticky endpoints by more than the configured
+penalty, the filter breaks stickiness and opens up all endpoints, preventing the hot-spotting
+problem. The exploration mechanism (`explorationProbability`) seeds cache state on other
+endpoints over time, preventing permanent stickiness to a fixed subset.
+
 ## Overview
 
 Probabilistic filter that narrows candidates to "sticky" endpoints. An endpoint is sticky
