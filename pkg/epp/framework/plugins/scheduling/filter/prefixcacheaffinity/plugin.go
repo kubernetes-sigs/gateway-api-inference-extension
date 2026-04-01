@@ -59,9 +59,9 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	AffinityThreshold:     0.80,
+	AffinityThreshold:      0.80,
 	ExplorationProbability: 0.01,
-	MaxTTFTPenaltyMs:      5000,
+	MaxTTFTPenaltyMs:       5000,
 }
 
 type Plugin struct {
