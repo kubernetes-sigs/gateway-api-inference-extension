@@ -43,21 +43,20 @@ const (
 	typePredictedTPOT          = "predicted_tpot"
 	typeTPOTPredictionDuration = "tpot_prediction_duration"
 	typeTPOTSLOViolation       = "tpot_slo_violation"
-	typeTPOTSLOThreshold       = "tpot_slo_threshold"
 
 	typeTTFT                   = "ttft"
 	typePredictedTTFT          = "predicted_ttft"
 	typeTTFTPredictionDuration = "ttft_prediction_duration"
 	typeTTFTSLOViolation       = "ttft_slo_violation"
-	typeTTFTSLOThreshold       = "ttft_slo_threshold"
 )
 
 var (
 	// --- Common Label Sets ---
-	modelLabels     = []string{"model_name", "target_model_name"}
-	modelTypeLabels = []string{"model_name", "target_model_name", "type"}
-	poolLabels      = []string{"name"}
-	endpointLabels  = []string{"pod_name", "namespace", "port"}
+	modelLabels             = []string{"model_name", "target_model_name"}
+	modelWithPriorityLabels = []string{"model_name", "target_model_name", "priority"}
+	modelTypeLabels         = []string{"model_name", "target_model_name", "type"}
+	poolLabels              = []string{"name"}
+	endpointLabels          = []string{"pod_name", "namespace", "port"}
 
 	// --- Common Buckets ---
 
@@ -89,7 +88,7 @@ var (
 			Name:      "request_total",
 			Help:      metricsutil.HelpMsgWithStability("Counter of inference objective requests broken out for each model and target model.", compbasemetrics.ALPHA),
 		},
-		modelLabels,
+		modelWithPriorityLabels,
 	)
 
 	requestErrCounter = prometheus.NewCounterVec(
@@ -293,6 +292,15 @@ var (
 		poolLabels,
 	)
 
+	inferencePoolAvgRunningRequests = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: inferencePoolComponent,
+			Name:      "average_running_requests",
+			Help:      metricsutil.HelpMsgWithStability("The average number of running requests across model servers in the pool.", compbasemetrics.ALPHA),
+		},
+		poolLabels,
+	)
+
 	inferencePoolReadyPods = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: inferencePoolComponent,
@@ -385,7 +393,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_request_queue_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Distribution of the total time requests spend in the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Distribution of total time requests spend in the Flow Control layer (from enqueue to final outcome).", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
 			},
@@ -418,7 +426,7 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_dispatch_cycle_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken for each dispatch cycle in the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Distribution of time taken for each internal dispatch cycle in the Flow Control layer.", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
@@ -430,19 +438,19 @@ var (
 		prometheus.HistogramOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_request_enqueue_duration_seconds",
-			Help:      metricsutil.HelpMsgWithStability("Distribution of the time taken to enqueue requests by the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Distribution of time taken to enqueue requests into the Flow Control layer.", compbasemetrics.ALPHA),
 			Buckets: []float64{
 				0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1,
 			},
 		},
-		[]string{"priority", "outcome"},
+		[]string{"fairness_id", "priority", "outcome"},
 	)
 
 	flowControlQueueSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_queue_size",
-			Help:      metricsutil.HelpMsgWithStability("Current number of requests being actively managed by the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Current number of requests actively held in the Flow Control queue.", compbasemetrics.ALPHA),
 		},
 		append([]string{"fairness_id", "priority", "inference_pool", "slo_class"}, modelLabels...),
 	)
@@ -451,7 +459,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: inferenceExtension,
 			Name:      "flow_control_queue_bytes",
-			Help:      metricsutil.HelpMsgWithStability("Current number of bytes associated with requests actively managed by the EPP flow control layer.", compbasemetrics.ALPHA),
+			Help:      metricsutil.HelpMsgWithStability("Current total size in bytes of requests actively held in the Flow Control queue.", compbasemetrics.ALPHA),
 		},
 		append([]string{"fairness_id", "priority", "inference_pool", "slo_class"}, modelLabels...),
 	)
@@ -508,6 +516,7 @@ func Register(customCollectors ...prometheus.Collector) {
 		metrics.Registry.MustRegister(normalizedTimePerOutputToken)
 		metrics.Registry.MustRegister(inferencePoolAvgKVCache)
 		metrics.Registry.MustRegister(inferencePoolAvgQueueSize)
+		metrics.Registry.MustRegister(inferencePoolAvgRunningRequests)
 		metrics.Registry.MustRegister(inferencePoolReadyPods)
 		metrics.Registry.MustRegister(schedulerE2ELatency)
 		metrics.Registry.MustRegister(schedulerAttemptsTotal)
@@ -560,6 +569,7 @@ func Reset() {
 	normalizedTimePerOutputToken.Reset()
 	inferencePoolAvgKVCache.Reset()
 	inferencePoolAvgQueueSize.Reset()
+	inferencePoolAvgRunningRequests.Reset()
 	inferencePoolReadyPods.Reset()
 	schedulerE2ELatency.Reset()
 	schedulerAttemptsTotal.Reset()
@@ -579,8 +589,8 @@ func Reset() {
 }
 
 // RecordRequestCounter records the number of requests.
-func RecordRequestCounter(modelName, targetModelName string) {
-	requestCounter.WithLabelValues(modelName, targetModelName).Inc()
+func RecordRequestCounter(modelName, targetModelName string, priority int) {
+	requestCounter.WithLabelValues(modelName, targetModelName, strconv.Itoa(priority)).Inc()
 }
 
 // RecordRequestErrCounter records the number of error requests.
@@ -789,6 +799,10 @@ func RecordInferencePoolAvgQueueSize(name string, queueSize float64) {
 	inferencePoolAvgQueueSize.WithLabelValues(name).Set(queueSize)
 }
 
+func RecordInferencePoolAvgRunningRequests(name string, runningRequests float64) {
+	inferencePoolAvgRunningRequests.WithLabelValues(name).Set(runningRequests)
+}
+
 func RecordInferencePoolReadyPods(name string, runningPods float64) {
 	inferencePoolReadyPods.WithLabelValues(name).Set(runningPods)
 }
@@ -927,13 +941,13 @@ func RecordFlowControlDispatchCycleDuration(duration time.Duration) {
 	flowControlDispatchCycleDuration.WithLabelValues().Observe(duration.Seconds())
 }
 
-// RecordFlowControlRequestQueueDuration records the duration a request was in the enqueuing process in the Flow Control layer.
+// RecordFlowControlRequestEnqueueDuration records the duration a request was in the enqueuing process in the Flow Control layer.
 func RecordFlowControlRequestEnqueueDuration(
-	priority string, outcome string,
+	fairnessID string, priority string, outcome string,
 	duration time.Duration,
 ) {
 	flowControlRequestEnqueueDuration.WithLabelValues(
-		priority, outcome,
+		fairnessID, priority, outcome,
 	).Observe(duration.Seconds())
 }
 
@@ -960,18 +974,6 @@ func SubFlowControlQueueBytes(fairnessID, priority, inferencePool, sloClass, mod
 // RecordFlowControlPoolSaturation records the current saturation level for an inference pool.
 func RecordFlowControlPoolSaturation(inferencePool string, saturation float64) {
 	flowControlPoolSaturation.WithLabelValues(inferencePool).Set(saturation)
-}
-
-// SetTTFTSLOThreshold sets the TTFT SLO threshold for a model.
-// This allows dynamic threshold management and makes the threshold visible in metrics.
-func SetTTFTSLOThreshold(modelName, targetModelName string, threshold float64) {
-	inferenceGauges.WithLabelValues(modelName, targetModelName, typeTTFTSLOThreshold).Set(threshold)
-}
-
-// SetTPOTSLOThreshold sets the TPOT SLO threshold for a model.
-// This allows dynamic threshold management and makes the threshold visible in metrics.
-func SetTPOTSLOThreshold(modelName, targetModelName string, threshold float64) {
-	inferenceGauges.WithLabelValues(modelName, targetModelName, typeTPOTSLOThreshold).Set(threshold)
 }
 
 // RecordInferenceModelRewriteDecision records the routing decision for InferenceModelRewrite.

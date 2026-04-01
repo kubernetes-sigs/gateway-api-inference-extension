@@ -74,8 +74,8 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 			newTestPluginsHandle(t),
 			WithInitialShardCount(shardCount),
 			WithFlowGCTimeout(5*time.Minute),
-			WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
-			WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
+			WithPriorityBand(&PriorityBandConfig{Priority: highPriority}),
+			WithPriorityBand(&PriorityBandConfig{Priority: lowPriority}),
 		)
 		require.NoError(t, err, "Test setup: failed to create default config")
 	}
@@ -177,7 +177,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 
 		handle := newTestPluginsHandle(t)
 		badQueueName := queue.RegisteredQueueName("non-existent-queue")
-		badBand, err := NewPriorityBandConfig(handle, highPriority, "High", WithQueue(badQueueName))
+		badBand, err := NewPriorityBandConfig(handle, highPriority, WithQueue(badQueueName))
 		require.NoError(t, err)
 
 		// Create a Config that uses a mock checker to bypass the strict validation.
@@ -465,7 +465,7 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 			t.Parallel()
 
 			handle := newTestPluginsHandle(t)
-			band, err := NewPriorityBandConfig(handle, highPriority, "A", WithBandMaxBytes(bandCapacity))
+			band, err := NewPriorityBandConfig(handle, highPriority, WithBandMaxBytes(bandCapacity))
 			require.NoError(t, err)
 
 			config, err := NewConfig(
@@ -1397,7 +1397,7 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 
 	// We create a custom band config that uses this failing queue.
 	// We set it as the default band so that dynamic provisioning is used.
-	failingBand, err := NewPriorityBandConfig(handle, 0, "FailingBand", WithQueue(failQueueName))
+	failingBand, err := NewPriorityBandConfig(handle, 0, WithQueue(failQueueName))
 	require.NoError(t, err)
 
 	cfg, err := NewConfig(handle, withCapabilityChecker(mockChecker), WithDefaultPriorityBand(failingBand))

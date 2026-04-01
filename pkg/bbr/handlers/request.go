@@ -29,36 +29,46 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
+	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
+// HandleRequestHeaders extracts request headers into reqCtx and returns
+// the ext-proc header response.
+func (s *Server) HandleRequestHeaders(ctx context.Context, reqCtx *RequestContext, headers *eppb.HttpHeaders, streaming bool) []*eppb.ProcessingResponse {
+	reqCtx.RequestReceivedTimestamp = time.Now()
+
+	if headers != nil && headers.Headers != nil {
+		for _, header := range headers.Headers.Headers {
+			reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
+		}
+	}
+
+	if streaming && !headers.GetEndOfStream() {
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("captured request headers, deferring response until body arrives...")
+		return nil
+	}
+	// if we're here, that means we're in non-streaming, or we're in streaming and got end of stream(means no body).
+	// in both cases we can return HeadersResponse
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &eppb.HeadersResponse{},
+			},
+		},
+	}
+}
+
 // HandleRequestBody parses the raw body bytes into reqCtx.Request.Body and processes the request.
 func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, requestBodyBytes []byte) ([]*eppb.ProcessingResponse, error) {
-	logger := log.FromContext(ctx)
 	var ret []*eppb.ProcessingResponse
 
 	if err := json.Unmarshal(requestBodyBytes, &reqCtx.Request.Body); err != nil {
-		return nil, err
+		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("failed to parse request body: %v", err)}
 	}
 
 	if err := s.runRequestPlugins(ctx, reqCtx.CycleState, reqCtx.Request); err != nil {
-		logger.V(logutil.DEFAULT).Error(err, "failed to execute request plugins")
-		if s.streaming {
-			ret = append(ret, &eppb.ProcessingResponse{
-				Response: &eppb.ProcessingResponse_RequestHeaders{
-					RequestHeaders: &eppb.HeadersResponse{},
-				},
-			})
-			ret = addStreamedBodyResponse(ret, requestBodyBytes)
-			return ret, nil
-		} else {
-			ret = append(ret, &eppb.ProcessingResponse{
-				Response: &eppb.ProcessingResponse_RequestBody{
-					RequestBody: &eppb.BodyResponse{},
-				},
-			})
-		}
-		return ret, nil
+		return nil, err
 	}
 
 	bodyMutated := reqCtx.Request.BodyMutated()
@@ -136,7 +146,8 @@ func (s *Server) runRequestPlugins(ctx context.Context, cycleState *framework.Cy
 		err = plugin.ProcessRequest(ctx, cycleState, request)
 		metrics.RecordPluginProcessingLatency(requestPluginExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
-			return fmt.Errorf("failed to execute request plugin '%s' - %w", plugin.TypedName(), err)
+			log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "Failed to execute request plugin", "plugin", plugin.TypedName())
+			return err
 		}
 	}
 
@@ -155,26 +166,6 @@ func addStreamedBodyResponse(responses []*eppb.ProcessingResponse, requestBodyBy
 		})
 	}
 	return responses
-}
-
-// HandleRequestHeaders extracts request headers into reqCtx and returns
-// the ext-proc header response.
-func (s *Server) HandleRequestHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
-	reqCtx.RequestReceivedTimestamp = time.Now()
-
-	if headers != nil && headers.Headers != nil {
-		for _, header := range headers.Headers.Headers {
-			reqCtx.Request.Headers[header.Key] = envoy.GetHeaderValue(header)
-		}
-	}
-
-	return []*eppb.ProcessingResponse{
-		{
-			Response: &eppb.ProcessingResponse_RequestHeaders{
-				RequestHeaders: &eppb.HeadersResponse{},
-			},
-		},
-	}, nil
 }
 
 // HandleRequestTrailers handles request trailers.

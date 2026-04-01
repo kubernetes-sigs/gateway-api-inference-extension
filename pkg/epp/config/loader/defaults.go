@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
@@ -108,6 +109,9 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle fwkplugin.H
 	}
 	if err := ensureParser(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply parser defaults: %w", err)
+	}
+	if err := ensureSaturationDetector(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply saturation detector defaults: %w", err)
 	}
 	return nil
 }
@@ -224,6 +228,34 @@ func ensureParser(
 	if _, ok := allPlugins[parserConfig.PluginRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, openai.OpenAIParserType); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// ensureSaturationDetector guarantees that saturation detector is configured.
+// If the saturation detector is not set, the utilization detector is configured by default.
+func ensureSaturationDetector(
+	cfg *configapi.EndpointPickerConfig,
+	handle fwkplugin.Handle,
+	allPlugins map[string]fwkplugin.Plugin,
+) error {
+	sdConfig := cfg.SaturationDetector
+	if sdConfig == nil {
+		sdConfig = &configapi.SaturationDetectorConfig{
+			PluginRef: utilization.UtilizationDetectorType,
+		}
+		cfg.SaturationDetector = sdConfig
+	}
+	if sdConfig.PluginRef == "" {
+		sdConfig.PluginRef = utilization.UtilizationDetectorType
+	}
+
+	if sdConfig.PluginRef == utilization.UtilizationDetectorType {
+		if _, ok := allPlugins[sdConfig.PluginRef]; !ok {
+			if err := registerDefaultPlugin(cfg, handle, utilization.UtilizationDetectorType); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -22,18 +22,13 @@ This error indicates that the entire inference pool has exceeded its saturation 
     * **v0.5.1 and earlier**: Verify you're using an `InferenceModel` and that its `criticality` is set to `Critical`. This ensures requests are queued on the model servers instead of being dropped.
     * **v1.0.0 and later**: Ensure the `InferenceObjective` you're using has a `priority` greater than or equal to 0. A negative priority can cause requests to be dropped.
 
-* Pool Thresholds: Check the defined pool [thresholds](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/f36111cab0ed5a309d1eafade896d4f37ab623a6/pkg/epp/saturationdetector/config.go#L41) to understand the saturation limits. Currently, we use three main metrics to assess the system's load:
-    * `DefaultQueueDepthThreshold`: This is the maximum number of requests waiting in the queue for a backend. The default value is 5. If the queue for a model server exceeds this number, the saturation detector may consider the system under pressure. 
-    To override this, set the `queueDepthThreshold` field in the `saturationDetector` section of the text based configuration.
-    See [Saturation Detector configuration](../epp-configuration/config-text#saturation-detector-configuration).
-    <br>**Note:** The use of the `SD_QUEUE_DEPTH_THRESHOLD` environment variable to override this is now deprecated.
-    * `DefaultKVCacheUtilThreshold`: This is the maximum utilization of the Key-Value (KV) cache on the model server, expressed as a decimal from 0.0 to 1.0. The default is 0.8, or 80%. The KV cache stores attention keys and values to speed up inference for subsequent tokens. When its utilization exceeds this threshold, it's an indication that the model server is nearing its memory capacity and may be becoming saturated.
-    To override this, set the `kvCacheUtilThreshold` field in the `saturationDetector` section of the text based configuration.
-    See [Saturation Detector configuration](../epp-configuration/config-text#saturation-detector-configuration).
-    <br>**Note:** The use of the `SD_KV_CACHE_UTIL_THRESHOLD` environment variable to override this is now deprecated.
-    * `DefaultMetricsStalenessThreshold`: This defines the maximum age of metrics data before it's considered outdated. The default is 200 milliseconds. The saturation detector needs up-to-date metrics to make accurate decisions about system load. If the metrics are older than this threshold, the detector won't use them. This value is tied to how often metrics are refreshed, and setting it slightly higher ensures that there's always fresh data available.
-    To override this, set the `metricsStalenessThreshold` field in the `saturationDetector` section of the text based configuration. See [Saturation Detector configuration](../epp-configuration/config-text#saturation-detector-configuration).
-    <br>**Note:** The use of the `SD_METRICS_STALENESS_THRESHOLD` environment variable to override this is now deprecated.
+* **Pool Thresholds (Saturation Detector)**: The Gateway uses a pluggable Saturation Detector to assess if the pool is overloaded. By default, it looks at the queue depth and KV cache utilization of your endpoints. If these metrics exceed configured safety limits, the system sheds load. If you are seeing unexpected 429s, your thresholds may be configured too tightly for your workload.
+
+    > **Note:**
+    > To learn how to tune these thresholds, change the detector type, or understand how priority interacts with capacity, see our standard guides:
+    > - [Saturation Detector Configuration](./epp-configuration/config-text.md#saturation-detector-plugins)
+    > - [Priority and Capacity Concepts](../concepts/priority-and-capacity.md)
+    > - [Flow Control Tuning Guidance](./flow-control.md#2-tuning-the-saturation-detector-the-healthy-buffer)
 
 ## 500 Internal Server Error
 ### `fault filter abort`
@@ -79,14 +74,14 @@ The EPP needs to watch the InferencePool, InferenceObjectives and Pods that belo
 **Solution**: Create or update the RBAC configuration to grant the [required permissions](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/a3f25c07231a47945d52518e979aa7ee386907d3/config/charts/inferencepool/templates/rbac.yaml#L41) to the EPP service account.
 
 ### `Pool is not initialized, skipping refreshing metrics`
-This error indicates that the Inference Pool pods are not initialized. 
+This error indicates that the Inference Pool pods are not initialized.
 
 **Solution**: Check the EPP start up argument `--pool-name` has the correct InferencePool name specified and the InferencePool exists.
 
 ## Unexpected Routing Behaviors
-The EPP's core function is to intelligently route requests to the most optimal model server pod in a pool. It uses a score-based algorithm that considers several metrics (such as queue depth, KV cache utilization, etc.) to choose the best pod for each request. 
+The EPP's core function is to intelligently route requests to the most optimal model server pod in a pool. It uses a score-based algorithm that considers several metrics (such as queue depth, KV cache utilization, etc.) to choose the best pod for each request.
 
-For unexpected routing behaviors: 
+For unexpected routing behaviors:
 
 * Verify the expected metrics are being emitted from the model server. Some model servers aren't fully compatible with the default expected metrics, vLLM is generally the most up-to-date in this regard. See [Support Model Servers](https://gateway-api-inference-extension.sigs.k8s.io/implementations/model-servers/).
 * Check your [plugins](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/config-text/) configuration, especially the weights of the scorer plugins. If weight is omitted, a default weight of 1 will be used.
@@ -94,7 +89,7 @@ For unexpected routing behaviors:
 ## Poor Performance under High Concurrency
 For more information, check out [EPP scale testing](https://docs.google.com/document/d/1TDD_wvuTO5hhm1Byl8K7TZkNnn8sVQ1ZrkZM_u0gJvw/edit?tab=t.0#heading=h.mtff4cnithxf).
 
-When performance degrades under high load (for example high-latency tail or significantly lower-than-expected successful QPS) with underutilized resources, the issue may be related to excessive logging in the endpoint picker (EPP). Higher verbosity levels (e.g., `--v=2` or greater) generate a large volume of logs. This floods the log buffer and standard output, leading to heavy writelock contention. In extreme cases, this can cause the kubelet to kill the pod due to health check timeouts, leading to a restart cycle. 
+When performance degrades under high load (for example high-latency tail or significantly lower-than-expected successful QPS) with underutilized resources, the issue may be related to excessive logging in the endpoint picker (EPP). Higher verbosity levels (e.g., `--v=2` or greater) generate a large volume of logs. This floods the log buffer and standard output, leading to heavy writelock contention. In extreme cases, this can cause the kubelet to kill the pod due to health check timeouts, leading to a restart cycle.
 
 **Solution**: Ensure log level for the EPP is set to `--v=1`.
 
@@ -161,7 +156,7 @@ inferenceExtension:
       - type: predicted-latency-scorer
         parameters:
           # Include your latency predictor parameters here
-          samplingMean: 1000.0 
+          samplingMean: 1000.0
       schedulingProfiles:
       - name: default
         plugins:

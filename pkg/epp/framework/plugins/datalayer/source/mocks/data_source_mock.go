@@ -19,6 +19,7 @@ package mocks
 import (
 	"context"
 	"reflect"
+	"sync"
 	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,10 +32,11 @@ var _ fwkdl.DataSource = (*MetricsDataSource)(nil)
 var _ fwkdl.PollingDataSource = (*MetricsDataSource)(nil)
 
 type MetricsDataSource struct {
+	mu        sync.RWMutex
 	typedName plugin.TypedName
 	CallCount int64
-	Metrics   map[types.NamespacedName]*fwkdl.Metrics
-	Errors    map[types.NamespacedName]error
+	metrics   map[types.NamespacedName]*fwkdl.Metrics
+	errors    map[types.NamespacedName]error
 }
 
 func NewDataSource(typedName plugin.TypedName) *MetricsDataSource {
@@ -53,13 +55,27 @@ func (fds *MetricsDataSource) ExtractorType() reflect.Type {
 	return reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
 }
 
-func (fds *MetricsDataSource) Extractors() []string                 { return []string{} }
-func (fds *MetricsDataSource) AddExtractor(_ fwkdl.Extractor) error { return nil }
+// SetMetrics replaces the metrics map in a thread-safe manner.
+func (fds *MetricsDataSource) SetMetrics(metrics map[types.NamespacedName]*fwkdl.Metrics) {
+	fds.mu.Lock()
+	defer fds.mu.Unlock()
+	fds.metrics = metrics
+}
+
+// SetErrors replaces the errors map in a thread-safe manner.
+func (fds *MetricsDataSource) SetErrors(errors map[types.NamespacedName]error) {
+	fds.mu.Lock()
+	defer fds.mu.Unlock()
+	fds.errors = errors
+}
 
 func (fds *MetricsDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any, error) {
 	atomic.AddInt64(&fds.CallCount, 1)
-	if metrics, ok := fds.Metrics[ep.GetMetadata().Clone().NamespacedName]; ok {
-		if _, ok := fds.Errors[ep.GetMetadata().Clone().NamespacedName]; !ok {
+	fds.mu.RLock()
+	defer fds.mu.RUnlock()
+	nn := ep.GetMetadata().Clone().NamespacedName
+	if metrics, ok := fds.metrics[nn]; ok {
+		if _, ok := fds.errors[nn]; !ok {
 			ep.UpdateMetrics(metrics)
 		}
 	}

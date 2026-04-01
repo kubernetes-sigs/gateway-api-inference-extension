@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"testing"
 
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -28,6 +29,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
@@ -36,7 +38,6 @@ import (
 )
 
 const (
-	bufSize    = 1024 * 1024
 	podName    = "pod1"
 	podAddress = "1.2.3.4"
 	poolPort   = int32(5678)
@@ -46,42 +47,75 @@ const (
 func TestServer(t *testing.T) {
 	tests := []struct {
 		name              string
+		streamInRequest   bool
 		streamingResponse bool
 		hasTrailer        bool
 	}{
 		{
 			name:              "Streaming response with trailers",
+			streamInRequest:   false,
 			streamingResponse: true,
 			hasTrailer:        true,
 		},
 		{
 			name:              "Non-streaming response with trailers",
+			streamInRequest:   false,
 			streamingResponse: false,
 			hasTrailer:        true,
 		},
 		{
 			name:              "Streaming response without trailers",
+			streamInRequest:   false,
 			streamingResponse: true,
 			hasTrailer:        false,
 		},
 		{
 			name:              "Non-streaming response without trailers",
+			streamInRequest:   false,
 			streamingResponse: false,
+			hasTrailer:        false,
+		},
+		{
+			name:              "Request with stream=true and streaming response with trailers",
+			streamInRequest:   true,
+			streamingResponse: true,
+			hasTrailer:        true,
+		},
+		{
+			name:              "Request with stream=true with non-streaming response header",
+			streamInRequest:   true,
+			streamingResponse: false,
+			hasTrailer:        true,
+		},
+		{
+			name:              "Streaming solely by response header",
+			streamInRequest:   false,
+			streamingResponse: true,
 			hasTrailer:        false,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runStreamingTest(t, test.streamingResponse, test.hasTrailer)
+			runStreamingTest(t, test.streamInRequest, test.streamingResponse, test.hasTrailer)
 		})
 	}
 }
 
-func runStreamingTest(t *testing.T, streamingResponse bool, hasTrailers bool) {
+func runStreamingTest(t *testing.T, streamInRequest bool, streamingResponse bool, hasTrailers bool) {
 	t.Helper()
 
+	expectedMutatedBodyMap := map[string]any{
+		"model":  "v1",
+		"prompt": "Is banana tasty?",
+	}
+	if streamInRequest {
+		expectedMutatedBodyMap["stream"] = true
+	}
+	expectedMutatedBodyBytes, _ := json.Marshal(expectedMutatedBodyMap)
+	contentLength := strconv.Itoa(len(expectedMutatedBodyBytes))
+	expectedBody := string(expectedMutatedBodyBytes)
 	expectedRequestHeaders := map[string]string{metadata.DestinationEndpointKey: fmt.Sprintf("%s:%d", podAddress, poolPort),
-		"Content-Length": "42", ":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
+		"Content-Length": contentLength, ":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
 	expectedResponseHeaders := map[string]string{"x-went-into-resp-headers": "true", ":method": "POST", "x-test": "body"}
 	expectedSchedulerHeaders := map[string]string{":method": "POST", "x-test": "body", "x-request-id": "test-request-id"}
 
@@ -93,7 +127,7 @@ func runStreamingTest(t *testing.T, streamingResponse bool, hasTrailers bool) {
 		[]*v1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: podName}}}, "test-pool1", namespace, poolPort)
 	streamingServer := handlers.NewStreamingServer(ds, director, openai.NewOpenAIParser())
 
-	testListener, errChan := utils.SetupTestStreamingServer(t, ctx, ds, streamingServer)
+	testListener, errChan := utils.SetupTestStreamingServer(t, ctx, streamingServer)
 	process, conn := utils.GetStreamingServerClient(ctx, t)
 	defer conn.Close()
 
@@ -116,7 +150,9 @@ func runStreamingTest(t *testing.T, streamingResponse bool, hasTrailers bool) {
 
 	// Send request body
 	requestBody := "{\"model\":\"food-review\",\"prompt\":\"Is banana tasty?\"}"
-	expectedBody := "{\"model\":\"v1\",\"prompt\":\"Is banana tasty?\"}"
+	if streamInRequest {
+		requestBody = "{\"model\":\"food-review\",\"prompt\":\"Is banana tasty?\",\"stream\":true}"
+	}
 	request = &pb.ProcessingRequest{
 		Request: &pb.ProcessingRequest_RequestBody{
 			RequestBody: &pb.HttpBody{
@@ -216,7 +252,7 @@ func runStreamingTest(t *testing.T, streamingResponse bool, hasTrailers bool) {
 		if err := recvResponseBody(process); err != nil {
 			t.Fatalf("failed to receive response body (no trailers case): %v", err)
 		}
-	case streamingResponse:
+	case streamInRequest || streamingResponse:
 		// For streaming case, ext_proc will first receive the response before getting trailers.
 		if err := recvResponseBody(process); err != nil {
 			t.Fatalf("failed to receive response body (streaming case): %v", err)
@@ -319,6 +355,15 @@ func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.Requ
 	}
 	reqCtx.RequestSize = len(reqCtx.Request.RawBody)
 	reqCtx.TargetEndpoint = fmt.Sprintf("%s:%d", podAddress, poolPort)
+
+	// Populate SchedulingRequest for testing request-based streaming detection.
+	reqCtx.SchedulingRequest = &scheduling.LLMRequest{
+		Body: &scheduling.LLMRequestBody{},
+	}
+	if stream, ok := bodyMap["stream"].(bool); ok && stream {
+		reqCtx.SchedulingRequest.Body.Stream = true
+	}
+
 	return reqCtx, nil
 }
 

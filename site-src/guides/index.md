@@ -8,6 +8,10 @@
 
 --8<-- "site-src/_includes/prereqs.md"
 
+### Verify Prerequisites
+
+--8<-- "site-src/_includes/verify-prereqs.md"
+
 ## **Steps**
 
 ### Set Latest Release Variable
@@ -52,13 +56,21 @@ IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gatewa
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${IGW_LATEST_RELEASE}/manifests.yaml
 ```
 
+Verify the CRDs were installed successfully:
+
+```bash
+kubectl get crds | grep inference.networking.k8s.io
+```
+
+You should see output listing the inference-related CRDs.
+
 ### Install the Gateway
 
    Choose one of the following options to install Gateway.
 
 === "GKE"
 
-      Nothing to install here, you can move to the next [section](#deploy-the-inferencepool-and-endpoint-picker-extension)
+      GKE comes with Gateway API support built-in, so you can skip this step and move to the next [section](#deploy-an-inference-gateway).
 
 === "Istio"
 
@@ -110,15 +122,13 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
       1. Requirements
 
-         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed (Standard or Experimental channel).
-         - A Kubernetes cluster with LoadBalancer or NodePort access.
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
       1. Install NGINX Gateway Fabric with the Inference Extension enabled by setting the `nginxGateway.gwAPIInferenceExtension.enable=true` Helm value
 
-         ```bash 
+         ```bash
          helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginxGateway.gwAPIInferenceExtension.enable=true
          ```
-         This enables NGINX Gateway Fabric to watch and manage Inference Extension resources such as InferencePool and InferenceObjective.
 
 ### Deploy an Inference Gateway
 
@@ -195,8 +205,6 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "NGINX Gateway Fabric"
 
-      NGINX Gateway Fabric is an implementation of the Gateway API that supports the Inference Extension. Follow these steps to deploy an Inference Gateway using NGINX Gateway Fabric.
-
       1. Deploy the Gateway
 
          ```bash
@@ -211,7 +219,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
       
-       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
+       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/)
 
 ### Deploy the InferencePool and Endpoint Picker Extension
 

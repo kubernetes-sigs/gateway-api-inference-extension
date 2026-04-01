@@ -24,9 +24,10 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/pkg/features"
+	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 )
 
 func init() {
@@ -37,9 +38,9 @@ var HTTPRouteInvalidInferencePoolRef = suite.ConformanceTest{
 	ShortName:   "HTTPRouteInvalidInferencePoolRef",
 	Description: "Tests HTTPRoute status when it references an InferencePool that does not exist.",
 	Manifests:   []string{"tests/httproute_invalid_inferencepool_ref.yaml"},
-	Features: []features.FeatureName{
-		features.FeatureName("SupportInferencePool"),
-		features.SupportGateway,
+	Features: []gatewayfeatures.FeatureName{
+		features.SupportInferencePool,
+		gatewayfeatures.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		routeNN := types.NamespacedName{Name: "httproute-to-non-existent-pool", Namespace: resources.AppBackendNamespace}

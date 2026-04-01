@@ -51,7 +51,7 @@ spec:
     name: vllm-llama3-8b-instruct-pool
   targetModels:
   - name: my-model-12345
-    weight: 100    
+    weight: 100
 ---
 apiVersion: inference.networking.x-k8s.io/v1alpha2
 kind: InferenceObjective
@@ -60,6 +60,16 @@ metadata:
   namespace: default
 spec:
   priority: 2
+  poolRef:
+    name: vllm-llama3-8b-instruct-pool   
+---
+apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceObjective
+metadata:
+  name: inference-objective-with-priority-4
+  namespace: default
+spec:
+  priority: 4
   poolRef:
     name: vllm-llama3-8b-instruct-pool
 ---

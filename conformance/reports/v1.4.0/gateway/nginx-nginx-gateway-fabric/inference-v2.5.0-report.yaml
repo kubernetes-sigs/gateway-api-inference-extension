@@ -1,0 +1,26 @@
+GatewayAPIInferenceExtensionVersion: v1.4.0
+apiVersion: gateway.networking.k8s.io/v1
+date: "2026-03-30T17:31:48Z"
+gatewayAPIChannel: experimental
+gatewayAPIVersion: v1.5.1
+implementation:
+  contact:
+  - https://github.com/nginx/nginx-gateway-fabric/discussions/new/choose
+  organization: nginx
+  project: nginx-gateway-fabric
+  url: https://github.com/nginx/nginx-gateway-fabric
+  version: v2.5.0
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: partial
+    skippedTests:
+    - GatewayDestinationEndpointServed
+    - InferencePoolAppProtocol
+    statistics:
+      Failed: 0
+      Passed: 11
+      Skipped: 2
+  name: Gateway
+  summary: Core tests partially succeeded with 2 test skips.

@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
@@ -114,4 +115,23 @@ type OrderingPolicy interface {
 	//   - "edf-ordering-policy" (Earliest Deadline First) REQUIRES CapabilityPriorityConfigurable (Heap) to function
 	//     correctly.
 	RequiredQueueCapabilities() []QueueCapability
+}
+
+// SaturationDetector provides real-time load signals.
+//
+// Plugins implementing this interface provide a continuous saturation gradient [0.0, 1.0+] based on
+// the observed state of the endpoints.
+type SaturationDetector interface {
+	plugin.Plugin
+
+	// Saturation returns the aggregate saturation level of the candidate pool.
+	//
+	//   - A value >= 1.0 indicates that the system is fully saturated. Values strictly > 1.0
+	//     represent the depth of overload, scaling proportionally with the excess load.
+	//   - A value < 1.0 indicates the ratio of used capacity to total available capacity.
+	//
+	// The FlowController consumes this signal to make dispatch decisions:
+	//   - If Saturation() >= 1.0: Stop dispatching and apply backpressure (buffer requests).
+	//   - If Saturation() < 1.0: Continue dispatching traffic to the pool.
+	Saturation(ctx context.Context, endpoints []datalayer.Endpoint) float64
 }

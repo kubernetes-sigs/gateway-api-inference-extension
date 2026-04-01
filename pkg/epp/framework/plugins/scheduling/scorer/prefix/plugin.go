@@ -488,6 +488,10 @@ func getUserInputBytes(request *framework.LLMRequest) ([]byte, error) {
 		// Handle completions API (maintain backward compatibility)
 		return []byte(request.Body.Completions.Prompt), nil
 
+	case request.Body.Embeddings != nil:
+		// Handle embeddings API - marshal input for cache key generation
+		return json.Marshal(request.Body.Embeddings.Input)
+
 	default:
 		return nil, errors.New("invalid request body: no recognized API format found")
 	}

@@ -33,9 +33,8 @@ import (
 
 const (
 	BaseModelToHeaderPluginType = "base-model-to-header"
-	// These constants must match the header names defined in pkg/bbr/handlers/server.go
-	baseModelHeader = "X-Gateway-Base-Model-Name"
-	modelField      = "model"
+	BaseModelHeader             = "X-Gateway-Base-Model-Name"
+	modelField                  = "model"
 )
 
 // compile-time type validation
@@ -95,7 +94,7 @@ func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framewo
 	rawFieldValue, exists := request.Body[modelField]
 	if !exists {
 		// If model field is not present, set empty base model header
-		request.SetHeader(baseModelHeader, "")
+		request.SetHeader(BaseModelHeader, "")
 		log.FromContext(ctx).V(logutil.VERBOSE).Info("model field not found, setting empty base model header")
 		return nil
 	}
@@ -107,7 +106,7 @@ func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framewo
 	baseModel := p.AdaptersStore.getBaseModel(targetModel)
 
 	// Set model headers for routing (empty string is valid)
-	request.SetHeader(baseModelHeader, baseModel)
+	request.SetHeader(BaseModelHeader, baseModel)
 	log.FromContext(ctx).V(logutil.VERBOSE).Info("updated base model header based on the request target model", "targetModel", targetModel, "baseModel", baseModel)
 	return nil
 }

@@ -34,27 +34,26 @@ import (
 
 // HandleResponseHeaders extracts response headers into reqCtx and returns
 // the ext-proc header response.
-func (s *Server) HandleResponseHeaders(reqCtx *RequestContext, headers *eppb.HttpHeaders) ([]*eppb.ProcessingResponse, error) {
+func (s *Server) HandleResponseHeaders(ctx context.Context, reqCtx *RequestContext, headers *eppb.HttpHeaders, streaming bool) []*eppb.ProcessingResponse {
 	if headers != nil && headers.Headers != nil {
 		for _, header := range headers.Headers.Headers {
 			reqCtx.Response.Headers[header.Key] = envoy.GetHeaderValue(header)
 		}
 	}
 
-	if !s.streaming || headers.GetEndOfStream() {
-		return []*eppb.ProcessingResponse{
-			{
-				Response: &eppb.ProcessingResponse_ResponseHeaders{
-					ResponseHeaders: &eppb.HeadersResponse{},
-				},
-			},
-		}, nil
+	if streaming && !headers.GetEndOfStream() {
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("captured response headers, deferring response until body arrives...")
+		return nil
 	}
-
-	// In streaming mode with a body pending, defer the response —
-	// HandleResponseBody will send it together with the body response,
-	// mirroring the request-side pattern.
-	return nil, nil
+	// if we're here, that means we're in non-streaming, or we're in streaming and got end of stream(means no body).
+	// in both cases we can return HeadersResponse
+	return []*eppb.ProcessingResponse{
+		{
+			Response: &eppb.ProcessingResponse_ResponseHeaders{
+				ResponseHeaders: &eppb.HeadersResponse{},
+			},
+		},
+	}
 }
 
 // HandleResponseBody handles response bodies by executing response plugins in order.
@@ -88,7 +87,7 @@ func (s *Server) HandleResponseBody(ctx context.Context, reqCtx *RequestContext,
 	}
 
 	if err := s.runResponsePlugins(ctx, reqCtx.CycleState, reqCtx.Response); err != nil {
-		return nil, fmt.Errorf("failed to execute response plugins - %w", err)
+		return nil, err
 	}
 
 	bodyMutated := reqCtx.Response.BodyMutated()
@@ -185,7 +184,8 @@ func (s *Server) runResponsePlugins(ctx context.Context, cycleState *framework.C
 		err = plugin.ProcessResponse(ctx, cycleState, response)
 		metrics.RecordPluginProcessingLatency(responsePluginExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		if err != nil {
-			return fmt.Errorf("failed to execute response plugin '%s' - %w", plugin.TypedName(), err)
+			log.FromContext(ctx).V(logutil.DEFAULT).Error(err, "Failed to execute response plugin", "plugin", plugin.TypedName())
+			return err
 		}
 	}
 

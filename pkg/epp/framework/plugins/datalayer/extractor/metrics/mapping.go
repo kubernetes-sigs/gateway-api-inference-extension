@@ -18,6 +18,8 @@ package metrics
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 )
 
 // Mapping holds specifications for the well-known metrics defined
@@ -28,6 +30,30 @@ type Mapping struct {
 	KVCacheUtilization   *Spec
 	LoraRequestInfo      *LoRASpec
 	CacheInfo            *Spec
+}
+
+// String returns a human-readable representation of the Mapping, listing which specs are disabled (nil).
+func (m *Mapping) String() string {
+	specs := []struct {
+		name string
+		val  any
+	}{
+		{"queue", m.TotalQueuedRequests},
+		{"running", m.TotalRunningRequests},
+		{"kv", m.KVCacheUtilization},
+		{"lora", m.LoraRequestInfo},
+		{"cacheInfo", m.CacheInfo},
+	}
+	var disabled []string
+	for _, s := range specs {
+		if s.val == nil {
+			disabled = append(disabled, s.name)
+		}
+	}
+	if len(disabled) == 0 {
+		return "Mapping{all specs enabled}"
+	}
+	return fmt.Sprintf("Mapping{disabled: [%s]}", strings.Join(disabled, ", "))
 }
 
 // NewMapping creates a metrics.Mapping from the input specification strings.

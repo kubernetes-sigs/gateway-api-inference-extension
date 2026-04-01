@@ -284,11 +284,10 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 		return nil
 	}
 
-	fr.logger.Info("Dynamically provisioning new priority band", "priority", priority)
+	fr.logger.V(logging.DEFAULT).Info("Dynamically provisioning new priority band", "priority", priority)
 
 	newBand := *fr.config.DefaultPriorityBand
 	newBand.Priority = priority
-	newBand.PriorityName = fmt.Sprintf("Dynamic-%d", priority)
 	fr.config.PriorityBands[priority] = &newBand
 
 	fr.perPriorityBandStats.LoadOrStore(priority, &bandStats{})
@@ -334,7 +333,6 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 		bandCfg := fr.config.PriorityBands[priority]
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
 			Priority:      priority,
-			PriorityName:  bandCfg.PriorityName,
 			CapacityBytes: bandCfg.MaxBytes,
 			ByteSize:      uint64(bandStats.byteSize.Load()),
 			Len:           uint64(bandStats.len.Load()),
@@ -447,7 +445,7 @@ func (fr *FlowRegistry) cleanupPriorityBandResources(priorities []int) {
 			shard.deletePriorityBand(priority)
 		}
 
-		fr.logger.Info("Successfully deleted priority band", "priority", priority)
+		fr.logger.V(logging.DEFAULT).Info("Successfully deleted priority band", "priority", priority)
 	}
 }
 
@@ -505,7 +503,7 @@ func (fr *FlowRegistry) updateShardCount(n int) error {
 func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	currentActive := len(fr.activeShards)
 	numToAdd := newTotalActive - currentActive
-	fr.logger.Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
+	fr.logger.V(logging.DEFAULT).Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
 
 	// Prepare All New Shard Objects (Infallible):
 	newShards := make([]*registryShard, numToAdd)
@@ -552,7 +550,7 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 // Expects the registry's write lock to be held.
 func (fr *FlowRegistry) executeScaleDownLocked(newTotalActive int) {
 	currentActive := len(fr.activeShards)
-	fr.logger.Info("Scaling down shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
+	fr.logger.V(logging.DEFAULT).Info("Scaling down shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
 
 	shardsToDrain := fr.activeShards[newTotalActive:]
 	fr.activeShards = fr.activeShards[:newTotalActive]

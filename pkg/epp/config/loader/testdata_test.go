@@ -46,9 +46,7 @@ featureGates:
 - dataLayer
 - flowControl
 saturationDetector:
-  queueDepthThreshold: 10
-  kvCacheUtilThreshold: 0.8
-  metricsStalenessThreshold: 100ms
+  pluginRef: utilization-detector
 `
 
 // successNoProfilesText represents a valid config with plugins but no profiles.
@@ -348,6 +346,17 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: non-existent-plugin
+`
+
+// errorUndefinedSaturationDetectorPluginText references a plugin that is not defined.
+const errorUndefinedSaturationDetectorPluginText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: test1
+  type: test-plugin
+saturationDetector:
+  pluginRef: unknown-plugin
 `
 
 // errorDuplicatePluginText defines the same plugin name twice.

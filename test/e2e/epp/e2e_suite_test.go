@@ -136,7 +136,7 @@ func setupInfra() {
 	if strings.Contains(modelServerManifestArray[0], "hf-token") {
 		createHfSecret(testConfig, modelServerSecretManifest)
 	}
-	testutils.CreateCrdsFromKustomize(testConfig, crdKustomizePath)
+	testutils.ProcessKustomize(testConfig, crdKustomizePath, testutils.CreateAndVerifyObjs)
 	testutils.ValidateCRDsEstablished(testConfig, expectedCRDs)
 
 	inferExtManifestPath := inferExtManifestDefault

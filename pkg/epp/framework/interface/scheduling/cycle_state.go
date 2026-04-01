@@ -64,7 +64,7 @@ func (c *CycleState) Delete(key plugin.StateKey) {
 	c.storage.Delete(key)
 }
 
-// ReadCycleStateKey  retrieves data with the given key from CycleState and asserts it to type T.
+// ReadCycleStateKey retrieves data with the given key from CycleState and asserts it to type T.
 // Returns an error if the key is not found or the type assertion fails.
 func ReadCycleStateKey[T plugin.StateData](c *CycleState, key plugin.StateKey) (T, error) {
 	var zero T

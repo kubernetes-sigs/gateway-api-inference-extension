@@ -18,9 +18,13 @@ package error
 
 import (
 	"fmt"
+
+	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
+	"google.golang.org/grpc/status"
 )
 
-// Error is an error struct for errors returned by the epp server.
+// Error is an error struct for errors returned by the epp/bbr server.
 type Error struct {
 	Code string
 	Msg  string
@@ -29,6 +33,9 @@ type Error struct {
 const (
 	Unknown            = "Unknown"
 	BadRequest         = "BadRequest"
+	Unauthorized       = "Unauthorized"
+	Forbidden          = "Forbidden"
+	NotFound           = "NotFound"
 	Internal           = "Internal"
 	ServiceUnavailable = "ServiceUnavailable"
 	ModelServerError   = "ModelServerError"
@@ -47,4 +54,46 @@ func CanonicalCode(err error) string {
 		return e.Code
 	}
 	return Unknown
+}
+
+// BuildErrResponse maps an error to an Envoy ImmediateResponse with the appropriate
+// HTTP status code and error message body. If the error code is not recognized,
+// it returns a gRPC error instead of an ImmediateResponse.
+func BuildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
+	var httpCode envoyTypePb.StatusCode
+
+	switch CanonicalCode(err) {
+	case BadRequest:
+		httpCode = envoyTypePb.StatusCode_BadRequest
+	case Unauthorized:
+		httpCode = envoyTypePb.StatusCode_Unauthorized
+	case Forbidden:
+		httpCode = envoyTypePb.StatusCode_Forbidden
+	case NotFound:
+		httpCode = envoyTypePb.StatusCode_NotFound
+	case ResourceExhausted:
+		httpCode = envoyTypePb.StatusCode_TooManyRequests
+	case Internal:
+		httpCode = envoyTypePb.StatusCode_InternalServerError
+	case ServiceUnavailable:
+		httpCode = envoyTypePb.StatusCode_ServiceUnavailable
+	default:
+		return nil, status.Errorf(status.Code(err), "failed to handle request: %v", err)
+	}
+
+	resp := &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+			ImmediateResponse: &extProcPb.ImmediateResponse{
+				Status: &envoyTypePb.HttpStatus{
+					Code: httpCode,
+				},
+			},
+		},
+	}
+
+	if err.Error() != "" {
+		resp.Response.(*extProcPb.ProcessingResponse_ImmediateResponse).ImmediateResponse.Body = []byte(err.Error())
+	}
+
+	return resp, nil
 }

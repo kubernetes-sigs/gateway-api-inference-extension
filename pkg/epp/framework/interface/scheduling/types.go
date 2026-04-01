@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 )
 
@@ -68,13 +69,39 @@ func (r *LLMRequest) String() string {
 		return nilString
 	}
 
-	return fmt.Sprintf("RequestID: %s, TargetModel: %s, Body: %s, Headers: %v",
+	return fmt.Sprintf("RequestID: %s, TargetModel: %s, Body: %v, Headers: %v",
 		r.RequestId, r.TargetModel, r.Body, r.Headers)
 }
 
+// RequestPayload represents a strongly-typed unmarshaled request payload or raw bytes.
+type RequestPayload interface {
+	isRequestPayload()
+	IsParsed() bool
+}
+
+// PayloadMap represents a JSON request body unmarshaled into a map.
+type PayloadMap map[string]any
+
+func (PayloadMap) isRequestPayload() {}
+func (PayloadMap) IsParsed() bool    { return true }
+
+// PayloadProto represents a gRPC request body unmarshaled into a proto.Message.
+type PayloadProto struct {
+	proto.Message
+}
+
+func (PayloadProto) isRequestPayload() {}
+func (PayloadProto) IsParsed() bool    { return true }
+
+// RawPayload represents an unparsed request body kept as raw bytes.
+type RawPayload []byte
+
+func (RawPayload) isRequestPayload() {}
+func (RawPayload) IsParsed() bool    { return false }
+
 // LLMRequestBody contains the request-body fields that we parse out as user input,
 // to be used in forming scheduling decisions.
-// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, or ConversationsRequest.
+// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, ConversationsRequest, or EmbeddingsRequest.
 type LLMRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
@@ -84,11 +111,16 @@ type LLMRequestBody struct {
 	Responses *ResponsesRequest `json:"responses,omitempty"`
 	// ConversationsRequest is the representation of the OpenAI /v1/conversations request body.
 	Conversations *ConversationsRequest `json:"conversations,omitempty"`
+	// EmbeddingsRequest is the representation of the OpenAI /v1/embeddings request body.
+	Embeddings *EmbeddingsRequest `json:"embeddings,omitempty"`
+	// Payload contains the unmarshaled request payload or raw bytes.
+	// If the payload is unmarshaled, we can perform advanced processing (like prefix cache aware routing).
+	// If it remains as raw bytes, such processing may not be supported.
+	Payload RequestPayload `json:"-"`
 
-	// ParsedBody contains the unmarshaled request payload.
-	// Note: Because this handles multiple protocols, this field is strictly expected
-	// to be either a map[string]any (for HTTP/JSON) or a proto.Message (for gRPC).
-	ParsedBody any `json:"-"`
+	// Stream indicates whether the request specifies a streaming response (e.g., via a stream field).
+	// This typically implies the model server's response will be streamed.
+	Stream bool `json:"-"`
 }
 
 // PromptText returns a plain-text representation of the prompt from whichever
@@ -133,6 +165,9 @@ func (r *LLMRequestBody) CacheSalt() string {
 	}
 	if r.Completions != nil {
 		return r.Completions.CacheSalt
+	}
+	if r.Embeddings != nil {
+		return r.Embeddings.CacheSalt
 	}
 	return ""
 }
@@ -221,6 +256,22 @@ func (c *ConversationsRequest) String() string {
 		return nilString
 	}
 	return fmt.Sprintf("{ItemsCount: %d}", len(c.Items))
+}
+
+// EmbeddingsRequest represents the OpenAI /v1/embeddings request body structure.
+// Input can be a string or array of strings; see https://platform.openai.com/docs/api-reference/embeddings.
+type EmbeddingsRequest struct {
+	// Input is the text to embed (string or array of strings).
+	Input interface{} `json:"input,omitempty"`
+	// CacheSalt is an optional request parameter to isolate prefix caches for security reasons.
+	CacheSalt string `json:"cache_salt,omitempty"`
+}
+
+func (e *EmbeddingsRequest) String() string {
+	if e == nil {
+		return nilString
+	}
+	return fmt.Sprintf("{InputType: %T}", e.Input)
 }
 
 // ConversationItem represents a single item in a conversation

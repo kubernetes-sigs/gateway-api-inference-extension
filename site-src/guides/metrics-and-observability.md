@@ -65,9 +65,9 @@ These metrics provide insights into the [Flow Control layer](flow-control.md) wi
 | inference_extension_flow_control_queue_size | Gauge | The current number of requests being actively managed by the Flow Control layer. This counts requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `slo_class`=&lt;bounded TTFT SLO header bucket&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_queue_bytes | Gauge | The current size in bytes of all requests being actively managed by the Flow Control layer. This includes requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `slo_class`=&lt;bounded TTFT SLO header bucket&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_slo_incoming_requests_total | Counter | Total number of requests that entered the Flow Control layer via `EnqueueAndWait`. | `slo_class`=&lt;bounded TTFT SLO header bucket&gt; <br> `inference_pool`=&lt;pool-name&gt; | ALPHA |
-| inference_extension_flow_control_dispatch_cycle_duration_seconds | Histogram | The time taken for each dispatch cycle in the Flow Control layer. |  | ALPHA |
-| inference_extension_flow_control_request_enqueue_duration_seconds | Gauge | The time taken to enqueue requests by the EPP Flow Control layer. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
-| inference_extension_flow_control_pool_saturation | Gauge | Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated). | `inference_pool`=&lt;pool-name&gt; | ALPHA |
+| inference_extension_flow_control_dispatch_cycle_duration_seconds | Distribution | The time taken for each dispatch cycle in the Flow Control layer. |  | ALPHA |
+| inference_extension_flow_control_request_enqueue_duration_seconds | Distribution | The time taken to enqueue requests by the EPP Flow Control layer. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
+| inference_extension_flow_control_pool_saturation | Gauge | Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated). When this exceeds 1.0, Flow Control backpressure activates. | `inference_pool`=&lt;pool-name&gt; | ALPHA |
 
 
 ## Scrape Metrics & Pprof profiles
@@ -127,7 +127,7 @@ type: kubernetes.io/service-account-token
 Then, you can curl the appropriate port as follows. For EPP (port 9090)
 
 ```
-TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret  -o jsonpath='{.secrets[0].name}' -o jsonpath='{.data.token}' | base64 --decode)
+TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret -o jsonpath='{.data.token}' | base64 --decode)
 
 kubectl -n default port-forward inference-gateway-ext-proc-pod-name  9090
 

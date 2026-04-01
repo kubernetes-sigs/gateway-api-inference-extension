@@ -26,6 +26,6 @@ spec:
       {{- end }}
     {{- if ne (lower .Values.provider.name) "gke" }}
     timeouts:
-      request: 300s
+      request: {{ .Values.experimentalHttpRoute.requestTimeout }}
     {{- end }}
 {{- end }}

@@ -27,7 +27,6 @@ import (
 	"time"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
@@ -50,15 +49,12 @@ import (
 )
 
 const (
-	modelMyModel         = "my-model"
-	modelMyModelTarget   = "my-model-12345"
-	modelSQLLora         = "sql-lora"
-	modelSQLLoraTarget   = "sql-lora-1fdg2"
-	modelSheddable       = "sql-lora-sheddable"
-	modelSheddableTarget = "sql-lora-1fdg3"
-	modelDirect          = "direct-model"
-	modelToBeWritten     = "model-to-be-rewritten"
-	modelAfterRewrite    = "rewritten-model"
+	modelSheddable                  = "sql-lora-sheddable"
+	modelSheddableTarget            = "sql-lora-1fdg3"
+	modelDirect                     = "direct-model"
+	modelToBeWritten                = "model-to-be-rewritten"
+	modelAfterRewrite               = "rewritten-model"
+	inferenceObjectiveWithPriority4 = "inference-objective-with-priority-4"
 )
 
 func TestMain(m *testing.M) {
@@ -109,293 +105,248 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 		{name: "Standalone-WithCRD", mode: modeStandalone, standaloneStrategy: strategyWithCRD},
 	}
 
-	tests := []struct {
-		name          string
-		requests      []*extProcPb.ProcessingRequest
-		pods          []podState
-		wantResponses []*extProcPb.ProcessingResponse
-		wantMetrics   map[string]string
-		waitForModel  string
-		// requiresCRDs indicates that this test case relies on specific Gateway API CRD features (like
-		// InferenceModelRewrite) which are not available in Standalone runMode without CRD.
-		requiresCRDs bool
-		// wantSpans lists the span names expected to be recorded.
-		wantSpans []string
-	}{
-		// --- Standard Routing Logic ---
-		{
-			name:     "select lower queue and kv cache",
-			requests: integration.ReqLLM(logger, "test1", modelMyModel, modelMyModelTarget),
-			pods: []podState{
-				P(0, 3, 0.2),
-				P(1, 0, 0.1), // Winner (Low Queue, Low KV)
-				P(2, 10, 0.2),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelMyModelTarget, "test1"),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelMyModel, modelMyModelTarget)),
-				"inference_pool_ready_pods":         cleanMetric(metricReadyPods(3)),
-			},
-			wantSpans: []string{"gateway.request", "gateway.request_orchestration"},
-		},
-		{
-			name:     "select active lora, low queue",
-			requests: integration.ReqLLM(logger, "test2", modelSQLLora, modelSQLLoraTarget),
-			pods: []podState{
-				P(0, 0, 0.2, "foo", "bar"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget), // Winner (Has LoRA)
-				P(2, 10, 0.2, "foo", "bar"),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget)),
-			},
-		},
-		{
-			name:     "select lora despite higher kv cache (affinity)",
-			requests: integration.ReqLLM(logger, "test3", modelSQLLora, modelSQLLoraTarget),
-			pods: []podState{
-				P(0, 10, 0.2, "foo", "bar"),
-				P(1, 10, 0.4, "foo", modelSQLLoraTarget), // Winner (Affinity overrides KV)
-				P(2, 10, 0.3, "foo"),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test3"),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget)),
-			},
-		},
-		{
-			name:     "do not shed requests by default",
-			requests: integration.ReqLLM(logger, "test4", modelSQLLora, modelSQLLoraTarget),
-			pods: []podState{
-				P(0, 6, 0.2, "foo", "bar", modelSQLLoraTarget), // Winner (Lowest saturated)
-				P(1, 0, 0.85, "foo"),
-				P(2, 10, 0.9, "foo"),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.1:8000", modelSQLLoraTarget, "test4"),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget)),
-			},
-		},
-
-		// --- Error Handling & Edge Cases ----
-		{
-			name: "invalid json body",
-			requests: integration.ReqRaw(
-				map[string]string{"hi": "mom"},
-				"no healthy upstream",
-			),
-			pods: []podState{
-				P(0, 0, 0.2, "foo", "bar"),
-			},
-			wantResponses: ExpectReject(
-				envoyTypePb.StatusCode_BadRequest,
-				"inference error: BadRequest - error unmarshaling request bodyMap",
-			),
-		},
-		{
-			name: "split body across chunks",
-			requests: integration.ReqRaw(
-				map[string]string{
-					"hi":                         "mom",
-					metadata.ObjectiveKey:        modelSheddable,
-					metadata.ModelNameRewriteKey: modelSheddableTarget,
-					reqcommon.RequestIdHeaderKey: "test-request-id",
-				},
-				`{"max_tokens":100,"model":"sql-lo`,
-				`ra-sheddable","prompt":"test6","temperature":0}`,
-			),
-			pods: []podState{
-				P(0, 4, 0.2, "foo", "bar", modelSheddableTarget),
-				P(1, 4, 0.85, "foo", modelSheddableTarget),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.1:8000", modelSheddableTarget, "test6"),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelSheddable, modelSheddableTarget)),
-			},
-		},
-		{
-			name:     "no backend pods available",
-			requests: integration.ReqHeaderOnly(map[string]string{"content-type": "application/json"}),
-			pods:     nil,
-			wantResponses: ExpectReject(envoyTypePb.StatusCode_InternalServerError,
-				"inference error: Internal - no pods available in datastore"),
-		},
-		{
-			name: "request missing model field",
-			requests: integration.ReqRaw(
-				map[string]string{"content-type": "application/json"},
-				`{"prompt":"hello world"}`,
-			),
-			wantResponses: ExpectReject(envoyTypePb.StatusCode_BadRequest,
-				"inference error: BadRequest - model not found in request body"),
-		},
-
-		// --- Subsetting & Metadata ---
-		{
-			name: "subsetting: select best from subset",
-			// Only pods in the subset list are eligible.
-			requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget,
-				"192.168.1.1:8000", "192.168.1.2:8000", "192.168.1.3:8000"),
-			pods: []podState{
-				P(0, 0, 0.2, "foo"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget), // Winner (Low Queue + Matches Subset)
-				P(2, 10, 0.2, "foo"),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
-		},
-		{
-			name:     "subsetting: partial match",
-			requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget, "192.168.1.3:8000"),
-			pods: []podState{
-				P(0, 0, 0.2, "foo"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget),
-				P(2, 10, 0.2, "foo"), // Winner (Matches Subset, despite load)
-			},
-			wantResponses: ExpectRouteTo("192.168.1.3:8000", modelSQLLoraTarget, "test2"),
-		},
-		{
-			name:     "subsetting: no pods match",
-			requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget, "192.168.1.99:8000"),
-			pods: []podState{
-				P(0, 0, 0.2, "foo"),
-				P(1, 0, 0.1, "foo", modelSQLLoraTarget),
-			},
-			wantResponses: ExpectReject(envoyTypePb.StatusCode_ServiceUnavailable,
-				"inference error: ServiceUnavailable - failed to find candidate endpoints for serving the request"),
-		},
-
-		// --- Request Modification (Passthrough & Rewrite) ---
-		{
-			name: "passthrough: model not in objectives",
-			requests: integration.ReqRaw(
-				map[string]string{
-					"hi":                         "mom",
-					metadata.ObjectiveKey:        modelDirect,
-					metadata.ModelNameRewriteKey: modelDirect,
-					reqcommon.RequestIdHeaderKey: "test-request-id",
-				},
-				`{"max_tokens":100,"model":"direct-`,
-				`model","prompt":"test6","temperature":0}`,
-			),
-			pods: []podState{
-				P(0, 4, 0.2, "foo", "bar", modelSheddableTarget),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.1:8000", modelDirect, "test6"),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelDirect, modelDirect)),
-			},
-		},
-		{
-			name:     "rewrite request model",
-			requests: integration.ReqLLM(logger, "test-rewrite", modelToBeWritten, modelToBeWritten),
-			pods: []podState{
-				P(0, 0, 0.1, "foo", modelAfterRewrite),
-			},
-			wantResponses: ExpectRouteTo("192.168.1.1:8000", modelAfterRewrite, "test-rewrite"),
-			wantMetrics: map[string]string{
-				"inference_objective_request_total": cleanMetric(metricReqTotal(modelToBeWritten, modelAfterRewrite)),
-			},
-			requiresCRDs: true,
-		},
-		{
-			name: "protocol: simple GET (header only)",
-			requests: integration.ReqHeaderOnly(map[string]string{
-				"content-type": "text/event-stream",
-				"status":       "200",
-			}),
-			pods:          []podState{P(0, 0, 0, "foo")},
-			wantResponses: nil,
-		},
-
-		// --- Response Processing (Buffering & Streaming) ---
-		{
-			name: "response buffering: multi-chunk JSON",
-			requests: ReqResponseOnly(
-				map[string]string{"content-type": "application/json"},
-				`{"max_tokens":100,"model":"sql-lo`,
-				`ra-sheddable","prompt":"test6","temperature":0}`,
-			),
-			pods: []podState{P(0, 4, 0.2, modelSheddableTarget)},
-			wantResponses: ExpectBufferResp(
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddable),
-				"application/json"),
-		},
-		{
-			name: "response buffering: invalid JSON",
-			requests: ReqResponseOnly(
-				map[string]string{"content-type": "application/json"},
-				"no healthy upstream",
-			),
-			pods:          []podState{P(0, 4, 0.2, modelSheddableTarget)},
-			wantResponses: ExpectBufferResp("no healthy upstream", "application/json"),
-		},
-		{
-			name: "response buffering: empty EOS chunk (JSON)",
-			requests: ReqResponseOnly(
-				map[string]string{"content-type": "application/json"},
-				`{"max_tokens":100,"model":"sql-lora-sheddable","prompt":"test6","temperature":0}`,
-				"",
-			),
-			pods: []podState{P(0, 4, 0.2, modelSheddableTarget)},
-			wantResponses: ExpectBufferResp(
-				fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddable),
-				"application/json"),
-		},
-		{
-			name: "response streaming: SSE token counting",
-			requests: ReqResponseOnly(
-				map[string]string{"content-type": "text/event-stream", "status": "200"},
-				// Chunk 1: Simulate a standard data chunk.
-				`data: {}`,
-				// Chunk 2: Usage data + DONE signal.
-				`data: {"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`+"\n"+`data: [DONE]`,
-				"", // EndOfStream
-			),
-			pods:         []podState{P(0, 4, 0.2, modelSheddableTarget)},
-			waitForModel: modelSheddable,
-			wantResponses: ExpectStreamResp(
-				`data: {}`,
-				`data: {"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`+"\n"+`data: [DONE]`,
-				"",
-			),
-			// Labels are empty because we skipped the Request phase.
-			wantMetrics: map[string]string{
-				"inference_objective_input_tokens": cleanMetric(`
-					# HELP inference_objective_input_tokens [ALPHA] Inference objective input token count distribution for requests in each model.
-					# TYPE inference_objective_input_tokens histogram
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="64"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="128"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="256"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="512"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1024"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="2048"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="4096"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8192"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16384"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32778"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="65536"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="131072"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="262144"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="524288"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1.048576e+06"} 1
-					inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="+Inf"} 1
-					inference_objective_input_tokens_sum{model_name="",target_model_name=""} 7
-					inference_objective_input_tokens_count{model_name="",target_model_name=""} 1
-					`),
-			},
-		},
-	}
-
 	for _, executionMode := range executionModes {
 		t.Run(executionMode.name, func(t *testing.T) {
+			// Determine if we are running in the standalone mode without CRDs
+			isNoCRD := executionMode.mode == modeStandalone && executionMode.standaloneStrategy == strategyNoCRD
+
+			// Helper function to override priority to 0 when in NoCRD mode
+			prio := func(p int) int {
+				if isNoCRD {
+					return 0
+				}
+				return p
+			}
+
+			hermeticTests := []testCase{
+				{
+					name:     "select lora despite higher kv cache (affinity)",
+					requests: integration.ReqLLM(logger, "test3", modelSQLLora, modelSQLLoraTarget),
+					pods: []podState{
+						P(0, 10, 0.2, "foo", "bar"),
+						P(1, 10, 0.4, "foo", modelSQLLoraTarget), // Winner (Affinity overrides KV)
+						P(2, 10, 0.3, "foo"),
+					},
+					wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test3"),
+					wantMetrics: map[string]string{
+						"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget, prio(2))),
+					},
+				},
+				{
+					name:     "do not shed requests by default",
+					requests: integration.ReqLLM(logger, "test4", modelSQLLora, modelSQLLoraTarget),
+					pods: []podState{
+						P(0, 6, 0.2, "foo", "bar", modelSQLLoraTarget), // Winner (Lowest saturated)
+						P(1, 0, 0.85, "foo"),
+						P(2, 10, 0.9, "foo"),
+					},
+					wantResponses: ExpectRouteTo("192.168.1.1:8000", modelSQLLoraTarget, "test4"),
+					wantMetrics: map[string]string{
+						"inference_objective_request_total": cleanMetric(metricReqTotal(modelSQLLora, modelSQLLoraTarget, prio(2))),
+					},
+				},
+
+				// --- Error Handling & Edge Cases ----
+				{
+					name: "invalid json body",
+					requests: integration.ReqRaw(
+						map[string]string{"hi": "mom"},
+						"no healthy upstream",
+					),
+					pods: []podState{
+						P(0, 0, 0.2, "foo", "bar"),
+					},
+					wantResponses: ExpectReject(
+						envoyTypePb.StatusCode_BadRequest,
+						"inference error: BadRequest - error unmarshaling request bodyMap",
+					),
+				},
+				{
+					name: "split body across chunks",
+					requests: integration.ReqRaw(
+						map[string]string{
+							"hi":                         "mom",
+							metadata.ObjectiveKey:        modelSheddable,
+							metadata.ModelNameRewriteKey: modelSheddableTarget,
+							reqcommon.RequestIdHeaderKey: "test-request-id",
+						},
+						`{"max_tokens":100,"model":"sql-lo`,
+						`ra-sheddable","prompt":"test6","temperature":0}`,
+					),
+					pods: []podState{
+						P(0, 4, 0.2, "foo", "bar", modelSheddableTarget),
+						P(1, 4, 0.85, "foo", modelSheddableTarget),
+					},
+					wantResponses: ExpectRouteTo("192.168.1.1:8000", modelSheddableTarget, "test6"),
+					wantMetrics: map[string]string{
+						"inference_objective_request_total": cleanMetric(metricReqTotal(modelSheddable, modelSheddableTarget, prio(0))),
+					},
+				},
+
+				// --- Subsetting & Metadata ---
+				{
+					name: "subsetting: select best from subset",
+					// Only pods in the subset list are eligible.
+					requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget,
+						"192.168.1.1:8000", "192.168.1.2:8000", "192.168.1.3:8000"),
+					pods: []podState{
+						P(0, 0, 0.2, "foo"),
+						P(1, 0, 0.1, "foo", modelSQLLoraTarget), // Winner (Low Queue + Matches Subset)
+						P(2, 10, 0.2, "foo"),
+					},
+					wantResponses: ExpectRouteTo("192.168.1.2:8000", modelSQLLoraTarget, "test2"),
+				},
+				{
+					name:     "subsetting: partial match",
+					requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget, "192.168.1.3:8000"),
+					pods: []podState{
+						P(0, 0, 0.2, "foo"),
+						P(1, 0, 0.1, "foo", modelSQLLoraTarget),
+						P(2, 10, 0.2, "foo"), // Winner (Matches Subset, despite load)
+					},
+					wantResponses: ExpectRouteTo("192.168.1.3:8000", modelSQLLoraTarget, "test2"),
+				},
+				{
+					name:     "subsetting: no pods match",
+					requests: ReqSubset("test2", modelSQLLora, modelSQLLoraTarget, "192.168.1.99:8000"),
+					pods: []podState{
+						P(0, 0, 0.2, "foo"),
+						P(1, 0, 0.1, "foo", modelSQLLoraTarget),
+					},
+					wantResponses: ExpectReject(envoyTypePb.StatusCode_ServiceUnavailable,
+						"inference error: ServiceUnavailable - failed to find candidate endpoints for serving the request"),
+				},
+
+				// --- Request Modification (Passthrough & Rewrite) ---
+				{
+					name: "passthrough: model not in objectives",
+					requests: integration.ReqRaw(
+						map[string]string{
+							"hi":                         "mom",
+							metadata.ObjectiveKey:        modelDirect,
+							metadata.ModelNameRewriteKey: modelDirect,
+							reqcommon.RequestIdHeaderKey: "test-request-id",
+						},
+						`{"max_tokens":100,"model":"direct-`,
+						`model","prompt":"test6","temperature":0}`,
+					),
+					pods: []podState{
+						P(0, 4, 0.2, "foo", "bar", modelSheddableTarget),
+					},
+					wantResponses: ExpectRouteTo("192.168.1.1:8000", modelDirect, "test6"),
+					wantMetrics: map[string]string{
+						"inference_objective_request_total": cleanMetric(metricReqTotal(modelDirect, modelDirect, prio(2))),
+					},
+				},
+				{
+					name:     "rewrite request model",
+					requests: integration.ReqLLM(logger, "test-rewrite", modelToBeWritten, modelToBeWritten),
+					pods: []podState{
+						P(0, 0, 0.1, "foo", modelAfterRewrite),
+					},
+					wantResponses: ExpectRouteTo("192.168.1.1:8000", modelAfterRewrite, "test-rewrite"),
+					wantMetrics: map[string]string{
+						"inference_objective_request_total": cleanMetric(metricReqTotal(modelToBeWritten, modelAfterRewrite, prio(0))),
+					},
+					requiresCRDs: true,
+				},
+				{
+					name: "protocol: simple GET (header only)",
+					requests: integration.ReqHeaderOnly(map[string]string{
+						"content-type": "text/event-stream",
+						"status":       "200",
+					}),
+					pods:          []podState{P(0, 0, 0, "foo")},
+					wantResponses: nil,
+				},
+
+				// --- Response Processing (Buffering & Streaming) ---
+				{
+					name: "response buffering: multi-chunk JSON",
+					requests: ReqResponseOnly(
+						map[string]string{"content-type": "application/json"},
+						`{"max_tokens":100,"model":"sql-lo`,
+						`ra-sheddable","prompt":"test6","temperature":0}`,
+					),
+					pods: []podState{P(0, 4, 0.2, modelSheddableTarget)},
+					wantResponses: ExpectBufferResp(
+						fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddable),
+						"application/json"),
+				},
+				{
+					name: "response buffering: invalid JSON",
+					requests: ReqResponseOnly(
+						map[string]string{"content-type": "application/json"},
+						"no healthy upstream",
+					),
+					pods:          []podState{P(0, 4, 0.2, modelSheddableTarget)},
+					wantResponses: ExpectBufferResp("no healthy upstream", "application/json"),
+				},
+				{
+					name: "response buffering: empty EOS chunk (JSON)",
+					requests: ReqResponseOnly(
+						map[string]string{"content-type": "application/json"},
+						`{"max_tokens":100,"model":"sql-lora-sheddable","prompt":"test6","temperature":0}`,
+						"",
+					),
+					pods: []podState{P(0, 4, 0.2, modelSheddableTarget)},
+					wantResponses: ExpectBufferResp(
+						fmt.Sprintf(`{"max_tokens":100,"model":%q,"prompt":"test6","temperature":0}`, modelSheddable),
+						"application/json"),
+				},
+				{
+					name: "response streaming: SSE token counting",
+					requests: ReqResponseOnly(
+						map[string]string{"content-type": "text/event-stream", "status": "200"},
+						// Chunk 1: Simulate a standard data chunk.
+						`data: {}`,
+						// Chunk 2: Usage data + DONE signal.
+						`data: {"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`+"\n"+`data: [DONE]`,
+						"", // EndOfStream
+					),
+					pods:         []podState{P(0, 4, 0.2, modelSheddableTarget)},
+					waitForModel: modelSheddable,
+					wantResponses: ExpectStreamResp(
+						`data: {}`,
+						`data: {"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}`+"\n"+`data: [DONE]`,
+						"",
+					),
+					// Labels are empty because we skipped the Request phase.
+					wantMetrics: map[string]string{
+						"inference_objective_input_tokens": cleanMetric(`
+              # HELP inference_objective_input_tokens [ALPHA] Inference objective input token count distribution for requests in each model.
+              # TYPE inference_objective_input_tokens histogram
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1"} 0
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="64"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="128"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="256"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="512"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1024"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="2048"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="4096"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="8192"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="16384"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="32778"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="65536"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="131072"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="262144"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="524288"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="1.048576e+06"} 1
+              inference_objective_input_tokens_bucket{model_name="",target_model_name="",le="+Inf"} 1
+              inference_objective_input_tokens_sum{model_name="",target_model_name=""} 7
+              inference_objective_input_tokens_count{model_name="",target_model_name=""} 1
+              `),
+					},
+				},
+			}
+			tests := append(commonTestCases(prio), hermeticTests...)
+
 			for _, tc := range tests {
 				t.Run(tc.name, func(t *testing.T) {
-					if executionMode.mode == modeStandalone && executionMode.standaloneStrategy == strategyNoCRD && tc.requiresCRDs {
+					if isNoCRD && tc.requiresCRDs {
 						t.Skipf("Skipping test %q: requires CRDs, but running in standalone without crd executionMode", tc.name)
 					}
 
@@ -448,7 +399,6 @@ func TestFullDuplexStreamed_KubeInferenceObjectiveRequest(t *testing.T) {
 					if len(tc.wantMetrics) > 0 {
 						h.ExpectMetrics(tc.wantMetrics)
 					}
-
 					if len(tc.wantSpans) > 0 {
 						// Close the stream so the server finishes processing and ends the root span
 						_ = h.Client.CloseSend()

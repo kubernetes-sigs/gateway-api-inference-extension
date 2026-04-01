@@ -146,6 +146,8 @@ provider:
 experimentalHttpRoute:
   enabled: false # a flag to indicate whether to create the httproute as part of the chart or not.
   inferenceGatewayName: inference-gateway
+  # HTTPRoute request timeout. Defaults to "300s". Unused when provider.name is gke.
+  requestTimeout: "300s"
 
 
 # Optional: Define InferenceObjective(s) for this InferencePool.

@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-grpc-qwen3-32b
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-grpc-qwen3-32b
+  template:
+    metadata:
+      labels:
+        app: vllm-grpc-qwen3-32b
+        inference.networking.k8s.io/engine-type: vllm
+    spec:
+      containers:
+      - name: vllm-sim
+        image: ghcr.io/llm-d/llm-d-inference-sim:v0.8.2
+        imagePullPolicy: Always
+        args:
+        - --model
+        - Qwen/Qwen3-32B
+        - --port
+        - "50051"
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 50051
+          name: grpc
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 10m

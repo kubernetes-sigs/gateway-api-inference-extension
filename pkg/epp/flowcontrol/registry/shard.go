@@ -169,7 +169,7 @@ func (s *registryShard) addPriorityBand(priority int) {
 
 	bandConfig := s.config.PriorityBands[priority]
 	s.initPriorityBand(bandConfig)
-	s.logger.Info("Dynamically added priority band", "priority", priority)
+	s.logger.V(logging.DEFAULT).Info("Dynamically added priority band", "priority", priority)
 }
 
 // deletePriorityBand removes a priority band from this shard.
@@ -280,7 +280,6 @@ func (s *registryShard) Stats() contracts.ShardStats {
 
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
 			Priority:      priority,
-			PriorityName:  band.config.PriorityName,
 			CapacityBytes: band.config.MaxBytes, // This is the partitioned capacity.
 			ByteSize:      uint64(band.byteSize.Load()),
 			Len:           uint64(band.len.Load()),
@@ -326,7 +325,7 @@ func (s *registryShard) synchronizeFlow(
 func (s *registryShard) deleteFlow(key flowcontrol.FlowKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.logger.Info("Deleting queue instance.", "flowKey", key)
+	s.logger.V(logging.DEFAULT).Info("Deleting queue instance.", "flowKey", key)
 	if val, ok := s.priorityBands.Load(key.Priority); ok {
 		band := val.(*priorityBand)
 		delete(band.queues, key.ID)
@@ -389,13 +388,6 @@ func (a *priorityBandAccessor) Priority() int {
 	a.shard.mu.RLock()
 	defer a.shard.mu.RUnlock()
 	return a.band.config.Priority
-}
-
-// PriorityName returns the human-readable name of this priority band.
-func (a *priorityBandAccessor) PriorityName() string {
-	a.shard.mu.RLock()
-	defer a.shard.mu.RUnlock()
-	return a.band.config.PriorityName
 }
 
 // PolicyState returns the opaque, mutable state for the fairness policy scoped to this band.

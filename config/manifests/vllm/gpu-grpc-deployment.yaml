@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-grpc-qwen3-32b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-grpc-qwen3-32b
+  template:
+    metadata:
+      labels:
+        app: vllm-grpc-qwen3-32b
+        inference.networking.k8s.io/engine-type: vllm
+    spec:
+      containers:
+        - name: vllm-server
+          image: vllm/vllm-openai:v0.15.1
+          command: ["python3", "-m", "vllm.entrypoints.grpc_server"]
+          args:
+          - "--model"
+          - "Qwen/Qwen3-32B"
+          - "--tensor-parallel-size"
+          - "1"
+          - "--gpu-memory-utilization"
+          - "0.9"
+          - "--max-num-seq"
+          - "1024"
+          - "--max-model-len"
+          - "16000"
+          - "--port"
+          - "50051"
+          ports:
+            - containerPort: 50051
+              name: grpc
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /dev/shm
+              name: shm
+          startupProbe:
+            # Note: The vLLM gRPC server currently does not support the standard gRPC health check protocol: 
+            # https://github.com/grpc/grpc/blob/master/doc/health-checking.md. 
+            # Using a tcpSocket probe instead to verify that the port is open.
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 2 
+            periodSeconds: 1
+            failureThreshold: 600 
+          readinessProbe:
+            tcpSocket:
+              port: 50051
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+            timeoutSeconds: 1
+          livenessProbe:
+            tcpSocket:
+              port: 50051
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 5
+            timeoutSeconds: 5
+
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory

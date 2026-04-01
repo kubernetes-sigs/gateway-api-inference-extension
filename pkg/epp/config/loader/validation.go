@@ -17,6 +17,7 @@ limitations under the License.
 package loader
 
 import (
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -32,6 +33,29 @@ func validateConfig(cfg *configapi.EndpointPickerConfig) error {
 	if err := validateSchedulingProfiles(cfg); err != nil {
 		return fmt.Errorf("scheduling profile validation failed: %w", err)
 	}
+	if err := validateSaturationDetector(cfg); err != nil {
+		return fmt.Errorf("saturation detector validation failed: %w", err)
+	}
+	return nil
+}
+
+func validateSaturationDetector(cfg *configapi.EndpointPickerConfig) error {
+	if cfg.SaturationDetector == nil {
+		return nil
+	}
+	if cfg.SaturationDetector.PluginRef == "" {
+		return errors.New("saturation detector plugin reference is empty")
+	}
+
+	definedPlugins := sets.New[string]()
+	for _, p := range cfg.Plugins {
+		definedPlugins.Insert(p.Name)
+	}
+
+	if !definedPlugins.Has(cfg.SaturationDetector.PluginRef) {
+		return fmt.Errorf("saturation detector references undefined plugin '%s'", cfg.SaturationDetector.PluginRef)
+	}
+
 	return nil
 }
 
