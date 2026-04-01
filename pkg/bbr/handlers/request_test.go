@@ -208,20 +208,99 @@ func TestHandleRequestBody(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:    "model not found",
-			body:    map[string]any{"prompt": "Tell me a joke"},
-			wantErr: true,
+			name: "model not found - skips gracefully",
+			body: map[string]any{"prompt": "Tell me a joke"},
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key: basemodelextractor.BaseModelHeader,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			name:      "model not found with streaming",
+			name:      "model not found with streaming - skips gracefully",
 			body:      map[string]any{"prompt": "Tell me a joke"},
 			streaming: true,
-			wantErr:   true,
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte("27"),
+											},
+										},
+										{
+											Header: &basepb.HeaderValue{
+												Key: basemodelextractor.BaseModelHeader,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								BodyMutation: &extProcPb.BodyMutation{
+									Mutation: &extProcPb.BodyMutation_StreamedResponse{
+										StreamedResponse: &extProcPb.StreamedBodyResponse{
+											Body:        []byte(`{"prompt":"Tell me a joke"}`),
+											EndOfStream: true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			name:    "model in body but empty",
-			body:    map[string]any{"model": "", "prompt": "Tell me a joke"},
-			wantErr: true,
+			name: "model in body but empty - skips gracefully",
+			body: map[string]any{"model": "", "prompt": "Tell me a joke"},
+			want: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*basepb.HeaderValueOption{
+										{
+											Header: &basepb.HeaderValue{
+												Key: basemodelextractor.BaseModelHeader,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name: "model is not string, success after it's being auto converted to string",
@@ -473,7 +552,7 @@ func TestHandleRequestBody(t *testing.T) {
 	bbr_body_field_not_found_total{field="model"} 2
 	# HELP bbr_success_total [ALPHA] Count of time the request was processed successfully.
 	# TYPE bbr_success_total counter
-	bbr_success_total{} 4
+	bbr_success_total{} 7
 	`
 
 	if err := metricsutils.GatherAndCompare(crmetrics.Registry, strings.NewReader(wantMetrics),

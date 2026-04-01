@@ -56,10 +56,26 @@ func TestBodyBasedRouting(t *testing.T) {
 			wantResponse: ExpectBBRUnaryResponse("llama", "llama", "test"),
 		},
 		{
-			name:             "immediate response: no model parameter in body",
-			req:              integration.ReqLLMUnary(logger, "test1", ""),
-			wantStatusCode:   envoyTypePb.StatusCode_BadRequest,
-			wantBodyContains: "model",
+			name: "no model parameter in body - skips gracefully",
+			req:  integration.ReqLLMUnary(logger, "test1", ""),
+			wantResponse: &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_RequestBody{
+					RequestBody: &extProcPb.BodyResponse{
+						Response: &extProcPb.CommonResponse{
+							ClearRouteCache: true,
+							HeaderMutation: &extProcPb.HeaderMutation{
+								SetHeaders: []*envoyCorev3.HeaderValueOption{
+									{
+										Header: &envoyCorev3.HeaderValue{
+											Key: "X-Gateway-Base-Model-Name",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -231,10 +247,35 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			},
 		},
 		{
-			name:             "immediate response: handles missing model field",
-			reqs:             integration.ReqLLM(logger, "test", "", ""),
-			wantStatusCode:   envoyTypePb.StatusCode_BadRequest,
-			wantBodyContains: "model",
+			name: "missing model field - skips gracefully",
+			reqs: integration.ReqLLM(logger, "test", "", ""),
+			wantResponses: []*extProcPb.ProcessingResponse{
+				{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*envoyCorev3.HeaderValueOption{
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte("50"),
+											},
+										},
+										{
+											Header: &envoyCorev3.HeaderValue{
+												Key: "X-Gateway-Base-Model-Name",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				ExpectBBRBodyPassThrough("test", ""),
+			},
 		},
 	}
 

@@ -228,7 +228,7 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest(t *testing.T) {
 			wantHeader: "true",
 		},
 		{
-			name:       "field not found",
+			name:       "field not found - skips gracefully",
 			fieldName:  "missing",
 			headerName: "X-Gateway-Missing",
 			request: func() *framework.InferenceRequest {
@@ -236,10 +236,9 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest(t *testing.T) {
 				r.Body["other"] = "value"
 				return r
 			}(),
-			wantErr: true,
 		},
 		{
-			name:       "field is empty string",
+			name:       "field is empty string - skips gracefully",
 			fieldName:  "model",
 			headerName: "X-Gateway-Model",
 			request: func() *framework.InferenceRequest {
@@ -247,7 +246,6 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest(t *testing.T) {
 				r.Body["model"] = ""
 				return r
 			}(),
-			wantErr: true,
 		},
 		{
 			name:       "nil field value",

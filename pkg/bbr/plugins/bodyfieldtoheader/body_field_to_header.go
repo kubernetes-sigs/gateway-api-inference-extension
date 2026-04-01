@@ -26,7 +26,6 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	errcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/error"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
@@ -113,13 +112,15 @@ func (p *BodyFieldToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framewo
 	rawFieldValue, exists := request.Body[p.fieldName]
 	if !exists {
 		metrics.RecordBodyFieldNotFound(p.fieldName)
-		return errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("field '%s' not found in request body", p.fieldName)}
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("field not found in request body, skipping", "field", p.fieldName)
+		return nil
 	}
 
 	fieldStr := fmt.Sprintf("%v", rawFieldValue) // convert any type to string
 	if fieldStr == "" {
 		metrics.RecordBodyFieldEmpty(p.fieldName)
-		return errcommon.Error{Code: errcommon.BadRequest, Msg: fmt.Sprintf("field '%s' is empty and couldn't be processed", p.fieldName)}
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("field is empty in request body, skipping", "field", p.fieldName)
+		return nil
 	}
 
 	log.FromContext(ctx).V(logutil.VERBOSE).Info("parsed field from body", "field", p.fieldName, "value", fieldStr)
