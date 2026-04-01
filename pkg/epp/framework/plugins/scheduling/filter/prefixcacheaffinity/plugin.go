@@ -43,13 +43,13 @@ const (
 var _ framework.Filter = &Plugin{}
 
 type Config struct {
-	// Tau is the prefix cache score threshold. Endpoints with score >= Tau
-	// are considered "sticky" (prompt is cached). Default: 0.80.
-	Tau float64 `json:"tau,omitempty"`
+	// AffinityThreshold is the prefix cache score threshold. Endpoints with
+	// score >= this value are considered "sticky" (prompt is cached). Default: 0.80.
+	AffinityThreshold float64 `json:"affinityThreshold,omitempty"`
 
-	// EpsilonExplore is the probability of skipping the gate entirely,
+	// ExplorationProbability is the probability of skipping the gate entirely,
 	// keeping all endpoints for exploration. Range: [0, 1]. Default: 0.01.
-	EpsilonExplore float64 `json:"epsilonExplore,omitempty"`
+	ExplorationProbability float64 `json:"explorationProbability,omitempty"`
 
 	// MaxTTFTPenaltyMs is the max TTFT penalty (ms) before breaking stickiness.
 	// If the best sticky endpoint's predicted TTFT exceeds the best non-sticky
@@ -59,9 +59,9 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	Tau:              0.80,
-	EpsilonExplore:   0.01,
-	MaxTTFTPenaltyMs: 5000,
+	AffinityThreshold:     0.80,
+	ExplorationProbability: 0.01,
+	MaxTTFTPenaltyMs:      5000,
 }
 
 type Plugin struct {
@@ -86,11 +86,11 @@ func Factory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fw
 }
 
 func (c *Config) validate() error {
-	if c.Tau > 1.0 {
-		return fmt.Errorf("tau must be <= 1.0, got %f", c.Tau)
+	if c.AffinityThreshold > 1.0 {
+		return fmt.Errorf("affinityThreshold must be <= 1.0, got %f", c.AffinityThreshold)
 	}
-	if c.EpsilonExplore < 0 || c.EpsilonExplore > 1.0 {
-		return fmt.Errorf("epsilonExplore must be in [0, 1], got %f", c.EpsilonExplore)
+	if c.ExplorationProbability < 0 || c.ExplorationProbability > 1.0 {
+		return fmt.Errorf("explorationProbability must be in [0, 1], got %f", c.ExplorationProbability)
 	}
 	if c.MaxTTFTPenaltyMs < 0 {
 		return fmt.Errorf("maxTTFTPenaltyMs must be >= 0, got %f", c.MaxTTFTPenaltyMs)
@@ -105,21 +105,21 @@ func (p *Plugin) TypedName() fwkplugin.TypedName {
 func (p *Plugin) Filter(ctx context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) []framework.Endpoint {
 	logger := log.FromContext(ctx)
 
-	if len(endpoints) <= 1 || p.config.Tau <= 0 {
+	if len(endpoints) <= 1 || p.config.AffinityThreshold <= 0 {
 		return endpoints
 	}
 
-	// Epsilon exploration: skip the gate with configured probability.
-	if rand.Float64() < p.config.EpsilonExplore {
-		logger.V(logutil.DEBUG).Info("PrefixCacheAffinityFilter: epsilon skip, keeping all",
-			"tau", p.config.Tau, "total", len(endpoints))
+	// Exploration: skip the gate with configured probability.
+	if rand.Float64() < p.config.ExplorationProbability {
+		logger.V(logutil.DEBUG).Info("PrefixCacheAffinityFilter: exploration skip, keeping all",
+			"affinityThreshold", p.config.AffinityThreshold, "total", len(endpoints))
 		return endpoints
 	}
 
 	// Find sticky and non-sticky endpoints.
 	var sticky, nonSticky []framework.Endpoint
 	for _, ep := range endpoints {
-		if prefixCacheScore(ep) >= p.config.Tau {
+		if prefixCacheScore(ep) >= p.config.AffinityThreshold {
 			sticky = append(sticky, ep)
 		} else {
 			nonSticky = append(nonSticky, ep)
@@ -129,7 +129,7 @@ func (p *Plugin) Filter(ctx context.Context, _ *framework.CycleState, _ *framewo
 	// No sticky endpoints found, keep all.
 	if len(sticky) == 0 {
 		logger.V(logutil.DEBUG).Info("PrefixCacheAffinityFilter: no sticky endpoints",
-			"tau", p.config.Tau, "total", len(endpoints))
+			"affinityThreshold", p.config.AffinityThreshold, "total", len(endpoints))
 		return endpoints
 	}
 
@@ -146,7 +146,7 @@ func (p *Plugin) Filter(ctx context.Context, _ *framework.CycleState, _ *framewo
 	}
 
 	logger.V(logutil.DEBUG).Info("PrefixCacheAffinityFilter: narrowed to sticky",
-		"tau", p.config.Tau, "sticky", len(sticky), "total", len(endpoints))
+		"affinityThreshold", p.config.AffinityThreshold, "sticky", len(sticky), "total", len(endpoints))
 	return sticky
 }
 

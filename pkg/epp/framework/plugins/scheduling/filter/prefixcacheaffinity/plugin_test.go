@@ -45,25 +45,25 @@ func makeEndpoint(name string, prefixMatch int, ttft float64) framework.Endpoint
 	return ep
 }
 
-func TestFilter_TauDisabled(t *testing.T) {
-	p := &Plugin{config: Config{Tau: 0}}
+func TestFilter_AffinityThresholdDisabled(t *testing.T) {
+	p := &Plugin{config: Config{AffinityThreshold: 0}}
 	endpoints := []framework.Endpoint{
 		makeEndpoint("a", 0, 10),
 		makeEndpoint("b", 90, 20),
 	}
 	result := p.Filter(context.Background(), nil, nil, endpoints)
-	assert.Equal(t, 2, len(result), "tau=0 should return all")
+	assert.Equal(t, 2, len(result), "affinityThreshold=0 should return all")
 }
 
 func TestFilter_SingleEndpoint(t *testing.T) {
-	p := &Plugin{config: Config{Tau: 0.80}}
+	p := &Plugin{config: Config{AffinityThreshold: 0.80}}
 	endpoints := []framework.Endpoint{makeEndpoint("a", 90, 10)}
 	result := p.Filter(context.Background(), nil, nil, endpoints)
 	assert.Equal(t, 1, len(result), "single endpoint should always pass")
 }
 
 func TestFilter_NoStickyEndpoints(t *testing.T) {
-	p := &Plugin{config: Config{Tau: 0.80, EpsilonExplore: 0}}
+	p := &Plugin{config: Config{AffinityThreshold: 0.80, ExplorationProbability: 0}}
 	endpoints := []framework.Endpoint{
 		makeEndpoint("a", 10, 10),
 		makeEndpoint("b", 20, 20),
@@ -74,7 +74,7 @@ func TestFilter_NoStickyEndpoints(t *testing.T) {
 }
 
 func TestFilter_NarrowToSticky(t *testing.T) {
-	p := &Plugin{config: Config{Tau: 0.80, EpsilonExplore: 0, MaxTTFTPenaltyMs: 5000}}
+	p := &Plugin{config: Config{AffinityThreshold: 0.80, ExplorationProbability: 0, MaxTTFTPenaltyMs: 5000}}
 	endpoints := []framework.Endpoint{
 		makeEndpoint("a", 90, 100),
 		makeEndpoint("b", 85, 120),
@@ -85,7 +85,7 @@ func TestFilter_NarrowToSticky(t *testing.T) {
 }
 
 func TestFilter_TTFTPenaltyBreaksStickiness(t *testing.T) {
-	p := &Plugin{config: Config{Tau: 0.80, EpsilonExplore: 0, MaxTTFTPenaltyMs: 100}}
+	p := &Plugin{config: Config{AffinityThreshold: 0.80, ExplorationProbability: 0, MaxTTFTPenaltyMs: 100}}
 	endpoints := []framework.Endpoint{
 		makeEndpoint("a", 90, 500),
 		makeEndpoint("b", 10, 50),
@@ -94,8 +94,8 @@ func TestFilter_TTFTPenaltyBreaksStickiness(t *testing.T) {
 	assert.Equal(t, 2, len(result), "TTFT penalty should break stickiness")
 }
 
-func TestFilter_EpsilonExplore(t *testing.T) {
-	p := &Plugin{config: Config{Tau: 0.80, EpsilonExplore: 1.0}}
+func TestFilter_ExplorationProbability(t *testing.T) {
+	p := &Plugin{config: Config{AffinityThreshold: 0.80, ExplorationProbability: 1.0}}
 	endpoints := []framework.Endpoint{
 		makeEndpoint("a", 90, 100),
 		makeEndpoint("b", 10, 50),
@@ -111,14 +111,14 @@ func TestFactory_ValidConfig(t *testing.T) {
 	assert.Equal(t, PluginType, plugin.TypedName().Type)
 }
 
-func TestFactory_InvalidTau(t *testing.T) {
-	_, err := Factory("test", []byte(`{"tau": 1.5}`), nil)
+func TestFactory_InvalidAffinityThreshold(t *testing.T) {
+	_, err := Factory("test", []byte(`{"affinityThreshold": 1.5}`), nil)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "tau must be <= 1.0")
+	assert.Contains(t, err.Error(), "affinityThreshold must be <= 1.0")
 }
 
-func TestFactory_InvalidEpsilon(t *testing.T) {
-	_, err := Factory("test", []byte(`{"epsilonExplore": -0.1}`), nil)
+func TestFactory_InvalidExplorationProbability(t *testing.T) {
+	_, err := Factory("test", []byte(`{"explorationProbability": -0.1}`), nil)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "epsilonExplore must be in [0, 1]")
+	assert.Contains(t, err.Error(), "explorationProbability must be in [0, 1]")
 }
