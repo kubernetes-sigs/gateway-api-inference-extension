@@ -1,5 +1,22 @@
 # Prefix Cache Affinity Filter (`prefix-cache-affinity-filter`)
 
+## When to use this filter
+
+Enable this filter when your workload has repeated or similar prompts across requests (e.g.,
+shared system prompts, multi-turn conversations, or RAG pipelines with overlapping context).
+In these scenarios, vLLM's automatic prefix caching keeps KV cache blocks from previous
+requests in GPU memory. Without this filter, the default load-balancing strategy may route a
+request to any endpoint, forcing a full prefill even when another endpoint already has most
+of the prompt cached. This filter steers requests toward endpoints that hold a cache hit,
+converting expensive prefill into a near-free cache lookup and significantly reducing
+time-to-first-token (TTFT).
+
+If your workload consists of unique, non-overlapping prompts, this filter has no effect
+because no endpoint will accumulate cache hits, and the filter falls through to keeping all
+candidates (no-op).
+
+## Overview
+
 Probabilistic filter that narrows candidates to "sticky" endpoints. An endpoint is sticky
 when it has a high prefix cache score for the current request, meaning the request's prompt
 (or most of it) is already cached on that endpoint from a previous request with the same or
