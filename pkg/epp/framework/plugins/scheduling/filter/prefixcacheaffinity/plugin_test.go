@@ -111,6 +111,32 @@ func TestFactory_ValidConfig(t *testing.T) {
 	assert.Equal(t, PluginType, plugin.TypedName().Type)
 }
 
+func TestFactory_PartialConfigPreservesDefaults(t *testing.T) {
+	// Setting only affinityThreshold should preserve defaults for other params.
+	plugin, err := Factory("test", []byte(`{"affinityThreshold": 0.95}`), nil)
+	assert.NoError(t, err)
+	p := plugin.(*Plugin)
+	assert.Equal(t, 0.95, p.config.AffinityThreshold)
+	assert.Equal(t, DefaultConfig.ExplorationProbability, p.config.ExplorationProbability)
+	assert.Equal(t, DefaultConfig.MaxTTFTPenaltyMs, p.config.MaxTTFTPenaltyMs)
+
+	// Setting only explorationProbability should preserve defaults for other params.
+	plugin, err = Factory("test", []byte(`{"explorationProbability": 0.05}`), nil)
+	assert.NoError(t, err)
+	p = plugin.(*Plugin)
+	assert.Equal(t, DefaultConfig.AffinityThreshold, p.config.AffinityThreshold)
+	assert.Equal(t, 0.05, p.config.ExplorationProbability)
+	assert.Equal(t, DefaultConfig.MaxTTFTPenaltyMs, p.config.MaxTTFTPenaltyMs)
+
+	// Setting only maxTTFTPenaltyMs should preserve defaults for other params.
+	plugin, err = Factory("test", []byte(`{"maxTTFTPenaltyMs": 10000}`), nil)
+	assert.NoError(t, err)
+	p = plugin.(*Plugin)
+	assert.Equal(t, DefaultConfig.AffinityThreshold, p.config.AffinityThreshold)
+	assert.Equal(t, DefaultConfig.ExplorationProbability, p.config.ExplorationProbability)
+	assert.Equal(t, float64(10000), p.config.MaxTTFTPenaltyMs)
+}
+
 func TestFactory_InvalidAffinityThreshold(t *testing.T) {
 	_, err := Factory("test", []byte(`{"affinityThreshold": 1.5}`), nil)
 	assert.Error(t, err)
