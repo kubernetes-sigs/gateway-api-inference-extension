@@ -74,14 +74,14 @@ func NewDirectorWithConfig(
 	scheduler Scheduler,
 	admissionController AdmissionController,
 	parser fwkrh.Parser,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	config *Config,
 ) *Director {
 	return &Director{
 		datastore:             datastore,
 		scheduler:             scheduler,
 		admissionController:   admissionController,
-		podLocator:            podLocator,
+		endpointCandidates:    endpointCandidates,
 		requestControlPlugins: *config,
 		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
@@ -101,7 +101,7 @@ type Director struct {
 	datastore             Datastore
 	scheduler             Scheduler
 	admissionController   AdmissionController
-	podLocator            contracts.PodLocator
+	endpointCandidates    contracts.EndpointCandidates
 	requestControlPlugins Config
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
 	// no need to set this in the constructor, since the value we want is the default int val
@@ -168,28 +168,29 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err := d.admissionController.Admit(ctx, reqCtx, *infObjective.Spec.Priority); err != nil {
 		return reqCtx, err
 	}
-	candidateEndpoints := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
-	if len(candidateEndpoints) == 0 {
+
+	endpointCandidates := d.endpointCandidates.Locate(ctx, reqCtx.Request.Metadata)
+	if len(endpointCandidates) == 0 {
 		return reqCtx, errcommon.Error{
 			Code: errcommon.ServiceUnavailable,
-			Msg:  "failed to find candidate endpoints for serving the request",
+			Msg:  "failed to find endpoint candidates for serving the request",
 		}
 	}
-	candidateSnapshot := d.toSchedulerEndpoints(candidateEndpoints)
 
+	snapshotOfCandidatePods := d.toSchedulerEndpoints(endpointCandidates)
 	// Prepare per request data by running PrepareData plugins.
-	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
+	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		// Don't fail the request if PrepareData plugins fail.
 		logger.Error(err, "failed to prepare per request data")
 	}
 
 	// Run admit request plugins
-	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot) {
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
 		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "request cannot be admitted"}
 	}
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target endpoint: %w", err).Error()}
 	}

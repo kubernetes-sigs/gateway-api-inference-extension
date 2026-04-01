@@ -126,7 +126,7 @@ func newUnitHarness(
 	}
 
 	mockDetector := &mockSaturationDetector{}
-	mockPodLocator := &mocks.MockPodLocator{}
+	mockEndpointCandidates := &mocks.MockEndpointCandidates{}
 
 	mockProcessorFactory := &mockShardProcessorFactory{
 		processors: make(map[string]*mockShardProcessor),
@@ -144,7 +144,7 @@ func newUnitHarness(
 		withClock(harnessOpts.clock),
 		withShardProcessorFactory(mockProcessorFactory.new),
 	}
-	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, usageLimitPolicy, fcOpts...)
+	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockEndpointCandidates, usageLimitPolicy, fcOpts...)
 	require.NoError(t, err, "failed to create FlowController for unit test harness")
 
 	h := &testHarness{
@@ -167,7 +167,7 @@ func newUnitHarness(
 func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, registry *mockRegistryClient) *testHarness {
 	t.Helper()
 	mockDetector := &mockSaturationDetector{}
-	mockPodLocator := &mocks.MockPodLocator{}
+	mockEndpointCandidates := &mocks.MockEndpointCandidates{}
 	usageLimitPolicy := usagelimits.DefaultPolicy()
 
 	// Align FakeClock with system time. See explanation in newUnitHarness.
@@ -180,7 +180,7 @@ func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, regis
 		withRegistryClient(registry),
 		withClock(mockClock),
 	}
-	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockPodLocator, usageLimitPolicy, opts...)
+	fc, err := NewFlowController(ctx, "test-pool", cfg, registry, mockDetector, mockEndpointCandidates, usageLimitPolicy, opts...)
 	require.NoError(t, err, "failed to create FlowController for integration test harness")
 
 	h := &testHarness{
@@ -290,7 +290,7 @@ func (f *mockShardProcessorFactory) new(
 	_ context.Context, // The factory does not use the lifecycle context; it's passed to the processor's Run method later.
 	shard contracts.RegistryShard,
 	_ flowcontrol.SaturationDetector,
-	_ contracts.PodLocator,
+	_ contracts.EndpointCandidates,
 	_ flowcontrol.UsageLimitPolicy,
 	_ clock.WithTicker,
 	_ time.Duration,
@@ -1155,7 +1155,7 @@ func TestFlowController_WorkerManagement(t *testing.T) {
 			ctx context.Context, // The context created by getOrStartWorker for the potential new processor.
 			shard contracts.RegistryShard,
 			_ flowcontrol.SaturationDetector,
-			_ contracts.PodLocator,
+			_ contracts.EndpointCandidates,
 			_ flowcontrol.UsageLimitPolicy,
 			_ clock.WithTicker,
 			_ time.Duration,

@@ -131,8 +131,8 @@ func TestLegacyAdmissionController_Admit(t *testing.T) {
 					return 0.0
 				},
 			}
-			locator := &mocks.MockPodLocator{Pods: tc.locatorPods}
-			ac := NewLegacyAdmissionController(mockDetector, locator)
+			endpointCandidates := &mocks.MockEndpointCandidates{Candidates: tc.locatorPods}
+			ac := NewLegacyAdmissionController(mockDetector, endpointCandidates)
 
 			err := ac.Admit(ctx, reqCtx, tc.priority)
 

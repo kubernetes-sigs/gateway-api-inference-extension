@@ -329,10 +329,10 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
-	var locator contracts.PodLocator
-	locator = requestcontrol.NewDatastorePodLocator(ds, requestcontrol.WithDisableEndpointSubsetFilter(opts.DisableEndpointSubsetFilter))
+	var endpointCandidates contracts.EndpointCandidates
+	endpointCandidates = requestcontrol.NewDatastoreEndpointCandidates(ds, requestcontrol.WithDisableEndpointSubsetFilter(opts.DisableEndpointSubsetFilter))
 	if r.featureGates[flowcontrol.FeatureGate] {
-		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
+		endpointCandidates = requestcontrol.NewCachedEndpointCandidates(ctx, endpointCandidates, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
 		registry, err := fcregistry.NewFlowRegistry(eppConfig.FlowControlConfig.Registry, setupLog)
 		if err != nil {
@@ -343,7 +343,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 			opts.PoolName,
 			eppConfig.FlowControlConfig.Controller,
 			registry, eppConfig.SaturationDetector,
-			locator, eppConfig.FlowControlConfig.UsageLimitPolicy,
+			endpointCandidates, eppConfig.FlowControlConfig.UsageLimitPolicy,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
@@ -352,12 +352,11 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		admissionController = requestcontrol.NewFlowControlAdmissionController(fc, opts.PoolName)
 	} else {
 		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
-		admissionController = requestcontrol.NewLegacyAdmissionController(eppConfig.SaturationDetector, locator)
+		admissionController = requestcontrol.NewLegacyAdmissionController(eppConfig.SaturationDetector, endpointCandidates)
 	}
 
-	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, r.parser, locator, r.requestControlConfig)
+	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, r.parser, endpointCandidates, r.requestControlConfig)
 
-	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         opts.GRPCPort,
 		GKNN:                             *gknn,

@@ -215,7 +215,7 @@ func TestFullDuplexStreamed_GRPC_KubeInferenceObjectiveRequest(t *testing.T) {
 				P(1, 0, 0.1, "foo", modelSQLLoraTarget),
 			},
 			wantResponses: ExpectReject(envoyTypePb.StatusCode_ServiceUnavailable,
-				"inference error: ServiceUnavailable - failed to find candidate endpoints for serving the request"),
+				"inference error: ServiceUnavailable - failed to find endpoint candidates for serving the request"),
 		},
 
 		// --- Response Processing (Non-streaming) ---

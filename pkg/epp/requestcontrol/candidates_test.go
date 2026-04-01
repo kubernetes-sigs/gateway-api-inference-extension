@@ -31,9 +31,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
-// --- DatastorePodLocator Tests ---
+// --- DatastoreEndpointCandidates Tests ---
 
-func TestDatastorePodLocator_Locate(t *testing.T) {
+func TestDatastoreEndpointCandidates_Locate(t *testing.T) {
 	t.Parallel()
 
 	endpointA := makeMockEndpoint("pod-a", "10.0.0.1")
@@ -45,7 +45,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		opts                []LocatorOption
+		opts                []EndpointCandidatesOption
 		metadata            map[string]any
 		expectedEndpointIPs []string
 	}{
@@ -107,7 +107,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 		},
 		{
 			name: "Subset filter with match (filter disabled)",
-			opts: []LocatorOption{
+			opts: []EndpointCandidatesOption{
 				WithDisableEndpointSubsetFilter(true),
 			},
 			metadata: makeMetadataWithSubset([]any{
@@ -117,7 +117,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 		},
 		{
 			name: "Subset filter is present but list is empty (filter disabled)",
-			opts: []LocatorOption{
+			opts: []EndpointCandidatesOption{
 				WithDisableEndpointSubsetFilter(true),
 			},
 			metadata:            makeMetadataWithSubset([]any{}),
@@ -125,7 +125,7 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 		},
 		{
 			name: "Subset filter with no matches (filter disabled)",
-			opts: []LocatorOption{
+			opts: []EndpointCandidatesOption{
 				WithDisableEndpointSubsetFilter(true),
 			},
 			metadata: makeMetadataWithSubset([]any{
@@ -138,30 +138,30 @@ func TestDatastorePodLocator_Locate(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			locator := NewDatastorePodLocator(mockDS, tc.opts...)
-			result := locator.Locate(context.Background(), tc.metadata)
+			endpointCandidates := NewDatastoreEndpointCandidates(mockDS, tc.opts...)
+			result := endpointCandidates.Locate(context.Background(), tc.metadata)
 
 			var gotIPs []string
 			for _, ep := range result {
 				gotIPs = append(gotIPs, ep.GetMetadata().GetIPAddress())
 			}
-			assert.ElementsMatch(t, tc.expectedEndpointIPs, gotIPs, "Locate returned unexpected set of pods")
+			assert.ElementsMatch(t, tc.expectedEndpointIPs, gotIPs, "Locate returned unexpected set of endpoint candidates")
 		})
 	}
 }
 
-// --- CachedPodLocator Tests ---
+// --- CachedEndpointCandidates Tests ---
 
-func TestCachedPodLocator_CachingBehavior(t *testing.T) {
+func TestCachedEndpointCandidates_CachingBehavior(t *testing.T) {
 	t.Parallel()
 
-	mockDelegate := &mockPodLocator{
+	mockDelegate := &mockEndpointCandidates{
 		result: []fwkdl.Endpoint{makeMockEndpoint("p1", "1.1.1.1")},
 	}
 
 	// Use a short TTL for testing.
 	ttl := 20 * time.Millisecond
-	cached := NewCachedPodLocator(context.Background(), mockDelegate, ttl)
+	cached := NewCachedEndpointCandidates(context.Background(), mockDelegate, ttl)
 	meta := makeMetadataWithSubset([]any{"1.1.1.1:80"})
 
 	// 1. First Call: Should hit delegate
@@ -183,11 +183,11 @@ func TestCachedPodLocator_CachingBehavior(t *testing.T) {
 	assert.Equal(t, 2, mockDelegate.callCount(), "Expected delegate to be called after TTL expiry")
 }
 
-func TestCachedPodLocator_CacheKeyDeterminism(t *testing.T) {
+func TestCachedEndpointCandidates_CacheKeyDeterminism(t *testing.T) {
 	t.Parallel()
 
-	mockDelegate := &mockPodLocator{}
-	cached := NewCachedPodLocator(context.Background(), mockDelegate, time.Minute)
+	mockDelegate := &mockEndpointCandidates{}
+	cached := NewCachedEndpointCandidates(context.Background(), mockDelegate, time.Minute)
 
 	// Scenario: subset [A, B] should generate same cache key as [B, A].
 	metaOrder1 := makeMetadataWithSubset([]any{"10.0.0.1:80", "10.0.0.2:80"})
@@ -200,18 +200,18 @@ func TestCachedPodLocator_CacheKeyDeterminism(t *testing.T) {
 	assert.Equal(t, 1, mockDelegate.callCount(), "Different order of subset endpoints should hit the same cache entry")
 }
 
-func TestCachedPodLocator_Concurrency_ThunderingHerd(t *testing.T) {
+func TestCachedEndpointCandidates_Concurrency_ThunderingHerd(t *testing.T) {
 	t.Parallel()
 
 	// Simulate a slow delegate to exacerbate race conditions.
-	mockDelegate := &mockPodLocator{
+	mockDelegate := &mockEndpointCandidates{
 		delay: 10 * time.Millisecond,
 		result: []fwkdl.Endpoint{
 			makeMockEndpoint("p1", "1.1.1.1"),
 		},
 	}
 
-	cached := NewCachedPodLocator(context.Background(), mockDelegate, 100*time.Millisecond)
+	cached := NewCachedEndpointCandidates(context.Background(), mockDelegate, 100*time.Millisecond)
 	meta := makeMetadataWithSubset([]any{"1.1.1.1:80"})
 
 	concurrency := 50
@@ -238,11 +238,11 @@ func TestCachedPodLocator_Concurrency_ThunderingHerd(t *testing.T) {
 	assert.Equal(t, 1, mockDelegate.callCount(), "Delegate should be called exactly once despite concurrent access")
 }
 
-func TestCachedPodLocator_DifferentSubsetsAreIsolated(t *testing.T) {
+func TestCachedEndpointCandidates_DifferentSubsetsAreIsolated(t *testing.T) {
 	t.Parallel()
 
-	mockDelegate := &mockPodLocator{}
-	cached := NewCachedPodLocator(context.Background(), mockDelegate, time.Minute)
+	mockDelegate := &mockEndpointCandidates{}
+	cached := NewCachedEndpointCandidates(context.Background(), mockDelegate, time.Minute)
 
 	metaA := makeMetadataWithSubset([]any{"10.0.0.1:80"})
 	metaB := makeMetadataWithSubset([]any{"10.0.0.2:80"})
@@ -254,13 +254,13 @@ func TestCachedPodLocator_DifferentSubsetsAreIsolated(t *testing.T) {
 	assert.Equal(t, 2, mockDelegate.callCount(), "Different subsets must trigger distinct delegate calls")
 }
 
-func TestCachedPodLocator_CacheIsolation_EmptyVsDefault(t *testing.T) {
+func TestCachedEndpointCandidates_CacheIsolation_EmptyVsDefault(t *testing.T) {
 	t.Parallel()
 
-	mockDelegate := &mockPodLocator{
+	mockDelegate := &mockEndpointCandidates{
 		result: []fwkdl.Endpoint{makeMockEndpoint("p1", "1.1.1.1")},
 	}
-	cached := NewCachedPodLocator(context.Background(), mockDelegate, time.Minute)
+	cached := NewCachedEndpointCandidates(context.Background(), mockDelegate, time.Minute)
 
 	// 1. Request All Pods (No Metadata)
 	res1 := cached.Locate(context.Background(), nil)
@@ -276,15 +276,15 @@ func TestCachedPodLocator_CacheIsolation_EmptyVsDefault(t *testing.T) {
 
 // --- Helpers & Mocks ---
 
-// mockPodLocator implements contracts.PodLocator.
-type mockPodLocator struct {
+// mockEndpointCandidates implements contracts.EndpointCandidates.
+type mockEndpointCandidates struct {
 	mu     sync.Mutex
 	calls  int
 	delay  time.Duration
 	result []fwkdl.Endpoint
 }
 
-func (m *mockPodLocator) Locate(ctx context.Context, _ map[string]any) []fwkdl.Endpoint {
+func (m *mockEndpointCandidates) Locate(ctx context.Context, _ map[string]any) []fwkdl.Endpoint {
 	m.mu.Lock()
 	m.calls++
 	delay := m.delay
@@ -297,7 +297,7 @@ func (m *mockPodLocator) Locate(ctx context.Context, _ map[string]any) []fwkdl.E
 	return result
 }
 
-func (m *mockPodLocator) callCount() int {
+func (m *mockEndpointCandidates) callCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.calls

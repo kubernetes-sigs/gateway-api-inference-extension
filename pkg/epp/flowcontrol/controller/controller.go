@@ -63,7 +63,7 @@ type shardProcessorFactory func(
 	ctx context.Context,
 	shard contracts.RegistryShard,
 	saturationDetector flowcontrol.SaturationDetector,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	usageLimitPolicy flowcontrol.UsageLimitPolicy,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
@@ -100,7 +100,7 @@ type FlowController struct {
 	config                *Config
 	registry              registryClient
 	saturationDetector    flowcontrol.SaturationDetector
-	podLocator            contracts.PodLocator
+	endpointCandidates    contracts.EndpointCandidates
 	usageLimitPolicy      flowcontrol.UsageLimitPolicy
 	clock                 clock.WithTicker
 	logger                logr.Logger
@@ -134,7 +134,7 @@ func NewFlowController(
 	config *Config,
 	registry contracts.FlowRegistry,
 	sd flowcontrol.SaturationDetector,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	usageLimitPolicy flowcontrol.UsageLimitPolicy,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
@@ -142,7 +142,7 @@ func NewFlowController(
 		config:             config,
 		registry:           registry,
 		saturationDetector: sd,
-		podLocator:         podLocator,
+		endpointCandidates: endpointCandidates,
 		usageLimitPolicy:   usageLimitPolicy,
 		clock:              clock.RealClock{},
 		logger:             log.FromContext(ctx).WithName("flow-controller"),
@@ -153,7 +153,7 @@ func NewFlowController(
 		ctx context.Context,
 		shard contracts.RegistryShard,
 		saturationDetector flowcontrol.SaturationDetector,
-		podLocator contracts.PodLocator,
+		endpointCandidates contracts.EndpointCandidates,
 		usageLimitPolicy flowcontrol.UsageLimitPolicy,
 		clock clock.WithTicker,
 		cleanupSweepInterval time.Duration,
@@ -165,12 +165,13 @@ func NewFlowController(
 			poolName,
 			shard,
 			saturationDetector,
-			podLocator,
+			endpointCandidates,
 			usageLimitPolicy,
 			clock,
 			cleanupSweepInterval,
 			enqueueChannelBufferSize,
-			logger)
+			logger,
+		)
 	}
 
 	for _, opt := range opts {
@@ -492,7 +493,7 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 		processorCtx,
 		shard,
 		fc.saturationDetector,
-		fc.podLocator,
+		fc.endpointCandidates,
 		fc.usageLimitPolicy,
 		fc.clock,
 		fc.config.ExpiryCleanupInterval,
