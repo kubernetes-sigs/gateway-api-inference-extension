@@ -1,6 +1,6 @@
 # Latency Scorer Plugin (`latency-scorer`)
 
-Scores endpoints based on predicted latency headroom, the gap between the predicted
+Scores endpoints based on predicted latency headroom, defined as the gap between the predicted
 request latency and the user's SLO. Endpoints with more favorable headroom get higher
 scores and are more likely to be selected by the picker. For negative headroom
 (all endpoints violate SLO), idle endpoints are preferred.
@@ -42,7 +42,7 @@ and scores only the best (least severe) non-empty bucket:
 ### Normalization and blending
 
 TTFT and TPOT headroom values are normalized to [0, 1] and blended:
-`combined = alpha * nTTFT + beta * nTPOT`.
+`combined = ttftWeight * nTTFT + tpotWeight * nTPOT`.
 
 ### No SLO behavior
 
