@@ -316,10 +316,10 @@ type FlowControlConfig struct {
 	PriorityBands []PriorityBandConfig `json:"priorityBands,omitempty"`
 
 	// +optional
-	// UsageLimitPolicyRef specifies the UsageLimitPolicy plugin to use for adaptive capacity management.
+	// UsageLimitPolicyPluginRef specifies the UsageLimitPolicy plugin to use for adaptive capacity management.
 	// Must reference a named plugin instance defined in the top-level Plugins section.
 	// If omitted, a default static policy (threshold=1.0, no gating) is used.
-	UsageLimitPolicyRef string `json:"usageLimitPolicyRef,omitempty"`
+	UsageLimitPolicyPluginRef string `json:"usageLimitPolicyPluginRef,omitempty"`
 }
 
 func (fcc *FlowControlConfig) String() string {
@@ -346,8 +346,8 @@ func (fcc *FlowControlConfig) String() string {
 		parts = append(parts, fmt.Sprintf("PriorityBands: %v", fcc.PriorityBands))
 	}
 
-	if fcc.UsageLimitPolicyRef != "" {
-		parts = append(parts, "UsageLimitPolicyRef: "+fcc.UsageLimitPolicyRef)
+	if fcc.UsageLimitPolicyPluginRef != "" {
+		parts = append(parts, "UsageLimitPolicyRef: "+fcc.UsageLimitPolicyPluginRef)
 	}
 
 	return "{" + strings.Join(parts, ", ") + "}"
