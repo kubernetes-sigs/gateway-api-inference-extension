@@ -347,7 +347,7 @@ func (fcc *FlowControlConfig) String() string {
 	}
 
 	if fcc.UsageLimitPolicyRef != "" {
-		parts = append(parts, fmt.Sprintf("UsageLimitPolicyRef: %s", fcc.UsageLimitPolicyRef))
+		parts = append(parts, "UsageLimitPolicyRef: "+fcc.UsageLimitPolicyRef)
 	}
 
 	return "{" + strings.Join(parts, ", ") + "}"
