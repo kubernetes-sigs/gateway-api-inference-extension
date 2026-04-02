@@ -32,11 +32,11 @@ fi
 
 # The vLLM image versions
 # The GPU image is from https://hub.docker.com/r/vllm/vllm-openai/tags
-VLLM_GPU="${VLLM_GPU:-0.10.0}"
-# The CPU image is from https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
-VLLM_CPU="${VLLM_CPU:-0.10.0}"
+VLLM_GPU="${VLLM_GPU:-0.18.1}"
+# The CPU image is from https://hub.docker.com/r/vllm/vllm-openai-cpu/tags
+VLLM_CPU="${VLLM_CPU:-0.18.1}"
 # The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
-VLLM_SIM="${VLLM_SIM:-0.3.2-fix}"
+VLLM_SIM="${VLLM_SIM:-0.8.2}"
 
 echo "Using release tag: ${RELEASE_TAG}"
 echo "Using vLLM GPU image version: ${VLLM_GPU}"
@@ -104,38 +104,47 @@ sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io
 # -----------------------------------------------------------------------------
 # Update vLLM deployment manifests
 # -----------------------------------------------------------------------------
-VLLM_GPU_DEPLOY="config/manifests/vllm/gpu-deployment.yaml"
-echo "Updating ${VLLM_GPU_DEPLOY} ..."
+VLLM_GPU_DEPLOYS=(
+  "config/manifests/vllm/gpu-deployment.yaml"
+  "config/manifests/vllm/gpu-grpc-deployment.yaml"
+  "config/manifests/vllm/gpu-prefix-cache-deployment.yaml"
+)
+echo "Updating ${VLLM_GPU_DEPLOYS[*]} ..."
 
-# Update the vLLM GPU image version
-sed -i.bak -E "s|(vllm/vllm-openai:)[^\"[:space:]]+|\1v${VLLM_GPU}|g" "$VLLM_GPU_DEPLOY"
-
-# Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
-sed -i.bak '/vllm\/vllm-openai/{n;s/Always/IfNotPresent/;}' "$VLLM_GPU_DEPLOY"
+for vllm_gpu_deploy in "${VLLM_GPU_DEPLOYS[@]}"; do
+  # Replace the floating GPU tag with the latest semver tag for the release.
+  sed -i.bak -E "s|(vllm/vllm-openai:)[^\"[:space:]]+|\1v${VLLM_GPU}|g" "$vllm_gpu_deploy"
+  # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
+  sed -i.bak '/vllm\/vllm-openai/{n;s/Always/IfNotPresent/;}' "$vllm_gpu_deploy"
+done
 
 VLLM_CPU_DEPLOY="config/manifests/vllm/cpu-deployment.yaml"
 echo "Updating ${VLLM_CPU_DEPLOY} ..."
 
 # Update the vLLM CPU image version
-sed -i.bak -E "s|(q9t5s3a7/vllm-cpu-release-repo:)[^\"[:space:]]+|\1v${VLLM_CPU}|g" "$VLLM_CPU_DEPLOY"
+sed -i.bak -E "s|(vllm/vllm-openai-cpu:)[^\"[:space:]]+|\1v${VLLM_CPU}|g" "$VLLM_CPU_DEPLOY"
 
 # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM CPU image.
-sed -i.bak '/q9t5s3a7\/vllm-cpu-release-repo/{n;s/Always/IfNotPresent/;}' "$VLLM_CPU_DEPLOY"
+sed -i.bak '/vllm\/vllm-openai-cpu/{n;s/Always/IfNotPresent/;}' "$VLLM_CPU_DEPLOY"
 
-VLLM_SIM_DEPLOY="config/manifests/vllm/sim-deployment.yaml"
-echo "Updating ${VLLM_SIM_DEPLOY} ..."
+VLLM_SIM_DEPLOYS=(
+  "config/manifests/vllm/sim-deployment.yaml"
+  "config/manifests/vllm/sim-grpc-deployment.yaml"
+)
+echo "Updating ${VLLM_SIM_DEPLOYS[*]} ..."
 
-# Update the vLLM Simulator image version
-sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "$VLLM_SIM_DEPLOY"
-
-# Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
-sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$VLLM_SIM_DEPLOY"
+for vllm_sim_deploy in "${VLLM_SIM_DEPLOYS[@]}"; do
+  # Replace the floating simulator tag with the latest semver tag for the release.
+  sed -i.bak -E "s|(llm-d/llm-d-inference-sim:)[^\"[:space:]]+|\1v${VLLM_SIM}|g" "$vllm_sim_deploy"
+  # Also change the imagePullPolicy from Always to IfNotPresent on lines containing the vLLM image.
+  sed -i.bak '/llm-d\/llm-d-inference-sim/{n;s/Always/IfNotPresent/;}' "$vllm_sim_deploy"
+done
 
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY files..."
-git add $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS $VLLM_GPU_DEPLOY $VLLM_CPU_DEPLOY $VLLM_SIM_DEPLOY
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS ${VLLM_GPU_DEPLOYS[*]} $VLLM_CPU_DEPLOY ${VLLM_SIM_DEPLOYS[*]} files..."
+git add "$VERSION_FILE" "$UPDATED_CRD" "$README" "$EPP_HELM" "$LATENCY_ROUTING_HELM" "$BBR_HELM" "$STANDALONE_HELM" "$CONFORMANCE_MANIFESTS" "${VLLM_GPU_DEPLOYS[@]}" "$VLLM_CPU_DEPLOY" "${VLLM_SIM_DEPLOYS[@]}"
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

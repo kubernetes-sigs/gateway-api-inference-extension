@@ -14,8 +14,8 @@ spec:
         inference.networking.k8s.io/engine-type: vllm
     spec:
       containers:
-        - name: lora
-          image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.10.2" # formal images can be found in https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
+        - name: vllm
+          image: "vllm/vllm-openai-cpu:latest" # formal images can be found in https://hub.docker.com/r/vllm/vllm-openai-cpu/tags
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
