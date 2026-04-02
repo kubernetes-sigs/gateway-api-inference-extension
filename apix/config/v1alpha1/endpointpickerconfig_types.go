@@ -395,4 +395,3 @@ func (pbc PriorityBandConfig) String() string {
 
 	return "{" + strings.Join(parts, ", ") + "}"
 }
-
