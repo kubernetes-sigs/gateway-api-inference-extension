@@ -132,7 +132,7 @@ func newUnitHarness(
 		processors: make(map[string]*mockShardProcessor),
 	}
 
-	usageLimitPolicy := usagelimits.NoopPolicy()
+	usageLimitPolicy := usagelimits.DefaultPolicy()
 
 	// Default the registry if nil, simplifying tests that don't focus on registry interaction.
 	if registry == nil {
@@ -168,7 +168,7 @@ func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, regis
 	t.Helper()
 	mockDetector := &mockSaturationDetector{}
 	mockPodLocator := &mocks.MockPodLocator{}
-	usageLimitPolicy := usagelimits.NoopPolicy()
+	usageLimitPolicy := usagelimits.DefaultPolicy()
 
 	// Align FakeClock with system time. See explanation in newUnitHarness.
 	mockClock := testclock.NewFakeClock(time.Now())

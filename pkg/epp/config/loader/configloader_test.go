@@ -713,7 +713,7 @@ func registerTestPlugins(t *testing.T) {
 	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
-	fwkplugin.Register(usagelimits.NoopUsageLimitPolicyType, usagelimits.NoopPolicyFactory)
+	fwkplugin.Register(usagelimits.StaticUsageLimitPolicyType, usagelimits.StaticPolicyFactory)
 }
 
 func TestValidateSaturationDetector(t *testing.T) {

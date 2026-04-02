@@ -51,7 +51,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			Type: ordering.FCFSOrderingPolicyType,
 		},
 	})
-	handle.AddPlugin(usagelimits.NoopUsageLimitPolicyType, usagelimits.NoopPolicy())
+	handle.AddPlugin(usagelimits.StaticUsageLimitPolicyType, usagelimits.DefaultPolicy())
 
 	// A func-based custom policy that always returns 0.8 — demonstrates that users can define
 	// their policy in the standard plugins section and reference it via UsageLimit.PluginRef.
@@ -111,7 +111,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			name: "Success - UsageLimitPolicyRef is resolved",
 			apiConfig: &configapi.FlowControlConfig{
 				UsageLimit: &configapi.UsageLimitConfig{
-					PluginRef: usagelimits.NoopUsageLimitPolicyType,
+					PluginRef: usagelimits.StaticUsageLimitPolicyType,
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {

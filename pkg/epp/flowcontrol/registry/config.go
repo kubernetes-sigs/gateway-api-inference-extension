@@ -42,7 +42,7 @@ const (
 	// DefaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
 	DefaultFairnessPolicyRef string = fairness.GlobalStrictFairnessPolicyType
 	// DefaultUsageLimitPolicyRef is the default policy to compute usage limit of a priority band dynamically.
-	DefaultUsageLimitPolicyRef string = usagelimits.NoopUsageLimitPolicyType
+	DefaultUsageLimitPolicyRef string = usagelimits.StaticUsageLimitPolicyType
 )
 
 const (

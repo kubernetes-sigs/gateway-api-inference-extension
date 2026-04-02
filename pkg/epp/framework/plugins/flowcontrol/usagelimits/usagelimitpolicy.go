@@ -25,15 +25,35 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-const NoopUsageLimitPolicyType = "noop-usage-limit-policy"
+const StaticUsageLimitPolicyType = "static-usage-limit-policy"
 
-func NoopPolicyFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
-	return NewConstPolicy(name, 1.0), nil
+// staticPolicyConfig is the JSON configuration for the static usage limit policy.
+type staticPolicyConfig struct {
+	// Threshold is the fixed ceiling returned for all priorities.
+	// Defaults to 1.0 (no gating).
+	Threshold *float64 `json:"threshold,omitempty"`
 }
 
-// NoopPolicy returns the default UsageLimitPolicy, which always returns 1.0 (no gating).
-func NoopPolicy() flowcontrol.UsageLimitPolicy {
-	return NewConstPolicy(NoopUsageLimitPolicyType, 1.0)
+// StaticPolicyFactory creates a StaticUsageLimitPolicy from JSON config.
+// If no threshold is specified, it defaults to 1.0 (no gating).
+func StaticPolicyFactory(name string, rawConfig json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+	threshold := 1.0
+	if len(rawConfig) > 0 {
+		var cfg staticPolicyConfig
+		if err := json.Unmarshal(rawConfig, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse static usage limit policy config: %w", err)
+		}
+		if cfg.Threshold != nil {
+			threshold = *cfg.Threshold
+		}
+	}
+	return NewConstPolicy(name, threshold), nil
+}
+
+// DefaultPolicy returns the default UsageLimitPolicy with threshold 1.0 (no gating).
+// Useful for test cases.
+func DefaultPolicy() flowcontrol.UsageLimitPolicy {
+	return NewConstPolicy(StaticUsageLimitPolicyType, 1.0)
 }
 
 // NewConstPolicy implements a UsageLimitPolicy that returns a fixed threshold for all priorities.

@@ -276,7 +276,7 @@ func setupBenchmarkHarness(
 		}
 	}
 
-	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, reg, detector, &mocks.MockPodLocator{}, usagelimits.NoopPolicy())
+	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, reg, detector, &mocks.MockPodLocator{}, usagelimits.DefaultPolicy())
 	if err != nil {
 		b.Fatalf("Failed to init FlowController: %v", err)
 	}
