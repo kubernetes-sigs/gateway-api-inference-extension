@@ -86,7 +86,7 @@ func TestRuntimePollingDispatch(t *testing.T) {
 			r := datalayer.NewRuntime(pollingInterval)
 			ext := mocks.NewPollingExtractor("test-extractor")
 
-			httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
+			httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, 0, "test-http", "test-source",
 				parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
 			require.NoError(t, err)
 
@@ -138,7 +138,7 @@ func TestRuntimePollingMultipleExtractors(t *testing.T) {
 	ext1 := mocks.NewPollingExtractor("extractor-1")
 	ext2 := mocks.NewPollingExtractor("extractor-2")
 
-	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
+	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, 0, "test-http", "test-source",
 		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
 	require.NoError(t, err)
 
@@ -187,7 +187,7 @@ func TestRuntimePollingEndpointLifecycle(t *testing.T) {
 	r := datalayer.NewRuntime(pollingInterval)
 	ext := mocks.NewPollingExtractor("lifecycle-extractor")
 
-	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
+	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, 0, "test-http", "test-source",
 		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
 	require.NoError(t, err)
 
@@ -241,7 +241,7 @@ func TestRuntimePollingWithoutExtractors(t *testing.T) {
 
 	r := datalayer.NewRuntime(50 * time.Millisecond)
 
-	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
+	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, 0, "test-http", "test-source",
 		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
 	require.NoError(t, err)
 
@@ -280,7 +280,7 @@ func TestRuntimePollingHTTPError(t *testing.T) {
 	r := datalayer.NewRuntime(pollingInterval)
 	ext := mocks.NewPollingExtractor("error-extractor")
 
-	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, "test-http", "test-source",
+	httpSrc, err := httpds.NewHTTPDataSource("http", "/metrics", true, 0, "test-http", "test-source",
 		parsePrometheusMetrics, reflect.TypeOf(fwkdl.Metrics{}))
 	require.NoError(t, err)
 

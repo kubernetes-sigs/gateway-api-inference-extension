@@ -48,13 +48,19 @@ type metricsDatasourceParams struct {
 	Path string `json:"path"`
 	// InsecureSkipVerify defines whether model server certificate should be verified or not.
 	InsecureSkipVerify bool `json:"insecureSkipVerify"`
+	// MetricsPort defines the port to use for scraping metrics from model server pods.
+	// When set, this overrides the inference port encoded in the endpoint's MetricsHost.
+	// Useful when the model server exposes metrics on a separate port from inference
+	// (e.g., vLLM with --metrics-port 9090).
+	// Defaults to 0, which means the inference port is used.
+	MetricsPort int `json:"metricsPort"`
 }
 
 // NewHTTPMetricsDataSource constructs a MetricsDataSource with the given scheme and path.
 // InsecureSkipVerify defaults to true (matching the factory default).
 // Use this function directly in tests to bypass JSON parameter marshaling.
 func NewHTTPMetricsDataSource(scheme, path, name string) (*http.HTTPDataSource, error) {
-	return http.NewHTTPDataSource(scheme, path, defaultMetricsInsecureSkipVerify,
+	return http.NewHTTPDataSource(scheme, path, defaultMetricsInsecureSkipVerify, 0,
 		MetricsDataSourceType, name, parseMetrics, PrometheusMetricType)
 }
 
@@ -72,7 +78,11 @@ func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fw
 		}
 	}
 
-	return http.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, MetricsDataSourceType,
+	if cfg.MetricsPort != 0 && (cfg.MetricsPort < 1 || cfg.MetricsPort > 65535) {
+		return nil, fmt.Errorf("metricsPort must be between 1 and 65535, got %d", cfg.MetricsPort)
+	}
+
+	return http.NewHTTPDataSource(cfg.Scheme, cfg.Path, cfg.InsecureSkipVerify, cfg.MetricsPort, MetricsDataSourceType,
 		name, parseMetrics, PrometheusMetricType)
 }
 

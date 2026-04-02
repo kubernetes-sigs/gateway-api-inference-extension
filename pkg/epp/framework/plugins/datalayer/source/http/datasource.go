@@ -21,8 +21,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"reflect"
+	"strconv"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -30,18 +32,20 @@ import (
 
 // HTTPDataSource is a data source that receives its data using HTTP client.
 type HTTPDataSource struct {
-	typedName fwkplugin.TypedName
-	scheme    string // scheme to use
-	path      string // path to use
+	typedName   fwkplugin.TypedName
+	scheme      string // scheme to use
+	path        string // path to use
+	metricsPort int    // when non-zero, overrides the port in MetricsHost for scraping
 
 	client     Client // client (e.g. a wrapped http.Client) used to get data
 	parser     func(io.Reader) (any, error)
 	outputType reflect.Type
 }
 
-// NewHTTPDataSource returns a new data source, configured with
-// the provided scheme, path and certificate verification parameters.
-func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, pluginType string,
+// NewHTTPDataSource returns a new data source configured with the given scheme, path,
+// and certificate verification. metricsPort overrides the port in MetricsHost when
+// non-zero; pass 0 to use MetricsHost as-is.
+func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, metricsPort int, pluginType string,
 	pluginName string, parser func(io.Reader) (any, error), outputType reflect.Type) (*HTTPDataSource, error) {
 	if scheme != "http" && scheme != "https" {
 		return nil, fmt.Errorf("unsupported scheme: %s", scheme)
@@ -59,11 +63,12 @@ func NewHTTPDataSource(scheme string, path string, skipCertVerification bool, pl
 			Type: pluginType,
 			Name: pluginName,
 		},
-		scheme:     scheme,
-		path:       path,
-		client:     defaultClient,
-		parser:     parser,
-		outputType: outputType,
+		scheme:      scheme,
+		path:        path,
+		metricsPort: metricsPort,
+		client:      defaultClient,
+		parser:      parser,
+		outputType:  outputType,
 	}
 	return dataSrc, nil
 }
@@ -90,9 +95,18 @@ func (dataSrc *HTTPDataSource) Poll(ctx context.Context, ep fwkdl.Endpoint) (any
 }
 
 func (dataSrc *HTTPDataSource) getEndpoint(ep Addressable) *url.URL {
+	host := ep.GetMetricsHost()
+	if dataSrc.metricsPort != 0 {
+		ip, _, err := net.SplitHostPort(host)
+		if err == nil {
+			host = net.JoinHostPort(ip, strconv.Itoa(dataSrc.metricsPort))
+		}
+		// If SplitHostPort fails (e.g. host has no port), use MetricsHost unchanged
+		// so we still attempt a scrape rather than silently dropping the endpoint.
+	}
 	return &url.URL{
 		Scheme: dataSrc.scheme,
-		Host:   ep.GetMetricsHost(),
+		Host:   host,
 		Path:   dataSrc.path,
 	}
 }
