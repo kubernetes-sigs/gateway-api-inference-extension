@@ -327,6 +327,17 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 	ceilings := sp.usageLimitPolicy.ComputeLimit(ctx, saturation, priorities)
 
 	for i, priority := range priorities {
+		// --- Viability Check (Saturation/HoL Blocking) ---
+		// Check before selecting an item: if we are already saturated for this priority, stop immediately.
+		usageLimit := ceilings[i]
+		if saturation >= usageLimit {
+			sp.logger.V(logutil.DEBUG).Info("Priority band is saturated; enforcing HoL blocking.",
+				"priority", priority, "usageLimit", usageLimit)
+			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
+			// lower-priority work might exacerbate the saturation affecting high-priority work.
+			return false
+		}
+
 		originalBand, err := sp.shard.PriorityBandAccessor(priority)
 		if err != nil {
 			sp.logger.Error(err, "Failed to get PriorityBandAccessor, skipping band", "priority", priority)
@@ -343,18 +354,8 @@ func (sp *ShardProcessor) dispatchCycle(ctx context.Context) bool {
 			continue
 		}
 
-		// --- Viability Check (Saturation/HoL Blocking) ---
-		req := item.OriginalRequest()
-		usageLimit := ceilings[i]
-		if saturation >= usageLimit {
-			sp.logger.V(logutil.DEBUG).Info("Policy's chosen item is saturated; enforcing HoL blocking.",
-				"flowKey", req.FlowKey(), "reqID", req.ID(), "usageLimit", usageLimit)
-			// Stop the dispatch cycle entirely to respect strict policy decision and prevent priority inversion where
-			// lower-priority work might exacerbate the saturation affecting high-priority work.
-			return false
-		}
-
 		// --- Dispatch ---
+		req := item.OriginalRequest()
 		if err := sp.dispatchItem(item); err != nil {
 			sp.logger.Error(err, "Failed to dispatch item, skipping priority band for this cycle",
 				"flowKey", req.FlowKey(), "reqID", req.ID())
