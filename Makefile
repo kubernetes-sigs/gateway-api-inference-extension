@@ -22,7 +22,10 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 GIT_COMMIT_SHA ?= "$(shell git rev-parse HEAD 2>/dev/null)"
-GIT_TAG ?= $(shell git describe --tags --dirty --always)
+# Keep root-module build metadata anchored to top-level release tags so
+# submodule tags such as conformance/v1.5.0 do not leak into image versions.
+ROOT_RELEASE_TAG_MATCH ?= v[0-9]*
+GIT_TAG ?= $(shell git describe --tags --match '$(ROOT_RELEASE_TAG_MATCH)' --dirty --always)
 TARGETARCH ?= $(shell go env GOARCH)
 PLATFORMS ?= linux/$(TARGETARCH)
 DOCKER_BUILDX_CMD ?= docker buildx
@@ -71,7 +74,7 @@ ifdef GO_VERSION
 BUILDER_IMAGE = golang:$(GO_VERSION)
 endif
 
-BUILD_REF ?= $(shell git describe --abbrev=0 2>/dev/null)
+BUILD_REF ?= $(shell git describe --tags --match '$(ROOT_RELEASE_TAG_MATCH)' --abbrev=0 2>/dev/null)
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
 BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
@@ -489,6 +492,10 @@ standalone-helm-chart-push: yq helm-install
 .PHONY: release-quickstart
 release-quickstart: ## Update the quickstart guide for a release.
 	./hack/release-quickstart.sh
+
+.PHONY: release-tags
+release-tags: ## Create and push signed tags for the root and conformance modules.
+	./hack/release-tags.sh
 
 .PHONY: artifacts
 artifacts: kustomize yq

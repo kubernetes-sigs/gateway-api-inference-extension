@@ -27,7 +27,7 @@ PATCH="${PATCH:-0}"
 if [[ -z "${RC-}" ]]; then
   RELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}"
 else
-  RELEASE_TAG="v${MAJOR}.${MINOR}.0-rc.${RC}"
+  RELEASE_TAG="v${MAJOR}.${MINOR}.${PATCH}-rc.${RC}"
 fi
 
 # The vLLM image versions
@@ -65,12 +65,22 @@ README="pkg/README.md"
 echo "Updating ${README} ..."
 
 # Replace URLs that refer to a tag (whether via refs/tags or releases/download)
-# This regex matches any version in the form v<MAJOR>.<MINOR>.0-rc[.]?<number>
-sed -i.bak -E "s|(refs/tags/)v[0-9]+\.[0-9]+\.0-rc\.?[0-9]+|\1${RELEASE_TAG}|g" "$README"
-sed -i.bak -E "s|(releases/download/)v[0-9]+\.[0-9]+\.0-rc\.?[0-9]+|\1${RELEASE_TAG}|g" "$README"
+# This regex matches any version in the form v<MAJOR>.<MINOR>.<PATCH>-rc[.]?<number>
+sed -i.bak -E "s|(refs/tags/)v[0-9]+\.[0-9]+\.[0-9]+-rc\.?[0-9]+|\1${RELEASE_TAG}|g" "$README"
+sed -i.bak -E "s|(releases/download/)v[0-9]+\.[0-9]+\.[0-9]+-rc\.?[0-9]+|\1${RELEASE_TAG}|g" "$README"
 
 # Replace the CRD installation line: change "kubectl apply -k" to "kubectl apply -f" with the proper URL
 sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd|kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${RELEASE_TAG}/manifests.yaml|g" "$README"
+
+# -----------------------------------------------------------------------------
+# Update the conformance module dependency
+# -----------------------------------------------------------------------------
+CONFORMANCE_GOMOD="conformance/go.mod"
+echo "Updating ${CONFORMANCE_GOMOD} ..."
+(
+  cd conformance
+  go mod edit -require=sigs.k8s.io/gateway-api-inference-extension@"${RELEASE_TAG}"
+)
 
 # -----------------------------------------------------------------------------
 # Update image references
@@ -143,8 +153,8 @@ done
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS ${VLLM_GPU_DEPLOYS[*]} $VLLM_CPU_DEPLOY ${VLLM_SIM_DEPLOYS[*]} files..."
-git add "$VERSION_FILE" "$UPDATED_CRD" "$README" "$EPP_HELM" "$LATENCY_ROUTING_HELM" "$BBR_HELM" "$STANDALONE_HELM" "$CONFORMANCE_MANIFESTS" "${VLLM_GPU_DEPLOYS[@]}" "$VLLM_CPU_DEPLOY" "${VLLM_SIM_DEPLOYS[@]}"
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $CONFORMANCE_GOMOD $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS ${VLLM_GPU_DEPLOYS[*]} $VLLM_CPU_DEPLOY ${VLLM_SIM_DEPLOYS[*]} files..."
+git add "$VERSION_FILE" "$UPDATED_CRD" "$README" "$CONFORMANCE_GOMOD" "$EPP_HELM" "$LATENCY_ROUTING_HELM" "$BBR_HELM" "$STANDALONE_HELM" "$CONFORMANCE_MANIFESTS" "${VLLM_GPU_DEPLOYS[@]}" "$VLLM_CPU_DEPLOY" "${VLLM_SIM_DEPLOYS[@]}"
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish
