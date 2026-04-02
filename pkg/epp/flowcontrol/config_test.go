@@ -110,9 +110,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "Success - UsageLimitPolicyRef is resolved",
 			apiConfig: &configapi.FlowControlConfig{
-				UsageLimit: &configapi.UsageLimitConfig{
-					PluginRef: usagelimits.StaticUsageLimitPolicyType,
-				},
+				UsageLimitPolicyRef: usagelimits.StaticUsageLimitPolicyType,
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				require.NotNil(t, cfg.UsageLimitPolicy, "UsageLimitPolicy should be resolved from the handle")
@@ -123,9 +121,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "Success - Func-based UsageLimitPolicy resolved via PluginRef",
 			apiConfig: &configapi.FlowControlConfig{
-				UsageLimit: &configapi.UsageLimitConfig{
-					PluginRef: funcPolicyName,
-				},
+				UsageLimitPolicyRef: funcPolicyName,
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				require.NotNil(t, cfg.UsageLimitPolicy)
@@ -147,9 +143,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 		{
 			name: "Success - Struct-based UsageLimitPolicy resolved via PluginRef",
 			apiConfig: &configapi.FlowControlConfig{
-				UsageLimit: &configapi.UsageLimitConfig{
-					PluginRef: structPolicyName,
-				},
+				UsageLimitPolicyRef: structPolicyName,
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				require.NotNil(t, cfg.UsageLimitPolicy)

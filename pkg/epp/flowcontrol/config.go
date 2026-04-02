@@ -61,8 +61,8 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 
 func ensureUsageLimitPolicy(apiConfig *configapi.FlowControlConfig, handle plugin.Handle) (flowcontrol.UsageLimitPolicy, error) {
 	ref := registry.DefaultUsageLimitPolicyRef
-	if apiConfig != nil && apiConfig.UsageLimit != nil {
-		ref = apiConfig.UsageLimit.PluginRef
+	if apiConfig != nil && apiConfig.UsageLimitPolicyRef != "" {
+		ref = apiConfig.UsageLimitPolicyRef
 	}
 	p := handle.Plugin(ref)
 	if p == nil {
