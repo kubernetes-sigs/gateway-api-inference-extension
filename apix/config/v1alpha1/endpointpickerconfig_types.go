@@ -130,6 +130,7 @@ func (ps PluginSpec) String() string {
 // SchedulingProfile contains the information to create a SchedulingProfile
 // entry to be used by the scheduler.
 type SchedulingProfile struct {
+	// +required
 	// +kubebuilder:validation:Required
 	// Name specifies the name of this SchedulingProfile
 	Name string `json:"name"`
