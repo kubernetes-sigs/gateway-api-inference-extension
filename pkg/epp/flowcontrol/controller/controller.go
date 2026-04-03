@@ -126,24 +126,29 @@ type FlowController struct {
 // test-only
 type flowControllerOption func(*FlowController)
 
+// Deps groups the external FlowController build dependencies to construct a FlowController.
+type Deps struct {
+	Registry           contracts.FlowRegistry
+	SaturationDetector flowcontrol.SaturationDetector
+	EndpointCandidates contracts.EndpointCandidates
+	UsageLimitPolicy   flowcontrol.UsageLimitPolicy
+}
+
 // NewFlowController creates and starts a new FlowController instance.
 // The provided context governs the lifecycle of the controller and all its workers.
 func NewFlowController(
 	ctx context.Context,
 	poolName string,
 	config *Config,
-	registry contracts.FlowRegistry,
-	sd flowcontrol.SaturationDetector,
-	endpointCandidates contracts.EndpointCandidates,
-	usageLimitPolicy flowcontrol.UsageLimitPolicy,
+	deps Deps,
 	opts ...flowControllerOption,
 ) (*FlowController, error) {
 	fc := &FlowController{
 		config:             config,
-		registry:           registry,
-		saturationDetector: sd,
-		endpointCandidates: endpointCandidates,
-		usageLimitPolicy:   usageLimitPolicy,
+		registry:           deps.Registry,
+		saturationDetector: deps.SaturationDetector,
+		endpointCandidates: deps.EndpointCandidates,
+		usageLimitPolicy:   deps.UsageLimitPolicy,
 		clock:              clock.RealClock{},
 		logger:             log.FromContext(ctx).WithName("flow-controller"),
 		parentCtx:          ctx,

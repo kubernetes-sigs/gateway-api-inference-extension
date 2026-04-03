@@ -344,8 +344,12 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 			ctx,
 			opts.PoolName,
 			eppConfig.FlowControlConfig.Controller,
-			registry, eppConfig.SaturationDetector,
-			endpointCandidates, eppConfig.FlowControlConfig.UsageLimitPolicy,
+			fccontroller.Deps{
+				Registry:           registry,
+				SaturationDetector: eppConfig.SaturationDetector,
+				EndpointCandidates: endpointCandidates,
+				UsageLimitPolicy:   eppConfig.FlowControlConfig.UsageLimitPolicy,
+			},
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
