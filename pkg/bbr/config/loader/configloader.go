@@ -25,6 +25,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 )
 
 var scheme = runtime.NewScheme()
@@ -58,6 +59,58 @@ func LoadRawConfig(configBytes []byte, logger logr.Logger) (*configapi.BodyBased
 	}
 
 	return rawConfig, nil
+}
+
+// InstantiateAndConfigure instantiates all plugins defined in the configuration and
+// assembles the request and response pipelines in declaration order.
+// It returns the ordered slices of RequestProcessor and ResponseProcessor plugins.
+func InstantiateAndConfigure(
+	cfg *configapi.BodyBasedRoutingConfig,
+	handle framework.Handle,
+) ([]framework.RequestProcessor, []framework.ResponseProcessor, error) {
+	// Instantiate all plugins.
+	plugins := make(map[string]framework.BBRPlugin, len(cfg.Plugins))
+	for _, spec := range cfg.Plugins {
+		factory, ok := framework.Registry[spec.Type]
+		if !ok {
+			return nil, nil, fmt.Errorf("plugin type %q is not registered", spec.Type)
+		}
+		instance, err := factory(spec.Name, spec.Parameters, handle)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create plugin %q (type: %s): %w", spec.Name, spec.Type, err)
+		}
+		plugins[spec.Name] = instance
+	}
+
+	// Assemble request pipeline in declaration order.
+	requestPlugins := make([]framework.RequestProcessor, 0, len(cfg.Request))
+	for i, ref := range cfg.Request {
+		plugin, ok := plugins[ref.PluginRef]
+		if !ok {
+			return nil, nil, fmt.Errorf("request[%d] references undefined plugin %q", i, ref.PluginRef)
+		}
+		rp, ok := plugin.(framework.RequestProcessor)
+		if !ok {
+			return nil, nil, fmt.Errorf("request[%d]: plugin %q does not implement RequestProcessor", i, ref.PluginRef)
+		}
+		requestPlugins = append(requestPlugins, rp)
+	}
+
+	// Assemble response pipeline in declaration order.
+	responsePlugins := make([]framework.ResponseProcessor, 0, len(cfg.Response))
+	for i, ref := range cfg.Response {
+		plugin, ok := plugins[ref.PluginRef]
+		if !ok {
+			return nil, nil, fmt.Errorf("response[%d] references undefined plugin %q", i, ref.PluginRef)
+		}
+		rp, ok := plugin.(framework.ResponseProcessor)
+		if !ok {
+			return nil, nil, fmt.Errorf("response[%d]: plugin %q does not implement ResponseProcessor", i, ref.PluginRef)
+		}
+		responsePlugins = append(responsePlugins, rp)
+	}
+
+	return requestPlugins, responsePlugins, nil
 }
 
 func decodeRawConfig(configBytes []byte) (*configapi.BodyBasedRoutingConfig, error) {
