@@ -103,8 +103,12 @@ request:
 			},
 		},
 		{
-			name: "empty config uses defaults",
-			want: loadDefaultConfig(),
+			name: "empty config uses defaults with static defaults applied",
+			want: func() *configapi.BodyBasedRoutingConfig {
+				cfg := loadDefaultConfig()
+				applyStaticDefaults(cfg)
+				return cfg
+			}(),
 		},
 		{
 			name:       "invalid YAML",

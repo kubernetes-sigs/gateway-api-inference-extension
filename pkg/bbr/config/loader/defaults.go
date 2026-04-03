@@ -17,22 +17,45 @@ limitations under the License.
 package loader
 
 import (
+	"encoding/json"
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/bodyfieldtoheader"
 )
 
+// defaultModelField is the body field name used in the default configuration.
+// This mirrors the modelField constant in cmd/bbr/runner/runner.go.
+const defaultModelField = "model"
+
 // loadDefaultConfig returns the default BBR configuration, equivalent to the
-// default behavior when no --plugin flags are specified.
-// TODO: populate with full default plugin specs in a follow-up patch.
+// default behavior when no --plugin flags are specified in runner.go:177-196.
 func loadDefaultConfig() *configapi.BodyBasedRoutingConfig {
 	return &configapi.BodyBasedRoutingConfig{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 			Kind:       "BodyBasedRoutingConfig",
 		},
-		Plugins:  []configapi.PluginSpec{},
-		Request:  []configapi.BBRPluginRef{},
+		Plugins: []configapi.PluginSpec{
+			{
+				Type: bodyfieldtoheader.BodyFieldToHeaderPluginType,
+				Parameters: json.RawMessage(fmt.Sprintf(
+					`{"field_name":%q,"header_name":%q}`,
+					defaultModelField,
+					bodyfieldtoheader.ModelHeader,
+				)),
+			},
+			{
+				Type: basemodelextractor.BaseModelToHeaderPluginType,
+			},
+		},
+		Request: []configapi.BBRPluginRef{
+			{PluginRef: bodyfieldtoheader.BodyFieldToHeaderPluginType},
+			{PluginRef: basemodelextractor.BaseModelToHeaderPluginType},
+		},
 		Response: []configapi.BBRPluginRef{},
 	}
 }
