@@ -33,6 +33,10 @@ data:
     {{- end }}
     {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
     - type: predicted-latency-producer
+    # Two-gate prefix cache affinity: strict (0.99) runs before the SLO tier
+    # filter to prefer near-exact cache matches across all endpoints; loose
+    # (0.80) runs after the tier filter to prefer partial matches within the
+    # SLO-qualified tier.
     - name: strict-affinity-filter
       type: prefix-cache-affinity-filter
       parameters:
