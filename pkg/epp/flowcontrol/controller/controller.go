@@ -122,16 +122,13 @@ type FlowController struct {
 	wg sync.WaitGroup
 }
 
-// flowControllerOption is a function that applies a configuration change.
-// test-only
-type flowControllerOption func(*FlowController)
-
 // Deps groups the external FlowController build dependencies to construct a FlowController.
 type Deps struct {
 	Registry           contracts.FlowRegistry
 	SaturationDetector flowcontrol.SaturationDetector
 	EndpointCandidates contracts.EndpointCandidates
 	UsageLimitPolicy   flowcontrol.UsageLimitPolicy
+	Clock              clock.WithTicker
 }
 
 // NewFlowController creates and starts a new FlowController instance.
@@ -141,15 +138,17 @@ func NewFlowController(
 	poolName string,
 	config *Config,
 	deps Deps,
-	opts ...flowControllerOption,
 ) (*FlowController, error) {
+	if deps.Clock == nil {
+		deps.Clock = clock.RealClock{}
+	}
 	fc := &FlowController{
 		config:             config,
 		registry:           deps.Registry,
 		saturationDetector: deps.SaturationDetector,
 		endpointCandidates: deps.EndpointCandidates,
 		usageLimitPolicy:   deps.UsageLimitPolicy,
-		clock:              clock.RealClock{},
+		clock:              deps.Clock,
 		logger:             log.FromContext(ctx).WithName("flow-controller"),
 		parentCtx:          ctx,
 	}
@@ -177,10 +176,6 @@ func NewFlowController(
 			enqueueChannelBufferSize,
 			logger,
 		)
-	}
-
-	for _, opt := range opts {
-		opt(fc)
 	}
 
 	go fc.run(ctx)

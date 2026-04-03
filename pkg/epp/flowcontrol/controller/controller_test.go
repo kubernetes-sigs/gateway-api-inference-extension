@@ -49,30 +49,6 @@ import (
 
 // --- Test Harness & Fixtures ---
 
-// withClock returns a test-only option to inject a clock.
-// test-only
-func withClock(c clock.WithTicker) flowControllerOption {
-	return func(fc *FlowController) {
-		fc.clock = c
-	}
-}
-
-// withRegistryClient returns a test-only option to inject a mock or fake registry client.
-// test-only
-func withRegistryClient(client registryClient) flowControllerOption {
-	return func(fc *FlowController) {
-		fc.registry = client
-	}
-}
-
-// withShardProcessorFactory returns a test-only option to inject a processor factory.
-// test-only
-func withShardProcessorFactory(factory shardProcessorFactory) flowControllerOption {
-	return func(fc *FlowController) {
-		fc.shardProcessorFactory = factory
-	}
-}
-
 type mockSaturationDetector struct {
 	flowcontrol.SaturationDetector
 }
@@ -139,18 +115,15 @@ func newUnitHarness(
 		registry = &mockRegistryClient{}
 	}
 
-	fcOpts := []flowControllerOption{
-		withRegistryClient(registry),
-		withClock(harnessOpts.clock),
-		withShardProcessorFactory(mockProcessorFactory.new),
-	}
 	fc, err := NewFlowController(ctx, "test-pool", cfg, Deps{
 		Registry:           registry,
 		SaturationDetector: mockDetector,
 		EndpointCandidates: mockEndpointCandidates,
 		UsageLimitPolicy:   usageLimitPolicy,
-	}, fcOpts...)
+		Clock:              harnessOpts.clock,
+	})
 	require.NoError(t, err, "failed to create FlowController for unit test harness")
+	fc.shardProcessorFactory = mockProcessorFactory.new
 
 	h := &testHarness{
 		fc:                   fc,
@@ -181,16 +154,13 @@ func newIntegrationHarness(t *testing.T, ctx context.Context, cfg *Config, regis
 		registry = &mockRegistryClient{}
 	}
 
-	opts := []flowControllerOption{
-		withRegistryClient(registry),
-		withClock(mockClock),
-	}
 	fc, err := NewFlowController(ctx, "test-pool", cfg, Deps{
 		Registry:           registry,
 		SaturationDetector: mockDetector,
 		EndpointCandidates: mockEndpointCandidates,
 		UsageLimitPolicy:   usageLimitPolicy,
-	}, opts...)
+		Clock:              mockClock,
+	})
 	require.NoError(t, err, "failed to create FlowController for integration test harness")
 
 	h := &testHarness{
