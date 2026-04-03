@@ -475,7 +475,7 @@ func (r *Runner) registerInTreePlugins() {
 	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.CoreMetricsExtractorFactory)
 	// register datalayer notification source plugins
 	fwkplugin.Register(sourcenotifications.NotificationSourceType, sourcenotifications.NotificationSourceFactory)
-	fwkplugin.Register(sourcenotifications.EndpointSourceType, sourcenotifications.EndpointSourceFactory)
+	fwkplugin.Register(sourcenotifications.EndpointNotificationSourceType, sourcenotifications.EndpointSourceFactory)
 	// register request control pluigns
 	fwkplugin.Register(requestattributereporter.RequestAttributeReporterType, requestattributereporter.RequestAttributeReporterPluginFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)

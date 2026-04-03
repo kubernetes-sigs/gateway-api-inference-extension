@@ -29,8 +29,8 @@ var (
 	_ fwkdl.EndpointSource = (*EndpointDataSource)(nil)
 )
 
-// EndpointSourceType is the plugin type identifier for endpoint sources.
-const EndpointSourceType = "endpoint-source"
+// EndpointNotificationSourceType is the plugin type identifier for endpoint notification sources.
+const EndpointNotificationSourceType = "endpoint-notification-source"
 
 // EndpointDataSource is an EndpointSource that passes endpoint lifecycle events
 // through to registered EndpointExtractors without modification.

@@ -33,7 +33,7 @@ func verifyEndpointSource(t *testing.T, plugin fwkplugin.Plugin, wantName string
 	src, ok := plugin.(fwkdl.EndpointSource)
 	require.True(t, ok, "plugin should implement EndpointSource")
 	assert.Equal(t, wantName, src.TypedName().Name, "name mismatch")
-	assert.Equal(t, EndpointSourceType, src.TypedName().Type, "type mismatch")
+	assert.Equal(t, EndpointNotificationSourceType, src.TypedName().Type, "type mismatch")
 
 	_, ok = plugin.(fwkdl.DataSource)
 	assert.True(t, ok, "plugin should implement DataSource")
@@ -48,7 +48,7 @@ func TestNewEndpointDataSource(t *testing.T) {
 }
 
 func TestEndpointNotifyReturnsEvent(t *testing.T) {
-	src := NewEndpointDataSource(EndpointSourceType, "test")
+	src := NewEndpointDataSource(EndpointNotificationSourceType, "test")
 	ep := fwkdl.NewEndpoint(&fwkdl.EndpointMetadata{}, nil)
 
 	event, err := src.NotifyEndpoint(context.Background(), fwkdl.EndpointEvent{
@@ -83,9 +83,9 @@ func TestEndpointSourceFactory(t *testing.T) {
 			wantName:   "my-endpoint-source",
 		},
 		{
-			name:       "name defaults to EndpointSourceType",
+			name:       "name defaults to EndpointNotificationSourceType",
 			pluginName: "",
-			wantName:   EndpointSourceType,
+			wantName:   EndpointNotificationSourceType,
 		},
 	}
 
