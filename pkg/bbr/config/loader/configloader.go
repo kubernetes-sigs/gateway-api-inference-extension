@@ -53,6 +53,10 @@ func LoadRawConfig(configBytes []byte, logger logr.Logger) (*configapi.BodyBased
 
 	applyStaticDefaults(rawConfig)
 
+	if err := validateConfig(rawConfig); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
 	return rawConfig, nil
 }
 
