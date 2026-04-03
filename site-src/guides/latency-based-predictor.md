@@ -27,7 +27,7 @@ Two additional plugins are included in the default pipeline. They are noop when 
 -   `slo-headroom-tier-filter`: Splits endpoints into positive (meets SLO) and negative (violates SLO) tiers. Probabilistically explores the negative tier to let recovering pods get traffic.
 -   `latency-slo-admitter`: Rejects [sheddable](../concepts/priority-and-capacity.md) requests when no endpoint can meet SLO constraints.
 
-### Scoring Strategy
+#### Scoring Strategy
 
 The `latency-scorer` plugin supports the following strategies for selecting a model server based on predicted latency headroom. These strategies only affect scoring when SLO headers are present; without SLOs, endpoints are always scored by lowest predicted latency regardless of strategy.
 
@@ -41,7 +41,7 @@ The strategy can be configured via the `headroomSelectionStrategy` parameter on 
 The following headers can optionally be included in inference requests for SLO-based scheduling:
 
 -   `x-slo-ttft-ms`: The Time to First Token SLO in milliseconds.
--   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds (this is vLLM's equivalent of ITL, it is **not** NTPOT).
+-   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds.
 
 When SLO headers are omitted, latency-based request scheduling still works — the scorer schedules to the endpoint with the lowest predicted latency.
 
