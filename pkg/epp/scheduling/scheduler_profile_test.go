@@ -413,10 +413,9 @@ func TestRunWithOutOfRangeScores(t *testing.T) {
 }
 
 // TestFilterExecutionOrder verifies that filters execute in the order they are
-// declared in the scheduling profile (i.e., YAML declaration order is preserved).
-// This is critical for chained filter patterns like the two-gate prefix cache
-// affinity pattern where strict-affinity must run before slo-headroom-tier
-// which must run before loose-affinity.
+// registered in the scheduling profile. See also TestFilterExecutionOrderFromYAML
+// in pkg/epp/config/loader which verifies that YAML declaration order is preserved
+// during deserialization.
 func TestFilterExecutionOrder(t *testing.T) {
 	executionOrder := []string{}
 
@@ -467,7 +466,7 @@ func TestFilterExecutionOrder(t *testing.T) {
 }
 
 // TestFilterExecutionOrderViaAddPlugins verifies that filters added via
-// AddPlugins (the path used by the config loader) also preserve declaration order.
+// AddPlugins (the path used by the config loader) execute in registration order.
 func TestFilterExecutionOrderViaAddPlugins(t *testing.T) {
 	executionOrder := []string{}
 
@@ -511,6 +510,7 @@ func TestFilterExecutionOrderViaAddPlugins(t *testing.T) {
 
 // TestFilterChainReceivesPreviousOutput verifies that each filter in the chain
 // receives the filtered output of the previous filter, not the original input.
+// This confirms filters execute as a sequential pipeline.
 func TestFilterChainReceivesPreviousOutput(t *testing.T) {
 	// First filter keeps pod1 and pod2 (removes pod3).
 	filter1 := &testPlugin{

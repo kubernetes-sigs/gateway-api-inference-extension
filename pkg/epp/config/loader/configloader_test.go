@@ -819,3 +819,27 @@ func TestEnsureSaturationDetector(t *testing.T) {
 		require.Equal(t, "utilization-detector", cfg.SaturationDetector.PluginRef)
 	})
 }
+
+// TestFilterExecutionOrderFromYAML verifies that the Plugins slice in a
+// SchedulingProfile preserves YAML declaration order after deserialization.
+// This is critical for chained filter patterns like the two-gate prefix cache
+// affinity pattern where filter execution order matters.
+func TestFilterExecutionOrderFromYAML(t *testing.T) {
+	t.Parallel()
+
+	logger := logging.NewTestLogger()
+
+	rawConfig, _, err := LoadRawConfig([]byte(successFilterOrderConfigText), logger)
+	require.NoError(t, err, "LoadRawConfig should succeed")
+
+	require.Len(t, rawConfig.SchedulingProfiles, 1)
+	plugins := rawConfig.SchedulingProfiles[0].Plugins
+
+	// Verify the pluginRef order matches YAML declaration order.
+	var pluginRefs []string
+	for _, p := range plugins {
+		pluginRefs = append(pluginRefs, p.PluginRef)
+	}
+	require.Equal(t, []string{"filter-A", "filter-B", "filter-C", "maxScorePicker"}, pluginRefs,
+		"Plugins slice must preserve YAML declaration order")
+}
