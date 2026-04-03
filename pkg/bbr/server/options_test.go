@@ -21,6 +21,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/config"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
@@ -40,6 +41,7 @@ func TestNewOptionsDefaults(t *testing.T) {
 		{"SecureServing", opts.SecureServing, true},
 		{"EnablePprof", opts.EnablePprof, true},
 		{"LogVerbosity", opts.LogVerbosity, 2}, // logging.DEFAULT
+		{"ConfigFile", opts.ConfigFile, ""},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -61,6 +63,7 @@ func TestAddFlagsOverridesDefaults(t *testing.T) {
 		"--secure-serving=false",
 		"--metrics-endpoint-auth=false",
 		"--enable-pprof=false",
+		"--config-file", "/tmp/bbr.yaml",
 		"-v", "3",
 	}
 	if err := fs.Parse(args); err != nil {
@@ -80,6 +83,7 @@ func TestAddFlagsOverridesDefaults(t *testing.T) {
 		{"MetricsEndpointAuth", opts.MetricsEndpointAuth, false},
 		{"EnablePprof", opts.EnablePprof, false},
 		{"LogVerbosity", opts.LogVerbosity, 3},
+		{"ConfigFile", opts.ConfigFile, "/tmp/bbr.yaml"},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -160,6 +164,20 @@ func TestValidate(t *testing.T) {
 				o.MetricsPort = 8080
 			},
 			expectError: true,
+		},
+		// --config-file and --plugin mutual exclusivity.
+		{
+			name: "config-file and plugin are mutually exclusive",
+			mutate: func(o *Options) {
+				o.ConfigFile = "/tmp/bbr.yaml"
+				o.PluginSpecs = []config.BBRPluginSpec{{Type: "foo", Name: "bar"}}
+			},
+			expectError: true,
+		},
+		{
+			name:        "config-file alone is valid",
+			mutate:      func(o *Options) { o.ConfigFile = "/tmp/bbr.yaml" },
+			expectError: false,
 		},
 		// Log verbosity validation.
 		{

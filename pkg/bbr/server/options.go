@@ -17,6 +17,7 @@ limitations under the License.
 package server
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/pflag"
@@ -51,6 +52,7 @@ type Options struct {
 	// Plugins.
 	//
 	PluginSpecs config.BBRPluginSpecs // Repeatable --plugin <type>:<name>[:<json>] flag values.
+	ConfigFile  string                // The path to the YAML configuration file.
 
 	// internal
 	fs *pflag.FlagSet // FlagSet used in AddFlags()
@@ -95,6 +97,8 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"Enables pprof handlers. Defaults to true. Set to false to disable pprof handlers.")
 
 	fs.Var(&opts.PluginSpecs, "plugin", `Repeatable. --plugin <type>:<name>[:<json>]`)
+	fs.StringVar(&opts.ConfigFile, "config-file", opts.ConfigFile,
+		"The path to the YAML configuration file. Mutually exclusive with --plugin.")
 
 	opts.LoggingOptions.AddFlags(fs) // Add logging flags.
 }
@@ -130,6 +134,11 @@ func (opts *Options) Validate() error {
 	if len(ports) < 3 {
 		return fmt.Errorf("port conflict: grpc-port (%d), grpc-health-port (%d), and metrics-port (%d) must all be different",
 			opts.GRPCPort, opts.GRPCHealthPort, opts.MetricsPort)
+	}
+
+	// Validate that --config-file and --plugin are mutually exclusive.
+	if opts.ConfigFile != "" && len(opts.PluginSpecs) > 0 {
+		return errors.New("--config-file and --plugin are mutually exclusive")
 	}
 
 	// Validate logging options.

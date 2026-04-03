@@ -28,13 +28,13 @@ import (
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/config/loader"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
@@ -45,8 +45,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/tracing"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
-
-const modelField = "model"
 
 var setupLog = ctrl.Log.WithName("setup")
 
@@ -173,34 +171,36 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Register factories for all known in-tree BBR plugins
 	r.registerInTreePlugins()
 
-	// Construct BBR plugin instances for the in-tree plugins that are (1) registered and (2) requested via the --plugin flags
-	if len(opts.PluginSpecs) == 0 {
-		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
-
-		modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
+	// Load plugins via one of three mutually exclusive paths:
+	// 1. --config-file: load from YAML config file
+	// 2. --plugin flags: legacy CLI-based plugin instantiation
+	// 3. Neither: use default config
+	switch {
+	case opts.ConfigFile != "":
+		setupLog.Info("Loading BBR plugins from config file", "path", opts.ConfigFile)
+		configBytes, err := os.ReadFile(opts.ConfigFile)
 		if err != nil {
-			setupLog.Error(err, "Failed to create plugin", "pluginType", bodyfieldtoheader.BodyFieldToHeaderPluginType)
+			setupLog.Error(err, "Failed to read config file", "path", opts.ConfigFile)
 			return err
 		}
-		r.requestPlugins = append(r.requestPlugins, modelToHeaderPlugin)
-
-		// Create BaseModelToHeaderPlugin instance for extracting the "model" field into X-Gateway-Base-Model-Name
-		baseModelToHeaderPlugin, err := basemodelextractor.NewBaseModelToHeaderPlugin(func() *builder.Builder {
-			return ctrl.NewControllerManagedBy(mgr)
-		}, mgr.GetAPIReader())
+		rawConfig, err := loader.LoadRawConfig(configBytes, setupLog)
 		if err != nil {
-			setupLog.Error(err, "Failed to create plugin", "pluginType", basemodelextractor.BaseModelToHeaderPluginType)
+			setupLog.Error(err, "Failed to parse config file")
 			return err
 		}
-
-		r.requestPlugins = append(r.requestPlugins, baseModelToHeaderPlugin)
-	} else {
-		setupLog.Info("BBR plugins are specified. Running BBR with the specified plugins.")
+		r.requestPlugins, r.responsePlugins, err = loader.InstantiateAndConfigure(rawConfig, bbrHandle)
+		if err != nil {
+			setupLog.Error(err, "Failed to instantiate plugins from config")
+			return err
+		}
+	case len(opts.PluginSpecs) > 0:
+		setupLog.Info("BBR plugins are specified via --plugin flags.")
 
 		for _, s := range opts.PluginSpecs {
 			factory, ok := framework.Registry[s.Type]
 			if !ok {
-				setupLog.Error(err, fmt.Sprintf("unknown plugin type %q (no factory registered)\n", s.Type))
+				err := fmt.Errorf("unknown plugin type %q (no factory registered)", s.Type)
+				setupLog.Error(err, "Failed to find plugin factory")
 				return err
 			}
 			instance, err := factory(s.Name, s.JSON, bbrHandle)
@@ -214,6 +214,18 @@ func (r *Runner) Run(ctx context.Context) error {
 			if responseProcessor, ok := instance.(framework.ResponseProcessor); ok {
 				r.responsePlugins = append(r.responsePlugins, responseProcessor)
 			}
+		}
+	default:
+		setupLog.Info("No plugins specified. Loading default configuration.")
+		rawConfig, err := loader.LoadRawConfig(nil, setupLog)
+		if err != nil {
+			setupLog.Error(err, "Failed to load default config")
+			return err
+		}
+		r.requestPlugins, r.responsePlugins, err = loader.InstantiateAndConfigure(rawConfig, bbrHandle)
+		if err != nil {
+			setupLog.Error(err, "Failed to instantiate default plugins")
+			return err
 		}
 	}
 
