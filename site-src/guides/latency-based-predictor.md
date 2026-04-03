@@ -110,8 +110,6 @@ Key categories of metrics include:
 -   **SLO Violations**: Counters and gauges are available to track when SLOs are violated. This can be used to alert on SLO breaches.
 -   **SLO Thresholds**: The current SLO thresholds for TTFT and TPOT are also exposed as metrics.
 
-NOTE: TPOT is equivalen to vLLM's **ITL** (Inter Token Latency), as vLLM defines TPOT as the average time per output token *including the TTFT*. This is commonly known as NTPOT in other contexts, and we don't capture that metric here.
-
 The following is a comprehensive list of the Prometheus metrics exposed:
 
 | Metric Name                                                | Description                                                                                                      |
