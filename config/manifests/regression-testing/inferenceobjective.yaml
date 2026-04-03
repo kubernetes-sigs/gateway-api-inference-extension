@@ -6,7 +6,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -18,7 +18,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -30,7 +30,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -42,7 +42,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -54,7 +54,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -66,7 +66,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -78,7 +78,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -90,7 +90,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -102,7 +102,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -114,7 +114,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -126,7 +126,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -138,7 +138,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -150,7 +150,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 
 ---
@@ -163,7 +163,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 
 ---
@@ -176,7 +176,7 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b
 
 ---
 
@@ -189,4 +189,4 @@ spec:
   priority: 2
   poolRef:
     group: inference.networking.k8s.io
-    name: vllm-llama3-8b-instruct
+    name: vllm-qwen3-32b

@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 )
 
-const testModelValue = "llama-3"
+const testModelValue = "qwen3"
 
 func TestNewBodyFieldToHeaderPlugin(t *testing.T) {
 	tests := []struct {
@@ -271,7 +271,7 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest(t *testing.T) {
 			request: &framework.InferenceRequest{
 				InferenceMessage: framework.InferenceMessage{
 					Headers: nil,
-					Body:    map[string]any{"model": "llama"},
+					Body:    map[string]any{"model": "qwen"},
 				},
 			},
 		},

@@ -69,7 +69,7 @@ var (
 )
 
 const (
-	testPoolName = "vllm-llama3-8b-instruct-pool"
+	testPoolName = "vllm-qwen3-32b-pool"
 
 	// mockDataSourceType is the plugin type name used for the mock data source in integration tests.
 	mockDataSourceType = "mock-metrics-source"

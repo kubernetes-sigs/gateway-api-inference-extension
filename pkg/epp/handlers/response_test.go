@@ -36,7 +36,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -60,7 +60,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -79,7 +79,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"invalid json"
@@ -93,7 +93,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,

@@ -27,7 +27,7 @@ import (
 // --- Response Expectations (Streaming) ---
 
 // ExpectBBRHeader asserts that BBR set the specific model header and cleared the route cache.
-// baseModelName is the expected base model name (e.g., "llama" for both "llama" and "sql-lora-sheddable")
+// baseModelName is the expected base model name (e.g., "qwen" for both "qwen" and "sql-lora-sheddable")
 func ExpectBBRHeader(modelName, baseModelName string, contentLength string) *extProcPb.ProcessingResponse {
 	return &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_RequestHeaders{
@@ -154,7 +154,7 @@ func ExpectResponseBodyMutation(body map[string]any) *extProcPb.ProcessingRespon
 // --- Request Phase Expectations (Unary) ---
 
 // ExpectBBRUnaryResponse creates expected response for unary tests where the body is mutated directly.
-// baseModelName is the expected base model name (e.g., "llama" for both "llama" and "sql-lora-sheddable")
+// baseModelName is the expected base model name (e.g., "qwen" for both "qwen" and "sql-lora-sheddable")
 func ExpectBBRUnaryResponse(modelName, baseModelName string, prompt string) *extProcPb.ProcessingResponse {
 	resp := &extProcPb.ProcessingResponse{}
 

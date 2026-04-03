@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama3-8b-instruct
+  name: vllm-qwen3-32b
 spec:
   replicas: 10
   selector:
     matchLabels:
-      app: vllm-llama3-8b-instruct
+      app: vllm-qwen3-32b
   template:
     metadata:
       labels:
-        app: vllm-llama3-8b-instruct
+        app: vllm-qwen3-32b
         inference.networking.k8s.io/engine-type: vllm
     spec:
       containers:
@@ -20,7 +20,7 @@ spec:
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
           - "--model"
-          - "meta-llama/Llama-3.1-8B-Instruct"
+          - "Qwen/Qwen3-32B"
           - "--tensor-parallel-size"
           - "1"
           - "--port"
@@ -201,8 +201,8 @@ spec:
       # follows:
       #
       #   1. Identify the maximum context length the model was trained on, or the maximum
-      #      allowed length of output tokens configured on vLLM (llama2-7b was trained to
-      #      4k context length, while llama3-8b was trained to 128k).
+      #      allowed length of output tokens configured on vLLM (qwen3-32b was trained to
+      #      128k context length).
       #   2. Output tokens are the more compute intensive to calculate and the accelerator
       #      will have a maximum concurrency (batch size) - the time per output token at
       #      maximum batch with no prompt tokens being processed is the slowest an output

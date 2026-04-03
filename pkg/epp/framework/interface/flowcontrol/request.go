@@ -67,7 +67,7 @@ type FlowControlRequest interface {
 	// This is used for observability (metrics labeling) to correlate queue depth with specific backend pools.
 	InferencePoolName() string
 
-	// ModelName returns the name of the base model being requested (e.g., "llama-2-70b").
+	// ModelName returns the name of the base model being requested (e.g., "qwen3-32b").
 	ModelName() string
 
 	// TargetModelName returns the name of the specific adapter or traffic target (e.g., "finance-lora-v1").

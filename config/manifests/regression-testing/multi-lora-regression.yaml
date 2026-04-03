@@ -31,7 +31,7 @@ spec:
         - name: BENCHMARK_TIME_SECONDS
           value: '300'
         - name: TOKENIZER
-          value: 'meta-llama/Llama-3.1-8B-Instruct'
+          value: 'Qwen/Qwen3-32B'
         - name: MODELS
           value: 'adapter-0,adapter-1,adapter-2,adapter-3,adapter-4,adapter-5,adapter-6,adapter-7,adapter-8,adapter-9,adapter-10,adapter-11,adapter-12,adapter-13,adapter-14'
         - name: TRAFFIC_SPLIT

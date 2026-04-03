@@ -51,7 +51,7 @@ const (
 	// A small capacity ensures a high accuracy of cache hit on the model server, but it will
 	// increase the chance of false negatives. A high capacity does the opposite.
 	// To properly size this, consider the sum of the total number of cache entries on all model
-	// servers. Consider the llama3 8B model on a H100 80GB GPUs. The size of the model weight is
+	// servers. Consider the qwen3 32B model on a H100 80GB GPUs. The size of the model weight is
 	// about 16GB. The remaining HBM used for caching prefixes is 64GB. Each
 	// token is about 128KB in size, so we can cache 500K tokens. Using the default block size of 16
 	// in vLLM, we will have 250K / 16 = 31.25K blocks.

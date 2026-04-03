@@ -22,11 +22,11 @@
 #
 # Options:
 #   --pred-base-url    Base URL for prediction servers (port appended per sidecar)
-#                      Default: http://vllm-llama3-8b-instruct-epp
+#                      Default: http://vllm-qwen3-32b-epp
 #   --pred-start-port  Port for the first prediction server; incremented per sidecar
 #                      Default: 8001
 #   --train-url        Full URL for the training server
-#                      Default: http://vllm-llama3-8b-instruct-epp:8000
+#                      Default: http://vllm-qwen3-32b-epp:8000
 #
 # Examples:
 #   # Default (EPP sidecar mode):
@@ -41,9 +41,9 @@
 set -e
 
 # Defaults
-PRED_BASE_URL="http://vllm-llama3-8b-instruct-epp"
+PRED_BASE_URL="http://vllm-qwen3-32b-epp"
 PRED_START_PORT=8001
-TRAIN_URL="http://vllm-llama3-8b-instruct-epp:8000"
+TRAIN_URL="http://vllm-qwen3-32b-epp:8000"
 
 # Parse flags
 while [[ $# -gt 0 ]]; do

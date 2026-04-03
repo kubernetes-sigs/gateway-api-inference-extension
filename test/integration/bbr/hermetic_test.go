@@ -52,8 +52,8 @@ func TestBodyBasedRouting(t *testing.T) {
 	}{
 		{
 			name:         "success: extracts model and sets header",
-			req:          integration.ReqLLMUnary(logger, "test", "llama"),
-			wantResponse: ExpectBBRUnaryResponse("llama", "llama", "test"),
+			req:          integration.ReqLLMUnary(logger, "test", "qwen"),
+			wantResponse: ExpectBBRUnaryResponse("qwen", "qwen", "test"),
 		},
 		{
 			name: "no model parameter in body - skips gracefully",
@@ -155,12 +155,12 @@ func TestResponsePlugins(t *testing.T) {
 				return NewBBRHarness(t, ctx, false)
 			},
 			reqs: []*extProcPb.ProcessingRequest{
-				integration.ReqLLMUnary(logger, "test", "llama"),
+				integration.ReqLLMUnary(logger, "test", "qwen"),
 				respHeaders,
 				respBodyReq(map[string]any{"choices": []any{map[string]any{"text": "Hi there!"}}}),
 			},
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRUnaryResponse("llama", "llama", "test"),
+				ExpectBBRUnaryResponse("qwen", "qwen", "test"),
 				ExpectResponseHeadersPassThrough(),
 				ExpectResponseBodyPassThrough(),
 			},
@@ -230,7 +230,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 			name: "success: adds model header from simple body",
 			reqs: integration.ReqLLM(logger, "test", "foo", "bar"),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRHeader("foo", "llama", "64"),
+				ExpectBBRHeader("foo", "qwen", "64"),
 				ExpectBBRBodyPassThrough("test", "foo"),
 			},
 		},
@@ -242,7 +242,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				`ra-sheddable","prompt":"test","temperature":0}`,
 			),
 			wantResponses: []*extProcPb.ProcessingResponse{
-				ExpectBBRHeader("sql-lora-sheddable", "llama", "79"),
+				ExpectBBRHeader("sql-lora-sheddable", "qwen", "79"),
 				ExpectBBRBodyPassThrough("test", "sql-lora-sheddable"),
 			},
 		},

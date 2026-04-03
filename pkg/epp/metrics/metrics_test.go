@@ -1068,8 +1068,8 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 
 	const (
 		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		model  = "qwen-3"
+		target = "qwen-3-base"
 	)
 
 	records := []struct {
@@ -1158,8 +1158,8 @@ func TestFlowControlQueueSizeMetric(t *testing.T) {
 
 	const (
 		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		model  = "qwen-3"
+		target = "qwen-3-base"
 	)
 
 	// Basic Inc/Dec
@@ -1196,8 +1196,8 @@ func TestFlowControlQueueBytesMetric(t *testing.T) {
 
 	const (
 		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		model  = "qwen-3"
+		target = "qwen-3-base"
 	)
 
 	// Basic Inc/Dec

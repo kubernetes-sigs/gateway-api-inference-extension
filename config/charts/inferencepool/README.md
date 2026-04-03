@@ -114,8 +114,8 @@ $ helm install vllm-qwen3-32b ./config/charts/inferencepool -f values.yaml
 Use `--set inferencePool.modelServerType=triton-tensorrt-llm` to install for Triton TensorRT-LLM, e.g.,
 
 ```txt
-$ helm install triton-llama3-8b-instruct \
-  --set inferencePool.modelServers.matchLabels.app=triton-llama3-8b-instruct \
+$ helm install triton-qwen3-32b \
+  --set inferencePool.modelServers.matchLabels.app=triton-qwen3-32b \
   --set inferencePool.modelServerType=triton-tensorrt-llm \
   --set provider.name=[none|gke|istio] \
   oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool --version v0

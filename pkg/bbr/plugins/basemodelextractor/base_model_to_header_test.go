@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	testBaseModel = "llama-3-8b"
+	testBaseModel = "qwen3-8b"
 	testAdapter   = "finance-adapter"
 )
 
