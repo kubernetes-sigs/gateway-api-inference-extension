@@ -14,7 +14,7 @@ Latency-based request scheduling is implemented as a pipeline of composable plug
 
 2.  **Prefix Cache Affinity Filtering** (`prefix-cache-affinity-filter`): If any endpoint has a prefix cache match score above the affinity threshold (default 0.80), the filter narrows the candidate set to those endpoints. This improves cache hit rates without hot-spotting.
 
-3.  **Scoring** (`latency-scorer`): Scores endpoints based on predicted latency headroom. Endpoints with lower predicted latency (less negative headroom) receive higher scores. When no SLO headers are set, all headrooms are negative and the scorer differentiates by relative deficit magnitude, effectively scheduling to the endpoint with the lowest predicted latency.
+3.  **Scoring** (`latency-scorer`): Scores endpoints based on predicted latency. In the absence of SLOs, `least` and `most` behave the same way — endpoints with the lowest predicted latency are scored higher. When SLO headers are present, scoring is based on headroom (`SLO - predicted`) and the strategy determines how headroom is used (see [Scoring Strategy](#scoring-strategy)).
 
 4.  **Selection** (`weighted-random-picker`): Selects an endpoint using weighted random selection based on the scores. This provides load spreading while still favoring better-scoring endpoints.
 
@@ -27,6 +27,15 @@ Two additional plugins are included in the default pipeline. They are noop when 
 -   `slo-headroom-tier-filter`: Splits endpoints into positive (meets SLO) and negative (violates SLO) tiers. Probabilistically explores the negative tier to let recovering pods get traffic.
 -   `latency-slo-admitter`: Rejects [sheddable](../concepts/priority-and-capacity.md) requests when no endpoint can meet SLO constraints.
 
+### Scoring Strategy
+
+The `latency-scorer` plugin supports the following strategies for selecting a model server based on predicted latency headroom. These strategies only affect scoring when SLO headers are present; without SLOs, endpoints are always scored by lowest predicted latency regardless of strategy.
+
+-   `least`: (Default) Prefers the endpoint closest to the SLO boundary in either direction — the smallest positive headroom (just meets SLO) or the smallest negative deficit (least overloaded). This strategy is good for bin-packing and maximizing utilization.
+-   `most`: Prefers the endpoint with the most headroom. This strategy is more conservative and leaves more room for unexpected latency spikes. Only applies to positive headroom; for negative headroom, `least` is always used.
+
+The strategy can be configured via the `headroomSelectionStrategy` parameter on the `latency-scorer` plugin.
+
 ## Request Headers
 
 The following headers can optionally be included in inference requests for SLO-based scheduling:
@@ -34,16 +43,7 @@ The following headers can optionally be included in inference requests for SLO-b
 -   `x-slo-ttft-ms`: The Time to First Token SLO in milliseconds.
 -   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds (this is vLLM's equivalent of ITL, it is **not** NTPOT).
 
-When SLO headers are omitted, latency-based request scheduling still works — the scorer differentiates endpoints by predicted latency alone, scheduling to the endpoint with the lowest predicted latency.
-
-## Scoring Strategy
-
-The `latency-scorer` plugin supports the following strategies for selecting a model server based on predicted latency headroom:
-
--   `least`: (Default) Prefers the endpoint closest to the SLO boundary in either direction — the smallest positive headroom (just meets SLO) or the smallest negative deficit (least overloaded). This strategy is good for bin-packing and maximizing utilization.
--   `most`: Prefers the endpoint with the most headroom. This strategy is more conservative and leaves more room for unexpected latency spikes. Only applies to positive headroom; for negative headroom, `least` is always used.
-
-The strategy can be configured via the `headroomSelectionStrategy` parameter on the `latency-scorer` plugin.
+When SLO headers are omitted, latency-based request scheduling still works — the scorer schedules to the endpoint with the lowest predicted latency.
 
 ## Streaming Mode
 
