@@ -836,10 +836,10 @@ func TestFilterExecutionOrderFromYAML(t *testing.T) {
 	plugins := rawConfig.SchedulingProfiles[0].Plugins
 
 	// Verify the pluginRef order matches YAML declaration order.
-	var pluginRefs []string
+	pluginRefs := make([]string, 0, len(plugins))
 	for _, p := range plugins {
 		pluginRefs = append(pluginRefs, p.PluginRef)
 	}
-	require.Equal(t, []string{"filter-A", "filter-B", "filter-C", "maxScorePicker"}, pluginRefs,
+	require.Equal(t, []string{"filter-A", "filter-B", "filter-C", "scorer-X", "scorer-Y", "maxScorePicker"}, pluginRefs,
 		"Plugins slice must preserve YAML declaration order")
 }

@@ -611,9 +611,9 @@ parser:
   pluginRef: wrongParser # Wrong names
 `
 
-// successFilterOrderConfigText defines 3 filter instances of the same type
-// in a specific order (A, B, C). Used to verify that the full YAML→config→profile
-// pipeline preserves filter declaration order.
+// successFilterOrderConfigText defines filters and scorers in a specific order.
+// Used to verify that the full YAML→config→profile pipeline preserves
+// plugin declaration order.
 const successFilterOrderConfigText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
@@ -624,6 +624,10 @@ plugins:
   type: test-order-filter
 - name: filter-C
   type: test-order-filter
+- name: scorer-X
+  type: test-scorer
+- name: scorer-Y
+  type: test-scorer
 - name: profileHandler
   type: single-profile-handler
 - name: maxScorePicker
@@ -634,5 +638,9 @@ schedulingProfiles:
   - pluginRef: filter-A
   - pluginRef: filter-B
   - pluginRef: filter-C
+  - pluginRef: scorer-X
+    weight: 10
+  - pluginRef: scorer-Y
+    weight: 20
   - pluginRef: maxScorePicker
 `
