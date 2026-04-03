@@ -2,7 +2,7 @@
 # Example: make all ISTIO_VERSION=1.28.0
 GATEWAY_API_VERSION ?= v1.3.0
 INFERENCE_EXTENSION_VERSION ?= v0.4.0
-ISTIO_VERSION ?= 1.27-alpha.0551127f00634403cddd4634567e65a8ecc499a7
+ISTIO_VERSION ?= 1.28.0
 ISTIO_HUB ?=
 ISTIO_PROFILE ?= minimal
 
@@ -423,7 +423,7 @@ setup-gateway-api-crds:
 # Apply Inference Extension CRDs
 setup-inference-extension-crds:
 	@echo "Applying Inference Extension CRDs version $(INFERENCE_EXTENSION_VERSION)..."
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.x-k8s.io_inferencepools.yaml
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.k8s.io_inferencepools.yaml
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml
 
 # Apply all CRDs (convenience target)

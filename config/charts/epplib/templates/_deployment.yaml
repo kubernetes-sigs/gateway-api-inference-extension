@@ -92,10 +92,8 @@ spec:
               # The pool namespace is optional because EPP can default to the NAMESPACE env var.
               - --pool-namespace
               - {{ .Release.Namespace }}
-          {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
               - --pool-group
-              - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
-          {{- end }}
+              - "inference.networking.k8s.io"
           {{- end }}
           # SGLang specific metrics.
           {{- if eq $modelServerType "sglang" }}

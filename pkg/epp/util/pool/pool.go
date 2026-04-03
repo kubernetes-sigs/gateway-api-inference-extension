@@ -18,7 +18,6 @@ package pool
 
 import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 )
 
@@ -38,22 +37,6 @@ func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datalayer.End
 	endpointPool := &datalayer.EndpointPool{
 		Selector:    selector,
 		TargetPorts: targetPorts,
-		Namespace:   inferencePool.Namespace,
-		Name:        inferencePool.Name,
-	}
-	return endpointPool
-}
-
-func AlphaInferencePoolToEndpointPool(inferencePool *v1alpha2.InferencePool) *datalayer.EndpointPool {
-	targetPorts := []int{int(inferencePool.Spec.TargetPortNumber)}
-	selector := make(map[string]string, len(inferencePool.Spec.Selector))
-	for k, v := range inferencePool.Spec.Selector {
-		selector[string(k)] = string(v)
-	}
-
-	endpointPool := &datalayer.EndpointPool{
-		TargetPorts: targetPorts,
-		Selector:    selector,
 		Namespace:   inferencePool.Namespace,
 		Name:        inferencePool.Name,
 	}

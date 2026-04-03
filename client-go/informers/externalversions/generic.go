@@ -67,8 +67,6 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha2().InferenceModelRewrites().Informer()}, nil
 	case v1alpha2.SchemeGroupVersion.WithResource("inferenceobjectives"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha2().InferenceObjectives().Informer()}, nil
-	case v1alpha2.SchemeGroupVersion.WithResource("inferencepools"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha2().InferencePools().Informer()}, nil
 
 	}
 
