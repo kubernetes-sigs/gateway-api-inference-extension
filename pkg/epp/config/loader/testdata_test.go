@@ -503,6 +503,21 @@ featureGates:
 - enableLegacyMetrics
 `
 
+// successDataLayerNoSourcesText has an explicit empty dataLayer section with no sources.
+// The loader should NOT inject defaults — the empty section signals "no metrics collection".
+const successDataLayerNoSourcesText = `
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- name: maxScore
+  type: max-score-picker
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: maxScore
+dataLayer: {}
+`
+
 // successDataLayerExplicitConfigText has the datalayer enabled with explicit data config.
 // The loader should preserve the user's config and NOT overwrite with defaults.
 const successDataLayerExplicitConfigText = `

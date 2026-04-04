@@ -504,6 +504,19 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			},
 		},
 		{
+			name:       "Success (DataLayer) - Empty dataLayer section disables default metrics",
+			configText: successDataLayerNoSourcesText,
+			wantErr:    false,
+			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
+				require.NotNil(t, rawCfg.DataLayer, "DataLayer section should be present (user provided it)")
+				require.Empty(t, rawCfg.DataLayer.Sources, "No sources should be present")
+				require.Nil(t, handle.Plugin(sourcemetrics.MetricsDataSourceType), "MetricsDataSource should not be instantiated")
+				require.Nil(t, handle.Plugin(extractormetrics.MetricsExtractorType), "MetricsExtractor should not be instantiated")
+				require.NotNil(t, cfg.DataConfig, "DataConfig should still be built (just empty)")
+				require.Empty(t, cfg.DataConfig.Sources, "DataConfig should have no sources")
+			},
+		},
+		{
 			name:       "Success (DataLayer) - Explicit data config preserved",
 			configText: successDataLayerExplicitConfigText,
 			wantErr:    false,
