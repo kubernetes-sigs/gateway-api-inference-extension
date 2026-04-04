@@ -111,8 +111,8 @@ func (in *EndpointPickerConfig) DeepCopyInto(out *EndpointPickerConfig) {
 		*out = new(SaturationDetectorConfig)
 		**out = **in
 	}
-	if in.Data != nil {
-		in, out := &in.Data, &out.Data
+	if in.DataLayer != nil {
+		in, out := &in.DataLayer, &out.DataLayer
 		*out = new(DataLayerConfig)
 		(*in).DeepCopyInto(*out)
 	}

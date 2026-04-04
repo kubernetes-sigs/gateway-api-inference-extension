@@ -89,7 +89,7 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 				},
 			},
 		},
-		Data: &configapi.DataLayerConfig{
+		DataLayer: &configapi.DataLayerConfig{
 			Sources: []configapi.DataLayerSource{
 				{
 					PluginRef: sourcemetrics.MetricsDataSourceType,
@@ -297,7 +297,7 @@ func ensureDataLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handl
 		return nil
 	}
 
-	if cfg.Data != nil {
+	if cfg.DataLayer != nil {
 		return nil
 	}
 
@@ -312,7 +312,7 @@ func ensureDataLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handl
 		}
 	}
 
-	cfg.Data = &configapi.DataLayerConfig{
+	cfg.DataLayer = &configapi.DataLayerConfig{
 		Sources: []configapi.DataLayerSource{{
 			PluginRef: sourcemetrics.MetricsDataSourceType,
 			Extractors: []configapi.DataLayerExtractor{{

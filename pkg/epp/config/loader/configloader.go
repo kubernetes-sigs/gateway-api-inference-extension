@@ -112,7 +112,7 @@ func InstantiateAndConfigure(
 	var dataConfig *datalayer.Config
 	if !featureGates[datalayer.EnableLegacyMetricsFeatureGate] {
 		var err error
-		dataConfig, err = buildDataLayerConfig(rawConfig.Data, handle)
+		dataConfig, err = buildDataLayerConfig(rawConfig.DataLayer, handle)
 		if err != nil {
 			return nil, fmt.Errorf("data layer config build failed: %w", err)
 		}

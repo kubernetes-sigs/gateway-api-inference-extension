@@ -184,7 +184,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 						},
 					},
 				},
-				Data: &configapi.DataLayerConfig{
+				DataLayer: &configapi.DataLayerConfig{
 					Sources: []configapi.DataLayerSource{
 						{
 							PluginRef: sourcemetrics.MetricsDataSourceType,
@@ -483,11 +483,11 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			configText: successDataLayerAutoDefaultText,
 			wantErr:    false,
 			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
-				require.NotNil(t, rawCfg.Data, "Data section should be injected by default")
-				require.Len(t, rawCfg.Data.Sources, 1, "Should have one default source")
-				require.Equal(t, sourcemetrics.MetricsDataSourceType, rawCfg.Data.Sources[0].PluginRef)
-				require.Len(t, rawCfg.Data.Sources[0].Extractors, 1)
-				require.Equal(t, extractormetrics.MetricsExtractorType, rawCfg.Data.Sources[0].Extractors[0].PluginRef)
+				require.NotNil(t, rawCfg.DataLayer, "Data section should be injected by default")
+				require.Len(t, rawCfg.DataLayer.Sources, 1, "Should have one default source")
+				require.Equal(t, sourcemetrics.MetricsDataSourceType, rawCfg.DataLayer.Sources[0].PluginRef)
+				require.Len(t, rawCfg.DataLayer.Sources[0].Extractors, 1)
+				require.Equal(t, extractormetrics.MetricsExtractorType, rawCfg.DataLayer.Sources[0].Extractors[0].PluginRef)
 				require.NotNil(t, cfg.DataConfig, "DataConfig should be built")
 				require.NotNil(t, handle.Plugin(sourcemetrics.MetricsDataSourceType), "MetricsDataSource plugin should be instantiated")
 				require.NotNil(t, handle.Plugin(extractormetrics.MetricsExtractorType), "MetricsExtractor plugin should be instantiated")
@@ -498,7 +498,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			configText: successDataLayerDisabledText,
 			wantErr:    false,
 			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
-				require.Nil(t, rawCfg.Data, "Data section should NOT be injected when datalayer is disabled")
+				require.Nil(t, rawCfg.DataLayer, "Data section should NOT be injected when datalayer is disabled")
 				require.Nil(t, handle.Plugin(sourcemetrics.MetricsDataSourceType), "MetricsDataSource should not be instantiated")
 				require.Nil(t, handle.Plugin(extractormetrics.MetricsExtractorType), "MetricsExtractor should not be instantiated")
 			},
@@ -508,9 +508,9 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			configText: successDataLayerExplicitConfigText,
 			wantErr:    false,
 			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {
-				require.NotNil(t, rawCfg.Data, "Data config should be present")
-				require.Len(t, rawCfg.Data.Sources, 1)
-				require.Equal(t, "testSource", rawCfg.Data.Sources[0].PluginRef,
+				require.NotNil(t, rawCfg.DataLayer, "Data config should be present")
+				require.Len(t, rawCfg.DataLayer.Sources, 1)
+				require.Equal(t, "testSource", rawCfg.DataLayer.Sources[0].PluginRef,
 					"Explicit source should be preserved, not overwritten by defaults")
 			},
 		},

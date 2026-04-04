@@ -84,7 +84,7 @@ schedulingProfiles:
   - pluginRef: testScorer
     weight: 50
   - pluginRef: maxScorePicker
-data:
+dataLayer:
   sources:
   - pluginRef: testSource
     extractors:
@@ -519,7 +519,7 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: maxScore
-data:
+dataLayer:
   sources:
   - pluginRef: testSource
     extractors:
@@ -541,7 +541,7 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: test1
-data:
+dataLayer:
   sources:
   - pluginRef: test-one
 featureGates:
@@ -563,7 +563,7 @@ schedulingProfiles:
 - name: default
   plugins:
   - pluginRef: test1
-data:
+dataLayer:
   sources:
   - pluginRef: test-source
     extractors:

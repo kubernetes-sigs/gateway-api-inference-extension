@@ -21,7 +21,7 @@ schedulingProfiles:
   - pluginRef: test-two
     weight: 50
   - pluginRef: testPicker
-data:
+dataLayer:
   sources:
   - pluginRef: test-source
     extractors:

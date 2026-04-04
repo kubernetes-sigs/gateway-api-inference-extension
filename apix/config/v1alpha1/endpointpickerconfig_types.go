@@ -55,8 +55,8 @@ type EndpointPickerConfig struct {
 	SaturationDetector *SaturationDetectorConfig `json:"saturationDetector,omitempty"`
 
 	// +optional
-	// Data configures the DataLayer. It is required if the new DataLayer is enabled.
-	Data *DataLayerConfig `json:"data"`
+	// DataLayer configures the DataLayer. It is required if the new DataLayer is enabled.
+	DataLayer *DataLayerConfig `json:"dataLayer"`
 
 	// +optional
 	// FlowControl configures the Flow Control layer.
@@ -80,8 +80,8 @@ func (cfg EndpointPickerConfig) String() string {
 	if len(cfg.SchedulingProfiles) > 0 {
 		parts = append(parts, fmt.Sprintf("SchedulingProfiles: %v", cfg.SchedulingProfiles))
 	}
-	if cfg.Data != nil {
-		parts = append(parts, fmt.Sprintf("Data: %v", cfg.Data))
+	if cfg.DataLayer != nil {
+		parts = append(parts, fmt.Sprintf("DataLayer: %v", cfg.DataLayer))
 	}
 	if cfg.SaturationDetector != nil {
 		parts = append(parts, fmt.Sprintf("SaturationDetector: %v", cfg.SaturationDetector))
