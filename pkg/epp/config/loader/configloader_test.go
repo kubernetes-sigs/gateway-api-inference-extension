@@ -72,7 +72,7 @@ func TestLoadRawConfiguration(t *testing.T) {
 
 	// Register known feature gates for validation.
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
-	RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
+	RegisterFeatureGate(datalayer.EnableLegacyMetricsFeatureGate)
 	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	queueScorerWeight := 2.0
@@ -234,7 +234,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 	registerTestPlugins(t)
 
 	RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
-	RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
+	RegisterFeatureGate(datalayer.EnableLegacyMetricsFeatureGate)
 	RegisterFeatureGate(flowcontrol.FeatureGate)
 
 	tests := []struct {
@@ -494,7 +494,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 			},
 		},
 		{
-			name:       "Success (DataLayer) - Disabled via disableDataLayer gate",
+			name:       "Success (DataLayer) - Legacy metrics via enableLegacyMetrics gate",
 			configText: successDataLayerDisabledText,
 			wantErr:    false,
 			validate: func(t *testing.T, handle fwkplugin.Handle, rawCfg *configapi.EndpointPickerConfig, cfg *config.Config) {

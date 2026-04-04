@@ -52,7 +52,7 @@ schedulingProfiles:
 parser:
   pluginRef: vllmgrpc-parser
 featureGates:
-  - disableDataLayer
+  - enableLegacyMetrics
 `
 )
 

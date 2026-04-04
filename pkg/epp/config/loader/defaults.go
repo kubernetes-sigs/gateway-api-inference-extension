@@ -290,12 +290,14 @@ func ensureSaturationDetector(
 
 // ensureDataLayer guarantees that the data layer is configured unless explicitly disabled.
 // If no data section is provided, the default plugins are added.
+// If a data section is explicitly provided (even empty), it is left unchanged — an empty section
+// disables metrics collection without falling back to legacy.
 func ensureDataLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle, allPlugins map[string]fwkplugin.Plugin) error {
-	if slices.Contains(cfg.FeatureGates, datalayer.DisableDataLayerFeatureGate) {
+	if slices.Contains(cfg.FeatureGates, datalayer.EnableLegacyMetricsFeatureGate) {
 		return nil
 	}
 
-	if cfg.Data != nil && len(cfg.Data.Sources) > 0 {
+	if cfg.Data != nil {
 		return nil
 	}
 

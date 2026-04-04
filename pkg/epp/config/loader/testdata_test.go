@@ -488,7 +488,7 @@ schedulingProfiles:
   - pluginRef: maxScore
 `
 
-// successDataLayerDisabledText opts out of the datalayer via the disableDataLayer gate.
+// successDataLayerDisabledText opts out of the datalayer via the enableLegacyMetrics gate.
 const successDataLayerDisabledText = `
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
@@ -500,7 +500,7 @@ schedulingProfiles:
   plugins:
   - pluginRef: maxScore
 featureGates:
-- disableDataLayer
+- enableLegacyMetrics
 `
 
 // successDataLayerExplicitConfigText has the datalayer enabled with explicit data config.

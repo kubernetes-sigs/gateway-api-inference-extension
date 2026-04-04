@@ -16,4 +16,4 @@ schedulingProfiles:
 parser:
   pluginRef: openai-parser
 featureGates:
-  - disableDataLayer
+  - enableLegacyMetrics

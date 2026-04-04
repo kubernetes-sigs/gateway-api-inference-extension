@@ -24,13 +24,13 @@ import (
 
 const (
 	// ExperimentalDatalayerFeatureGate is deprecated. The data layer is now enabled by default.
-	// This gate is a no-op and will be removed in a future version. To disable the data layer,
-	// use DisableDataLayerFeatureGate instead.
+	// This gate is a no-op and will be removed in a future version.
 	ExperimentalDatalayerFeatureGate = "dataLayer"
-	// DisableDataLayerFeatureGate disables the data layer metrics system and falls back to the
-	// legacy backend/metrics path.
-	DisableDataLayerFeatureGate   = "disableDataLayer"
-	PrepareDataPluginsFeatureGate = "prepareDataPlugins"
+	// EnableLegacyMetricsFeatureGate falls back to the legacy backend/metrics polling path.
+	// This gate is temporary and will be removed when the legacy path is deleted.
+	// To disable metrics collection without falling back to legacy, provide an empty data section in the config.
+	EnableLegacyMetricsFeatureGate = "enableLegacyMetrics"
+	PrepareDataPluginsFeatureGate  = "prepareDataPlugins"
 )
 
 // PoolInfo represents the DataStore information needed for endpoints.

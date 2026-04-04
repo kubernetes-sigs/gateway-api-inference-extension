@@ -230,7 +230,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		setupLog.Error(err, "Failed to parse configuration")
 		return nil, nil, err
 	}
-	useNewMetrics := !r.featureGates[datalayer.DisableDataLayerFeatureGate]
+	useNewMetrics := !r.featureGates[datalayer.EnableLegacyMetricsFeatureGate]
 	epf := r.setupMetricsCollection(useNewMetrics, opts, pmc)
 	gknn, err := extractGKNN(opts.PoolName, opts.PoolGroup, opts.PoolNamespace, opts.EndpointSelector)
 	if err != nil {
@@ -320,8 +320,8 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	// Data layer is enabled by default; opt out by setting the 'disableDataLayer' feature gate.
-	datalayerMetricsEnabled := !r.featureGates[datalayer.DisableDataLayerFeatureGate]
+	// Data layer is enabled by default; use the 'enableLegacyMetrics' feature gate to fall back to legacy polling.
+	datalayerMetricsEnabled := !r.featureGates[datalayer.EnableLegacyMetricsFeatureGate]
 	if err := r.configureAndStartDatalayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
@@ -371,7 +371,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		Director:                         director,
 		Parser:                           r.parser,
 		SaturationDetector:               eppConfig.SaturationDetector,
-		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.DisableDataLayerFeatureGate],
+		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.EnableLegacyMetricsFeatureGate],
 	}
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
@@ -498,7 +498,7 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	}
 
 	loader.RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
-	loader.RegisterFeatureGate(datalayer.DisableDataLayerFeatureGate)
+	loader.RegisterFeatureGate(datalayer.EnableLegacyMetricsFeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
 	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
 
@@ -514,11 +514,11 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] {
 		setupLog.Info("The data layer is now enabled by default. " +
 			"Please remove the 'dataLayer' feature gate from your config. " +
-			"To disable the data layer, use the 'disableDataLayer' feature gate.")
+			"To fall back to legacy metrics polling, use the 'enableLegacyMetrics' feature gate.")
 	}
 
-	if r.featureGates[datalayer.DisableDataLayerFeatureGate] {
-		setupLog.Info("Data layer: DISABLED (opt-out via 'disableDataLayer' feature gate)")
+	if r.featureGates[datalayer.EnableLegacyMetricsFeatureGate] {
+		setupLog.Info("Data layer: using legacy metrics polling (opt-in via 'enableLegacyMetrics' feature gate)")
 	} else {
 		setupLog.Info("Data layer: ENABLED (default)")
 	}

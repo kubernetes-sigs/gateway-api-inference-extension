@@ -110,15 +110,15 @@ func InstantiateAndConfigure(
 
 	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
 	var dataConfig *datalayer.Config
-	if !featureGates[datalayer.DisableDataLayerFeatureGate] {
+	if !featureGates[datalayer.EnableLegacyMetricsFeatureGate] {
 		var err error
 		dataConfig, err = buildDataLayerConfig(rawConfig.Data, handle)
 		if err != nil {
 			return nil, fmt.Errorf("data layer config build failed: %w", err)
 		}
-	}
-	if featureGates[datalayer.ExperimentalDatalayerFeatureGate] && len(dataConfig.Sources) == 0 {
-		logger.Info("data layer enabled with no sources configured, no metrics will be collected")
+		if len(dataConfig.Sources) == 0 {
+			logger.Info("No data sources configured; metrics collection is disabled")
+		}
 	}
 
 	var flowControlConfig *flowcontrol.Config

@@ -148,7 +148,7 @@ schedulingProfiles:
 parser:
   pluginRef: passthrough-parser
 featureGates:
-  - disableDataLayer
+  - enableLegacyMetrics
 `,
 					requests: integration.ReqRaw(
 						map[string]string{
