@@ -183,6 +183,16 @@ test-integration: envtest ## Run integration tests.
 test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster.
 	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) E2E_IMAGE=$(E2E_IMAGE) USE_KIND=$(E2E_USE_KIND) ./hack/test-e2e.sh
 
+.PHONY: run-example
+run-example: ## Run an example. Usage: make run-example EXAMPLE=scheduler
+	@test -n "$(EXAMPLE)" || (echo "Usage: make run-example EXAMPLE=<name>" && exit 1)
+	go run ./examples/$(EXAMPLE)/...
+
+.PHONY: build-example
+build-example: ## Build an example binary. Usage: make build-example EXAMPLE=custom-epp
+	@test -n "$(EXAMPLE)" || (echo "Usage: make build-example EXAMPLE=<name>" && exit 1)
+	go build -o bin/$(EXAMPLE) ./examples/$(EXAMPLE)/...
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run --timeout 5m
