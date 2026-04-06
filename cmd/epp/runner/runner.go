@@ -127,8 +127,6 @@ type Runner struct {
 	customCollectors     []prometheus.Collector
 	parser               fwkrh.Parser
 	dlRuntime            *datalayer.Runtime
-
-	testOverrideSkipNameValidation bool
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -209,7 +207,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	mgr, _, err := r.setup(ctx, cfg, opts, pmc)
+	mgr, _, err := r.setup(ctx, cfg, opts, pmc, nil)
 	if err != nil {
 		return err
 	}
@@ -227,10 +225,11 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // setup configures the internal state of the Runner, including the manager,
 // datastore, and other server components. It returns the initialized Manager
-// without starting it, allowing for flexible in integration test.
+// without starting it, allowing for flexible use in integration tests.
 //
-// The returned Datastore is **only** meant to use in the integration test.
-func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) (ctrl.Manager, datastore.Datastore, error) {
+// The returned Datastore is **only** meant to be used in the integration test.
+// Optional managerOverrides are applied to the controller manager options before creation.
+func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient, managerOverrides []func(*ctrl.Options)) (ctrl.Manager, datastore.Datastore, error) {
 	rawConfig, err := r.parseConfigurationPhaseOne(ctx, opts)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
@@ -286,10 +285,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection, r.testOverrideSkipNameValidation)
-	if r.testOverrideSkipNameValidation {
-		setupLog.Info("Warning: testOverrideSkipNameValidation is set to true, this should be only used in test.")
-	}
+	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection, managerOverrides...)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return nil, nil, err

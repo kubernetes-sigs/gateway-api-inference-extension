@@ -35,7 +35,6 @@ import (
 // automatically. Pass nil to fall back to the legacy metrics system with pmc.
 func NewTestRunnerSetup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient, mockDataSource fwkdl.DataSource) (ctrl.Manager, datastore.Datastore, error) {
 	runner := NewRunner()
-	runner.testOverrideSkipNameValidation = true
 
 	if mockDataSource != nil {
 		mockType := mockDataSource.TypedName().Type
@@ -45,5 +44,14 @@ func NewTestRunnerSetup(ctx context.Context, cfg *rest.Config, opts *runserver.O
 		defer delete(fwkplugin.Registry, mockType)
 	}
 
-	return runner.setup(ctx, cfg, opts, pmc)
+	// Skip controller name validation in integration tests to avoid collisions
+	// when multiple controllers are registered within the same test process.
+	skipNameValidation := true
+	managerOverrides := []func(*ctrl.Options){
+		func(o *ctrl.Options) {
+			o.Controller.SkipNameValidation = &skipNameValidation
+		},
+	}
+
+	return runner.setup(ctx, cfg, opts, pmc, managerOverrides)
 }
