@@ -30,6 +30,7 @@ import (
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
@@ -64,6 +65,7 @@ func createTestRouter() *PredictedLatency {
 		),
 		// runningRequestLists is a sync.Map and needs no initialization
 		latencypredictor: nil,
+		metricsRecorder:  &plugmocks.NoopMetricsRecorder{},
 		config:           DefaultConfig,
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -41,7 +42,7 @@ func createTestEndpointWithLabels(name string, kvCacheUsage float64, runningRequ
 func TestValidatePrediction_StreamingMode(t *testing.T) {
 	cfg := DefaultConfig
 	cfg.StreamingMode = true
-	pl := NewPredictedLatency(cfg, nil)
+	pl := NewPredictedLatency(cfg, nil, &plugmocks.NoopMetricsRecorder{})
 
 	tests := []struct {
 		name            string
@@ -118,7 +119,7 @@ func TestValidatePrediction_StreamingMode(t *testing.T) {
 func TestValidatePrediction_NonStreamingMode(t *testing.T) {
 	config := DefaultConfig
 	config.StreamingMode = false
-	pl := NewPredictedLatency(config, nil)
+	pl := NewPredictedLatency(config, nil, &plugmocks.NoopMetricsRecorder{})
 
 	ctx := &predictedLatencyCtx{
 		ttftSLO:    100,
@@ -141,7 +142,7 @@ func TestValidatePrediction_PrefillEndpointNeutralizeTPOT(t *testing.T) {
 	config := DefaultConfig
 	config.EndpointRoleLabel = "role"
 	config.StreamingMode = true
-	pl := NewPredictedLatency(config, nil)
+	pl := NewPredictedLatency(config, nil, &plugmocks.NoopMetricsRecorder{})
 
 	prefillEp := createTestEndpointWithLabels("prefill-pod", 0.3, 0, 0, map[string]string{"role": "prefill"})
 	decodeEp := createTestEndpointWithLabels("decode-pod", 0.3, 0, 0, map[string]string{"role": "decode"})
@@ -210,7 +211,7 @@ func TestValidatePrediction_PrefillEndpointNeutralizeTPOT(t *testing.T) {
 }
 
 func TestUpdateRequestContextWithPredictions(t *testing.T) {
-	pl := NewPredictedLatency(DefaultConfig, nil)
+	pl := NewPredictedLatency(DefaultConfig, nil, &plugmocks.NoopMetricsRecorder{})
 	ctx := &predictedLatencyCtx{
 		predictionsForScheduling: make(map[string]endpointPredictionResult),
 	}

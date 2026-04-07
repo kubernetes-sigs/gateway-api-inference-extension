@@ -28,6 +28,7 @@ import (
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -151,7 +152,7 @@ func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *
 func TestPredictedLatency_TypedName(t *testing.T) {
 	predictor := &mockPredictor{}
 	cfg := DefaultConfig
-	router := NewPredictedLatency(cfg, predictor)
+	router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 	tn := router.TypedName()
 	assert.Equal(t, "predicted-latency-producer", tn.Type, "Type should be latency-predictor")
@@ -161,7 +162,7 @@ func TestPredictedLatency_TypedName(t *testing.T) {
 func TestPredictedLatency_WithName(t *testing.T) {
 	predictor := &mockPredictor{}
 	cfg := DefaultConfig
-	router := NewPredictedLatency(cfg, predictor)
+	router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 	customName := "custom-router"
 	router = router.WithName(customName)
@@ -216,7 +217,7 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
-			router := NewPredictedLatency(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -272,7 +273,7 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
-			router := NewPredictedLatency(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -377,7 +378,7 @@ func TestPredictedLatencyFactoryInvalidJSON(t *testing.T) {
 func TestSloContextStoreEviction(t *testing.T) {
 	config := DefaultConfig
 	config.ContextTTL = 100 * time.Millisecond
-	pl := NewPredictedLatency(config, nil)
+	pl := NewPredictedLatency(config, nil, &plugmocks.NoopMetricsRecorder{})
 
 	requestID := "test-req-id"
 	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}

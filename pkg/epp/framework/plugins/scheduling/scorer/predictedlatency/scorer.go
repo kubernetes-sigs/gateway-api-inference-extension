@@ -42,6 +42,7 @@ import (
 type PredictedLatency struct {
 	typedName             plugin.TypedName
 	latencypredictor      latencypredictor.PredictorInterface
+	metricsRecorder       plugin.MetricsRecorder
 	runningRequestLists   sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
 	sloContextStore       *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
 	headroomStrategy      headroomStrategy
@@ -119,7 +120,7 @@ func PredictedLatencyFactory(name string, rawParameters json.RawMessage, handle 
 		return nil, fmt.Errorf("failed to start latency predictor: %w", err)
 	}
 
-	return NewPredictedLatency(parameters, predictor).WithName(name), nil
+	return NewPredictedLatency(parameters, predictor, handle.Metrics()).WithName(name), nil
 }
 
 func (c *Config) validate() error {
@@ -169,7 +170,7 @@ func (c *Config) validate() error {
 	return nil
 }
 
-func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInterface) *PredictedLatency {
+func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInterface, metricsRecorder plugin.MetricsRecorder) *PredictedLatency {
 	strategy := headroomStrategy(config.HeadroomSelectionStrategy)
 	if strategy == "" {
 		strategy = headroomStrategyLeast
@@ -178,6 +179,7 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 	predictedLatency := &PredictedLatency{
 		typedName:        plugin.TypedName{Type: PredictedLatencyPluginType, Name: PredictedLatencyPluginType},
 		latencypredictor: predictor,
+		metricsRecorder:  metricsRecorder,
 		// runningRequestLists is a sync.Map and needs no initialization
 		headroomStrategy: strategy,
 		config:           config,

@@ -25,23 +25,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
 // indexer implements the indexerInterface interface.
 type indexer struct {
-	mu             sync.RWMutex
-	hashToPods     map[blockHash]podSet                         // the lookup data structure to find pods that have the blockHash cached
-	podToLRU       map[ServerID]*lru.Cache[blockHash, struct{}] // key is pod namespacedName, value is an LRU cache
-	defaultLRUSize int
+	mu              sync.RWMutex
+	hashToPods      map[blockHash]podSet                         // the lookup data structure to find pods that have the blockHash cached
+	podToLRU        map[ServerID]*lru.Cache[blockHash, struct{}] // key is pod namespacedName, value is an LRU cache
+	defaultLRUSize  int
+	metricsRecorder plugin.MetricsRecorder
 }
 
 // newIndexer initializes an indexer with size limits and starts cache size reporting.
-func newIndexer(ctx context.Context, defaultLRUSize int) indexerInterface {
+func newIndexer(ctx context.Context, defaultLRUSize int, metricsRecorder plugin.MetricsRecorder) indexerInterface {
 	i := &indexer{
-		hashToPods:     make(map[blockHash]podSet),
-		podToLRU:       make(map[ServerID]*lru.Cache[blockHash, struct{}]),
-		defaultLRUSize: defaultLRUSize,
+		hashToPods:      make(map[blockHash]podSet),
+		podToLRU:        make(map[ServerID]*lru.Cache[blockHash, struct{}]),
+		defaultLRUSize:  defaultLRUSize,
+		metricsRecorder: metricsRecorder,
 	}
 
 	go i.reportLRUSize(ctx, time.Second)
@@ -151,7 +153,9 @@ func (i *indexer) reportOnce(ctx context.Context) {
 		avg = float64(totalEntries) / float64(numPods)
 	}
 
-	metrics.RecordPrefixCacheSize(int64(totalEntries))
+	if i.metricsRecorder != nil {
+		i.metricsRecorder.RecordPrefixCacheSize(int64(totalEntries))
+	}
 
 	log.FromContext(ctx).V(logutil.TRACE).Info("Prefix cache state",
 		"total entries", totalEntries,

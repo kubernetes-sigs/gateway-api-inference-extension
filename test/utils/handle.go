@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 )
 
 // testHandle is an implementation of plugin.Handle for test purposes
@@ -37,6 +38,10 @@ func (h *testHandle) Context() context.Context {
 
 func (h *testHandle) PodList() []types.NamespacedName {
 	return []types.NamespacedName{}
+}
+
+func (h *testHandle) Metrics() plugin.MetricsRecorder {
+	return &plugmocks.NoopMetricsRecorder{}
 }
 
 type testHandlePlugins struct {

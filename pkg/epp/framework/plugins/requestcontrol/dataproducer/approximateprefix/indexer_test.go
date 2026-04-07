@@ -29,7 +29,7 @@ func TestIndexer_AddAndGet(t *testing.T) {
 		ServerID:       ServerID{Namespace: "default", Name: "server1"},
 		NumOfGPUBlocks: 2,
 	}
-	i := newIndexer(context.Background(), 3).(*indexer) // Initialize with an lruSize greater than server.numOfGPUBlocks to verify server-defined limits take precedence.
+	i := newIndexer(context.Background(), 3, nil).(*indexer) // Initialize with an lruSize greater than server.numOfGPUBlocks to verify server-defined limits take precedence.
 
 	hash1 := blockHash(1)
 	// Add an entry to the cache
@@ -55,7 +55,7 @@ func TestIndexer_AddAndGet(t *testing.T) {
 func TestIndexer_RemovePodAndEviction(t *testing.T) {
 	const indexerSize = 10
 
-	i := newIndexer(context.Background(), indexerSize).(*indexer)
+	i := newIndexer(context.Background(), indexerSize, nil).(*indexer)
 
 	server1 := server{ServerID: ServerID{Namespace: "default", Name: "server1"}}
 	server2 := server{ServerID: ServerID{Namespace: "default", Name: "server2"}}
@@ -115,7 +115,7 @@ func TestIndexer_RemovePodAndEviction(t *testing.T) {
 func TestIndexer_ConcurrentAddRemovePod(t *testing.T) {
 	lruSize := 10
 	for iter := range 100 {
-		i := newIndexer(context.Background(), lruSize).(*indexer)
+		i := newIndexer(context.Background(), lruSize, nil).(*indexer)
 		pod := server{ServerID: ServerID{Namespace: "default", Name: "pod1"}}
 
 		var wg sync.WaitGroup

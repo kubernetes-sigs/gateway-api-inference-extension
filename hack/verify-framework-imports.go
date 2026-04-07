@@ -63,7 +63,6 @@ var currentCodeExceptionMap = map[string][]string{
 		"pkg/epp/util/error",
 	},
 	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/latencypredictor_helper.go": {
-		"pkg/epp/metrics",
 		"pkg/epp/util/request",
 		"sidecars/latencypredictorasync",
 	},
@@ -77,7 +76,6 @@ var currentCodeExceptionMap = map[string][]string{
 		"sidecars/latencypredictorasync",
 	},
 	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/requestcontrol_hooks.go": {
-		"pkg/epp/metrics",
 		"pkg/epp/util/request",
 	},
 	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/requestcontrol_hooks_test.go": {
@@ -94,9 +92,6 @@ var currentCodeExceptionMap = map[string][]string{
 		"sidecars/latencypredictorasync",
 		"test/utils",
 	},
-	"pkg/epp/framework/plugins/scheduling/scorer/prefix/plugin.go": {
-		"pkg/epp/metrics",
-	},
 	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/plugin.go": {
 		"sidecars/latencypredictorasync",
 	},
@@ -111,21 +106,13 @@ var currentCodeExceptionMap = map[string][]string{
 		"sidecars/latencypredictorasync",
 	},
 	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/requestcontrol_hooks.go": {
-		"pkg/epp/metrics",
 		"sidecars/latencypredictorasync",
 	},
 	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/training.go": {
-		"pkg/epp/metrics",
 		"sidecars/latencypredictorasync",
 	},
 	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/training_test.go": {
 		"sidecars/latencypredictorasync",
-	},
-	"pkg/epp/framework/plugins/requestcontrol/dataproducer/approximateprefix/indexer.go": {
-		"pkg/epp/metrics",
-	},
-	"pkg/epp/framework/plugins/requestcontrol/dataproducer/approximateprefix/plugin.go": {
-		"pkg/epp/metrics",
 	},
 }
 

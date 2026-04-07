@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -162,7 +163,7 @@ func TestValidatePrediction(t *testing.T) {
 			cfg := DefaultConfig
 			cfg.SLOBufferFactor = tt.sloBufferFactor
 			cfg.StreamingMode = tt.streamingMode
-			s := NewPredictedLatency(cfg, nil)
+			s := NewPredictedLatency(cfg, nil, &plugmocks.NoopMetricsRecorder{})
 
 			plCtx := &predictedLatencyCtx{
 				ttftSLO:    tt.ttftSLO,
@@ -265,7 +266,7 @@ func TestGeneratePredictions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := DefaultConfig
 			cfg.StreamingMode = true
-			s := NewPredictedLatency(cfg, tt.predictor)
+			s := NewPredictedLatency(cfg, tt.predictor, &plugmocks.NoopMetricsRecorder{})
 
 			request := createTestLLMRequest("test-gen-pred", tt.ttftSLO, tt.avgTPOTSLO)
 			plCtx := newPredictedLatencyContext(request)
@@ -347,7 +348,7 @@ func TestUpdateRequestContextWithPredictions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := DefaultConfig
-			s := NewPredictedLatency(cfg, nil)
+			s := NewPredictedLatency(cfg, nil, &plugmocks.NoopMetricsRecorder{})
 
 			request := createTestLLMRequest("test-update-ctx", 1000, 50)
 			plCtx := newPredictedLatencyContext(request)
@@ -375,7 +376,7 @@ func TestGeneratePredictions_ValidityFlags(t *testing.T) {
 	cfg := DefaultConfig
 	cfg.StreamingMode = true
 	cfg.SLOBufferFactor = 1.0
-	s := NewPredictedLatency(cfg, predictor)
+	s := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 	request := createTestLLMRequest("test-validity", 1000, 50)
 	plCtx := newPredictedLatencyContext(request)

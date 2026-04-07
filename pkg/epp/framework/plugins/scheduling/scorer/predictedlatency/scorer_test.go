@@ -31,6 +31,7 @@ import (
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -326,7 +327,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 				predictor = nil
 			}
 
-			router = NewPredictedLatency(cfg, predictor)
+			router = NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 			// ADD THIS: Setup prediction context before scoring
 			if tt.predictor != nil {
@@ -407,7 +408,7 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 			}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(tt.strategy)
-			router := NewPredictedLatency(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 			request := createTestLLMRequest("test", 1.0, 0.05)
 			endpoints := []fwksched.Endpoint{
@@ -438,7 +439,7 @@ func TestPredictedLatency_TypedName(t *testing.T) {
 	predictor := &mockPredictor{}
 	cfg := DefaultConfig
 	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-	router := NewPredictedLatency(cfg, predictor)
+	router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 	tn := router.TypedName()
 	assert.Equal(t, "predicted-latency-scorer", tn.Type, "Type should be predicted-latency-scorer")
@@ -449,7 +450,7 @@ func TestPredictedLatency_WithName(t *testing.T) {
 	predictor := &mockPredictor{}
 	cfg := DefaultConfig
 	cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-	router := NewPredictedLatency(cfg, predictor)
+	router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 	customName := "custom-router"
 	router = router.WithName(customName)
@@ -505,7 +506,7 @@ func TestPredictedLatency_GetPodRunningRequestCount(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-			router := NewPredictedLatency(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -563,7 +564,7 @@ func TestPredictedLatency_GetPodMinTPOTSLO(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-			router := NewPredictedLatency(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 			pod := createTestEndpoint("test-pod", 0.5, 2, 1)
 
 			tt.setupRequests(router, pod)
@@ -592,7 +593,7 @@ func TestPredictedLatency_GetPrefixCacheScoreForPod(t *testing.T) {
 			predictor := &mockPredictor{}
 			cfg := DefaultConfig
 			cfg.HeadroomSelectionStrategy = string(headroomStrategyLeast)
-			router := NewPredictedLatency(cfg, predictor)
+			router := NewPredictedLatency(cfg, predictor, &plugmocks.NoopMetricsRecorder{})
 
 			state := fwksched.NewCycleState()
 			tt.setupState(state)
@@ -766,7 +767,7 @@ func TestPredictedLatencyFactoryInvalidJSON(t *testing.T) {
 func TestSloContextStoreEviction(t *testing.T) {
 	config := DefaultConfig
 	config.ContextTTL = 100 * time.Millisecond
-	pl := NewPredictedLatency(config, nil)
+	pl := NewPredictedLatency(config, nil, &plugmocks.NoopMetricsRecorder{})
 
 	requestID := "test-req-id"
 	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
@@ -823,12 +824,12 @@ func TestCompositeLeastVsMost_NegativeHeadroom(t *testing.T) {
 	cfgMost := DefaultConfig
 	cfgMost.HeadroomSelectionStrategy = string(headroomStrategyCompositeMost)
 	cfgMost.SelectionMode = string(podSelectionMax)
-	routerMost := NewPredictedLatency(cfgMost, nil)
+	routerMost := NewPredictedLatency(cfgMost, nil, &plugmocks.NoopMetricsRecorder{})
 
 	cfgLeast := DefaultConfig
 	cfgLeast.HeadroomSelectionStrategy = string(headroomStrategyCompositeLeast)
 	cfgLeast.SelectionMode = string(podSelectionMax)
-	routerLeast := NewPredictedLatency(cfgLeast, nil)
+	routerLeast := NewPredictedLatency(cfgLeast, nil, &plugmocks.NoopMetricsRecorder{})
 
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(42))

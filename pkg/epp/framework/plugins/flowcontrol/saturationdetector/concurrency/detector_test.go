@@ -28,6 +28,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrconcurrency "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/concurrency"
@@ -126,7 +127,7 @@ func TestConcurrencyDetectorFactory(t *testing.T) {
 			t.Parallel()
 
 			plugin, err := ConcurrencyDetectorFactory("test-concurrency-detector",
-				tc.configJSON, fwkplugin.NewEppHandle(t.Context(), func() []types.NamespacedName { return nil }))
+				tc.configJSON, fwkplugin.NewEppHandle(t.Context(), func() []types.NamespacedName { return nil }, &plugmocks.NoopMetricsRecorder{}))
 			if tc.wantError {
 				require.Error(t, err, "Expected initialization to fail on invalid configuration")
 				require.Nil(t, plugin, "Plugin must be nil when initialization fails")
@@ -202,7 +203,7 @@ func TestDetector_Configuration(t *testing.T) {
 func TestDetector_TypedName(t *testing.T) {
 	t.Parallel()
 	plugin, err := ConcurrencyDetectorFactory("test-plugin", []byte(`{}`), fwkplugin.NewEppHandle(
-		t.Context(), func() []types.NamespacedName { return nil }))
+		t.Context(), func() []types.NamespacedName { return nil }, &plugmocks.NoopMetricsRecorder{}))
 	require.NoError(t, err, "Plugin initialization should succeed")
 	require.Equal(t, "test-plugin", plugin.TypedName().Name)
 	require.Equal(t, "concurrency-detector", plugin.TypedName().Type)

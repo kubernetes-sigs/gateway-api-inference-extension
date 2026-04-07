@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 )
 
 const (
@@ -44,11 +43,12 @@ var (
 
 // prepareData is a plugin that prepares data consumed by approx prefix cache aware scheduling.
 type prepareData struct {
-	typedName   plugin.TypedName
-	config      config
-	indexerInst indexerInterface
-	pluginState *plugin.PluginState
-	wg          sync.WaitGroup // Used for waiting on async cache updates in tests.
+	typedName       plugin.TypedName
+	config          config
+	indexerInst     indexerInterface
+	metricsRecorder plugin.MetricsRecorder
+	pluginState     *plugin.PluginState
+	wg              sync.WaitGroup // Used for waiting on async cache updates in tests.
 }
 
 // TypedName returns the type and name of the plugin.
@@ -78,16 +78,21 @@ func newPrepareData(ctx context.Context, config config, handle plugin.Handle) (*
 	if !config.AutoTune && config.BlockSizeTokens <= 0 {
 		return nil, fmt.Errorf("invalid configuration: BlockSizeTokens must be > 0 when AutoTune is disabled (current value: %d)", config.BlockSizeTokens)
 	}
-	indexer := newIndexer(ctx, config.LRUCapacityPerServer)
+	var metricsRec plugin.MetricsRecorder
+	if handle != nil {
+		metricsRec = handle.Metrics()
+	}
+	indexer := newIndexer(ctx, config.LRUCapacityPerServer, metricsRec)
 
 	p := &prepareData{
 		typedName: plugin.TypedName{
 			Type: ApproxPrefixCachePluginType,
 			Name: ApproxPrefixCachePluginType,
 		},
-		config:      config,
-		indexerInst: indexer,
-		pluginState: plugin.NewPluginState(ctx),
+		config:          config,
+		indexerInst:     indexer,
+		metricsRecorder: metricsRec,
+		pluginState:     plugin.NewPluginState(ctx),
 	}
 
 	if handle != nil {
@@ -194,7 +199,9 @@ func (p *prepareData) PreRequest(ctx context.Context, request *framework.LLMRequ
 	matchLen := state.PrefixCacheServers[ServerID(targetEndpoint.GetMetadata().NamespacedName)]
 	blockSize := p.GetBlockSize(primaryProfileResult.TargetEndpoints)
 	avgChars := averageCharactersPerToken
-	metrics.RecordPrefixCacheMatch(matchLen*blockSize*avgChars, total*blockSize*avgChars)
+	if p.metricsRecorder != nil {
+		p.metricsRecorder.RecordPrefixCacheMatch(matchLen*blockSize*avgChars, total*blockSize*avgChars)
+	}
 }
 
 func (p *prepareData) makeserver(targetEndpoint framework.Endpoint) server {

@@ -27,7 +27,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -163,6 +163,7 @@ func bulkPredictWithMetrics(
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
 	prefillTokensInFlights []int64,
+	metricsRecorder plugin.MetricsRecorder,
 ) ([]*latencypredictor.PredictionResponse, error) {
 	logger := log.FromContext(ctx)
 
@@ -220,8 +221,8 @@ func bulkPredictWithMetrics(
 	}
 
 	if predictedLatencyContext != nil {
-		metrics.RecordRequestTTFTPredictionDuration(ctx, predictedLatencyContext.schedulingRequest.TargetModel, predictedLatencyContext.incomingModelName, duration.Seconds())
-		metrics.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyContext.schedulingRequest.TargetModel, predictedLatencyContext.incomingModelName, duration.Seconds())
+		metricsRecorder.RecordRequestTTFTPredictionDuration(ctx, predictedLatencyContext.incomingModelName, predictedLatencyContext.schedulingRequest.TargetModel, duration.Seconds())
+		metricsRecorder.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyContext.incomingModelName, predictedLatencyContext.schedulingRequest.TargetModel, duration.Seconds())
 	}
 
 	results := make([]*latencypredictor.PredictionResponse, len(bulkResponse.Predictions))

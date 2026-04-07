@@ -557,7 +557,7 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	applyDeprecatedEnvFeatureGate(enableExperimentalFlowControlLayer, "Flow Control layer", flowcontrol.FeatureGate, rawConfig)
 
-	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds))
+	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds), metrics.NewRecorder())
 	cfg, err := loader.InstantiateAndConfigure(rawConfig, handle, logger)
 
 	if err != nil {

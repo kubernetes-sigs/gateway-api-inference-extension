@@ -32,6 +32,9 @@ type Handle interface {
 
 	// PodList lists pods.
 	PodList() []types.NamespacedName
+
+	// Metrics returns a MetricsRecorder for plugins to record metrics.
+	Metrics() MetricsRecorder
 }
 
 // HandlePlugins defines a set of APIs to work with instantiated plugins
@@ -56,7 +59,8 @@ type PodListFunc func() []types.NamespacedName
 type eppHandle struct {
 	ctx context.Context
 	HandlePlugins
-	podList PodListFunc
+	podList         PodListFunc
+	metricsRecorder MetricsRecorder
 }
 
 // Context returns a context the plugins can use, if they need one
@@ -98,13 +102,19 @@ func (h *eppHandle) PodList() []types.NamespacedName {
 	return h.podList()
 }
 
-func NewEppHandle(ctx context.Context, podList PodListFunc) Handle {
+// Metrics returns the MetricsRecorder.
+func (h *eppHandle) Metrics() MetricsRecorder {
+	return h.metricsRecorder
+}
+
+func NewEppHandle(ctx context.Context, podList PodListFunc, metricsRecorder MetricsRecorder) Handle {
 	return &eppHandle{
 		ctx: ctx,
 		HandlePlugins: &eppHandlePlugins{
 			plugins: map[string]Plugin{},
 		},
-		podList: podList,
+		podList:         podList,
+		metricsRecorder: metricsRecorder,
 	}
 }
 

@@ -29,7 +29,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -272,6 +272,7 @@ func processTokenForLatencyPrediction(
 	now time.Time,
 	samplingMean float64,
 	maxSampledTokens int,
+	metricsRecorder plugin.MetricsRecorder,
 ) {
 	logger := log.FromContext(ctx)
 
@@ -328,7 +329,7 @@ func processTokenForLatencyPrediction(
 			predictedLatencyCtx.predictedTPOTObservations = append(predictedLatencyCtx.predictedTPOTObservations, p.TPOT)
 			predictedLatencyCtx.avgPredictedTPOT = calculateRunningAverage(predictedLatencyCtx.avgPredictedTPOT, p.TPOT, len(predictedLatencyCtx.predictedTPOTObservations))
 		}
-		metrics.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyCtx.schedulingRequest.TargetModel, predictedLatencyCtx.incomingModelName, dur.Seconds())
+		metricsRecorder.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyCtx.incomingModelName, predictedLatencyCtx.schedulingRequest.TargetModel, dur.Seconds())
 
 		predictedLatencyCtx.tokenSampler.recordPrediction(predictedLatencyCtx.generatedTokenCount)
 	}
@@ -352,6 +353,7 @@ func bulkPredictWithMetrics(
 	generatedTokenCounts []int,
 	prefixCacheScores []float64,
 	prefillTokensInFlights []int64,
+	metricsRecorder plugin.MetricsRecorder,
 ) ([]*latencypredictor.PredictionResponse, error) {
 	logger := log.FromContext(ctx)
 
@@ -414,8 +416,8 @@ func bulkPredictWithMetrics(
 	}
 
 	if predictedLatencyContext != nil {
-		metrics.RecordRequestTTFTPredictionDuration(ctx, predictedLatencyContext.schedulingRequest.TargetModel, predictedLatencyContext.incomingModelName, duration.Seconds())
-		metrics.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyContext.schedulingRequest.TargetModel, predictedLatencyContext.incomingModelName, duration.Seconds())
+		metricsRecorder.RecordRequestTTFTPredictionDuration(ctx, predictedLatencyContext.incomingModelName, predictedLatencyContext.schedulingRequest.TargetModel, duration.Seconds())
+		metricsRecorder.RecordRequestTPOTPredictionDuration(ctx, predictedLatencyContext.incomingModelName, predictedLatencyContext.schedulingRequest.TargetModel, duration.Seconds())
 	}
 	// Convert to pointer slice for consistency with single prediction
 	results := make([]*latencypredictor.PredictionResponse, len(bulkResponse.Predictions))

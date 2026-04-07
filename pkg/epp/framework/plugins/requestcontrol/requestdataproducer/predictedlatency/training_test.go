@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -53,7 +54,7 @@ func TestBulkPredictWithMetrics(t *testing.T) {
 	generatedTokenCounts := []int{1, 1}
 	prefixCacheScores := []float64{0.0, 0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil)
+	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil, &plugmocks.NoopMetricsRecorder{})
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 2)
@@ -80,7 +81,7 @@ func TestBulkPredictWithMetrics_Error(t *testing.T) {
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil)
+	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil, &plugmocks.NoopMetricsRecorder{})
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
@@ -98,7 +99,7 @@ func TestBulkPredictWithMetrics_InputMismatch(t *testing.T) {
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil)
+	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil, &plugmocks.NoopMetricsRecorder{})
 
 	assert.Error(t, err)
 	assert.Nil(t, results)
@@ -131,7 +132,7 @@ func TestBulkPredictWithMetrics_WithPredictedLatencyCtx(t *testing.T) {
 		incomingModelName: "incoming-model",
 	}
 
-	results, err := bulkPredictWithMetrics(context.Background(), plCtx, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil)
+	results, err := bulkPredictWithMetrics(context.Background(), plCtx, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil, &plugmocks.NoopMetricsRecorder{})
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
@@ -162,7 +163,7 @@ func TestBulkPredictWithMetrics_ChatCompletionsPrompt(t *testing.T) {
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), nil, mp, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, []int64{0})
+	results, err := bulkPredictWithMetrics(context.Background(), nil, mp, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, []int64{0}, &plugmocks.NoopMetricsRecorder{})
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
@@ -181,7 +182,7 @@ func TestBulkPredictWithMetrics_NilMetricsState(t *testing.T) {
 	generatedTokenCounts := []int{1}
 	prefixCacheScores := []float64{0.0}
 
-	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil)
+	results, err := bulkPredictWithMetrics(context.Background(), nil, mockPredictor, metricsStates, "", pods, prompts, generatedTokenCounts, prefixCacheScores, nil, &plugmocks.NoopMetricsRecorder{})
 
 	assert.Error(t, err)
 	assert.Nil(t, results)

@@ -1,5 +1,5 @@
 /*
-Copyright 2025 The Kubernetes Authors.
+Copyright 2026 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,24 +14,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package predictedlatency
+package plugin_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	plugmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin/mocks"
-	attrlatency "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/latency"
-	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
 
-func TestProducesConsumes(t *testing.T) {
-	pl := NewPredictedLatency(DefaultConfig, nil, &plugmocks.NoopMetricsRecorder{})
+func TestNewEppHandle_Metrics(t *testing.T) {
+	recorder := &plugmocks.NoopMetricsRecorder{}
+	handle := plugin.NewEppHandle(t.Context(), func() []types.NamespacedName { return nil }, recorder)
 
-	produces := pl.Produces()
-	assert.Contains(t, produces, attrlatency.LatencyPredictionInfoKey)
+	assert.NotNil(t, handle.Metrics())
+	assert.Equal(t, recorder, handle.Metrics())
+}
 
-	consumes := pl.Consumes()
-	assert.Contains(t, consumes, attrprefix.PrefixCacheMatchInfoKey)
+func TestNewEppHandle_MetricsNil(t *testing.T) {
+	handle := plugin.NewEppHandle(t.Context(), func() []types.NamespacedName { return nil }, nil)
+
+	assert.Nil(t, handle.Metrics())
 }
