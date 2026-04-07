@@ -18,6 +18,7 @@ package picker
 
 import (
 	"math/rand/v2"
+	"sync"
 	"time"
 
 	types "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
@@ -32,13 +33,38 @@ type pickerParameters struct {
 	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
 }
 
-func shuffleScoredEndpoints(scoredEndpoints []*types.ScoredEndpoint) {
-	// Rand package is not safe for concurrent use, so we create a new instance.
-	// Source: https://pkg.go.dev/math/rand/v2#pkg-overview
-	randomGenerator := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
+type lockedRand struct {
+	mu   sync.Mutex
+	rand *rand.Rand
+}
 
+func newLockedRand() *lockedRand {
+	seed := uint64(time.Now().UnixNano())
+
+	return &lockedRand{
+		rand: rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15)),
+	}
+}
+
+func (r *lockedRand) Float64() float64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.rand.Float64()
+}
+
+func (r *lockedRand) Shuffle(n int, swap func(i, j int)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.rand.Shuffle(n, swap)
+}
+
+var pickerRand = newLockedRand()
+
+func shuffleScoredEndpoints(scoredEndpoints []*types.ScoredEndpoint) {
 	// Shuffle in-place
-	randomGenerator.Shuffle(len(scoredEndpoints), func(i, j int) {
+	pickerRand.Shuffle(len(scoredEndpoints), func(i, j int) {
 		scoredEndpoints[i], scoredEndpoints[j] = scoredEndpoints[j], scoredEndpoints[i]
 	})
 }

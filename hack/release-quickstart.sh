@@ -76,7 +76,8 @@ sed -i.bak "s|kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-in
 # Update the conformance module dependency
 # -----------------------------------------------------------------------------
 CONFORMANCE_GOMOD="conformance/go.mod"
-echo "Updating ${CONFORMANCE_GOMOD} ..."
+CONFORMANCE_GOSUM="conformance/go.sum"
+echo "Updating ${CONFORMANCE_GOMOD} and ${CONFORMANCE_GOSUM} ..."
 (
   cd conformance
   go mod edit -require=sigs.k8s.io/gateway-api-inference-extension@"${RELEASE_TAG}"
@@ -153,8 +154,8 @@ done
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $CONFORMANCE_GOMOD $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS ${VLLM_GPU_DEPLOYS[*]} $VLLM_CPU_DEPLOY ${VLLM_SIM_DEPLOYS[*]} files..."
-git add "$VERSION_FILE" "$UPDATED_CRD" "$README" "$CONFORMANCE_GOMOD" "$EPP_HELM" "$LATENCY_ROUTING_HELM" "$BBR_HELM" "$STANDALONE_HELM" "$CONFORMANCE_MANIFESTS" "${VLLM_GPU_DEPLOYS[@]}" "$VLLM_CPU_DEPLOY" "${VLLM_SIM_DEPLOYS[@]}"
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $CONFORMANCE_GOMOD $CONFORMANCE_GOSUM $EPP_HELM $LATENCY_ROUTING_HELM $BBR_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS ${VLLM_GPU_DEPLOYS[*]} $VLLM_CPU_DEPLOY ${VLLM_SIM_DEPLOYS[*]} files..."
+git add "$VERSION_FILE" "$UPDATED_CRD" "$README" "$CONFORMANCE_GOMOD" "$CONFORMANCE_GOSUM" "$EPP_HELM" "$LATENCY_ROUTING_HELM" "$BBR_HELM" "$STANDALONE_HELM" "$CONFORMANCE_MANIFESTS" "${VLLM_GPU_DEPLOYS[@]}" "$VLLM_CPU_DEPLOY" "${VLLM_SIM_DEPLOYS[@]}"
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

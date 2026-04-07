@@ -249,8 +249,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.5.0-rc.1
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "primary-inference-pool"
@@ -347,8 +347,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.5.0-rc.1
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "secondary-inference-pool"
@@ -445,8 +445,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.5.0-rc.1
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "appprotocol-http-inference-pool"
@@ -543,8 +543,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.5.0-rc.1
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "appprotocol-h2c-inference-pool"
@@ -752,8 +752,8 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.5.0-rc.1
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "dp-inference-pool"
