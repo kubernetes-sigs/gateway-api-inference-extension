@@ -53,7 +53,7 @@ func TestTokenLoadScorer(t *testing.T) {
 	// pod3: 1000 tokens
 	endpoints[2].Put(attrconcurrency.InFlightLoadKey, &attrconcurrency.InFlightLoad{Tokens: 1000})
 
-	scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.LLMRequest{}, endpoints)
+	scores := scorer.Score(context.Background(), fwksched.NewCycleState(), &fwksched.InferenceRequest{}, endpoints)
 
 	assert.InDelta(t, 1.0, scores[endpoints[0]], 0.0001, "Pod1 (0 tokens) should have score 1.0")
 	assert.InDelta(t, 0.5, scores[endpoints[1]], 0.0001, "Pod2 (500 tokens) should have score 0.5")

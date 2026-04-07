@@ -125,7 +125,7 @@ func TestBulkPredictWithMetrics_WithPredictedLatencyCtx(t *testing.T) {
 	prefixCacheScores := []float64{0.0}
 
 	plCtx := &predictedLatencyCtx{
-		schedulingRequest: schedulingtypes.LLMRequest{
+		schedulingRequest: schedulingtypes.InferenceRequest{
 			TargetModel: "test-model",
 		},
 		incomingModelName: "incoming-model",
@@ -151,7 +151,7 @@ func TestBulkPredictWithMetrics_ChatCompletionsPrompt(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"}},
 	}
 
-	chatBody := &schedulingtypes.LLMRequestBody{
+	chatBody := &schedulingtypes.InferenceRequestBody{
 		ChatCompletions: &schedulingtypes.ChatCompletionsRequest{
 			Messages: []schedulingtypes.Message{
 				{Role: "user", Content: schedulingtypes.Content{Raw: "Hello world"}},

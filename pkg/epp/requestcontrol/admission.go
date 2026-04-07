@@ -177,7 +177,7 @@ type flowControlRequest struct {
 	fairnessID        string
 	priority          int
 	requestByteSize   uint64
-	inferenceRequest  *scheduling.LLMRequest
+	inferenceRequest  *scheduling.InferenceRequest
 	receivedTimestamp time.Time
 	reqMetadata       map[string]any
 	inferencePoolName string
@@ -192,13 +192,15 @@ func (r *flowControlRequest) ID() string {
 	}
 	return r.inferenceRequest.RequestId
 }
-func (r *flowControlRequest) InitialEffectiveTTL() time.Duration       { return 0 } // Use controller default.
-func (r *flowControlRequest) ByteSize() uint64                         { return r.requestByteSize }
-func (r *flowControlRequest) InferenceRequest() *scheduling.LLMRequest { return r.inferenceRequest }
-func (r *flowControlRequest) ReceivedTimestamp() time.Time             { return r.receivedTimestamp }
-func (r *flowControlRequest) GetMetadata() map[string]any              { return r.reqMetadata }
-func (r *flowControlRequest) InferencePoolName() string                { return r.inferencePoolName }
-func (r *flowControlRequest) ModelName() string                        { return r.modelName }
+func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
+func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
+func (r *flowControlRequest) InferenceRequest() *scheduling.InferenceRequest {
+	return r.inferenceRequest
+}
+func (r *flowControlRequest) ReceivedTimestamp() time.Time { return r.receivedTimestamp }
+func (r *flowControlRequest) GetMetadata() map[string]any  { return r.reqMetadata }
+func (r *flowControlRequest) InferencePoolName() string    { return r.inferencePoolName }
+func (r *flowControlRequest) ModelName() string            { return r.modelName }
 func (r *flowControlRequest) TargetModelName() string {
 	if r.inferenceRequest == nil {
 		return ""

@@ -28,7 +28,7 @@ import (
 
 type fakeSchedulerProfile struct{}
 
-func (f *fakeSchedulerProfile) Run(_ context.Context, _ *framework.LLMRequest, _ *framework.CycleState, _ []framework.Endpoint) (*framework.ProfileRunResult, error) {
+func (f *fakeSchedulerProfile) Run(_ context.Context, _ *framework.InferenceRequest, _ *framework.CycleState, _ []framework.Endpoint) (*framework.ProfileRunResult, error) {
 	return &framework.ProfileRunResult{}, nil
 }
 

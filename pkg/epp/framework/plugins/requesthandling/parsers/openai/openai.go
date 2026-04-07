@@ -93,7 +93,7 @@ func (p *OpenAIParser) WithName(name string) *OpenAIParser {
 }
 
 // ParseRequest parses the request body and headers and returns a map representation.
-func (p *OpenAIParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
+func (p *OpenAIParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.InferenceRequestBody, error) {
 	bodyMap := make(map[string]any)
 	if err := json.Unmarshal(body, &bodyMap); err != nil {
 		return nil, fmt.Errorf("error unmarshaling request bodyMap: %w", err)
@@ -189,8 +189,8 @@ func determineAPITypeFromPath(path string) string {
 	return completionsAPI
 }
 
-// extractRequestBody extracts the LLMRequestBody from the given request body map using path-based detection.
-func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
+// extractRequestBody extracts the InferenceRequestBody from the given request body map using path-based detection.
+func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.InferenceRequestBody, error) {
 	// Determine API type from request path
 	path := getRequestPath(headers)
 	apiType := determineAPITypeFromPath(path)
@@ -199,14 +199,14 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.
 	case conversationsAPI:
 		var conversations scheduling.ConversationsRequest
 		if err := json.Unmarshal(rawBody, &conversations); err == nil && len(conversations.Items) > 0 {
-			return &scheduling.LLMRequestBody{Conversations: &conversations}, nil
+			return &scheduling.InferenceRequestBody{Conversations: &conversations}, nil
 		}
 		return nil, errors.New("invalid conversations request: must have items field")
 
 	case responsesAPI:
 		var responses scheduling.ResponsesRequest
 		if err := json.Unmarshal(rawBody, &responses); err == nil && responses.Input != nil {
-			return &scheduling.LLMRequestBody{Responses: &responses}, nil
+			return &scheduling.InferenceRequestBody{Responses: &responses}, nil
 		}
 		return nil, errors.New("invalid responses request: must have input field")
 
@@ -214,7 +214,7 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.
 		var chatCompletions scheduling.ChatCompletionsRequest
 		if err := json.Unmarshal(rawBody, &chatCompletions); err == nil {
 			if err = validateChatCompletionsMessages(chatCompletions.Messages); err == nil {
-				return &scheduling.LLMRequestBody{ChatCompletions: &chatCompletions}, nil
+				return &scheduling.InferenceRequestBody{ChatCompletions: &chatCompletions}, nil
 			}
 		}
 		return nil, errors.New("invalid chat completions request: must have valid messages field")
@@ -222,14 +222,14 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.
 	case completionsAPI:
 		var completions scheduling.CompletionsRequest
 		if err := json.Unmarshal(rawBody, &completions); err == nil && !completions.Prompt.IsEmpty() {
-			return &scheduling.LLMRequestBody{Completions: &completions}, nil
+			return &scheduling.InferenceRequestBody{Completions: &completions}, nil
 		}
 		return nil, errors.New("invalid completions request: must have prompt field")
 
 	case embeddingsAPI:
 		var embeddings scheduling.EmbeddingsRequest
 		if err := json.Unmarshal(rawBody, &embeddings); err == nil && embeddings.Input != nil {
-			return &scheduling.LLMRequestBody{Embeddings: &embeddings}, nil
+			return &scheduling.InferenceRequestBody{Embeddings: &embeddings}, nil
 		}
 		return nil, errors.New("invalid embeddings request: must have input field")
 

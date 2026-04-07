@@ -49,10 +49,10 @@ func TestPrepareRequestData(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2}
 
 	// First request to populate cache.
-	req1 := &fwksched.LLMRequest{
+	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			Completions: &fwksched.CompletionsRequest{
 				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
 			},
@@ -89,10 +89,10 @@ func TestPreRequest(t *testing.T) {
 	p, _ := newPrepareData(context.Background(), config, nil)
 
 	endpoint1 := fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1", Namespace: "default"}}, fwkdl.NewMetrics(), fwkdl.NewAttributes())
-	req1 := &fwksched.LLMRequest{
+	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			Completions: &fwksched.CompletionsRequest{
 				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
 			},
@@ -171,10 +171,10 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1, endpoint2, endpoint3}
 
 	// First request.
-	req1 := &fwksched.LLMRequest{
+	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			Completions: &fwksched.CompletionsRequest{
 				Prompt: fwksched.Prompt{Raw: "aaaaaa"},
 			},
@@ -197,10 +197,10 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	p.wg.Wait()
 
 	// Third request shares partial prefix with first one.
-	req3 := &fwksched.LLMRequest{
+	req3 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			Completions: &fwksched.CompletionsRequest{
 				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
 			},
@@ -238,10 +238,10 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	endpoints := []fwksched.Endpoint{endpoint1}
 
 	// First request with initial conversation
-	req1 := &fwksched.LLMRequest{
+	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			ChatCompletions: &fwksched.ChatCompletionsRequest{
 				Messages: []fwksched.Message{
 					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
@@ -266,10 +266,10 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	p.wg.Wait()
 
 	// Second request adds assistant response and new user message
-	req2 := &fwksched.LLMRequest{
+	req2 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			ChatCompletions: &fwksched.ChatCompletionsRequest{
 				Messages: []fwksched.Message{
 					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
@@ -300,10 +300,10 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 		}, fwkdl.NewAttributes())
 	endpoints := []fwksched.Endpoint{endpoint}
 
-	req := &fwksched.LLMRequest{
+	req := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			Completions: &fwksched.CompletionsRequest{
 				// Length 128 chars.
 				// If block size is 64 chars: 2 blocks
@@ -356,10 +356,10 @@ func TestMaxPrefixTokensToMatch(t *testing.T) {
 	)
 
 	// Prompt is 16 chars = 4 blocks at blockSize 4 chars, but should be capped to 2.
-	req := &fwksched.LLMRequest{
+	req := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			Completions: &fwksched.CompletionsRequest{
 				Prompt: fwksched.Prompt{Raw: "aaaabbbbccccdddd"},
 			},
@@ -383,10 +383,10 @@ func TestMaxPrefixTokensToMatch(t *testing.T) {
 	p2, err := newPrepareData(context.Background(), cfg2, nil)
 	assert.NoError(t, err)
 
-	req2 := &fwksched.LLMRequest{
+	req2 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model",
-		Body: &fwksched.LLMRequestBody{
+		Body: &fwksched.InferenceRequestBody{
 			Completions: &fwksched.CompletionsRequest{
 				Prompt: fwksched.Prompt{Raw: "aaaabbbbccccdddd"},
 			},
@@ -419,10 +419,10 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 				NamespacedName: k8stypes.NamespacedName{Name: "pod1"},
 			}, nil, fwkdl.NewAttributes())
 			endpoints := []fwksched.Endpoint{endpoint}
-			req := &fwksched.LLMRequest{
+			req := &fwksched.InferenceRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "model-stress",
-				Body: &fwksched.LLMRequestBody{
+				Body: &fwksched.InferenceRequestBody{
 					Completions: &fwksched.CompletionsRequest{
 						Prompt: fwksched.Prompt{Raw: prompt},
 					},

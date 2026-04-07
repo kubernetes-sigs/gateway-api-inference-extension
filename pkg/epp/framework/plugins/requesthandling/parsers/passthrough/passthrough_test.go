@@ -32,13 +32,13 @@ func TestPassthroughParser_ParseRequest(t *testing.T) {
 		name     string
 		body     []byte
 		headers  map[string]string
-		wantBody *scheduling.LLMRequestBody
+		wantBody *scheduling.InferenceRequestBody
 	}{
 		{
 			name:    "empty body",
 			body:    []byte{},
 			headers: map[string]string{},
-			wantBody: &scheduling.LLMRequestBody{
+			wantBody: &scheduling.InferenceRequestBody{
 				Payload: scheduling.RawPayload([]byte{}),
 			},
 		},
@@ -46,7 +46,7 @@ func TestPassthroughParser_ParseRequest(t *testing.T) {
 			name:    "non-empty body",
 			body:    []byte("hello world"),
 			headers: map[string]string{},
-			wantBody: &scheduling.LLMRequestBody{
+			wantBody: &scheduling.InferenceRequestBody{
 				Payload: scheduling.RawPayload([]byte("hello world")),
 			},
 		},

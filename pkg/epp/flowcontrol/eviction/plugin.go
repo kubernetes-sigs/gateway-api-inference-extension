@@ -61,7 +61,7 @@ func (p *Plugin) TypedName() plugin.TypedName {
 // It tracks the request and, if the filter policy accepts it, adds it to the eviction queue.
 func (p *Plugin) PreRequest(
 	ctx context.Context,
-	request *scheduling.LLMRequest,
+	request *scheduling.InferenceRequest,
 	result *scheduling.SchedulingResult,
 ) {
 	if request == nil || result == nil || len(result.ProfileResults) == 0 {
@@ -110,7 +110,7 @@ func (p *Plugin) PreRequest(
 // On the final call (EndOfStream == true), it removes the request from tracking and the eviction queue.
 func (p *Plugin) ResponseBody(
 	ctx context.Context,
-	request *scheduling.LLMRequest,
+	request *scheduling.InferenceRequest,
 	response *requestcontrol.Response,
 	targetEndpoint *datalayer.EndpointMetadata,
 ) {

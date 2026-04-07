@@ -640,7 +640,7 @@ func (m *mockScorer) Category() framework.ScorerCategory {
 	return framework.Distribution
 }
 
-func (m *mockScorer) Score(context.Context, *framework.CycleState, *framework.LLMRequest, []framework.Endpoint) map[framework.Endpoint]float64 {
+func (m *mockScorer) Score(context.Context, *framework.CycleState, *framework.InferenceRequest, []framework.Endpoint) map[framework.Endpoint]float64 {
 	return nil
 }
 
@@ -660,11 +660,11 @@ type mockHandler struct{ mockPlugin }
 // compile-time type assertion
 var _ framework.ProfileHandler = &mockHandler{}
 
-func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.LLMRequest, map[string]framework.SchedulerProfile,
+func (m *mockHandler) Pick(context.Context, *framework.CycleState, *framework.InferenceRequest, map[string]framework.SchedulerProfile,
 	map[string]*framework.ProfileRunResult) map[string]framework.SchedulerProfile {
 	return nil
 }
-func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *framework.LLMRequest,
+func (m *mockHandler) ProcessResults(context.Context, *framework.CycleState, *framework.InferenceRequest,
 	map[string]*framework.ProfileRunResult) (*framework.SchedulingResult, error) {
 	return nil, nil
 }

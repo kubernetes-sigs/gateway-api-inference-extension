@@ -97,7 +97,7 @@ type RequestContext struct {
 	RequestRunning            bool
 	Request                   *Request
 
-	SchedulingRequest *schedulingtypes.LLMRequest
+	SchedulingRequest *schedulingtypes.InferenceRequest
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool

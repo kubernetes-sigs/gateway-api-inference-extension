@@ -80,21 +80,21 @@ func (p *VllmGRPCParser) SupportedAppProtocols() []v1.AppProtocol {
 	return []v1.AppProtocol{v1.AppProtocolH2C}
 }
 
-// ParseRequest parses the gRPC request body and headers and returns an LLMRequestBody.
-func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
+// ParseRequest parses the gRPC request body and headers and returns an InferenceRequestBody.
+func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.InferenceRequestBody, error) {
 	logger := log.FromContext(ctx)
 
 	path := headers[methodPathKey]
 	switch path {
 	case vllmEmbedPath:
-		extractedBody, err := convertEmbedToLLMRequestBody(body)
+		extractedBody, err := convertEmbedToInferenceRequestBody(body)
 		if err != nil {
 			return nil, fmt.Errorf("parsing gRPC payload for Embed: %w", err)
 		}
 		logger.V(logutil.TRACE).Info("parsed EmbedRequest")
 		return extractedBody, nil
 	case vllmGeneratePath:
-		extractedBody, err := convertToLLMRequestBody(body)
+		extractedBody, err := convertToInferenceRequestBody(body)
 		if err != nil {
 			return nil, fmt.Errorf("parsing gRPC payload for Generate: %w", err)
 		}
@@ -180,22 +180,22 @@ func toGenerateResponse(payload []byte, resp *pb.GenerateResponse) error {
 	return proto.Unmarshal(parsedPayload, resp)
 }
 
-func convertToLLMRequestBody(payload []byte) (*scheduling.LLMRequestBody, error) {
+func convertToInferenceRequestBody(payload []byte) (*scheduling.InferenceRequestBody, error) {
 	pbReq := &pb.GenerateRequest{}
 	if err := toGenerateRequest(payload, pbReq); err != nil {
 		return nil, err
 	}
-	var body *scheduling.LLMRequestBody
+	var body *scheduling.InferenceRequestBody
 	switch pbReq.Input.(type) {
 	case *pb.GenerateRequest_Text:
-		body = &scheduling.LLMRequestBody{
+		body = &scheduling.InferenceRequestBody{
 			Completions: &scheduling.CompletionsRequest{
 				Prompt: scheduling.Prompt{Raw: pbReq.GetText()},
 			},
 			Payload: scheduling.PayloadProto{Message: pbReq},
 		}
 	case *pb.GenerateRequest_Tokenized:
-		body = &scheduling.LLMRequestBody{
+		body = &scheduling.InferenceRequestBody{
 			Completions: &scheduling.CompletionsRequest{
 				Prompt: scheduling.Prompt{Raw: pbReq.GetTokenized().OriginalText},
 			},
@@ -240,14 +240,14 @@ func toGenerateRequest(payload []byte, req *pb.GenerateRequest) error {
 	return proto.Unmarshal(parsedPayload, req)
 }
 
-func convertEmbedToLLMRequestBody(payload []byte) (*scheduling.LLMRequestBody, error) {
+func convertEmbedToInferenceRequestBody(payload []byte) (*scheduling.InferenceRequestBody, error) {
 	pbReq := &pb.EmbedRequest{}
 	if err := toEmbedRequest(payload, pbReq); err != nil {
 		return nil, err
 	}
-	var body *scheduling.LLMRequestBody
+	var body *scheduling.InferenceRequestBody
 	if pbReq.Tokenized != nil {
-		body = &scheduling.LLMRequestBody{
+		body = &scheduling.InferenceRequestBody{
 			Embeddings: &scheduling.EmbeddingsRequest{
 				Input: pbReq.GetTokenized().OriginalText,
 			},

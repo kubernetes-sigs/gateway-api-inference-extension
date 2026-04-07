@@ -50,7 +50,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 		name    string
 		headers map[string]string
 		body    map[string]any
-		want    *scheduling.LLMRequestBody
+		want    *scheduling.InferenceRequestBody
 		wantErr bool
 	}{
 		{
@@ -60,7 +60,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model":  "test",
 				"prompt": "test prompt",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Completions: &scheduling.CompletionsRequest{
 					Prompt: scheduling.Prompt{Raw: "test prompt"},
 				},
@@ -77,7 +77,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model":  "test",
 				"prompt": []any{"Why is the sky blue?"},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Completions: &scheduling.CompletionsRequest{
 					Prompt: scheduling.Prompt{Strings: []string{"Why is the sky blue?"}},
 				},
@@ -94,7 +94,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model":  "test",
 				"prompt": []any{"prompt1", "prompt2"},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Completions: &scheduling.CompletionsRequest{
 					Prompt: scheduling.Prompt{Strings: []string{"prompt1", "prompt2"}},
 				},
@@ -127,7 +127,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					},
 				},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				ChatCompletions: &scheduling.ChatCompletionsRequest{
 					Messages: []scheduling.Message{
 						{Role: "system", Content: scheduling.Content{Raw: "this is a system message"}},
@@ -175,7 +175,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					},
 				},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				ChatCompletions: &scheduling.ChatCompletionsRequest{
 					Messages: []scheduling.Message{
 						{Role: "system", Content: scheduling.Content{
@@ -248,7 +248,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					},
 				},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				ChatCompletions: &scheduling.ChatCompletionsRequest{
 					Messages: []scheduling.Message{
 						{Role: "user", Content: scheduling.Content{
@@ -306,7 +306,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"add_generation_prompt":        true,
 				"chat_template_kwargs":         map[string]any{"key": "value"},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				ChatCompletions: &scheduling.ChatCompletionsRequest{
 					Messages:                  []scheduling.Message{{Role: "user", Content: scheduling.Content{Raw: "hello"}}},
 					Tools:                     []any{map[string]any{"type": "function"}},
@@ -487,7 +487,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"prompt":     "test prompt",
 				"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Completions: &scheduling.CompletionsRequest{
 					Prompt:    scheduling.Prompt{Raw: "test prompt"},
 					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
@@ -514,7 +514,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				},
 				"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				ChatCompletions: &scheduling.ChatCompletionsRequest{
 					Messages: []scheduling.Message{
 						{Role: "system", Content: scheduling.Content{Raw: "this is a system message"}},
@@ -544,7 +544,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"input":        "How do I check if a Python object is an instance of a class?",
 				"instructions": "You are a coding assistant that talks like a pirate.",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Responses: &scheduling.ResponsesRequest{
 					Input:        "How do I check if a Python object is an instance of a class?",
 					Instructions: "You are a coding assistant that talks like a pirate.",
@@ -564,7 +564,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"input":      "test input",
 				"cache_salt": "abc123",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Responses: &scheduling.ResponsesRequest{
 					Input:     "test input",
 					CacheSalt: "abc123",
@@ -595,7 +595,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Conversations: &scheduling.ConversationsRequest{
 					Items: []scheduling.ConversationItem{
 						{Type: "message", Role: "user", Content: "Hello"},
@@ -616,7 +616,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Conversations: &scheduling.ConversationsRequest{
 					Items: []scheduling.ConversationItem{
 						{Type: "message", Role: "user", Content: "Hello"},
@@ -637,7 +637,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model":  "gpt-4o",
 				"prompt": "test prompt",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Completions: &scheduling.CompletionsRequest{
 					Prompt: scheduling.Prompt{Raw: "test prompt"},
 				},
@@ -657,7 +657,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				},
 				"stream": true,
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				ChatCompletions: &scheduling.ChatCompletionsRequest{
 					Messages: []scheduling.Message{{Role: "user", Content: scheduling.Content{Raw: "hello"}}},
 				},
@@ -679,7 +679,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": "The food was delicious and the waiter...",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Embeddings: &scheduling.EmbeddingsRequest{
 					Input: "The food was delicious and the waiter...",
 				},
@@ -696,7 +696,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": []any{"First document", "Second document"},
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Embeddings: &scheduling.EmbeddingsRequest{
 					Input: []any{"First document", "Second document"},
 				},
@@ -714,7 +714,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"input":      "embed this text",
 				"cache_salt": "embeddings-salt-123",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Embeddings: &scheduling.EmbeddingsRequest{
 					Input:     "embed this text",
 					CacheSalt: "embeddings-salt-123",
@@ -733,7 +733,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 				"model": "text-embedding-3-small",
 				"input": "text to embed",
 			},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Embeddings: &scheduling.EmbeddingsRequest{
 					Input: "text to embed",
 				},

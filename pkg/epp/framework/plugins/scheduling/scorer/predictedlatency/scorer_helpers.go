@@ -29,7 +29,7 @@ import (
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
-func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedulingtypes.LLMRequest, predictedLatencyCtx *predictedLatencyCtx) {
+func (s *PredictedLatency) parseSLOHeaders(ctx context.Context, request *schedulingtypes.InferenceRequest, predictedLatencyCtx *predictedLatencyCtx) {
 	logger := log.FromContext(ctx)
 	var err error
 

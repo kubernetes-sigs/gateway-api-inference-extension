@@ -96,7 +96,7 @@ func (p *LatencyAdmission) Consumes() map[string]any {
 //   - No endpoint has a valid prediction (all violate SLO)
 //   - No endpoint is idle (all have running requests)
 //   - No cold pod exists (predictions are reliable)
-func (p *LatencyAdmission) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+func (p *LatencyAdmission) AdmitRequest(ctx context.Context, request *schedulingtypes.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		return nil

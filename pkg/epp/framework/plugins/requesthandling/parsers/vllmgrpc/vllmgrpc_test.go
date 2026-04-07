@@ -91,7 +91,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 		headers       map[string]string
 		malformedData []byte
 		wantErr       bool
-		want          *scheduling.LLMRequestBody
+		want          *scheduling.InferenceRequestBody
 	}{
 		{
 			name: "Valid Text Request",
@@ -101,7 +101,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				},
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Completions: &scheduling.CompletionsRequest{
 					Prompt: scheduling.Prompt{Raw: "Hello world"},
 				},
@@ -125,7 +125,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				},
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Completions: &scheduling.CompletionsRequest{
 					Prompt: scheduling.Prompt{Raw: "Tokenized hello"},
 				},
@@ -164,7 +164,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				Stream: true,
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Stream: true,
 				Completions: &scheduling.CompletionsRequest{
 					Prompt: scheduling.Prompt{Raw: "Hello world"},
@@ -186,7 +186,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				},
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Embed"},
-			want: &scheduling.LLMRequestBody{
+			want: &scheduling.InferenceRequestBody{
 				Embeddings: &scheduling.EmbeddingsRequest{
 					Input: "Embed this",
 				},

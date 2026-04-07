@@ -391,7 +391,7 @@ func TestValueReporting(t *testing.T) {
 				t.Fatalf("Failed to create plugin: %v", err)
 			}
 
-			plugin.ResponseBody(context.Background(), &scheduling.LLMRequest{}, currentResponse, &datalayer.EndpointMetadata{})
+			plugin.ResponseBody(context.Background(), &scheduling.InferenceRequest{}, currentResponse, &datalayer.EndpointMetadata{})
 
 			if diff := cmp.Diff(tt.wantResult, currentResponse.DynamicMetadata, protocmp.Transform()); diff != "" {
 				t.Errorf("ResponseComplete() DynamicMetadata mismatch (-want +got):\n%s", diff)

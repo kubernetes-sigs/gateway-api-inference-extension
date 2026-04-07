@@ -114,7 +114,7 @@ func (p *SchedulerProfile) String() string {
 
 // Run runs a SchedulerProfile. It invokes all the SchedulerProfile plugins for the given request in this
 // order - Filters, Scorers, Picker. After completing all, it returns the result.
-func (p *SchedulerProfile) Run(ctx context.Context, request *fwksched.LLMRequest, cycleState *fwksched.CycleState, candidateEndpoints []fwksched.Endpoint) (*fwksched.ProfileRunResult, error) {
+func (p *SchedulerProfile) Run(ctx context.Context, request *fwksched.InferenceRequest, cycleState *fwksched.CycleState, candidateEndpoints []fwksched.Endpoint) (*fwksched.ProfileRunResult, error) {
 	endpoints := p.runFilterPlugins(ctx, request, cycleState, candidateEndpoints)
 	if len(endpoints) == 0 {
 		return nil, errcommmon.Error{Code: errcommmon.Internal, Msg: "no endpoints available for the given request"}
@@ -127,7 +127,7 @@ func (p *SchedulerProfile) Run(ctx context.Context, request *fwksched.LLMRequest
 	return result, nil
 }
 
-func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *fwksched.LLMRequest, cycleState *fwksched.CycleState, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
+func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *fwksched.InferenceRequest, cycleState *fwksched.CycleState, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
 	logger := log.FromContext(ctx)
 	filteredEndpoints := endpoints
 	logger.V(logutil.DEBUG).Info("Before running filter plugins", "endpoints", filteredEndpoints)
@@ -148,7 +148,7 @@ func (p *SchedulerProfile) runFilterPlugins(ctx context.Context, request *fwksch
 	return filteredEndpoints
 }
 
-func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *fwksched.LLMRequest, cycleState *fwksched.CycleState, endpoints []fwksched.Endpoint) map[fwksched.Endpoint]float64 {
+func (p *SchedulerProfile) runScorerPlugins(ctx context.Context, request *fwksched.InferenceRequest, cycleState *fwksched.CycleState, endpoints []fwksched.Endpoint) map[fwksched.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.DEBUG).Info("Before running scorer plugins", "endpoints", endpoints)
 

@@ -73,7 +73,7 @@ func (s *LoraAffinityScorer) WithName(name string) *LoraAffinityScorer {
 	return s
 }
 
-func (s *LoraAffinityScorer) Score(_ context.Context, _ *framework.CycleState, request *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *LoraAffinityScorer) Score(_ context.Context, _ *framework.CycleState, request *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 
 	// Assign a score to each endpoint for loading the target adapter.

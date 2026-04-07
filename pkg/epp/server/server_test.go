@@ -357,8 +357,8 @@ func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.Requ
 	reqCtx.TargetEndpoint = fmt.Sprintf("%s:%d", podAddress, poolPort)
 
 	// Populate SchedulingRequest for testing request-based streaming detection.
-	reqCtx.SchedulingRequest = &scheduling.LLMRequest{
-		Body: &scheduling.LLMRequestBody{},
+	reqCtx.SchedulingRequest = &scheduling.InferenceRequest{
+		Body: &scheduling.InferenceRequestBody{},
 	}
 	if stream, ok := bodyMap["stream"].(bool); ok && stream {
 		reqCtx.SchedulingRequest.Body.Stream = true

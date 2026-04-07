@@ -22,15 +22,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLLMRequestBody_PromptText(t *testing.T) {
+func TestInferenceRequestBody_PromptText(t *testing.T) {
 	tests := []struct {
 		name     string
-		body     *LLMRequestBody
+		body     *InferenceRequestBody
 		expected string
 	}{
 		{
 			name: "completions request returns prompt directly",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				Completions: &CompletionsRequest{
 					Prompt: Prompt{Raw: "What is the meaning of life?"},
 				},
@@ -39,7 +39,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "completions request with array of strings prompt",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				Completions: &CompletionsRequest{
 					Prompt: Prompt{Strings: []string{"Why is", "the sky blue?"}},
 				},
@@ -48,7 +48,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "chat completions with single raw message",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				ChatCompletions: &ChatCompletionsRequest{
 					Messages: []Message{
 						{Role: "user", Content: Content{Raw: "Hello, how are you?"}},
@@ -59,7 +59,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "chat completions with multiple messages",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				ChatCompletions: &ChatCompletionsRequest{
 					Messages: []Message{
 						{Role: "system", Content: Content{Raw: "You are a helpful assistant."}},
@@ -71,7 +71,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "chat completions with structured content blocks",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				ChatCompletions: &ChatCompletionsRequest{
 					Messages: []Message{
 						{
@@ -90,7 +90,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "responses request with string input",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				Responses: &ResponsesRequest{
 					Input: "Some response input",
 				},
@@ -99,7 +99,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "responses request with non-string input",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				Responses: &ResponsesRequest{
 					Input: map[string]any{"key": "value"},
 				},
@@ -108,7 +108,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "conversations request",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				Conversations: &ConversationsRequest{
 					Items: []ConversationItem{
 						{Type: "message", Role: "user", Content: "Hello"},
@@ -119,12 +119,12 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name:     "empty body returns empty string",
-			body:     &LLMRequestBody{},
+			body:     &InferenceRequestBody{},
 			expected: "",
 		},
 		{
 			name: "chat completions with no messages",
-			body: &LLMRequestBody{
+			body: &InferenceRequestBody{
 				ChatCompletions: &ChatCompletionsRequest{
 					Messages: []Message{},
 				},

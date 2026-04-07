@@ -29,7 +29,7 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		request  *framework.LLMRequest
+		request  *framework.InferenceRequest
 		expected int64
 	}{
 		{
@@ -39,20 +39,20 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name:     "Empty request",
-			request:  &framework.LLMRequest{},
+			request:  &framework.InferenceRequest{},
 			expected: 0,
 		},
 		{
 			name: "Body nil",
-			request: &framework.LLMRequest{
+			request: &framework.InferenceRequest{
 				Body: nil,
 			},
 			expected: 0,
 		},
 		{
 			name: "Less than 4 characters",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Completions: &framework.CompletionsRequest{
 						Prompt: framework.Prompt{Raw: "123"},
 					},
@@ -62,8 +62,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Completions Request",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Completions: &framework.CompletionsRequest{
 						Prompt: framework.Prompt{Raw: "Hello, world!"},
 					},
@@ -73,8 +73,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Completions with empty prompt",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Completions: &framework.CompletionsRequest{
 						Prompt: framework.Prompt{},
 					},
@@ -84,8 +84,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Completions with exactly 4 characters",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Completions: &framework.CompletionsRequest{
 						Prompt: framework.Prompt{Raw: "1234"},
 					},
@@ -95,8 +95,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Chat Completions Request with Structured content",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					ChatCompletions: &framework.ChatCompletionsRequest{
 						Messages: []framework.Message{
 							{
@@ -118,8 +118,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Chat Completions with Raw content",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					ChatCompletions: &framework.ChatCompletionsRequest{
 						Messages: []framework.Message{
 							{
@@ -136,8 +136,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Chat Completions with multiple messages",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					ChatCompletions: &framework.ChatCompletionsRequest{
 						Messages: []framework.Message{
 							{
@@ -166,8 +166,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Chat Completions with empty messages",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					ChatCompletions: &framework.ChatCompletionsRequest{
 						Messages: []framework.Message{},
 					},
@@ -177,8 +177,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Responses API with string input",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Responses: &framework.ResponsesRequest{
 						Input: "Tell me a story about a brave knight.",
 					},
@@ -188,8 +188,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Responses API with structured input",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Responses: &framework.ResponsesRequest{
 						Input: []any{
 							map[string]any{"role": "user", "content": "Hello"},
@@ -201,8 +201,8 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		},
 		{
 			name: "Conversations API",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Conversations: &framework.ConversationsRequest{
 						Items: []framework.ConversationItem{
 							{Type: "message", Role: "user", Content: "Hi there"},
@@ -230,13 +230,13 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		request  *framework.LLMRequest
+		request  *framework.InferenceRequest
 		expected int64
 	}{
 		{
 			name: "Empty prompt with custom config",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Completions: &framework.CompletionsRequest{
 						Prompt: framework.Prompt{},
 					},
@@ -246,8 +246,8 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		},
 		{
 			name: "4 chars with custom config",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Completions: &framework.CompletionsRequest{
 						Prompt: framework.Prompt{Raw: "1234"},
 					},
@@ -257,8 +257,8 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		},
 		{
 			name: "More than 4 chars with custom config",
-			request: &framework.LLMRequest{
-				Body: &framework.LLMRequestBody{
+			request: &framework.InferenceRequest{
+				Body: &framework.InferenceRequestBody{
 					Completions: &framework.CompletionsRequest{
 						Prompt: framework.Prompt{Raw: "This is a longer message."},
 					},

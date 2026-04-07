@@ -113,16 +113,16 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 	)
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+func createTestInferenceRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
+	return createTestInferenceRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.InferenceRequestBody{
 		Completions: &fwksched.CompletionsRequest{
 			Prompt: fwksched.Prompt{Raw: "test prompt"},
 		},
 	})
 }
 
-func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+func createTestChatCompletionsInferenceRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
+	return createTestInferenceRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.InferenceRequestBody{
 		ChatCompletions: &fwksched.ChatCompletionsRequest{
 			Messages: []fwksched.Message{
 				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
@@ -132,7 +132,7 @@ func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64)
 	})
 }
 
-func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.LLMRequestBody) *fwksched.LLMRequest {
+func createTestInferenceRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.InferenceRequestBody) *fwksched.InferenceRequest {
 	headers := make(map[string]string)
 	headers[reqcommon.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -142,7 +142,7 @@ func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
 
-	return &fwksched.LLMRequest{
+	return &fwksched.InferenceRequest{
 		Headers: headers,
 		Body:    body,
 	}
@@ -382,7 +382,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 	requestID := "test-req-id"
 	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
 
-	req := &fwksched.LLMRequest{
+	req := &fwksched.InferenceRequest{
 		Headers: map[string]string{
 			reqcommon.RequestIdHeaderKey: requestID,
 		},
