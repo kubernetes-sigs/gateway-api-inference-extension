@@ -94,6 +94,8 @@ func validateFeatureGates(gates configapi.FeatureGates) error {
 		return nil
 	}
 
+	registeredFeatureGatesMu.RLock()
+	defer registeredFeatureGatesMu.RUnlock()
 	for _, gate := range gates {
 		if !registeredFeatureGates.Has(gate) {
 			return fmt.Errorf("feature gate '%s' is unknown or unregistered", gate)

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,8 +45,9 @@ import (
 )
 
 var (
-	scheme                 = runtime.NewScheme()
-	registeredFeatureGates = sets.New[string]()
+	scheme                   = runtime.NewScheme()
+	registeredFeatureGatesMu sync.RWMutex
+	registeredFeatureGates   = sets.New[string]()
 )
 
 func init() {
@@ -54,6 +56,8 @@ func init() {
 
 // RegisterFeatureGate registers a feature gate name for validation purposes.
 func RegisterFeatureGate(gate string) {
+	registeredFeatureGatesMu.Lock()
+	defer registeredFeatureGatesMu.Unlock()
 	registeredFeatureGates.Insert(gate)
 }
 
@@ -273,6 +277,8 @@ func buildSchedulerConfig(
 }
 
 func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
+	registeredFeatureGatesMu.RLock()
+	defer registeredFeatureGatesMu.RUnlock()
 	config := make(map[string]bool, len(registeredFeatureGates))
 	for gate := range registeredFeatureGates {
 		config[gate] = false
