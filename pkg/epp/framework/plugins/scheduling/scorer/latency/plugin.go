@@ -141,7 +141,7 @@ type epData struct {
 }
 
 // Score returns a float64 score in [0,1] for each endpoint.
-func (s *Plugin) Score(ctx context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *Plugin) Score(ctx context.Context, _ *framework.CycleState, _ *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	logger := log.FromContext(ctx)
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, ep := range endpoints {

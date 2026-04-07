@@ -134,7 +134,7 @@ func (p *prepareData) PluginState() *plugin.PluginState {
 }
 
 // PrepareRequestData is called by the director before scheduling requests.
-func (p *prepareData) PrepareRequestData(ctx context.Context, request *framework.LLMRequest, pods []framework.Endpoint) error {
+func (p *prepareData) PrepareRequestData(ctx context.Context, request *framework.InferenceRequest, pods []framework.Endpoint) error {
 	blockSize := p.GetBlockSize(pods)
 	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
 	total := len(hashes)
@@ -159,7 +159,7 @@ func (p *prepareData) PrepareRequestData(ctx context.Context, request *framework
 
 // PreRequest records in the shared indexer the result of the scheduling selection.
 // It updates the indexer with the prefix hashes for the selected endpoint(s).
-func (p *prepareData) PreRequest(ctx context.Context, request *framework.LLMRequest, schedulingResult *framework.SchedulingResult) {
+func (p *prepareData) PreRequest(ctx context.Context, request *framework.InferenceRequest, schedulingResult *framework.SchedulingResult) {
 	// Delete the state to avoid memory leak.
 	defer p.pluginState.Delete(request.RequestId)
 	primaryProfileResult := schedulingResult.ProfileResults[schedulingResult.PrimaryProfileName]

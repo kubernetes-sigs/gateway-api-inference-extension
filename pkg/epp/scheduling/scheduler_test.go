@@ -59,14 +59,14 @@ func TestSchedule(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     *fwksched.LLMRequest
+		req     *fwksched.InferenceRequest
 		input   []fwksched.Endpoint
 		wantRes *fwksched.SchedulingResult
 		err     bool
 	}{
 		{
 			name: "no candidate endpoints",
-			req: &fwksched.LLMRequest{
+			req: &fwksched.InferenceRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "any-model",
 			},
@@ -76,7 +76,7 @@ func TestSchedule(t *testing.T) {
 		},
 		{
 			name: "finds optimal endpoint",
-			req: &fwksched.LLMRequest{
+			req: &fwksched.InferenceRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "critical",
 			},

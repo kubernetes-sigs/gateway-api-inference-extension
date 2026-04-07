@@ -80,7 +80,7 @@ func (s *TokenLoadScorer) Consumes() map[string]any {
 	}
 }
 
-func (s *TokenLoadScorer) Score(ctx context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *TokenLoadScorer) Score(ctx context.Context, _ *framework.CycleState, _ *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	logger := log.FromContext(ctx)
 

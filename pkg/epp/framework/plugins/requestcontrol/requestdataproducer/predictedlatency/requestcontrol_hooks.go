@@ -40,7 +40,7 @@ var _ requestcontrol.ResponseBody = &PredictedLatency{}
 
 // --- RequestControl Hooks ---
 
-func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult) {
+func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingtypes.InferenceRequest, schedulingResult *schedulingtypes.SchedulingResult) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.PreRequest: request is nil, skipping")
@@ -110,7 +110,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	processPreRequestForLatencyPrediction(ctx, predictedLatencyCtx)
 }
 
-func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *schedulingtypes.InferenceRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
@@ -119,7 +119,7 @@ func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *scheduli
 }
 
 // ResponseBody handles both per-chunk processing and request completion logic.
-func (t *PredictedLatency) ResponseBody(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseBody(ctx context.Context, request *schedulingtypes.InferenceRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseBody: request is nil, skipping")

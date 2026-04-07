@@ -51,7 +51,7 @@ var _ requestcontrol.ResponseBody = &PredictedLatency{}
 var _ requestcontrol.AdmissionPlugin = &PredictedLatency{}
 
 type predictedLatencyCtx struct {
-	schedulingRequest         schedulingtypes.LLMRequest
+	schedulingRequest         schedulingtypes.InferenceRequest
 	targetMetadata            *fwkdl.EndpointMetadata
 	prefillTargetMetadata     *fwkdl.EndpointMetadata
 	schedulingResult          *schedulingtypes.SchedulingResult
@@ -92,7 +92,7 @@ type predictedLatencyCtx struct {
 	decodeTokensAtDispatch           int64
 }
 
-func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedLatencyCtx {
+func newPredictedLatencyContext(request *schedulingtypes.InferenceRequest) *predictedLatencyCtx {
 	var promptText string
 	if request.Body != nil {
 		promptText = request.Body.PromptText()
@@ -108,7 +108,7 @@ func newPredictedLatencyContext(request *schedulingtypes.LLMRequest) *predictedL
 	}
 }
 
-func (s *PredictedLatency) getPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) (*predictedLatencyCtx, error) {
+func (s *PredictedLatency) getPredictedLatencyContextForRequest(request *schedulingtypes.InferenceRequest) (*predictedLatencyCtx, error) {
 	id := request.Headers[reqcommon.RequestIdHeaderKey]
 	if item := s.sloContextStore.Get(id); item != nil {
 		return item.Value(), nil
@@ -116,18 +116,18 @@ func (s *PredictedLatency) getPredictedLatencyContextForRequest(request *schedul
 	return nil, fmt.Errorf("SLO context not found for request ID: %s", id)
 }
 
-func (s *PredictedLatency) setPredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest, ctx *predictedLatencyCtx) {
+func (s *PredictedLatency) setPredictedLatencyContextForRequest(request *schedulingtypes.InferenceRequest, ctx *predictedLatencyCtx) {
 	id := request.Headers[reqcommon.RequestIdHeaderKey]
 	s.sloContextStore.Set(id, ctx, ttlcache.DefaultTTL)
 }
 
-func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *schedulingtypes.LLMRequest) {
+func (s *PredictedLatency) deletePredictedLatencyContextForRequest(request *schedulingtypes.InferenceRequest) {
 	id := request.Headers[reqcommon.RequestIdHeaderKey]
 	s.sloContextStore.Delete(id)
 }
 
 // --- RequestControl Hooks ---
-func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingtypes.LLMRequest, schedulingResult *schedulingtypes.SchedulingResult) {
+func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingtypes.InferenceRequest, schedulingResult *schedulingtypes.SchedulingResult) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.PreRequest: request is nil, skipping")
@@ -203,7 +203,7 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	processPreRequestForLatencyPrediction(ctx, predictedLatencyCtx)
 }
 
-func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *schedulingtypes.InferenceRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseReceived: request is nil, skipping")
@@ -212,7 +212,7 @@ func (t *PredictedLatency) ResponseHeader(ctx context.Context, request *scheduli
 }
 
 // ResponseBody now handles both per-chunk processing and request completion logic.
-func (t *PredictedLatency) ResponseBody(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
+func (t *PredictedLatency) ResponseBody(ctx context.Context, request *schedulingtypes.InferenceRequest, response *requestcontrol.Response, targetMetadata *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		logger.V(logutil.DEBUG).Info("PredictedLatency.ResponseBody: request is nil, skipping")
@@ -335,7 +335,7 @@ func (t *PredictedLatency) checkPredictor(logger logr.Logger, metadata *fwkdl.En
 	return true
 }
 
-func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+func (t *PredictedLatency) AdmitRequest(ctx context.Context, request *schedulingtypes.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
 	if request == nil {
 		// This should not happen as the framework should not call AdmitRequest with a nil request, but we defensively check to avoid panics

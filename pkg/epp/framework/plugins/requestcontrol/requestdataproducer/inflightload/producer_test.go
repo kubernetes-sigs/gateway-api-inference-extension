@@ -205,10 +205,10 @@ func (f *stubSchedulingEndpoint) Get(key string) (datalayer.Cloneable, bool) {
 }
 func (f *stubSchedulingEndpoint) Keys() []string { return f.attr.Keys() }
 
-func makeTokenRequest(requestID, prompt string) *schedulingtypes.LLMRequest {
-	return &schedulingtypes.LLMRequest{
+func makeTokenRequest(requestID, prompt string) *schedulingtypes.InferenceRequest {
+	return &schedulingtypes.InferenceRequest{
 		RequestId: requestID,
-		Body: &schedulingtypes.LLMRequestBody{
+		Body: &schedulingtypes.InferenceRequestBody{
 			Completions: &schedulingtypes.CompletionsRequest{Prompt: schedulingtypes.Prompt{Raw: prompt}},
 		},
 	}

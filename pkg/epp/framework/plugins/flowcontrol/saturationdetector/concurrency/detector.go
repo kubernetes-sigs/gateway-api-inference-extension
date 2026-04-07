@@ -146,7 +146,7 @@ func (d *detector) Saturation(_ context.Context, endpoints []datalayer.Endpoint)
 func (d *detector) Filter(
 	_ context.Context,
 	_ *framework.CycleState,
-	_ *framework.LLMRequest,
+	_ *framework.InferenceRequest,
 	endpoints []framework.Endpoint,
 ) []framework.Endpoint {
 	// Pre-allocate assuming most endpoints will pass the filter to minimize allocations.

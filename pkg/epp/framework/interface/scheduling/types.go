@@ -41,14 +41,14 @@ type RequestObjectives struct {
 	Priority int
 }
 
-// LLMRequest is a structured representation of the fields we parse out of the LLMRequest body.
-type LLMRequest struct {
+// InferenceRequest is a structured representation of the fields we parse out of the InferenceRequest body.
+type InferenceRequest struct {
 	// RequestId is the Envoy generated Id for the request being processed
 	RequestId string
 	// TargetModel is the final target model after traffic split.
 	TargetModel string
 	// Data contains the request-body fields that we parse out as user input.
-	Body *LLMRequestBody
+	Body *InferenceRequestBody
 	// Headers is a map of the request headers.
 	Headers map[string]string
 	// Request Objective
@@ -87,7 +87,7 @@ type MultiModalFeature struct {
 	Length int
 }
 
-func (r *LLMRequest) String() string {
+func (r *InferenceRequest) String() string {
 	if r == nil {
 		return nilString
 	}
@@ -122,10 +122,10 @@ type RawPayload []byte
 func (RawPayload) isRequestPayload() {}
 func (RawPayload) IsParsed() bool    { return false }
 
-// LLMRequestBody contains the request-body fields that we parse out as user input,
+// InferenceRequestBody contains the request-body fields that we parse out as user input,
 // to be used in forming scheduling decisions.
-// An LLMRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, ConversationsRequest, or EmbeddingsRequest.
-type LLMRequestBody struct {
+// An InferenceRequestBody must contain exactly one of CompletionsRequest, ChatCompletionsRequest, ResponsesRequest, ConversationsRequest, or EmbeddingsRequest.
+type InferenceRequestBody struct {
 	// CompletionsRequest is the representation of the OpenAI /v1/completions request body.
 	Completions *CompletionsRequest `json:"completions,omitempty"`
 	// ChatCompletionsRequest is the representation of the OpenAI /v1/chat/completions request body.
@@ -148,7 +148,7 @@ type LLMRequestBody struct {
 
 // PromptText returns a plain-text representation of the prompt from whichever
 // API type is populated, analogous to CacheSalt().
-func (r *LLMRequestBody) PromptText() string {
+func (r *InferenceRequestBody) PromptText() string {
 	switch {
 	case r.Completions != nil:
 		return r.Completions.Prompt.PlainText()
@@ -176,7 +176,7 @@ func (r *LLMRequestBody) PromptText() string {
 	}
 }
 
-func (r *LLMRequestBody) CacheSalt() string {
+func (r *InferenceRequestBody) CacheSalt() string {
 	if r.Conversations != nil {
 		return r.Conversations.CacheSalt
 	}
@@ -521,5 +521,5 @@ type SchedulingResult struct {
 }
 
 type SchedulerProfile interface {
-	Run(ctx context.Context, request *LLMRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error)
+	Run(ctx context.Context, request *InferenceRequest, cycleState *CycleState, candidateEndpoints []Endpoint) (*ProfileRunResult, error)
 }

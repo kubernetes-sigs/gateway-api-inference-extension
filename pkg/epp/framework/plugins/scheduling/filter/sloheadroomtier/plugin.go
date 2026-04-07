@@ -81,7 +81,7 @@ func (p *Plugin) TypedName() fwkplugin.TypedName {
 // endpoints are kept. 1% of the time, only negative-tier endpoints are kept
 // (epsilon exploration for recovery). If only one tier has endpoints, that
 // tier is returned. If no endpoints have predictions, all are kept.
-func (p *Plugin) Filter(ctx context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) []framework.Endpoint {
+func (p *Plugin) Filter(ctx context.Context, _ *framework.CycleState, _ *framework.InferenceRequest, endpoints []framework.Endpoint) []framework.Endpoint {
 	logger := log.FromContext(ctx)
 
 	if len(endpoints) <= 1 {

@@ -120,16 +120,16 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 	)
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.InferenceRequestBody{
 		Completions: &fwksched.CompletionsRequest{
 			Prompt: fwksched.Prompt{Raw: "test prompt"},
 		},
 	})
 }
 
-func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
+func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.InferenceRequestBody{
 		ChatCompletions: &fwksched.ChatCompletionsRequest{
 			Messages: []fwksched.Message{
 				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
@@ -139,7 +139,7 @@ func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64)
 	})
 }
 
-func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.LLMRequestBody) *fwksched.LLMRequest {
+func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.InferenceRequestBody) *fwksched.InferenceRequest {
 	headers := make(map[string]string)
 	headers[reqcommon.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -149,7 +149,7 @@ func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
 
-	return &fwksched.LLMRequest{
+	return &fwksched.InferenceRequest{
 		Headers: headers,
 		Body:    body,
 	}
@@ -157,7 +157,7 @@ func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *
 
 // Add this helper function after the createTestLLMRequest function
 
-func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
+func setupPredictionContext(router *PredictedLatency, request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
 	ctx := context.Background()
 
 	// Create prediction context
@@ -200,7 +200,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 		name           string
 		predictor      *mockPredictor
 		strategy       headroomStrategy
-		request        *fwksched.LLMRequest
+		request        *fwksched.InferenceRequest
 		endpoints      []fwksched.Endpoint
 		expectedScores map[string]float64 // Map of pod name to expected score
 		expectNil      bool
@@ -771,7 +771,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 	requestID := "test-req-id"
 	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
 
-	req := &fwksched.LLMRequest{
+	req := &fwksched.InferenceRequest{
 		Headers: map[string]string{
 			reqcommon.RequestIdHeaderKey: requestID,
 		},

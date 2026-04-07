@@ -76,7 +76,7 @@ func (p *VllmGRPCParser) TypedName() fwkplugin.TypedName {
 }
 
 // ParseRequest parses the gRPC request body and headers and returns an LLMRequestBody.
-func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
+func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.InferenceRequestBody, error) {
 	logger := log.FromContext(ctx)
 
 	path := headers[methodPathKey]
@@ -175,22 +175,22 @@ func toGenerateResponse(payload []byte, resp *pb.GenerateResponse) error {
 	return proto.Unmarshal(parsedPayload, resp)
 }
 
-func convertToLLMRequestBody(payload []byte) (*scheduling.LLMRequestBody, error) {
+func convertToLLMRequestBody(payload []byte) (*scheduling.InferenceRequestBody, error) {
 	pbReq := &pb.GenerateRequest{}
 	if err := toGenerateRequest(payload, pbReq); err != nil {
 		return nil, err
 	}
-	var body *scheduling.LLMRequestBody
+	var body *scheduling.InferenceRequestBody
 	switch pbReq.Input.(type) {
 	case *pb.GenerateRequest_Text:
-		body = &scheduling.LLMRequestBody{
+		body = &scheduling.InferenceRequestBody{
 			Completions: &scheduling.CompletionsRequest{
 				Prompt: scheduling.Prompt{Raw: pbReq.GetText()},
 			},
 			Payload: scheduling.PayloadProto{Message: pbReq},
 		}
 	case *pb.GenerateRequest_Tokenized:
-		body = &scheduling.LLMRequestBody{
+		body = &scheduling.InferenceRequestBody{
 			Completions: &scheduling.CompletionsRequest{
 				Prompt: scheduling.Prompt{Raw: pbReq.GetTokenized().OriginalText},
 			},
@@ -235,14 +235,14 @@ func toGenerateRequest(payload []byte, req *pb.GenerateRequest) error {
 	return proto.Unmarshal(parsedPayload, req)
 }
 
-func convertEmbedToLLMRequestBody(payload []byte) (*scheduling.LLMRequestBody, error) {
+func convertEmbedToLLMRequestBody(payload []byte) (*scheduling.InferenceRequestBody, error) {
 	pbReq := &pb.EmbedRequest{}
 	if err := toEmbedRequest(payload, pbReq); err != nil {
 		return nil, err
 	}
-	var body *scheduling.LLMRequestBody
+	var body *scheduling.InferenceRequestBody
 	if pbReq.Tokenized != nil {
-		body = &scheduling.LLMRequestBody{
+		body = &scheduling.InferenceRequestBody{
 			Embeddings: &scheduling.EmbeddingsRequest{
 				Input: pbReq.GetTokenized().OriginalText,
 			},

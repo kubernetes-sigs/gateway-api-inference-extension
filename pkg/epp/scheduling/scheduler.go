@@ -51,7 +51,7 @@ type Scheduler struct {
 }
 
 // Schedule finds the target pod based on metrics and the requested lora adapter.
-func (s *Scheduler) Schedule(ctx context.Context, request *framework.LLMRequest, candidateEndpoints []framework.Endpoint) (result *framework.SchedulingResult, err error) {
+func (s *Scheduler) Schedule(ctx context.Context, request *framework.InferenceRequest, candidateEndpoints []framework.Endpoint) (result *framework.SchedulingResult, err error) {
 	loggerVerbose := log.FromContext(ctx).V(logutil.VERBOSE)
 
 	scheduleStart := time.Now()

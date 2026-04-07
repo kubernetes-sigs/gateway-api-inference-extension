@@ -38,8 +38,8 @@ func makeLatencyAdmissionEndpoint(name string, kvCache float64, runningRequests 
 	)
 }
 
-func makeSheddableRequest(ttftSLO, tpotSLO string) *schedulingtypes.LLMRequest {
-	return &schedulingtypes.LLMRequest{
+func makeSheddableRequest(ttftSLO, tpotSLO string) *schedulingtypes.InferenceRequest {
+	return &schedulingtypes.InferenceRequest{
 		Headers: map[string]string{
 			ttftSLOHeaderKey: ttftSLO,
 			tpotSLOHeaderKey: tpotSLO,
@@ -48,8 +48,8 @@ func makeSheddableRequest(ttftSLO, tpotSLO string) *schedulingtypes.LLMRequest {
 	}
 }
 
-func makeNonSheddableRequest(ttftSLO, tpotSLO string) *schedulingtypes.LLMRequest {
-	return &schedulingtypes.LLMRequest{
+func makeNonSheddableRequest(ttftSLO, tpotSLO string) *schedulingtypes.InferenceRequest {
+	return &schedulingtypes.InferenceRequest{
 		Headers: map[string]string{
 			ttftSLOHeaderKey: ttftSLO,
 			tpotSLOHeaderKey: tpotSLO,
@@ -63,7 +63,7 @@ func TestAdmitRequest(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		request   *schedulingtypes.LLMRequest
+		request   *schedulingtypes.InferenceRequest
 		endpoints []schedulingtypes.Endpoint
 		setupFn   func(endpoints []schedulingtypes.Endpoint) // set endpoint attributes
 		wantErr   bool

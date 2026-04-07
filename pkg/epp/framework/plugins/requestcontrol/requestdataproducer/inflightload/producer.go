@@ -98,7 +98,7 @@ func (p *InFlightLoadProducer) ExtractNotification(ctx context.Context, event da
 	return nil
 }
 
-func (p *InFlightLoadProducer) PrepareRequestData(_ context.Context, _ *framework.LLMRequest, endpoints []framework.Endpoint) error {
+func (p *InFlightLoadProducer) PrepareRequestData(_ context.Context, _ *framework.InferenceRequest, endpoints []framework.Endpoint) error {
 	for _, e := range endpoints {
 		endpointID := e.GetMetadata().NamespacedName.String()
 		e.Put(attrconcurrency.InFlightLoadKey, &attrconcurrency.InFlightLoad{
@@ -109,7 +109,7 @@ func (p *InFlightLoadProducer) PrepareRequestData(_ context.Context, _ *framewor
 	return nil
 }
 
-func (p *InFlightLoadProducer) PreRequest(_ context.Context, request *framework.LLMRequest, result *framework.SchedulingResult) {
+func (p *InFlightLoadProducer) PreRequest(_ context.Context, request *framework.InferenceRequest, result *framework.SchedulingResult) {
 	if result == nil || len(result.ProfileResults) == 0 {
 		return
 	}
@@ -133,7 +133,7 @@ func (p *InFlightLoadProducer) PreRequest(_ context.Context, request *framework.
 
 func (p *InFlightLoadProducer) ResponseBody(
 	_ context.Context,
-	request *framework.LLMRequest,
+	request *framework.InferenceRequest,
 	resp *requestcontrol.Response,
 	targetEndpoint *datalayer.EndpointMetadata,
 ) {

@@ -71,7 +71,7 @@ func NewDestinationEndpointServedVerifier() *DestinationEndpointServedVerifier {
 }
 
 // ResponseHeader is the handler for the ResponseHeader extension point.
-func (p *DestinationEndpointServedVerifier) ResponseHeader(ctx context.Context, request *schedulingtypes.LLMRequest, response *requestcontrol.Response, _ *fwkdl.EndpointMetadata) {
+func (p *DestinationEndpointServedVerifier) ResponseHeader(ctx context.Context, request *schedulingtypes.InferenceRequest, response *requestcontrol.Response, _ *fwkdl.EndpointMetadata) {
 	logger := log.FromContext(ctx).WithName(p.TypedName().String())
 	logger.V(logging.DEBUG).Info("Verifying destination endpoint served")
 

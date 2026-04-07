@@ -73,7 +73,7 @@ func (s *KVCacheUtilizationScorer) WithName(name string) *KVCacheUtilizationScor
 }
 
 // Score returns the scoring result for the given list of endpoints based on context.
-func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.LLMRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
+func (s *KVCacheUtilizationScorer) Score(_ context.Context, _ *framework.CycleState, _ *framework.InferenceRequest, endpoints []framework.Endpoint) map[framework.Endpoint]float64 {
 	scores := make(map[framework.Endpoint]float64, len(endpoints))
 	for _, endpoint := range endpoints {
 		scores[endpoint] = 1 - endpoint.GetMetrics().KVCacheUsagePercent

@@ -187,7 +187,7 @@ func (r *benchRequest) GetMetadata() map[string]any              { return nil }
 func (r *benchRequest) InferencePoolName() string                { return "bench-pool" }
 func (r *benchRequest) ModelName() string                        { return "bench-model" }
 func (r *benchRequest) TargetModelName() string                  { return "bench-target" }
-func (r *benchRequest) InferenceRequest() *scheduling.LLMRequest { return nil }
+func (r *benchRequest) InferenceRequest() *scheduling.InferenceRequest { return nil }
 func (r *benchRequest) ReceivedTimestamp() time.Time             { return time.Now() }
 
 // setupRegistry provisions the concrete FlowRegistry.

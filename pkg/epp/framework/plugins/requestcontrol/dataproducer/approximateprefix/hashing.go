@@ -31,7 +31,7 @@ import (
 // hashPrompt divides the prompt into blocks and calculates a prefix cache hash for each block.
 // The first block hash includes the model name and cache salt (if provided).
 // For subsequent blocks, the hash is calculated as: hash(block i content, hash(i-1)).
-func hashPrompt(ctx context.Context, request *scheduling.LLMRequest, blockSizeTokens int, maxPrefixBlocks int) []blockHash {
+func hashPrompt(ctx context.Context, request *scheduling.InferenceRequest, blockSizeTokens int, maxPrefixBlocks int) []blockHash {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	if request == nil || request.Body == nil {
 		loggerDebug.Info("Request or request data is nil, skipping hashing")
@@ -93,7 +93,7 @@ func toBytes(i blockHash) []byte {
 	return bytes
 }
 
-func getUserInputBytes(request *scheduling.LLMRequest) ([]byte, error) {
+func getUserInputBytes(request *scheduling.InferenceRequest) ([]byte, error) {
 	switch {
 	case request.Body.Conversations != nil:
 		return json.Marshal(request.Body.Conversations.Items)
