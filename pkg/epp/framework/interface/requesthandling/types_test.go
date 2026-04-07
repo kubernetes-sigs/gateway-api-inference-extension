@@ -20,38 +20,39 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 )
 
 func TestLLMRequestBody_PromptText(t *testing.T) {
 	tests := []struct {
 		name     string
-		body     *InferenceRequestBody
+		body     *fwkrh.InferenceRequestBody
 		expected string
 	}{
 		{
 			name: "completions request returns prompt directly",
-			body: &InferenceRequestBody{
-				Completions: &CompletionsRequest{
-					Prompt: Prompt{Raw: "What is the meaning of life?"},
+			body: &fwkrh.InferenceRequestBody{
+				Completions: &fwkrh.CompletionsRequest{
+					Prompt: fwkrh.Prompt{Raw: "What is the meaning of life?"},
 				},
 			},
 			expected: "What is the meaning of life?",
 		},
 		{
 			name: "completions request with array of strings prompt",
-			body: &InferenceRequestBody{
-				Completions: &CompletionsRequest{
-					Prompt: Prompt{Strings: []string{"Why is", "the sky blue?"}},
+			body: &fwkrh.InferenceRequestBody{
+				Completions: &fwkrh.CompletionsRequest{
+					Prompt: fwkrh.Prompt{Strings: []string{"Why is", "the sky blue?"}},
 				},
 			},
 			expected: "Why is the sky blue?",
 		},
 		{
 			name: "chat completions with single raw message",
-			body: &InferenceRequestBody{
-				ChatCompletions: &ChatCompletionsRequest{
-					Messages: []Message{
-						{Role: "user", Content: Content{Raw: "Hello, how are you?"}},
+			body: &fwkrh.InferenceRequestBody{
+				ChatCompletions: &fwkrh.ChatCompletionsRequest{
+					Messages: []fwkrh.Message{
+						{Role: "user", Content: fwkrh.Content{Raw: "Hello, how are you?"}},
 					},
 				},
 			},
@@ -59,11 +60,11 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "chat completions with multiple messages",
-			body: &InferenceRequestBody{
-				ChatCompletions: &ChatCompletionsRequest{
-					Messages: []Message{
-						{Role: "system", Content: Content{Raw: "You are a helpful assistant."}},
-						{Role: "user", Content: Content{Raw: "Tell me a joke."}},
+			body: &fwkrh.InferenceRequestBody{
+				ChatCompletions: &fwkrh.ChatCompletionsRequest{
+					Messages: []fwkrh.Message{
+						{Role: "system", Content: fwkrh.Content{Raw: "You are a helpful assistant."}},
+						{Role: "user", Content: fwkrh.Content{Raw: "Tell me a joke."}},
 					},
 				},
 			},
@@ -71,15 +72,15 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "chat completions with structured content blocks",
-			body: &InferenceRequestBody{
-				ChatCompletions: &ChatCompletionsRequest{
-					Messages: []Message{
+			body: &fwkrh.InferenceRequestBody{
+				ChatCompletions: &fwkrh.ChatCompletionsRequest{
+					Messages: []fwkrh.Message{
 						{
 							Role: "user",
-							Content: Content{
-								Structured: []ContentBlock{
+							Content: fwkrh.Content{
+								Structured: []fwkrh.ContentBlock{
 									{Type: "text", Text: "Describe this image:"},
-									{Type: "image_url", ImageURL: ImageBlock{Url: "http://example.com/img.png"}},
+									{Type: "image_url", ImageURL: fwkrh.ImageBlock{Url: "http://example.com/img.png"}},
 								},
 							},
 						},
@@ -90,8 +91,8 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "responses request with string input",
-			body: &InferenceRequestBody{
-				Responses: &ResponsesRequest{
+			body: &fwkrh.InferenceRequestBody{
+				Responses: &fwkrh.ResponsesRequest{
 					Input: "Some response input",
 				},
 			},
@@ -99,8 +100,8 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "responses request with non-string input",
-			body: &InferenceRequestBody{
-				Responses: &ResponsesRequest{
+			body: &fwkrh.InferenceRequestBody{
+				Responses: &fwkrh.ResponsesRequest{
 					Input: map[string]any{"key": "value"},
 				},
 			},
@@ -108,9 +109,9 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name: "conversations request",
-			body: &InferenceRequestBody{
-				Conversations: &ConversationsRequest{
-					Items: []ConversationItem{
+			body: &fwkrh.InferenceRequestBody{
+				Conversations: &fwkrh.ConversationsRequest{
+					Items: []fwkrh.ConversationItem{
 						{Type: "message", Role: "user", Content: "Hello"},
 					},
 				},
@@ -119,14 +120,14 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 		},
 		{
 			name:     "empty body returns empty string",
-			body:     &InferenceRequestBody{},
+			body:     &fwkrh.InferenceRequestBody{},
 			expected: "",
 		},
 		{
 			name: "chat completions with no messages",
-			body: &InferenceRequestBody{
-				ChatCompletions: &ChatCompletionsRequest{
-					Messages: []Message{},
+			body: &fwkrh.InferenceRequestBody{
+				ChatCompletions: &fwkrh.ChatCompletionsRequest{
+					Messages: []fwkrh.Message{},
 				},
 			},
 			expected: "",
@@ -145,23 +146,23 @@ func TestPrompt_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		want    Prompt
+		want    fwkrh.Prompt
 		wantErr bool
 	}{
 		{
 			name:  "string prompt",
 			input: `"hello world"`,
-			want:  Prompt{Raw: "hello world"},
+			want:  fwkrh.Prompt{Raw: "hello world"},
 		},
 		{
 			name:  "array of strings prompt",
 			input: `["hello","world"]`,
-			want:  Prompt{Strings: []string{"hello", "world"}},
+			want:  fwkrh.Prompt{Strings: []string{"hello", "world"}},
 		},
 		{
 			name:  "single-element array prompt",
 			input: `["hello world"]`,
-			want:  Prompt{Strings: []string{"hello world"}},
+			want:  fwkrh.Prompt{Strings: []string{"hello world"}},
 		},
 		{
 			name:    "integer prompt is rejected",
@@ -177,7 +178,7 @@ func TestPrompt_UnmarshalJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var p Prompt
+			var p fwkrh.Prompt
 			err := p.UnmarshalJSON([]byte(tt.input))
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -192,13 +193,13 @@ func TestPrompt_UnmarshalJSON(t *testing.T) {
 func TestPrompt_PlainText(t *testing.T) {
 	tests := []struct {
 		name string
-		p    Prompt
+		p    fwkrh.Prompt
 		want string
 	}{
-		{name: "raw string", p: Prompt{Raw: "hello"}, want: "hello"},
-		{name: "strings joined", p: Prompt{Strings: []string{"a", "b", "c"}}, want: "a b c"},
-		{name: "single string in array", p: Prompt{Strings: []string{"hello"}}, want: "hello"},
-		{name: "zero value", p: Prompt{}, want: ""},
+		{name: "raw string", p: fwkrh.Prompt{Raw: "hello"}, want: "hello"},
+		{name: "strings joined", p: fwkrh.Prompt{Strings: []string{"a", "b", "c"}}, want: "a b c"},
+		{name: "single string in array", p: fwkrh.Prompt{Strings: []string{"hello"}}, want: "hello"},
+		{name: "zero value", p: fwkrh.Prompt{}, want: ""},
 	}
 
 	for _, tt := range tests {
@@ -209,19 +210,19 @@ func TestPrompt_PlainText(t *testing.T) {
 }
 
 func TestPrompt_IsEmpty(t *testing.T) {
-	assert.True(t, Prompt{}.IsEmpty())
-	assert.True(t, Prompt{Strings: []string{}}.IsEmpty())
-	assert.False(t, Prompt{Raw: "x"}.IsEmpty())
-	assert.False(t, Prompt{Strings: []string{"x"}}.IsEmpty())
+	assert.True(t, fwkrh.Prompt{}.IsEmpty())
+	assert.True(t, fwkrh.Prompt{Strings: []string{}}.IsEmpty())
+	assert.False(t, fwkrh.Prompt{Raw: "x"}.IsEmpty())
+	assert.False(t, fwkrh.Prompt{Strings: []string{"x"}}.IsEmpty())
 }
 
 func TestPrompt_MarshalJSON(t *testing.T) {
-	raw, _ := Prompt{Raw: "hello"}.MarshalJSON()
+	raw, _ := fwkrh.Prompt{Raw: "hello"}.MarshalJSON()
 	assert.Equal(t, `"hello"`, string(raw))
 
-	arr, _ := Prompt{Strings: []string{"a", "b"}}.MarshalJSON()
+	arr, _ := fwkrh.Prompt{Strings: []string{"a", "b"}}.MarshalJSON()
 	assert.Equal(t, `["a","b"]`, string(arr))
 
-	empty, _ := Prompt{}.MarshalJSON()
+	empty, _ := fwkrh.Prompt{}.MarshalJSON()
 	assert.Equal(t, `""`, string(empty))
 }
