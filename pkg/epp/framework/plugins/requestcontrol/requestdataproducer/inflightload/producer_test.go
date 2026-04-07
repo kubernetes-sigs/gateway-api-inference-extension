@@ -27,6 +27,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrconcurrency "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/concurrency"
 )
@@ -208,8 +209,8 @@ func (f *stubSchedulingEndpoint) Keys() []string { return f.attr.Keys() }
 func makeTokenRequest(requestID, prompt string) *schedulingtypes.InferenceRequest {
 	return &schedulingtypes.InferenceRequest{
 		RequestId: requestID,
-		Body: &schedulingtypes.InferenceRequestBody{
-			Completions: &schedulingtypes.CompletionsRequest{Prompt: schedulingtypes.Prompt{Raw: prompt}},
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{Prompt: fwkrh.Prompt{Raw: prompt}},
 		},
 	}
 }

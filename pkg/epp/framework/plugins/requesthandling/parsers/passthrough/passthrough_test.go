@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 )
 
 func TestPassthroughParser_ParseRequest(t *testing.T) {
@@ -32,22 +32,22 @@ func TestPassthroughParser_ParseRequest(t *testing.T) {
 		name     string
 		body     []byte
 		headers  map[string]string
-		wantBody *scheduling.InferenceRequestBody
+		wantBody *fwkrh.InferenceRequestBody
 	}{
 		{
 			name:    "empty body",
 			body:    []byte{},
 			headers: map[string]string{},
-			wantBody: &scheduling.InferenceRequestBody{
-				Payload: scheduling.RawPayload([]byte{}),
+			wantBody: &fwkrh.InferenceRequestBody{
+				Payload: fwkrh.RawPayload([]byte{}),
 			},
 		},
 		{
 			name:    "non-empty body",
 			body:    []byte("hello world"),
 			headers: map[string]string{},
-			wantBody: &scheduling.InferenceRequestBody{
-				Payload: scheduling.RawPayload([]byte("hello world")),
+			wantBody: &fwkrh.InferenceRequestBody{
+				Payload: fwkrh.RawPayload([]byte("hello world")),
 			},
 		},
 	}

@@ -23,7 +23,6 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -67,9 +66,9 @@ func (p *PassthroughParser) WithName(name string) *PassthroughParser {
 }
 
 // ParseRequest converts the request to RawPayload.
-func (p *PassthroughParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.InferenceRequestBody, error) {
-	return &scheduling.InferenceRequestBody{
-		Payload: scheduling.RawPayload(body),
+func (p *PassthroughParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
+	return &fwkrh.InferenceRequestBody{
+		Payload: fwkrh.RawPayload(body),
 	}, nil
 }
 

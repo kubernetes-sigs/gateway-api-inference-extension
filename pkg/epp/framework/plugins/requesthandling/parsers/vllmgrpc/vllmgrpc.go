@@ -28,9 +28,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	pb "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/gen"
 )
 
@@ -80,8 +78,8 @@ func (p *VllmGRPCParser) SupportedAppProtocols() []v1.AppProtocol {
 	return []v1.AppProtocol{v1.AppProtocolH2C}
 }
 
-// ParseRequest parses the gRPC request body and headers and returns an InferenceRequestBody.
-func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.InferenceRequestBody, error) {
+// ParseRequest parses the gRPC request body and headers and returns an LLMRequestBody.
+func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
 	logger := log.FromContext(ctx)
 
 	path := headers[methodPathKey]
@@ -118,7 +116,7 @@ func (p *VllmGRPCParser) ParseResponse(ctx context.Context, body []byte, headers
 			logger.V(logutil.DEBUG).Info("parsed EmbedResponse", "promptTokens", embedResp.PromptTokens)
 			result := &fwkrh.ParsedResponse{}
 			if embedResp.PromptTokens > 0 {
-				result.Usage = &requestcontrol.Usage{
+				result.Usage = &fwkrh.Usage{
 					PromptTokens:     int(embedResp.PromptTokens),
 					CompletionTokens: 0,
 					TotalTokens:      int(embedResp.PromptTokens),
@@ -156,12 +154,12 @@ func (p *VllmGRPCParser) ParseResponse(ctx context.Context, body []byte, headers
 	return result, nil
 }
 
-func requestControlUsage(promptToken, completionToken, cachedToken int) *requestcontrol.Usage {
-	return &requestcontrol.Usage{
+func requestControlUsage(promptToken, completionToken, cachedToken int) *fwkrh.Usage {
+	return &fwkrh.Usage{
 		PromptTokens:     promptToken,
 		CompletionTokens: completionToken,
 		TotalTokens:      promptToken + completionToken,
-		PromptTokenDetails: &requestcontrol.PromptTokenDetails{
+		PromptTokenDetails: &fwkrh.PromptTokenDetails{
 			CachedTokens: cachedToken,
 		},
 	}
@@ -180,26 +178,26 @@ func toGenerateResponse(payload []byte, resp *pb.GenerateResponse) error {
 	return proto.Unmarshal(parsedPayload, resp)
 }
 
-func convertToInferenceRequestBody(payload []byte) (*scheduling.InferenceRequestBody, error) {
+func convertToInferenceRequestBody(payload []byte) (*fwkrh.InferenceRequestBody, error) {
 	pbReq := &pb.GenerateRequest{}
 	if err := toGenerateRequest(payload, pbReq); err != nil {
 		return nil, err
 	}
-	var body *scheduling.InferenceRequestBody
+	var body *fwkrh.InferenceRequestBody
 	switch pbReq.Input.(type) {
 	case *pb.GenerateRequest_Text:
-		body = &scheduling.InferenceRequestBody{
-			Completions: &scheduling.CompletionsRequest{
-				Prompt: scheduling.Prompt{Raw: pbReq.GetText()},
+		body = &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: pbReq.GetText()},
 			},
-			Payload: scheduling.PayloadProto{Message: pbReq},
+			Payload: fwkrh.PayloadProto{Message: pbReq},
 		}
 	case *pb.GenerateRequest_Tokenized:
-		body = &scheduling.InferenceRequestBody{
-			Completions: &scheduling.CompletionsRequest{
-				Prompt: scheduling.Prompt{Raw: pbReq.GetTokenized().OriginalText},
+		body = &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: pbReq.GetTokenized().OriginalText},
 			},
-			Payload: scheduling.PayloadProto{Message: pbReq},
+			Payload: fwkrh.PayloadProto{Message: pbReq},
 		}
 	default:
 		return nil, errors.New("not supported request inputType")
@@ -240,18 +238,18 @@ func toGenerateRequest(payload []byte, req *pb.GenerateRequest) error {
 	return proto.Unmarshal(parsedPayload, req)
 }
 
-func convertEmbedToInferenceRequestBody(payload []byte) (*scheduling.InferenceRequestBody, error) {
+func convertEmbedToInferenceRequestBody(payload []byte) (*fwkrh.InferenceRequestBody, error) {
 	pbReq := &pb.EmbedRequest{}
 	if err := toEmbedRequest(payload, pbReq); err != nil {
 		return nil, err
 	}
-	var body *scheduling.InferenceRequestBody
+	var body *fwkrh.InferenceRequestBody
 	if pbReq.Tokenized != nil {
-		body = &scheduling.InferenceRequestBody{
-			Embeddings: &scheduling.EmbeddingsRequest{
+		body = &fwkrh.InferenceRequestBody{
+			Embeddings: &fwkrh.EmbeddingsRequest{
 				Input: pbReq.GetTokenized().OriginalText,
 			},
-			Payload: scheduling.PayloadProto{Message: pbReq},
+			Payload: fwkrh.PayloadProto{Message: pbReq},
 		}
 	} else {
 		return nil, errors.New("missing tokenized input in EmbedRequest")

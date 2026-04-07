@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduling
+package requesthandling
 
 import (
 	"testing"
@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestInferenceRequestBody_PromptText(t *testing.T) {
+func TestLLMRequestBody_PromptText(t *testing.T) {
 	tests := []struct {
 		name     string
 		body     *InferenceRequestBody

@@ -29,6 +29,7 @@ import (
 
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
@@ -52,9 +53,9 @@ func TestPrepareRequestData(t *testing.T) {
 	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.InferenceRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: "aaaabbbb"},
 			},
 		},
 	}
@@ -92,9 +93,9 @@ func TestPreRequest(t *testing.T) {
 	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.InferenceRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: "aaaabbbb"},
 			},
 		},
 	}
@@ -174,9 +175,9 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.InferenceRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: fwksched.Prompt{Raw: "aaaaaa"},
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: "aaaaaa"},
 			},
 		},
 	}
@@ -200,9 +201,9 @@ func TestPrefixPluginCompletion(t *testing.T) {
 	req3 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.InferenceRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: fwksched.Prompt{Raw: "aaaabbbb"},
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: "aaaabbbb"},
 			},
 		},
 	}
@@ -241,11 +242,11 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	req1 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.InferenceRequestBody{
-			ChatCompletions: &fwksched.ChatCompletionsRequest{
-				Messages: []fwksched.Message{
-					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
+		Body: &fwkrh.InferenceRequestBody{
+			ChatCompletions: &fwkrh.ChatCompletionsRequest{
+				Messages: []fwkrh.Message{
+					{Role: "system", Content: fwkrh.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: fwkrh.Content{Raw: "Hello, how are you?"}},
 				},
 			},
 		},
@@ -269,13 +270,13 @@ func TestPrefixPluginChatCompletionsGrowth(t *testing.T) {
 	req2 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model1",
-		Body: &fwksched.InferenceRequestBody{
-			ChatCompletions: &fwksched.ChatCompletionsRequest{
-				Messages: []fwksched.Message{
-					{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Hello, how are you?"}},
-					{Role: "assistant", Content: fwksched.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
-					{Role: "user", Content: fwksched.Content{Raw: "Can you explain how prefix caching works?"}},
+		Body: &fwkrh.InferenceRequestBody{
+			ChatCompletions: &fwkrh.ChatCompletionsRequest{
+				Messages: []fwkrh.Message{
+					{Role: "system", Content: fwkrh.Content{Raw: "You are a helpful assistant"}},
+					{Role: "user", Content: fwkrh.Content{Raw: "Hello, how are you?"}},
+					{Role: "assistant", Content: fwkrh.Content{Raw: "I'm doing well, thank you! How can I help you today?"}},
+					{Role: "user", Content: fwkrh.Content{Raw: "Can you explain how prefix caching works?"}},
 				},
 			},
 		},
@@ -303,11 +304,11 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	req := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model",
-		Body: &fwksched.InferenceRequestBody{
-			Completions: &fwksched.CompletionsRequest{
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
 				// Length 128 chars.
 				// If block size is 64 chars: 2 blocks
-				Prompt: fwksched.Prompt{Raw: strings.Repeat("a", 128)},
+				Prompt: fwkrh.Prompt{Raw: strings.Repeat("a", 128)},
 			},
 		},
 	}
@@ -359,9 +360,9 @@ func TestMaxPrefixTokensToMatch(t *testing.T) {
 	req := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model",
-		Body: &fwksched.InferenceRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: fwksched.Prompt{Raw: "aaaabbbbccccdddd"},
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: "aaaabbbbccccdddd"},
 			},
 		},
 	}
@@ -386,9 +387,9 @@ func TestMaxPrefixTokensToMatch(t *testing.T) {
 	req2 := &fwksched.InferenceRequest{
 		RequestId:   uuid.NewString(),
 		TargetModel: "test-model",
-		Body: &fwksched.InferenceRequestBody{
-			Completions: &fwksched.CompletionsRequest{
-				Prompt: fwksched.Prompt{Raw: "aaaabbbbccccdddd"},
+		Body: &fwkrh.InferenceRequestBody{
+			Completions: &fwkrh.CompletionsRequest{
+				Prompt: fwkrh.Prompt{Raw: "aaaabbbbccccdddd"},
 			},
 		},
 	}
@@ -422,9 +423,9 @@ func BenchmarkPrefixPluginStress(b *testing.B) {
 			req := &fwksched.InferenceRequest{
 				RequestId:   uuid.NewString(),
 				TargetModel: "model-stress",
-				Body: &fwksched.InferenceRequestBody{
-					Completions: &fwksched.CompletionsRequest{
-						Prompt: fwksched.Prompt{Raw: prompt},
+				Body: &fwkrh.InferenceRequestBody{
+					Completions: &fwkrh.CompletionsRequest{
+						Prompt: fwkrh.Prompt{Raw: prompt},
 					},
 				},
 			}
