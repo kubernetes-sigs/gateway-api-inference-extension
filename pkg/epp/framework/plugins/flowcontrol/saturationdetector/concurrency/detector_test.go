@@ -30,6 +30,7 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	requesthandle "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	attrconcurrency "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/concurrency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestdataproducer/inflightload"
 )
@@ -667,8 +668,8 @@ func (f *liveSchedulingEndpoint) Clone() datalayer.AttributeMap   { return f }
 func makeTokenRequest(requestID, prompt string) *schedulingtypes.InferenceRequest {
 	return &schedulingtypes.InferenceRequest{
 		RequestId: requestID,
-		Body: &schedulingtypes.InferenceRequestBody{
-			Completions: &schedulingtypes.CompletionsRequest{Prompt: schedulingtypes.Prompt{Raw: prompt}},
+		Body: &requesthandle.InferenceRequestBody{
+			Completions: &requesthandle.CompletionsRequest{Prompt: requesthandle.Prompt{Raw: prompt}},
 		},
 	}
 }

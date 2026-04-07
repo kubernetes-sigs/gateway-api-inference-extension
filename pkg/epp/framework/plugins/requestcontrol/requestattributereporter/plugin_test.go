@@ -27,6 +27,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	requesthandle "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
@@ -199,7 +200,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: requesthandle.Usage{
 					PromptTokens: 15,
 				},
 			},
@@ -231,7 +232,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: requesthandle.Usage{
 					PromptTokens: 0,
 				},
 			},
@@ -251,7 +252,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: requesthandle.Usage{
 					PromptTokens: 10,
 				},
 				DynamicMetadata: &structpb.Struct{
@@ -280,7 +281,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: requesthandle.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -299,7 +300,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: requesthandle.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -318,7 +319,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: requesthandle.Usage{
 					PromptTokens: 10,
 				},
 			},
@@ -337,7 +338,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{}, // Empty usage
+				Usage: requesthandle.Usage{}, // Empty usage
 			},
 			wantResult: nil, // Expect early return for zero value
 		},
@@ -354,7 +355,7 @@ func TestValueReporting(t *testing.T) {
 				},
 			},
 			response: &requestcontrol.Response{
-				Usage: requestcontrol.Usage{
+				Usage: requesthandle.Usage{
 					CompletionTokens: 25,
 				},
 			},

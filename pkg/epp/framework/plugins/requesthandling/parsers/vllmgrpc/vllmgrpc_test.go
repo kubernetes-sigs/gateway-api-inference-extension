@@ -27,9 +27,7 @@ import (
 
 	// Note: Adjust these imports if your local aliases differ
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	pb "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/gen"
 )
 
@@ -90,7 +88,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 		headers       map[string]string
 		malformedData []byte
 		wantErr       bool
-		want          *scheduling.InferenceRequestBody
+		want          *fwkrh.InferenceRequestBody
 	}{
 		{
 			name: "Valid Text Request",
@@ -100,11 +98,11 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				},
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
-			want: &scheduling.InferenceRequestBody{
-				Completions: &scheduling.CompletionsRequest{
-					Prompt: scheduling.Prompt{Raw: "Hello world"},
+			want: &fwkrh.InferenceRequestBody{
+				Completions: &fwkrh.CompletionsRequest{
+					Prompt: fwkrh.Prompt{Raw: "Hello world"},
 				},
-				Payload: scheduling.PayloadProto{
+				Payload: fwkrh.PayloadProto{
 					Message: &pb.GenerateRequest{
 						Input: &pb.GenerateRequest_Text{
 							Text: "Hello world",
@@ -124,11 +122,11 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				},
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
-			want: &scheduling.InferenceRequestBody{
-				Completions: &scheduling.CompletionsRequest{
-					Prompt: scheduling.Prompt{Raw: "Tokenized hello"},
+			want: &fwkrh.InferenceRequestBody{
+				Completions: &fwkrh.CompletionsRequest{
+					Prompt: fwkrh.Prompt{Raw: "Tokenized hello"},
 				},
-				Payload: scheduling.PayloadProto{
+				Payload: fwkrh.PayloadProto{
 					Message: &pb.GenerateRequest{
 						Input: &pb.GenerateRequest_Tokenized{
 							Tokenized: &pb.TokenizedInput{
@@ -163,12 +161,12 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				Stream: true,
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
-			want: &scheduling.InferenceRequestBody{
+			want: &fwkrh.InferenceRequestBody{
 				Stream: true,
-				Completions: &scheduling.CompletionsRequest{
-					Prompt: scheduling.Prompt{Raw: "Hello world"},
+				Completions: &fwkrh.CompletionsRequest{
+					Prompt: fwkrh.Prompt{Raw: "Hello world"},
 				},
-				Payload: scheduling.PayloadProto{
+				Payload: fwkrh.PayloadProto{
 					Message: &pb.GenerateRequest{
 						Input: &pb.GenerateRequest_Text{
 							Text: "Hello world",
@@ -185,11 +183,11 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				},
 			},
 			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Embed"},
-			want: &scheduling.InferenceRequestBody{
-				Embeddings: &scheduling.EmbeddingsRequest{
+			want: &fwkrh.InferenceRequestBody{
+				Embeddings: &fwkrh.EmbeddingsRequest{
 					Input: "Embed this",
 				},
-				Payload: scheduling.PayloadProto{
+				Payload: fwkrh.PayloadProto{
 					Message: &pb.EmbedRequest{
 						Tokenized: &pb.TokenizedInput{
 							OriginalText: "Embed this",
@@ -249,11 +247,11 @@ func TestVllmGRPCParser_ParseResponse(t *testing.T) {
 				},
 			},
 			want: &fwkrh.ParsedResponse{
-				Usage: &fwkrc.Usage{
+				Usage: &fwkrh.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 5,
 					TotalTokens:      15,
-					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+					PromptTokenDetails: &fwkrh.PromptTokenDetails{
 						CachedTokens: 2,
 					},
 				},
@@ -273,11 +271,11 @@ func TestVllmGRPCParser_ParseResponse(t *testing.T) {
 				},
 			},
 			want: &fwkrh.ParsedResponse{
-				Usage: &fwkrc.Usage{
+				Usage: &fwkrh.Usage{
 					PromptTokens:     20,
 					CompletionTokens: 15,
 					TotalTokens:      35,
-					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+					PromptTokenDetails: &fwkrh.PromptTokenDetails{
 						CachedTokens: 5,
 					},
 				},
@@ -310,7 +308,7 @@ func TestVllmGRPCParser_ParseResponse(t *testing.T) {
 				EmbeddingDim: 2,
 			},
 			want: &fwkrh.ParsedResponse{
-				Usage: &fwkrc.Usage{
+				Usage: &fwkrh.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 0,
 					TotalTokens:      10,
@@ -325,7 +323,7 @@ func TestVllmGRPCParser_ParseResponse(t *testing.T) {
 				EmbeddingDim: 2,
 			},
 			want: &fwkrh.ParsedResponse{
-				Usage: &fwkrc.Usage{
+				Usage: &fwkrh.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 0,
 					TotalTokens:      10,
@@ -343,11 +341,11 @@ func TestVllmGRPCParser_ParseResponse(t *testing.T) {
 				},
 			},
 			want: &fwkrh.ParsedResponse{
-				Usage: &fwkrc.Usage{
+				Usage: &fwkrh.Usage{
 					PromptTokens:     20,
 					CompletionTokens: 15,
 					TotalTokens:      35,
-					PromptTokenDetails: &fwkrc.PromptTokenDetails{
+					PromptTokenDetails: &fwkrh.PromptTokenDetails{
 						CachedTokens: 0,
 					},
 				},

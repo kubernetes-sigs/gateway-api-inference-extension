@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	requesthandle "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 )
 
 func TestSimpleTokenEstimator_Estimate(t *testing.T) {
@@ -52,9 +53,9 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Less than 4 characters",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					Completions: &framework.CompletionsRequest{
-						Prompt: framework.Prompt{Raw: "123"},
+				Body: &requesthandle.InferenceRequestBody{
+					Completions: &requesthandle.CompletionsRequest{
+						Prompt: requesthandle.Prompt{Raw: "123"},
 					},
 				},
 			},
@@ -63,9 +64,9 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Completions Request",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					Completions: &framework.CompletionsRequest{
-						Prompt: framework.Prompt{Raw: "Hello, world!"},
+				Body: &requesthandle.InferenceRequestBody{
+					Completions: &requesthandle.CompletionsRequest{
+						Prompt: requesthandle.Prompt{Raw: "Hello, world!"},
 					},
 				},
 			},
@@ -74,9 +75,9 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Completions with empty prompt",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					Completions: &framework.CompletionsRequest{
-						Prompt: framework.Prompt{},
+				Body: &requesthandle.InferenceRequestBody{
+					Completions: &requesthandle.CompletionsRequest{
+						Prompt: requesthandle.Prompt{},
 					},
 				},
 			},
@@ -85,9 +86,9 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Completions with exactly 4 characters",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					Completions: &framework.CompletionsRequest{
-						Prompt: framework.Prompt{Raw: "1234"},
+				Body: &requesthandle.InferenceRequestBody{
+					Completions: &requesthandle.CompletionsRequest{
+						Prompt: requesthandle.Prompt{Raw: "1234"},
 					},
 				},
 			},
@@ -96,13 +97,13 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions Request with Structured content",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{
+				Body: &requesthandle.InferenceRequestBody{
+					ChatCompletions: &requesthandle.ChatCompletionsRequest{
+						Messages: []requesthandle.Message{
 							{
 								Role: "user",
-								Content: framework.Content{
-									Structured: []framework.ContentBlock{
+								Content: requesthandle.Content{
+									Structured: []requesthandle.ContentBlock{
 										{
 											Type: "text",
 											Text: "This is a longer message.",
@@ -119,12 +120,12 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions with Raw content",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{
+				Body: &requesthandle.InferenceRequestBody{
+					ChatCompletions: &requesthandle.ChatCompletionsRequest{
+						Messages: []requesthandle.Message{
 							{
 								Role: "user",
-								Content: framework.Content{
+								Content: requesthandle.Content{
 									Raw: "This is raw content.",
 								},
 							},
@@ -137,21 +138,21 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions with multiple messages",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{
+				Body: &requesthandle.InferenceRequestBody{
+					ChatCompletions: &requesthandle.ChatCompletionsRequest{
+						Messages: []requesthandle.Message{
 							{
 								Role: "user",
-								Content: framework.Content{
-									Structured: []framework.ContentBlock{
+								Content: requesthandle.Content{
+									Structured: []requesthandle.ContentBlock{
 										{Type: "text", Text: "Hi"},
 									},
 								},
 							},
 							{
 								Role: "assistant",
-								Content: framework.Content{
-									Structured: []framework.ContentBlock{
+								Content: requesthandle.Content{
+									Structured: []requesthandle.ContentBlock{
 										{Type: "text", Text: "Hello"},
 									},
 								},
@@ -165,9 +166,9 @@ func TestSimpleTokenEstimator_Estimate(t *testing.T) {
 		{
 			name: "Chat Completions with empty messages",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					ChatCompletions: &framework.ChatCompletionsRequest{
-						Messages: []framework.Message{},
+				Body: &requesthandle.InferenceRequestBody{
+					ChatCompletions: &requesthandle.ChatCompletionsRequest{
+						Messages: []requesthandle.Message{},
 					},
 				},
 			},
@@ -197,9 +198,9 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		{
 			name: "Empty prompt with custom config",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					Completions: &framework.CompletionsRequest{
-						Prompt: framework.Prompt{},
+				Body: &requesthandle.InferenceRequestBody{
+					Completions: &requesthandle.CompletionsRequest{
+						Prompt: requesthandle.Prompt{},
 					},
 				},
 			},
@@ -208,9 +209,9 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		{
 			name: "4 chars with custom config",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					Completions: &framework.CompletionsRequest{
-						Prompt: framework.Prompt{Raw: "1234"},
+				Body: &requesthandle.InferenceRequestBody{
+					Completions: &requesthandle.CompletionsRequest{
+						Prompt: requesthandle.Prompt{Raw: "1234"},
 					},
 				},
 			},
@@ -219,9 +220,9 @@ func TestSimpleTokenEstimator_Estimate_CustomConfig(t *testing.T) {
 		{
 			name: "More than 4 chars with custom config",
 			request: &framework.InferenceRequest{
-				Body: &framework.InferenceRequestBody{
-					Completions: &framework.CompletionsRequest{
-						Prompt: framework.Prompt{Raw: "This is a longer message."},
+				Body: &requesthandle.InferenceRequestBody{
+					Completions: &requesthandle.CompletionsRequest{
+						Prompt: requesthandle.Prompt{Raw: "This is a longer message."},
 					},
 				},
 			},

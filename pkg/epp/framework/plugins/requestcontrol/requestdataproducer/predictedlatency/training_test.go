@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	requesthandle "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -151,10 +152,10 @@ func TestBulkPredictWithMetrics_ChatCompletionsPrompt(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"}},
 	}
 
-	chatBody := &schedulingtypes.InferenceRequestBody{
-		ChatCompletions: &schedulingtypes.ChatCompletionsRequest{
-			Messages: []schedulingtypes.Message{
-				{Role: "user", Content: schedulingtypes.Content{Raw: "Hello world"}},
+	chatBody := &requesthandle.InferenceRequestBody{
+		ChatCompletions: &requesthandle.ChatCompletionsRequest{
+			Messages: []requesthandle.Message{
+				{Role: "user", Content: requesthandle.Content{Raw: "Hello world"}},
 			},
 		},
 	}

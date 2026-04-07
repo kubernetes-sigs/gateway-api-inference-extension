@@ -206,21 +206,21 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwksched.InferenceRequestBody, error) {
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwkrh.InferenceRequestBody, error) {
 	llmRequestBody, err := parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
 	if err != nil {
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
 	}
 
 	switch v := llmRequestBody.Payload.(type) {
-	case fwksched.PayloadProto:
+	case fwkrh.PayloadProto:
 		// Protos are not currently mutated, return as-is.
 		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
-	case fwksched.PayloadMap:
+	case fwkrh.PayloadMap:
 		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
 			return nil, err
 		}
-	case fwksched.RawPayload:
+	case fwkrh.RawPayload:
 		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
 	default:
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}

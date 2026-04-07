@@ -29,6 +29,7 @@ import (
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	requesthandle "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -114,25 +115,25 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 }
 
 func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.InferenceRequestBody{
-		Completions: &fwksched.CompletionsRequest{
-			Prompt: fwksched.Prompt{Raw: "test prompt"},
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &requesthandle.InferenceRequestBody{
+		Completions: &requesthandle.CompletionsRequest{
+			Prompt: requesthandle.Prompt{Raw: "test prompt"},
 		},
 	})
 }
 
 func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.InferenceRequestBody{
-		ChatCompletions: &fwksched.ChatCompletionsRequest{
-			Messages: []fwksched.Message{
-				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
-				{Role: "user", Content: fwksched.Content{Raw: "Tell me a joke."}},
+	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &requesthandle.InferenceRequestBody{
+		ChatCompletions: &requesthandle.ChatCompletionsRequest{
+			Messages: []requesthandle.Message{
+				{Role: "system", Content: requesthandle.Content{Raw: "You are a helpful assistant."}},
+				{Role: "user", Content: requesthandle.Content{Raw: "Tell me a joke."}},
 			},
 		},
 	})
 }
 
-func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.InferenceRequestBody) *fwksched.InferenceRequest {
+func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *requesthandle.InferenceRequestBody) *fwksched.InferenceRequest {
 	headers := make(map[string]string)
 	headers[reqcommon.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
