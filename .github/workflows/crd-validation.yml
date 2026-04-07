@@ -35,11 +35,19 @@ jobs:
 
           FAILED=0
           for crd in config/crd/bases/*.yaml; do
-            if ! crdify "git://${BASE_SHA}?path=$crd" "git://HEAD?path=$crd"; then
-              echo "❌ Incompatible change detected in $crd"
-              ((FAILED++))
+            if git cat-file -e ${BASE_SHA}:${crd} 2>/dev/null; then
+              if git cat-file -e HEAD:${crd} 2>/dev/null; then
+                if ! crdify "git://${BASE_SHA}?path=$crd" "git://HEAD?path=$crd"; then
+                  echo "❌ Incompatible change detected in $crd"
+                  ((FAILED++))
+                else
+                  echo "✅ $crd is valid"
+                fi
+              else
+                echo "⚠️ Skipping $crd (not present in HEAD)"
+              fi
             else
-              echo "✅ $crd is valid"
+              echo "⚠️ Skipping $crd (not present in BASE)"
             fi
           done
 
