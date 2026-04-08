@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLLMRequestBody_PromptText(t *testing.T) {
+func TestInferenceRequestBody_PromptText(t *testing.T) {
 	tests := []struct {
 		name     string
 		body     *InferenceRequestBody

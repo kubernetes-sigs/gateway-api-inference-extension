@@ -25,6 +25,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const nilStr = "<nil>"
+
 // RequestPayload represents a strongly-typed unmarshaled request payload or raw bytes.
 type RequestPayload interface {
 	isRequestPayload()
@@ -176,7 +178,7 @@ type CompletionsRequest struct {
 
 func (r *CompletionsRequest) String() string {
 	if r == nil {
-		return "<nil>"
+		return nilStr
 	}
 
 	return fmt.Sprintf("{PromptLength: %d}", len(r.Prompt.PlainText()))
@@ -203,7 +205,7 @@ type ChatCompletionsRequest struct {
 
 func (r *ChatCompletionsRequest) String() string {
 	if r == nil {
-		return "<nil>"
+		return nilStr
 	}
 
 	messagesLen := 0
@@ -227,7 +229,7 @@ type ResponsesRequest struct {
 
 func (r *ResponsesRequest) String() string {
 	if r == nil {
-		return "<nil>"
+		return nilStr
 	}
 	return fmt.Sprintf("{InputType: %T, InstructionsType: %T}", r.Input, r.Instructions)
 }
@@ -244,7 +246,7 @@ type ConversationsRequest struct {
 
 func (c *ConversationsRequest) String() string {
 	if c == nil {
-		return "<nil>"
+		return nilStr
 	}
 	return fmt.Sprintf("{ItemsCount: %d}", len(c.Items))
 }
@@ -260,7 +262,7 @@ type EmbeddingsRequest struct {
 
 func (e *EmbeddingsRequest) String() string {
 	if e == nil {
-		return "<nil>"
+		return nilStr
 	}
 	return fmt.Sprintf("{InputType: %T}", e.Input)
 }

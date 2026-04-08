@@ -91,7 +91,7 @@ func (p *OpenAIParser) ParseRequest(ctx context.Context, body []byte, headers ma
 	if err := json.Unmarshal(body, &bodyMap); err != nil {
 		return nil, fmt.Errorf("error unmarshaling request bodyMap: %w", err)
 	}
-	extractedBody, err := extractRequestBody(body, headers)
+	extractedBody, err := extractInferenceRequestBody(body, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +180,8 @@ func determineAPITypeFromPath(path string) string {
 	return completionsAPI
 }
 
-// extractRequestBody extracts the LLMRequestBody from the given request body map using path-based detection.
-func extractRequestBody(rawBody []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
+// extractInferenceRequestBody extracts the InferenceRequestBody from the given request body map using path-based detection.
+func extractInferenceRequestBody(rawBody []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
 	// Determine API type from request path
 	path := getRequestPath(headers)
 	apiType := determineAPITypeFromPath(path)

@@ -93,10 +93,6 @@ func (r *InferenceRequest) String() string {
 		r.RequestId, r.TargetModel, r.Body, r.Headers)
 }
 
-
-
-
-
 type Endpoint interface {
 	GetMetadata() *fwkdl.EndpointMetadata
 	GetMetrics() *fwkdl.Metrics

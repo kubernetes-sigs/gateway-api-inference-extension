@@ -21,8 +21,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	requesthandle "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 func TestSimpleTokenEstimator_Estimate(t *testing.T) {

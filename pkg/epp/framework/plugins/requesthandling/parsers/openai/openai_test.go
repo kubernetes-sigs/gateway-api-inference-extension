@@ -1058,7 +1058,7 @@ func BenchmarkExtractRequestData_ChatCompletionsWithOptionals(b *testing.B) {
 		if err != nil {
 			b.Errorf("body cannot be marshalled to JSON bytes")
 		}
-		_, err = extractRequestBody(jsonBytes, headers)
+		_, err = extractInferenceRequestBody(jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)
 		}

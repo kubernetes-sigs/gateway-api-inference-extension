@@ -73,21 +73,21 @@ func (p *VllmGRPCParser) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-// ParseRequest parses the gRPC request body and headers and returns an LLMRequestBody.
+// ParseRequest parses the gRPC request body and headers and returns an InferenceRequestBody.
 func (p *VllmGRPCParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
 	logger := log.FromContext(ctx)
 
 	path := headers[methodPathKey]
 	switch path {
 	case vllmEmbedPath:
-		extractedBody, err := convertEmbedToLLMRequestBody(body)
+		extractedBody, err := convertEmbedToInferenceRequestBody(body)
 		if err != nil {
 			return nil, fmt.Errorf("parsing gRPC payload for Embed: %w", err)
 		}
 		logger.V(logutil.TRACE).Info("parsed EmbedRequest")
 		return extractedBody, nil
 	case vllmGeneratePath:
-		extractedBody, err := convertToLLMRequestBody(body)
+		extractedBody, err := convertToInferenceRequestBody(body)
 		if err != nil {
 			return nil, fmt.Errorf("parsing gRPC payload for Generate: %w", err)
 		}
@@ -173,7 +173,7 @@ func toGenerateResponse(payload []byte, resp *pb.GenerateResponse) error {
 	return proto.Unmarshal(parsedPayload, resp)
 }
 
-func convertToLLMRequestBody(payload []byte) (*fwkrh.InferenceRequestBody, error) {
+func convertToInferenceRequestBody(payload []byte) (*fwkrh.InferenceRequestBody, error) {
 	pbReq := &pb.GenerateRequest{}
 	if err := toGenerateRequest(payload, pbReq); err != nil {
 		return nil, err
@@ -233,7 +233,7 @@ func toGenerateRequest(payload []byte, req *pb.GenerateRequest) error {
 	return proto.Unmarshal(parsedPayload, req)
 }
 
-func convertEmbedToLLMRequestBody(payload []byte) (*fwkrh.InferenceRequestBody, error) {
+func convertEmbedToInferenceRequestBody(payload []byte) (*fwkrh.InferenceRequestBody, error) {
 	pbReq := &pb.EmbedRequest{}
 	if err := toEmbedRequest(payload, pbReq); err != nil {
 		return nil, err

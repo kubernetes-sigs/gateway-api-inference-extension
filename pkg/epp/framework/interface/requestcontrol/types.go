@@ -40,5 +40,3 @@ type Response struct {
 	// metadata when processing ProcessingResponse_RequestHeaders.
 	DynamicMetadata *structpb.Struct
 }
-
-
