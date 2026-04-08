@@ -340,7 +340,7 @@ type testDirector struct {
 	handleResponseBodyEndStreamCount int
 }
 
-func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext, inferenceRequestBody *fwkrh.InferenceRequestBody) (*handlers.RequestContext, error) {
 	ts.requestHeaders = reqCtx.Request.Headers
 
 	bodyMap := make(map[string]any)
