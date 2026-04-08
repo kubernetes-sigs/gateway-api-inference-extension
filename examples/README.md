@@ -187,63 +187,112 @@ func RegisterAllPlugins() {
 ## How to Build a Custom EPP
 
 A custom EPP is deployed alongside (or instead of) the default EPP. Each
-`InferencePool` independently references whichever EPP it needs.
+`InferencePool` independently references whichever EPP it needs via
+`endpointPickerRef`.
 
 ### How a Request Finds Its EPP
 
-The routing chain involves four Kubernetes resources. Here is the end-to-end
-flow for a single request:
+There are two separate flows to understand: the **control plane** (how the
+gateway is configured) and the **data plane** (how a request is routed at
+runtime).
+
+#### Control Plane
+
+Configuration is **declarative**: you write Gateway API objects, and an
+**inference-capable Gateway controller** (for example Envoy Gateway with this
+extension, or another implementation that conforms to the
+[implementer's guide](https://gateway-api-inference-extension.sigs.k8s.io/guides/implementers/))
+turns them into proxy config. The controller typically watches at least
+`Gateway`, `HTTPRoute`, and `InferencePool`, and resolves backend endpoints
+(for example by tracking Pods that match the pool’s label selector, or via a
+shadow Service—both patterns are described in that guide).
+
+The `HTTPRoute` binds traffic to a `Gateway` via `parentRefs` and names an
+`InferencePool` as a **backend** via `rules[].backendRefs`. The pool’s
+`endpointPickerRef` points at the Kubernetes **Service** that fronts your EPP
+Deployment (including the gRPC service port, commonly `9002`). Reconciliation
+does not “call” the EPP; it installs static/dynamic proxy configuration so
+that, at request time, the data plane knows which EPP address to use for
+ext_proc and how to reach pool member pods.
 
 ```
-  ① User Request
-       │
-       ▼
-  ┌──────────┐  ② HTTPRoute matches the request path/host and
-  │  Envoy   │     identifies the backendRef → InferencePool
-  │ (Gateway)│
-  └────┬─────┘
-       │
-       │  ③ Gateway controller has already read InferencePool.spec.extensionRef
-       │     and configured Envoy's ext-proc filter to call that EPP Service
-       │
-       ▼
-  ┌──────────────────────┐
-  │   InferencePool      │   extensionRef:
-  │   name: pool-a       │     name: epp-a   ───────┐
-  │   selector: app=vllm │                          │
-  └──────────────────────┘                          │
-                                                    ▼
-                                          ┌──────────────────┐
-                                    ④     │  EPP Service      │
-                                Envoy ──► │  (ext-proc gRPC)  │
-                                          │  epp-a:9002       │
-                                          └────────┬─────────┘
-                                                   │
-                                             ⑤ EPP runs
-                                          Filter→Score→Pick
-                                                   │
-                                                   ▼
-                                          ⑥ Returns selected
-                                          endpoint via header:
-                                          x-gateway-destination-endpoint
-                                                   │
-       ┌───────────────────────────────────────────┘
-       ▼
-  ┌──────────┐
-  │  Envoy   │  ⑦ Forwards the request to the chosen vLLM pod
-  └────┬─────┘
-       │
-       ▼
-  ┌──────────┐
-  │ vLLM pod │
-  └──────────┘
+                    ┌─────────────────────────┐
+                    │        Gateway          │
+                    │ (listener / virtual IP) │
+                    └───────────▲─────────────┘
+                                │  parentRefs
+                    ┌───────────┴─────────────┐
+                    │       HTTPRoute         │
+                    │  backendRefs → pool-a   │
+                    └───────────┬─────────────┘
+                                │  (ref: group, kind, name)
+                                ▼
+                    ┌─────────────────────────┐
+                    │     InferencePool       │
+                    │  name: pool-a           │
+                    │  selector + targetPorts │
+                    │  endpointPickerRef:     │
+                    │    name: epp-a (Service)│
+                    │    port: 9002           │
+                    └───────────┬─────────────┘
+                                │
+              ┌─────────────────▼─────────────────┐
+              │ Inference Gateway controller      │
+              │ reconciles resources → proxy      │
+              │ config (route, clusters, ext_proc │
+              │ cluster/authority for epp-a:9002) │
+              └───────────────────────────────────┘
+```
+
+#### Data Plane
+
+At runtime, traffic never flows **through** the `InferencePool` object—it is
+only the API that defined the pool’s selector, ports, and EPP reference. The
+live path is: **client → proxy → ext_proc round-trip to EPP → chosen
+model-server Pod**. The EPP **does not terminate or proxy** the user’s HTTP; it
+returns a routing decision on the ext_proc stream.
+
+Envoy’s ext_proc uses **gRPC** (bidirectional streaming). The proxy may pass an
+optional candidate subset via metadata (for example
+`x-gateway-destination-endpoint-subset`); if omitted, the EPP selects from
+endpoints implied by the pool. The EPP must communicate the chosen endpoint
+back using both the **`x-gateway-destination-endpoint` response header** and
+matching **`dynamic_metadata`** in the ProcessingResponse (see the
+[Endpoint Picker protocol](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol)).
+
+```
+  ① Client HTTP request
+           │
+           ▼
+  ┌────────────────┐
+  │ Envoy (proxy)  │  ② Match HTTPRoute; backend is InferencePool →
+  └───────┬────────┘     run ext_proc before forwarding
+          │
+          │ ③ ext_proc gRPC: ProcessingRequest / ProcessingResponse
+          ▼
+  ┌────────────────┐
+  │ EPP (epp-a)    │  ④ Scheduling pipeline: Filter → Score → Pick
+  │ :9002          │
+  └───────┬────────┘
+          │
+          │ ⑤ Decision: x-gateway-destination-endpoint + dynamic_metadata
+          ▼
+  ┌────────────────┐
+  │ Envoy (proxy)  │  ⑥ Forward original request to chosen Pod:targetPort
+  └───────┬────────┘
+          ▼
+  ┌────────────────┐
+  │ Model server   │
+  │ (e.g. vLLM)    │
+  └────────────────┘
 ```
 
 Step by step:
 
 1. **User sends a request** to the Envoy-based Gateway (e.g. `POST /v1/completions`).
-2. **HTTPRoute matches** the request by path/host and has a `backendRef`
-   pointing to an `InferencePool`:
+2. **Envoy matches** the request via HTTPRoute rules. The Gateway controller
+   has already configured Envoy's ext-proc filter based on the `InferencePool`
+   and its `endpointPickerRef` (Service + port for the EPP):
    ```yaml
    kind: HTTPRoute
    spec:
@@ -253,51 +302,75 @@ Step by step:
          kind: InferencePool
          name: pool-a          # ← which InferencePool
    ```
-3. **The Gateway controller** watches both `HTTPRoute` and `InferencePool`.
-   When it sees `pool-a` has `extensionRef.name: epp-a`, it configures
-   Envoy's ext-proc filter so that requests matching this route call `epp-a`
-   on the specified port.
-4. **Envoy calls the EPP** via ext-proc gRPC. The EPP is just a regular
+3. **Envoy calls the EPP** via ext-proc gRPC. The EPP is just a regular
    Kubernetes Service backed by the EPP Deployment.
-5. **The EPP runs the scheduling pipeline** (Filter → Score → Pick) against
+4. **The EPP runs the scheduling pipeline** (Filter → Score → Pick) against
    the pool's endpoints.
-6. **The EPP returns** the chosen endpoint in the `x-gateway-destination-endpoint`
-   response header and dynamic metadata.
-7. **Envoy forwards** the original request to that specific vLLM pod.
+5. **The EPP returns** the chosen endpoint in the `x-gateway-destination-endpoint`
+   response header and dynamic metadata. The EPP does **not** proxy the request
+   itself.
+6. **Envoy forwards** the original request to that specific vLLM pod.
 
-Because the binding path is `HTTPRoute → InferencePool → extensionRef → EPP
+Because the binding path is `HTTPRoute → InferencePool → endpointPickerRef → EPP
 Service`, different pools can point to different EPP deployments. This is how
-multiple EPPs (upstream and custom) coexist in the same cluster:
+multiple EPPs (upstream and custom) coexist in the same cluster.
+
+**Important:** a **single** HTTP request matches **one** route rule (for a given
+listener) and therefore uses **one** `InferencePool` and **one** ext_proc
+call to **one** EPP. The data plane below shows **two independent examples**
+(side by side), not one request fanning out to both EPPs.
 
 ```
-                           ┌───────────────┐
-           User Request ──►│    Envoy      │
-                           │  (Gateway)    │
-                           └───┬───────┬───┘
-                               │       │
-                    HTTPRoute  │       │  HTTPRoute
-                    path: /a   │       │  path: /b
-                               │       │
-                     ┌─────────▼──┐ ┌──▼───────────┐
-                     │InferencePool│ │InferencePool │
-                     │  pool-a     │ │  pool-b      │
-                     │  ext: epp-a │ │  ext: epp-b  │
-                     └──────┬──────┘ └──────┬───────┘
-                            │               │
-                     ┌──────▼──────┐ ┌──────▼───────┐
-                     │EPP (upstream)│ │ EPP (custom) │
-                     │ built-in    │ │ out-of-tree  │
-                     │ plugins     │ │ plugins      │
-                     └──────┬──────┘ └──────┬───────┘
-                            │               │
-                     ┌──────▼──────┐ ┌──────▼───────┐
-                     │  vLLM pods  │ │  vLLM pods   │
-                     └─────────────┘ └──────────────┘
+  Control plane (declarative; reconciled into proxy config)
+
+        HTTPRoute: /a -> pool-a, /b -> pool-b
+                   │                  │
+                   ▼                  ▼
+     ┌──────────────────────┐  ┌──────────────────────┐
+     │ InferencePool        │  │ InferencePool        │
+     │ pool-a               │  │ pool-b               │
+     │ pickerRef -> epp-a   │  │ pickerRef -> epp-b   │
+     └──────────┬───────────┘  └──────────┬───────────┘
+                └──────────┬──────────────┘
+                           ▼
+     ┌─────────────────────────────────────────────────┐
+     │ Inference Gateway controller                    │
+     │ reconciles -> Envoy config (routes + ext_proc)  │
+     └─────────────────────────────────────────────────┘
+
+  Data plane (two independent requests shown side by side)
+
+     Request /a                        Request /b
+          │                                 │
+          └──────────────┬──────────────────┘
+                         ▼
+     ┌─────────────────────────────────────────────┐
+     │             Envoy (Gateway)                 │
+     │   each request: one route, one ext_proc     │
+     └───────┬─────────────────────────────┬───────┘
+             │ ext_proc                    │ ext_proc
+             ▼                             ▼
+     ┌──────────────────┐         ┌──────────────────┐
+     │ EPP a (upstream) │         │ EPP b (custom)   │
+     │ built-in plugins │         │ out-of-tree      │
+     └────────┬─────────┘         └────────┬─────────┘
+              │ decision                   │ decision
+              ▼                            ▼
+     ┌─────────────────────────────────────────────┐
+     │             Envoy (Gateway)                 │
+     │   forwards request to the chosen pod        │
+     └───────┬─────────────────────────────┬───────┘
+             ▼                             ▼
+     ┌──────────────────┐         ┌──────────────────┐
+     │ Pod in pool-a    │         │ Pod in pool-b    │
+     └──────────────────┘         └──────────────────┘
 ```
 
 Each `InferencePool` independently references whichever EPP it needs via
-`extensionRef`. Requests to `/a` are scheduled by the upstream EPP, while
+`endpointPickerRef`. Requests to `/a` are scheduled by the upstream EPP, while
 requests to `/b` are scheduled by the custom EPP with out-of-tree plugins.
+In both cases, Envoy calls the EPP to get a routing decision, then Envoy
+itself forwards the request to the chosen model server pod.
 
 A custom EPP binary is a standard Go program that registers your plugins and
 then starts the upstream EPP Runner. This is the same pattern used by
@@ -400,17 +473,21 @@ Build and deploy to your Kubernetes cluster, then point an `InferencePool`
 at your custom EPP:
 
 ```yaml
-apiVersion: inference.networking.x-k8s.io/v1alpha2
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: my-pool
 spec:
-  targetPortNumber: 8000
   selector:
-    app: vllm
-  extensionRef:
-    name: my-custom-epp    # Your EPP's Service name
+    matchLabels:
+      app: vllm
+  targetPorts:
+    - number: 8000
+  endpointPickerRef:
+    name: my-custom-epp   # Your EPP's Service name
+    port:
+      number: 9002
 ```
 
 Multiple EPP deployments can coexist in a cluster — each `InferencePool`
-independently references whichever EPP it needs via `extensionRef`.
+independently references whichever EPP it needs via `endpointPickerRef`.

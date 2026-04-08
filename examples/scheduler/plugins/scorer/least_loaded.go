@@ -44,13 +44,16 @@ const PluginType = "least-loaded-scorer"
 // compile-time interface check
 var _ fwksched.Scorer = &LeastLoadedScorer{}
 
-// LeastLoadedScorer scores each endpoint by how much spare model capacity it has:
+// LeastLoadedScorer scores each endpoint by how much spare LoRA adapter capacity
+// it has:
 //
 //	score = 1 - len(ActiveModels) / MaxActiveModels
 //
-// An endpoint running 1 of 4 possible models scores 0.75 (plenty of room),
-// while one running 4 of 4 scores 0.0 (fully loaded). This encourages the
-// scheduler to spread new model loads to less busy pods.
+// ActiveModels tracks the LoRA adapters currently loaded on an endpoint, not
+// fully fledged models. An endpoint running 1 of 4 possible LoRA adapters
+// scores 0.75 (plenty of room), while one running 4 of 4 scores 0.0 (fully
+// loaded). This encourages the scheduler to spread new LoRA adapter loads to
+// less busy pods.
 type LeastLoadedScorer struct {
 	typedName fwkplugin.TypedName
 }
