@@ -166,20 +166,22 @@ func getRequestPath(headers map[string]string) string {
 // determineAPITypeFromPath determines the API type based on the request path.
 // Note: path strings have already been cleaned and normalized by the gateway/proxy layer
 // (no trailing slashes, query parameters, or additional suffix strings at this point).
+// The suffix-based matching supports both standard OpenAI paths (e.g. /v1/chat/completions)
+// and provider-specific paths (e.g. Vertex AI's /v1/projects/.../chat/completions).
 func determineAPITypeFromPath(path string) string {
-	if strings.Contains(path, "/v1/conversations") {
+	if strings.HasSuffix(path, "/conversations") {
 		return conversationsAPI
 	}
-	if strings.Contains(path, "/v1/responses") {
+	if strings.HasSuffix(path, "/responses") {
 		return responsesAPI
 	}
-	if strings.Contains(path, "/v1/chat/completions") {
+	if strings.HasSuffix(path, "/chat/completions") {
 		return chatCompletionsAPI
 	}
-	if strings.Contains(path, "/v1/completions") {
+	if strings.HasSuffix(path, "/completions") {
 		return completionsAPI
 	}
-	if strings.Contains(path, "/v1/embeddings") {
+	if strings.HasSuffix(path, "/embeddings") {
 		return embeddingsAPI
 	}
 
