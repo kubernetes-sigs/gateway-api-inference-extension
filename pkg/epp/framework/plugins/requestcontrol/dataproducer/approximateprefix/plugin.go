@@ -78,6 +78,9 @@ func newPrepareData(ctx context.Context, config config, handle plugin.Handle) (*
 	if !config.AutoTune && config.BlockSizeTokens <= 0 {
 		return nil, fmt.Errorf("invalid configuration: BlockSizeTokens must be > 0 when AutoTune is disabled (current value: %d)", config.BlockSizeTokens)
 	}
+	if config.MaxPrefixTokensToMatch < 0 {
+		return nil, fmt.Errorf("invalid configuration: MaxPrefixTokensToMatch must be >= 0 (current value: %d)", config.MaxPrefixTokensToMatch)
+	}
 	indexer := newIndexer(ctx, config.LRUCapacityPerServer)
 
 	p := &prepareData{
@@ -136,7 +139,11 @@ func (p *prepareData) PluginState() *plugin.PluginState {
 // PrepareRequestData is called by the director before scheduling requests.
 func (p *prepareData) PrepareRequestData(ctx context.Context, request *framework.LLMRequest, pods []framework.Endpoint) error {
 	blockSize := p.GetBlockSize(pods)
-	hashes := hashPrompt(ctx, request, blockSize, p.config.MaxPrefixBlocksToMatch)
+	maxBlocks := p.config.MaxPrefixBlocksToMatch
+	if p.config.MaxPrefixTokensToMatch > 0 && blockSize > 0 {
+		maxBlocks = p.config.MaxPrefixTokensToMatch / blockSize
+	}
+	hashes := hashPrompt(ctx, request, blockSize, maxBlocks)
 	total := len(hashes)
 	prefixCacheServers := p.matchLongestPrefix(ctx, hashes)
 
