@@ -216,11 +216,11 @@ Selects a single profile which is always the primary profile.
 
 The set of instantiated plugins can also include a picker, which chooses the actual pod to which
 the request is scheduled after filtering and scoring. If one is not referenced in a `SchedulingProfile`, an
-instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
+instance of `MaxScorePicker` will be added to the SchedulingProfile in question. For a high-level overview of available pickers, see the [Scheduling Pickers](../../../pkg/epp/framework/plugins/scheduling/picker/README.md) guide.
 
 These plugins are referenced within the `schedulingProfiles` section.
 
-#### PrefixCache Scorer
+#### [PrefixCache Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/prefix/README.md)
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
 
@@ -233,9 +233,7 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
   - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
     per server (pod). If not specified defaults to `31250`
 
-#### LoRAAffinity Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity) Link**
+#### [LoRAAffinity Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/loraaffinity/README.md)
 
 
 Scores pods based on whether the requested LoRA adapter is already loaded in the pod's HBM, or if
@@ -244,18 +242,14 @@ the pod is ready to load the LoRA on demand.
 - *Type*: lora-affinity-scorer
 - *Parameters*: none
 
-#### KvCacheUtilization Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization) Link**
+#### [KvCacheUtilization Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization/README.md)
 
 Scores the candidate pods based on their KV cache utilization.
 
 - *Type*: kv-cache-utilization-scorer
 - *Parameters*: none
 
-#### QueueDepth Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/queuedepth) Link**
+#### [QueueDepth Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/queuedepth/README.md)
 
 Scores list of candidate pods based on the pod's waiting queue size. The lower the
 waiting queue size the pod has, the higher the score it will get (since it's more
@@ -264,9 +258,7 @@ available to serve new request).
 - *Type*: queue-scorer
 - *Parameters*: none
 
-#### RunningRequest Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/runningrequest) Link**
+#### [RunningRequest Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/runningrequests/README.md)
 
 Scores candidate pods based on the number of requests currently being processed (in-flight) on
 each pod. Pods with fewer running requests receive a higher score. Scores are normalized across
@@ -277,7 +269,7 @@ every pod receives a neutral score of `1.0`.
 - *Type*: running-requests-size-scorer
 - *Parameters*: none
 
-#### MaxScorePicker
+#### [MaxScorePicker](../../../pkg/epp/framework/plugins/scheduling/picker/maxscore/README.md)
 
 Picks the pod with the maximum score from the list of candidates. This is the default picker plugin
 if not specified.
@@ -287,7 +279,7 @@ if not specified.
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates, based on
     the scores of those endpoints. If not specified defaults to `1`.
 
-#### RandomPicker
+#### [RandomPicker](../../../pkg/epp/framework/plugins/scheduling/picker/random/README.md)
 
 Picks a random pod from the list of candidates.
 
@@ -296,7 +288,7 @@ Picks a random pod from the list of candidates.
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
-#### WeightedRandomPicker
+#### [WeightedRandomPicker](../../../pkg/epp/framework/plugins/scheduling/picker/weightedrandom/README.md)
 
 Picks pod(s) from the list of candidates based on weighted random sampling using A-Res algorithm.
 
@@ -350,9 +342,7 @@ An Ordering Policy that orders requests by an SLO-based deadline, computed from 
 
 These plugins are used to interpret system load and protect endpoints from overload. They are referenced in the `saturationDetector` section.
 
-#### Utilization Detector Plugin
-
-**Local [README](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization/README.md) Link**
+#### [Utilization Detector Plugin](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization/README.md)
 
 This is the default saturation detector. It closed-loop reacts to telemetry emitted by individual model servers. It evaluates queue depth and KV cache utilization against user thresholds to score global saturation.
 
@@ -363,9 +353,7 @@ This is the default saturation detector. It closed-loop reacts to telemetry emit
   - `metricsStalenessThreshold` (`string` duration): Maximum age of metrics before an endpoint is considered stale (e.g., `"150ms"`). Must be > 0. (Default: `"200ms"`)
   - `headroom` (`float64`): Allowed burst capacity above the ideal thresholds, expressed as a fraction (e.g., `0.2` for 20%). Must be >= 0.0. (Default: `0.0`)
 
-#### Concurrency Detector Plugin
-
-**Local [README](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/concurrency/README.md) Link**
+#### [Concurrency Detector Plugin](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/concurrency/README.md)
 
 Synchronous saturation detection mechanism based on active in-flight request accounting. Open-loop calculation of pool load with local endpoint limiting.
 
@@ -526,24 +514,15 @@ list has the following field:
 **Note**: The names of the plugin instances mentioned above, refer to plugin instances defined in the plugins section
 of the configuration.
 
-<<<<<<< HEAD
 ### Minimal configuration (core vLLM metrics)
 
 The built-in `metrics-data-source` and `core-metrics-extractor` plugins collect the five vLLM Model
 Server Protocol metrics out of the box - no `parameters` are required:
-=======
-## Parser Configuration
-
-The `parser` section configures the parser to understand the request and response payloads. This is crucial for enabling advanced capabilities such as prefix-cache aware routing, request/response usage tracking, and other payload-specific processing. By default, if no parser is specified, the `openai-parser` is used, which supports the [OpenAI API](https://developers.openai.com/api/reference/overview).
-
-Here is an example configuration that uses the `vllmgrpc-parser`:
->>>>>>> 5943afb7 (add parser doc)
 
 ```yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-<<<<<<< HEAD
   - type: metrics-data-source
   - type: core-metrics-extractor
 
@@ -672,7 +651,16 @@ deployment that doesn't load LoRA adapters.
 
 To eliminate the error entirely, disable the spec with an empty string as shown above.
 
-=======
+## Parser Configuration
+
+The `parser` section configures the parser to understand the request and response payloads. This is crucial for enabling advanced capabilities such as prefix-cache aware routing, request/response usage tracking, and other payload-specific processing. By default, if no parser is specified, the `openai-parser` is used, which supports the [OpenAI API](https://developers.openai.com/api/reference/overview).
+
+Here is an example configuration that uses the `vllmgrpc-parser`:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
 - name: maxScore
   type: max-score-picker
 - name: vllmgrpcParser
@@ -685,7 +673,6 @@ parser:
   pluginRef: vllmgrpcParser
 ```
 
->>>>>>> 5943afb7 (add parser doc)
 ## Feature Gates
 
 The Feature Gates section allows for the enabling of experimental features of the IGW. These experimental

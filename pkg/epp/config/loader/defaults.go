@@ -31,7 +31,7 @@ import (
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker/maxscore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
@@ -186,10 +186,10 @@ func ensureSchedulingLayer(
 	}
 
 	if maxScorePickerName == "" {
-		if err := registerDefaultPlugin(cfg, handle, picker.MaxScorePickerType); err != nil {
+		if err := registerDefaultPlugin(cfg, handle, maxscore.MaxScorePickerType); err != nil {
 			return err
 		}
-		maxScorePickerName = picker.MaxScorePickerType
+		maxScorePickerName = maxscore.MaxScorePickerType
 	}
 
 	for i, prof := range cfg.SchedulingProfiles {

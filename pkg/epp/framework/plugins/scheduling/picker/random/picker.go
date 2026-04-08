@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package picker
+// Package random implements a scheduling picker that selects endpoints uniformly at random,
+// ignoring any scores calculated by scorer plugins.
+//
+// For detailed behavioral intent and configuration, see the package README.
+package random
 
 import (
 	"context"
@@ -26,9 +30,11 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 )
 
 const (
+	// RandomPickerType is the registered name of the random picker plugin.
 	RandomPickerType = "random-picker"
 )
 
@@ -37,7 +43,7 @@ var _ framework.Picker = &RandomPicker{}
 
 // RandomPickerFactory defines the factory function for RandomPicker.
 func RandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
+	parameters := picker.PickerParameters{MaxNumOfEndpoints: picker.DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", RandomPickerType, err)
@@ -50,7 +56,7 @@ func RandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin
 // NewRandomPicker initializes a new RandomPicker and returns its pointer.
 func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
 	if maxNumOfEndpoints <= 0 {
-		maxNumOfEndpoints = DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
+		maxNumOfEndpoints = picker.DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
 	}
 
 	return &RandomPicker{
@@ -81,8 +87,8 @@ func (p *RandomPicker) Pick(ctx context.Context, _ *framework.CycleState, scored
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
-	// Shuffle in-place
-	shuffleScoredEndpoints(scoredEndpoints)
+	// Shuffle to ensure uniform random selection.
+	picker.ShuffleScoredEndpoints(scoredEndpoints)
 
 	// if we have enough endpoints to return keep only the relevant subset
 	if p.maxNumOfEndpoints < len(scoredEndpoints) {

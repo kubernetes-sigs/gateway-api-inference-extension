@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package picker
+// Package weightedrandom implements a scheduling picker that selects endpoints randomly, where the
+// probability of an endpoint being selected is proportional to its score.
+//
+// For detailed behavioral intent and configuration, see the package README.
+package weightedrandom
 
 import (
 	"context"
@@ -29,9 +33,12 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker/random"
 )
 
 const (
+	// WeightedRandomPickerType is the registered name of the weighted random picker plugin.
 	WeightedRandomPickerType = "weighted-random-picker"
 )
 
@@ -46,7 +53,7 @@ var _ framework.Picker = &WeightedRandomPicker{}
 
 // WeightedRandomPickerFactory defines the factory function for WeightedRandomPicker.
 func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
+	parameters := picker.PickerParameters{MaxNumOfEndpoints: picker.DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", WeightedRandomPickerType, err)
@@ -59,13 +66,13 @@ func WeightedRandomPickerFactory(name string, rawParameters json.RawMessage, _ f
 // NewWeightedRandomPicker initializes a new WeightedRandomPicker and returns its pointer.
 func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 	if maxNumOfEndpoints <= 0 {
-		maxNumOfEndpoints = DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
+		maxNumOfEndpoints = picker.DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
 	}
 
 	return &WeightedRandomPicker{
 		typedName:         fwkplugin.TypedName{Type: WeightedRandomPickerType, Name: WeightedRandomPickerType},
 		maxNumOfEndpoints: maxNumOfEndpoints,
-		randomPicker:      NewRandomPicker(maxNumOfEndpoints),
+		randomPicker:      random.NewRandomPicker(maxNumOfEndpoints),
 	}
 }
 
@@ -85,7 +92,7 @@ func NewWeightedRandomPicker(maxNumOfEndpoints int) *WeightedRandomPicker {
 type WeightedRandomPicker struct {
 	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int
-	randomPicker      *RandomPicker // fallback for zero weights
+	randomPicker      *random.RandomPicker // fallback for zero weights
 }
 
 // WithName sets the name of the picker.
@@ -123,9 +130,9 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *framework.C
 		}
 
 		// If we're here the scoredEndpoint.Score > 0. Generate a random number U in (0,1)
-		u := pickerRand.Float64()
+		u := picker.PickerRand.Float64()
 		if u == 0 {
-			u = 1e-10 // Avoid log(0)
+			u = 1e-10 // Avoid 0 to ensure positive key
 		}
 
 		weightedEndpoints[i] = weightedScoredEndpoint{ScoredEndpoint: scoredEndpoint, key: math.Pow(u, 1.0/scoredEndpoint.Score)} // key = U^(1/weight)

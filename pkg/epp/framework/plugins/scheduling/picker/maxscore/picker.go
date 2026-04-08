@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package picker
+// Package maxscore implements a scheduling picker that selects the endpoint(s) with the highest
+// score calculated during the scoring phase.
+//
+// For detailed behavioral intent and configuration, see the package README.
+package maxscore
 
 import (
 	"context"
@@ -27,9 +31,11 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
 )
 
 const (
+	// MaxScorePickerType is the registered name of the max score picker plugin.
 	MaxScorePickerType = "max-score-picker"
 )
 
@@ -38,7 +44,7 @@ var _ framework.Picker = &MaxScorePicker{}
 
 // MaxScorePickerFactory defines the factory function for MaxScorePicker.
 func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
-	parameters := pickerParameters{MaxNumOfEndpoints: DefaultMaxNumOfEndpoints}
+	parameters := picker.PickerParameters{MaxNumOfEndpoints: picker.DefaultMaxNumOfEndpoints}
 	if rawParameters != nil {
 		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
 			return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", MaxScorePickerType, err)
@@ -51,7 +57,7 @@ func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ fwkplug
 // NewMaxScorePicker initializes a new MaxScorePicker and returns its pointer.
 func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	if maxNumOfEndpoints <= 0 {
-		maxNumOfEndpoints = DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
+		maxNumOfEndpoints = picker.DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
 	}
 
 	return &MaxScorePicker{
@@ -60,7 +66,7 @@ func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
 	}
 }
 
-// MaxScorePicker picks pod(s) with the maximum score from the list of candidates.
+// MaxScorePicker picks endpoint(s) with the highest score calculated during the scoring phase.
 type MaxScorePicker struct {
 	typedName         fwkplugin.TypedName
 	maxNumOfEndpoints int // maximum number of endpoints to pick
@@ -77,13 +83,13 @@ func (p *MaxScorePicker) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-// Pick selects the endpoint with the maximum score from the list of candidates.
+// Pick selects the endpoint(s) with the highest score calculated during the scoring phase.
 func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
 	// Shuffle in-place - needed for random tie break when scores are equal
-	shuffleScoredEndpoints(scoredEndpoints)
+	picker.ShuffleScoredEndpoints(scoredEndpoints)
 
 	slices.SortStableFunc(scoredEndpoints, func(i, j *framework.ScoredEndpoint) int { // highest score first
 		if i.Score > j.Score {

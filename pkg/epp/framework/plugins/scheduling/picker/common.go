@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package picker provides the standard implementations of the Picker interface for the scheduling
+// framework. These plugins represent the final phase of the scheduling cycle, selecting target
+// endpoints from the scored candidates.
+//
+// For detailed descriptions of the available pickers and their configuration, see the package
+// README.md.
 package picker
 
 import (
@@ -25,11 +31,13 @@ import (
 )
 
 const (
-	DefaultMaxNumOfEndpoints = 1 // common default to all pickers
+	// DefaultMaxNumOfEndpoints is the fallback maximum number of endpoints to pick if not specified
+	// in the configuration.
+	DefaultMaxNumOfEndpoints = 1
 )
 
-// pickerParameters defines the common parameters for all pickers
-type pickerParameters struct {
+// PickerParameters defines the common parameters for all pickers
+type PickerParameters struct {
 	MaxNumOfEndpoints int `json:"maxNumOfEndpoints"`
 }
 
@@ -60,11 +68,14 @@ func (r *lockedRand) Shuffle(n int, swap func(i, j int)) {
 	r.rand.Shuffle(n, swap)
 }
 
-var pickerRand = newLockedRand()
+// PickerRand is a thread-safe random number generator shared by all pickers to avoid seeding
+// overhead and ensure controlled randomization.
+var PickerRand = newLockedRand()
 
-func shuffleScoredEndpoints(scoredEndpoints []*types.ScoredEndpoint) {
+// ShuffleScoredEndpoints randomizes the order of the given scored candidates in-place.
+func ShuffleScoredEndpoints(scoredEndpoints []*types.ScoredEndpoint) {
 	// Shuffle in-place
-	pickerRand.Shuffle(len(scoredEndpoints), func(i, j int) {
+	PickerRand.Shuffle(len(scoredEndpoints), func(i, j int) {
 		scoredEndpoints[i], scoredEndpoints[j] = scoredEndpoints[j], scoredEndpoints[i]
 	})
 }
