@@ -73,8 +73,6 @@ data:
       - pluginRef: loose-affinity-filter
       - pluginRef: latency-scorer
       - pluginRef: weighted-random-picker
-    featureGates:
-      - prepareDataPlugins
     {{- else }}
     - name: default
       plugins:
