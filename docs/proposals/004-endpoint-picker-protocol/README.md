@@ -98,7 +98,7 @@ This metadata is required because the EPP provides a list of endpoints to the da
 
 ## Health Checking
 
-The EPP MUST implement health checking to enable monitoring, load balancing, and high availability. The EPP exposes health check endpoints following the [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md).
+The EPP MUST expose health check endpoints following the [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md).
 
 ### Health Check Services
 
