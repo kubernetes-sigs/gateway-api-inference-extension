@@ -95,6 +95,7 @@ type RequestContext struct {
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
+	ParsedBody                *fwkrh.InferenceRequestBody
 
 	SchedulingRequest *schedulingtypes.InferenceRequest
 
@@ -237,6 +238,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				// Body stream complete. Capture raw size for flow control.
 				reqCtx.RequestSize = len(body)
 				body = []byte{}
+
+				parsedBody, parseErr := s.parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
+				if parseErr != nil {
+					err = errcommon.Error{Code: errcommon.BadRequest, Msg: parseErr.Error()}
+					logger.Error(err, "Error parsing request")
+					break
+				}
+				reqCtx.ParsedBody = parsedBody
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {

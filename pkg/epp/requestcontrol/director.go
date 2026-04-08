@@ -73,7 +73,6 @@ func NewDirectorWithConfig(
 	datastore Datastore,
 	scheduler Scheduler,
 	admissionController AdmissionController,
-	parser fwkrh.Parser,
 	endpointCandidates contracts.EndpointCandidates,
 	config *Config,
 ) *Director {
@@ -83,7 +82,6 @@ func NewDirectorWithConfig(
 		admissionController:   admissionController,
 		endpointCandidates:    endpointCandidates,
 		requestControlPlugins: *config,
-		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
 	}
 }
@@ -107,7 +105,6 @@ type Director struct {
 	// no need to set this in the constructor, since the value we want is the default int val
 	// and value types cannot be nil
 	defaultPriority int
-	parser          fwkrh.Parser
 }
 
 // getInferenceObjective fetches the inferenceObjective from the datastore otherwise creates a new one based on reqCtx.
@@ -137,7 +134,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger := log.FromContext(ctx)
 
 	// Parse, mutate, and extract the request body
-	llmRequestBody, err := d.processRequestBody(ctx, reqCtx, d.parser)
+	llmRequestBody, err := d.processParsedBody(ctx, reqCtx, reqCtx.ParsedBody)
 	if err != nil {
 		return reqCtx, err
 	}
@@ -206,12 +203,7 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwkrh.InferenceRequestBody, error) {
-	llmRequestBody, err := parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
-	if err != nil {
-		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
-	}
-
+func (d *Director) processParsedBody(ctx context.Context, reqCtx *handlers.RequestContext, llmRequestBody *fwkrh.InferenceRequestBody) (*fwkrh.InferenceRequestBody, error) {
 	switch v := llmRequestBody.Payload.(type) {
 	case fwkrh.PayloadProto:
 		// Protos are not currently mutated, return as-is.
