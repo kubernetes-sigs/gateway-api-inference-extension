@@ -12,6 +12,10 @@
 
 --8<-- "site-src/_includes/prereqs.md"
 
+### Verify Prerequisites
+
+--8<-- "site-src/_includes/verify-prereqs.md"
+
 ## **Steps**
 
 ### Deploy Sample Model Server
@@ -19,7 +23,8 @@
    Set the model server environment variable:
 
    ```bash
-   MODEL_SERVER=vllm  # sglang is also supported.
+   export MODEL_SERVER=vllm  # Options: vllm, sglang, triton-tensorrt-llm, trtllm-serve
+   export MODEL_SERVER_PROTOCOL=http # Options: http, grpc
    ```
 
 --8<-- "site-src/_includes/model-server-gpu.md"
@@ -27,7 +32,7 @@
     ```bash
     export INFERENCE_POOL_NAME=${MODEL_SERVER}-qwen3-32b
     export MODEL_NAME=Qwen/Qwen3-32B
-    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Llama models
+    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN # Your Hugging Face Token with access to the set of Qwen models
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml
     ```
 
@@ -47,11 +52,36 @@
     kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml
     ```
 
+--8<-- "site-src/_includes/model-server-gpu-grpc.md"
+
+    ```bash
+    export INFERENCE_POOL_NAME=${MODEL_SERVER}-grpc-qwen3-32b
+    export MODEL_NAME=Qwen/Qwen3-32B
+    kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-grpc-deployment.yaml
+    ```
+
+--8<-- "site-src/_includes/model-server-sim-grpc.md"
+
+    ```bash
+    export INFERENCE_POOL_NAME=vllm-grpc-qwen3-32b
+    export MODEL_NAME=Qwen/Qwen3-32B
+    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-grpc-deployment.yaml
+    ```
+
 ### Install the Inference Extension CRDs
 
 ```bash
 kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
 ```
+
+Verify the CRDs were installed successfully:
+
+```bash
+kubectl get crds | grep inference.networking.k8s.io
+```
+
+You should see output listing the inference-related CRDs.
 
 ### Install the Gateway
 
@@ -59,7 +89,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "GKE"
 
-      Nothing to install here, you can move to the next [section](#deploy-the-inferencepool-and-endpoint-picker-extension)
+      GKE comes with Gateway API support built-in, so you can skip this step and move to the next [section](#deploy-an-inference-gateway).
 
 === "Istio"
 
@@ -110,15 +140,13 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
       1. Requirements
 
-         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed (Standard or Experimental channel).
-         - A Kubernetes cluster with LoadBalancer or NodePort access.
+         - Gateway API [CRDs](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) installed.
 
       1. Install NGINX Gateway Fabric with the Inference Extension enabled by setting the `nginxGateway.gwAPIInferenceExtension.enable=true` Helm value
 
          ```bash
-         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --dependency-update --set nginxGateway.gwAPIInferenceExtension.enable=true
+         helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric --create-namespace -n nginx-gateway --set nginxGateway.gwAPIInferenceExtension.enable=true
          ```
-         This enables NGINX Gateway Fabric to watch and manage Inference Extension resources such as InferencePool and InferenceObjective.
 
 ### Deploy an Inference Gateway
 
@@ -184,8 +212,6 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 === "NGINX Gateway Fabric"
 
-      NGINX Gateway Fabric is an implementation of the Gateway API that supports the Inference Extension. Follow these steps to deploy an Inference Gateway using NGINX Gateway Fabric.
-
       1. Deploy the Gateway
 
          ```bash
@@ -200,7 +226,7 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
          inference-gateway   inference-gateway   <MY_ADDRESS>    True         22s
          ```
       
-       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/#overview)
+       For more information, see the [NGINX Gateway Fabric - Inference Gateway Setup guide](https://docs.nginx.com/nginx-gateway-fabric/how-to/gateway-api-inference-extension/)
 
 ### Deploy the InferencePool and Endpoint Picker Extension
 
@@ -214,6 +240,14 @@ kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extens
 
 --8<-- "site-src/_includes/epp-latest.md"
 
+??? note "Using Passthrough Parser for Custom Formats"
+    By default, EPP assumes requests follow the [OpenAI API format](https://developers.openai.com/api/reference/overview) (for HTTP) or vLLM [gRPC API format](https://docs.vllm.ai/en/latest/api/vllm/entrypoints/grpc_server/) (for gRPC). If your model server uses a different format, you can configure EPP to use a `passthrough-parser` which passes the request through without parsing. See the [parser framework readme](../../pkg/epp/framework/plugins/requesthandling/parsers/README.md) for more details.
+
+    To use it, set the parser in your Helm command:
+    `--set inferencePool.parser=passthrough-parser`
+
+    **Important Drawback**: Because the passthrough parser does not parse the payload, features that rely on payload parsing (such as the `prefix-cache-scorer`) cannot be used.
+
 ### Verify HttpRoute and InferencePool Status
 
 --8<-- "site-src/_includes/verify-status-latest.md"
@@ -226,7 +260,42 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml
    ```
 
---8<-- "site-src/_includes/test.md"
+### Try it out
+
+   Wait until the gateway is ready.
+
+=== "HTTP"
+
+    ```bash
+    IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
+    PORT=80
+
+    curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
+    "model": "${MODEL_NAME}",
+    "prompt": "Write as if you were a critic: San Francisco",
+    "max_tokens": 100,
+    "temperature": 0
+    }'
+    ```
+
+=== "gRPC"
+
+    ```bash
+    IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
+    PORT=80
+    
+    grpcurl -v -plaintext \
+      -proto pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/proto/vllm_engine.proto \
+      -d '{
+        "text": "Write as if you were a critic: San Francisco",
+        "sampling_params": {
+          "max_tokens": 100
+        },
+        "stream": true
+      }' \
+      ${IP}:${PORT} \
+      vllm.grpc.engine.VllmEngine/Generate
+    ```
 
 --8<-- "site-src/_includes/bbr.md"
 
@@ -244,7 +313,9 @@ If you wish to exercise that function, then retain the setup you have deployed s
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/inferenceobjective.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/cpu-deployment.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/${MODEL_SERVER}/gpu-grpc-deployment.yaml --ignore-not-found
       kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-deployment.yaml --ignore-not-found
+      kubectl delete -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/vllm/sim-grpc-deployment.yaml --ignore-not-found
       kubectl delete secret hf-token --ignore-not-found
       ```
 

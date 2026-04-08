@@ -30,14 +30,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/test"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/bodyfieldtoheader"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
+
+const modelField = "model"
 
 var logger = logutil.NewTestLogger().V(logutil.VERBOSE)
 
@@ -52,20 +52,60 @@ type BBRHarness struct {
 }
 
 // NewBBRHarness boots up an isolated BBR server on a random port with the default
-// BodyFieldToHeaderPlugin for model extraction.
+// BodyFieldToHeaderPlugin for model extraction and no response plugins.
 func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarness {
 	t.Helper()
-	modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
+	modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
 	require.NoError(t, err, "failed to create body-field-to-header plugin")
 
-	baseModelToHeaderPlugin, err := test.NewTestBaseModelPlugin()
-	require.NoError(t, err, "failed to create base model plugin")
+	testConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-model-mappings",
+			Namespace: "default",
+			Labels: map[string]string{
+				"inference.networking.k8s.io/bbr-managed": "true",
+			},
+		},
+		Data: map[string]string{
+			"baseModel": "qwen",
+			"adapters": `
+- sql-lora-sheddable
+- foo
+- 1
+`,
+		},
+	}
 
-	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin})
+	store := basemodelextractor.NewAdaptersStore()
+	fakeClient := fake.NewClientBuilder().WithObjects(testConfigMap).Build()
+	reconciler := &basemodelextractor.ConfigMapReconciler{
+		Reader:        fakeClient,
+		AdaptersStore: store,
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: testConfigMap.Namespace,
+			Name:      testConfigMap.Name,
+		},
+	}
+	_, err = reconciler.Reconcile(ctx, req)
+	require.NoError(t, err, "failed to reconcile configmap with test data")
+
+	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: store}
+
+	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 }
 
-// NewBBRHarnessWithPlugins boots up an isolated BBR server with custom request plugins.
-func NewBBRHarnessWithPlugins(t *testing.T, ctx context.Context, streaming bool, requestPlugins []framework.RequestProcessor) *BBRHarness {
+// NewBBRHarnessWithPlugins boots up an isolated BBR server on a random port
+// with the given request and response plugins.
+func NewBBRHarnessWithPlugins(
+	t *testing.T,
+	ctx context.Context,
+	streaming bool,
+	requestPlugins []framework.RequestProcessor,
+	responsePlugins []framework.ResponseProcessor,
+) *BBRHarness {
 	t.Helper()
 
 	// 1. Allocate Free Port
@@ -77,58 +117,7 @@ func NewBBRHarnessWithPlugins(t *testing.T, ctx context.Context, streaming bool,
 	runner.SecureServing = false
 	runner.Streaming = streaming
 	runner.RequestPlugins = requestPlugins
-
-	// Find the BaseModelToHeaderPlugin in the requestPlugins to configure it
-	var baseModelToHeaderPlugin *basemodelextractor.BaseModelToHeaderPlugin
-	for _, plugin := range requestPlugins {
-		if p, ok := plugin.(*basemodelextractor.BaseModelToHeaderPlugin); ok {
-			baseModelToHeaderPlugin = p
-			break
-		}
-	}
-
-	// Configure the BaseModelToHeaderPlugin with test data if it exists
-	if baseModelToHeaderPlugin != nil {
-		// Create a test ConfigMap with model mappings
-		testConfigMap := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-model-mappings",
-				Namespace: "default",
-				Labels: map[string]string{
-					"inference.networking.k8s.io/bbr-managed": "true",
-				},
-			},
-			Data: map[string]string{
-				"baseModel": "llama",
-				"adapters": `
-- sql-lora-sheddable
-- foo
-- 1
-`,
-			},
-		}
-
-		// Get the reconciler from the plugin and set it up with a fake manager
-		reconciler := baseModelToHeaderPlugin.GetReconciler()
-
-		// Create a fake client with the test ConfigMap
-		fakeClient := fake.NewClientBuilder().
-			WithObjects(testConfigMap).
-			Build()
-
-		// Set the Reader on the reconciler
-		reconciler.Reader = fakeClient
-
-		// Call Reconcile() to update the adapters store with test data
-		req := ctrl.Request{
-			NamespacedName: types.NamespacedName{
-				Namespace: testConfigMap.Namespace,
-				Name:      testConfigMap.Name,
-			},
-		}
-		_, err = reconciler.Reconcile(ctx, req)
-		require.NoError(t, err, "failed to configure base model plugin with test data via Reconcile")
-	}
+	runner.ResponsePlugins = responsePlugins
 
 	// 3. Start Server in Background
 	serverCtx, serverCancel := context.WithCancel(ctx)

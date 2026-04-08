@@ -412,6 +412,184 @@ func TestRunWithOutOfRangeScores(t *testing.T) {
 	}
 }
 
+// TestFilterExecutionOrder verifies that filters execute in the order they are
+// registered in the scheduling profile. See also TestFilterExecutionOrderFromYAML
+// in pkg/epp/config/loader which verifies that YAML declaration order is preserved
+// during deserialization.
+func TestFilterExecutionOrder(t *testing.T) {
+	executionOrder := []string{}
+
+	// Create three order-tracking filters.
+	filterA := &orderTrackingFilter{
+		name:           "filter-A",
+		executionOrder: &executionOrder,
+	}
+	filterB := &orderTrackingFilter{
+		name:           "filter-B",
+		executionOrder: &executionOrder,
+	}
+	filterC := &orderTrackingFilter{
+		name:           "filter-C",
+		executionOrder: &executionOrder,
+	}
+
+	pickerPlugin := &testPlugin{
+		TypeRes: "picker",
+		PickRes: k8stypes.NamespacedName{Name: "pod1"},
+	}
+
+	// Declare filters in order A, B, C.
+	profile := NewSchedulerProfile().
+		WithFilters(filterA, filterB, filterC).
+		WithPicker(pickerPlugin)
+
+	input := []fwksched.Endpoint{
+		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
+		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil),
+	}
+
+	request := &fwksched.LLMRequest{
+		TargetModel: "test-model",
+		RequestId:   uuid.NewString(),
+	}
+
+	_, err := profile.Run(context.Background(), request, fwksched.NewCycleState(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify execution order matches declaration order.
+	wantOrder := []string{"filter-A", "filter-B", "filter-C"}
+	if diff := cmp.Diff(wantOrder, executionOrder); diff != "" {
+		t.Errorf("Filter execution order mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// TestFilterExecutionOrderViaAddPlugins verifies that filters added via
+// AddPlugins (the path used by the config loader) execute in registration order.
+func TestFilterExecutionOrderViaAddPlugins(t *testing.T) {
+	executionOrder := []string{}
+
+	filterA := &orderTrackingFilter{name: "filter-A", executionOrder: &executionOrder}
+	filterB := &orderTrackingFilter{name: "filter-B", executionOrder: &executionOrder}
+	filterC := &orderTrackingFilter{name: "filter-C", executionOrder: &executionOrder}
+
+	pickerPlugin := &testPlugin{
+		TypeRes: "picker",
+		PickRes: k8stypes.NamespacedName{Name: "pod1"},
+	}
+
+	// Use AddPlugins sequentially, as the config loader does.
+	profile := NewSchedulerProfile()
+	for _, p := range []fwkplugin.Plugin{filterA, filterB, filterC} {
+		if err := profile.AddPlugins(p); err != nil {
+			t.Fatalf("unexpected error adding plugin: %v", err)
+		}
+	}
+	profile.WithPicker(pickerPlugin)
+
+	input := []fwksched.Endpoint{
+		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
+	}
+
+	request := &fwksched.LLMRequest{
+		TargetModel: "test-model",
+		RequestId:   uuid.NewString(),
+	}
+
+	_, err := profile.Run(context.Background(), request, fwksched.NewCycleState(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantOrder := []string{"filter-A", "filter-B", "filter-C"}
+	if diff := cmp.Diff(wantOrder, executionOrder); diff != "" {
+		t.Errorf("Filter execution order mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// TestFilterChainReceivesPreviousOutput verifies that each filter in the chain
+// receives the filtered output of the previous filter, not the original input.
+// This confirms filters execute as a sequential pipeline.
+func TestFilterChainReceivesPreviousOutput(t *testing.T) {
+	// First filter keeps pod1 and pod2 (removes pod3).
+	filter1 := &testPlugin{
+		TypeRes:   "filter1",
+		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}, {Name: "pod2"}},
+	}
+	// Second filter keeps only pod1 (removes pod2).
+	filter2 := &testPlugin{
+		TypeRes:   "filter2",
+		FilterRes: []k8stypes.NamespacedName{{Name: "pod1"}},
+	}
+	// Third filter is a pass-through that records what it received.
+	receivedCount := 0
+	filter3 := &countingFilter{
+		name:          "filter3",
+		receivedCount: &receivedCount,
+	}
+
+	pickerPlugin := &testPlugin{
+		TypeRes: "picker",
+		PickRes: k8stypes.NamespacedName{Name: "pod1"},
+	}
+
+	profile := NewSchedulerProfile().
+		WithFilters(filter1, filter2, filter3).
+		WithPicker(pickerPlugin)
+
+	input := []fwksched.Endpoint{
+		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}}, nil, nil),
+		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod2"}}, nil, nil),
+		fwksched.NewEndpoint(&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod3"}}, nil, nil),
+	}
+
+	request := &fwksched.LLMRequest{
+		TargetModel: "test-model",
+		RequestId:   uuid.NewString(),
+	}
+
+	_, err := profile.Run(context.Background(), request, fwksched.NewCycleState(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// filter3 should have received only 1 endpoint (pod1) — the output of filter2.
+	if receivedCount != 1 {
+		t.Errorf("third filter received %d endpoints, want 1 (chained output of previous filters)", receivedCount)
+	}
+}
+
+// orderTrackingFilter records its name into a shared slice when Filter is called.
+type orderTrackingFilter struct {
+	name           string
+	executionOrder *[]string
+}
+
+func (f *orderTrackingFilter) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Name: f.name, Type: f.name}
+}
+
+func (f *orderTrackingFilter) Filter(_ context.Context, _ *fwksched.CycleState, _ *fwksched.LLMRequest, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
+	*f.executionOrder = append(*f.executionOrder, f.name)
+	return endpoints // pass-through
+}
+
+// countingFilter records how many endpoints it received.
+type countingFilter struct {
+	name          string
+	receivedCount *int
+}
+
+func (f *countingFilter) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Name: f.name, Type: f.name}
+}
+
+func (f *countingFilter) Filter(_ context.Context, _ *fwksched.CycleState, _ *fwksched.LLMRequest, endpoints []fwksched.Endpoint) []fwksched.Endpoint {
+	*f.receivedCount = len(endpoints)
+	return endpoints // pass-through
+}
+
 // filterOnlyPlugin implements only the Filter interface (not Scorer or Picker).
 type filterOnlyPlugin struct {
 	typedName fwkplugin.TypedName

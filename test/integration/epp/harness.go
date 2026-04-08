@@ -18,6 +18,7 @@ package epp
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strings"
 	"testing"
@@ -27,6 +28,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
@@ -35,16 +40,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	metricsutils "k8s.io/component-base/metrics/testutil"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 
 	eppRunner "sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	dlmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	eppServer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
 	epptestutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
@@ -56,32 +64,22 @@ var (
 	k8sClient     client.Client
 	testEnv       *envtest.Environment
 	testScheme    = runtime.NewScheme()
-	logger        = zap.New(zap.UseDevMode(true), zap.Level(-1*zapcore.Level(logutil.DEFAULT)))
+	logger        = zap.New(zap.UseDevMode(true), zap.Level(zapcore.Level(logutil.DEFAULT)))
 	baseResources []*unstructured.Unstructured
 )
 
 const (
-	testPoolName = "vllm-llama3-8b-instruct-pool"
-	testConfig   = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-  - type: queue-scorer
-  - type: kv-cache-utilization-scorer
-  - type: prefix-cache-scorer
-  - type: lora-affinity-scorer
-  - type: openai-parser
-schedulingProfiles:
-  - name: default
-    plugins:
-      - pluginRef: queue-scorer
-      - pluginRef: kv-cache-utilization-scorer
-      - pluginRef: prefix-cache-scorer
-      - pluginRef: lora-affinity-scorer
-parser:
-  pluginRef: openai-parser
-`
+	testPoolName = "vllm-qwen3-32b-pool"
+
+	// mockDataSourceType is the plugin type name used for the mock data source in integration tests.
+	mockDataSourceType = "mock-metrics-source"
 )
+
+//go:embed testdata/default-config.yaml
+var testConfig string
+
+//go:embed testdata/datalayer-config.yaml
+var testDLConfig string
 
 type runMode string
 type standaloneStrategy string
@@ -103,6 +101,12 @@ type HarnessConfig struct {
 
 	// configText overrides the default testConfig if provided. A nil value means use default.
 	configText *string
+
+	// Tracing indicates if tracing should be enabled for this test.
+	Tracing bool
+
+	// useDataLayer switches the harness to use the data layer pipeline instead of FakePodMetricsClient.
+	useDataLayer bool
 }
 
 // HarnessOption is a functional option for configuring the TestHarness.
@@ -130,6 +134,46 @@ func WithConfigText(text string) HarnessOption {
 	}
 }
 
+// WithTracing enables tracing for the test harness.
+func WithTracing() HarnessOption {
+	return func(c *HarnessConfig) {
+		c.Tracing = true
+	}
+}
+
+// WithDataLayer configures the harness to use the data layer pipeline with a mock DataSource.
+func WithDataLayer() HarnessOption {
+	return func(c *HarnessConfig) {
+		c.useDataLayer = true
+	}
+}
+
+// metricsBackend abstracts how pod metrics are injected into the test environment.
+// The standard harness uses FakePodMetricsClient; the datalayer harness uses a mock DataSource.
+type metricsBackend interface {
+	SetPodMetrics(m map[types.NamespacedName]*fwkdl.Metrics)
+}
+
+// fakePmcBackend wraps FakePodMetricsClient to implement metricsBackend.
+type fakePmcBackend struct {
+	fakePmc *backendmetrics.FakePodMetricsClient
+}
+
+func (b *fakePmcBackend) SetPodMetrics(m map[types.NamespacedName]*fwkdl.Metrics) {
+	b.fakePmc.SetRes(m)
+}
+
+// mockDataSourceBackend wraps the mock DataSource to implement metricsBackend.
+type mockDataSourceBackend struct {
+	mockDataSource *dlmocks.MetricsDataSource
+	fakePmc        *backendmetrics.FakePodMetricsClient
+}
+
+func (b *mockDataSourceBackend) SetPodMetrics(m map[types.NamespacedName]*fwkdl.Metrics) {
+	b.mockDataSource.SetMetrics(m)
+	b.fakePmc.SetRes(m)
+}
+
 // TestHarness encapsulates the environment for a single isolated EPP test run.
 // It manages the lifecycle of the controller manager, the EPP server, and the K8s namespace.
 type TestHarness struct {
@@ -140,14 +184,23 @@ type TestHarness struct {
 	// --- Config State ---
 	runMode            runMode
 	standaloneStrategy standaloneStrategy
+	Tracing            bool
 
 	Client    extProcPb.ExternalProcessor_ProcessClient
 	Datastore datastore.Datastore
 
-	// Internal handles for cleanup
-	grpcConn *grpc.ClientConn
+	// --- Tracing State ---
+	Exporter *tracetest.InMemoryExporter
+	tp       *sdktrace.TracerProvider
 
-	fakePmc *backendmetrics.FakePodMetricsClient
+	// Internal handles for cleanup
+	grpcConn       *grpc.ClientConn
+	metricsBackend metricsBackend
+}
+
+// hasCRDs returns true when the harness is running in a mode that has CRD support.
+func (h *TestHarness) hasCRDs() bool {
+	return h.runMode != modeStandalone || h.standaloneStrategy != strategyNoCRD
 }
 
 // NewTestHarness boots up a fully isolated test environment.
@@ -161,24 +214,66 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		opt(config)
 	}
 
-	// Create dedicated namespace for the whole test
+	// Determine config text and namespace prefix.
+	configText := testConfig
+	nsPrefix := "epp-test-"
+	if config.useDataLayer {
+		configText = testDLConfig
+		nsPrefix = "epp-dl-test-"
+	}
+	if config.configText != nil {
+		configText = *config.configText
+	}
+
+	// Create dedicated namespace for the whole test.
 	uid := uuid.New().String()[:8]
-	testNamespaceName := "epp-test-" + uid
+	testNamespaceName := nsPrefix + uid
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespaceName}}
 	require.NoError(t, k8sClient.Create(ctx, ns), "failed to create test namespace")
 
-	eppOptions := defaultEppServerOptions(t, testNamespaceName)
-	if config.configText != nil {
-		eppOptions.ConfigText = *config.configText
-	}
+	eppOptions := defaultEppServerOptions(t, testNamespaceName, configText)
 	if config.runMode == modeStandalone && config.standaloneStrategy == strategyNoCRD {
 		// Only standalone EPP without crd need to set the EndpointSelector.
 		eppOptions.EndpointSelector = "app=" + testPoolName
 	}
 
 	fakePmc := &backendmetrics.FakePodMetricsClient{}
-	mgr, dataStore, err := eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc)
-	require.NoError(t, err, "failed to create manager")
+	var backend metricsBackend
+	var mgr ctrl.Manager
+	var dataStore datastore.Datastore
+	var err error
+
+	if config.useDataLayer {
+		// Shorten the Prometheus refresh interval so WaitForReadyPodsMetric (10s timeout)
+		// has many opportunities to observe the metric update instead of only ~2.
+		eppOptions.RefreshPrometheusMetricsInterval = 500 * time.Millisecond
+
+		// Data layer path: create mock data source and wire it in.
+		mockDataSource := dlmocks.NewDataSource(plugin.TypedName{
+			Type: mockDataSourceType,
+			Name: mockDataSourceType,
+		})
+		mgr, dataStore, err = eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc, mockDataSource)
+		require.NoError(t, err, "failed to create manager")
+		backend = &mockDataSourceBackend{mockDataSource: mockDataSource, fakePmc: fakePmc}
+	} else {
+		// Standard path: use FakePodMetricsClient directly.
+		mgr, dataStore, err = eppRunner.NewTestRunnerSetup(ctx, testEnv.Config, eppOptions, fakePmc, nil)
+		require.NoError(t, err, "failed to create manager")
+		backend = &fakePmcBackend{fakePmc: fakePmc}
+	}
+
+	// Tracing Setup (InMemory)
+	var exporter *tracetest.InMemoryExporter
+	var tp *sdktrace.TracerProvider
+	if config.Tracing {
+		exporter = tracetest.NewInMemoryExporter()
+		tp = sdktrace.NewTracerProvider(
+			sdktrace.WithSyncer(exporter),
+		)
+		otel.SetTracerProvider(tp)
+	}
+
 	mgrCtx, mgrCancel := context.WithCancel(ctx)
 
 	// Start Manager.
@@ -191,7 +286,7 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		}
 	}()
 
-	client, conn := integration.ExtProcServerClient(
+	extProcClient, conn := integration.ExtProcServerClient(
 		t,
 		mgrCtx,
 		eppOptions.GRPCPort,
@@ -204,14 +299,24 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 		Namespace:          eppOptions.PoolNamespace,
 		runMode:            config.runMode,
 		standaloneStrategy: config.standaloneStrategy,
-		Client:             client,
+		Tracing:            config.Tracing,
+		Client:             extProcClient,
 		Datastore:          dataStore,
+		Exporter:           exporter,
+		tp:                 tp,
 		grpcConn:           conn,
-		fakePmc:            fakePmc,
+		metricsBackend:     backend,
 	}
+
+	// 8. Register Cleanup
 
 	t.Cleanup(func() {
 		mgrCancel()
+		if config.Tracing {
+			_ = tp.Shutdown(ctx)
+			// Reset to no-op to avoid pollution between tests.
+			otel.SetTracerProvider(noop.NewTracerProvider())
+		}
 		_ = h.grpcConn.Close()
 		// Deleting the Namespace cascades to all contained resources.
 		_ = k8sClient.Delete(context.Background(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: eppOptions.PoolNamespace}})
@@ -222,13 +327,13 @@ func NewTestHarness(t *testing.T, ctx context.Context, opts ...HarnessOption) *T
 	return h
 }
 
-func defaultEppServerOptions(t *testing.T, namespace string) *eppServer.Options {
+func defaultEppServerOptions(t *testing.T, namespace, configText string) *eppServer.Options {
 	t.Helper()
 
 	eppOptions := eppServer.NewOptions()
 	eppOptions.PoolName = testPoolName
 	eppOptions.PoolNamespace = namespace
-	eppOptions.ConfigText = testConfig
+	eppOptions.ConfigText = configText
 
 	metricsPort, err := integration.GetFreePort()
 	require.NoError(t, err)
@@ -246,6 +351,11 @@ func defaultEppServerOptions(t *testing.T, namespace string) *eppServer.Options 
 	return eppOptions
 }
 
+// GetSpans returns the currently recorded spans from the in-memory exporter.
+func (h *TestHarness) GetSpans() tracetest.SpanStubs {
+	return h.Exporter.GetSpans()
+}
+
 // --- Fluent Builder API ---
 
 // WithBaseResources injects the standard pool and objective definitions into the test namespace.
@@ -260,12 +370,12 @@ func (h *TestHarness) WithBaseResources() *TestHarness {
 	return h
 }
 
-// WithPods creates pod objects in the API server and configures the fake metrics client.
+// WithPods creates pod objects in the API server and configures the metrics backend.
 func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 	h.t.Helper()
 	metricsMap := make(map[types.NamespacedName]*fwkdl.Metrics)
 
-	// Pre-calculate metrics and register them with the fake client.
+	// Build metrics map.
 	for _, p := range pods {
 		metricsKeyName := fmt.Sprintf("pod-%d-rank-0", p.index)
 		activeModelsMap := make(map[string]int)
@@ -280,13 +390,12 @@ func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 			WaitingModels:       make(map[string]int),
 		}
 	}
-	h.fakePmc.SetRes(metricsMap)
+	h.metricsBackend.SetPodMetrics(metricsMap)
 
 	// Create K8s Objects.
 	for _, p := range pods {
 		name := fmt.Sprintf("pod-%d", p.index)
 
-		// Create K8s object.
 		pod := epptestutil.MakePod(name).
 			Namespace(h.Namespace).
 			ReadyCondition(). // Sets Status.Conditions.
@@ -307,12 +416,10 @@ func (h *TestHarness) WithPods(pods []podState) *TestHarness {
 		// Update Status subresource.
 		require.NoError(h.t, k8sClient.Status().Update(h.ctx, pod), "failed to update status for pod %s", name)
 	}
-
 	return h
 }
 
 // WaitForReadyPodsMetric blocks until the prometheus metric 'inference_pool_ready_pods' matches the expected count.
-// This ensures the background metric collector has fully synced.
 func (h *TestHarness) WaitForReadyPodsMetric(expectedCount int) {
 	h.t.Helper()
 
@@ -325,23 +432,17 @@ func (h *TestHarness) WaitForReadyPodsMetric(expectedCount int) {
 }
 
 // WaitForSync blocks until the EPP Datastore has synced the expected number of pods.
-// In Standard runMode, it also waits for the InferencePool CRD to sync.
 func (h *TestHarness) WaitForSync(expectedPods int, checkModelObjective string) *TestHarness {
 	h.t.Helper()
 	require.Eventually(h.t, func() bool {
-		// If we are NOT in standalone runMode without CRDs, we must wait for the Pool CRD to sync.
-		// In standaloneStrategy runMode, there is no CRD controller, so this check is skipped.
-		if (h.runMode != modeStandalone || h.standaloneStrategy != strategyNoCRD) && !h.Datastore.PoolHasSynced() {
+		if h.hasCRDs() && !h.Datastore.PoolHasSynced() {
 			return false
 		}
 
 		if len(h.Datastore.PodList(datastore.AllPodsPredicate)) != expectedPods {
 			return false
 		}
-		// In standalone runMode without CRD, Objectives are not CRDs, so we skip checking the Objective store unless we add logic to mock
-		// that too.
-		// For now, we skip objective verification in standalone runMode without CRD.
-		if (h.runMode != modeStandalone || h.standaloneStrategy != strategyNoCRD) && checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
+		if h.hasCRDs() && checkModelObjective != "" && h.Datastore.ObjectiveGet(checkModelObjective) == nil {
 			return false
 		}
 		return true

@@ -76,11 +76,13 @@ func TestMetricsCollected(t *testing.T) {
 		pod1NamespacedName: pod1Metrics,
 	}
 	period := time.Millisecond
+	mockDS := &mocks.MetricsDataSource{}
+	mockDS.SetMetrics(metrics)
 	factories := []datalayer.EndpointFactory{
 		backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{Res: metrics}, period),
 		datalayer.NewTestRuntimeWithConfig(t, period, &datalayer.Config{
 			Sources: []datalayer.DataSourceConfig{
-				{Plugin: &mocks.MetricsDataSource{Metrics: metrics}},
+				{Plugin: mockDS},
 			},
 		}),
 	}

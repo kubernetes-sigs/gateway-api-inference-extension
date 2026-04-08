@@ -16,11 +16,16 @@ limitations under the License.
 
 package datalayer
 
+import (
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+)
+
 type EndpointPool struct {
 	Selector    map[string]string
 	TargetPorts []int
 	Namespace   string
 	Name        string
+	AppProtocol v1.AppProtocol
 }
 
 // NewEndpointPool creates and returns a new empty instance of EndpointPool.

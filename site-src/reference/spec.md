@@ -15,6 +15,23 @@ inference.networking.k8s.io API group.
 
 
 
+#### AppProtocol
+
+_Underlying type:_ _string_
+
+AppProtocol describes the application protocol for a port.
+
+
+
+_Appears in:_
+- [InferencePoolSpec](#inferencepoolspec)
+
+| Field | Description |
+| --- | --- |
+| `http` | AppProtocolHTTP represents the HTTP/1.1 protocol.<br />This is the default protocol if AppProtocol is unspecified.<br /> |
+| `kubernetes.io/h2c` | AppProtocolH2C represents HTTP/2 over cleartext (h2c).<br />This protocol is typically used for gRPC workloads where TLS is terminated<br />at the Gateway or not used within the cluster.<br /> |
+
+
 #### ControllerName
 
 _Underlying type:_ _string_
@@ -151,6 +168,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `selector` _[LabelSelector](#labelselector)_ | Selector determines which Pods are members of this inference pool.<br />It matches Pods by their labels only within the same namespace; cross-namespace<br />selection is not supported.<br />The structure of this LabelSelector is intentionally simple to be compatible<br />with Kubernetes Service selectors, as some implementations may translate<br />this configuration into a Service resource. |  |  |
 | `targetPorts` _[Port](#port) array_ | TargetPorts defines a list of ports that are exposed by this InferencePool.<br />Every port will be treated as a distinctive endpoint by EPP,<br />addressable as a 'podIP:portNumber' combination. |  | MaxItems: 8 <br />MinItems: 1 <br /> |
+| `appProtocol` _[AppProtocol](#appprotocol)_ | AppProtocol describes the application protocol for all the target ports.<br />If unspecified, the protocol defaults to HTTP/1.1.<br />Supported values include:<br />* "http": HTTP/1.1. This is the default.<br />* "kubernetes.io/h2c": HTTP/2 over cleartext. | http | Enum: [http kubernetes.io/h2c] <br /> |
 | `endpointPickerRef` _[EndpointPickerRef](#endpointpickerref)_ | EndpointPickerRef is a reference to the Endpoint Picker extension and its<br />associated configuration. |  |  |
 
 
@@ -243,7 +261,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `matchLabels` _object (keys:[LabelKey](#labelkey), values:[LabelValue](#labelvalue))_ | MatchLabels contains a set of required \{key,value\} pairs.<br />An object must match every label in this map to be selected.<br />The matching logic is an AND operation on all entries. |  | MaxItems: 64 <br />MinItems: 1 <br /> |
+| `matchLabels` _object (keys:[LabelKey](#labelkey), values:[LabelValue](#labelvalue))_ | MatchLabels contains a set of required \{key,value\} pairs.<br />An object must match every label in this map to be selected.<br />The matching logic is an AND operation on all entries. |  | MaxProperties: 64 <br />MinProperties: 1 <br /> |
 
 
 #### LabelValue

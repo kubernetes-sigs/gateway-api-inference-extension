@@ -2,8 +2,8 @@ bbr:
   name: body-based-router
   replicas: 1
   image:
-    name: bbr
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    registry: us-central1-docker.pkg.dev/k8s-staging-images
+    repository: gateway-api-inference-extension/bbr
     tag: main
     pullPolicy: Always
   port: 9004
@@ -22,8 +22,8 @@ bbr:
     - type: body-field-to-header
       name: model-extractor
       json:
-        field_name: model
-        header_name: X-Gateway-Model-Name
+        fieldName: model
+        headerName: X-Gateway-Model-Name
     - type: base-model-to-header
       name: base-model-mapper
 
@@ -37,6 +37,15 @@ bbr:
 
 provider:
   name: none
+
+  # Istio-specific configuration.
+  # This block is only used if name is "istio".
+  istio:
+    envoyFilter:
+      # Operation for inserting the ext_proc filter into the Envoy filter chain.
+      operation: INSERT_FIRST
+      # Anchor filter for INSERT_BEFORE/INSERT_AFTER (empty = no anchor).
+      anchorSubFilter: ""
 
 inferenceGateway:
   name: inference-gateway

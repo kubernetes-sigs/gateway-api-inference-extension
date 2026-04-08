@@ -15,6 +15,8 @@ We generally follow the [k8s instrumentation logging guidelines](https://github.
 
 To configure logging verbosity, specify the `v` flag such as `--v=2`.
 
+The Helm chart defaults to 1 (Quiet/Performant), while V(2) is our standard tracing level (Opt-In).
+
 ### Add logs
 
 The [k8s instrumentation logging guidelines](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md) has the following definitions:
@@ -26,7 +28,7 @@ The [k8s instrumentation logging guidelines](https://github.com/kubernetes/commu
 - `logger.V(4).Info` - Debug level verbosity
 - `logger.V(5).Info` - Trace level verbosity
 
-We choose to simplify to the following 3 common levels.
+We choose to simplify to the following 4 common levels.
 
 ```
 const(
@@ -43,9 +45,9 @@ The guidelines are written in the context of a k8s controller. Our [epp](../pkg/
 
    - `logger.Info` Logging at the `V(0)` verbosity level is generally welcome here as this is only logged once at startup, and provides useful info for debugging.
 
-2. Reconciler loops. The reconciler loops watch for CR changes such as the `InferenceObjective` CR. And given changes in these CRs significantly affect the behavior of the extension, we recommend using v=1 verbosity level as default, and sparsely use higher verbosity levels.
+2. Reconciler loops. The reconciler loops watch for CR changes such as the `InferenceObjective` CR. And given changes in these CRs significantly affect the behavior of the extension, we recommend using `V(DEFAULT)` verbosity level as default, and sparsely use higher verbosity levels.
 
-   - `logger.V(DEFAULT)`
+- `logger.V(DEFAULT)`
      - Default log level in the reconcilers.
      - Information about config (listening on X, watching Y)
      - Errors that repeat frequently that relate to conditions that can be corrected (e.g., inference model not initialized yet)

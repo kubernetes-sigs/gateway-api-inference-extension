@@ -19,12 +19,9 @@ package testing
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 )
 
 // DefaultTestPort is the standard port used for mock model servers in tests.
@@ -84,17 +81,6 @@ func (p *PodWrapper) Namespace(ns string) *PodWrapper {
 // Labels sets the pod labels.
 func (p *PodWrapper) Labels(labels map[string]string) *PodWrapper {
 	p.ObjectMeta.Labels = labels
-	return p
-}
-
-// Labels sets the pod labels.
-func (p *PodWrapper) LabelsFromPoolSelector(selector map[v1alpha2.LabelKey]v1alpha2.LabelValue) *PodWrapper {
-	if p.ObjectMeta.Labels == nil {
-		p.ObjectMeta.Labels = map[string]string{}
-	}
-	for k, v := range selector {
-		p.ObjectMeta.Labels[string(k)] = string(v)
-	}
 	return p
 }
 
@@ -231,64 +217,5 @@ func (m *InferencePoolWrapper) EndpointPickerRef(name string) *InferencePoolWrap
 
 // Obj returns the wrapped InferencePool.
 func (m *InferencePoolWrapper) ObjRef() *v1.InferencePool {
-	return &m.InferencePool
-}
-
-func (m *InferencePoolWrapper) ToGKNN() common.GKNN {
-	return common.GKNN{
-		NamespacedName: types.NamespacedName{
-			Name:      m.Name,
-			Namespace: m.ObjectMeta.Namespace,
-		},
-		GroupKind: schema.GroupKind{
-			Group: "inference.networking.k8s.io",
-			Kind:  "InferencePool",
-		},
-	}
-}
-
-// AlphaInferencePoolWrapper wraps an group "inference.networking.x-k8s.io" InferencePool.
-type AlphaInferencePoolWrapper struct {
-	v1alpha2.InferencePool
-}
-
-// MakeAlphaInferencePool creates a wrapper for a InferencePool.
-func MakeAlphaInferencePool(name string) *AlphaInferencePoolWrapper {
-	return &AlphaInferencePoolWrapper{
-		v1alpha2.InferencePool{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
-			},
-			Spec: v1alpha2.InferencePoolSpec{},
-		},
-	}
-}
-
-func (m *AlphaInferencePoolWrapper) Namespace(ns string) *AlphaInferencePoolWrapper {
-	m.ObjectMeta.Namespace = ns
-	return m
-}
-
-func (m *AlphaInferencePoolWrapper) Selector(selector map[string]string) *AlphaInferencePoolWrapper {
-	s := make(map[v1alpha2.LabelKey]v1alpha2.LabelValue)
-	for k, v := range selector {
-		s[v1alpha2.LabelKey(k)] = v1alpha2.LabelValue(v)
-	}
-	m.Spec.Selector = s
-	return m
-}
-
-func (m *AlphaInferencePoolWrapper) TargetPortNumber(p int32) *AlphaInferencePoolWrapper {
-	m.Spec.TargetPortNumber = p
-	return m
-}
-
-func (m *AlphaInferencePoolWrapper) ExtensionRef(name string) *AlphaInferencePoolWrapper {
-	m.Spec.ExtensionRef = v1alpha2.Extension{Name: v1alpha2.ObjectName(name)}
-	return m
-}
-
-// Obj returns the wrapped InferencePool.
-func (m *AlphaInferencePoolWrapper) ObjRef() *v1alpha2.InferencePool {
 	return &m.InferencePool
 }

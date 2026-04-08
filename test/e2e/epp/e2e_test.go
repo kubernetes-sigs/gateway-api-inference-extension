@@ -48,6 +48,7 @@ const (
 	maxRetries            = 5
 	backoff               = 5 * time.Second
 	batches               = 20
+	apiEmbeddings         = "/embeddings"
 )
 
 var _ = ginkgo.Describe("InferencePool", func() {
@@ -320,12 +321,29 @@ func verifyTrafficRouting() {
 				{"role": "user", "content": "Now summarize your thoughts."},
 			},
 		},
+		{
+			api:              apiEmbeddings,
+			promptOrMessages: "The food was delicious and the service was great.",
+		},
+		{
+			api:              apiEmbeddings,
+			promptOrMessages: []string{"First sentence to embed.", "Second sentence to embed."},
+		},
 	} {
 		ginkgo.By(fmt.Sprintf("Verifying connectivity through the inference extension with %s api and prompt/messages: %v", t.api, t.promptOrMessages))
 
-		// Expected ports and InferenceObjective target models
+		// Skip embeddings API if server returns 404 (not all models support embeddings).
+		if t.api == apiEmbeddings {
+			probeCmd := getCurlCommand(envoyName, testConfig.NsName, envoyPort, modelName, curlTimeout, t.api, t.promptOrMessages, false)
+			probeResp, probeErr := testutils.ExecCommandInPod(testConfig, "curl", "curl", probeCmd)
+			if probeErr == nil && strings.Contains(probeResp, "404") {
+				ginkgo.Skip("Skipping " + apiEmbeddings + ": server returned 404 (embeddings may not be supported by this model)")
+			}
+		}
+
+		// Expected ports and client-facing model name (response model is rewritten back to the incoming name)
 		expectedPort := generateSequence(firstPort, numPorts)
-		expectedModel := []string{targetModelName}
+		expectedModel := []string{modelName}
 
 		// Observed ports and InferenceObjective target models
 		actualModel := make(map[string]int)
@@ -348,6 +366,12 @@ func verifyTrafficRouting() {
 				currentPromptOrMessages = append([]map[string]any{nonceMsg}, originalMessages...)
 			} else if originalString, ok := t.promptOrMessages.(string); ok {
 				currentPromptOrMessages = fmt.Sprintf("[TestNonce: %s-%d] %s", dynamicHashValue, i, originalString)
+			} else if originalStrings, ok := t.promptOrMessages.([]string); ok {
+				// For embeddings with array input, prepend a unique string so each request is distinct.
+				withNonce := make([]string, 0, len(originalStrings)+1)
+				withNonce = append(withNonce, fmt.Sprintf("[TestNonce: %s-%d]", dynamicHashValue, i))
+				withNonce = append(withNonce, originalStrings...)
+				currentPromptOrMessages = withNonce
 			} else {
 				currentPromptOrMessages = t.promptOrMessages
 			}
@@ -553,8 +577,12 @@ func getCurlCommand(name, ns, port, model string, timeout time.Duration, api str
 		body["prompt"] = promptOrMessages
 	case "/chat/completions":
 		body["messages"] = promptOrMessages
+	case apiEmbeddings:
+		body["input"] = promptOrMessages
+		delete(body, "max_tokens")
+		delete(body, "temperature")
 	}
-	if streaming {
+	if streaming && api != apiEmbeddings {
 		body["stream"] = true
 		body["stream_options"] = map[string]any{
 			"include_usage": true,
@@ -679,7 +707,7 @@ func generateTraffic(
 	var wg sync.WaitGroup
 	errorCh := make(chan error, batches)
 
-	for i := 0; i < batches; i++ {
+	for i := range batches {
 		wg.Add(1)
 		semaphore <- struct{}{}
 

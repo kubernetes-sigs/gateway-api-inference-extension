@@ -17,13 +17,13 @@ limitations under the License.
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"strings"
 	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -86,6 +86,7 @@ type RequestContext struct {
 	TargetModelName           string
 	FairnessID                string
 	ObjectiveKey              string
+	Priority                  int
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
@@ -171,7 +172,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// error metrics. This doesn't cover the error "Cannot receive stream request" because
 	// such errors might happen even though response is processed.
 	var err error
-	defer func(error, *RequestContext) {
+	defer func() {
 		if reqCtx.ResponseStatusCode != "" {
 			metrics.RecordRequestErrCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.ResponseStatusCode)
 		} else if err != nil {
@@ -189,7 +190,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			cleanupCtx := log.IntoContext(context.Background(), logger)
 			s.director.HandleResponseBody(cleanupCtx, reqCtx, true)
 		}
-	}(err, reqCtx)
+	}()
 
 	for {
 		select {
@@ -203,7 +204,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return nil
 		}
 		if recvErr != nil {
-			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", err)
+			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", recvErr)
 		}
 
 		reqCtx.Request.Metadata = envoy.ExtractMetadataValues(req)
@@ -219,7 +220,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey] = requestID // update in headers so director can consume it
 			}
 			logger = logger.WithValues(reqcommon.RequestIdHeaderKey, requestID)
-			logger.V(1).Info("EPP received request") // Request ID will be logged too as part of logger context values.
+			logger.V(logutil.DEFAULT).Info("EPP received request") // Request ID will be logged too as part of logger context values.
 			loggerTrace = logger.V(logutil.TRACE)
 			ctx = log.IntoContext(ctx, logger)
 
@@ -240,14 +241,17 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
 				if err != nil {
-					logger.V(1).Error(err, "Error handling request")
+					logger.Error(err, "Error handling request")
 					break
+				}
+
+				if reqCtx.SchedulingRequest != nil && reqCtx.SchedulingRequest.Body != nil {
+					reqCtx.modelServerStreaming = reqCtx.SchedulingRequest.Body.Stream
 				}
 
 				reqCtx.reqHeaderResp = s.generateRequestHeaderResponse(ctx, reqCtx)
 				reqCtx.reqBodyResp = envoy.GenerateRequestBodyResponses(reqCtx.Request.RawBody)
-
-				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName)
+				metrics.RecordRequestCounter(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.Priority)
 				metrics.RecordRequestSizes(reqCtx.IncomingModelName, reqCtx.TargetModelName, reqCtx.RequestSize)
 			}
 		case *extProcPb.ProcessingRequest_RequestTrailers:
@@ -272,22 +276,26 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			chunk := v.ResponseBody.Body
 
 			if reqCtx.modelServerStreaming {
+				if endOfStream {
+					reqCtx.ResponseComplete = true
+					reqCtx.ResponseCompleteTimestamp = time.Now()
+				}
 				s.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
+				// Rewrite the model name in response body back to the original client-facing name.
+				chunk = rewriteModelName(chunk, reqCtx.TargetModelName, reqCtx.IncomingModelName)
 				// For streaming response, we send response chunk back to envoy every time we received it.
 				reqCtx.respBodyResp = generateResponseBodyResponses(chunk, endOfStream, reqCtx.Response.DynamicMetadata)
 			} else {
 				body = append(body, chunk...)
-			}
-
-			// If this chunk marks the end of the stream, trigger the finalization logic.
-			if endOfStream {
-				s.finishResponse(ctx, reqCtx, body, reqCtx.modelServerStreaming)
+				if endOfStream {
+					s.finishResponse(ctx, reqCtx, body, reqCtx.modelServerStreaming, true)
+				}
 			}
 		case *extProcPb.ProcessingRequest_ResponseTrailers:
 			// For HTTP, the response trailer is not sent. Thus, this case will not be triggered.
 			// For gRPC(over HTTP2), the protocol relies on responseTrialers to determine whether a response is complete.
 			// More info: https://chromium.googlesource.com/external/github.com/grpc/grpc/+/HEAD/doc/PROTOCOL-HTTP2.md#responses
-			s.finishResponse(ctx, reqCtx, body, reqCtx.modelServerStreaming)
+			s.finishResponse(ctx, reqCtx, body, reqCtx.modelServerStreaming, false)
 			reqCtx.respTrailerResp = &extProcPb.ProcessingResponse{
 				Response: &extProcPb.ProcessingResponse_ResponseTrailers{
 					ResponseTrailers: &extProcPb.TrailersResponse{},
@@ -300,14 +308,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			if logger.V(logutil.DEBUG).Enabled() {
 				logger.V(logutil.DEBUG).Error(err, "Failed to process request", "request", req)
 			} else {
-				logger.V(1).Error(err, "Failed to process request")
+				logger.Error(err, "Failed to process request")
 			}
-			resp, err := buildErrResponse(err)
+			resp, err := errcommon.BuildErrResponse(err)
 			if err != nil {
 				return err
 			}
 			if err := srv.Send(resp); err != nil {
-				logger.V(1).Error(err, "Send failed")
+				logger.Error(err, "Send failed")
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 			return nil
@@ -321,7 +329,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 // finishResponse ensures all post-response logic, such as metric recording
 // and state updates, is executed exactly once for the request lifecycle.
-func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestContext, body []byte, modelStreaming bool) {
+func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestContext, body []byte, modelStreaming bool, setEos bool) {
 	// Return early if the response has already been finished to prevent
 	// duplicate execution of side effects and metrics.
 	if reqCtx.ResponseComplete {
@@ -330,15 +338,36 @@ func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestCon
 
 	reqCtx.ResponseComplete = true
 	reqCtx.ResponseCompleteTimestamp = time.Now()
-	reqCtx.ResponseSize = len(body)
 	reqCtx = s.HandleResponseBody(ctx, reqCtx, body, true)
 	if !modelStreaming {
+		// Rewrite the model name in response body back to the original client-facing name.
+		body = rewriteModelName(body, reqCtx.TargetModelName, reqCtx.IncomingModelName)
 		// For non-streaming response, we send response back to envoy after receiving all the response body.
-		reqCtx.respBodyResp = generateResponseBodyResponses(body, true, reqCtx.Response.DynamicMetadata)
+		reqCtx.respBodyResp = generateResponseBodyResponses(body, setEos, reqCtx.Response.DynamicMetadata)
 	}
 }
 
-// updateStateAndSendIfNeeded checks state and can send mutiple responses in a single pass, but only if ordered properly.
+// rewriteModelName replaces occurrences of the target (internal) model name with the
+// incoming (client-facing) model name in the response body bytes. This ensures clients
+// see the model name they originally requested, not the internal backend model name.
+// It is a no-op when the names are identical or either is empty.
+func rewriteModelName(body []byte, targetModel, incomingModel string) []byte {
+	if targetModel == "" || incomingModel == "" || targetModel == incomingModel {
+		return body
+	}
+	old := []byte(`"model":"` + targetModel + `"`)
+	new := []byte(`"model":"` + incomingModel + `"`)
+	result := bytes.ReplaceAll(body, old, new)
+	if !bytes.Equal(result, body) {
+		return result
+	}
+	// Also handle the case where JSON has spaces after the colon: "model": "..."
+	old = []byte(`"model": "` + targetModel + `"`)
+	new = []byte(`"model": "` + incomingModel + `"`)
+	return bytes.ReplaceAll(body, old, new)
+}
+
+// updateStateAndSendIfNeeded checks state and can send multiple responses in a single pass, but only if ordered properly.
 // Order of requests matter in FULL_DUPLEX_STREAMING. For both request and response, the order of response sent back MUST be: Header->Body->Trailer, with trailer being optional.
 func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProcessor_ProcessServer, logger logr.Logger) error {
 	loggerTrace := logger.V(logutil.TRACE)
@@ -346,7 +375,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 	if r.RequestState == RequestReceived && r.reqHeaderResp != nil {
 		loggerTrace.Info("Sending request header response", "obj", r.reqHeaderResp)
 		if err := srv.Send(r.reqHeaderResp); err != nil {
-			logger.V(1).Error(err, "error sending response")
+			logger.Error(err, "error sending response")
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 		}
 		r.RequestState = HeaderRequestResponseComplete
@@ -359,7 +388,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 		}
-		logger.V(1).Info("EPP sent request body response(s) to proxy", "modelName", r.IncomingModelName, "targetModelName", r.TargetModelName)
+		logger.V(logutil.DEFAULT).Info("EPP sent request body response(s) to proxy", "modelName", r.IncomingModelName, "targetModelName", r.TargetModelName)
 		r.RequestState = BodyRequestResponsesComplete
 		metrics.IncRunningRequests(r.IncomingModelName)
 		r.RequestRunning = true
@@ -387,7 +416,7 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 			}
 		}
 		if r.ResponseComplete {
-			logger.V(1).Info("EPP sent response body back to proxy")
+			logger.V(logutil.DEFAULT).Info("EPP sent response body back to proxy")
 			r.RequestState = BodyResponseResponsesComplete
 		}
 		// Dump the response so a new stream message can begin
@@ -397,67 +426,9 @@ func (r *RequestContext) updateStateAndSendIfNeeded(srv extProcPb.ExternalProces
 		// Trailers in requests are not guaranteed
 		if err := srv.Send(r.respTrailerResp); err != nil {
 			return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
+		} else {
+			logger.V(logutil.DEBUG).Info("EPP sent trailer back to proxy")
 		}
 	}
 	return nil
-}
-
-func buildErrResponse(err error) (*extProcPb.ProcessingResponse, error) {
-	var resp *extProcPb.ProcessingResponse
-
-	switch errcommon.CanonicalCode(err) {
-	// This code can be returned by scheduler when there is no capacity for sheddable
-	// requests.
-	case errcommon.ResourceExhausted:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_TooManyRequests,
-					},
-				},
-			},
-		}
-	// This code can be returned by when EPP processes the request and run into server-side errors.
-	case errcommon.Internal:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_InternalServerError,
-					},
-				},
-			},
-		}
-	// This code can be returned by the director when there are no candidate pods for the request scheduling.
-	case errcommon.ServiceUnavailable:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_ServiceUnavailable,
-					},
-				},
-			},
-		}
-	// This code can be returned when users provide invalid json request.
-	case errcommon.BadRequest:
-		resp = &extProcPb.ProcessingResponse{
-			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
-				ImmediateResponse: &extProcPb.ImmediateResponse{
-					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_BadRequest,
-					},
-				},
-			},
-		}
-	default:
-		return nil, status.Errorf(status.Code(err), "failed to handle request: %v", err)
-	}
-
-	if err.Error() != "" {
-		resp.Response.(*extProcPb.ProcessingResponse_ImmediateResponse).ImmediateResponse.Body = []byte(err.Error())
-	}
-
-	return resp, nil
 }

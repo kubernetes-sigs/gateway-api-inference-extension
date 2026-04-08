@@ -17,7 +17,7 @@ limitations under the License.
 package epp
 
 import (
-	"context"
+	_ "embed"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,33 +30,11 @@ import (
 
 var reqLogger = zap.New(zap.UseDevMode(true), zap.Level(-1*zapcore.Level(logutil.DEFAULT)))
 
-const requestAttributeReporterTestConfig = `
-apiVersion: inference.networking.x-k8s.io/v1alpha1
-kind: EndpointPickerConfig
-plugins:
-  - type: openai-parser
-  - name: total-tokens-cost-reporter
-    type: request-attribute-reporter
-    parameters:
-      attributes:
-        - key:
-            namespace: envoy.lb
-            name: x-gateway-inference-request-cost
-          expression: |
-            usage.completion_tokens
-          condition: "has(usage.completion_tokens)"
-schedulingProfiles:
-  - name: default
-    plugins:
-      - pluginRef: openai-parser
-      - pluginRef: total-tokens-cost-reporter
-parser:
-  pluginRef: openai-parser
-`
+//go:embed testdata/request-attribute-reporter-config.yaml
+var requestAttributeReporterTestConfig string
 
 func TestRequestAttributeReporter(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Use our new WithConfigText harness option to provide the custom config.
 	h := NewTestHarness(t, ctx, WithStandardMode(), WithConfigText(requestAttributeReporterTestConfig)).WithBaseResources()

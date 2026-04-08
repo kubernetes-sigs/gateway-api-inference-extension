@@ -35,7 +35,7 @@ import (
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
+	reqdataprodprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/dataproducer/approximateprefix"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
 
@@ -425,8 +425,8 @@ func (t *PredictedLatency) getOrMakePredictedLatencyContextForRequest(request *f
 
 func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleState *framework.CycleState, endpoint framework.Endpoint) float64 {
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Running getPrefixCacheScoreForPod, getting prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String())
-	plugintype := prefix.PrefixCachePluginType
-	pluginname := prefix.PrefixCachePluginType
+	plugintype := reqdataprodprefix.ApproxPrefixCachePluginType
+	pluginname := reqdataprodprefix.ApproxPrefixCachePluginType
 	cycleStateKey := (plugin.TypedName{Type: plugintype, Name: pluginname}).String()
 	stateData, err := cycleState.Read(plugin.StateKey(cycleStateKey))
 
@@ -438,7 +438,7 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 		return 0.0
 	}
 
-	prefixCacheState, ok := stateData.(*prefix.SchedulingContextState)
+	prefixCacheState, ok := stateData.(*reqdataprodprefix.SchedulingContextState)
 	if !ok {
 		// This should not happen if the plugin is configured correctly.
 		log.FromContext(ctx).Error(fmt.Errorf("unexpected state type: %T", stateData), "failed to read prefix cache state")
@@ -452,7 +452,7 @@ func (s *PredictedLatency) getPrefixCacheScoreForPod(ctx context.Context, cycleS
 		return 0.0
 	}
 
-	matchLen := prefixCacheState.PrefixCacheServers[prefix.ServerID(endpoint.GetMetadata().NamespacedName)]
+	matchLen := prefixCacheState.PrefixCacheServers[reqdataprodprefix.ServerID(endpoint.GetMetadata().NamespacedName)]
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Prefix cache score for endpoint", "endpoint", endpoint.GetMetadata().String(), "matchLen", matchLen, "totalPrefixes", total)
 	return float64(matchLen) / float64(total)
 }

@@ -64,14 +64,14 @@ type flowController interface {
 // rejectIfSheddableAndSaturated checks if a request should be immediately rejected.
 func rejectIfSheddableAndSaturated(
 	ctx context.Context,
-	sd contracts.SaturationDetector,
-	locator contracts.PodLocator,
+	sd flowcontrol.SaturationDetector,
+	endpointCandidates contracts.EndpointCandidates,
 	reqCtx *handlers.RequestContext,
 	priority int,
 	logger logr.Logger,
 ) error {
 	if requtil.IsSheddable(priority) {
-		if sd.Saturation(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) >= 1.0 {
+		if sd.Saturation(ctx, endpointCandidates.Locate(ctx, reqCtx.Request.Metadata)) >= 1.0 {
 			logger.V(logutil.TRACE).Info("Request rejected: system saturated and request is sheddable",
 				"requestID", reqCtx.SchedulingRequest.RequestId)
 			return errcommon.Error{
@@ -89,18 +89,18 @@ func rejectIfSheddableAndSaturated(
 // It rejects sheddable requests (priority < 0) if the saturationDetector indicates that the system is currently
 // saturated. Non-sheddable requests always bypass the saturation check.
 type LegacyAdmissionController struct {
-	saturationDetector contracts.SaturationDetector
-	podLocator         contracts.PodLocator
+	saturationDetector flowcontrol.SaturationDetector
+	endpointCandidates contracts.EndpointCandidates
 }
 
 // NewLegacyAdmissionController creates a new LegacyAdmissionController.
 func NewLegacyAdmissionController(
-	sd contracts.SaturationDetector,
-	pl contracts.PodLocator,
+	sd flowcontrol.SaturationDetector,
+	endpointCandidates contracts.EndpointCandidates,
 ) *LegacyAdmissionController {
 	return &LegacyAdmissionController{
 		saturationDetector: sd,
-		podLocator:         pl,
+		endpointCandidates: endpointCandidates,
 	}
 }
 
@@ -117,7 +117,7 @@ func (lac *LegacyAdmissionController) Admit(
 	if err := rejectIfSheddableAndSaturated(
 		ctx,
 		lac.saturationDetector,
-		lac.podLocator,
+		lac.endpointCandidates,
 		reqCtx, priority,
 		logger,
 	); err != nil {

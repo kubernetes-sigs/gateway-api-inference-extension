@@ -18,6 +18,7 @@ package datalayer
 
 import (
 	"fmt"
+	"maps"
 	"time"
 )
 
@@ -34,7 +35,7 @@ type Metrics struct {
 	KvCacheMaxTokenCapacity int
 	CacheBlockSize          int
 	// Number of GPU blocks in the model server for KV Cache.
-	CacheNumGPUBlocks int
+	CacheNumBlocks int
 
 	// UpdateTime records the last time when the metrics were updated.
 	UpdateTime time.Time
@@ -63,13 +64,9 @@ func (m *Metrics) Clone() *Metrics {
 		return nil
 	}
 	activeModels := make(map[string]int, len(m.ActiveModels))
-	for key, value := range m.ActiveModels {
-		activeModels[key] = value
-	}
+	maps.Copy(activeModels, m.ActiveModels)
 	waitingModels := make(map[string]int, len(m.WaitingModels))
-	for key, value := range m.WaitingModels {
-		waitingModels[key] = value
-	}
+	maps.Copy(waitingModels, m.WaitingModels)
 	return &Metrics{
 		ActiveModels:            activeModels,
 		WaitingModels:           waitingModels,
@@ -79,7 +76,7 @@ func (m *Metrics) Clone() *Metrics {
 		KVCacheUsagePercent:     m.KVCacheUsagePercent,
 		KvCacheMaxTokenCapacity: m.KvCacheMaxTokenCapacity,
 		CacheBlockSize:          m.CacheBlockSize,
-		CacheNumGPUBlocks:       m.CacheNumGPUBlocks,
+		CacheNumBlocks:          m.CacheNumBlocks,
 		UpdateTime:              m.UpdateTime,
 	}
 }

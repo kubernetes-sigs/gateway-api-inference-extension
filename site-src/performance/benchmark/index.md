@@ -18,7 +18,7 @@ __Note:__ Only the GPU-based model server deployment option is supported for ben
 You are more likely to see the benefits of the inference extension when there are a decent number of replicas to make the optimal routing decision.
 
 ```bash
-kubectl scale deployment vllm-llama3-8b-instruct --replicas=8
+kubectl scale deployment vllm-qwen3-32b --replicas=8
 ```
 
 ### Expose the model server via a k8s service
@@ -26,7 +26,7 @@ kubectl scale deployment vllm-llama3-8b-instruct --replicas=8
 To establish a baseline, expose the vLLM deployment as a k8s service:
 
 ```bash
-kubectl expose deployment vllm-llama3-8b-instruct --port=80 --target-port=8000 --type=LoadBalancer
+kubectl expose deployment vllm-qwen3-32b --port=80 --target-port=8000 --type=LoadBalancer
 ```
 
 ## Run benchmark
@@ -110,7 +110,7 @@ The examples below shows how to get the IP of a gateway or a k8s service.
 # Get gateway IP
 GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
 # Get LoadBalancer k8s service IP
-SVC_IP=$(kubectl get service/vllm-llama3-8b-instruct -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+SVC_IP=$(kubectl get service/vllm-qwen3-32b -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 echo $GW_IP
 echo $SVC_IP

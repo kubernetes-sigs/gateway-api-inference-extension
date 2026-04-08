@@ -67,3 +67,11 @@ func NotificationSourceFactory(name string, parameters json.RawMessage, _ fwkplu
 
 	return NewK8sNotificationSource(NotificationSourceType, name, gvk), nil
 }
+
+// EndpointSourceFactory is the factory function for endpoint notification source plugins.
+func EndpointSourceFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	if name == "" {
+		name = EndpointNotificationSourceType
+	}
+	return NewEndpointDataSource(EndpointNotificationSourceType, name), nil
+}

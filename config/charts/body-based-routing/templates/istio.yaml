@@ -18,8 +18,12 @@ spec:
         filterChain:
           filter:
             name: "envoy.filters.network.http_connection_manager"
+            {{- if .Values.provider.istio.envoyFilter.anchorSubFilter }}
+            subFilter:
+              name: {{ .Values.provider.istio.envoyFilter.anchorSubFilter }}
+            {{- end }}
     patch:
-      operation: INSERT_FIRST
+      operation: {{ .Values.provider.istio.envoyFilter.operation }}
       value:
         name: envoy.filters.http.ext_proc.bbr
         typed_config:

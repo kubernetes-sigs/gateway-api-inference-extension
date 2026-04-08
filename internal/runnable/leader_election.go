@@ -15,11 +15,6 @@ func LeaderElection(runnable manager.Runnable, needsLeaderElection bool) manager
 	}
 }
 
-// RequireLeaderElection wraps the given runnable, marking it as requiring leader election.
-func RequireLeaderElection(runnable manager.Runnable) manager.Runnable {
-	return LeaderElection(runnable, true)
-}
-
 // RequireLeaderElection wraps the given runnable, marking it as not requiring leader election.
 func NoLeaderElection(runnable manager.Runnable) manager.Runnable {
 	return LeaderElection(runnable, false)

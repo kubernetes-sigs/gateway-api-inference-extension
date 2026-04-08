@@ -26,29 +26,27 @@ import (
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	healthPb "google.golang.org/grpc/health/grpc_health_v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/bodyfieldtoheader"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/profiling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/tracing"
 	"sigs.k8s.io/gateway-api-inference-extension/version"
 )
+
+const modelField = "model"
 
 var setupLog = ctrl.Log.WithName("setup")
 
@@ -147,17 +145,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return nil
 		}(),
 	}
-	// label "inference.networking.k8s.io/bbr-managed" = "true" is used for server-side filtering of configmaps.
-	// only the configmap objects with this label will be tracked by bbr.
-	cacheOptions := cache.Options{
-		ByObject: map[client.Object]cache.ByObject{
-			&corev1.ConfigMap{}: {
-				Label: labels.SelectorFromSet(labels.Set{
-					"inference.networking.k8s.io/bbr-managed": "true",
-				}),
-			},
-		},
-	}
+	cacheOptions := cache.Options{}
 	// Apply namespace filtering only if env var is set.
 	namespace := os.Getenv("NAMESPACE")
 	if namespace != "" {
@@ -189,9 +177,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	if len(opts.PluginSpecs) == 0 {
 		setupLog.Info("No BBR plugins are specified. Running BBR with the default behavior.")
 
-		modelToHeaderPlugin, err := plugins.NewBodyFieldToHeaderPlugin(handlers.ModelField, handlers.ModelHeader)
+		modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
 		if err != nil {
-			setupLog.Error(err, "Failed to create plugin", "pluginType", plugins.BodyFieldToHeaderPluginType)
+			setupLog.Error(err, "Failed to create plugin", "pluginType", bodyfieldtoheader.BodyFieldToHeaderPluginType)
 			return err
 		}
 		r.requestPlugins = append(r.requestPlugins, modelToHeaderPlugin)
@@ -261,7 +249,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // registerInTreePlugins registers the factory functions of all known BBR plugins
 func (r *Runner) registerInTreePlugins() {
-	framework.Register(plugins.BodyFieldToHeaderPluginType, plugins.BodyFieldToHeaderPluginFactory)
+	framework.Register(bodyfieldtoheader.BodyFieldToHeaderPluginType, bodyfieldtoheader.BodyFieldToHeaderPluginFactory)
 	framework.Register(basemodelextractor.BaseModelToHeaderPluginType, basemodelextractor.BaseModelToHeaderPluginFactory)
 }
 

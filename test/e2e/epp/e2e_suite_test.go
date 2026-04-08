@@ -47,7 +47,7 @@ const (
 	// defaultNsName is the default name of the Namespace used for tests. Can override using the E2E_NS environment variable.
 	defaultNsName = "inf-ext-e2e"
 	// modelServerName is the name of the model server test resources.
-	modelServerName = "vllm-llama3-8b-instruct"
+	modelServerName = "vllm-qwen3-32b"
 	// modelName is the test model name.
 	modelName = "food-review"
 	// targetModelName is the target model name of the test model server.
@@ -57,7 +57,7 @@ const (
 	// envoyPort is the listener port number of the test envoy proxy.
 	envoyPort = "8081"
 	// inferExtName is the name of the inference extension test resources.
-	inferExtName = "vllm-llama3-8b-instruct-epp"
+	inferExtName = "vllm-qwen3-32b-epp"
 	// metricsReaderSecretName is the name of the metrics reader secret which stores sa token to read epp metrics.
 	metricsReaderSecretName = "inference-gateway-sa-metrics-reader-secret"
 	// clientManifest is the manifest for the client test resources.
@@ -85,6 +85,14 @@ var (
 	// Required for exec'ing in curl pod
 	e2eImage              string
 	leaderElectionEnabled bool
+
+	// expectedCRDs lists the CRD names that must be established after kustomize apply.
+	expectedCRDs = []string{
+		"inferencepools.inference.networking.k8s.io",
+		"inferenceobjectives.inference.networking.x-k8s.io",
+		"inferencemodelrewrites.inference.networking.x-k8s.io",
+		"inferencepoolimports.inference.networking.x-k8s.io",
+	}
 )
 
 func TestAPIs(t *testing.T) {
@@ -127,7 +135,8 @@ func setupInfra() {
 	if strings.Contains(modelServerManifestArray[0], "hf-token") {
 		createHfSecret(testConfig, modelServerSecretManifest)
 	}
-	testutils.CreateCrdsFromKustomize(testConfig, crdKustomizePath)
+	testutils.ProcessKustomize(testConfig, crdKustomizePath, testutils.CreateAndVerifyObjs)
+	testutils.ValidateCRDsEstablished(testConfig, expectedCRDs)
 
 	inferExtManifestPath := inferExtManifestDefault
 	if leaderElectionEnabled {

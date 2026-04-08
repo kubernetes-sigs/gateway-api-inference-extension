@@ -48,6 +48,7 @@ const (
 	runningRequestsMetric              = inferenceObjectiveComponent + "_running_requests"
 	kvCacheAvgUsageMetric              = inferencePoolComponent + "_average_kv_cache_utilization"
 	queueAvgSizeMetric                 = inferencePoolComponent + "_average_queue_size"
+	runningRequestsAvgMetric           = inferencePoolComponent + "_average_running_requests"
 )
 
 func TestMain(m *testing.M) {
@@ -94,7 +95,7 @@ func TestRecordRequestCounterandSizes(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			for _, req := range scenario.reqs {
-				RecordRequestCounter(req.modelName, req.targetModelName)
+				RecordRequestCounter(req.modelName, req.targetModelName, 0)
 				RecordRequestSizes(req.modelName, req.targetModelName, req.reqSize)
 			}
 			wantRequestTotal, err := os.Open("testdata/request_total_metric")
@@ -531,22 +532,25 @@ func TestRunningRequestsMetrics(t *testing.T) {
 func TestInferencePoolMetrics(t *testing.T) {
 	Reset()
 	scenarios := []struct {
-		name         string
-		poolName     string
-		kvCacheAvg   float64
-		queueSizeAvg float64
+		name               string
+		poolName           string
+		kvCacheAvg         float64
+		queueSizeAvg       float64
+		runningRequestsAvg float64
 	}{
 		{
-			name:         "basic test",
-			poolName:     "p1",
-			kvCacheAvg:   0.3,
-			queueSizeAvg: 0.4,
+			name:               "basic test",
+			poolName:           "p1",
+			kvCacheAvg:         0.3,
+			queueSizeAvg:       0.4,
+			runningRequestsAvg: 0.5,
 		},
 	}
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			RecordInferencePoolAvgKVCache(scenario.poolName, scenario.kvCacheAvg)
 			RecordInferencePoolAvgQueueSize(scenario.poolName, scenario.queueSizeAvg)
+			RecordInferencePoolAvgRunningRequests(scenario.poolName, scenario.runningRequestsAvg)
 
 			wantKVCache, err := os.Open("testdata/kv_cache_avg_metrics")
 			defer func() {
@@ -571,6 +575,19 @@ func TestInferencePoolMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := testutil.GatherAndCompare(metrics.Registry, wantQueueSize, queueAvgSizeMetric); err != nil {
+				t.Error(err)
+			}
+
+			wantRunningRequests, err := os.Open("testdata/running_requests_avg_metrics")
+			defer func() {
+				if err := wantRunningRequests.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.GatherAndCompare(metrics.Registry, wantRunningRequests, runningRequestsAvgMetric); err != nil {
 				t.Error(err)
 			}
 		})
@@ -773,6 +790,7 @@ func TestFlowControlEnqueueDurationMetric(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			for i := range scenario.priorities {
 				RecordFlowControlRequestEnqueueDuration(
+					"default-fairness",
 					scenario.priorities[i],
 					scenario.outcomes[i],
 					scenario.durations[i],
@@ -919,10 +937,10 @@ func TestSchedulerAttemptsTotal(t *testing.T) {
 
 	t.Run("mixed success and failure attempts", func(t *testing.T) {
 		Reset()
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			RecordSchedulerAttempt(nil, "modelA", nil)
 		}
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			RecordSchedulerAttempt(errors.New("simulated scheduling failure"), "modelA", nil)
 		}
 		compareMetrics(t, "testdata/scheduler_attempts_total_metrics")
@@ -1050,8 +1068,8 @@ func TestFlowControlQueueDurationMetric(t *testing.T) {
 
 	const (
 		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		model  = "qwen-3"
+		target = "qwen-3-base"
 	)
 
 	records := []struct {
@@ -1140,8 +1158,8 @@ func TestFlowControlQueueSizeMetric(t *testing.T) {
 
 	const (
 		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		model  = "qwen-3"
+		target = "qwen-3-base"
 	)
 
 	// Basic Inc/Dec
@@ -1178,8 +1196,8 @@ func TestFlowControlQueueBytesMetric(t *testing.T) {
 
 	const (
 		pool   = "pool-1"
-		model  = "llama-2"
-		target = "llama-base"
+		model  = "qwen-3"
+		target = "qwen-3-base"
 	)
 
 	// Basic Inc/Dec

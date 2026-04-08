@@ -50,13 +50,13 @@ type EndpointPickerConfig struct {
 	SchedulingProfiles []SchedulingProfile `json:"schedulingProfiles"`
 
 	// +optional
-	// SaturationDetector when present specifies the configuration of the
-	// Saturation detector. If not present, default values are used.
-	SaturationDetector *SaturationDetector `json:"saturationDetector,omitempty"`
+	// SaturationDetector specifies which saturation detector plugin to use for both Admission and
+	// Flow Control. If omitted, "utilization-detector" is used by default.
+	SaturationDetector *SaturationDetectorConfig `json:"saturationDetector,omitempty"`
 
 	// +optional
-	// Data configures the DataLayer. It is required if the new DataLayer is enabled.
-	Data *DataLayerConfig `json:"data"`
+	// DataLayer configures the DataLayer. It is required if the new DataLayer is enabled.
+	DataLayer *DataLayerConfig `json:"dataLayer"`
 
 	// +optional
 	// FlowControl configures the Flow Control layer.
@@ -80,8 +80,8 @@ func (cfg EndpointPickerConfig) String() string {
 	if len(cfg.SchedulingProfiles) > 0 {
 		parts = append(parts, fmt.Sprintf("SchedulingProfiles: %v", cfg.SchedulingProfiles))
 	}
-	if cfg.Data != nil {
-		parts = append(parts, fmt.Sprintf("Data: %v", cfg.Data))
+	if cfg.DataLayer != nil {
+		parts = append(parts, fmt.Sprintf("DataLayer: %v", cfg.DataLayer))
 	}
 	if cfg.SaturationDetector != nil {
 		parts = append(parts, fmt.Sprintf("SaturationDetector: %v", cfg.SaturationDetector))
@@ -195,41 +195,20 @@ func (fg FeatureGates) String() string {
 	return "{" + result + "}"
 }
 
-// SaturationDetector
-type SaturationDetector struct {
+// SaturationDetectorConfig contains the configuration for a saturation detector.
+type SaturationDetectorConfig struct {
 	// +optional
-	// QueueDepthThreshold defines the backend waiting queue size above which a
-	// pod is considered to have insufficient capacity for new requests.
-	QueueDepthThreshold int `json:"queueDepthThreshold,omitempty"`
-
-	// +optional
-	// KVCacheUtilThreshold defines the KV cache utilization (0.0 to 1.0) above
-	// which a pod is considered to have insufficient capacity.
-	KVCacheUtilThreshold float64 `json:"kvCacheUtilThreshold,omitempty"`
-
-	// +optional
-	// MetricsStalenessThreshold defines how old a pod's metrics can be.
-	// If a pod's metrics are older than this, it might be excluded from
-	// "good capacity" considerations or treated as having no capacity for
-	// safety.
-	MetricsStalenessThreshold metav1.Duration `json:"metricsStalenessThreshold,omitempty"`
+	// PluginRef specifies the name of the plugin instance to use for saturation detection.
+	// The reference is to the name of an entry of the Plugins defined in the configuration's Plugins section.
+	// If unspecified, "utilization-detector" is used by default.
+	PluginRef string `json:"pluginRef,omitempty"`
 }
 
-func (sd *SaturationDetector) String() string {
-	if sd == nil {
+func (sdc *SaturationDetectorConfig) String() string {
+	if sdc == nil {
 		return nilString
 	}
-	var parts []string
-	if sd.QueueDepthThreshold != 0 {
-		parts = append(parts, fmt.Sprintf("QueueDepthThreshold: %d", sd.QueueDepthThreshold))
-	}
-	if sd.KVCacheUtilThreshold != 0.0 {
-		parts = append(parts, fmt.Sprintf("KVCacheUtilThreshold: %.2f", sd.KVCacheUtilThreshold))
-	}
-	if sd.MetricsStalenessThreshold.Duration != 0 {
-		parts = append(parts, fmt.Sprintf("MetricsStalenessThreshold: %s", sd.MetricsStalenessThreshold.Duration))
-	}
-	return "{" + strings.Join(parts, ", ") + "}"
+	return fmt.Sprintf("{PluginRef: %s}", sdc.PluginRef)
 }
 
 // DataLayerConfig contains the configuration of the DataLayer feature
@@ -308,11 +287,20 @@ type ParserConfig struct {
 // FlowControlConfig configures the Flow Control layer.
 type FlowControlConfig struct {
 	// +optional
-	// MaxBytes is the global maximum number of bytes allowed across all priority levels.
-	// If exceeded, new requests will be rejected even if their specific priority band has capacity.
+	// MaxBytes defines the global maximum aggregate byte size of all active requests across all priority
+	// levels. If this limit is exceeded, new requests will be rejected even if their specific
+	// priority band has capacity.
 	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
-	// If not specified, no global limits are enforced.
+	// If omitted, no global byte limit is enforced.
 	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
+
+	// +optional
+	// MaxRequests defines the global maximum number of concurrent requests across all priority
+	// levels. If this limit is exceeded, new requests will be rejected even if their specific
+	// priority band has capacity.
+	// Accepts standard Kubernetes resource quantities (e.g., "100", "1k").
+	// If omitted, no global request limit is enforced.
+	MaxRequests *resource.Quantity `json:"maxRequests,omitempty"`
 
 	// +optional
 	// DefaultRequestTTL serves as a fallback timeout for requests that do not specify their own
@@ -335,6 +323,12 @@ type FlowControlConfig struct {
 	// priority levels. Traffic matching these priorities will be handled according to these rules.
 	// If a priority band is not specified, it uses specific defaults.
 	PriorityBands []PriorityBandConfig `json:"priorityBands,omitempty"`
+
+	// +optional
+	// UsageLimitPolicyPluginRef specifies the UsageLimitPolicy plugin to use for adaptive capacity management.
+	// Must reference a named plugin instance defined in the top-level Plugins section.
+	// If omitted, a default static policy (threshold=1.0, no gating) is used.
+	UsageLimitPolicyPluginRef string `json:"usageLimitPolicyPluginRef,omitempty"`
 }
 
 func (fcc *FlowControlConfig) String() string {
@@ -349,6 +343,12 @@ func (fcc *FlowControlConfig) String() string {
 		parts = append(parts, "MaxBytes: unlimited")
 	}
 
+	if fcc.MaxRequests != nil {
+		parts = append(parts, fmt.Sprintf("MaxRequests: %d", fcc.MaxRequests.Value()))
+	} else {
+		parts = append(parts, "MaxRequests: unlimited")
+	}
+
 	if fcc.DefaultRequestTTL != nil {
 		parts = append(parts, fmt.Sprintf("DefaultRequestTTL: %s", fcc.DefaultRequestTTL.Duration))
 	}
@@ -359,6 +359,10 @@ func (fcc *FlowControlConfig) String() string {
 
 	if len(fcc.PriorityBands) > 0 {
 		parts = append(parts, fmt.Sprintf("PriorityBands: %v", fcc.PriorityBands))
+	}
+
+	if fcc.UsageLimitPolicyPluginRef != "" {
+		parts = append(parts, "UsageLimitPolicyRef: "+fcc.UsageLimitPolicyPluginRef)
 	}
 
 	return "{" + strings.Join(parts, ", ") + "}"
@@ -372,10 +376,15 @@ type PriorityBandConfig struct {
 
 	// +optional
 	// MaxBytes is the maximum number of bytes allowed for this priority band.
-	// If exceeded, new requests at this priority will be shed.
 	// Accepts standard Kubernetes resource quantities (e.g., "1Gi", "500M").
-	// If not specified, the system default is used (e.g., 1 GB).
+	// If omitted, the system default is used.
 	MaxBytes *resource.Quantity `json:"maxBytes,omitempty"`
+
+	// +optional
+	// MaxRequests is the maximum number of concurrent requests allowed for this priority band.
+	// Accepts standard Kubernetes resource quantities (e.g., "100", "1k").
+	// If omitted, no request limit is enforced.
+	MaxRequests *resource.Quantity `json:"maxRequests,omitempty"`
 
 	// +optional
 	// FairnessPolicyRef specifies the name of the policy that governs flow selection.
@@ -394,6 +403,10 @@ func (pbc PriorityBandConfig) String() string {
 
 	if pbc.MaxBytes != nil {
 		parts = append(parts, fmt.Sprintf("MaxBytes: %d", pbc.MaxBytes.Value()))
+	}
+
+	if pbc.MaxRequests != nil {
+		parts = append(parts, fmt.Sprintf("MaxRequests: %d", pbc.MaxRequests.Value()))
 	}
 
 	if pbc.FairnessPolicyRef != "" {

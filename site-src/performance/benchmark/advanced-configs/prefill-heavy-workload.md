@@ -35,7 +35,7 @@ cd gateway-api-inference-extension/benchmarking/single-workload
   # Get gateway IP
   GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}')
   # Get LoadBalancer k8s service IP
-  SVC_IP=$(kubectl get service/vllm-llama3-8b-instruct -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  SVC_IP=$(kubectl get service/vllm-qwen3-32b -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
   echo $GW_IP
   echo $SVC_IP

@@ -18,7 +18,7 @@ Follow the detailed instructions [here](https://github.com/AI-Hypercomputer/infe
   gcloud artifacts repositories create ai-benchmark --location=us-central1 --repository-format=docker
   ```
 
-* Prepare datasets for [Infinity-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) and [billsum]((https://huggingface.co/datasets/FiscalNote/billsum)):
+* Prepare datasets for [Infinity-Instruct](https://huggingface.co/datasets/BAAI/Infinity-Instruct) and [billsum]((https://huggingface.co/datasets/FiscalNote/billsum)):
 
   ```bash
   pip install datasets transformers numpy pandas tqdm matplotlib
@@ -46,7 +46,7 @@ Run benchmarks using the configurations below, which are optimized for NVIDIA H1
 
 - **Dataset:** `billsum_conversations.json` (created from [HuggingFace billsum dataset](https://huggingface.co/datasets/FiscalNote/billsum)).  
   *This dataset features long prompts, making it prefill-heavy and ideal for testing scenarios that emphasize initial token generation.*
-- **Model:** [Llama 3 (8B)](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) (*critical*)
+- **Model:** [Qwen 3 (8B)](https://huggingface.co/Qwen/Qwen3-8B) (*critical*)
 - **Replicas:** 10 (vLLM)
 - **Request Rates:** 300–350 QPS (increments of 10)
 
@@ -57,7 +57,7 @@ Refer to example manifest:
 
 - **Dataset:** `Infinity-Instruct_conversations.json` (created from [HuggingFace Infinity-Instruct dataset](https://huggingface.co/datasets/BAAI/Infinity-Instruct)).  
   *This dataset has long outputs, making it decode-heavy and useful for testing scenarios focusing on sustained token generation.*
-- **Model:** [Llama 3 (8B)](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
+- **Model:** [Qwen 3 (8B)](https://huggingface.co/Qwen/Qwen3-8B)
 - **LoRA Adapters:** 15 adapters (`nvidia/llama-3.1-nemoguard-8b-topic-control`, rank 8, critical)
 - **Traffic Distribution:**  
   - 60 % on first 5 adapters (12 % each)  

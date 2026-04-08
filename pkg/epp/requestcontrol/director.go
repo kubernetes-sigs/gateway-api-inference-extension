@@ -27,7 +27,9 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/proto"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -72,14 +74,14 @@ func NewDirectorWithConfig(
 	scheduler Scheduler,
 	admissionController AdmissionController,
 	parser fwkrh.Parser,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	config *Config,
 ) *Director {
 	return &Director{
 		datastore:             datastore,
 		scheduler:             scheduler,
 		admissionController:   admissionController,
-		podLocator:            podLocator,
+		endpointCandidates:    endpointCandidates,
 		requestControlPlugins: *config,
 		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
@@ -99,7 +101,7 @@ type Director struct {
 	datastore             Datastore
 	scheduler             Scheduler
 	admissionController   AdmissionController
-	podLocator            contracts.PodLocator
+	endpointCandidates    contracts.EndpointCandidates
 	requestControlPlugins Config
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
 	// no need to set this in the constructor, since the value we want is the default int val
@@ -128,6 +130,10 @@ func (d *Director) getInferenceObjective(ctx context.Context, reqCtx *handlers.R
 // HandleRequest orchestrates the request lifecycle.
 // It always returns the requestContext even in the error case, as the request context is used in error handling.
 func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestContext) (*handlers.RequestContext, error) {
+	tracer := otel.Tracer("gateway-api-inference-extension")
+	ctx, span := tracer.Start(ctx, "gateway.request_orchestration", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 
 	// Parse, mutate, and extract the request body
@@ -137,8 +143,15 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	}
 
 	infObjective := d.getInferenceObjective(ctx, reqCtx)
+	reqCtx.Priority = *infObjective.Spec.Priority
 	requestObjectives := fwksched.RequestObjectives{Priority: *infObjective.Spec.Priority}
 
+	span.SetAttributes(
+		attribute.String("target_model", reqCtx.TargetModelName),
+		attribute.Int("request_prio", *infObjective.Spec.Priority),
+	)
+
+	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
 	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
 		RequestId:        reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		TargetModel:      reqCtx.TargetModelName,
@@ -153,32 +166,31 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	logger.V(logutil.DEBUG).Info("LLM request assembled")
 
 	if err := d.admissionController.Admit(ctx, reqCtx, *infObjective.Spec.Priority); err != nil {
-		logger.V(logutil.DEFAULT).Info("Request rejected by admission control", "error", err)
 		return reqCtx, err
 	}
-	candidateEndpoints := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
-	if len(candidateEndpoints) == 0 {
+
+	endpointCandidates := d.endpointCandidates.Locate(ctx, reqCtx.Request.Metadata)
+	if len(endpointCandidates) == 0 {
 		return reqCtx, errcommon.Error{
 			Code: errcommon.ServiceUnavailable,
-			Msg:  "failed to find candidate endpoints for serving the request",
+			Msg:  "failed to find endpoint candidates for serving the request",
 		}
 	}
-	candidateSnapshot := d.toSchedulerEndpoints(candidateEndpoints)
 
+	snapshotOfCandidatePods := d.toSchedulerEndpoints(endpointCandidates)
 	// Prepare per request data by running PrepareData plugins.
-	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
+	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		// Don't fail the request if PrepareData plugins fail.
-		logger.V(logutil.DEFAULT).Error(err, "failed to prepare per request data")
+		logger.Error(err, "failed to prepare per request data")
 	}
 
 	// Run admit request plugins
-	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot) {
-		logger.V(logutil.DEFAULT).Info("Request cannot be admitted")
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
 		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "request cannot be admitted"}
 	}
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target endpoint: %w", err).Error()}
 	}
@@ -200,14 +212,16 @@ func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.Requ
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
 	}
 
-	switch v := llmRequestBody.ParsedBody.(type) {
-	case proto.Message:
+	switch v := llmRequestBody.Payload.(type) {
+	case fwksched.PayloadProto:
 		// Protos are not currently mutated, return as-is.
 		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
-	case map[string]any:
+	case fwksched.PayloadMap:
 		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
 			return nil, err
 		}
+	case fwksched.RawPayload:
+		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
 	default:
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
 	}
@@ -226,7 +240,7 @@ func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.Requ
 	// Marshal back to bytes so downstream ExtProc filters see the updated model
 	requestBodyBytes, err := json.Marshal(bodyMap)
 	if err != nil {
-		logger.V(logutil.DEFAULT).Error(err, "Error marshalling request body")
+		logger.Error(err, "Error marshalling request body")
 		return errcommon.Error{Code: errcommon.Internal, Msg: "Error marshalling request body"}
 	}
 

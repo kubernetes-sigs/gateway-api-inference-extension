@@ -28,8 +28,8 @@ import (
 )
 
 var (
-	extractorType             = reflect.TypeOf((*fwkdl.Extractor)(nil)).Elem()
-	notificationextractorType = reflect.TypeOf((*fwkdl.NotificationExtractor)(nil)).Elem()
+	extractorType             = reflect.TypeFor[fwkdl.Extractor]()
+	notificationextractorType = reflect.TypeFor[fwkdl.NotificationExtractor]()
 )
 
 func TestValidateInputTypeCompatible(t *testing.T) {
@@ -77,21 +77,21 @@ func TestValidateExtractorCompatible(t *testing.T) {
 		},
 		{
 			name:         "nil expected type",
-			extType:      reflect.TypeOf(&notExtractor{}),
+			extType:      reflect.TypeFor[*notExtractor](),
 			expectedType: nil,
 			valid:        false,
 			errContains:  "can't be nil",
 		},
 		{
 			name:         "expected type not interface",
-			extType:      reflect.TypeOf(&notExtractor{}),
-			expectedType: reflect.TypeOf("string"),
+			extType:      reflect.TypeFor[*notExtractor](),
+			expectedType: reflect.TypeFor[string](),
 			valid:        false,
 			errContains:  "must be an interface",
 		},
 		{
 			name:         "does not implement interface",
-			extType:      reflect.TypeOf(&notExtractor{}),
+			extType:      reflect.TypeFor[*notExtractor](),
 			expectedType: extractorType,
 			valid:        false,
 			errContains:  "does not implement interface",
@@ -121,7 +121,7 @@ func typeOfT(v any) reflect.Type {
 	if t == nil {
 		return nil
 	}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		return t.Elem()
 	}
 	return t

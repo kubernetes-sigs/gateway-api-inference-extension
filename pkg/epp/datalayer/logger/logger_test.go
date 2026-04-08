@@ -29,10 +29,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
 	poolutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/pool"
 )
 
@@ -79,6 +81,127 @@ func TestLogger(t *testing.T) {
 	assert.Contains(t, logOutput, "RunningRequestsSize:3 WaitingQueueSize:7 KVCacheUsagePercent:42.5 KvCacheMaxTokenCapacity:2048")
 	assert.Contains(t, logOutput, "Metadata: {NamespacedName:default/pod2 PodName: Address:1.2.3.4:5679")
 	assert.Contains(t, logOutput, "\"Stale metrics\": \"[]\"")
+}
+
+func TestCalculateTotals(t *testing.T) {
+	tests := []struct {
+		name      string
+		endpoints []fwkdl.Endpoint
+		want      totals
+	}{
+		{
+			name:      "empty list",
+			endpoints: []fwkdl.Endpoint{},
+			want:      totals{},
+		},
+		{
+			name: "single endpoint",
+			endpoints: []fwkdl.Endpoint{
+				fwkdl.NewEndpoint(pod1, &fwkdl.Metrics{
+					KVCacheUsagePercent: 50.0,
+					WaitingQueueSize:    3,
+					RunningRequestsSize: 5,
+					UpdateTime:          time.Now(),
+				}),
+			},
+			want: totals{kvCache: 50.0, queueSize: 3, runningRequests: 5},
+		},
+		{
+			name: "multiple endpoints aggregated",
+			endpoints: []fwkdl.Endpoint{
+				fwkdl.NewEndpoint(pod1, &fwkdl.Metrics{
+					KVCacheUsagePercent: 30.0,
+					WaitingQueueSize:    2,
+					RunningRequestsSize: 1,
+					UpdateTime:          time.Now(),
+				}),
+				fwkdl.NewEndpoint(pod2, &fwkdl.Metrics{
+					KVCacheUsagePercent: 70.0,
+					WaitingQueueSize:    5,
+					RunningRequestsSize: 3,
+					UpdateTime:          time.Now(),
+				}),
+			},
+			want: totals{kvCache: 100.0, queueSize: 7, runningRequests: 4},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateTotals(tt.endpoints)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestRefreshPrometheusMetricsAvgValues(t *testing.T) {
+	metrics.Register()
+	metrics.Reset()
+
+	logger := logr.Discard()
+
+	// Use a datastore where pods have odd-sum metrics so that
+	// integer division would truncate incorrectly.
+	// Pod1: RunningRequests=0, Queue=1
+	// Pod2: RunningRequests=1, Queue=2
+	// Correct avg: RunningRequests=0.5, Queue=1.5
+	// Integer truncation would give: RunningRequests=0, Queue=1
+	ds := &FakeOddMetricsDataStore{}
+
+	refreshPrometheusMetrics(logger, ds, 100*time.Millisecond)
+
+	families, err := ctrlmetrics.Registry.Gather()
+	assert.NoError(t, err)
+
+	findGauge := func(name string) float64 {
+		for _, f := range families {
+			if f.GetName() == name {
+				for _, m := range f.GetMetric() {
+					return m.GetGauge().GetValue()
+				}
+			}
+		}
+		t.Fatalf("metric %s not found", name)
+		return 0
+	}
+
+	avgRunning := findGauge("inference_pool_average_running_requests")
+	avgQueue := findGauge("inference_pool_average_queue_size")
+
+	assert.InDelta(t, 0.5, avgRunning, 0.001, "average running requests should be 0.5, not truncated to 0")
+	assert.InDelta(t, 1.5, avgQueue, 0.001, "average queue size should be 1.5, not truncated to 1")
+}
+
+type FakeOddMetricsDataStore struct{}
+
+func (f *FakeOddMetricsDataStore) PoolGet() (*datalayer.EndpointPool, error) {
+	pool := &v1.InferencePool{Spec: v1.InferencePoolSpec{TargetPorts: []v1.Port{{Number: 8000}}}}
+	return poolutil.InferencePoolToEndpointPool(pool), nil
+}
+
+func (f *FakeOddMetricsDataStore) PodList(predicate func(fwkdl.Endpoint) bool) []fwkdl.Endpoint {
+	m1 := &fwkdl.Metrics{
+		RunningRequestsSize: 0,
+		WaitingQueueSize:    1,
+		KVCacheUsagePercent: 10.0,
+		UpdateTime:          time.Now(),
+	}
+	m2 := &fwkdl.Metrics{
+		RunningRequestsSize: 1,
+		WaitingQueueSize:    2,
+		KVCacheUsagePercent: 20.0,
+		UpdateTime:          time.Now(),
+	}
+	ep1 := fwkdl.NewEndpoint(pod1, m1)
+	ep2 := fwkdl.NewEndpoint(pod2, m2)
+	pods := []fwkdl.Endpoint{ep1, ep2}
+	res := []fwkdl.Endpoint{}
+	for _, pod := range pods {
+		if predicate(pod) {
+			res = append(res, pod)
+		}
+	}
+	return res
 }
 
 var pod1 = &fwkdl.EndpointMetadata{

@@ -33,9 +33,8 @@ import (
 
 const (
 	BaseModelToHeaderPluginType = "base-model-to-header"
-	// These constants must match the header names defined in pkg/bbr/handlers/server.go
-	baseModelHeader = "X-Gateway-Base-Model-Name"
-	modelField      = "model"
+	BaseModelHeader             = "X-Gateway-Base-Model-Name"
+	modelField                  = "model"
 )
 
 // compile-time type validation
@@ -43,7 +42,7 @@ var _ framework.RequestProcessor = &BaseModelToHeaderPlugin{}
 
 type BaseModelToHeaderPlugin struct {
 	typedName     plugin.TypedName
-	adaptersStore adaptersStore
+	AdaptersStore AdaptersStore
 }
 
 // BaseModelToHeaderPluginFactory defines the factory function for BaseModelToHeaderPlugin
@@ -56,22 +55,21 @@ func BaseModelToHeaderPluginFactory(name string, _ json.RawMessage, handle frame
 	return plugin.WithName(name), nil
 }
 
-// NewBaseModelToHeaderPlugin returns a concrete *BaseModelToHeaderPlugin with an initialized adaptersStore.
+// NewBaseModelToHeaderPlugin returns a *BaseModelToHeaderPlugin with an initialized AdaptersStore.
 func NewBaseModelToHeaderPlugin(reconcilerBuilder func() *builder.Builder, clientReader client.Reader) (*BaseModelToHeaderPlugin, error) {
-	reconcilerBuidler := reconcilerBuilder()
-	adaptersStore := newAdaptersStore()
-	configMapReconciler := &configMapReconciler{
+	adaptersStore := NewAdaptersStore()
+	configMapReconciler := &ConfigMapReconciler{
 		Reader:        clientReader,
-		adaptersStore: adaptersStore,
+		AdaptersStore: adaptersStore,
 	}
 
-	if err := reconcilerBuidler.For(&corev1.ConfigMap{}).Complete(configMapReconciler); err != nil {
+	if err := reconcilerBuilder().For(&corev1.ConfigMap{}).WithEventFilter(bbrManagedPredicate()).Complete(configMapReconciler); err != nil {
 		return nil, fmt.Errorf("failed to register configmap reconciler for plugin '%s' - %w", BaseModelToHeaderPluginType, err)
 	}
 
 	return &BaseModelToHeaderPlugin{
 		typedName:     plugin.TypedName{Type: BaseModelToHeaderPluginType, Name: BaseModelToHeaderPluginType},
-		adaptersStore: adaptersStore,
+		AdaptersStore: adaptersStore,
 	}, nil
 }
 
@@ -88,34 +86,22 @@ func (p *BaseModelToHeaderPlugin) WithName(name string) *BaseModelToHeaderPlugin
 
 // ProcessRequest sets base model name on the header
 func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
-	if request == nil || request.Headers == nil || request.Body == nil {
-		return nil // this shouldn't happen
-	}
-
 	// extract raw field value from body
 	rawFieldValue, exists := request.Body[modelField]
 	if !exists {
-		// If model field is not present, set empty base model header
-		request.SetHeader(baseModelHeader, "")
-		log.FromContext(ctx).V(logutil.VERBOSE).Info("model field not found, setting empty base model header")
+		// If model field is not present, skip base model header
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("model field not found, skipping")
 		return nil
 	}
 
 	targetModel := fmt.Sprintf("%v", rawFieldValue) // convert any type to string
 
-	// Look up base model using configured adaptersStore
+	// Look up base model using configured AdaptersStore
 	// If baseModel is empty, it means the model is neither a LoRA adapter nor a registered base model
-	baseModel := p.adaptersStore.getBaseModel(targetModel)
+	baseModel := p.AdaptersStore.getBaseModel(targetModel)
 
 	// Set model headers for routing (empty string is valid)
-	request.SetHeader(baseModelHeader, baseModel)
+	request.SetHeader(BaseModelHeader, baseModel)
 	log.FromContext(ctx).V(logutil.VERBOSE).Info("updated base model header based on the request target model", "targetModel", targetModel, "baseModel", baseModel)
 	return nil
-}
-
-// GetReconciler returns a configMapReconciler that can be registered with a controller manager.
-func (p *BaseModelToHeaderPlugin) GetReconciler() *configMapReconciler {
-	return &configMapReconciler{
-		adaptersStore: p.adaptersStore,
-	}
 }

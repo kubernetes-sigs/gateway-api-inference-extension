@@ -51,13 +51,11 @@ func TestStringers(t *testing.T) {
 			want: "{PluginRef: test-ref, Weight: 2.50}",
 		},
 		{
-			name: "SaturationDetector",
-			obj: &SaturationDetector{
-				QueueDepthThreshold:       10,
-				KVCacheUtilThreshold:      0.8,
-				MetricsStalenessThreshold: metav1.Duration{Duration: 100 * time.Millisecond},
+			name: "SaturationDetectorConfig",
+			obj: &SaturationDetectorConfig{
+				PluginRef: "test-plugin",
 			},
-			want: "{QueueDepthThreshold: 10, KVCacheUtilThreshold: 0.80, MetricsStalenessThreshold: 100ms}",
+			want: "{PluginRef: test-plugin}",
 		},
 		{
 			name: "FlowControlConfig",
@@ -68,7 +66,7 @@ func TestStringers(t *testing.T) {
 					{Priority: 10, MaxBytes: resource.NewQuantity(512, resource.DecimalSI)},
 				},
 			},
-			want: "{MaxBytes: 1024, DefaultRequestTTL: 30s, PriorityBands: [{Priority: 10, MaxBytes: 512}]}",
+			want: "{MaxBytes: 1024, MaxRequests: unlimited, DefaultRequestTTL: 30s, PriorityBands: [{Priority: 10, MaxBytes: 512}]}",
 		},
 		{
 			name: "ParserConfig",

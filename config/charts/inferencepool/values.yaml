@@ -1,8 +1,8 @@
 inferenceExtension:
   replicas: 1
   image:
-    name: epp
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    registry: us-central1-docker.pkg.dev/k8s-staging-images
+    repository: gateway-api-inference-extension/epp
     tag: main
     pullPolicy: Always
   extProcPort: 9002
@@ -107,17 +107,13 @@ inferenceExtension:
 inferencePool:
   targetPorts:
     - number: 8000
-  modelServerType: vllm # vllm, triton-tensorrt-llm
+  modelServerType: vllm # vllm, sglang, triton-tensorrt-llm, trtllm-serve
+  modelServerProtocol: http # http, grpc
+  parser: "" # openai-parser, vllmgrpc-parser, passthrough-parser, or empty for auto-selection
   apiVersion: inference.networking.k8s.io/v1
   # modelServers: # REQUIRED
   #   matchLabels:
   #     app: vllm-qwen3-32b
-
-  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
-  # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
-  targetPortNumber: 8000
-
-
 
 # Options: ["gke", "istio", "none"]
 provider:
@@ -146,6 +142,8 @@ provider:
 experimentalHttpRoute:
   enabled: false # a flag to indicate whether to create the httproute as part of the chart or not.
   inferenceGatewayName: inference-gateway
+  # HTTPRoute request timeout. Defaults to "300s". Unused when provider.name is gke.
+  requestTimeout: "300s"
 
 
 # Optional: Define InferenceObjective(s) for this InferencePool.

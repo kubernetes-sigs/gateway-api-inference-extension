@@ -90,14 +90,10 @@ for i in {1..7}; do
     ID=$(gen_id)
 
     ret=0
-    output=$(kubectl run --rm -i curl-"$ID" \
-            --namespace "$NAMESPACE" \
-            --image=curlimages/curl --restart=Never \
-            --env "PAYLOAD=$chat_payload" -- \
-            sh -c 'sleep 1; curl -sS -X POST "http://'${SVC_HOST}'/v1/chat/completions" \
-                -H "accept: application/json" \
-                -H "Content-Type: application/json" \
-                -d "$PAYLOAD"') || ret=$?
+    output=$(curl -sS -X POST "http://$SVC_HOST/v1/chat/completions" \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d "$chat_payload")
     echo "$output"
     [[ $ret -ne 0 || "$output" != *'{'* ]] && {
       echo "Error: POST /v1/chat/completions failed (exit $ret or no JSON)" >&2; failed=true; }
@@ -110,14 +106,10 @@ for i in {1..7}; do
   ID=$(gen_id)
 
   ret=0
-  output=$(kubectl run --rm -i curl-"$ID" \
-          --namespace "$NAMESPACE" \
-          --image=curlimages/curl --restart=Never \
-          --env "PAYLOAD=$payload" -- \
-          sh -c 'sleep 1; curl -sS -X POST "http://'${SVC_HOST}'/v1/completions" \
-               -H "accept: application/json" \
-               -H "Content-Type: application/json" \
-               -d "$PAYLOAD"') || ret=$?
+output=$(curl -sS -X POST "http://$SVC_HOST/v1/completions" \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d "$payload")
   echo "$output"
   [[ $ret -ne 0 || "$output" != *'{'* ]] && {
     echo "Error: POST /v1/completions failed (exit $ret or no JSON)" >&2; failed=true; }

@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -83,6 +84,29 @@ func NewTestConfig(nsName string, k8sContext string) *TestConfig {
 	kubeCli, err := kubernetes.NewForConfig(cfg)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(kubeCli).NotTo(gomega.BeNil())
+
+	ginkgo.By("API server endpoint: " + cfg.Host)
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	if k8sContext != "" {
+		configOverrides.CurrentContext = k8sContext
+	}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	rawConfig, err := kubeConfig.RawConfig()
+	if err == nil {
+		ctxName := rawConfig.CurrentContext
+		if k8sContext != "" {
+			ctxName = k8sContext
+		}
+		ginkgo.By("Kubeconfig context: " + ctxName)
+		if ctx, ok := rawConfig.Contexts[ctxName]; ok {
+			ginkgo.By(fmt.Sprintf("Cluster: %s, AuthInfo: %s", ctx.Cluster, ctx.AuthInfo))
+		}
+	}
+	serverVersion, err := kubeCli.Discovery().ServerVersion()
+	if err == nil {
+		ginkgo.By("Kubernetes server version: " + serverVersion.GitVersion)
+	}
 
 	return &TestConfig{
 		Context:           context.Background(),
@@ -143,24 +167,7 @@ func DeleteClusterResources(testConfig *TestConfig) error {
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	model := &apiextv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "inferenceobjectives.inference.networking.x-k8s.io",
-		},
-	}
-	err = testConfig.K8sClient.Delete(testConfig.Context, model, client.PropagationPolicy(metav1.DeletePropagationForeground))
-	if err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-	pool := &apiextv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "inferencepools.inference.networking.x-k8s.io",
-		},
-	}
-	err = testConfig.K8sClient.Delete(testConfig.Context, pool, client.PropagationPolicy(metav1.DeletePropagationForeground))
-	if err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
+	ProcessKustomize(testConfig, "../../../config/crd/", DeleteAndVerifyObjs)
 	return nil
 }
 
@@ -387,7 +394,7 @@ func EventuallyExists(testConfig *TestConfig, getResource func() error) {
 	}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.Succeed())
 }
 
-func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
+func CreateAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
 	objNames := make([]string, 0, len(objs))
 	for _, unstrObj := range objs {
 		ginkgo.By(fmt.Sprintf("Processing GVK: %s", unstrObj.GroupVersionKind()))
@@ -398,8 +405,12 @@ func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructur
 		objNames = append(objNames, kind+"/"+name)
 
 		err := testConfig.K8sClient.Create(testConfig.Context, unstrObj, &client.CreateOptions{})
-		gomega.Expect(err).NotTo(gomega.HaveOccurred(),
-			fmt.Sprintf("Failed to create %s %s", kind, name))
+		if apierrors.IsAlreadyExists(err) {
+			ginkgo.By(fmt.Sprintf("%s %s already exists, skipping creation", kind, name))
+		} else {
+			gomega.Expect(err).NotTo(gomega.HaveOccurred(),
+				fmt.Sprintf("Failed to create %s %s", kind, name))
+		}
 
 		clientObj := getClientObject(kind)
 		EventuallyExists(testConfig, func() error {
@@ -419,7 +430,31 @@ func createAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructur
 	return objNames
 }
 
-func CreateCrdsFromKustomize(testConfig *TestConfig, kustomizePath string) []string {
+func DeleteAndVerifyObjs(testConfig *TestConfig, objs []*unstructured.Unstructured) []string {
+	objNames := make([]string, 0, len(objs))
+	for _, unstrObj := range objs {
+		ginkgo.By(fmt.Sprintf("Deleting GVK: %s", unstrObj.GroupVersionKind()))
+		unstrObj.SetNamespace(testConfig.NsName)
+
+		kind := unstrObj.GetKind()
+		name := unstrObj.GetName()
+		objNames = append(objNames, kind+"/"+name)
+		err := testConfig.K8sClient.Delete(testConfig.Context, unstrObj, client.PropagationPolicy(metav1.DeletePropagationForeground))
+		if err != nil && !apierrors.IsNotFound(err) {
+			gomega.Expect(err).NotTo(gomega.HaveOccurred(), fmt.Sprintf("Failed to delete %s %s", kind, name))
+		}
+
+		clientObj := getClientObject(kind)
+		gomega.Eventually(func() bool {
+			err := testConfig.K8sClient.Get(testConfig.Context,
+				types.NamespacedName{Namespace: testConfig.NsName, Name: name}, clientObj)
+			return apierrors.IsNotFound(err)
+		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.BeTrue(), fmt.Sprintf("Timed out waiting for %s %s to be deleted", kind, name))
+	}
+	return objNames
+}
+
+func ProcessKustomize(testConfig *TestConfig, kustomizePath string, action func(*TestConfig, []*unstructured.Unstructured) []string) []string {
 	ginkgo.By("Running Kustomize build on: " + kustomizePath)
 
 	fSys := filesys.MakeFsOnDisk()
@@ -437,7 +472,7 @@ func CreateCrdsFromKustomize(testConfig *TestConfig, kustomizePath string) []str
 		gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to run kustomize get map")
 		objs = append(objs, &unstructured.Unstructured{Object: resMap})
 	}
-	return createAndVerifyObjs(testConfig, objs)
+	return action(testConfig, objs)
 }
 
 // CreateObjsFromYaml creates K8S objects from yaml and waits for them to be instantiated
@@ -467,26 +502,7 @@ func CreateObjsFromYaml(testConfig *TestConfig, docs []string) []string {
 		}
 		objs = append(objs, unstrObj)
 	}
-	return createAndVerifyObjs(testConfig, objs)
-}
-
-// DeleteObjects deletes  set of Kubernetes objects in the form of kind/name
-func DeleteObjects(testConfig *TestConfig, kindAndNames []string) {
-	for _, kindAndName := range kindAndNames {
-		split := strings.Split(kindAndName, "/")
-		clientObj := getClientObject(split[0])
-		err := testConfig.K8sClient.Get(testConfig.Context,
-			types.NamespacedName{Namespace: testConfig.NsName, Name: split[1]}, clientObj)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		err = testConfig.K8sClient.Delete(testConfig.Context, clientObj)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred())
-		gomega.Eventually(func() bool {
-			clientObj := getClientObject(split[0])
-			err := testConfig.K8sClient.Get(testConfig.Context,
-				types.NamespacedName{Namespace: testConfig.NsName, Name: split[1]}, clientObj)
-			return apierrors.IsNotFound(err)
-		}, testConfig.ExistsTimeout, testConfig.Interval).Should(gomega.BeTrue())
-	}
+	return CreateAndVerifyObjs(testConfig, objs)
 }
 
 // ApplyYAMLFile reads a file containing YAML (possibly multiple docs)
@@ -504,6 +520,18 @@ func ReadYaml(filePath string) []string {
 
 	// Split multiple docs, if needed
 	return strings.Split(string(yamlBytes), "\n---")
+}
+
+// ValidateCRDsEstablished verifies that each of the given CRD names is established in the cluster.
+func ValidateCRDsEstablished(testConfig *TestConfig, crdNames []string) {
+	for _, name := range crdNames {
+		crd := &apiextv1.CustomResourceDefinition{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+		}
+		CRDEstablished(testConfig, crd)
+	}
 }
 
 func getClientObject(kind string) client.Object {

@@ -67,6 +67,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
@@ -120,12 +121,13 @@ func (m benchMatrix) name() string {
 
 // testDetector exposes an API to manually release downstream capacity during a test run.
 type testDetector interface {
-	contracts.SaturationDetector
+	flowcontrol.SaturationDetector
 	Release()
 }
 
 // benchDetector models target saturation based strictly on active request counts.
 type benchDetector struct {
+	flowcontrol.SaturationDetector
 	concurrencyLimit atomic.Int64
 	// _ prevents false sharing between atomic counters on multicore CPU cache lines.
 	_        [56]byte
@@ -158,8 +160,9 @@ func (d *benchDetector) Saturation(ctx context.Context, candidates []fwkdl.Endpo
 }
 
 // alwaysSaturatedDetector simulates a permanently saturated downstream pool.
-// It is strictly used to evaluate garbage collection pathways and client abandonment scenarios.
-type alwaysSaturatedDetector struct{}
+type alwaysSaturatedDetector struct {
+	flowcontrol.SaturationDetector
+}
 
 // Release is a no-op for the permanently saturated mock.
 func (d *alwaysSaturatedDetector) Release() {}
@@ -204,7 +207,7 @@ func setupRegistry(
 
 	for i := 0; i < int(p); i++ {
 		band, err := registry.NewPriorityBandConfig(
-			handle, i, fmt.Sprintf("band-%d", i),
+			handle, i,
 			registry.WithBandMaxBytes(10_000_000_000), // Prevent capacity-based rejections.
 		)
 		if err != nil {
@@ -273,7 +276,12 @@ func setupBenchmarkHarness(
 		}
 	}
 
-	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, reg, detector, &mocks.MockPodLocator{})
+	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, controller.Deps{
+		Registry:           reg,
+		SaturationDetector: detector,
+		EndpointCandidates: &mocks.MockEndpointCandidates{},
+		UsageLimitPolicy:   usagelimits.DefaultPolicy()},
+	)
 	if err != nil {
 		b.Fatalf("Failed to init FlowController: %v", err)
 	}

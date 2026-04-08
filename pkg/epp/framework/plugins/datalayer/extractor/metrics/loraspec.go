@@ -37,9 +37,10 @@ func parseStringToLoRASpec(spec string) (*LoRASpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &LoRASpec{
-		Spec: baseSpec,
-	}, nil
+	if baseSpec == nil {
+		return nil, nil // empty string → disabled; preserve nil-means-disabled contract
+	}
+	return &LoRASpec{Spec: baseSpec}, nil
 }
 
 // getLatestMetric retrieves the latest LoRA metric based on Spec.

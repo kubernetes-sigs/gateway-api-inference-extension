@@ -43,33 +43,53 @@ token:
 
 config:
   load:
-    type: constant
-    interval: 15
-    stages:
-    - rate: 200
-      duration: 60
-    - rate: 210
-      duration: 60
-    - rate: 220
-      duration: 60
+    type: poisson
     worker_max_concurrency: 1000
+    stages:
+      # Warmup — seat residents (~1×S)
+      - rate: 15
+        duration: 50            # 15*50  = 750
+
+      # Main ladder
+      - rate: 10
+        duration: 20
+      - rate: 15
+        duration: 20
+      - rate: 20
+        duration: 38
+      - rate: 25
+        duration: 30
+      - rate: 30
+        duration: 25
+      - rate: 35
+        duration: 21
+      - rate: 40
+        duration: 38
+      - rate: 45
+        duration: 36
+      - rate: 50
+        duration: 30
+      - rate: 55
+        duration: 27
+      - rate: 60
+        duration: 25
   api:
     type: completion
     streaming: true
   server:
     type: vllm
-    model_name: meta-llama/Llama-3.1-8B-Instruct
-    base_url: http://0.0.0.0:8000
+    model_name: Qwen/Qwen3-32B
+    base_url: "http://0.0.0.0:8000"
     ignore_eos: true
   tokenizer:
-    pretrained_model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
+    pretrained_model_name_or_path: Qwen/Qwen3-32B
   data:
     type: infinity_instruct
     path: ""
     input_distribution:
       max: 1024
     output_distribution:
-      max: 1024
+      max: 2048
   metrics:
     type: prometheus
     prometheus:

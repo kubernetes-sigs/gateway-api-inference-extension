@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
@@ -61,13 +62,56 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "test prompt",
+					Prompt: scheduling.Prompt{Raw: "test prompt"},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model":  "test",
 					"prompt": "test prompt",
 				},
 			},
+		},
+		{
+			name:    "completions request with array of strings prompt",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": []any{"Why is the sky blue?"},
+			},
+			want: &scheduling.LLMRequestBody{
+				Completions: &scheduling.CompletionsRequest{
+					Prompt: scheduling.Prompt{Strings: []string{"Why is the sky blue?"}},
+				},
+				Payload: scheduling.PayloadMap{
+					"model":  "test",
+					"prompt": []any{"Why is the sky blue?"},
+				},
+			},
+		},
+		{
+			name:    "completions request with multiple strings in prompt array",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": []any{"prompt1", "prompt2"},
+			},
+			want: &scheduling.LLMRequestBody{
+				Completions: &scheduling.CompletionsRequest{
+					Prompt: scheduling.Prompt{Strings: []string{"prompt1", "prompt2"}},
+				},
+				Payload: scheduling.PayloadMap{
+					"model":  "test",
+					"prompt": []any{"prompt1", "prompt2"},
+				},
+			},
+		},
+		{
+			name:    "completions request with empty string array prompt rejected",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": []any{},
+			},
+			wantErr: true,
 		},
 		{
 			name:    "chat completions request body",
@@ -90,7 +134,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 						{Role: "user", Content: scheduling.Content{Raw: "hello"}},
 					},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model": "test",
 					"messages": []any{
 						map[string]any{
@@ -152,7 +196,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 						}},
 					},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model": "test",
 					"messages": []any{
 						map[string]any{
@@ -221,7 +265,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 						}},
 					},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model": "test",
 					"messages": []any{
 						map[string]any{
@@ -273,7 +317,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					AddGenerationPrompt:       true,
 					ChatTemplateKWArgs:        map[string]any{"key": "value"},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model": "test",
 					"messages": []any{
 						map[string]any{"role": "user", "content": "hello"},
@@ -445,10 +489,10 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt:    "test prompt",
+					Prompt:    scheduling.Prompt{Raw: "test prompt"},
 					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model":      "test",
 					"prompt":     "test prompt",
 					"cache_salt": "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
@@ -478,7 +522,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					},
 					CacheSalt: "Z3V2bmV3aGxza3ZubGFoZ3Zud3V3ZWZ2bmd0b3V2bnZmc2xpZ3RoZ2x2aQ==",
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model": "test",
 					"messages": []any{
 						map[string]any{
@@ -505,7 +549,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					Input:        "How do I check if a Python object is an instance of a class?",
 					Instructions: "You are a coding assistant that talks like a pirate.",
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model":        "gpt-4o",
 					"input":        "How do I check if a Python object is an instance of a class?",
 					"instructions": "You are a coding assistant that talks like a pirate.",
@@ -525,7 +569,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 					Input:     "test input",
 					CacheSalt: "abc123",
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model":      "gpt-4o",
 					"input":      "test input",
 					"cache_salt": "abc123",
@@ -547,7 +591,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			headers: map[string]string{":path": "/v1/conversations"},
 			body: map[string]any{
 				"model": "gpt-4o",
-				"items": []map[string]interface{}{
+				"items": []map[string]any{
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
@@ -557,7 +601,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 						{Type: "message", Role: "user", Content: "Hello"},
 					},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model": "gpt-4o",
 					"items": []any{map[string]any{"type": "message", "role": "user", "content": "Hello"}},
 				},
@@ -568,7 +612,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			headers: map[string]string{"x-original-path": "/v1/conversations"},
 			body: map[string]any{
 				"model": "gpt-4o",
-				"items": []map[string]interface{}{
+				"items": []map[string]any{
 					{"type": "message", "role": "user", "content": "Hello"},
 				},
 			},
@@ -578,7 +622,7 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 						{Type: "message", Role: "user", Content: "Hello"},
 					},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model": "gpt-4o",
 					"items": []any{
 						map[string]any{"type": "message", "role": "user", "content": "Hello"},
@@ -595,13 +639,126 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			},
 			want: &scheduling.LLMRequestBody{
 				Completions: &scheduling.CompletionsRequest{
-					Prompt: "test prompt",
+					Prompt: scheduling.Prompt{Raw: "test prompt"},
 				},
-				ParsedBody: map[string]any{
+				Payload: scheduling.PayloadMap{
 					"model":  "gpt-4o",
 					"prompt": "test prompt",
 				},
 			},
+		},
+		{
+			name:    "chat completions request body with stream",
+			headers: map[string]string{":path": "/v1/chat/completions"},
+			body: map[string]any{
+				"model": "test",
+				"messages": []any{
+					map[string]any{"role": "user", "content": "hello"},
+				},
+				"stream": true,
+			},
+			want: &scheduling.LLMRequestBody{
+				ChatCompletions: &scheduling.ChatCompletionsRequest{
+					Messages: []scheduling.Message{{Role: "user", Content: scheduling.Content{Raw: "hello"}}},
+				},
+				Payload: scheduling.PayloadMap{
+					"model": "test",
+					"messages": []any{
+						map[string]any{"role": "user", "content": "hello"},
+					},
+					"stream": true,
+				},
+				Stream: true,
+			},
+		},
+		// Embeddings API tests
+		{
+			name:    "embeddings request body with string input",
+			headers: map[string]string{":path": "/v1/embeddings"},
+			body: map[string]any{
+				"model": "text-embedding-3-small",
+				"input": "The food was delicious and the waiter...",
+			},
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
+					Input: "The food was delicious and the waiter...",
+				},
+				Payload: scheduling.PayloadMap{
+					"model": "text-embedding-3-small",
+					"input": "The food was delicious and the waiter...",
+				},
+			},
+		},
+		{
+			name:    "embeddings request body with array input",
+			headers: map[string]string{":path": "/v1/embeddings"},
+			body: map[string]any{
+				"model": "text-embedding-3-small",
+				"input": []any{"First document", "Second document"},
+			},
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
+					Input: []any{"First document", "Second document"},
+				},
+				Payload: scheduling.PayloadMap{
+					"model": "text-embedding-3-small",
+					"input": []any{"First document", "Second document"},
+				},
+			},
+		},
+		{
+			name:    "embeddings request with cache_salt",
+			headers: map[string]string{":path": "/v1/embeddings"},
+			body: map[string]any{
+				"model":      "text-embedding-3-small",
+				"input":      "embed this text",
+				"cache_salt": "embeddings-salt-123",
+			},
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
+					Input:     "embed this text",
+					CacheSalt: "embeddings-salt-123",
+				},
+				Payload: scheduling.PayloadMap{
+					"model":      "text-embedding-3-small",
+					"input":      "embed this text",
+					"cache_salt": "embeddings-salt-123",
+				},
+			},
+		},
+		{
+			name:    "embeddings API via x-original-path header",
+			headers: map[string]string{"x-original-path": "/v1/embeddings"},
+			body: map[string]any{
+				"model": "text-embedding-3-small",
+				"input": "text to embed",
+			},
+			want: &scheduling.LLMRequestBody{
+				Embeddings: &scheduling.EmbeddingsRequest{
+					Input: "text to embed",
+				},
+				Payload: scheduling.PayloadMap{
+					"model": "text-embedding-3-small",
+					"input": "text to embed",
+				},
+			},
+		},
+		{
+			name:    "embeddings request missing input",
+			headers: map[string]string{":path": "/v1/embeddings"},
+			body: map[string]any{
+				"model": "text-embedding-3-small",
+			},
+			wantErr: true,
+		},
+		{
+			name:    "embeddings request with null input",
+			headers: map[string]string{":path": "/v1/embeddings"},
+			body: map[string]any{
+				"model": "text-embedding-3-small",
+				"input": nil,
+			},
+			wantErr: true,
 		},
 	}
 
@@ -837,6 +994,16 @@ func TestOpenAIParser_ParseResponse_Streaming(t *testing.T) {
 	}
 }
 
+func TestOpenAIParser_SupportedAppProtocols(t *testing.T) {
+	parser := NewOpenAIParser()
+	supported := parser.SupportedAppProtocols()
+	want := []v1.AppProtocol{v1.AppProtocolH2C, v1.AppProtocolHTTP}
+
+	if diff := cmp.Diff(want, supported); diff != "" {
+		t.Errorf("SupportedAppProtocols() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 // Benchmark tests for performance comparison
 func BenchmarkExtractRequestData_Completions(b *testing.B) {
 	body := map[string]any{
@@ -936,7 +1103,7 @@ func BenchmarkExtractRequestData_Responses(b *testing.B) {
 func BenchmarkExtractRequestData_Conversations(b *testing.B) {
 	body := map[string]any{
 		"model": "gpt-4o",
-		"items": []map[string]interface{}{
+		"items": []map[string]any{
 			{"type": "message", "role": "user", "content": "Hello"},
 		},
 	}
@@ -949,6 +1116,27 @@ func BenchmarkExtractRequestData_Conversations(b *testing.B) {
 		if err != nil {
 			b.Errorf("body cannot be marshalled to JSON bytes")
 		}
+		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkExtractRequestData_Embeddings(b *testing.B) {
+	body := map[string]any{
+		"model": "text-embedding-3-small",
+		"input": "The food was delicious and the waiter...",
+	}
+	headers := map[string]string{":path": "/v1/embeddings"}
+	jsonBytes, err := json.Marshal(body)
+	if err != nil {
+		b.Fatal(err)
+	}
+	parser := NewOpenAIParser()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
 		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
 		if err != nil {
 			b.Fatal(err)

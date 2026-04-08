@@ -1,4 +1,4 @@
-# HELP inference_extension_flow_control_dispatch_cycle_duration_seconds [ALPHA] Distribution of the time taken for each dispatch cycle in the EPP flow control layer.
+# HELP inference_extension_flow_control_dispatch_cycle_duration_seconds [ALPHA] Distribution of time taken for each internal dispatch cycle in the Flow Control layer.
 # TYPE inference_extension_flow_control_dispatch_cycle_duration_seconds histogram
 inference_extension_flow_control_dispatch_cycle_duration_seconds_bucket{le="0.0001"} 1
 inference_extension_flow_control_dispatch_cycle_duration_seconds_bucket{le="0.0002"} 2

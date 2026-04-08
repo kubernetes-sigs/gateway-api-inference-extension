@@ -15,33 +15,33 @@ This capability is essential for managing model/adapter lifecycles without disru
 
 Follow [getting-started](https://gateway-api-inference-extension.sigs.k8s.io/guides/getting-started-latest/#getting-started-with-an-inference-gateway) to set up the IGW stack.
 
-In this guide, we modify the LoRA adapters ConfigMap to have two small-segment-lora models to better illustrate the gradual rollout scenario.
+In this guide, we use vLLM's native `lora_filesystem_resolver` to load adapters dynamically from a local directory. To enable this, configure your vLLM deployment with the following environment variables and ensure your adapters are accessible in the cache directory (e.g., mounted via a PVC or synchronized by an initContainer).
 
-The ConfigMap used in this guide is as follows:
+### vLLM Configuration
+
+Add the following environment variables to your vLLM container:
 
 ```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vllm-qwen3-32b-adapters
-data:
-  configmap.yaml: |
-    vLLMLoRAConfig:
-      name: vllm-qwen3-32b-adapters
-      port: 8000
-      defaultBaseModel: Qwen/Qwen3-32B
-      ensureExist:
-        models:
-        - id: small-segment-lora-v1
-          source: ttt421/nec119-small-segment-lora
-        - id: small-segment-lora-v2
-          source: ttt421/nec119-small-segment-lora
+env:
+- name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+  value: "True"
+- name: VLLM_PLUGINS
+  value: "lora_filesystem_resolver"
+- name: VLLM_LORA_RESOLVER_CACHE_DIR
+  value: "/adapters"
 ```
+
+Ensure your adapters are organized in subdirectories under the cache directory:
+- `/adapters/small-segment-lora-v1/`
+- `/adapters/small-segment-lora-v2/`
+
+For more details on the expected directory structure and plugins, see the [vLLM documentation](https://docs.vllm.ai/en/stable/design/lora_resolver_plugins/).
+
 
 **Verify Available Models**: You can query the `/v1/models` endpoint to confirm the adapters are loaded:
 
 ```bash
-curl http://${IP}/v1/models | jq . 
+curl http://${IP}/v1/models | jq .
 ```
 
 ## Step 1: Establishing A Baseline (Alias v1)
@@ -77,8 +77,8 @@ When a client requests `"model": "small-segment-lora"`, the system serves the re
 ```bash
 curl http://${IP}/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d 
-'{ 
+  -d
+'{
 "model": "small-segment-lora",
 "messages": [
   {
@@ -87,7 +87,7 @@ curl http://${IP}/v1/chat/completions \
   }
 ],
 "max_completion_tokens": 10
-}' | jq . 
+}' | jq .
 ```
 
 Response:
@@ -203,32 +203,17 @@ small-segment-lora-v1: 0 requests
 small-segment-lora-v2: 20 requests
 ```
 
-## Step 3: Cleanup
+Now that 100% of traffic is routed to `small-segment-lora-v2`, you can safely unload the older version.
 
-Now that 100% of traffic is routed to `small-segment-lora-v2`, you can safely unload the older version from the servers.
+With the file-based resolver, you can simply remove the `small-segment-lora-v1` directory from the cache path to ensure it is no longer loaded or cached by vLLM.
 
-Update the LoRA syncer ConfigMap to list the older version under the `ensureNotExist` list:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vllm-qwen3-32b-adapters
-data:
-  configmap.yaml: |
-    vLLMLoRAConfig:
-      name: vllm-qwen3-32b-adapters
-      port: 8000
-      defaultBaseModel: Qwen/Qwen3-32B
-      ensureExist:
-        models:
-        - id: small-segment-lora-v2
-          source: ttt421/nec119-small-segment-lora
-      ensureNotExist:
-        models:
-        - id: small-segment-lora-v1
-          source: ttt421/nec119-small-segment-lora
+```bash
+rm -rf /adapters/small-segment-lora-v1
 ```
+
+> [!IMPORTANT]
+> While deleting the folder stops vLLM from *newly* loading the adapter, it might still remain in vLLM's internal VRAM cache until evicted. To deterministically free up VRAM immediately, use vLLM's `/v1/unload_lora_adapter` HTTP endpoint.
+
 
 With this, the old adapter is removed, and the rollout is complete.
 
@@ -257,8 +242,8 @@ for ((i=1; i<=total_requests; i++)); do
   # jq -r '.model': Extracts the raw string of the model name
   model_name=$(curl -s "http://${target_ip}/v1/chat/completions" \
     -H "Content-Type: application/json" \
-    -d 
-'{ 
+    -d
+'{
       "model": "small-segment-lora",
       "messages": [{"role": "user", "content": "test"}],
       "max_completion_tokens": 1

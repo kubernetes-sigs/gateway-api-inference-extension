@@ -114,7 +114,7 @@ func (s *PredictedLatency) selectFromNegativeHeadroomEndpointsInternal(ctx conte
 	case headroomStrategyCompositeMost:
 		return s.selectFromCompositeScores(ctx, candidates, r, headroomStrategyCompositeMost)
 	case headroomStrategyCompositeLeast:
-		return s.selectFromCompositeScores(ctx, candidates, r, headroomStrategyCompositeMost)
+		return s.selectFromCompositeScores(ctx, candidates, r, headroomStrategyCompositeLeast)
 	}
 
 	// Build weighted choices for selection

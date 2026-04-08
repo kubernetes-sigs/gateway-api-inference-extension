@@ -17,8 +17,10 @@ limitations under the License.
 package loader
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,18 +33,21 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkflowcontrol "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	reqdataprodprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/dataproducer/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/saturationdetector/framework/plugins/utilizationdetector"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/scheduling"
 )
 
 var (
-	scheme                 = runtime.NewScheme()
-	registeredFeatureGates = sets.New[string]()
+	scheme                   = runtime.NewScheme()
+	registeredFeatureGatesMu sync.RWMutex
+	registeredFeatureGates   = sets.New[string]()
 )
 
 func init() {
@@ -51,6 +56,8 @@ func init() {
 
 // RegisterFeatureGate registers a feature gate name for validation purposes.
 func RegisterFeatureGate(gate string) {
+	registeredFeatureGatesMu.Lock()
+	defer registeredFeatureGatesMu.Unlock()
 	registeredFeatureGates.Insert(gate)
 }
 
@@ -109,9 +116,16 @@ func InstantiateAndConfigure(
 	}
 
 	featureGates := loadFeatureConfig(rawConfig.FeatureGates)
-	dataConfig, err := buildDataLayerConfig(rawConfig.Data, featureGates[datalayer.ExperimentalDatalayerFeatureGate], handle)
-	if err != nil {
-		return nil, fmt.Errorf("data layer config build failed: %w", err)
+	var dataConfig *datalayer.Config
+	if !featureGates[datalayer.EnableLegacyMetricsFeatureGate] {
+		var err error
+		dataConfig, err = buildDataLayerConfig(rawConfig.DataLayer, handle)
+		if err != nil {
+			return nil, fmt.Errorf("data layer config build failed: %w", err)
+		}
+		if len(dataConfig.Sources) == 0 {
+			logger.Info("No data sources configured; metrics collection is disabled")
+		}
 	}
 
 	var flowControlConfig *flowcontrol.Config
@@ -128,12 +142,21 @@ func InstantiateAndConfigure(
 		return nil, fmt.Errorf("parse config build failed: %w", err)
 	}
 
+	plugin, ok := handle.GetAllPluginsWithNames()[rawConfig.SaturationDetector.PluginRef]
+	if !ok {
+		return nil, fmt.Errorf("saturation detector plugin '%s' not found", rawConfig.SaturationDetector.PluginRef)
+	}
+	saturationDetector, ok := plugin.(fwkflowcontrol.SaturationDetector)
+	if !ok {
+		return nil, fmt.Errorf("plugin '%s' is not a fwkflowcontrol.SaturationDetector", rawConfig.SaturationDetector.PluginRef)
+	}
+
 	return &config.Config{
-		SchedulerConfig:          schedulerConfig,
-		SaturationDetectorConfig: buildSaturationConfig(rawConfig.SaturationDetector),
-		DataConfig:               dataConfig,
-		FlowControlConfig:        flowControlConfig,
-		ParserConfig:             parserConfig,
+		SchedulerConfig:    schedulerConfig,
+		SaturationDetector: saturationDetector,
+		DataConfig:         dataConfig,
+		FlowControlConfig:  flowControlConfig,
+		ParserConfig:       parserConfig,
 	}, nil
 }
 
@@ -148,6 +171,8 @@ func decodeRawConfig(configBytes []byte) (*configapi.EndpointPickerConfig, error
 
 func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplugin.Handle) error {
 	pluginNames := sets.New[string]()
+	var approxPrefixCacheParams json.RawMessage
+	foundPrefixCacheScorer := false
 	for _, spec := range configuredPlugins {
 		if spec.Type == "" {
 			return fmt.Errorf("plugin '%s' is missing a type", spec.Name)
@@ -161,15 +186,38 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplug
 		if !ok {
 			return fmt.Errorf("plugin type '%s' is not registered", spec.Type)
 		}
-
 		plugin, err := factory(spec.Name, spec.Parameters, handle)
 		if err != nil {
 			return fmt.Errorf("failed to create plugin '%s' (type: %s): %w", spec.Name, spec.Type, err)
 		}
 
 		handle.AddPlugin(spec.Name, plugin)
+		// If the prefix cache scorer plugin is configured, create the corresponding dataproducer plugin.
+		// This is necessary because the prefix cache scorer plugin relies on the dataproducer plugin to populate its state.
+		// This is due to historical reasons where the scorer plugin was developed before the dataproducer plugins were introduced.
+		if spec.Type == prefix.PrefixCacheScorerPluginType {
+			foundPrefixCacheScorer = true
+			approxPrefixCacheParams = spec.Parameters
+		}
 	}
+	if foundPrefixCacheScorer && !existsByType(handle, reqdataprodprefix.ApproxPrefixCachePluginType) {
+		plugin, err := reqdataprodprefix.ApproxPrefixCacheFactory(reqdataprodprefix.ApproxPrefixCachePluginType, approxPrefixCacheParams, handle)
+		if err != nil {
+			return fmt.Errorf("failed to create ApproxPrefixCache plugin for prefix cache plugin: %w, params: %s", err, string(approxPrefixCacheParams))
+		}
+		handle.AddPlugin(reqdataprodprefix.ApproxPrefixCachePluginType, plugin)
+	}
+
 	return nil
+}
+
+func existsByType(handle fwkplugin.Handle, pluginType string) bool {
+	for _, p := range handle.GetAllPlugins() {
+		if p.TypedName().Type == pluginType {
+			return true
+		}
+	}
+	return false
 }
 
 func buildSchedulerConfig(
@@ -229,6 +277,8 @@ func buildSchedulerConfig(
 }
 
 func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
+	registeredFeatureGatesMu.RLock()
+	defer registeredFeatureGatesMu.RUnlock()
 	config := make(map[string]bool, len(registeredFeatureGates))
 	for gate := range registeredFeatureGates {
 		config[gate] = false
@@ -237,28 +287,6 @@ func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
 		config[gate] = true
 	}
 	return config
-}
-
-func buildSaturationConfig(apiConfig *configapi.SaturationDetector) *utilizationdetector.Config {
-	cfg := &utilizationdetector.Config{
-		QueueDepthThreshold:       utilizationdetector.DefaultQueueDepthThreshold,
-		KVCacheUtilThreshold:      utilizationdetector.DefaultKVCacheUtilThreshold,
-		MetricsStalenessThreshold: utilizationdetector.DefaultMetricsStalenessThreshold,
-	}
-
-	if apiConfig != nil {
-		if apiConfig.QueueDepthThreshold > 0 {
-			cfg.QueueDepthThreshold = apiConfig.QueueDepthThreshold
-		}
-		if apiConfig.KVCacheUtilThreshold > 0.0 && apiConfig.KVCacheUtilThreshold < 1.0 {
-			cfg.KVCacheUtilThreshold = apiConfig.KVCacheUtilThreshold
-		}
-		if apiConfig.MetricsStalenessThreshold.Duration > 0 {
-			cfg.MetricsStalenessThreshold = apiConfig.MetricsStalenessThreshold.Duration
-		}
-	}
-
-	return cfg
 }
 
 func buildParserConfig(rawParserConfig *configapi.ParserConfig, handle fwkplugin.Handle) (*handlers.Config, error) {
@@ -278,11 +306,7 @@ func buildParserConfig(rawParserConfig *configapi.ParserConfig, handle fwkplugin
 	}, nil
 }
 
-func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, dataLayerEnabled bool, handle fwkplugin.Handle) (*datalayer.Config, error) {
-	if dataLayerEnabled && (rawDataConfig == nil || rawDataConfig.Sources == nil) { // enabled but no configuration
-		return nil, errors.New("the Datalayer has been enabled. You must specify the Data section in the configuration")
-	}
-
+func buildDataLayerConfig(rawDataConfig *configapi.DataLayerConfig, handle fwkplugin.Handle) (*datalayer.Config, error) {
 	cfg := datalayer.Config{
 		Sources: []datalayer.DataSourceConfig{},
 	}

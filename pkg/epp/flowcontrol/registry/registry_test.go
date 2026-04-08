@@ -74,8 +74,8 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 			newTestPluginsHandle(t),
 			WithInitialShardCount(shardCount),
 			WithFlowGCTimeout(5*time.Minute),
-			WithPriorityBand(&PriorityBandConfig{Priority: highPriority, PriorityName: "High"}),
-			WithPriorityBand(&PriorityBandConfig{Priority: lowPriority, PriorityName: "Low"}),
+			WithPriorityBand(&PriorityBandConfig{Priority: highPriority}),
+			WithPriorityBand(&PriorityBandConfig{Priority: lowPriority}),
 		)
 		require.NoError(t, err, "Test setup: failed to create default config")
 	}
@@ -89,11 +89,9 @@ func newRegistryTestHarness(t *testing.T, opts harnessOptions) *registryTestHarn
 		// Start the GC loop in the background.
 		ctx, cancel := context.WithCancel(context.Background())
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			fr.Run(ctx)
-		}()
+		})
 		t.Cleanup(func() {
 			cancel()
 			wg.Wait()
@@ -177,7 +175,7 @@ func TestFlowRegistry_WithConnection_AndHandle(t *testing.T) {
 
 		handle := newTestPluginsHandle(t)
 		badQueueName := queue.RegisteredQueueName("non-existent-queue")
-		badBand, err := NewPriorityBandConfig(handle, highPriority, "High", WithQueue(badQueueName))
+		badBand, err := NewPriorityBandConfig(handle, highPriority, WithQueue(badQueueName))
 		require.NoError(t, err)
 
 		// Create a Config that uses a mock checker to bypass the strict validation.
@@ -301,11 +299,9 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 		var wg sync.WaitGroup
 		leaseAcquired := make(chan struct{})
 		releaseLease := make(chan struct{})
-		wg.Add(1)
 
-		go func() {
+		wg.Go(func() {
 			// This goroutine holds the lease. It will not exit until the main test goroutine calls `wg.Done()`.
-			defer wg.Done()
 			err := h.fr.WithConnection(key, func(contracts.ActiveFlowConnection) error {
 				close(leaseAcquired) // Signal to the main test that the lease is now active.
 				<-releaseLease       // Block here, holding the lease, until signaled.
@@ -313,7 +309,7 @@ func TestFlowRegistry_GarbageCollection(t *testing.T) {
 				return nil
 			})
 			require.NoError(t, err, "WithConnection in the background goroutine should not fail")
-		}()
+		})
 		t.Cleanup(func() {
 			close(releaseLease) // Unblock the goroutine.
 			wg.Wait()           // Wait for the goroutine to fully exit.
@@ -465,7 +461,7 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 			t.Parallel()
 
 			handle := newTestPluginsHandle(t)
-			band, err := NewPriorityBandConfig(handle, highPriority, "A", WithBandMaxBytes(bandCapacity))
+			band, err := NewPriorityBandConfig(handle, highPriority, WithBandMaxBytes(bandCapacity))
 			require.NoError(t, err)
 
 			config, err := NewConfig(
@@ -647,9 +643,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 		stopCh := make(chan struct{})
 
 		// Routine 1: The "User" - Constantly tries to connect.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stopCh:
@@ -664,12 +658,10 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 					}
 				}
 			}
-		}()
+		})
 
 		// Routine 2: The "GC" - Constantly deletes the flow.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stopCh:
@@ -680,7 +672,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 					time.Sleep(100 * time.Microsecond) // Yield briefly to let Routine 1 make progress
 				}
 			}
-		}()
+		})
 
 		// Let the chaos run for a bit.
 		time.Sleep(100 * time.Millisecond)
@@ -711,13 +703,11 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 		// Launch a background routine to simulate the GC completing the deletion.
 		// Without this, the main thread would spin forever in pinActiveFlow reloading the same doomed object.
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Yield to allow the main thread to enter the retry loop and hit the "poisoned" check at least once.
 			time.Sleep(10 * time.Millisecond)
 			h.fr.flowStates.Delete(key)
-		}()
+		})
 
 		// Attempt to connect.
 		// It should spin briefly, detect the deletion, create a new flow, and succeed.
@@ -831,7 +821,7 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 		// GC Worker: Constantly running GC cycles
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
 				h.fr.executeGCCycle()
 				time.Sleep(5 * time.Millisecond)
@@ -1397,7 +1387,7 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 
 	// We create a custom band config that uses this failing queue.
 	// We set it as the default band so that dynamic provisioning is used.
-	failingBand, err := NewPriorityBandConfig(handle, 0, "FailingBand", WithQueue(failQueueName))
+	failingBand, err := NewPriorityBandConfig(handle, 0, WithQueue(failQueueName))
 	require.NoError(t, err)
 
 	cfg, err := NewConfig(handle, withCapabilityChecker(mockChecker), WithDefaultPriorityBand(failingBand))

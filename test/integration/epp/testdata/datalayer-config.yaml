@@ -1,0 +1,21 @@
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: prefix-cache-scorer
+  - type: lora-affinity-scorer
+  - type: openai-parser
+  - type: mock-metrics-source
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: queue-scorer
+      - pluginRef: kv-cache-utilization-scorer
+      - pluginRef: prefix-cache-scorer
+      - pluginRef: lora-affinity-scorer
+parser:
+  pluginRef: openai-parser
+dataLayer:
+  sources:
+  - pluginRef: mock-metrics-source

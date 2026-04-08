@@ -17,21 +17,19 @@ limitations under the License.
 package tests
 
 import (
-	"context"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
+	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/pkg/features"
+	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 )
 
@@ -43,9 +41,9 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 	ShortName:   "InferencePoolResolvedRefsCondition",
 	Description: "Verify that an InferencePool correctly updates its parent-specific status (e.g., Accepted condition) when referenced by HTTPRoutes attached to shared Gateways, and clears parent statuses when no longer referenced.",
 	Manifests:   []string{"tests/inferencepool_resolvedrefs_condition.yaml"},
-	Features: []features.FeatureName{
-		features.FeatureName("SupportInferencePool"),
-		features.SupportGateway,
+	Features: []gatewayfeatures.FeatureName{
+		features.SupportInferencePool,
+		gatewayfeatures.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
@@ -65,8 +63,8 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 
 		inferenceTimeoutConfig := config.DefaultInferenceExtensionTimeoutConfig()
 
-		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoutePrimaryNN, gatewayPrimaryNN)
-		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteSecondaryNN, gatewaySecondaryNN)
+		gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRoutePrimaryNN, gatewayPrimaryNN)
+		gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteSecondaryNN, gatewaySecondaryNN)
 
 		gwPrimaryAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayPrimaryNN)
 		gwSecondaryAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewaySecondaryNN)
@@ -114,11 +112,7 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 		})
 
 		t.Run("Delete httproute-for-primary-gw and verify InferencePool status and routing via secondary gw", func(t *testing.T) {
-			httpRoutePrimary := &gatewayv1.HTTPRoute{
-				ObjectMeta: metav1.ObjectMeta{Name: httpRoutePrimaryNN.Name, Namespace: httpRoutePrimaryNN.Namespace},
-			}
-			t.Logf("Deleting HTTPRoute %s", httpRoutePrimaryNN.String())
-			require.NoError(t, s.Client.Delete(context.TODO(), httpRoutePrimary), "failed to delete httproute-for-primary-gw")
+			gatewayk8sutils.DeleteHTTPRoute(t, s.Client, httpRoutePrimaryNN)
 
 			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRoutePrimaryNN.String())
 			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)
@@ -162,11 +156,7 @@ var InferencePoolResolvedRefsCondition = suite.ConformanceTest{
 		})
 
 		t.Run("Delete httproute-for-secondary-gw and verify InferencePool has no parent statuses and is not routable", func(t *testing.T) {
-			httpRouteSecondary := &gatewayv1.HTTPRoute{
-				ObjectMeta: metav1.ObjectMeta{Name: httpRouteSecondaryNN.Name, Namespace: httpRouteSecondaryNN.Namespace},
-			}
-			t.Logf("Deleting HTTPRoute %s", httpRouteSecondaryNN.String())
-			require.NoError(t, s.Client.Delete(context.TODO(), httpRouteSecondary), "failed to delete httproute-for-secondary-gw")
+			gatewayk8sutils.DeleteHTTPRoute(t, s.Client, httpRouteSecondaryNN)
 
 			t.Logf("Waiting for %v for Gateway conditions to update after deleting HTTPRoute %s", inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout, httpRouteSecondaryNN.String())
 			time.Sleep(inferenceTimeoutConfig.HTTPRouteDeletionReconciliationTimeout)

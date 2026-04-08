@@ -18,6 +18,8 @@ package datalayer
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,6 +32,27 @@ import (
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
 	datasourcemocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/mocks"
 )
+
+// errSource is a test stub that returns a configurable error from Poll.
+// The error is guarded by a mutex so it can safely be changed between ticks.
+type errSource struct {
+	datasourcemocks.MetricsDataSource
+	mu  sync.Mutex
+	err error
+}
+
+func (e *errSource) setErr(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.err = err
+}
+
+func (e *errSource) Poll(_ context.Context, _ fwkdl.Endpoint) (any, error) {
+	atomic.AddInt64(&e.CallCount, 1)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return nil, e.err
+}
 
 // --- Test Stubs ---
 
@@ -154,4 +177,62 @@ func TestCollectorStartSourceValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCollectorLogsFirstPollError(t *testing.T) {
+	pollErr := errors.New("metric family not found")
+	src := &errSource{err: pollErr}
+	c := NewCollector()
+	ticker := mocks.NewTicker()
+	ctx := context.Background()
+
+	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.PollingDataSource{src}, nil))
+
+	ticker.Tick()
+	ticker.Tick()
+	ticker.Tick()
+
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt64(&src.CallCount) == 3
+	}, 1*time.Second, 2*time.Millisecond, "expected 3 poll calls")
+
+	require.NoError(t, c.Stop()) // Stop waits for the goroutine to exit
+
+	// Error is recorded exactly once regardless of how many ticks delivered it.
+	key := src.TypedName().String()
+	require.Len(t, c.lastPollErrors, 1, "expected exactly one error state entry")
+	assert.Equal(t, pollErr, c.lastPollErrors[key])
+}
+
+func TestCollectorLogsRecoveryAfterError(t *testing.T) {
+	pollErr := errors.New("transient error")
+	src := &errSource{err: pollErr}
+	c := NewCollector()
+	ticker := mocks.NewTicker()
+	ctx := context.Background()
+
+	require.NoError(t, c.Start(ctx, ticker, endpoint, []fwkdl.PollingDataSource{src}, nil))
+
+	// Two ticks with an error.
+	ticker.Tick()
+	ticker.Tick()
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt64(&src.CallCount) == 2
+	}, 1*time.Second, 2*time.Millisecond, "expected 2 poll calls with error")
+
+	// Clear the error, then send more ticks.
+	src.setErr(nil)
+	ticker.Tick()
+	ticker.Tick()
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt64(&src.CallCount) == 4
+	}, 1*time.Second, 2*time.Millisecond, "expected 4 total poll calls after recovery")
+
+	require.NoError(t, c.Stop()) // Stop waits for the goroutine to exit
+
+	// After recovery the entry exists but holds nil.
+	key := src.TypedName().String()
+	entry, seen := c.lastPollErrors[key]
+	require.True(t, seen, "recovery should leave a nil entry in lastPollErrors")
+	assert.Nil(t, entry)
 }

@@ -23,11 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
+	gwk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
-	"sigs.k8s.io/gateway-api/pkg/features"
+	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
@@ -40,9 +42,9 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 	ShortName:   "EppUnAvailableFailOpen",
 	Description: "Inference gateway should send traffic to backends even when the EPP is unavailable (fail-open)",
 	Manifests:   []string{"tests/epp_unavailable_fail_open.yaml"},
-	Features: []features.FeatureName{
-		features.FeatureName("SupportInferencePool"),
-		features.SupportGateway,
+	Features: []gatewayfeatures.FeatureName{
+		features.SupportInferencePool,
+		gatewayfeatures.SupportGateway,
 	},
 	Test: func(t *testing.T, s *suite.ConformanceTestSuite) {
 		const (
@@ -57,7 +59,7 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 
 		httpRouteNN := types.NamespacedName{Name: "httproute-for-failopen-pool-gw", Namespace: resources.AppBackendNamespace}
 		gatewayNN := resources.SecondaryGatewayNN
-		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
+		gwk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
 		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, resources.SecondaryInferencePoolNN, gatewayNN)
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 

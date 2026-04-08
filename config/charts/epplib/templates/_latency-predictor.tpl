@@ -25,7 +25,7 @@ Latency Predictor Sidecar Containers
 {{- if .Values.inferenceExtension.latencyPredictor.enabled }}
 # Training Server Sidecar Container
 - name: training-server
-  image: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.hub }}/{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.name }}:{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.tag }}
+  image: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.registry }}/{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.repository }}:{{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.tag }}
   imagePullPolicy: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.image.pullPolicy }}
   ports:
   - containerPort: {{ .Values.inferenceExtension.latencyPredictor.trainingServer.port }}
@@ -52,7 +52,7 @@ Latency Predictor Sidecar Containers
 {{- range $i := until (int .Values.inferenceExtension.latencyPredictor.predictionServers.count) }}
 # Prediction Server Sidecar Container {{ add $i 1 }}
 - name: prediction-server-{{ add $i 1 }}
-  image: {{ $.Values.inferenceExtension.latencyPredictor.predictionServers.image.hub }}/{{ $.Values.inferenceExtension.latencyPredictor.predictionServers.image.name }}:{{ $.Values.inferenceExtension.latencyPredictor.predictionServers.image.tag }}
+  image: {{ $.Values.inferenceExtension.latencyPredictor.predictionServers.image.registry }}/{{ $.Values.inferenceExtension.latencyPredictor.predictionServers.image.repository }}:{{ $.Values.inferenceExtension.latencyPredictor.predictionServers.image.tag }}
   imagePullPolicy: {{ $.Values.inferenceExtension.latencyPredictor.predictionServers.image.pullPolicy }}
   command: ["uvicorn"]
   args: ["prediction_server:app", "--host", "0.0.0.0", "--port", "{{ add $.Values.inferenceExtension.latencyPredictor.predictionServers.startPort $i }}"]

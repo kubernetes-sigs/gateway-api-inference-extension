@@ -19,6 +19,7 @@ package requesthandle
 import (
 	"context"
 
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
@@ -37,6 +38,10 @@ type Parser interface {
 	// For non-streaming responses, this method is invoked exactly once with the full
 	// buffered response body and 'endOfStream' set to true.
 	ParseResponse(ctx context.Context, body []byte, headers map[string]string, endofStream bool) (*ParsedResponse, error)
+
+	// SupportedAppProtocols returns the list of supported protocols.
+	// Returning an empty list means it supports all protocols.
+	SupportedAppProtocols() []v1.AppProtocol
 }
 
 type ParsedResponse struct {

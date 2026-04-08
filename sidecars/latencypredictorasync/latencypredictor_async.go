@@ -56,7 +56,7 @@ func New(config *Config, logger logr.Logger) *Predictor {
 	}
 	maxDispatches := config.MaxConcurrentDispatches
 	sem := make(chan struct{}, maxDispatches)
-	for i := 0; i < maxDispatches; i++ {
+	for range maxDispatches {
 		sem <- struct{}{}
 	}
 

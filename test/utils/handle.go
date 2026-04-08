@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// testHandle is an implmentation of plugin.Handle for test purposes
+// testHandle is an implementation of plugin.Handle for test purposes
 type testHandle struct {
 	ctx context.Context
 	plugin.HandlePlugins

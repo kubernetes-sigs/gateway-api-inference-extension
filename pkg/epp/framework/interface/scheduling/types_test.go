@@ -32,10 +32,19 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 			name: "completions request returns prompt directly",
 			body: &LLMRequestBody{
 				Completions: &CompletionsRequest{
-					Prompt: "What is the meaning of life?",
+					Prompt: Prompt{Raw: "What is the meaning of life?"},
 				},
 			},
 			expected: "What is the meaning of life?",
+		},
+		{
+			name: "completions request with array of strings prompt",
+			body: &LLMRequestBody{
+				Completions: &CompletionsRequest{
+					Prompt: Prompt{Strings: []string{"Why is", "the sky blue?"}},
+				},
+			},
+			expected: "Why is the sky blue?",
 		},
 		{
 			name: "chat completions with single raw message",
@@ -92,7 +101,7 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 			name: "responses request with non-string input",
 			body: &LLMRequestBody{
 				Responses: &ResponsesRequest{
-					Input: map[string]interface{}{"key": "value"},
+					Input: map[string]any{"key": "value"},
 				},
 			},
 			expected: `{"key":"value"}`,
@@ -130,4 +139,89 @@ func TestLLMRequestBody_PromptText(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestPrompt_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    Prompt
+		wantErr bool
+	}{
+		{
+			name:  "string prompt",
+			input: `"hello world"`,
+			want:  Prompt{Raw: "hello world"},
+		},
+		{
+			name:  "array of strings prompt",
+			input: `["hello","world"]`,
+			want:  Prompt{Strings: []string{"hello", "world"}},
+		},
+		{
+			name:  "single-element array prompt",
+			input: `["hello world"]`,
+			want:  Prompt{Strings: []string{"hello world"}},
+		},
+		{
+			name:    "integer prompt is rejected",
+			input:   `123`,
+			wantErr: true,
+		},
+		{
+			name:    "object prompt is rejected",
+			input:   `{"key":"value"}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var p Prompt
+			err := p.UnmarshalJSON([]byte(tt.input))
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, p)
+			}
+		})
+	}
+}
+
+func TestPrompt_PlainText(t *testing.T) {
+	tests := []struct {
+		name string
+		p    Prompt
+		want string
+	}{
+		{name: "raw string", p: Prompt{Raw: "hello"}, want: "hello"},
+		{name: "strings joined", p: Prompt{Strings: []string{"a", "b", "c"}}, want: "a b c"},
+		{name: "single string in array", p: Prompt{Strings: []string{"hello"}}, want: "hello"},
+		{name: "zero value", p: Prompt{}, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.p.PlainText())
+		})
+	}
+}
+
+func TestPrompt_IsEmpty(t *testing.T) {
+	assert.True(t, Prompt{}.IsEmpty())
+	assert.True(t, Prompt{Strings: []string{}}.IsEmpty())
+	assert.False(t, Prompt{Raw: "x"}.IsEmpty())
+	assert.False(t, Prompt{Strings: []string{"x"}}.IsEmpty())
+}
+
+func TestPrompt_MarshalJSON(t *testing.T) {
+	raw, _ := Prompt{Raw: "hello"}.MarshalJSON()
+	assert.Equal(t, `"hello"`, string(raw))
+
+	arr, _ := Prompt{Strings: []string{"a", "b"}}.MarshalJSON()
+	assert.Equal(t, `["a","b"]`, string(arr))
+
+	empty, _ := Prompt{}.MarshalJSON()
+	assert.Equal(t, `""`, string(empty))
 }

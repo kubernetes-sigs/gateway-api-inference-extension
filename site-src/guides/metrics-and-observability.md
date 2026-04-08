@@ -4,26 +4,20 @@ This guide describes the current state of exposed metrics and how to scrape them
 
 ## Requirements
 
-=== "EPP"
+To have response metrics, ensure the body mode is set to `Buffered` or `Streamed` (this should be the default behavior for all implementations).
 
-      To have response metrics, ensure the body mode is set to `Buffered` or `Streamed` (this should be the default behavior for all implementations).
+If you want to include usage metrics for vLLM model server streaming request, send the request with `include_usage`:
 
-      If you want to include usage metrics for vLLM model server streaming request, send the request with `include_usage`:
-
-      ```
-      curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
-      "model": "small-segment-lora",
-      "prompt": "whats your fav movie?",
-      "max_tokens": 10,
-      "temperature": 0,
-      "stream": true,
-      "stream_options": {"include_usage": true}
-      }'
-      ```
-
-=== "Dynamic LoRA Adapter Sidecar"
-
-      To have response metrics, ensure the vLLM model server is configured with the dynamic LoRA adapter as a sidecar container and a ConfigMap to configure which models to load/unload. See [this doc](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/tools/dynamic-lora-sidecar#example-configuration) for an example.
+```bash
+curl -i ${IP}:${PORT}/v1/completions -H 'Content-Type: application/json' -d '{
+"model": "small-segment-lora",
+"prompt": "whats your fav movie?",
+"max_tokens": 10,
+"temperature": 0,
+"stream": true,
+"stream_options": {"include_usage": true}
+}'
+```
 
 
 ## Exposed metrics
@@ -49,12 +43,6 @@ This guide describes the current state of exposed metrics and how to scrape them
 | inference_extension_scheduler_attempts_total | Counter          | Total number of scheduling attempts.                              | `status`=&lt;success\|failure&gt; <br> `target_model_name`=&lt;target-model-name&gt; <br> `pod_name`=&lt;pod-name&gt; <br> `namespace`=&lt;namespace&gt; <br> `port`=&lt;port&gt; | ALPHA       |
 
 
-### Dynamic LoRA Adapter Sidecar
-
-| **Metric name**            | **Metric Type**  | <div style="width:200px">**Description**</div>   | <div style="width:250px">**Labels**</div> | **Status**  |
-|:---------------------------|:-----------------|:-------------------------------------------------|:------------------------------------------|:------------|
-| lora_syncer_adapter_status | Gauge            | Status of LoRA adapters (1=loaded, 0=not_loaded) | `adapter_name`=&lt;adapter-id&gt;         | ALPHA       |
-
 ### Flow Control Metrics
 
 These metrics provide insights into the [Flow Control layer](flow-control.md) within the EPP when enabled.
@@ -64,9 +52,9 @@ These metrics provide insights into the [Flow Control layer](flow-control.md) wi
 | inference_extension_flow_control_request_queue_duration_seconds | Distribution | Distribution of the total time requests spend in the Flow Control layer. This is measured from the moment a request enters the `EnqueueAndWait` function until it reaches a final outcome (e.g., Dispatched, Rejected, Evicted). | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_queue_size | Gauge | The current number of requests being actively managed by the Flow Control layer. This counts requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
 | inference_extension_flow_control_queue_bytes | Gauge | The current size in bytes of all requests being actively managed by the Flow Control layer. This includes requests from the moment they enter the `EnqueueAndWait` function until they reach a final outcome. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `inference_pool`=&lt;pool-name&gt; <br> `model_name`=&lt;model-name&gt; <br> `target_model_name`=&lt;target-model-name&gt; | ALPHA |
-| inference_extension_flow_control_dispatch_cycle_duration_seconds | Histogram | The time taken for each dispatch cycle in the Flow Control layer. |  | ALPHA |
-| inference_extension_flow_control_request_enqueue_duration_seconds | Gauge | The time taken to enqueue requests by the EPP Flow Control layer. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
-| inference_extension_flow_control_pool_saturation | Gauge | Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated). | `inference_pool`=&lt;pool-name&gt; | ALPHA |
+| inference_extension_flow_control_dispatch_cycle_duration_seconds | Distribution | The time taken for each dispatch cycle in the Flow Control layer. |  | ALPHA |
+| inference_extension_flow_control_request_enqueue_duration_seconds | Distribution | The time taken to enqueue requests by the EPP Flow Control layer. | `fairness_id`=&lt;flow-id&gt; <br> `priority`=&lt;flow-priority&gt; <br> `outcome`=&lt;QueueOutcome&gt; | ALPHA |
+| inference_extension_flow_control_pool_saturation | Gauge | Current saturation level of the inference pool (0.0 = empty, 1.0 = fully saturated). When this exceeds 1.0, Flow Control backpressure activates. | `inference_pool`=&lt;pool-name&gt; | ALPHA |
 
 
 ## Scrape Metrics & Pprof profiles
@@ -74,7 +62,6 @@ These metrics provide insights into the [Flow Control layer](flow-control.md) wi
 The metrics endpoints are exposed on different ports by default:
 
 - EPP exposes the metrics endpoint at port 9090
-- Dynamic LoRA adapter sidecar exposes the metrics endpoint at port 8080
 
 To scrape metrics, the client needs a ClusterRole with the following rule:
 `nonResourceURLs: "/metrics", verbs: get`.
@@ -126,7 +113,7 @@ type: kubernetes.io/service-account-token
 Then, you can curl the appropriate port as follows. For EPP (port 9090)
 
 ```
-TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret  -o jsonpath='{.secrets[0].name}' -o jsonpath='{.data.token}' | base64 --decode)
+TOKEN=$(kubectl -n default get secret inference-gateway-sa-metrics-reader-secret -o jsonpath='{.data.token}' | base64 --decode)
 
 kubectl -n default port-forward inference-gateway-ext-proc-pod-name  9090
 

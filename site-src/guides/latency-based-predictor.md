@@ -1,44 +1,61 @@
-# Latency-Based Routing
+# Latency-Based Request Scheduling
 
-> For deployment instructions, jump to [Deploying with Latency-Based Routing](#deploying-with-latency-based-routing).
+> For deployment instructions, jump to [Deploying with Latency-Based Request Scheduling](#deploying-with-latency-based-request-scheduling).
 
-Latency-based routing is a feature of the Inference Gateway that enables intelligent routing of inference requests based on Service Level Objectives (SLOs) using latency predictions. It uses a latency predictor to estimate the Time to First Token (TTFT) and Time Per Output Token (TPOT) for each request on each available model server. This allows the gateway to select the optimal server that can meet the request's SLOs, while also considering the overall health and utilization of the model servers.
+Latency-based request scheduling is a feature of the Inference Gateway that enables intelligent scheduling of inference requests using latency predictions. It uses a latency predictor to estimate the Time to First Token (TTFT) and Time Per Output Token (TPOT) for each request on each available model server. This allows the gateway to schedule requests to the server with the lowest predicted latency, and optionally enforce Service Level Objectives (SLOs).
+
+For a deep dive into the design and motivation, see the blog post: [Predicted Latency-Based Scheduling for LLMs](https://llm-d.ai/blog/predicted-latency-based-scheduling-for-llms).
 
 ## How it Works
 
-The latency-based routing feature is implemented as a plugin for the Endpoint Picker (EPP). When a request is received, the plugin performs the following steps:
+Latency-based request scheduling is implemented as a pipeline of composable plugins for the Endpoint Picker (EPP):
 
-1.  **SLO Extraction**: The plugin extracts the TTFT and TPOT SLOs from the request headers (`x-slo-ttft-ms` and `x-slo-tpot-ms`). It also checks for the `x-prediction-based-scheduling-off` header to determine if latency-based routing should be used for this request.
+1.  **Latency Prediction** (`predicted-latency-producer`): Calls the latency predictor sidecar to predict TTFT and TPOT for the request on each available model server. Predictions are based on each server's current KV cache utilization, queue depth, and prefix cache match score. If SLO headers are present (`x-slo-ttft-ms`, `x-slo-tpot-ms`), headroom is computed as `SLO - predicted`.
 
-2.  **Latency Prediction**: The plugin uses a latency predictor, deployed as a set of sidecar containers to the EPP, to predict the TTFT and TPOT for the request on each of the available model servers. The prediction is based on the current state of the server, including its KV cache utilization, and the number of running and waiting requests.
+2.  **Prefix Cache Affinity Filtering** (`prefix-cache-affinity-filter`): If any endpoint has a prefix cache match score above the affinity threshold (default 0.80), the filter narrows the candidate set to those endpoints. This improves cache hit rates without hot-spotting.
 
-3.  **Headroom Calculation**: For each model server, the plugin calculates the "headroom", which is the difference between the predicted latency and the SLO. A positive headroom means the server is expected to meet the SLO, while a negative headroom means it is not.
+3.  **Scoring** (`latency-scorer`): Scores endpoints based on predicted latency. In the absence of SLOs, `least` and `most` behave the same way — endpoints with the lowest predicted latency are scored higher. When SLO headers are present, scoring is based on headroom (`SLO - predicted`) and the strategy determines how headroom is used (see [Scoring Strategy](#scoring-strategy)).
 
-4.  **Pod Selection**: The plugin selects a model server based on the calculated headrooms and a configurable selection strategy. The goal is to pick a server that can meet the SLOs without being overloaded.
+4.  **Selection** (`weighted-random-picker`): Selects an endpoint using weighted random selection based on the scores. This provides load spreading while still favoring better-scoring endpoints.
 
-5.  **Fallback**: If the latency predictor is not available or fails to make a prediction, the plugin falls back to a "composite scoring" mechanism. This mechanism uses a combination of metrics, including prefix cache scores and queue sizes, to make a routing decision.
+5.  **Fallback**: If the latency predictor is not available or fails to make a prediction, the scorer falls back to a composite scoring mechanism using KV cache utilization, queue depth, and prefix cache scores.
+
+### SLO enforcement
+
+Two additional plugins are included in the default pipeline. They are noop when requests do not include SLO headers, and activate automatically when SLO headers are present:
+
+-   `slo-headroom-tier-filter`: Splits endpoints into positive (meets SLO) and negative (violates SLO) tiers. Probabilistically explores the negative tier to let recovering pods get traffic.
+-   `latency-slo-admitter`: Rejects [sheddable](../concepts/priority-and-capacity.md) requests when no endpoint can meet SLO constraints.
+
+#### Scoring Strategy
+
+The `latency-scorer` plugin supports the following strategies for selecting a model server based on predicted latency headroom. These strategies only affect scoring when SLO headers are present; without SLOs, endpoints are always scored by lowest predicted latency regardless of strategy.
+
+-   `least`: (Default) Prefers the endpoint closest to the SLO boundary in either direction — the smallest positive headroom (just meets SLO) or the smallest negative deficit (least overloaded). This strategy is good for bin-packing and maximizing utilization.
+-   `most`: Prefers the endpoint with the most headroom. This strategy is more conservative and leaves more room for unexpected latency spikes. Only applies to positive headroom; for negative headroom, `least` is always used.
+
+The strategy can be configured via the `headroomSelectionStrategy` parameter on the `latency-scorer` plugin.
 
 ## Request Headers
 
-To use latency-based routing, you need to include the following headers in your inference requests:
+The following headers can optionally be included in inference requests for SLO-based scheduling:
 
--   `x-prediction-based-scheduling-off`: Include this header to disable predictive routing for that specific request. If omitted, predictive routing is enabled by default.
 -   `x-slo-ttft-ms`: The Time to First Token SLO in milliseconds.
--   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds (this is vLLMs equivalent of ITL, is it **not** NTPOT).
+-   `x-slo-tpot-ms`: The Time Per Output Token SLO in milliseconds.
 
-## Headroom Selection Strategies
+When SLO headers are omitted, latency-based request scheduling still works — the scorer schedules to the endpoint with the lowest predicted latency.
 
-The latency-based routing plugin provides several strategies for selecting a model server based on the calculated headrooms:
+## Streaming Mode
 
--   `least`: (Default) Prefers the pod with the least positive headroom. This strategy is good for packing pods tightly and maximizing utilization.
--   `most`: Prefers the pod with the most positive headroom. This strategy is more conservative and leaves more room for unexpected latency spikes.
--   `composite-least`: A strategy that considers a composite score of various metrics, and prefers the pod with the lowest score.
--   `composite-most`: A strategy that considers a composite score of various metrics, and prefers the pod with the highest score.
--   `composite-only`: This strategy only uses the composite score and ignores latency predictions.
+The `predicted-latency-producer` plugin has a `streamingMode` parameter (default: `false`) that controls how TTFT and TPOT are measured and trained.
 
-The selection strategy can be configured via the `headroomSelectionStrategy` plugin config variable in the EPP helm chart (see deployment details below).
+-   **`streamingMode: false`** (default): The system trains on end-to-end request latency. TTFT is recorded at the end of the response and represents the full e2e latency. TPOT is not trained. This is the right default when the workload has a mix of streaming and non-streaming requests, or when no SLO headers are used.
 
-## Deploying with Latency-Based Routing
+-   **`streamingMode: true`**: The system trains separate TTFT (time to first token) and TPOT (time per output token) models. TTFT is recorded on the first streaming chunk, and TPOT is sampled across subsequent tokens. **Set this when using TTFT/TPOT SLO headers** (`x-slo-ttft-ms`, `x-slo-tpot-ms`) and the workload is streaming. If the workload is a mix of streaming and non-streaming requests, SLO enforcement will not work correctly because TTFT and TPOT cannot be measured for non-streamed responses.
+
+To enable streaming mode, set the `streamingMode` parameter on the `predicted-latency-producer` plugin via `inferenceExtension.pluginsCustomConfig` in your `values.yaml`.
+
+## Deploying with Latency-Based Request Scheduling
 
 ### Prerequisites
 
@@ -46,15 +63,11 @@ Before you begin, ensure you have a functional Inference Gateway with at least o
 
 ### Deployment
 
-To enable latency-based routing, you must enable the latency predictor in the chart and have built the images for the training/prediction sidecars, which are then deployed as containers alongside the Endpoint Picker. When the latency predictor is enabled, the `predicted-latency-scorer` and `predicted-latency-profile-handler` plugins are automatically configured.
+To enable latency-based request scheduling, enable the latency predictor in the Helm chart. When enabled, the full plugin pipeline is automatically configured including latency prediction, prefix cache affinity filtering, SLO-aware tier gating, latency scoring, and admission control. The SLO plugins are noop when requests do not include SLO headers.
 
 #### Steps:
 
-1. Build the predictor and sidecar images from inside the `latencypredictor` package. See the [Latency Predictor - Build Guide](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/latencypredictor/README.md) for instructions.
-
-2. Set your Docker repository path by replacing the placeholders in Helm chart [values.yaml](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/config/charts/inferencepool/values.yaml) in the format `us-docker.pkg.dev/PROJECT_ID/REPOSITORY` based on what you used to build the sidecars in the Build Guide from step 1.
-
-3. Deploy the chart with the latency predictor enabled by setting `inferenceExtension.latencyPredictor.enabled` to `true` in your `values.yaml` file, or by using the `--set` flag on the command line:
+1. Deploy the chart with the latency predictor enabled by setting `inferenceExtension.latencyPredictor.enabled` to `true` in your `values.yaml` file, or by using the `--set` flag on the command line:
 
 ```txt
 helm install vllm-qwen3-32b . \
@@ -65,15 +78,15 @@ helm install vllm-qwen3-32b . \
   -f values.yaml
 ```
 
-After these steps, Inference Gateway will be prepared to predict, train, and route requests based on their SLOs.
+After these steps, Inference Gateway will be prepared to predict, train, and schedule requests based on predicted latency. SLO headers are optional — see [Request Headers](#request-headers).
 
-For details on specific plugin config variables for latency-based routing, refer to the [InferencePool Helm Chart README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/config/charts/inferencepool/README.md#latency-based-router-configuration).
+Each plugin accepts its own parameters. For the full list of per-plugin configuration options, refer to the README in each plugin's package directory under `pkg/epp/framework/plugins/`. To override the default plugin configuration, provide a full custom config via `inferenceExtension.pluginsCustomConfig` in your `values.yaml`.
 
 ### Sending Requests
 
-To send a request with Latency-Based Routing, you will need to specify the request SLOs and whether to route or not in the request header. See [Request Headers](#request-headers) section above.
+Latency-based request scheduling works out of the box without any special request headers. To additionally enforce SLO constraints, include the SLO headers as described in [Request Headers](#request-headers).
 
-If you have a standard setup via using the [Getting Started Guide](getting-started-latest.md) and then followed the steps outlined above, below is an example inference request with SLOs specified and routing enabled:
+If you have a standard setup via using the [Getting Started Guide](getting-started-latest.md) and then followed the steps outlined above, below is an example inference request with SLOs specified:
 
 ```txt
 export GW_IP=$(kubectl get gateway/inference-gateway -o jsonpath='{.status.addresses[0].value}'):80
@@ -88,7 +101,7 @@ curl -v $GW_IP/v1/completions -H 'Content-Type: application/json' -H 'x-slo-ttft
 
 ## Monitoring
 
-When latency-based routing is enabled, a number of Prometheus metrics are exposed to allow for monitoring and observability of the feature. These metrics provide insight into the performance of the latency predictor and the effectiveness of the SLO-based routing.
+When latency-based request scheduling is enabled, a number of Prometheus metrics are exposed to allow for monitoring and observability of the feature. These metrics provide insight into the performance of the latency predictor and the effectiveness of the SLO-based scheduling.
 
 Key categories of metrics include:
 
@@ -96,8 +109,6 @@ Key categories of metrics include:
 -   **Prediction Duration**: The time it takes for the latency predictor to generate a prediction is also measured.
 -   **SLO Violations**: Counters and gauges are available to track when SLOs are violated. This can be used to alert on SLO breaches.
 -   **SLO Thresholds**: The current SLO thresholds for TTFT and TPOT are also exposed as metrics.
-
-NOTE: TPOT is equivalen to vLLM's **ITL** (Inter Token Latency), as vLLM defines TPOT as the average time per output token *including the TTFT*. This is commonly known as NTPOT in other contexts, and we don't capture that metric here.
 
 The following is a comprehensive list of the Prometheus metrics exposed:
 

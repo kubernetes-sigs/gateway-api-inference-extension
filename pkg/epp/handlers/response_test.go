@@ -36,7 +36,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -60,7 +60,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -79,7 +79,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"invalid json"
@@ -93,7 +93,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -361,4 +361,128 @@ func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
 	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
 	assert.NotContains(t, gotHeaders, metadata.DestinationEndpointKey)
 	assert.NotContains(t, gotHeaders, "content-length")
+}
+
+func TestRewriteModelName(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		targetModel   string
+		incomingModel string
+		want          string
+	}{
+		{
+			name:          "non-streaming response with model rewrite",
+			body:          `{"id":"cmpl-123","model":"vllm-backend-01","choices":[]}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"id":"cmpl-123","model":"gpt-4-proxy","choices":[]}`,
+		},
+		{
+			name:          "streaming SSE chunk with model rewrite",
+			body:          `data: {"id":"cmpl-123","model":"vllm-backend-01","choices":[]}` + "\n\n",
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `data: {"id":"cmpl-123","model":"gpt-4-proxy","choices":[]}` + "\n\n",
+		},
+		{
+			name:          "no rewrite when names are the same",
+			body:          `{"model":"same-model"}`,
+			targetModel:   "same-model",
+			incomingModel: "same-model",
+			want:          `{"model":"same-model"}`,
+		},
+		{
+			name:          "no rewrite when target is empty",
+			body:          `{"model":"some-model"}`,
+			targetModel:   "",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"model":"some-model"}`,
+		},
+		{
+			name:          "no rewrite when incoming is empty",
+			body:          `{"model":"some-model"}`,
+			targetModel:   "some-model",
+			incomingModel: "",
+			want:          `{"model":"some-model"}`,
+		},
+		{
+			name:          "model field with space after colon",
+			body:          `{"model": "vllm-backend-01"}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"model": "gpt-4-proxy"}`,
+		},
+		{
+			name:          "body without model field is unchanged",
+			body:          `{"id":"cmpl-123","choices":[]}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"id":"cmpl-123","choices":[]}`,
+		},
+		{
+			name:          "DONE marker is not affected",
+			body:          "data: [DONE]\n",
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          "data: [DONE]\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rewriteModelName([]byte(tc.body), tc.targetModel, tc.incomingModel)
+			assert.Equal(t, tc.want, string(got))
+		})
+	}
+}
+
+func TestResponseSizeAccumulation(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	tests := []struct {
+		name             string
+		chunks           [][]byte
+		wantResponseSize int
+	}{
+		{
+			name:             "single chunk",
+			chunks:           [][]byte{[]byte("hello world")},
+			wantResponseSize: 11,
+		},
+		{
+			name:             "multiple chunks",
+			chunks:           [][]byte{[]byte("chunk1"), []byte("chunk2"), []byte("chunk3")},
+			wantResponseSize: 18,
+		},
+		{
+			name:             "empty chunk",
+			chunks:           [][]byte{[]byte("")},
+			wantResponseSize: 0,
+		},
+		{
+			name:             "mixed chunks with empty",
+			chunks:           [][]byte{[]byte("data"), []byte(""), []byte("more")},
+			wantResponseSize: 8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &StreamingServer{
+				parser:   openai.NewOpenAIParser(),
+				director: &mockDirector{},
+			}
+			reqCtx := &RequestContext{
+				Response: &Response{
+					Headers: map[string]string{},
+				},
+			}
+			for i, chunk := range tt.chunks {
+				endOfStream := i == len(tt.chunks)-1
+				server.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
+			}
+			assert.Equal(t, tt.wantResponseSize, reqCtx.ResponseSize)
+		})
+	}
 }

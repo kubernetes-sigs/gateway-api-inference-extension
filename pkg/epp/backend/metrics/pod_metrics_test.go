@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-	http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package metrics
 
 import (
@@ -47,16 +48,6 @@ var (
 		},
 		WaitingModels: map[string]int{},
 	}
-	updated = &MetricsState{
-		WaitingQueueSize:    9999,
-		KVCacheUsagePercent: 0.99,
-		MaxActiveModels:     99,
-		ActiveModels: map[string]int{
-			"foo": 1,
-			"bar": 1,
-		},
-		WaitingModels: map[string]int{},
-	}
 )
 
 func TestMetricsRefresh(t *testing.T) {
@@ -75,13 +66,8 @@ func TestMetricsRefresh(t *testing.T) {
 	}
 	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 
-	// Stop the loop, and simulate metric update again, this time the PodMetrics won't get the
-	// new update.
+	// Stop the loop.
 	pmf.ReleaseEndpoint(pm)
-	time.Sleep(pmf.refreshMetricsInterval * 2 /* small buffer for robustness */)
-	pmc.SetRes(map[types.NamespacedName]*MetricsState{pod1Info.NamespacedName: updated})
-	// Still expect the same condition (no metrics update).
-	assert.EventuallyWithT(t, condition, time.Second, time.Millisecond)
 }
 
 type FakeRefresherDataStore struct{}

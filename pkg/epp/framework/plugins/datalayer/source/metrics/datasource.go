@@ -50,6 +50,14 @@ type metricsDatasourceParams struct {
 	InsecureSkipVerify bool `json:"insecureSkipVerify"`
 }
 
+// NewHTTPMetricsDataSource constructs a MetricsDataSource with the given scheme and path.
+// InsecureSkipVerify defaults to true (matching the factory default).
+// Use this function directly in tests to bypass JSON parameter marshaling.
+func NewHTTPMetricsDataSource(scheme, path, name string) (*http.HTTPDataSource, error) {
+	return http.NewHTTPDataSource(scheme, path, defaultMetricsInsecureSkipVerify,
+		MetricsDataSourceType, name, parseMetrics, PrometheusMetricType)
+}
+
 // MetricsDataSourceFactory is a factory function used to instantiate data layer's
 // metrics data source plugins specified in a configuration.
 func MetricsDataSourceFactory(name string, parameters json.RawMessage, handle fwkplugin.Handle) (fwkplugin.Plugin, error) {

@@ -152,6 +152,56 @@ A challenge to this option is that Proxy-Wasm becomes a dependency and may need 
 
 An example of a similar approach is Kuadrant’s [WASM Shim](https://github.com/Kuadrant/wasm-shim/tree/main), which implements the protocols required by External Authorization and Rate Limiting Service APIs as a WASM module.
 
+## Managing InferencePool Status
+
+### Ownership Model
+
+InferencePool follows a **shared ownership model**, similar to Kubernetes Services.
+Multiple controllers may manage the same InferencePool concurrently. Implementations:
+
+- **MUST NOT** use labels, `ownerReferences`, or other mechanisms to claim
+  exclusive ownership of an InferencePool.
+- **SHOULD** assume that other controllers may also be reconciling the same
+  InferencePool.
+
+This design mirrors how Kubernetes Services work, a Service is a backend resource
+that can be referenced by multiple Ingresses or Routes from different controllers.
+Similarly, the same InferencePool may be referenced as a `backendRef` by multiple
+HTTPRoutes attached to different Gateways managed by different implementations.
+Using `ownerReferences` or labels to claim exclusive ownership would prevent this
+multi-Gateway scenario from working correctly, as one controller's ownership claim
+would conflict with another's. Instead, each controller independently tracks its
+relationship to the InferencePool through its own status entry (see below).
+
+### Status Management
+
+The InferencePool status supports multiple parents (up to 32, consistent with the
+[Gateway API RouteStatus convention](https://github.com/kubernetes-sigs/gateway-api/blob/v1.5.1/apis/v1/shared_types.go)),
+allowing each Gateway implementation to independently report its own status:
+
+```yaml
+status:
+  parents:
+    - parentRef:
+        group: gateway.networking.k8s.io
+        kind: Gateway
+        name: my-gateway
+      conditions:
+        - type: Accepted
+          status: "True"
+```
+
+Key guidelines:
+
+- **Parent should be the Gateway**, not the xRoute. A single xRoute may be
+  attached to multiple Gateways, so Gateway serves as the unique identifier
+  per implementation.
+- Each controller **SHOULD** only manage its own status entry (matched by
+  its Gateway reference) and **MUST NOT** modify entries belonging to other
+  controllers.
+- When a Gateway is no longer associated with the InferencePool, the
+  controller **SHOULD** remove its corresponding status entry.
+
 ## Testing Tips
 
 Here are some tips for testing your controller end-to-end:

@@ -284,11 +284,10 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 		return nil
 	}
 
-	fr.logger.Info("Dynamically provisioning new priority band", "priority", priority)
+	fr.logger.V(logging.DEFAULT).Info("Dynamically provisioning new priority band", "priority", priority)
 
 	newBand := *fr.config.DefaultPriorityBand
 	newBand.Priority = priority
-	newBand.PriorityName = fmt.Sprintf("Dynamic-%d", priority)
 	fr.config.PriorityBands[priority] = &newBand
 
 	fr.perPriorityBandStats.LoadOrStore(priority, &bandStats{})
@@ -322,10 +321,11 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 	// Casts from `int64` to `uint64` are safe because the non-negativity invariant is strictly enforced at the
 	// `managedQueue` level.
 	stats := contracts.AggregateStats{
-		TotalCapacityBytes:   fr.config.MaxBytes,
-		TotalByteSize:        uint64(fr.totalByteSize.Load()),
-		TotalLen:             uint64(fr.totalLen.Load()),
-		PerPriorityBandStats: make(map[int]contracts.PriorityBandStats, len(fr.config.PriorityBands)),
+		TotalCapacityBytes:    fr.config.MaxBytes,
+		TotalCapacityRequests: fr.config.MaxRequests,
+		TotalByteSize:         uint64(fr.totalByteSize.Load()),
+		TotalLen:              uint64(fr.totalLen.Load()),
+		PerPriorityBandStats:  make(map[int]contracts.PriorityBandStats, len(fr.config.PriorityBands)),
 	}
 
 	fr.perPriorityBandStats.Range(func(key, value any) bool {
@@ -333,11 +333,11 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 		bandStats := value.(*bandStats)
 		bandCfg := fr.config.PriorityBands[priority]
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
-			Priority:      priority,
-			PriorityName:  bandCfg.PriorityName,
-			CapacityBytes: bandCfg.MaxBytes,
-			ByteSize:      uint64(bandStats.byteSize.Load()),
-			Len:           uint64(bandStats.len.Load()),
+			Priority:         priority,
+			CapacityBytes:    bandCfg.MaxBytes,
+			CapacityRequests: bandCfg.MaxRequests,
+			ByteSize:         uint64(bandStats.byteSize.Load()),
+			Len:              uint64(bandStats.len.Load()),
 		}
 		return true
 	})
@@ -447,7 +447,7 @@ func (fr *FlowRegistry) cleanupPriorityBandResources(priorities []int) {
 			shard.deletePriorityBand(priority)
 		}
 
-		fr.logger.Info("Successfully deleted priority band", "priority", priority)
+		fr.logger.V(logging.DEFAULT).Info("Successfully deleted priority band", "priority", priority)
 	}
 }
 
@@ -505,7 +505,7 @@ func (fr *FlowRegistry) updateShardCount(n int) error {
 func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	currentActive := len(fr.activeShards)
 	numToAdd := newTotalActive - currentActive
-	fr.logger.Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
+	fr.logger.V(logging.DEFAULT).Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
 
 	// Prepare All New Shard Objects (Infallible):
 	newShards := make([]*registryShard, numToAdd)
@@ -521,7 +521,7 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	// discarded, leaving the system state clean.
 	allComponents := make(map[flowcontrol.FlowKey][]flowComponents)
 	var rangeErr error
-	fr.flowStates.Range(func(key, _ interface{}) bool {
+	fr.flowStates.Range(func(key, _ any) bool {
 		flowKey := key.(flowcontrol.FlowKey)
 		components, err := fr.buildFlowComponents(flowKey, len(newShards))
 		if err != nil {
@@ -552,7 +552,7 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 // Expects the registry's write lock to be held.
 func (fr *FlowRegistry) executeScaleDownLocked(newTotalActive int) {
 	currentActive := len(fr.activeShards)
-	fr.logger.Info("Scaling down shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
+	fr.logger.V(logging.DEFAULT).Info("Scaling down shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
 
 	shardsToDrain := fr.activeShards[newTotalActive:]
 	fr.activeShards = fr.activeShards[:newTotalActive]
