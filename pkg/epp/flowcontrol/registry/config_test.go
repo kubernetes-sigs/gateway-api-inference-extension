@@ -31,7 +31,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -39,16 +40,16 @@ import (
 func newTestPluginsHandle(t *testing.T) plugin.Handle {
 	t.Helper()
 	handle := utils.NewTestHandle(t.Context())
-	handle.AddPlugin(fairness.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+	handle.AddPlugin(globalstrict.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: fairness.GlobalStrictFairnessPolicyType,
-			Name: fairness.GlobalStrictFairnessPolicyType,
+			Type: globalstrict.GlobalStrictFairnessPolicyType,
+			Name: globalstrict.GlobalStrictFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(fairness.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+	handle.AddPlugin(roundrobin.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: fairness.RoundRobinFairnessPolicyType,
-			Name: fairness.RoundRobinFairnessPolicyType,
+			Type: roundrobin.RoundRobinFairnessPolicyType,
+			Name: roundrobin.RoundRobinFairnessPolicyType,
 		},
 	})
 	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
@@ -322,7 +323,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
 			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
-			WithFairnessPolicy(fairness.RoundRobinFairnessPolicyType, handle),
+			WithFairnessPolicy(roundrobin.RoundRobinFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
@@ -330,7 +331,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		require.NotNil(t, pb.OrderingPolicy)
 		assert.Equal(t, ordering.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
 		require.NotNil(t, pb.FairnessPolicy)
-		assert.Equal(t, fairness.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
+		assert.Equal(t, roundrobin.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
 	})
 
 	t.Run("ShouldError_OnInvalidOptions", func(t *testing.T) {
@@ -354,7 +355,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		t.Parallel()
 		pb, err := NewPriorityBandConfig(handle, 10,
 			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
-			WithFairnessPolicy(fairness.GlobalStrictFairnessPolicyType, handle),
+			WithFairnessPolicy(globalstrict.GlobalStrictFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName(queue.MaxMinHeapName), pb.Queue,
@@ -365,7 +366,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		t.Parallel()
 		pb, err := NewPriorityBandConfig(handle, 20,
 			WithOrderingPolicy(ordering.FCFSOrderingPolicyType, handle),
-			WithFairnessPolicy(fairness.GlobalStrictFairnessPolicyType, handle),
+			WithFairnessPolicy(globalstrict.GlobalStrictFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName(queue.ListQueueName), pb.Queue,
@@ -545,7 +546,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 					{
 						Priority:          1,
 						OrderingPolicyRef: ordering.EDFOrderingPolicyType,
-						FairnessPolicyRef: fairness.RoundRobinFairnessPolicyType,
+						FairnessPolicyRef: roundrobin.RoundRobinFairnessPolicyType,
 					},
 				},
 			},
@@ -554,7 +555,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				band := cfg.PriorityBands[1]
 				assert.Equal(t, ordering.EDFOrderingPolicyType, band.OrderingPolicy.TypedName().Name,
 					"OrderingPolicy should be correctly translated")
-				assert.Equal(t, fairness.RoundRobinFairnessPolicyType, band.FairnessPolicy.TypedName().Name,
+				assert.Equal(t, roundrobin.RoundRobinFairnessPolicyType, band.FairnessPolicy.TypedName().Name,
 					"FairnessPolicy should be correctly translated")
 			},
 		},

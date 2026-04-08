@@ -307,21 +307,29 @@ Picks pod(s) from the list of candidates based on weighted random sampling using
 
 ### Flow Control Plugins (Policies)
 
-These plugins are referenced within the `flowControl` section (Priority Bands).
+These plugins are referenced within the `flowControl` section (Priority Bands). This section includes policies for **[fairness](../../../pkg/epp/framework/plugins/flowcontrol/fairness/README.md)** and ordering.
 
-#### GlobalStrictFairnessPolicy
+#### [GlobalStrictFairnessPolicy](../../../pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict/README.md)
 
-A specialized Fairness Policy that ignores flow isolation and serves all requests in a single global FIFO order (strict prioritization). This is the default Fairness Policy.
+A Fairness Policy that ignores flow isolation and serves all requests in a single global order, delegating the actual ordering to the configured `OrderingPolicy`. It acts effectively as a single global queue per priority band.
 
-- *Type*: global-strict-fairness-policy
-- *Parameters*: none
+- **Unit of Fairness**: None (Greedy)
+- **Type**: `global-strict-fairness-policy`
+- **Parameters**: none
 
-#### RoundRobinFairnessPolicy
+> [!NOTE]
+> This policy prioritizes absolute ordering over fairness. A single flow with a burst of high-priority traffic can starve others.
 
-A Fairness Policy that ensures fair sharing of capacity between different flows (e.g., different models or LoRA adapters) by cycling through them in a round-robin fashion.
+#### [RoundRobinFairnessPolicy](../../../pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin/README.md)
 
-- *Type*: round-robin-fairness-policy
-- *Parameters*: none
+A Fairness Policy that guarantees fair sharing of dispatch opportunities between different flows (e.g., different models or LoRA adapters) by cycling through active flows one by one.
+
+- **Unit of Fairness**: Dispatch Attempts
+- **Type**: `round-robin-fairness-policy`
+- **Parameters**: none
+
+> [!NOTE]
+> While this policy prevents starvation, it may introduce global ordering violations, as a newer request in an under-served flow might be dispatched before an older request in a heavily loaded flow.
 
 #### FCFSOrderingPolicy
 
@@ -526,24 +534,15 @@ list has the following field:
 **Note**: The names of the plugin instances mentioned above, refer to plugin instances defined in the plugins section
 of the configuration.
 
-<<<<<<< HEAD
 ### Minimal configuration (core vLLM metrics)
 
 The built-in `metrics-data-source` and `core-metrics-extractor` plugins collect the five vLLM Model
 Server Protocol metrics out of the box - no `parameters` are required:
-=======
-## Parser Configuration
-
-The `parser` section configures the parser to understand the request and response payloads. This is crucial for enabling advanced capabilities such as prefix-cache aware routing, request/response usage tracking, and other payload-specific processing. By default, if no parser is specified, the `openai-parser` is used, which supports the [OpenAI API](https://developers.openai.com/api/reference/overview).
-
-Here is an example configuration that uses the `vllmgrpc-parser`:
->>>>>>> 5943afb7 (add parser doc)
 
 ```yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-<<<<<<< HEAD
   - type: metrics-data-source
   - type: core-metrics-extractor
 
@@ -672,7 +671,16 @@ deployment that doesn't load LoRA adapters.
 
 To eliminate the error entirely, disable the spec with an empty string as shown above.
 
-=======
+## Parser Configuration
+
+The `parser` section configures the parser to understand the request and response payloads. This is crucial for enabling advanced capabilities such as prefix-cache aware routing, request/response usage tracking, and other payload-specific processing. By default, if no parser is specified, the `openai-parser` is used, which supports the [OpenAI API](https://developers.openai.com/api/reference/overview).
+
+Here is an example configuration that uses the `vllmgrpc-parser`:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
 - name: maxScore
   type: max-score-picker
 - name: vllmgrpcParser
@@ -685,7 +693,6 @@ parser:
   pluginRef: vllmgrpcParser
 ```
 
->>>>>>> 5943afb7 (add parser doc)
 ## Feature Gates
 
 The Feature Gates section allows for the enabling of experimental features of the IGW. These experimental

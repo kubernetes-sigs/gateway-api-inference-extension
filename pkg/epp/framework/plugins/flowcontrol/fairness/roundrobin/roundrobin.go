@@ -14,7 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fairness
+// Package roundrobin implements a fairness policy that selects queues from a priority band using a
+// round-robin strategy, cycling through active flows one by one to guarantee that no single flow
+// can starve others.
+//
+// For detailed documentation, see README.md.
+package roundrobin
 
 import (
 	"context"
@@ -27,15 +32,16 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// RoundRobinFairnessPolicyType represents a fairness policy that selects a queue from a priority band using a simple
-// round-robin strategy.
+// RoundRobinFairnessPolicyType is the registration type for the round-robin fairness policy.
 const RoundRobinFairnessPolicyType = "round-robin-fairness-policy"
 
+// RoundRobinFairnessPolicyFactory is the factory function for the round-robin fairness policy.
 func RoundRobinFairnessPolicyFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return newRoundRobin(name), nil
 }
 
-// roundRobin implements FairnessPolicy.
+// roundRobin implements the FairnessPolicy interface, selecting queues from a priority band
+// in a round-robin fashion.
 type roundRobin struct {
 	name string
 }

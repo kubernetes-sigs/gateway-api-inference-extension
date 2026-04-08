@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fairness
+// Package globalstrict implements a greedy fairness policy that enforces a strict global ordering
+// across all flows within a priority band, ignoring flow boundaries.
+//
+// For detailed documentation, see README.md.
+package globalstrict
 
 import (
 	"context"
@@ -25,18 +29,16 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// GlobalStrictFairnessPolicyType represents a fairness policy that enforces a strict global ordering across all flows.
-// By ignoring flow boundaries and always selecting the absolute "best" item from any available queue, this policy
-// effectively transforms the multi-queue Priority Band into a single logical Priority Queue.
-// TODO: rename files to `global_strict.go` and `global_strict_test.go`.
+// GlobalStrictFairnessPolicyType is the registration type for the global strict fairness policy.
 const GlobalStrictFairnessPolicyType = "global-strict-fairness-policy"
 
+// GlobalStrictFairnessPolicyFactory is the factory function for the global strict fairness policy.
 func GlobalStrictFairnessPolicyFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return newGlobalStrict(name), nil
 }
 
-// globalStrict implements FairnessPolicy.
-// It selects the queue containing the single "best" item from across all queues in a priority band.
+// globalStrict implements the FairnessPolicy interface, selecting the queue
+// containing the single "best" item from across all queues in a priority band.
 type globalStrict struct {
 	name string
 }
@@ -62,19 +64,12 @@ func (p *globalStrict) NewState(_ context.Context) any {
 	return nil
 }
 
-// Pick executes the global strict strategy.
-//
-// It iterates over every active flow in the band, inspecting the head of each queue to find the single highest-priority
-// item currently waiting in the entire pool.
-//
-// Behavior:
-//   - Fairness: Ignored. A single flow with a burst of high-priority traffic can starve others.
-//   - Ordering: Strict. The system behaves as if all requests were in one global queue.
+// Pick executes the global strict strategy by iterating over every active flow in the band
+// and inspecting the head of each queue to find the single highest-priority item.
 //
 // Requirements:
-// All flows in the band MUST use compatible ItemComparators (i.e., identical ScoreTypes).
-// If incompatible comparators are detected (e.g., comparing "Timestamp" vs "UrgencyScore"), the method returns an error
-// as a strict comparison is impossible.
+// All flows in the band MUST use compatible OrderingPolicy types (i.e., identical score types).
+// If incompatible policies are detected, an error is returned.
 func (p *globalStrict) Pick(
 	_ context.Context,
 	flowGroup flowcontrol.PriorityBandAccessor,

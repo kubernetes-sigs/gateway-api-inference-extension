@@ -42,7 +42,7 @@ import (
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
@@ -376,7 +376,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 					"Should be FCFS type")
 				require.Equal(t, "customFairness", band.FairnessPolicy.TypedName().Name,
 					"Should use custom fairness policy name")
-				require.Equal(t, fairness.GlobalStrictFairnessPolicyType, band.FairnessPolicy.TypedName().Type,
+				require.Equal(t, globalstrict.GlobalStrictFairnessPolicyType, band.FairnessPolicy.TypedName().Type,
 					"Should be GlobalStrict type")
 			},
 		},
@@ -763,9 +763,9 @@ func registerTestPlugins(t *testing.T) {
 		return &mockExtractor{mockPlugin{t: fwkplugin.TypedName{Name: name, Type: testExtractorType}}}, nil
 	})
 
-	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	fwkplugin.Register(globalstrict.GlobalStrictFairnessPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		return &flowcontrolmocks.MockFairnessPolicy{
-			TypedNameV: fwkplugin.TypedName{Name: name, Type: fairness.GlobalStrictFairnessPolicyType},
+			TypedNameV: fwkplugin.TypedName{Name: name, Type: globalstrict.GlobalStrictFairnessPolicyType},
 		}, nil
 	})
 	fwkplugin.Register(ordering.FCFSOrderingPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {

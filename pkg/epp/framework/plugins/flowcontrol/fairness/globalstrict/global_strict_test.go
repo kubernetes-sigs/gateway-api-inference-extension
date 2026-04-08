@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package fairness
+package globalstrict
 
 import (
 	"context"
@@ -27,6 +27,11 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+)
+
+var (
+	flow1Key = flowcontrol.FlowKey{ID: "flow1", Priority: 0}
+	flow2Key = flowcontrol.FlowKey{ID: "flow2", Priority: 0}
 )
 
 func newTestOrderingPolicy() *mocks.MockOrderingPolicy {
