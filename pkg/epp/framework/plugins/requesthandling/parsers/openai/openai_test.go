@@ -991,6 +991,16 @@ func TestOpenAIParser_ParseResponse_Streaming(t *testing.T) {
 	}
 }
 
+func TestOpenAIParser_SupportedAppProtocols(t *testing.T) {
+	parser := NewOpenAIParser()
+	supported := parser.SupportedAppProtocols()
+	want := []v1.AppProtocol{v1.AppProtocolH2C, v1.AppProtocolHTTP}
+
+	if diff := cmp.Diff(want, supported); diff != "" {
+		t.Errorf("SupportedAppProtocols() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 // Benchmark tests for performance comparison
 func BenchmarkExtractRequestData_Completions(b *testing.B) {
 	body := map[string]any{

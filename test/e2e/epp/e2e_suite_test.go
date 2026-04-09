@@ -88,7 +88,6 @@ var (
 
 	// expectedCRDs lists the CRD names that must be established after kustomize apply.
 	expectedCRDs = []string{
-		"inferencepools.inference.networking.x-k8s.io",
 		"inferencepools.inference.networking.k8s.io",
 		"inferenceobjectives.inference.networking.x-k8s.io",
 		"inferencemodelrewrites.inference.networking.x-k8s.io",

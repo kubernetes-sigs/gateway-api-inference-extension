@@ -21,10 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/rand"
 	"slices"
 	"sort"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -113,8 +111,6 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *framework.C
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates by random weighted picker", "max-num-of-endpoints", p.maxNumOfEndpoints,
 		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
 
-	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	// A-Res algorithm: keyᵢ = Uᵢ^(1/wᵢ)
 	weightedEndpoints := make([]weightedScoredEndpoint, len(scoredEndpoints))
 
@@ -127,7 +123,7 @@ func (p *WeightedRandomPicker) Pick(ctx context.Context, cycleState *framework.C
 		}
 
 		// If we're here the scoredEndpoint.Score > 0. Generate a random number U in (0,1)
-		u := randomGenerator.Float64()
+		u := pickerRand.Float64()
 		if u == 0 {
 			u = 1e-10 // Avoid log(0)
 		}

@@ -159,7 +159,7 @@ func TestMetricsExtractionDefaultConfig(t *testing.T) {
 	assert.Contains(t, m.ActiveModels, "adapter-b")
 	assert.Contains(t, m.WaitingModels, "adapter-c")
 	assert.Equal(t, 16, m.CacheBlockSize, "CacheBlockSize")
-	assert.Equal(t, 512, m.CacheNumGPUBlocks, "CacheNumGPUBlocks")
+	assert.Equal(t, 512, m.CacheNumBlocks, "CacheNumBlocks")
 }
 
 // TestMetricsExtractionLoRADisabledViaConfig verifies the "disable a specific metric"

@@ -217,13 +217,7 @@ func (ct *concurrencyTracker) add(endpointID string, delta int64) {
 }
 
 func (ct *concurrencyTracker) dec(endpointID string) {
-	ct.mu.RLock()
-	counter, exists := ct.counts[endpointID]
-	ct.mu.RUnlock()
-
-	if exists {
-		counter.Add(-1)
-	}
+	ct.add(endpointID, -1)
 }
 
 func (ct *concurrencyTracker) delete(endpointID string) {

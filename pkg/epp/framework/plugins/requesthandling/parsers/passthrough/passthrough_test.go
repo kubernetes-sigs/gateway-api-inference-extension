@@ -77,3 +77,11 @@ func TestPassthroughParser_ParseResponse(t *testing.T) {
 		t.Errorf("expected nil result, got %v", got)
 	}
 }
+
+func TestPassthroughParser_SupportedAppProtocols(t *testing.T) {
+	parser := NewPassthroughParser()
+	supported := parser.SupportedAppProtocols()
+	if len(supported) != 0 {
+		t.Errorf("SupportedAppProtocols() = %v, want empty non-nil list", supported)
+	}
+}

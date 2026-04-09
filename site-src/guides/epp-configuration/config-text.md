@@ -457,9 +457,11 @@ flowControl:
   defaultRequestTTL: 60s
   defaultPriorityBand:
     maxBytes: 10Gi
+    maxRequests: 5000
   priorityBands:
   - priority: 100
     maxBytes: 5Gi
+    maxRequests: 500
     orderingPolicyRef: fcfs-ordering-policy
     fairnessPolicyRef: global-strict-fairness-policy
 ```
@@ -469,6 +471,9 @@ The fields in the `flowControl` section are:
 - `maxBytes`: Defines the global capacity limit for all active requests across all priority levels.
     - Supports Kubernetes quantity format (e.g., `10Gi`, `512Mi`, `1048576Ki`) as well as plain integers (in bytes).
     - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
+- `maxRequests`: Defines an optional global maximum total request count limit aggregated across all priority bands.
+    - Supports Kubernetes quantity format (e.g., `50Mi`, `5000Ki`) as plain integers.
+    - If `0` or omitted, no global request count limit is enforced, though individual priority band `maxRequests` limits still apply.
 - `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
     - If `0` or omitted, it defaults to the client context deadline, meaning requests may wait indefinitely unless cancelled by the client.
 - `defaultPriorityBand`: A template used to dynamically provision priority bands for requests arriving with priority
@@ -483,6 +488,9 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 - `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
     - Supports Kubernetes quantity format (e.g., `5Gi`, `512Mi`) as well as plain integers (in bytes).
     - If `0` or omitted, the system default (1 GB) is used.
+- `maxRequests`: The maximum number of concurrent requests allowed for this specific priority band.
+    - Supports Kubernetes quantity format (e.g., `50Mi`, `5000Ki`) as plain integers.
+    - If `0` or omitted, no per-band request count limit is enforced for this band.
 - `orderingPolicyRef`: The name of the Ordering Policy plugin to use (e.g., `fcfs-ordering-policy`).
     - Defaults to `fcfs-ordering-policy` if omitted.
 - `fairnessPolicyRef`: The name of the Fairness Policy plugin to use (e.g., `global-strict-fairness-policy`).

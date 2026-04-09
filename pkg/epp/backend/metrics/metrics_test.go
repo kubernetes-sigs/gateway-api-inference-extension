@@ -394,8 +394,8 @@ func TestCacheConfigInfoMetrics(t *testing.T) {
 			},
 			existingMetrics: &MetricsState{},
 			expectedMetrics: &MetricsState{
-				CacheBlockSize:    16,
-				CacheNumGPUBlocks: 1024,
+				CacheBlockSize: 16,
+				CacheNumBlocks: 1024,
 			},
 			expectedErr: nil,
 		},
@@ -411,7 +411,7 @@ func TestCacheConfigInfoMetrics(t *testing.T) {
 			},
 			existingMetrics: &MetricsState{},
 			expectedMetrics: &MetricsState{
-				CacheNumGPUBlocks: 1024,
+				CacheNumBlocks: 1024,
 			},
 			expectedErr: errors.New("strconv.Atoi: parsing \"invalid\": invalid syntax"),
 		},
@@ -456,7 +456,7 @@ func TestCacheConfigInfoMetrics(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedMetrics.CacheBlockSize, updated.CacheBlockSize, "CacheBlockSize mismatch")
-				assert.Equal(t, tc.expectedMetrics.CacheNumGPUBlocks, updated.CacheNumGPUBlocks, "CacheNumGPUBlocks mismatch")
+				assert.Equal(t, tc.expectedMetrics.CacheNumBlocks, updated.CacheNumBlocks, "CacheNumBlocks mismatch")
 			}
 		})
 	}

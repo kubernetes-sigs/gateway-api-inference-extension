@@ -45,6 +45,7 @@ var (
 // globalExceptions are paths that are always allowed for all framework files.
 // These are utility packages that the framework is permitted to import.
 var globalExceptions = []string{
+	"api/v1",
 	"pkg/common/observability/logging",
 	"pkg/common/error",
 	"pkg/common/request",

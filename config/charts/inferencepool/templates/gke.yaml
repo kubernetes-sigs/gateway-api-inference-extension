@@ -9,7 +9,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+    group: inference.networking.k8s.io
     kind: InferencePool
     name: {{ .Release.Name }}
   default:
@@ -45,7 +45,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+    group: inference.networking.k8s.io
     kind: InferencePool
     name: {{ .Release.Name }}
   default:

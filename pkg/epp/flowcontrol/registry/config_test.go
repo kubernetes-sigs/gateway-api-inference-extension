@@ -577,7 +577,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: nil, // Omitted
+						// MaxBytes and MaxRequests omitted
 					},
 				},
 			},
@@ -593,7 +593,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+						MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero,
 					},
 				},
 			},
@@ -607,7 +607,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			name: "ShouldApplyDefault_WhenDefaultPriorityBandMaxBytesIsZero",
 			apiConfig: &configapi.FlowControlConfig{
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+					MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero,
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
@@ -645,6 +645,129 @@ func TestNewConfigFromAPI(t *testing.T) {
 				},
 			},
 			expectedErr: "DefaultPriorityBand MaxBytes must be non-negative",
+		},
+
+		// --- MaxRequests: Happy Paths ---
+		{
+			name: "ShouldSucceed_WithMaxBytesAndMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxBytes:    ptr.To(resource.MustParse("1Gi")),
+				MaxRequests: ptr.To(resource.MustParse("5000")),
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    100,
+						MaxBytes:    ptr.To(resource.MustParse("1Gi")),
+						MaxRequests: ptr.To(resource.MustParse("5000")),
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(1073741824), cfg.MaxBytes, "Global MaxBytes should be 1Gi")
+				assert.Equal(t, uint64(5000), cfg.MaxRequests, "Global MaxRequests should be 5000")
+
+				require.Contains(t, cfg.PriorityBands, 100, "Priority band 100 should be present")
+				band := cfg.PriorityBands[100]
+				assert.Equal(t, uint64(1073741824), band.MaxBytes, "Band MaxBytes should be 1Gi")
+				assert.Equal(t, uint64(5000), band.MaxRequests, "Band MaxRequests should be 5000")
+			},
+		},
+		{
+			name: "ShouldSucceed_WithOnlyMaxRequests_NoMaxBytes",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxRequests: ptr.To(resource.MustParse("1000")),
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    1,
+						MaxRequests: ptr.To(resource.MustParse("500")),
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(0), cfg.MaxBytes, "Global MaxBytes should be 0 (no global byte limit)")
+				assert.Equal(t, uint64(1000), cfg.MaxRequests, "Global MaxRequests should be 1000")
+
+				require.Contains(t, cfg.PriorityBands, 1)
+				band := cfg.PriorityBands[1]
+				assert.Equal(t, defaultPriorityBandMaxBytes, band.MaxBytes,
+					"Band MaxBytes should fall back to system default when not configured")
+				assert.Equal(t, uint64(500), band.MaxRequests, "Band MaxRequests should be 500")
+			},
+		},
+		{
+			name: "ShouldSucceed_WithDefaultPriorityBandMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxRequests: ptr.To(resource.MustParse("200")),
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.DefaultPriorityBand)
+				assert.Equal(t, uint64(200), cfg.DefaultPriorityBand.MaxRequests,
+					"DefaultPriorityBand MaxRequests should be translated")
+			},
+		},
+
+		// --- MaxRequests: Defaulting Logic ---
+		{
+			name: "ShouldDefaultToZero_WhenMaxRequestsIsNil",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, uint64(0), cfg.PriorityBands[1].MaxRequests,
+					"Omitted MaxRequests should default to 0 (no request limit)")
+			},
+		},
+		{
+			name: "ShouldDefaultToZero_WhenMaxRequestsIsZero",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    1,
+						MaxRequests: ptr.To(resource.MustParse("0")),
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, uint64(0), cfg.PriorityBands[1].MaxRequests,
+					"Explicit MaxRequests=0 should remain 0 (no request limit)")
+			},
+		},
+
+		// --- MaxRequests: Validation Errors ---
+		{
+			name: "ShouldError_WithNegativeGlobalMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxRequests: ptr.To(resource.MustParse("-1")),
+			},
+			expectedErr: "global MaxRequests must be non-negative",
+		},
+		{
+			name: "ShouldError_WithNegativePriorityBandMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    1,
+						MaxRequests: ptr.To(resource.MustParse("-100")),
+					},
+				},
+			},
+			expectedErr: "priority band 1 MaxRequests must be non-negative",
+		},
+		{
+			name: "ShouldError_WithNegativeDefaultPriorityBandMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxRequests: ptr.To(resource.MustParse("-5")),
+				},
+			},
+			expectedErr: "DefaultPriorityBand MaxRequests must be non-negative",
 		},
 	}
 

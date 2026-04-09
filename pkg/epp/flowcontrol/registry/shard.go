@@ -271,12 +271,13 @@ func (s *registryShard) Stats() contracts.ShardStats {
 	defer s.mu.RUnlock()
 
 	stats := contracts.ShardStats{
-		ID:                   s.id,
-		IsActive:             s.IsActive(),
-		TotalCapacityBytes:   s.config.MaxBytes,
-		TotalByteSize:        uint64(s.totalByteSize.Load()),
-		TotalLen:             uint64(s.totalLen.Load()),
-		PerPriorityBandStats: make(map[int]contracts.PriorityBandStats),
+		ID:                    s.id,
+		IsActive:              s.IsActive(),
+		TotalCapacityBytes:    s.config.MaxBytes,
+		TotalCapacityRequests: s.config.MaxRequests,
+		TotalByteSize:         uint64(s.totalByteSize.Load()),
+		TotalLen:              uint64(s.totalLen.Load()),
+		PerPriorityBandStats:  make(map[int]contracts.PriorityBandStats),
 	}
 
 	s.priorityBands.Range(func(key, value any) bool {
@@ -284,10 +285,11 @@ func (s *registryShard) Stats() contracts.ShardStats {
 		band := value.(*priorityBand)
 
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
-			Priority:      priority,
-			CapacityBytes: band.config.MaxBytes, // This is the partitioned capacity.
-			ByteSize:      uint64(band.byteSize.Load()),
-			Len:           uint64(band.len.Load()),
+			Priority:         priority,
+			CapacityBytes:    band.config.MaxBytes,    // This is the partitioned capacity.
+			CapacityRequests: band.config.MaxRequests, // This is the partitioned capacity.
+			ByteSize:         uint64(band.byteSize.Load()),
+			Len:              uint64(band.len.Load()),
 		}
 		return true
 	})

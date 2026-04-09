@@ -321,10 +321,11 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 	// Casts from `int64` to `uint64` are safe because the non-negativity invariant is strictly enforced at the
 	// `managedQueue` level.
 	stats := contracts.AggregateStats{
-		TotalCapacityBytes:   fr.config.MaxBytes,
-		TotalByteSize:        uint64(fr.totalByteSize.Load()),
-		TotalLen:             uint64(fr.totalLen.Load()),
-		PerPriorityBandStats: make(map[int]contracts.PriorityBandStats, len(fr.config.PriorityBands)),
+		TotalCapacityBytes:    fr.config.MaxBytes,
+		TotalCapacityRequests: fr.config.MaxRequests,
+		TotalByteSize:         uint64(fr.totalByteSize.Load()),
+		TotalLen:              uint64(fr.totalLen.Load()),
+		PerPriorityBandStats:  make(map[int]contracts.PriorityBandStats, len(fr.config.PriorityBands)),
 	}
 
 	fr.perPriorityBandStats.Range(func(key, value any) bool {
@@ -332,10 +333,11 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 		bandStats := value.(*bandStats)
 		bandCfg := fr.config.PriorityBands[priority]
 		stats.PerPriorityBandStats[priority] = contracts.PriorityBandStats{
-			Priority:      priority,
-			CapacityBytes: bandCfg.MaxBytes,
-			ByteSize:      uint64(bandStats.byteSize.Load()),
-			Len:           uint64(bandStats.len.Load()),
+			Priority:         priority,
+			CapacityBytes:    bandCfg.MaxBytes,
+			CapacityRequests: bandCfg.MaxRequests,
+			ByteSize:         uint64(bandStats.byteSize.Load()),
+			Len:              uint64(bandStats.len.Load()),
 		}
 		return true
 	})

@@ -227,7 +227,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 						errs = multierr.Append(errs, err)
 					}
 				case CacheConfigNumGPUBlocksMetricName:
-					updated.CacheNumGPUBlocks, err = strconv.Atoi(v.GetValue())
+					updated.CacheNumBlocks, err = strconv.Atoi(v.GetValue())
 					if err != nil {
 						errs = multierr.Append(errs, err)
 					}

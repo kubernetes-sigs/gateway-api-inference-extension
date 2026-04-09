@@ -148,12 +148,38 @@ func (ext *Extractor) Extract(ctx context.Context, data any, ep fwkdl.Endpoint) 
 		}
 	}
 
-	if spec := mapping.CacheInfo; spec != nil { // extract CacheInfo-specific metrics
+	if spec := mapping.CacheInfo; spec != nil { // extract CacheInfo-specific metrics (labels)
 		metric, err := spec.getLatestMetric(families)
 		if err != nil {
 			errs = append(errs, err)
 		} else if metric != nil {
-			populateCacheInfoMetrics(clone, metric, &errs)
+			blockSizeLabel := mapping.CacheBlockSizeLabel
+			if blockSizeLabel == "" {
+				blockSizeLabel = CacheConfigBlockSizeInfoMetricName
+			}
+			numBlocksLabel := mapping.CacheNumBlocksLabel
+			if numBlocksLabel == "" {
+				numBlocksLabel = CacheConfigNumGPUBlocksMetricName
+			}
+			populateCacheInfoMetrics(clone, metric, blockSizeLabel, numBlocksLabel, &errs)
+			updated = true
+		}
+	}
+
+	if spec := mapping.CacheBlockSize; spec != nil { // extract block size as direct gauge value
+		if metric, err := spec.getLatestMetric(families); err != nil {
+			errs = append(errs, err)
+		} else {
+			clone.CacheBlockSize = int(extractValue(metric))
+			updated = true
+		}
+	}
+
+	if spec := mapping.CacheNumBlocks; spec != nil { // extract num GPU blocks as direct gauge value
+		if metric, err := spec.getLatestMetric(families); err != nil {
+			errs = append(errs, err)
+		} else {
+			clone.CacheNumBlocks = int(extractValue(metric))
 			updated = true
 		}
 	}
@@ -210,11 +236,13 @@ func populateLoRAMetrics(clone *fwkdl.Metrics, metric *dto.Metric, errs *[]error
 }
 
 // populateCacheInfoMetrics updates the metrics with cache info from the metric labels.
-func populateCacheInfoMetrics(clone *fwkdl.Metrics, metric *dto.Metric, errs *[]error) {
+// blockSizeLabelName and numBlocksLabelName allow engines to use different label names
+// (e.g. SGLang uses "page_size" and "num_pages" instead of "block_size" and "num_gpu_blocks").
+func populateCacheInfoMetrics(clone *fwkdl.Metrics, metric *dto.Metric, blockSizeLabelName, numBlocksLabelName string, errs *[]error) {
 	clone.CacheBlockSize = 0
 	for _, label := range metric.GetLabel() {
 		switch label.GetName() {
-		case CacheConfigBlockSizeInfoMetricName:
+		case blockSizeLabelName:
 			if label.GetValue() != "" {
 				if val, err := strconv.Atoi(label.GetValue()); err == nil {
 					clone.CacheBlockSize = val
@@ -222,10 +250,10 @@ func populateCacheInfoMetrics(clone *fwkdl.Metrics, metric *dto.Metric, errs *[]
 					*errs = append(*errs, err)
 				}
 			}
-		case CacheConfigNumGPUBlocksMetricName:
+		case numBlocksLabelName:
 			if label.GetValue() != "" {
 				if val, err := strconv.Atoi(label.GetValue()); err == nil {
-					clone.CacheNumGPUBlocks = val
+					clone.CacheNumBlocks = val
 				} else {
 					*errs = append(*errs, err)
 				}

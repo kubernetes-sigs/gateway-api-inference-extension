@@ -33,6 +33,14 @@ data:
         path: {{ .Values.inferenceExtension.metricsDataSource.path | default "/metrics" | quote }}
         insecureSkipVerify: {{ .Values.inferenceExtension.metricsDataSource.insecureSkipVerify | default true }}
     - type: core-metrics-extractor
+      {{- $modelServerType := .Values.inferencePool.modelServerType | default "vllm" }}
+      {{- if and .Values.inferenceExtension.endpointsServer (not .Values.inferenceExtension.endpointsServer.createInferencePool) }}
+        {{- $modelServerType = .Values.inferenceExtension.endpointsServer.modelServerType | default "vllm" }}
+      {{- end }}
+      {{- if ne $modelServerType "vllm" }}
+      parameters:
+        defaultEngine: {{ $modelServerType | quote }}
+      {{- end }}
     {{- if $parserType }}
     - type: {{ $parserType }}
     {{- end }}
@@ -65,8 +73,6 @@ data:
       - pluginRef: loose-affinity-filter
       - pluginRef: latency-scorer
       - pluginRef: weighted-random-picker
-    featureGates:
-      - prepareDataPlugins
     {{- else }}
     - name: default
       plugins:

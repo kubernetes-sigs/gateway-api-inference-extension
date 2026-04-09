@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,8 +45,9 @@ import (
 )
 
 var (
-	scheme                 = runtime.NewScheme()
-	registeredFeatureGates = sets.New[string]()
+	scheme                   = runtime.NewScheme()
+	registeredFeatureGatesMu sync.RWMutex
+	registeredFeatureGates   = sets.New[string]()
 )
 
 func init() {
@@ -54,6 +56,8 @@ func init() {
 
 // RegisterFeatureGate registers a feature gate name for validation purposes.
 func RegisterFeatureGate(gate string) {
+	registeredFeatureGatesMu.Lock()
+	defer registeredFeatureGatesMu.Unlock()
 	registeredFeatureGates.Insert(gate)
 }
 
@@ -168,6 +172,7 @@ func decodeRawConfig(configBytes []byte) (*configapi.EndpointPickerConfig, error
 func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplugin.Handle) error {
 	pluginNames := sets.New[string]()
 	var approxPrefixCacheParams json.RawMessage
+	foundPrefixCacheScorer := false
 	for _, spec := range configuredPlugins {
 		if spec.Type == "" {
 			return fmt.Errorf("plugin '%s' is missing a type", spec.Name)
@@ -191,10 +196,11 @@ func instantiatePlugins(configuredPlugins []configapi.PluginSpec, handle fwkplug
 		// This is necessary because the prefix cache scorer plugin relies on the dataproducer plugin to populate its state.
 		// This is due to historical reasons where the scorer plugin was developed before the dataproducer plugins were introduced.
 		if spec.Type == prefix.PrefixCacheScorerPluginType {
+			foundPrefixCacheScorer = true
 			approxPrefixCacheParams = spec.Parameters
 		}
 	}
-	if approxPrefixCacheParams != nil && !existsByType(handle, reqdataprodprefix.ApproxPrefixCachePluginType) {
+	if foundPrefixCacheScorer && !existsByType(handle, reqdataprodprefix.ApproxPrefixCachePluginType) {
 		plugin, err := reqdataprodprefix.ApproxPrefixCacheFactory(reqdataprodprefix.ApproxPrefixCachePluginType, approxPrefixCacheParams, handle)
 		if err != nil {
 			return fmt.Errorf("failed to create ApproxPrefixCache plugin for prefix cache plugin: %w, params: %s", err, string(approxPrefixCacheParams))
@@ -271,6 +277,8 @@ func buildSchedulerConfig(
 }
 
 func loadFeatureConfig(gates configapi.FeatureGates) map[string]bool {
+	registeredFeatureGatesMu.RLock()
+	defer registeredFeatureGatesMu.RUnlock()
 	config := make(map[string]bool, len(registeredFeatureGates))
 	for gate := range registeredFeatureGates {
 		config[gate] = false

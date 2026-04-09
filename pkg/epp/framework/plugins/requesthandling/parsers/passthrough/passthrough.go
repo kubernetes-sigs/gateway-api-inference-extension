@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 )
@@ -49,6 +50,10 @@ func NewPassthroughParser() *PassthroughParser {
 // TypedName returns the type and name tuple of this plugin instance.
 func (p *PassthroughParser) TypedName() fwkplugin.TypedName {
 	return p.typedName
+}
+
+func (p *PassthroughParser) SupportedAppProtocols() []v1.AppProtocol {
+	return []v1.AppProtocol{}
 }
 
 func PassthroughParserPluginFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {

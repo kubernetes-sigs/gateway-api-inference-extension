@@ -92,23 +92,36 @@ spec:
               # The pool namespace is optional because EPP can default to the NAMESPACE env var.
               - --pool-namespace
               - {{ .Release.Namespace }}
-          {{- if ne .Values.inferencePool.apiVersion "inference.networking.k8s.io" }}
               - --pool-group
-              - "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+              - "inference.networking.k8s.io"
           {{- end }}
-          {{- end }}
-          # SGLang specific metrics.
+          {{- if not .Values.inferenceExtension.latencyPredictor.enabled }}
+          # Legacy metric CLI flags (skipped when dataLayer is enabled via latency predictor).
           {{- if eq $modelServerType "sglang" }}
               - --total-queued-requests-metric="sglang:num_queue_reqs"
+              - --total-running-requests-metric="sglang:num_running_reqs"
               - --kv-cache-usage-percentage-metric="sglang:token_usage"
+              - --cache-info-metric="sglang:cache_config_info"
           {{- end }}
           {{- if eq $modelServerType "triton-tensorrt-llm" }}
               - --total-queued-requests-metric
               - "nv_trt_llm_request_metrics{request_type=waiting}"
+              - --total-running-requests-metric
+              - "nv_trt_llm_request_metrics{request_type=scheduled}"
               - --kv-cache-usage-percentage-metric
               - "nv_trt_llm_kv_cache_block_metrics{kv_cache_block_type=fraction}"
               - --lora-info-metric
               - "" # Set an empty metric to disable LoRA metric scraping as they are not supported by Triton yet.
+          {{- end }}
+          {{- if eq $modelServerType "trtllm-serve" }}
+              - --total-queued-requests-metric="trtllm_num_requests_waiting"
+              - --total-running-requests-metric="trtllm_num_requests_running"
+              - --kv-cache-usage-percentage-metric="trtllm_kv_cache_utilization"
+              - --cache-info-metric="trtllm_cache_config_info"
+              - --model-server-metrics-path="/prometheus/metrics"
+              - --lora-info-metric
+              - "" # LoRA metrics are not supported by trtllm-serve.
+          {{- end }}
           {{- end }}
               - --zap-encoder
               - "json"
