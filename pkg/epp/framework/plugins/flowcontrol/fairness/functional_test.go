@@ -29,6 +29,7 @@ import (
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/vtc"
 )
 
 // TestFairnessPolicyConformance is the main conformance test suite for FairnessPolicy implementations.
@@ -40,6 +41,7 @@ func TestFairnessPolicyConformance(t *testing.T) {
 	policies := map[string]fwkplugin.FactoryFunc{
 		globalstrict.GlobalStrictFairnessPolicyType: globalstrict.GlobalStrictFairnessPolicyFactory,
 		roundrobin.RoundRobinFairnessPolicyType:     roundrobin.RoundRobinFairnessPolicyFactory,
+		vtc.VTCFairnessPolicyType:                   vtc.VTCFairnessPolicyFactory,
 	}
 
 	for name, f := range policies {
