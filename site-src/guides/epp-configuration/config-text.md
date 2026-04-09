@@ -299,7 +299,7 @@ Picks pod(s) from the list of candidates based on weighted random sampling using
 
 ### Flow Control Plugins (Policies)
 
-These plugins are referenced within the `flowControl` section (Priority Bands). This section includes policies for **[fairness](../../../pkg/epp/framework/plugins/flowcontrol/fairness/README.md)** and ordering.
+These plugins are referenced within the `flowControl` section (Priority Bands). This section includes policies for **[fairness](../../../pkg/epp/framework/plugins/flowcontrol/fairness/README.md)** and **[ordering](../../../pkg/epp/framework/plugins/flowcontrol/ordering/README.md)**.
 
 #### [GlobalStrictFairnessPolicy](../../../pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict/README.md)
 
@@ -323,21 +323,21 @@ A Fairness Policy that guarantees fair sharing of dispatch opportunities between
 > [!NOTE]
 > While this policy prevents starvation, it may introduce global ordering violations, as a newer request in an under-served flow might be dispatched before an older request in a heavily loaded flow.
 
-#### FCFSOrderingPolicy
+#### [FCFSOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/fcfs/README.md)
 
 An Ordering Policy that implements First-Come, First-Served ordering based on logical arrival time. This is the default Ordering Policy.
 
 - *Type*: fcfs-ordering-policy
 - *Parameters*: none
 
-#### EDFOrderingPolicy
+#### [EDFOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/edf/README.md)
 
 An Ordering Policy that implements Earliest Deadline First. It prioritizes requests with the closest expiration time (deadline).
 
 - *Type*: edf-ordering-policy
 - *Parameters*: none
 
-#### SLODeadlineOrderingPolicy
+#### [SLODeadlineOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/slo_deadline/README.md)
 
 An Ordering Policy that orders requests by an SLO-based deadline, computed from the time the request is received by the server. It prioritizes requests with the earliest such deadline.
 

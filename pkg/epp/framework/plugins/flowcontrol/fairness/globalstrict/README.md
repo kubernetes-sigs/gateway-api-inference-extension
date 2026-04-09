@@ -28,6 +28,14 @@ This policy inspects the state of the queues and their items:
 *   **Head Items**: Peeks at the head item of each queue to find the globally "best" candidate.
 *   **Ordering Policy**: Invokes the `OrderingPolicy.Less` method to compare items across flows.
 
+## Configuration
+
+This policy does not require any additional configuration parameters beyond its type registration.
+
+```yaml
+fairnessPolicyRef: global-strict-fairness-policy
+```
+
 ## Requirements
 
 All flows in the band **MUST** use compatible `OrderingPolicy` types (i.e., identical score types). If incompatible policies are detected, the policy will return an error.

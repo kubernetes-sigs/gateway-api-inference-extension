@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
@@ -45,10 +45,10 @@ func TestNewConfigFromAPI(t *testing.T) {
 			Type: globalstrict.GlobalStrictFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &mocks.MockOrderingPolicy{
+	handle.AddPlugin(fcfs.FCFSOrderingPolicyType, &mocks.MockOrderingPolicy{
 		TypedNameV: fwkplugin.TypedName{
-			Name: ordering.FCFSOrderingPolicyType,
-			Type: ordering.FCFSOrderingPolicyType,
+			Name: fcfs.FCFSOrderingPolicyType,
+			Type: fcfs.FCFSOrderingPolicyType,
 		},
 	})
 	handle.AddPlugin(usagelimits.StaticUsageLimitPolicyType, usagelimits.DefaultPolicy())

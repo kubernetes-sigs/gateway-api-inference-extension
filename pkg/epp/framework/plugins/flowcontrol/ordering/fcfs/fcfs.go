@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ordering
+// Package fcfs implements an ordering policy that selects requests based on their arrival order
+// at the Flow Control layer (First-Come, First-Served).
+//
+// For detailed documentation, see README.md.
+package fcfs
 
 import (
 	"encoding/json"
@@ -23,32 +27,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// FCFSOrderingPolicyType represents an ordering policy that implements a First-Come, First-Served (FCFS) strategy.
+// FCFSOrderingPolicyType is the registration type for the FCFS ordering policy.
 //
 // It selects the item with the earliest logical enqueue time.
-//
-// # Behavior and Queue Pairing
-//
-// The behavioral guarantees of this policy are critically dependent on the capabilities of the SafeQueue it is paired
-// with. The system distinguishes between:
-//   - "Logical Enqueue Time": The timestamp when a request first arrives at the `controller.FlowController`.
-//   - "Physical Enqueue Time": The timestamp when a request is added to a specific shard's queue, which happens later.
-//
-// This policy's behavior changes accordingly:
-//   - Paired with a `CapabilityPriorityConfigurable` queue, it provides strict FCFS ordering based on logical enqueue
-//     time, aligning with this policy's `Less` implementation.
-//     This configuration ensures that requests are processed in the order they arrived at the controller, providing the
-//     most intuitive behavior.
-//   - Paired with a `CapabilityFIFO` queue, it provides approximate FCFS ordering based on physical arrival order at
-//     the SafeQueue.
-//     This configuration offers higher performance at the cost of strict logical-time ordering, as the
-//     `controller.FlowController`'s "bounce-and-retry" mechanic for Draining shards means a bounced request may be
-//     processed after a request that logically arrived later.
-//
-// Given that true end-to-end ordering is non-deterministic in a distributed system, this policy defaults to pairing with
-// a `CapabilityFIFO` queue (like "ListQueue") to prioritize performance and high throughput. For users who require the
-// strictest possible logical-time ordering that this layer can provide, explicitly pairing this policy with a
-// `CapabilityPriorityConfigurable` queue is recommended.
+// For detailed documentation on behavior and queue pairing, see README.md.
 const FCFSOrderingPolicyType = "fcfs-ordering-policy"
 
 func FCFSOrderingPolicyFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {

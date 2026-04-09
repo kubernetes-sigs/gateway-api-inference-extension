@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ordering
+// Package edf implements an ordering policy that selects requests based on their absolute deadlines
+// (Earliest Deadline First).
+//
+// For detailed documentation, see README.md.
+package edf
 
 import (
 	"encoding/json"
@@ -24,11 +28,10 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 )
 
-// EDFOrderingPolicyType represents an ordering policy that implements a Earliest Deadline First (EDF) strategy.
+// EDFOrderingPolicyType is the registration type for the EDF ordering policy.
 //
-// It selects the request with the earliest absolute deadline, computed as `EnqueueTime() + EffectiveTTL()`.
-// Requests without a valid TTL (i.e., EffectiveTTL <= 0) are treated as having no deadline and are scheduled after all
-// time-bound requests, using FCFS as a tie-breaker for fairness.
+// It selects the request with the earliest absolute deadline.
+// For detailed documentation, see README.md.
 const EDFOrderingPolicyType = "edf-ordering-policy"
 
 func EDFOrderingPolicyFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {

@@ -25,6 +25,10 @@ This policy consumes structural data from the flow control system:
 
 This policy does not require any additional configuration parameters beyond its type registration.
 
+```yaml
+fairnessPolicyRef: round-robin-fairness-policy
+```
+
 ## Trade-offs
 
 *   **Global Ordering Violation**: It breaks strict global ordering (as defined by the `OrderingPolicy`) across flows. An item in a flow might be served before a 'better' item in another flow depending on the cursor position.

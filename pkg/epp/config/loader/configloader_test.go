@@ -43,7 +43,7 @@ import (
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker/maxscore"
@@ -372,7 +372,7 @@ func TestInstantiateAndConfigure(t *testing.T) {
 				// Verify custom policies.
 				require.Equal(t, "customFCFS", band.OrderingPolicy.TypedName().Name,
 					"Should use custom ordering policy name")
-				require.Equal(t, ordering.FCFSOrderingPolicyType, band.OrderingPolicy.TypedName().Type,
+				require.Equal(t, fcfs.FCFSOrderingPolicyType, band.OrderingPolicy.TypedName().Type,
 					"Should be FCFS type")
 				require.Equal(t, "customFairness", band.FairnessPolicy.TypedName().Name,
 					"Should use custom fairness policy name")
@@ -768,9 +768,9 @@ func registerTestPlugins(t *testing.T) {
 			TypedNameV: fwkplugin.TypedName{Name: name, Type: globalstrict.GlobalStrictFairnessPolicyType},
 		}, nil
 	})
-	fwkplugin.Register(ordering.FCFSOrderingPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	fwkplugin.Register(fcfs.FCFSOrderingPolicyType, func(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 		return &flowcontrolmocks.MockOrderingPolicy{
-			TypedNameV: fwkplugin.TypedName{Name: name, Type: ordering.FCFSOrderingPolicyType},
+			TypedNameV: fwkplugin.TypedName{Name: name, Type: fcfs.FCFSOrderingPolicyType},
 		}, nil
 	})
 

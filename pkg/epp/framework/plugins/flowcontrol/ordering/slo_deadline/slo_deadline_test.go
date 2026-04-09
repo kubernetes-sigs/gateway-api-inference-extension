@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ordering
+package slodeadline
 
 import (
 	"testing"
@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
+
+var testFlowKey = flowcontrol.FlowKey{ID: "test-flow", Priority: 0}
 
 func TestSLODeadlinePolicy_Name(t *testing.T) {
 	t.Parallel()

@@ -33,7 +33,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/edf"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -52,16 +53,16 @@ func newTestPluginsHandle(t *testing.T) plugin.Handle {
 			Name: roundrobin.RoundRobinFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(fcfs.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: ordering.FCFSOrderingPolicyType,
-			Name: ordering.FCFSOrderingPolicyType,
+			Type: fcfs.FCFSOrderingPolicyType,
+			Name: fcfs.FCFSOrderingPolicyType,
 		},
 	})
-	handle.AddPlugin(ordering.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(edf.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: ordering.EDFOrderingPolicyType,
-			Name: ordering.EDFOrderingPolicyType,
+			Type: edf.EDFOrderingPolicyType,
+			Name: edf.EDFOrderingPolicyType,
 		},
 		RequiredQueueCapabilitiesV: []flowcontrol.QueueCapability{flowcontrol.CapabilityPriorityConfigurable},
 	})
@@ -322,14 +323,14 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		pb, err := NewPriorityBandConfig(handle, 1,
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
-			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
+			WithOrderingPolicy(edf.EDFOrderingPolicyType, handle),
 			WithFairnessPolicy(roundrobin.RoundRobinFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
 		assert.Equal(t, uint64(999), pb.MaxBytes)
 		require.NotNil(t, pb.OrderingPolicy)
-		assert.Equal(t, ordering.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
+		assert.Equal(t, edf.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
 		require.NotNil(t, pb.FairnessPolicy)
 		assert.Equal(t, roundrobin.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
 	})
@@ -354,7 +355,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 	t.Run("ShouldDefaultToHeap_WhenPolicyRequiresIt", func(t *testing.T) {
 		t.Parallel()
 		pb, err := NewPriorityBandConfig(handle, 10,
-			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
+			WithOrderingPolicy(edf.EDFOrderingPolicyType, handle),
 			WithFairnessPolicy(globalstrict.GlobalStrictFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
@@ -365,7 +366,7 @@ func TestNewPriorityBandConfig(t *testing.T) {
 	t.Run("ShouldDefaultToList_WhenPolicyDoesNotRequirePriority", func(t *testing.T) {
 		t.Parallel()
 		pb, err := NewPriorityBandConfig(handle, 20,
-			WithOrderingPolicy(ordering.FCFSOrderingPolicyType, handle),
+			WithOrderingPolicy(fcfs.FCFSOrderingPolicyType, handle),
 			WithFairnessPolicy(globalstrict.GlobalStrictFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
@@ -545,7 +546,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority:          1,
-						OrderingPolicyRef: ordering.EDFOrderingPolicyType,
+						OrderingPolicyRef: edf.EDFOrderingPolicyType,
 						FairnessPolicyRef: roundrobin.RoundRobinFairnessPolicyType,
 					},
 				},
@@ -553,7 +554,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			assertion: func(t *testing.T, cfg *Config) {
 				require.Contains(t, cfg.PriorityBands, 1, "Configured priority band should be present")
 				band := cfg.PriorityBands[1]
-				assert.Equal(t, ordering.EDFOrderingPolicyType, band.OrderingPolicy.TypedName().Name,
+				assert.Equal(t, edf.EDFOrderingPolicyType, band.OrderingPolicy.TypedName().Name,
 					"OrderingPolicy should be correctly translated")
 				assert.Equal(t, roundrobin.RoundRobinFairnessPolicyType, band.FairnessPolicy.TypedName().Name,
 					"FairnessPolicy should be correctly translated")

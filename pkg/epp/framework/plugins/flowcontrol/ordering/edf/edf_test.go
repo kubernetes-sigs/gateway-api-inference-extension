@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ordering
+package edf
 
 import (
 	"testing"
@@ -26,6 +26,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 )
+
+var testFlowKey = flowcontrol.FlowKey{ID: "test-flow", Priority: 0}
 
 func TestEDFPolicy_Name(t *testing.T) {
 	t.Parallel()

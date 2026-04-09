@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ordering
+// Package slodeadline implements an ordering policy that selects requests based on an SLO-based deadline
+// derived from request headers.
+//
+// For detailed documentation, see README.md.
+package slodeadline
 
 import (
 	"encoding/json"
@@ -28,11 +32,10 @@ import (
 )
 
 const (
-	// SLODeadlineOrderingPolicyType orders requests by an SLO-based deadline
+	// SLODeadlineOrderingPolicyType is the registration type for the SLO deadline ordering policy.
 	//
-	// It selects the request with the earliest SLO-based deadline, computed as `ReceivedTimestamp() + x-slo-ttft-ms header (interpreted as milliseconds)`.
-	// Requests without a valid x-slo-ttft-ms header are treated as having no deadline and are scheduled after SLO-bound requests,
-	// with FCFS as a tie-breaker.
+	// It selects the request with the earliest SLO-based deadline.
+	// For detailed documentation, see README.md.
 	SLODeadlineOrderingPolicyType = "slo-deadline-ordering-policy"
 
 	// sloTtftHeader is the request header name for SLO time-to-first-token in milliseconds.

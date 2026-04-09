@@ -78,7 +78,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -249,7 +249,7 @@ func setupBenchmarkHarness(
 	}
 	handle.AddPlugin(registry.DefaultFairnessPolicyRef, fPolicy)
 
-	oPolicy, err := ordering.FCFSOrderingPolicyFactory(registry.DefaultOrderingPolicyRef, nil, handle)
+	oPolicy, err := fcfs.FCFSOrderingPolicyFactory(registry.DefaultOrderingPolicyRef, nil, handle)
 	if err != nil {
 		b.Fatalf("Failed to create ordering policy: %v", err)
 	}
