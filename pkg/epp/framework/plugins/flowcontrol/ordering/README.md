@@ -12,7 +12,7 @@ This corresponds to **Tier 3** of the strict 3-Tier Dispatch Hierarchy in the Fl
 
 *   **[First-Come, First-Served (FCFS)](./fcfs/README.md)** (`fcfs-ordering-policy`): Selects requests based on their arrival order. This is the default policy.
 *   **[Earliest Deadline First (EDF)](./edf/README.md)** (`edf-ordering-policy`): Selects requests based on their absolute deadline, derived from TTL.
-*   **[SLO Deadline](./slo_deadline/README.md)** (`slo-deadline-ordering-policy`): Selects requests based on a deadline derived from an SLO header (e.g., target TTFT).
+*   **[SLO Deadline](./slodeadline/README.md)** (`slo-deadline-ordering-policy`): Selects requests based on a deadline derived from an SLO header (e.g., target TTFT).
 
 ## Conformance Testing
 

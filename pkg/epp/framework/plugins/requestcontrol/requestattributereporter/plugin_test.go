@@ -169,6 +169,7 @@ func TestPluginCreation(t *testing.T) {
 			}
 			if plugin == nil {
 				t.Fatalf("New() returned nil plugin without error")
+				return
 			}
 
 			attributeKey := plugin.config.Attributes[0].Key

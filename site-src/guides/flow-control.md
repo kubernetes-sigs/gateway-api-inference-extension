@@ -44,7 +44,7 @@ The definition of "equitable share" depends on the configured policy's **Unit of
 
 ### Ordering (Request Selection)
 Ordering policies determine the order in which requests are served *within a specific flow*.
-By default, requests are served in a First-Come, First-Served ([FCFS](../../pkg/epp/framework/plugins/flowcontrol/ordering/fcfs/README.md)) order based on their arrival time at the gateway. However, other policies like Earliest Deadline First ([EDF](../../pkg/epp/framework/plugins/flowcontrol/ordering/edf/README.md)) or SLO Deadline ([SLO Deadline](../../pkg/epp/framework/plugins/flowcontrol/ordering/slo_deadline/README.md)) can be configured to prioritize requests based on deadlines or SLO targets.
+By default, requests are served in a First-Come, First-Served ([FCFS](../../pkg/epp/framework/plugins/flowcontrol/ordering/fcfs/README.md)) order based on their arrival time at the gateway. However, other policies like Earliest Deadline First ([EDF](../../pkg/epp/framework/plugins/flowcontrol/ordering/edf/README.md)) or SLO Deadline ([SLO Deadline](../../pkg/epp/framework/plugins/flowcontrol/ordering/slodeadline/README.md)) can be configured to prioritize requests based on deadlines or SLO targets.
 
 
 ### The User Experience: TTFT vs. TPOT
@@ -118,7 +118,7 @@ saturationDetector:
 
 ### 3. [Priority Bands and Capacity Config](epp-configuration/config-text.md#priority-band-configuration)
 
-Use the `EndpointPickerConfig.flowControl` configuration block to define your dynamic priority bands and global capacity constraints. For details on available policies, see the [Global Strict Fairness Policy](../../pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict/README.md) and [Round Robin Fairness Policy](../../pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin/README.md), as well as the [FCFS](../../pkg/epp/framework/plugins/flowcontrol/ordering/fcfs/README.md), [EDF](../../pkg/epp/framework/plugins/flowcontrol/ordering/edf/README.md), and [SLO Deadline](../../pkg/epp/framework/plugins/flowcontrol/ordering/slo_deadline/README.md) ordering policies.
+Use the `EndpointPickerConfig.flowControl` configuration block to define your dynamic priority bands and global capacity constraints. For details on available policies, see the [Global Strict Fairness Policy](../../pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict/README.md) and [Round Robin Fairness Policy](../../pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin/README.md), as well as the [FCFS](../../pkg/epp/framework/plugins/flowcontrol/ordering/fcfs/README.md), [EDF](../../pkg/epp/framework/plugins/flowcontrol/ordering/edf/README.md), and [SLO Deadline](../../pkg/epp/framework/plugins/flowcontrol/ordering/slodeadline/README.md) ordering policies.
 
 ```yaml
 flowControl:

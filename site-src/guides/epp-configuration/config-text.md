@@ -337,7 +337,7 @@ An Ordering Policy that implements Earliest Deadline First. It prioritizes reque
 - *Type*: edf-ordering-policy
 - *Parameters*: none
 
-#### [SLODeadlineOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/slo_deadline/README.md)
+#### [SLODeadlineOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/slodeadline/README.md)
 
 An Ordering Policy that orders requests by an SLO-based deadline, computed from the time the request is received by the server. It prioritizes requests with the earliest such deadline.
 
