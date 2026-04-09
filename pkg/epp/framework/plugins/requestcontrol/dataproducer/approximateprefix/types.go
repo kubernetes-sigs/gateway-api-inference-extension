@@ -123,6 +123,10 @@ type config struct {
 	BlockSize int `json:"blockSize"`
 	// MaxPrefixBlocksToMatch is the maximum number of prefix blocks to match.
 	MaxPrefixBlocksToMatch int `json:"maxPrefixBlocksToMatch"`
+	// MaxPrefixTokensToMatch is the maximum number of prefix tokens to match.
+	// When set (> 0), it takes precedence over MaxPrefixBlocksToMatch by computing
+	// maxBlocks = MaxPrefixTokensToMatch / blockSizeTokens.
+	MaxPrefixTokensToMatch int `json:"maxPrefixTokensToMatch"`
 	// Max capacity size of the LRU indexer in number of entries per server (pod).
 	LRUCapacityPerServer int `json:"lruCapacityPerServer"`
 }

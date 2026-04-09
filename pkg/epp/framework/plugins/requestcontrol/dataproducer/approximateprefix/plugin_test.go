@@ -338,6 +338,69 @@ func TestPrefixPluginAutoTune(t *testing.T) {
 	assert.Contains(t, p.indexer().Pods(), ServerID(endpoint.GetMetadata().NamespacedName))
 }
 
+func TestMaxPrefixTokensToMatch(t *testing.T) {
+	// BlockSizeTokens=1 means each block is 4 chars (1 token * 4 chars/token).
+	// With MaxPrefixTokensToMatch=2, maxBlocks = 2/1 = 2, so only the first
+	// 2 blocks (8 chars) of the prompt should be hashed.
+	cfg := config{
+		BlockSizeTokens:        1,
+		MaxPrefixTokensToMatch: 2,
+		LRUCapacityPerServer:   defaultLRUCapacityPerServer,
+	}
+	p, err := newPrepareData(context.Background(), cfg, nil)
+	assert.NoError(t, err)
+
+	endpoint := fwksched.NewEndpoint(
+		&fwkdl.EndpointMetadata{NamespacedName: k8stypes.NamespacedName{Name: "pod1"}},
+		fwkdl.NewMetrics(), fwkdl.NewAttributes(),
+	)
+
+	// Prompt is 16 chars = 4 blocks at blockSize 4 chars, but should be capped to 2.
+	req := &fwksched.LLMRequest{
+		RequestId:   uuid.NewString(),
+		TargetModel: "test-model",
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
+				Prompt: fwksched.Prompt{Raw: "aaaabbbbccccdddd"},
+			},
+		},
+	}
+
+	err = p.PrepareRequestData(context.Background(), req, []fwksched.Endpoint{endpoint})
+	assert.NoError(t, err)
+
+	state, err := plugin.ReadPluginStateKey[*SchedulingContextState](p.PluginState(), req.RequestId, plugin.StateKey(ApproxPrefixCachePluginType))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(state.PrefixHashes), "should cap at MaxPrefixTokensToMatch/BlockSizeTokens = 2 blocks")
+
+	// When MaxPrefixTokensToMatch is 0 (unset), fall back to MaxPrefixBlocksToMatch.
+	cfg2 := config{
+		BlockSizeTokens:        1,
+		MaxPrefixTokensToMatch: 0,
+		MaxPrefixBlocksToMatch: 3,
+		LRUCapacityPerServer:   defaultLRUCapacityPerServer,
+	}
+	p2, err := newPrepareData(context.Background(), cfg2, nil)
+	assert.NoError(t, err)
+
+	req2 := &fwksched.LLMRequest{
+		RequestId:   uuid.NewString(),
+		TargetModel: "test-model",
+		Body: &fwksched.LLMRequestBody{
+			Completions: &fwksched.CompletionsRequest{
+				Prompt: fwksched.Prompt{Raw: "aaaabbbbccccdddd"},
+			},
+		},
+	}
+
+	err = p2.PrepareRequestData(context.Background(), req2, []fwksched.Endpoint{endpoint})
+	assert.NoError(t, err)
+
+	state2, err := plugin.ReadPluginStateKey[*SchedulingContextState](p2.PluginState(), req2.RequestId, plugin.StateKey(ApproxPrefixCachePluginType))
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(state2.PrefixHashes), "should fall back to MaxPrefixBlocksToMatch when MaxPrefixTokensToMatch is 0")
+}
+
 // BenchmarkPrefixPluginStress is a stress test using prompts of increasing length.
 func BenchmarkPrefixPluginStress(b *testing.B) {
 	config := config{
