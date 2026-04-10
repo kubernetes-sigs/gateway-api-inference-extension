@@ -1445,3 +1445,187 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 	assert.Equal(t, int32(concurrency), errorCount.Load(), "All requests should fail JIT provisioning")
 	assert.Equal(t, int32(0), successCount.Load(), "No request should succeed if JIT failed")
 }
+
+// --- ReconcilePriorities Tests ---
+
+func TestFlowRegistry_ReconcilePriorities(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ShouldAddMissingPriorityBands", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+
+		newPrio := 50
+		h.fr.mu.RLock()
+		_, existsBefore := h.fr.config.PriorityBands[newPrio]
+		h.fr.mu.RUnlock()
+		require.False(t, existsBefore, "Priority band should not exist before reconciliation")
+
+		h.fr.ReconcilePriorities([]int{highPriority, lowPriority, newPrio})
+
+		// Verify the new band was created.
+		h.fr.mu.RLock()
+		_, existsAfter := h.fr.config.PriorityBands[newPrio]
+		h.fr.mu.RUnlock()
+		assert.True(t, existsAfter, "Priority band should exist after reconciliation")
+
+		// Verify it exists on all shards.
+		h.fr.mu.RLock()
+		for _, shard := range h.fr.allShards {
+			_, err := shard.FairnessPolicy(newPrio)
+			assert.NoError(t, err, "New priority band must be provisioned on shard %s", shard.ID())
+		}
+		h.fr.mu.RUnlock()
+
+		// Verify stats tracking is set up.
+		_, existsInStats := h.fr.perPriorityBandStats.Load(newPrio)
+		assert.True(t, existsInStats, "Stats tracking should be set up for the new band")
+	})
+
+	t.Run("ShouldRemoveStaleDynamicBands", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		dynamicPrio := 77
+
+		// First, provision a dynamic band via JIT.
+		key := flowcontrol.FlowKey{ID: "dynamic-flow", Priority: dynamicPrio}
+		h.openConnectionOnFlow(key)
+
+		h.fr.mu.RLock()
+		_, exists := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		require.True(t, exists, "Dynamic band should exist after JIT provisioning")
+
+		// Reconcile without the dynamic priority — it should be removed.
+		h.fr.ReconcilePriorities([]int{highPriority, lowPriority})
+
+		h.fr.mu.RLock()
+		_, existsAfter := h.fr.config.PriorityBands[dynamicPrio]
+		h.fr.mu.RUnlock()
+		assert.False(t, existsAfter, "Dynamic band should be removed by reconciliation")
+
+		// Verify removed from stats.
+		_, existsInStats := h.fr.perPriorityBandStats.Load(dynamicPrio)
+		assert.False(t, existsInStats, "Stats tracking should be removed for the deleted band")
+	})
+
+	t.Run("ShouldNeverRemoveStaticBands", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+
+		// Reconcile with an empty set — static bands must survive.
+		h.fr.ReconcilePriorities([]int{})
+
+		h.fr.mu.RLock()
+		_, highExists := h.fr.config.PriorityBands[highPriority]
+		_, lowExists := h.fr.config.PriorityBands[lowPriority]
+		h.fr.mu.RUnlock()
+
+		assert.True(t, highExists, "Static high priority band must never be removed by ReconcilePriorities")
+		assert.True(t, lowExists, "Static low priority band must never be removed by ReconcilePriorities")
+	})
+
+	t.Run("ShouldBeNoOp_WhenDesiredMatchesCurrent", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+
+		// Reconcile with exactly the existing static bands.
+		h.fr.ReconcilePriorities([]int{highPriority, lowPriority})
+
+		h.fr.mu.RLock()
+		bandCount := len(h.fr.config.PriorityBands)
+		h.fr.mu.RUnlock()
+
+		assert.Equal(t, 2, bandCount, "No bands should be added or removed when desired matches current")
+	})
+
+	t.Run("ShouldBeIdempotent", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		newPrio := 42
+
+		desired := []int{highPriority, lowPriority, newPrio}
+
+		// Call multiple times.
+		h.fr.ReconcilePriorities(desired)
+		h.fr.ReconcilePriorities(desired)
+		h.fr.ReconcilePriorities(desired)
+
+		h.fr.mu.RLock()
+		bandCount := len(h.fr.config.PriorityBands)
+		_, exists := h.fr.config.PriorityBands[newPrio]
+		h.fr.mu.RUnlock()
+
+		assert.Equal(t, 3, bandCount, "Repeated reconciliation should not create duplicate bands")
+		assert.True(t, exists, "Band should exist after repeated reconciliation")
+	})
+
+	t.Run("ShouldAddAndRemoveInSingleCall", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		dynOld := 60
+		dynNew := 70
+
+		// Pre-provision a dynamic band.
+		err := h.fr.ensurePriorityBand(dynOld)
+		require.NoError(t, err)
+		h.fr.mu.RLock()
+		_, oldExists := h.fr.config.PriorityBands[dynOld]
+		h.fr.mu.RUnlock()
+		require.True(t, oldExists)
+
+		// Reconcile: remove dynOld, add dynNew.
+		h.fr.ReconcilePriorities([]int{highPriority, lowPriority, dynNew})
+
+		h.fr.mu.RLock()
+		_, oldExistsAfter := h.fr.config.PriorityBands[dynOld]
+		_, newExistsAfter := h.fr.config.PriorityBands[dynNew]
+		h.fr.mu.RUnlock()
+
+		assert.False(t, oldExistsAfter, "Old dynamic band should be removed")
+		assert.True(t, newExistsAfter, "New dynamic band should be created")
+	})
+
+	t.Run("ShouldHandleEmptyDesiredSet", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+		dynPrio := 99
+
+		// Pre-provision a dynamic band.
+		err := h.fr.ensurePriorityBand(dynPrio)
+		require.NoError(t, err)
+
+		// Reconcile with empty set — only static bands should remain.
+		h.fr.ReconcilePriorities([]int{})
+
+		h.fr.mu.RLock()
+		_, dynExists := h.fr.config.PriorityBands[dynPrio]
+		_, highExists := h.fr.config.PriorityBands[highPriority]
+		_, lowExists := h.fr.config.PriorityBands[lowPriority]
+		bandCount := len(h.fr.config.PriorityBands)
+		h.fr.mu.RUnlock()
+
+		assert.False(t, dynExists, "Dynamic band should be removed")
+		assert.True(t, highExists, "Static high band should survive")
+		assert.True(t, lowExists, "Static low band should survive")
+		assert.Equal(t, 2, bandCount, "Only static bands should remain")
+	})
+
+	t.Run("ShouldHandleNilDesiredSet", func(t *testing.T) {
+		t.Parallel()
+		h := newRegistryTestHarness(t, harnessOptions{})
+
+		// Reconcile with nil — same as empty, only static bands remain.
+		require.NotPanics(t, func() {
+			h.fr.ReconcilePriorities(nil)
+		})
+
+		h.fr.mu.RLock()
+		_, highExists := h.fr.config.PriorityBands[highPriority]
+		_, lowExists := h.fr.config.PriorityBands[lowPriority]
+		h.fr.mu.RUnlock()
+
+		assert.True(t, highExists, "Static high band should survive")
+		assert.True(t, lowExists, "Static low band should survive")
+	})
+}

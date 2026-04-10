@@ -195,6 +195,7 @@ func (m *mockActiveFlowConnection) FlowKey() flowcontrol.FlowKey {
 type mockRegistryClient struct {
 	contracts.FlowRegistryObserver
 	contracts.FlowRegistryDataPlane
+	contracts.FlowRegistryControlPlane
 	WithConnectionFunc func(key flowcontrol.FlowKey, fn func(conn contracts.ActiveFlowConnection) error) error
 	ShardStatsFunc     func() []contracts.ShardStats
 }
