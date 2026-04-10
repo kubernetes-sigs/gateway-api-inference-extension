@@ -106,6 +106,7 @@ type RequestContext struct {
 	RequestSize               int
 	Usage                     fwkrh.Usage
 	ResponseSize              int
+	ResponseBodyStarted       bool
 	ResponseComplete          bool
 	ResponseStatusCode        string
 	RequestRunning            bool

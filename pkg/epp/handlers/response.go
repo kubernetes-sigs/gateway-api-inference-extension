@@ -40,7 +40,8 @@ import (
 // Non-streaming case:
 //
 //	Invoked exactly once with endOfStream=true. It processes the entire response
-//	body as a single "stream" event.
+//
+// body as a single "stream" event.
 func (s *StreamingServer) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, responseBytes []byte, endOfStream bool) *RequestContext {
 	logger := log.FromContext(ctx)
 	logger.V(logutil.DEBUG).Info("HandleResponseBody is triggered", "len(responseBytes)", len(responseBytes), "endOfStream", endOfStream)

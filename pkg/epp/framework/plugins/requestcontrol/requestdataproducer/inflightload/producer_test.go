@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
@@ -82,11 +81,51 @@ func TestInFlightLoadProducer_Lifecycle(t *testing.T) {
 	require.Equal(t, int64(10), producer.tokenTracker.get(endpointID))
 
 	// 2. ResponseBody EndOfStream (Dec)
-	targetEndpoint := &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: endpointName, Namespace: "default"}}
-	producer.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, targetEndpoint)
+	req.SchedulingResult = res
+	producer.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, nil)
 
 	require.Equal(t, int64(0), producer.requestTracker.get(endpointID))
 	require.Equal(t, int64(0), producer.tokenTracker.get(endpointID))
+}
+
+func TestInFlightLoadProducer_MultiPodLifecycle(t *testing.T) {
+	t.Parallel()
+
+	producer := &InFlightLoadProducer{
+		requestTracker: newConcurrencyTracker(),
+		tokenTracker:   newConcurrencyTracker(),
+		tokenEstimator: NewSimpleTokenEstimator(),
+	}
+	ctx := context.Background()
+	podA := "pod-a"
+	podB := "pod-b"
+	idA := fullEndpointName(podA)
+	idB := fullEndpointName(podB)
+
+	// 1. Dispatch to PodA (Prefill) and PodB (Decode)
+	req := makeTokenRequest("multi-req", "1234567890123456") // 10 tokens
+	res := &schedulingtypes.SchedulingResult{
+		PrimaryProfileName: "prefill",
+		ProfileResults: map[string]*schedulingtypes.ProfileRunResult{
+			"prefill": {TargetEndpoints: []schedulingtypes.Endpoint{newStubSchedulingEndpoint(podA)}},
+			"decode":  {TargetEndpoints: []schedulingtypes.Endpoint{newStubSchedulingEndpoint(podB)}},
+		},
+	}
+
+	producer.PreRequest(ctx, req, res)
+	require.Equal(t, int64(1), producer.requestTracker.get(idA))
+	require.Equal(t, int64(1), producer.requestTracker.get(idB))
+
+	// 2. First Chunk arrives (Early Prefill Release)
+	req.SchedulingResult = res
+	producer.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: false, StartOfStream: true}, nil)
+	require.Equal(t, int64(0), producer.requestTracker.get(idA), "PodA should be released after first chunk")
+	require.Equal(t, int64(1), producer.requestTracker.get(idB), "PodB should still be busy")
+
+	// 3. Final Chunk arrives (Full Cleanup)
+	producer.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, nil)
+	require.Equal(t, int64(0), producer.requestTracker.get(idA), "PodA should stay clean")
+	require.Equal(t, int64(0), producer.requestTracker.get(idB), "PodB should now be released")
 }
 
 func TestInFlightLoadProducer_NotificationCleanup(t *testing.T) {
@@ -104,17 +143,13 @@ func TestInFlightLoadProducer_NotificationCleanup(t *testing.T) {
 	producer.requestTracker.add(endpointID, 10)
 	producer.tokenTracker.add(endpointID, 1000)
 
-	// Simulate Delete Notification
-	pod := &unstructured.Unstructured{}
-	pod.SetNamespace("default")
-	pod.SetName(endpointName)
-
-	event := datalayer.NotificationEvent{
-		Type:   datalayer.EventDelete,
-		Object: pod,
+	// Simulate Delete Notification (Endpoint)
+	eventEndpoint := datalayer.EndpointEvent{
+		Type:     datalayer.EventDelete,
+		Endpoint: newStubSchedulingEndpoint(endpointName),
 	}
 
-	err := producer.ExtractNotification(ctx, event)
+	err := producer.ExtractEndpoint(ctx, eventEndpoint)
 	require.NoError(t, err)
 
 	// Verify Cleanup
@@ -157,9 +192,10 @@ func TestInFlightLoadProducer_ConcurrencyStress(t *testing.T) {
 	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			targetEndpoint := &datalayer.EndpointMetadata{NamespacedName: types.NamespacedName{Name: endpointName, Namespace: "default"}}
+			res := makeSchedulingResult(endpointName)
+			req := &schedulingtypes.InferenceRequest{SchedulingResult: res}
 			for range opsPerRoutine {
-				producer.ResponseBody(ctx, nil, &requestcontrol.Response{EndOfStream: true}, targetEndpoint)
+				producer.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, nil)
 			}
 		}()
 	}
@@ -199,8 +235,13 @@ func newStubSchedulingEndpoint(name string) *stubSchedulingEndpoint {
 	}
 }
 
-func (f *stubSchedulingEndpoint) GetMetadata() *datalayer.EndpointMetadata { return f.metadata }
-func (f *stubSchedulingEndpoint) Put(key string, val datalayer.Cloneable)  { f.attr.Put(key, val) }
+func (f *stubSchedulingEndpoint) GetMetadata() *datalayer.EndpointMetadata   { return f.metadata }
+func (f *stubSchedulingEndpoint) UpdateMetadata(*datalayer.EndpointMetadata) {}
+func (f *stubSchedulingEndpoint) GetMetrics() *datalayer.Metrics             { return nil }
+func (f *stubSchedulingEndpoint) UpdateMetrics(*datalayer.Metrics)           {}
+func (f *stubSchedulingEndpoint) GetAttributes() datalayer.AttributeMap      { return f.attr }
+func (f *stubSchedulingEndpoint) String() string                             { return "" }
+func (f *stubSchedulingEndpoint) Put(key string, val datalayer.Cloneable)    { f.attr.Put(key, val) }
 func (f *stubSchedulingEndpoint) Get(key string) (datalayer.Cloneable, bool) {
 	return f.attr.Get(key)
 }

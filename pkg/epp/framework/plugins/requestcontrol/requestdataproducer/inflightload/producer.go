@@ -23,9 +23,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
@@ -37,6 +34,7 @@ import (
 
 const (
 	InFlightLoadProducerType = "inflight-load-producer"
+	profilePrefill           = "prefill"
 )
 
 func InFlightLoadProducerFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
@@ -52,7 +50,7 @@ var (
 	_ requestcontrol.PreRequest            = &InFlightLoadProducer{}
 	_ requestcontrol.ResponseBodyProcessor = &InFlightLoadProducer{}
 	_ requestcontrol.DataProducer          = &InFlightLoadProducer{}
-	_ datalayer.NotificationExtractor      = &InFlightLoadProducer{}
+	_ datalayer.EndpointExtractor          = &InFlightLoadProducer{}
 )
 
 type InFlightLoadProducer struct {
@@ -66,14 +64,9 @@ func (p *InFlightLoadProducer) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-// GVK returns the GroupVersionKind this extractor handles.
-func (p *InFlightLoadProducer) GVK() schema.GroupVersionKind {
-	return corev1.SchemeGroupVersion.WithKind("Pod")
-}
-
 // ExpectedInputType defines the type expected by the extractor.
 func (p *InFlightLoadProducer) ExpectedInputType() reflect.Type {
-	return reflect.TypeFor[datalayer.NotificationEvent]()
+	return datalayer.EndpointEventReflectType
 }
 
 // Extract transforms the raw data into structured attributes (not used for notifications).
@@ -81,20 +74,16 @@ func (p *InFlightLoadProducer) Extract(context.Context, any, datalayer.Endpoint)
 	return nil
 }
 
-// ExtractNotification handles pod deletion events to prune stateful trackers.
-func (p *InFlightLoadProducer) ExtractNotification(ctx context.Context, event datalayer.NotificationEvent) error {
-	if event.Type != datalayer.EventDelete || event.Object == nil {
+// ExtractEndpoint handles endpoint deletion events to prune stateful trackers.
+func (p *InFlightLoadProducer) ExtractEndpoint(ctx context.Context, event datalayer.EndpointEvent) error {
+	if event.Type != datalayer.EventDelete || event.Endpoint == nil {
 		return nil
 	}
 
-	nsn := types.NamespacedName{
-		Namespace: event.Object.GetNamespace(),
-		Name:      event.Object.GetName(),
-	}
-	id := nsn.String()
+	id := event.Endpoint.GetMetadata().NamespacedName.String()
 
 	p.DeleteEndpoint(id)
-	log.FromContext(ctx).V(logutil.DEFAULT).Info("Cleaned up in-flight load for deleted pod", "pod", id)
+	log.FromContext(ctx).V(logutil.DEFAULT).Info("Cleaned up in-flight load for deleted endpoint", "endpoint", id)
 	return nil
 }
 
@@ -114,13 +103,12 @@ func (p *InFlightLoadProducer) PreRequest(_ context.Context, request *framework.
 		return
 	}
 
-	// For the foundational Scorer PR, we only track the primary target endpoint.
-	primaryResult := result.ProfileResults[result.PrimaryProfileName]
-	if primaryResult == nil || len(primaryResult.TargetEndpoints) == 0 {
-		return
-	}
-
-	for _, endpoint := range primaryResult.TargetEndpoints {
+	for _, profileResult := range result.ProfileResults {
+		if profileResult == nil || len(profileResult.TargetEndpoints) == 0 {
+			continue
+		}
+		// Only track the first endpoint (the primary target), as requested by reviewers.
+		endpoint := profileResult.TargetEndpoints[0]
 		if endpoint == nil || endpoint.GetMetadata() == nil {
 			continue
 		}
@@ -132,17 +120,49 @@ func (p *InFlightLoadProducer) PreRequest(_ context.Context, request *framework.
 }
 
 func (p *InFlightLoadProducer) ResponseBody(
-	_ context.Context,
+	ctx context.Context,
 	request *framework.InferenceRequest,
 	resp *requestcontrol.Response,
-	targetEndpoint *datalayer.EndpointMetadata,
+	_ *datalayer.EndpointMetadata,
 ) {
-	// For the foundational Scorer PR, we only perform cleanup on EndOfStream.
-	if targetEndpoint == nil || resp == nil || !resp.EndOfStream {
+	if request == nil || resp == nil {
 		return
 	}
 
-	eid := targetEndpoint.NamespacedName.String()
+	result := request.SchedulingResult
+	if result == nil {
+		return
+	}
+
+	// 1. Early Prefill Release (on first chunk)
+	// Uses the new StartOfStream signal provided by the framework.
+	if resp.StartOfStream {
+		if prefillResult, ok := result.ProfileResults[profilePrefill]; ok && len(prefillResult.TargetEndpoints) > 0 {
+			p.release(prefillResult.TargetEndpoints[0], request)
+		}
+	}
+
+	// 2. Full Cleanup (on completion)
+	if resp.EndOfStream {
+		for name, profileResult := range result.ProfileResults {
+			if profileResult == nil || len(profileResult.TargetEndpoints) == 0 {
+				continue
+			}
+			// Skip "prefill" as it was already released in the StartOfStream block.
+			// This works perfectly even if StartOfStream and EndOfStream are both true (single chunk).
+			if name == profilePrefill {
+				continue
+			}
+			p.release(profileResult.TargetEndpoints[0], request)
+		}
+	}
+}
+
+func (p *InFlightLoadProducer) release(endpoint framework.Endpoint, request *framework.InferenceRequest) {
+	if endpoint == nil || endpoint.GetMetadata() == nil {
+		return
+	}
+	eid := endpoint.GetMetadata().NamespacedName.String()
 	p.requestTracker.dec(eid)
 	tokens := p.tokenEstimator.Estimate(request)
 	p.tokenTracker.add(eid, -tokens)

@@ -28,6 +28,8 @@ type Response struct {
 	RequestId string
 	// Headers is a map of the response headers. Nil during body processing
 	Headers map[string]string
+	// StartOfStream when true indicates that this invocation contains the first chunk of the response
+	StartOfStream bool
 	// EndOfStream when true indicates that this invocation contains the last chunk of the response
 	EndOfStream bool
 	// ReqMetadata is a map of metadata that can be passed from Envoy.

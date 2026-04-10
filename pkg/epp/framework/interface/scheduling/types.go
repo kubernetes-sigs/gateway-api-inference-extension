@@ -56,6 +56,8 @@ type InferenceRequest struct {
 	// TokenizedPrompt contains the tokenization results if external tokenization is enabled.
 	// This is nil if tokenization was not performed or if the tokenizer is not configured.
 	TokenizedPrompt *TokenizedPrompt
+	// SchedulingResult captures the scheduling decisions made during the cycle.
+	SchedulingResult *SchedulingResult
 }
 
 // TokenizedPrompt contains the result of tokenizing the request prompt.

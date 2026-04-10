@@ -192,6 +192,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target endpoint: %w", err).Error()}
 	}
 
+	reqCtx.SchedulingRequest.SchedulingResult = result
+
 	// Prepare Request (Populates RequestContext and call PreRequest plugins)
 	// Insert target endpoint to instruct Envoy to route requests to the specified target pod and attach the port number.
 	// Invoke PreRequest registered plugins.
@@ -350,11 +352,14 @@ func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.Re
 func (d *Director) HandleResponseBody(ctx context.Context, reqCtx *handlers.RequestContext, endOfStream bool) *handlers.RequestContext {
 	logger := log.FromContext(ctx).WithValues("stage", "bodyChunk")
 	logger.V(logutil.TRACE).Info("Entering HandleResponseBodyChunk")
+	startOfStream := !reqCtx.ResponseBodyStarted
+	reqCtx.ResponseBodyStarted = true
 	response := &fwk.Response{
-		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
-		Headers:     reqCtx.Response.Headers,
-		EndOfStream: endOfStream,
-		Usage:       reqCtx.Usage,
+		RequestId:     reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
+		Headers:       reqCtx.Response.Headers,
+		StartOfStream: startOfStream,
+		EndOfStream:   endOfStream,
+		Usage:         reqCtx.Usage,
 	}
 	d.runResponseBodyPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 	reqCtx.Response.DynamicMetadata = response.DynamicMetadata
