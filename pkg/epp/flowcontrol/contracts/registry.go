@@ -49,6 +49,7 @@ import (
 type FlowRegistry interface {
 	FlowRegistryObserver
 	FlowRegistryDataPlane
+	FlowRegistryControlPlane
 }
 
 // FlowRegistryObserver defines the read-only, observation interface for the registry.
@@ -58,6 +59,29 @@ type FlowRegistryObserver interface {
 
 	// ShardStats returns a near-consistent slice of statistics snapshots, one for each `RegistryShard`.
 	ShardStats() []ShardStats
+}
+
+// FlowRegistryControlPlane defines the control-plane interface for managing the registry's priority band topology.
+// It allows controllers (e.g., the InferenceObjective reconciler) to pre-provision priority bands ahead of data-plane
+// traffic, moving this responsibility out of the request hot path.
+//
+// # Conformance: Implementations MUST be goroutine-safe.
+type FlowRegistryControlPlane interface {
+	// ReconcilePriorities synchronizes the registry's set of priority bands to match the desired set of priorities.
+	//
+	// It performs a three-way diff against the current state:
+	//   - Priorities in `desiredPriorities` that do not exist in the registry are created using the DefaultPriorityBand
+	//     template.
+	//   - Priorities that exist in the registry but are NOT in `desiredPriorities` and were dynamically provisioned
+	//     (not part of the initial static configuration) are removed, along with all their associated resources
+	//     (queues, stats, shard state).
+	//   - Priorities that exist in both are left unchanged (no-op).
+	//
+	// This method is idempotent: calling it multiple times with the same set produces the same result.
+	//
+	// Note: Statically configured priority bands (those provided at registry construction via Config.PriorityBands) are
+	// never removed by this method, even if they are absent from `desiredPriorities`.
+	ReconcilePriorities(desiredPriorities []int)
 }
 
 // FlowRegistryDataPlane defines the high-throughput, request-path interface for the registry.

@@ -105,6 +105,10 @@ type FlowRegistry struct {
 
 	mu    sync.RWMutex
 	shard *registryShard
+
+	// staticPriorities is the set of priority levels that were configured at construction time via Config.PriorityBands.
+	// These priorities are never removed by ReconcilePriorities. Protected by `mu`.
+	staticPriorities map[int]struct{}
 }
 
 var _ contracts.FlowRegistry = &FlowRegistry{}
@@ -137,7 +141,9 @@ func NewFlowRegistry(config *Config, logger logr.Logger, opts ...RegistryOption)
 		fr.clock = &clock.RealClock{}
 	}
 
+	fr.staticPriorities = make(map[int]struct{}, len(cfg.PriorityBands))
 	for prio := range cfg.PriorityBands {
+		fr.staticPriorities[prio] = struct{}{}
 		fr.perPriorityBandStats.Store(prio, &bandStats{})
 	}
 
@@ -298,6 +304,52 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 func (fr *FlowRegistry) deletePriorityBand(priority int) {
 	fr.priorityBandStates.Delete(priority)           // Logical delete
 	fr.cleanupPriorityBandResources([]int{priority}) // Physical cleanup
+}
+
+// --- `contracts.FlowRegistryControlPlane` Implementation ---
+
+// ReconcilePriorities synchronizes the registry's priority bands to match the desired set of priorities.
+//
+// It creates bands that are in `desiredPriorities` but missing from the registry, and removes dynamically provisioned
+// bands that are no longer in `desiredPriorities`. Statically configured bands (those provided at construction) are
+// never removed.
+func (fr *FlowRegistry) ReconcilePriorities(desiredPriorities []int) {
+	desiredSet := make(map[int]struct{}, len(desiredPriorities))
+	for _, p := range desiredPriorities {
+		desiredSet[p] = struct{}{}
+	}
+
+	// Determine which bands to add and which to remove.
+	fr.mu.RLock()
+	var toAdd []int
+	for p := range desiredSet {
+		if _, exists := fr.config.PriorityBands[p]; !exists {
+			toAdd = append(toAdd, p)
+		}
+	}
+
+	var toRemove []int
+	for p := range fr.config.PriorityBands {
+		if _, desired := desiredSet[p]; !desired {
+			if _, isStatic := fr.staticPriorities[p]; !isStatic {
+				toRemove = append(toRemove, p)
+			}
+		}
+	}
+	fr.mu.RUnlock()
+
+	// Add missing bands.
+	for _, p := range toAdd {
+		if err := fr.ensurePriorityBand(p); err != nil {
+			fr.logger.Error(err, "Failed to provision priority band during reconciliation", "priority", p)
+		}
+	}
+
+	// Remove stale dynamic bands.
+	for _, p := range toRemove {
+		fr.logger.V(logging.DEFAULT).Info("Removing stale dynamic priority band during reconciliation", "priority", p)
+		fr.deletePriorityBand(p)
+	}
 }
 
 // --- `contracts.FlowRegistryObserver` Implementation ---
