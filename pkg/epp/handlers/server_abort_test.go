@@ -112,7 +112,7 @@ func TestRecvOrAbort_AbortBeforeRecv(t *testing.T) {
 	case sent := <-srv.sentCh:
 		ir := sent.GetImmediateResponse()
 		require.NotNil(t, ir, "Should have sent ImmediateResponse")
-		assert.Equal(t, envoyTypePb.StatusCode_ServiceUnavailable, ir.Status.Code)
+		assert.Equal(t, envoyTypePb.StatusCode_TooManyRequests, ir.Status.Code)
 		assert.Equal(t, []byte("request evicted by flow control"), ir.Body)
 	case <-time.After(time.Second):
 		t.Fatal("Timeout waiting for ImmediateResponse")
@@ -143,7 +143,7 @@ func TestRecvOrAbort_AbortDuringRecvWait(t *testing.T) {
 	case sent := <-srv.sentCh:
 		ir := sent.GetImmediateResponse()
 		require.NotNil(t, ir)
-		assert.Equal(t, envoyTypePb.StatusCode_ServiceUnavailable, ir.Status.Code)
+		assert.Equal(t, envoyTypePb.StatusCode_TooManyRequests, ir.Status.Code)
 	case <-time.After(time.Second):
 		t.Fatal("Timeout waiting for ImmediateResponse")
 	}

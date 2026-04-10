@@ -403,7 +403,7 @@ func (s *StreamingServer) recvOrAbort(
 			Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 				ImmediateResponse: &extProcPb.ImmediateResponse{
 					Status: &envoyTypePb.HttpStatus{
-						Code: envoyTypePb.StatusCode_ServiceUnavailable,
+						Code: envoyTypePb.StatusCode_TooManyRequests,
 					},
 					Body: []byte("request evicted by flow control"),
 				},
