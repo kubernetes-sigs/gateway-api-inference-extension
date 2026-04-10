@@ -516,40 +516,56 @@ func TestFlowRegistry_UpdateShardCount(t *testing.T) {
 func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ShouldCreateBand_WhenPriorityIsUnknown", func(t *testing.T) {
+	t.Run("ShouldRejectFlow_WhenPriorityBandNotProvisioned", func(t *testing.T) {
 		t.Parallel()
-		// Start with 2 shards to ensure propagation works across the cluster.
+		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
+		unknownPrio := 55
+		key := flowcontrol.FlowKey{ID: "unknown-prio-flow", Priority: unknownPrio}
+
+		// Without pre-provisioning the band, WithConnection must fail.
+		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			t.Fatal("Callback must not be executed when the priority band does not exist")
+			return nil
+		})
+		require.Error(t, err, "WithConnection must fail for an unknown priority")
+		assert.ErrorIs(t, err, contracts.ErrPriorityBandNotFound,
+			"The error must indicate that the priority band was not found")
+	})
+
+	t.Run("ShouldSucceed_WhenBandPreProvisionedViaReconcile", func(t *testing.T) {
+		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
 		dynamicPrio := 55
 		key := flowcontrol.FlowKey{ID: "dynamic-flow", Priority: dynamicPrio}
 
-		// Connect with a new priority.
+		// Pre-provision the band via the control-plane API.
+		h.fr.ReconcilePriorities([]int{highPriority, lowPriority, dynamicPrio})
+
 		err := h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
 			return nil
 		})
-		require.NoError(t, err, "WithConnection should succeed for dynamic priority")
+		require.NoError(t, err, "WithConnection should succeed after band is pre-provisioned")
 
 		h.fr.mu.RLock()
 		_, existsInConfig := h.fr.config.PriorityBands[dynamicPrio]
 		h.fr.mu.RUnlock()
-		assert.True(t, existsInConfig, "Dynamic priority must be added to global config definition")
-
-		stats := h.fr.Stats()
-		_, existsInStats := stats.PerPriorityBandStats[dynamicPrio]
-		assert.True(t, existsInStats, "Dynamic priority must appear in global stats")
+		assert.True(t, existsInConfig, "Pre-provisioned priority must exist in global config")
 
 		for _, shard := range h.fr.activeShards {
 			_, err := shard.ManagedQueue(key)
-			assert.NoError(t, err, "Dynamic band must be provisioned on shard %s", shard.ID())
+			assert.NoError(t, err, "Flow must be provisioned on shard %s", shard.ID())
 		}
 	})
 
-	t.Run("ShouldHandleConcurrentDynamicCreation", func(t *testing.T) {
+	t.Run("ShouldHandleConcurrentConnections_OnPreProvisionedBand", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
 		dynamicPrio := 77
-		key := flowcontrol.FlowKey{ID: "race-flow", Priority: dynamicPrio}
 
+		// Pre-provision the band.
+		h.fr.ReconcilePriorities([]int{highPriority, lowPriority, dynamicPrio})
+
+		key := flowcontrol.FlowKey{ID: "race-flow", Priority: dynamicPrio}
 		var wg sync.WaitGroup
 		concurrency := 10
 		wg.Add(concurrency)
@@ -557,7 +573,6 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		for range concurrency {
 			go func() {
 				defer wg.Done()
-				// Everyone tries to trigger provisioning simultaneously.
 				_ = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error { return nil })
 			}()
 		}
@@ -566,16 +581,17 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		h.fr.mu.RLock()
 		_, exists := h.fr.config.PriorityBands[dynamicPrio]
 		h.fr.mu.RUnlock()
-		assert.True(t, exists, "Band should exist after concurrent creation attempts")
+		assert.True(t, exists, "Band should exist after concurrent connection attempts")
 	})
 
-	t.Run("ShouldPersistDynamicBands_AcrossScalingEvents", func(t *testing.T) {
+	t.Run("ShouldPersistPreProvisionedBands_AcrossScalingEvents", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 1})
 		dynamicPrio := 88
 		key := flowcontrol.FlowKey{ID: "scaling-flow", Priority: dynamicPrio}
 
-		// Create dynamic band on Shard 0.
+		// Pre-provision band and create a flow on Shard 0.
+		h.fr.ReconcilePriorities([]int{highPriority, lowPriority, dynamicPrio})
 		h.openConnectionOnFlow(key)
 
 		// Scale Up -> Shard 1 created.
@@ -769,20 +785,25 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 		assert.Equal(t, numWorkers*opsPerWorker, flowCount, "All concurrently registered flows must be present")
 	})
 
-	t.Run("ConcurrentDynamicBandProvisioning_WithGC", func(t *testing.T) {
+	t.Run("ConcurrentBandProvisioning_WithGC", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{})
 
 		const (
 			numWorkers    = 10
-			numPriorities = 20 // Create 20 different dynamic bands
+			numPriorities = 20 // Use 20 different pre-provisioned bands
 			opsPerWorker  = 10
 		)
+
+		// Pre-provision all dynamic bands before starting concurrent work.
+		for j := range numPriorities {
+			require.NoError(t, h.fr.ensurePriorityBand(100+j))
+		}
 
 		var wg sync.WaitGroup
 		wg.Add(numWorkers + 1) // +1 for GC goroutine
 
-		// Workers: Create flows at random priorities
+		// Workers: Create flows at pre-provisioned priorities
 		for i := range numWorkers {
 			go func() {
 				defer wg.Done()
@@ -799,24 +820,6 @@ func TestFlowRegistry_Concurrency(t *testing.T) {
 				}
 			}()
 		}
-
-		// Wait for at least one band to be created.
-		require.Eventually(t, func() bool {
-			count := 0
-			h.fr.priorityBandStates.Range(func(_, _ any) bool {
-				count++
-				return true
-			})
-			return count > 0
-		}, 5*time.Second, 10*time.Millisecond, "Dynamic bands should be created")
-
-		// Check bands were created before GC collects them all
-		bandCount := 0
-		h.fr.priorityBandStates.Range(func(_, _ any) bool {
-			bandCount++
-			return true
-		})
-		require.True(t, bandCount > 0, "Dynamic bands should be created during concurrent workload")
 
 		// GC Worker: Constantly running GC cycles
 		go func() {
@@ -956,7 +959,8 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
-		// Create dynamic band via JIT provisioning
+		// Pre-provision the dynamic band and create a flow.
+		require.NoError(t, h.fr.ensurePriorityBand(dynamicPrio))
 		h.openConnectionOnFlow(key)
 
 		// Verify band exists
@@ -1009,8 +1013,11 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
-		// Create 3 dynamic bands
+		// Pre-provision 3 dynamic bands and create flows.
 		prio1, prio2, prio3 := 101, 102, 103
+		require.NoError(t, h.fr.ensurePriorityBand(prio1))
+		require.NoError(t, h.fr.ensurePriorityBand(prio2))
+		require.NoError(t, h.fr.ensurePriorityBand(prio3))
 		h.openConnectionOnFlow(flowcontrol.FlowKey{ID: "flow-1", Priority: prio1})
 		h.openConnectionOnFlow(flowcontrol.FlowKey{ID: "flow-2", Priority: prio2})
 		h.openConnectionOnFlow(flowcontrol.FlowKey{ID: "flow-3", Priority: prio3})
@@ -1048,7 +1055,8 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 3})
 		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
-		// Create flow on all shards
+		// Pre-provision the dynamic band and create a flow.
+		require.NoError(t, h.fr.ensurePriorityBand(dynamicPrio))
 		h.openConnectionOnFlow(key)
 
 		// Verify band exists on all shards
@@ -1094,7 +1102,8 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 
-		// Create and collect flow (band becomes empty)
+		// Pre-provision the dynamic band, create and collect flow (band becomes empty).
+		require.NoError(t, h.fr.ensurePriorityBand(dynamicPrio))
 		h.openConnectionOnFlow(key)
 		h.fakeClock.Step(h.config.FlowGCTimeout + time.Second)
 		h.fr.executeGCCycle()
@@ -1136,7 +1145,7 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		assert.False(t, isIdle, "Band should not be idle when it has flows")
 	})
 
-	t.Run("ShouldReleaseBandLease_OnJITFailure", func(t *testing.T) {
+	t.Run("ShouldReleaseBandLease_OnProvisioningFailure", func(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
@@ -1180,7 +1189,8 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
-		// Create 3 flows at the same priority
+		// Pre-provision the dynamic band and create 3 flows at the same priority.
+		require.NoError(t, h.fr.ensurePriorityBand(dynamicPrio))
 		key1 := flowcontrol.FlowKey{ID: "flow-1", Priority: dynamicPrio}
 		key2 := flowcontrol.FlowKey{ID: "flow-2", Priority: dynamicPrio}
 		key3 := flowcontrol.FlowKey{ID: "flow-3", Priority: dynamicPrio}
@@ -1237,7 +1247,8 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
-		// Create 3 flows at the same priority
+		// Pre-provision the dynamic band and create 3 flows at the same priority.
+		require.NoError(t, h.fr.ensurePriorityBand(dynamicPrio))
 		key1 := flowcontrol.FlowKey{ID: "flow-1", Priority: dynamicPrio}
 		key2 := flowcontrol.FlowKey{ID: "flow-2", Priority: dynamicPrio}
 		key3 := flowcontrol.FlowKey{ID: "flow-3", Priority: dynamicPrio}
@@ -1321,6 +1332,8 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 		t.Parallel()
 		h := newRegistryTestHarness(t, harnessOptions{manualGC: true})
 
+		// Pre-provision the dynamic band.
+		require.NoError(t, h.fr.ensurePriorityBand(dynamicPrio))
 		key := flowcontrol.FlowKey{ID: "test-flow", Priority: dynamicPrio}
 		h.openConnectionOnFlow(key)
 
@@ -1370,14 +1383,14 @@ func TestFlowRegistry_PriorityBandGarbageCollection(t *testing.T) {
 	})
 }
 
-// TestFlowRegistry_JITErrorScoping ensures that JIT provisioning errors are correctly propagated to all concurrent
-// requests waiting on the same flow initialization.
-func TestFlowRegistry_JITErrorScoping(t *testing.T) {
+// TestFlowRegistry_ProvisioningErrorScoping ensures that flow provisioning errors are correctly propagated to all
+// concurrent requests waiting on the same flow initialization.
+func TestFlowRegistry_ProvisioningErrorScoping(t *testing.T) {
 	t.Parallel()
 	handle := newTestPluginsHandle(t)
 
 	// Create a registry with a capability checker that passes validation but using a queue name that doesn't exist.
-	// This ensures NewConfig succeeds, but JIT (ensureFlowInfrastructure) fails when trying to instantiate the queue.
+	// This ensures NewConfig succeeds, but ensureFlowInfrastructure fails when trying to instantiate the queue.
 	failQueueName := queue.RegisteredQueueName("NonExistentQueue")
 	mockChecker := &mockCapabilityChecker{
 		checkCompatibilityFunc: func(p flowcontrol.OrderingPolicy, q queue.RegisteredQueueName) error {
@@ -1396,16 +1409,16 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 	registry, err := NewFlowRegistry(cfg, logr.Discard())
 	require.NoError(t, err)
 
+	// Pre-provision the band (using the bad default template) so the band exists but has a broken queue config.
+	require.NoError(t, registry.ensurePriorityBand(100))
+
 	key := flowcontrol.FlowKey{
-		Priority: 100, // Dynamic, will trigger ensurePriorityBand
+		Priority: 100,
 		ID:       "flow-should-fail",
 	}
 
 	// Simulate contention:
-	// We acquire the registry RLock.
-	// JIT provisioning (dynamic band) requires registry Lock (Write Lock).
-	// So the first thread to reach ensurePriorityBand will block until we release this lock.
-	// All other threads will pile up behind it on sync.Once.
+	// We acquire the registry RLock so all goroutines block in ensureFlowInfrastructure until we release.
 	registry.mu.RLock()
 
 	const concurrency = 10
@@ -1442,8 +1455,8 @@ func TestFlowRegistry_JITErrorScoping(t *testing.T) {
 	wg.Wait()
 
 	// Assertion: all requests should fail.
-	assert.Equal(t, int32(concurrency), errorCount.Load(), "All requests should fail JIT provisioning")
-	assert.Equal(t, int32(0), successCount.Load(), "No request should succeed if JIT failed")
+	assert.Equal(t, int32(concurrency), errorCount.Load(), "All requests should fail provisioning")
+	assert.Equal(t, int32(0), successCount.Load(), "No request should succeed if provisioning failed")
 }
 
 // --- ReconcilePriorities Tests ---
@@ -1487,7 +1500,8 @@ func TestFlowRegistry_ReconcilePriorities(t *testing.T) {
 		h := newRegistryTestHarness(t, harnessOptions{initialShardCount: 2})
 		dynamicPrio := 77
 
-		// First, provision a dynamic band via JIT.
+		// Pre-provision a dynamic band and create a flow.
+		require.NoError(t, h.fr.ensurePriorityBand(dynamicPrio))
 		key := flowcontrol.FlowKey{ID: "dynamic-flow", Priority: dynamicPrio}
 		h.openConnectionOnFlow(key)
 

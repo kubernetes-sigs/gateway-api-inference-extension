@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
 	datalayerlogger "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/logger"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	fccontracts "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	fwkflowcontrol "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -62,6 +63,10 @@ type ExtProcServerRunner struct {
 	Parser                           fwkrh.Parser
 	SaturationDetector               fwkflowcontrol.SaturationDetector
 	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
+	// FlowControlPlane is an optional reference to the FlowRegistry's control-plane interface.
+	// When set (flow control enabled), it is injected into the InferenceObjectiveReconciler
+	// to pre-provision priority bands.
+	FlowControlPlane fccontracts.FlowRegistryControlPlane
 }
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
@@ -104,9 +109,10 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 
 		if r.ControllerCfg.hasInferenceObjective {
 			if err := (&controller.InferenceObjectiveReconciler{
-				Datastore: r.Datastore,
-				Reader:    mgr.GetClient(),
-				PoolGKNN:  r.GKNN,
+				Datastore:        r.Datastore,
+				Reader:           mgr.GetClient(),
+				PoolGKNN:         r.GKNN,
+				FlowControlPlane: r.FlowControlPlane,
 			}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("failed setting up InferenceObjectiveReconciler - %w", err)
 			}

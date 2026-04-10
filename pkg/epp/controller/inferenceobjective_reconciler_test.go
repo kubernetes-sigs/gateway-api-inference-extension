@@ -18,10 +18,14 @@ package controller
 
 import (
 	"context"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -205,4 +209,141 @@ func TestInferenceObjectiveReconciler(t *testing.T) {
 			})
 		}
 	}
+}
+
+// --- FlowControlPlane Integration Tests ---
+
+// mockFlowControlPlane records calls to ReconcilePriorities.
+type mockFlowControlPlane struct {
+	mu             sync.Mutex
+	callCount      int
+	lastPriorities []int
+}
+
+func (m *mockFlowControlPlane) ReconcilePriorities(priorities []int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callCount++
+	m.lastPriorities = make([]int, len(priorities))
+	copy(m.lastPriorities, priorities)
+	sort.Ints(m.lastPriorities)
+}
+
+func (m *mockFlowControlPlane) getCallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount
+}
+
+func (m *mockFlowControlPlane) getLastPriorities() []int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]int, len(m.lastPriorities))
+	copy(result, m.lastPriorities)
+	return result
+}
+
+func TestInferenceObjectiveReconciler_FlowControlPlane(t *testing.T) {
+	newReconciler := func(t *testing.T, fakeClient client.Client, ds datastore.Datastore, fcp *mockFlowControlPlane) *InferenceObjectiveReconciler {
+		t.Helper()
+		reconciler := &InferenceObjectiveReconciler{
+			Reader:    fakeClient,
+			Datastore: ds,
+			PoolGKNN: common.GKNN{
+				NamespacedName: types.NamespacedName{Name: inferencePool.Name, Namespace: inferencePool.Namespace},
+				GroupKind:      schema.GroupKind{Group: inferencePool.GroupVersionKind().Group, Kind: inferencePool.GroupVersionKind().Kind},
+			},
+		}
+		if fcp != nil {
+			reconciler.FlowControlPlane = fcp
+		}
+		return reconciler
+	}
+
+	newFakeClient := func(t *testing.T, objs ...client.Object) client.Client {
+		t.Helper()
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		_ = v1alpha2.Install(scheme)
+		_ = v1.Install(scheme)
+		return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+	}
+
+	t.Run("ShouldCallReconcilePriorities_OnObjectiveSet", func(t *testing.T) {
+		fcp := &mockFlowControlPlane{}
+		ds := datastore.NewDatastore(t.Context(), backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second), 0)
+		endpointPool := poolutil.InferencePoolToEndpointPool(inferencePool)
+		_ = ds.PoolSet(context.Background(), newFakeClient(t), endpointPool)
+
+		fakeClient := newFakeClient(t, infObjective1)
+		reconciler := newReconciler(t, fakeClient, ds, fcp)
+
+		_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: infObjective1.Name, Namespace: infObjective1.Namespace},
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, fcp.getCallCount(), "ReconcilePriorities should be called once")
+		assert.Equal(t, []int{1}, fcp.getLastPriorities(), "Should reconcile with the objective's priority")
+	})
+
+	t.Run("ShouldCallReconcilePriorities_OnObjectiveDelete", func(t *testing.T) {
+		fcp := &mockFlowControlPlane{}
+		ds := datastore.NewDatastore(t.Context(), backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second), 0)
+		endpointPool := poolutil.InferencePoolToEndpointPool(inferencePool)
+		_ = ds.PoolSet(context.Background(), newFakeClient(t), endpointPool)
+
+		// Pre-populate the store with objective1.
+		ds.ObjectiveSet(infObjective1)
+
+		// Simulate a delete: the objective is not in the API server.
+		fakeClient := newFakeClient(t)
+		reconciler := newReconciler(t, fakeClient, ds, fcp)
+
+		_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: infObjective1.Name, Namespace: infObjective1.Namespace},
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, fcp.getCallCount(), "ReconcilePriorities should be called once on delete")
+		assert.Equal(t, []int{}, fcp.getLastPriorities(), "Should reconcile with empty priorities after last objective deleted")
+	})
+
+	t.Run("ShouldNotPanic_WhenFlowControlPlaneIsNil", func(t *testing.T) {
+		ds := datastore.NewDatastore(t.Context(), backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second), 0)
+		endpointPool := poolutil.InferencePoolToEndpointPool(inferencePool)
+		_ = ds.PoolSet(context.Background(), newFakeClient(t), endpointPool)
+
+		fakeClient := newFakeClient(t, infObjective1)
+		reconciler := newReconciler(t, fakeClient, ds, nil) // No FlowControlPlane
+
+		require.NotPanics(t, func() {
+			_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: infObjective1.Name, Namespace: infObjective1.Namespace},
+			})
+			require.NoError(t, err)
+		})
+	})
+
+	t.Run("ShouldReconcileWithAllPriorities_WhenMultipleObjectivesExist", func(t *testing.T) {
+		fcp := &mockFlowControlPlane{}
+		ds := datastore.NewDatastore(t.Context(), backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, time.Second), 0)
+		endpointPool := poolutil.InferencePoolToEndpointPool(inferencePool)
+		_ = ds.PoolSet(context.Background(), newFakeClient(t), endpointPool)
+
+		// Pre-populate with objective1 (priority 1).
+		ds.ObjectiveSet(infObjective1)
+
+		// Add objective2 (no priority → defaults to 0).
+		fakeClient := newFakeClient(t, infObjective2)
+		reconciler := newReconciler(t, fakeClient, ds, fcp)
+
+		_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: infObjective2.Name, Namespace: infObjective2.Namespace},
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, fcp.getCallCount(), "ReconcilePriorities should be called once")
+		assert.Equal(t, []int{0, 1}, fcp.getLastPriorities(), "Should reconcile with priorities from all objectives")
+	})
 }

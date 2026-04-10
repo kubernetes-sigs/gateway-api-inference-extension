@@ -187,7 +187,8 @@ func (fr *FlowRegistry) Run(ctx context.Context) {
 // This method relies on an atomic leasing mechanism, ensuring that active flows are never garbage collected while
 // requests are in flight.
 //
-// If the flow does not exist, it is provisioned Just-In-Time (JIT).
+// If the flow does not exist, it is provisioned on-demand. The priority band for the flow MUST already exist
+// (pre-provisioned by ReconcilePriorities); otherwise, the method returns ErrPriorityBandNotFound.
 //
 // When a NEW flow is created, this method also increments the corresponding priority band's lease count,
 // establishing the invariant: bandState.leaseCount = number of active flows at this priority.
@@ -216,7 +217,7 @@ func (fr *FlowRegistry) WithConnection(key flowcontrol.FlowKey, fn func(conn con
 	}
 	defer state.unpin(fr.clock.Now())
 
-	// 2. JIT provisioning: Ensure physical resources exist on shards.
+	// 2. Flow provisioning: Ensure physical resources exist on shards.
 	// We use sync.Once to ensure we only pay the initialization cost (building components, locking shards) exactly once
 	// per flowState object.
 	state.initialized.Do(func() {
@@ -236,7 +237,7 @@ func (fr *FlowRegistry) WithConnection(key flowcontrol.FlowKey, fn func(conn con
 			}
 		}
 
-		return fmt.Errorf("failed to provision JIT flow resources: %w", state.initErr)
+		return fmt.Errorf("failed to provision flow resources: %w", state.initErr)
 	}
 
 	// 3. Execute callback.
@@ -244,25 +245,14 @@ func (fr *FlowRegistry) WithConnection(key flowcontrol.FlowKey, fn func(conn con
 	return fn(&connection{registry: fr, key: key})
 }
 
-// ensureFlowInfrastructure guarantees that the Priority Band exists and that the flow's queues are synchronized across
-// all active shards.
+// ensureFlowInfrastructure guarantees that the flow's queues are synchronized across all active shards.
+//
+// The Priority Band for the flow's priority level MUST already exist (pre-provisioned by the control plane via
+// ReconcilePriorities). If it does not, this method returns ErrPriorityBandNotFound.
 //
 // NOTE: The caller (WithConnection) must already hold a lease on the priority band to prevent GC during this operation.
 func (fr *FlowRegistry) ensureFlowInfrastructure(key flowcontrol.FlowKey) error {
-	// 1. Ensure Priority Band exists.
-	fr.mu.RLock()
-	_, exists := fr.config.PriorityBands[key.Priority]
-	fr.mu.RUnlock()
-
-	if !exists {
-		if err := fr.ensurePriorityBand(key.Priority); err != nil {
-			return err
-		}
-	}
-
-	// Now we know the band exists (or we errored). Re-acquire Read Lock to safely read the topology and build components.
-
-	// 2. Synchronize shards.
+	// Synchronize shards.
 	// Acquire Read Lock to iterate the shard topology safely.
 	fr.mu.RLock()
 	defer fr.mu.RUnlock()
@@ -276,7 +266,7 @@ func (fr *FlowRegistry) ensureFlowInfrastructure(key flowcontrol.FlowKey) error 
 		shard.synchronizeFlow(key, components[i].policy, components[i].queue)
 	}
 
-	fr.logger.V(logging.DEBUG).Info("JIT provisioned flow infrastructure", "flowKey", key)
+	fr.logger.V(logging.DEBUG).Info("Provisioned flow infrastructure", "flowKey", key)
 	return nil
 }
 

@@ -31,12 +31,17 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 )
 
 type InferenceObjectiveReconciler struct {
 	client.Reader
 	Datastore datastore.Datastore
 	PoolGKNN  common.GKNN
+	// FlowControlPlane is an optional dependency for pre-provisioning priority bands.
+	// When non-nil, the reconciler calls ReconcilePriorities after every objective change.
+	// This is nil when the Flow Control feature gate is disabled.
+	FlowControlPlane contracts.FlowRegistryControlPlane
 }
 
 func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -57,15 +62,42 @@ func (c *InferenceObjectiveReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if notFound || !infObjective.DeletionTimestamp.IsZero() || infObjective.Spec.PoolRef.Name != v1alpha2.ObjectName(c.PoolGKNN.Name) || infObjective.Spec.PoolRef.Group != v1alpha2.Group(c.PoolGKNN.Group) {
 		// InferenceObjective object got deleted or changed the referenced inferencePool.
 		c.Datastore.ObjectiveDelete(req.NamespacedName)
+		c.reconcilePriorityBands()
 		return ctrl.Result{}, nil
 	}
 
 	// Add or update if the InferenceObjective instance has a creation timestamp older than the existing entry of the model.
 	logger = logger.WithValues("poolRef", infObjective.Spec.PoolRef)
 	c.Datastore.ObjectiveSet(infObjective)
+	c.reconcilePriorityBands()
 	logger.Info("Added/Updated InferenceObjective")
 
 	return ctrl.Result{}, nil
+}
+
+// reconcilePriorityBands collects all distinct priorities from current InferenceObjectives and
+// pre-provisions the corresponding priority bands in the FlowRegistry.
+func (c *InferenceObjectiveReconciler) reconcilePriorityBands() {
+	if c.FlowControlPlane == nil {
+		return
+	}
+
+	objectives := c.Datastore.ObjectiveGetAll()
+	seen := make(map[int]struct{}, len(objectives))
+	for _, obj := range objectives {
+		p := 0
+		if obj.Spec.Priority != nil {
+			p = *obj.Spec.Priority
+		}
+		seen[p] = struct{}{}
+	}
+
+	priorities := make([]int, 0, len(seen))
+	for p := range seen {
+		priorities = append(priorities, p)
+	}
+
+	c.FlowControlPlane.ReconcilePriorities(priorities)
 }
 
 func (c *InferenceObjectiveReconciler) SetupWithManager(mgr ctrl.Manager) error {

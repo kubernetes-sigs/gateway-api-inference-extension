@@ -337,6 +337,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
 	var endpointCandidates contracts.EndpointCandidates
+	var flowControlPlane contracts.FlowRegistryControlPlane
 	endpointCandidates = requestcontrol.NewDatastoreEndpointCandidates(ds, requestcontrol.WithDisableEndpointSubsetFilter(opts.DisableEndpointSubsetFilter))
 	if r.featureGates[flowcontrol.FeatureGate] {
 		endpointCandidates = requestcontrol.NewCachedEndpointCandidates(ctx, endpointCandidates, time.Millisecond*50)
@@ -360,6 +361,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
 		}
 		go registry.Run(ctx)
+		flowControlPlane = registry
 		admissionController = requestcontrol.NewFlowControlAdmissionController(fc, opts.PoolName)
 	} else {
 		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
@@ -383,6 +385,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		Parser:                           r.parser,
 		SaturationDetector:               eppConfig.SaturationDetector,
 		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.EnableLegacyMetricsFeatureGate],
+		FlowControlPlane:                 flowControlPlane,
 	}
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
