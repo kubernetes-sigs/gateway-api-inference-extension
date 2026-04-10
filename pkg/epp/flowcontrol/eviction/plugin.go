@@ -33,13 +33,13 @@ import (
 )
 
 var _ requestcontrol.PreRequest = &RequestEvictor{}
-var _ requestcontrol.ResponseBody = &RequestEvictor{}
+var _ requestcontrol.ResponseBodyProcessor = &RequestEvictor{}
 
 // RequestEvictor tracks in-flight requests via RequestControl hooks and provides eviction capability.
 type RequestEvictor struct {
-	queue         *EvictionQueue
-	evictor       Evictor
-	abortRegistry *AbortRegistry
+	queue            *EvictionQueue
+	evictor          Evictor
+	evictionRegistry *EvictionRegistry
 }
 
 // NewRequestEvictor creates a RequestEvictor with the given policies and evictor.
@@ -49,16 +49,16 @@ func NewRequestEvictor(
 	evictor Evictor,
 ) *RequestEvictor {
 	return &RequestEvictor{
-		queue:         NewEvictionQueue(ordering, filter),
-		evictor:       evictor,
-		abortRegistry: NewAbortRegistry(),
+		queue:            NewEvictionQueue(ordering, filter),
+		evictor:          evictor,
+		evictionRegistry: NewEvictionRegistry(),
 	}
 }
 
-// AbortRegistry returns the shared abort registry.
-// The ext_proc Process() goroutine uses this to look up abort channels for dispatched requests.
-func (p *RequestEvictor) AbortRegistry() *AbortRegistry {
-	return p.abortRegistry
+// EvictionRegistry returns the shared eviction registry.
+// The ext_proc Process() goroutine uses this to look up eviction channels for dispatched requests.
+func (p *RequestEvictor) EvictionRegistry() *EvictionRegistry {
+	return p.evictionRegistry
 }
 
 func (p *RequestEvictor) TypedName() plugin.TypedName {
@@ -88,7 +88,7 @@ func (p *RequestEvictor) PreRequest(
 		return
 	}
 
-	abortCh := make(chan struct{})
+	evictCh := make(chan struct{})
 
 	item := &flowcontrol.EvictionItem{
 		RequestID:      requestID,
@@ -97,19 +97,18 @@ func (p *RequestEvictor) PreRequest(
 		TargetURL:      "http://" + net.JoinHostPort(metadata.GetIPAddress(), metadata.GetPort()),
 		Request:        request,
 		TargetEndpoint: metadata,
-		AbortCh:        abortCh,
+		EvictCh:        evictCh,
 	}
 
 	p.queue.Track(item)
-	p.abortRegistry.Register(requestID, abortCh)
+	p.evictionRegistry.Register(requestID, evictCh)
 
 	// Bind untrack to the request context's lifetime as a safety net.
 	// If the client disconnects and ResponseBody(EndOfStream) never fires,
 	// ctx.Done() ensures the request is still cleaned up. Untrack is idempotent.
 	go func() {
 		<-ctx.Done()
-		p.queue.Untrack(requestID)
-		p.abortRegistry.Deregister(requestID)
+		p.cleanupRequest(requestID)
 	}()
 
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Tracked in-flight request",
@@ -138,8 +137,7 @@ func (p *RequestEvictor) ResponseBody(
 		return
 	}
 
-	p.queue.Untrack(requestID)
-	p.abortRegistry.Deregister(requestID)
+	p.cleanupRequest(requestID)
 
 	log.FromContext(ctx).V(logutil.DEBUG).Info("Untracked completed request",
 		"requestID", requestID,
@@ -148,12 +146,12 @@ func (p *RequestEvictor) ResponseBody(
 }
 
 // EvictN attempts to evict up to n requests from the eviction queue.
-// Each request is only removed from tracking after a successful abort. If the abort fails,
+// Each request is only removed from tracking after a successful eviction. If the eviction fails,
 // the request remains in the queue for a future eviction attempt.
-// Returns the request IDs that were successfully aborted.
+// Returns the request IDs that were successfully evicted.
 func (p *RequestEvictor) EvictN(ctx context.Context, n int) ([]string, error) {
 	logger := log.FromContext(ctx)
-	aborted := make([]string, 0, n)
+	evicted := make([]string, 0, n)
 
 	for range n {
 		items := p.queue.PopN(1)
@@ -167,16 +165,33 @@ func (p *RequestEvictor) EvictN(ctx context.Context, n int) ([]string, error) {
 			p.queue.Track(item)
 			continue
 		}
-		aborted = append(aborted, item.RequestID)
+		evicted = append(evicted, item.RequestID)
 	}
 
-	if len(aborted) > 0 {
-		logger.Info("Eviction complete", "requested", n, "aborted", len(aborted))
+	if len(evicted) > 0 {
+		logger.Info("Eviction complete", "requested", n, "evicted", len(evicted))
 	}
-	return aborted, nil
+	return evicted, nil
 }
 
 // Stats returns the current in-flight and evictable request counts.
 func (p *RequestEvictor) Stats() (inFlight int, evictable int) {
 	return p.queue.InFlightLen(), p.queue.EvictableLen()
+}
+
+// cleanupRequest removes a request from all tracking structures.
+// If the evictor supports cleanup (e.g., ImmediateResponseEvictor), it also
+// cleans up evictor-internal state to prevent unbounded map growth.
+func (p *RequestEvictor) cleanupRequest(requestID string) {
+	p.queue.Untrack(requestID)
+	p.evictionRegistry.Deregister(requestID)
+	if c, ok := p.evictor.(EvictorWithCleanup); ok {
+		c.Cleanup(requestID)
+	}
+}
+
+// EvictorWithCleanup is an optional interface for evictors that maintain per-request state
+// that needs to be cleaned up when a request completes or is untracked.
+type EvictorWithCleanup interface {
+	Cleanup(requestID string)
 }

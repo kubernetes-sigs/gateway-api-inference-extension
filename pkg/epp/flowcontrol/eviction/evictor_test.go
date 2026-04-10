@@ -30,19 +30,19 @@ func TestImmediateResponseEvictor_ClosesChannel(t *testing.T) {
 	t.Parallel()
 	evictor := NewImmediateResponseEvictor()
 
-	abortCh := make(chan struct{})
+	evictCh := make(chan struct{})
 	item := &flowcontrol.EvictionItem{
 		RequestID: "req-1",
-		AbortCh:   abortCh,
+		EvictCh:   evictCh,
 	}
 
 	err := evictor.Evict(context.Background(), item)
 	require.NoError(t, err)
 
 	select {
-	case <-abortCh:
+	case <-evictCh:
 	default:
-		t.Fatal("abort channel should be closed after Evict()")
+		t.Fatal("eviction channel should be closed after Evict()")
 	}
 }
 
@@ -50,10 +50,10 @@ func TestImmediateResponseEvictor_DoubleEvictSafe(t *testing.T) {
 	t.Parallel()
 	evictor := NewImmediateResponseEvictor()
 
-	abortCh := make(chan struct{})
+	evictCh := make(chan struct{})
 	item := &flowcontrol.EvictionItem{
 		RequestID: "req-1",
-		AbortCh:   abortCh,
+		EvictCh:   evictCh,
 	}
 
 	err := evictor.Evict(context.Background(), item)
@@ -70,11 +70,46 @@ func TestImmediateResponseEvictor_NilChannel(t *testing.T) {
 
 	item := &flowcontrol.EvictionItem{
 		RequestID: "req-1",
-		AbortCh:   nil,
+		EvictCh:   nil,
 	}
 
 	err := evictor.Evict(context.Background(), item)
 	assert.Error(t, err, "Evict with nil channel should return error")
+}
+
+func TestImmediateResponseEvictor_Cleanup(t *testing.T) {
+	t.Parallel()
+	evictor := NewImmediateResponseEvictor()
+
+	evictCh := make(chan struct{})
+	item := &flowcontrol.EvictionItem{
+		RequestID: "req-1",
+		EvictCh:   evictCh,
+	}
+
+	_ = evictor.Evict(context.Background(), item)
+
+	// Cleanup should remove the sync.Once entry.
+	evictor.Cleanup("req-1")
+
+	// After cleanup, a new Evict on the same requestID with a new channel should work
+	// (the old sync.Once is gone, so a new one will be created).
+	evictCh2 := make(chan struct{})
+	item2 := &flowcontrol.EvictionItem{
+		RequestID: "req-1",
+		EvictCh:   evictCh2,
+	}
+	err := evictor.Evict(context.Background(), item2)
+	require.NoError(t, err)
+
+	select {
+	case <-evictCh2:
+	default:
+		t.Fatal("new channel should be closed after Evict post-Cleanup")
+	}
+
+	// Cleanup non-existent should not panic.
+	evictor.Cleanup("non-existent")
 }
 
 func TestNoOpEvictor(t *testing.T) {

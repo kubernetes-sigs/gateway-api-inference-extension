@@ -24,9 +24,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAbortRegistry_RegisterAndGet(t *testing.T) {
+func TestEvictionRegistry_RegisterAndGet(t *testing.T) {
 	t.Parallel()
-	r := NewAbortRegistry()
+	r := NewEvictionRegistry()
 
 	ch := make(chan struct{})
 	r.Register("req-1", ch)
@@ -37,9 +37,9 @@ func TestAbortRegistry_RegisterAndGet(t *testing.T) {
 	assert.Nil(t, r.Get("non-existent"), "Get for unregistered ID should return nil")
 }
 
-func TestAbortRegistry_Deregister(t *testing.T) {
+func TestEvictionRegistry_Deregister(t *testing.T) {
 	t.Parallel()
-	r := NewAbortRegistry()
+	r := NewEvictionRegistry()
 
 	ch := make(chan struct{})
 	r.Register("req-1", ch)
@@ -51,9 +51,9 @@ func TestAbortRegistry_Deregister(t *testing.T) {
 	r.Deregister("non-existent")
 }
 
-func TestAbortRegistry_Concurrency(t *testing.T) {
+func TestEvictionRegistry_Concurrency(t *testing.T) {
 	t.Parallel()
-	r := NewAbortRegistry()
+	r := NewEvictionRegistry()
 
 	const goroutines = 10
 	const opsPerGoroutine = 100

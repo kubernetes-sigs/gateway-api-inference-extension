@@ -18,45 +18,45 @@ package eviction
 
 import "sync"
 
-// AbortRegistry is a shared registry that maps request IDs to abort channels.
+// EvictionRegistry is a shared registry that maps request IDs to eviction channels.
 // It bridges the eviction plugin (which decides what to evict) and the ext_proc Process()
 // goroutine (which owns the stream needed to send ImmediateResponse).
 //
 // Lifecycle:
-//   - PreRequest: plugin creates an abort channel and registers it via Register().
+//   - PreRequest: plugin creates an eviction channel and registers it via Register().
 //   - Process(): after HandleRequest returns, looks up the channel via Get() and selects on it.
-//   - EvictN: aborter closes the channel via the EvictionItem.AbortCh reference.
+//   - EvictN: evictor closes the channel via the EvictionItem.EvictCh reference.
 //   - Process() defer: removes the channel via Deregister().
 //
 // All methods are goroutine-safe.
-type AbortRegistry struct {
+type EvictionRegistry struct {
 	mu       sync.RWMutex
-	channels map[string]chan struct{} // requestID → abort channel
+	channels map[string]chan struct{} // requestID → eviction channel
 }
 
-// NewAbortRegistry creates a new AbortRegistry.
-func NewAbortRegistry() *AbortRegistry {
-	return &AbortRegistry{
+// NewEvictionRegistry creates a new EvictionRegistry.
+func NewEvictionRegistry() *EvictionRegistry {
+	return &EvictionRegistry{
 		channels: make(map[string]chan struct{}),
 	}
 }
 
-// Register stores an abort channel for the given request ID.
-func (r *AbortRegistry) Register(requestID string, ch chan struct{}) {
+// Register stores an eviction channel for the given request ID.
+func (r *EvictionRegistry) Register(requestID string, ch chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.channels[requestID] = ch
 }
 
-// Get returns the abort channel for the given request ID, or nil if not found.
-func (r *AbortRegistry) Get(requestID string) chan struct{} {
+// Get returns the eviction channel for the given request ID, or nil if not found.
+func (r *EvictionRegistry) Get(requestID string) chan struct{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.channels[requestID]
 }
 
-// Deregister removes the abort channel for the given request ID.
-func (r *AbortRegistry) Deregister(requestID string) {
+// Deregister removes the eviction channel for the given request ID.
+func (r *EvictionRegistry) Deregister(requestID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.channels, requestID)

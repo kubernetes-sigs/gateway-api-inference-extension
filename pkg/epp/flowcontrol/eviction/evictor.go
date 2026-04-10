@@ -43,7 +43,7 @@ func (e *NoOpEvictor) Evict(ctx context.Context, item *flowcontrol.EvictionItem)
 	return nil
 }
 
-// ImmediateResponseEvictor evicts requests by closing the EvictionItem's AbortCh.
+// ImmediateResponseEvictor evicts requests by closing the EvictionItem's EvictCh.
 // The ext_proc Process() goroutine selects on this channel and sends an ImmediateResponse
 // to Envoy when it is closed, causing Envoy to reset the upstream connection to the model server.
 type ImmediateResponseEvictor struct {
@@ -57,13 +57,13 @@ func NewImmediateResponseEvictor() *ImmediateResponseEvictor {
 }
 
 func (e *ImmediateResponseEvictor) Evict(ctx context.Context, item *flowcontrol.EvictionItem) error {
-	if item.AbortCh == nil {
-		return fmt.Errorf("eviction item %s has no abort channel", item.RequestID)
+	if item.EvictCh == nil {
+		return fmt.Errorf("eviction item %s has no eviction channel", item.RequestID)
 	}
 
 	once, _ := e.closeOnce.LoadOrStore(item.RequestID, &sync.Once{})
 	once.(*sync.Once).Do(func() {
-		close(item.AbortCh)
+		close(item.EvictCh)
 	})
 
 	log.FromContext(ctx).Info("Eviction signal sent",
@@ -71,4 +71,10 @@ func (e *ImmediateResponseEvictor) Evict(ctx context.Context, item *flowcontrol.
 		"priority", item.Priority,
 		"targetURL", item.TargetURL)
 	return nil
+}
+
+// Cleanup removes the sync.Once entry for a request ID to prevent unbounded map growth.
+// Called when a request completes or is untracked.
+func (e *ImmediateResponseEvictor) Cleanup(requestID string) {
+	e.closeOnce.Delete(requestID)
 }
