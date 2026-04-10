@@ -63,28 +63,28 @@ var currentCodeExceptionMap = map[string][]string{
 	"pkg/epp/framework/plugins/scheduling/scorer/prefix/plugin.go": {
 		"pkg/epp/metrics",
 	},
-	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/plugin.go": {
+	"pkg/epp/framework/plugins/requestcontrol/dataproducer/predictedlatency/plugin.go": {
 		"sidecars/latencypredictorasync",
 	},
-	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/plugin_test.go": {
+	"pkg/epp/framework/plugins/requestcontrol/dataproducer/predictedlatency/plugin_test.go": {
 		"sidecars/latencypredictorasync",
 		"test/utils",
 	},
-	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/prediction.go": {
+	"pkg/epp/framework/plugins/requestcontrol/dataproducer/predictedlatency/prediction.go": {
 		"sidecars/latencypredictorasync",
 	},
-	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/prediction_test.go": {
+	"pkg/epp/framework/plugins/requestcontrol/dataproducer/predictedlatency/prediction_test.go": {
 		"sidecars/latencypredictorasync",
 	},
-	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/requestcontrol_hooks.go": {
+	"pkg/epp/framework/plugins/requestcontrol/dataproducer/predictedlatency/requestcontrol_hooks.go": {
 		"pkg/epp/metrics",
 		"sidecars/latencypredictorasync",
 	},
-	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/training.go": {
+	"pkg/epp/framework/plugins/requestcontrol/dataproducer/predictedlatency/training.go": {
 		"pkg/epp/metrics",
 		"sidecars/latencypredictorasync",
 	},
-	"pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency/training_test.go": {
+	"pkg/epp/framework/plugins/requestcontrol/dataproducer/predictedlatency/training_test.go": {
 		"sidecars/latencypredictorasync",
 	},
 	"pkg/epp/framework/plugins/requestcontrol/dataproducer/approximateprefix/indexer.go": {
