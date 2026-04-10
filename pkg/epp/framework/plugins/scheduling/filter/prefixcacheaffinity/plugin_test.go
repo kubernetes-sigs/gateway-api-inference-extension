@@ -40,7 +40,7 @@ func makeEndpoint(name string, prefixMatch int, ttft float64) framework.Endpoint
 		ep.Put(attrprefix.PrefixCacheMatchInfoKey, attrprefix.NewPrefixCacheMatchInfo(prefixMatch, 100, 16))
 	}
 	if ttft >= 0 {
-		ep.Put(attrlatency.LatencyPredictionInfoKey, attrlatency.NewLatencyPredictionInfo(true, true, 0, 0, ttft, 0))
+		ep.Put(attrlatency.LatencyPredictionInfoKey, attrlatency.NewLatencyPredictionInfo(true, true, 0, 0, ttft, 0, 0))
 	}
 	return ep
 }

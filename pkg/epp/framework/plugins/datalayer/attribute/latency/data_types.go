@@ -56,21 +56,6 @@ func NewLatencyPredictionInfo(
 	ttftValid, tpotValid bool,
 	ttftHeadroom, tpotHeadroom float64,
 	ttft, tpot float64,
-) *LatencyPredictionInfo {
-	return &LatencyPredictionInfo{
-		ttftValid:    ttftValid,
-		tpotValid:    tpotValid,
-		ttftHeadroom: ttftHeadroom,
-		tpotHeadroom: tpotHeadroom,
-		ttft:         ttft,
-		tpot:         tpot,
-	}
-}
-
-func NewLatencyPredictionInfoWithDispatch(
-	ttftValid, tpotValid bool,
-	ttftHeadroom, tpotHeadroom float64,
-	ttft, tpot float64,
 	dispatchedRequestCount int,
 ) *LatencyPredictionInfo {
 	return &LatencyPredictionInfo{

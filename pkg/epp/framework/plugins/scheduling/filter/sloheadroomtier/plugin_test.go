@@ -35,7 +35,7 @@ func makeEndpoint(name string, ttftHeadroom, tpotHeadroom float64, hasPrediction
 	ep := framework.NewEndpoint(meta, &fwkdl.Metrics{}, fwkdl.NewAttributes())
 	if hasPrediction {
 		ep.Put(attrlatency.LatencyPredictionInfoKey, attrlatency.NewLatencyPredictionInfo(
-			ttftHeadroom >= 0, tpotHeadroom >= 0, ttftHeadroom, tpotHeadroom, 100, 10))
+			ttftHeadroom >= 0, tpotHeadroom >= 0, ttftHeadroom, tpotHeadroom, 100, 10, 0))
 	}
 	return ep
 }

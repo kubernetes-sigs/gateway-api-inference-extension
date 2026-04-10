@@ -69,7 +69,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		// Store predictions in endpoint attributes
 		for _, pred := range predictions {
 			if pred.Endpoint != nil {
-				latencyInfo := attrlatency.NewLatencyPredictionInfoWithDispatch(
+				latencyInfo := attrlatency.NewLatencyPredictionInfo(
 					pred.TTFTValid,
 					pred.TPOTValid,
 					pred.TTFTHeadroom,
