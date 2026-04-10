@@ -32,42 +32,42 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
-var _ requestcontrol.PreRequest = &Plugin{}
-var _ requestcontrol.ResponseBodyProcessor = &Plugin{}
+var _ requestcontrol.PreRequest = &RequestEvictor{}
+var _ requestcontrol.ResponseBody = &RequestEvictor{}
 
-// Plugin tracks in-flight requests via RequestControl hooks and provides eviction capability.
-type Plugin struct {
+// RequestEvictor tracks in-flight requests via RequestControl hooks and provides eviction capability.
+type RequestEvictor struct {
 	queue         *EvictionQueue
-	aborter       Aborter
+	evictor       Evictor
 	abortRegistry *AbortRegistry
 }
 
-// NewPlugin creates an eviction plugin with the given policies and aborter.
-func NewPlugin(
+// NewRequestEvictor creates a RequestEvictor with the given policies and evictor.
+func NewRequestEvictor(
 	ordering flowcontrol.EvictionOrderingPolicy,
 	filter flowcontrol.EvictionFilterPolicy,
-	aborter Aborter,
-) *Plugin {
-	return &Plugin{
+	evictor Evictor,
+) *RequestEvictor {
+	return &RequestEvictor{
 		queue:         NewEvictionQueue(ordering, filter),
-		aborter:       aborter,
+		evictor:       evictor,
 		abortRegistry: NewAbortRegistry(),
 	}
 }
 
 // AbortRegistry returns the shared abort registry.
 // The ext_proc Process() goroutine uses this to look up abort channels for dispatched requests.
-func (p *Plugin) AbortRegistry() *AbortRegistry {
+func (p *RequestEvictor) AbortRegistry() *AbortRegistry {
 	return p.abortRegistry
 }
 
-func (p *Plugin) TypedName() plugin.TypedName {
+func (p *RequestEvictor) TypedName() plugin.TypedName {
 	return plugin.TypedName{Type: "EvictionPlugin", Name: "eviction"}
 }
 
 // PreRequest is called after scheduling, before the request reaches the model server.
 // It tracks the request and, if the filter policy accepts it, adds it to the eviction queue.
-func (p *Plugin) PreRequest(
+func (p *RequestEvictor) PreRequest(
 	ctx context.Context,
 	request *scheduling.InferenceRequest,
 	result *scheduling.SchedulingResult,
@@ -121,7 +121,7 @@ func (p *Plugin) PreRequest(
 
 // ResponseBody is called for every response data chunk (streaming) or once (non-streaming).
 // On the final call (EndOfStream == true), it removes the request from tracking and the eviction queue.
-func (p *Plugin) ResponseBody(
+func (p *RequestEvictor) ResponseBody(
 	ctx context.Context,
 	request *scheduling.InferenceRequest,
 	response *requestcontrol.Response,
@@ -151,7 +151,7 @@ func (p *Plugin) ResponseBody(
 // Each request is only removed from tracking after a successful abort. If the abort fails,
 // the request remains in the queue for a future eviction attempt.
 // Returns the request IDs that were successfully aborted.
-func (p *Plugin) EvictN(ctx context.Context, n int) ([]string, error) {
+func (p *RequestEvictor) EvictN(ctx context.Context, n int) ([]string, error) {
 	logger := log.FromContext(ctx)
 	aborted := make([]string, 0, n)
 
@@ -162,8 +162,8 @@ func (p *Plugin) EvictN(ctx context.Context, n int) ([]string, error) {
 		}
 		item := items[0]
 
-		if err := p.aborter.Abort(ctx, item); err != nil {
-			logger.Error(err, "Failed to abort request, re-tracking", "requestID", item.RequestID, "targetURL", item.TargetURL)
+		if err := p.evictor.Evict(ctx, item); err != nil {
+			logger.Error(err, "Failed to evict request, re-tracking", "requestID", item.RequestID, "targetURL", item.TargetURL)
 			p.queue.Track(item)
 			continue
 		}
@@ -177,6 +177,6 @@ func (p *Plugin) EvictN(ctx context.Context, n int) ([]string, error) {
 }
 
 // Stats returns the current in-flight and evictable request counts.
-func (p *Plugin) Stats() (inFlight int, evictable int) {
+func (p *RequestEvictor) Stats() (inFlight int, evictable int) {
 	return p.queue.InFlightLen(), p.queue.EvictableLen()
 }

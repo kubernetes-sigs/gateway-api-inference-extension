@@ -61,104 +61,91 @@ func makeLLMRequest(requestID string, priority int) *scheduling.LLMRequest { //n
 
 // --- Tests ---
 
-func TestPlugin_PreRequest_CreatesAbortChannel(t *testing.T) {
+func TestRequestEvictor_PreRequest_CreatesAbortChannel(t *testing.T) {
 	t.Parallel()
-	p := NewPlugin(&testOrdering{}, &acceptAllFilter{}, &NoOpAborter{})
+	re := NewRequestEvictor(&testOrdering{}, &acceptAllFilter{}, &NoOpEvictor{})
 
 	ctx := context.Background()
-	p.PreRequest(ctx, makeLLMRequest("req-1", -1), makeSchedulingResult())
+	re.PreRequest(ctx, makeLLMRequest("req-1", -1), makeSchedulingResult())
 
-	// Verify the abort channel is registered.
-	abortCh := p.AbortRegistry().Get("req-1")
+	abortCh := re.AbortRegistry().Get("req-1")
 	require.NotNil(t, abortCh, "AbortCh should be registered after PreRequest")
 
-	// Verify tracked in queue.
-	assert.Equal(t, 1, p.queue.InFlightLen())
-	assert.Equal(t, 1, p.queue.EvictableLen())
+	assert.Equal(t, 1, re.queue.InFlightLen())
+	assert.Equal(t, 1, re.queue.EvictableLen())
 }
 
-func TestPlugin_ResponseBody_DeregistersAbortChannel(t *testing.T) {
+func TestRequestEvictor_ResponseBody_DeregistersAbortChannel(t *testing.T) {
 	t.Parallel()
-	p := NewPlugin(&testOrdering{}, &acceptAllFilter{}, &NoOpAborter{})
+	re := NewRequestEvictor(&testOrdering{}, &acceptAllFilter{}, &NoOpEvictor{})
 
 	ctx := context.Background()
 	request := makeLLMRequest("req-1", -1)
-	p.PreRequest(ctx, request, makeSchedulingResult())
-	require.NotNil(t, p.AbortRegistry().Get("req-1"))
+	re.PreRequest(ctx, request, makeSchedulingResult())
+	require.NotNil(t, re.AbortRegistry().Get("req-1"))
 
-	// Complete the request.
-	p.ResponseBody(ctx, request, &requestcontrol.Response{EndOfStream: true}, nil)
+	re.ResponseBody(ctx, request, &requestcontrol.Response{EndOfStream: true}, nil)
 
-	assert.Nil(t, p.AbortRegistry().Get("req-1"), "AbortCh should be deregistered after completion")
-	assert.Equal(t, 0, p.queue.InFlightLen())
+	assert.Nil(t, re.AbortRegistry().Get("req-1"), "AbortCh should be deregistered after completion")
+	assert.Equal(t, 0, re.queue.InFlightLen())
 }
 
-func TestPlugin_EvictN_ClosesAbortChannel(t *testing.T) {
+func TestRequestEvictor_EvictN_ClosesAbortChannel(t *testing.T) {
 	t.Parallel()
-	aborter := NewImmediateResponseAborter()
-	p := NewPlugin(&testOrdering{}, &acceptAllFilter{}, aborter)
+	evictor := NewImmediateResponseEvictor()
+	re := NewRequestEvictor(&testOrdering{}, &acceptAllFilter{}, evictor)
 
 	ctx := context.Background()
-	p.PreRequest(ctx, makeLLMRequest("req-1", -1), makeSchedulingResult())
+	re.PreRequest(ctx, makeLLMRequest("req-1", -1), makeSchedulingResult())
 
-	// Grab the channel before eviction.
-	abortCh := p.AbortRegistry().Get("req-1")
+	abortCh := re.AbortRegistry().Get("req-1")
 	require.NotNil(t, abortCh)
 
-	// Evict.
-	aborted, err := p.EvictN(ctx, 1)
+	evicted, err := re.EvictN(ctx, 1)
 	require.NoError(t, err)
-	require.Equal(t, []string{"req-1"}, aborted)
+	require.Equal(t, []string{"req-1"}, evicted)
 
-	// Channel should be closed.
 	select {
 	case <-abortCh:
-		// success
 	default:
 		t.Fatal("abort channel should be closed after EvictN")
 	}
 }
 
-func TestPlugin_EvictN_ReTracksOnAbortFailure(t *testing.T) {
+func TestRequestEvictor_EvictN_ReTracksOnFailure(t *testing.T) {
 	t.Parallel()
-	p := NewPlugin(&testOrdering{}, &acceptAllFilter{}, &failingAborter{})
+	re := NewRequestEvictor(&testOrdering{}, &acceptAllFilter{}, &failingEvictor{})
 
 	ctx := context.Background()
-	p.PreRequest(ctx, makeLLMRequest("req-1", -1), makeSchedulingResult())
+	re.PreRequest(ctx, makeLLMRequest("req-1", -1), makeSchedulingResult())
 
-	aborted, err := p.EvictN(ctx, 1)
+	evicted, err := re.EvictN(ctx, 1)
 	require.NoError(t, err)
-	assert.Empty(t, aborted)
+	assert.Empty(t, evicted)
 
-	// Item should be re-tracked.
-	assert.Equal(t, 1, p.queue.EvictableLen())
+	assert.Equal(t, 1, re.queue.EvictableLen())
 }
 
-func TestPlugin_RaceBetweenEvictAndCompletion(t *testing.T) {
+func TestRequestEvictor_RaceBetweenEvictAndCompletion(t *testing.T) {
 	t.Parallel()
-	aborter := NewImmediateResponseAborter()
-	p := NewPlugin(&testOrdering{}, &acceptAllFilter{}, aborter)
+	evictor := NewImmediateResponseEvictor()
+	re := NewRequestEvictor(&testOrdering{}, &acceptAllFilter{}, evictor)
 
 	ctx := context.Background()
 
-	// Track multiple requests.
 	requests := make([]*scheduling.LLMRequest, 10)
 	for i := range requests {
-		requests[i] = makeLLMRequest(
-			"req-"+string(rune('a'+i)),
-			-1,
-		)
-		p.PreRequest(ctx, requests[i], makeSchedulingResult())
+		requests[i] = makeLLMRequest("req-"+string(rune('a'+i)), -1)
+		re.PreRequest(ctx, requests[i], makeSchedulingResult())
 	}
 
-	// Concurrently evict and complete.
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
 		for range 5 {
-			_, _ = p.EvictN(ctx, 1)
+			_, _ = re.EvictN(ctx, 1)
 			time.Sleep(time.Millisecond)
 		}
 	}()
@@ -166,23 +153,22 @@ func TestPlugin_RaceBetweenEvictAndCompletion(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for _, req := range requests {
-			p.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, nil)
+			re.ResponseBody(ctx, req, &requestcontrol.Response{EndOfStream: true}, nil)
 			time.Sleep(time.Millisecond)
 		}
 	}()
 
 	wg.Wait()
 
-	// No panics, no deadlocks. State should be consistent.
-	inFlight, evictable := p.Stats()
+	inFlight, evictable := re.Stats()
 	assert.GreaterOrEqual(t, inFlight, 0)
 	assert.GreaterOrEqual(t, evictable, 0)
 	assert.GreaterOrEqual(t, inFlight, evictable)
 }
 
-// failingAborter always returns an error.
-type failingAborter struct{}
+// failingEvictor always returns an error.
+type failingEvictor struct{}
 
-func (a *failingAborter) Abort(_ context.Context, _ *flowcontrol.EvictionItem) error {
+func (e *failingEvictor) Evict(_ context.Context, _ *flowcontrol.EvictionItem) error {
 	return assert.AnError
 }

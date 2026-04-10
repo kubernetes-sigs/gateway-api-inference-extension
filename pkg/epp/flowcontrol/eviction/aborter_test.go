@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
-func TestImmediateResponseAborter_ClosesChannel(t *testing.T) {
+func TestImmediateResponseEvictor_ClosesChannel(t *testing.T) {
 	t.Parallel()
-	aborter := NewImmediateResponseAborter()
+	evictor := NewImmediateResponseEvictor()
 
 	abortCh := make(chan struct{})
 	item := &flowcontrol.EvictionItem{
@@ -36,21 +36,19 @@ func TestImmediateResponseAborter_ClosesChannel(t *testing.T) {
 		AbortCh:   abortCh,
 	}
 
-	err := aborter.Abort(context.Background(), item)
+	err := evictor.Evict(context.Background(), item)
 	require.NoError(t, err)
 
-	// Channel should be closed.
 	select {
 	case <-abortCh:
-		// success — channel is closed
 	default:
-		t.Fatal("abort channel should be closed after Abort()")
+		t.Fatal("abort channel should be closed after Evict()")
 	}
 }
 
-func TestImmediateResponseAborter_DoubleAbortSafe(t *testing.T) {
+func TestImmediateResponseEvictor_DoubleEvictSafe(t *testing.T) {
 	t.Parallel()
-	aborter := NewImmediateResponseAborter()
+	evictor := NewImmediateResponseEvictor()
 
 	abortCh := make(chan struct{})
 	item := &flowcontrol.EvictionItem{
@@ -58,36 +56,35 @@ func TestImmediateResponseAborter_DoubleAbortSafe(t *testing.T) {
 		AbortCh:   abortCh,
 	}
 
-	// First abort should succeed.
-	err := aborter.Abort(context.Background(), item)
+	err := evictor.Evict(context.Background(), item)
 	require.NoError(t, err)
 
-	// Second abort on same request should not panic.
-	err = aborter.Abort(context.Background(), item)
+	// Second evict on same request should not panic.
+	err = evictor.Evict(context.Background(), item)
 	require.NoError(t, err)
 }
 
-func TestImmediateResponseAborter_NilChannel(t *testing.T) {
+func TestImmediateResponseEvictor_NilChannel(t *testing.T) {
 	t.Parallel()
-	aborter := NewImmediateResponseAborter()
+	evictor := NewImmediateResponseEvictor()
 
 	item := &flowcontrol.EvictionItem{
 		RequestID: "req-1",
 		AbortCh:   nil,
 	}
 
-	err := aborter.Abort(context.Background(), item)
-	assert.Error(t, err, "Abort with nil channel should return error")
+	err := evictor.Evict(context.Background(), item)
+	assert.Error(t, err, "Evict with nil channel should return error")
 }
 
-func TestNoOpAborter(t *testing.T) {
+func TestNoOpEvictor(t *testing.T) {
 	t.Parallel()
-	aborter := &NoOpAborter{}
+	evictor := &NoOpEvictor{}
 
 	item := &flowcontrol.EvictionItem{
 		RequestID: "req-1",
 	}
 
-	err := aborter.Abort(context.Background(), item)
-	assert.NoError(t, err, "NoOpAborter should always succeed")
+	err := evictor.Evict(context.Background(), item)
+	assert.NoError(t, err, "NoOpEvictor should always succeed")
 }

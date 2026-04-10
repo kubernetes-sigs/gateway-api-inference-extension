@@ -27,47 +27,46 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 )
 
-// Aborter handles aborting an in-flight request on a model server.
-type Aborter interface {
-	Abort(ctx context.Context, item *flowcontrol.EvictionItem) error
+// Evictor handles evicting an in-flight request on a model server.
+type Evictor interface {
+	Evict(ctx context.Context, item *flowcontrol.EvictionItem) error
 }
 
-// NoOpAborter logs the eviction but does not abort the request on the model server.
-type NoOpAborter struct{}
+// NoOpEvictor logs the eviction but does not evict the request on the model server.
+type NoOpEvictor struct{}
 
-func (a *NoOpAborter) Abort(ctx context.Context, item *flowcontrol.EvictionItem) error {
-	log.FromContext(ctx).V(logutil.DEBUG).Info("Eviction selected request for abort (no-op: abort mechanism not available)",
+func (e *NoOpEvictor) Evict(ctx context.Context, item *flowcontrol.EvictionItem) error {
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Eviction selected request (no-op: eviction mechanism not available)",
 		"requestID", item.RequestID,
 		"priority", item.Priority,
 		"targetURL", item.TargetURL)
 	return nil
 }
 
-// ImmediateResponseAborter aborts requests by closing the EvictionItem's AbortCh.
+// ImmediateResponseEvictor evicts requests by closing the EvictionItem's AbortCh.
 // The ext_proc Process() goroutine selects on this channel and sends an ImmediateResponse
 // to Envoy when it is closed, causing Envoy to reset the upstream connection to the model server.
-type ImmediateResponseAborter struct {
+type ImmediateResponseEvictor struct {
 	// closeOnce tracks which channels have been closed to prevent double-close panics.
 	closeOnce sync.Map // requestID → *sync.Once
 }
 
-// NewImmediateResponseAborter creates an ImmediateResponseAborter.
-func NewImmediateResponseAborter() *ImmediateResponseAborter {
-	return &ImmediateResponseAborter{}
+// NewImmediateResponseEvictor creates an ImmediateResponseEvictor.
+func NewImmediateResponseEvictor() *ImmediateResponseEvictor {
+	return &ImmediateResponseEvictor{}
 }
 
-func (a *ImmediateResponseAborter) Abort(ctx context.Context, item *flowcontrol.EvictionItem) error {
+func (e *ImmediateResponseEvictor) Evict(ctx context.Context, item *flowcontrol.EvictionItem) error {
 	if item.AbortCh == nil {
 		return fmt.Errorf("eviction item %s has no abort channel", item.RequestID)
 	}
 
-	// Use sync.Once to safely close the channel exactly once.
-	once, _ := a.closeOnce.LoadOrStore(item.RequestID, &sync.Once{})
+	once, _ := e.closeOnce.LoadOrStore(item.RequestID, &sync.Once{})
 	once.(*sync.Once).Do(func() {
 		close(item.AbortCh)
 	})
 
-	log.FromContext(ctx).Info("Abort signal sent",
+	log.FromContext(ctx).Info("Eviction signal sent",
 		"requestID", item.RequestID,
 		"priority", item.Priority,
 		"targetURL", item.TargetURL)
