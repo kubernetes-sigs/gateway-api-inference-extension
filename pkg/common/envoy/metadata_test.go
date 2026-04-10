@@ -52,14 +52,24 @@ func TestExtractMetadataValues(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:     "Empty metadata",
+			metadata: nil,
+			expected: nil,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &extProcPb.ProcessingRequest{
-				MetadataContext: &corev3.Metadata{
-					FilterMetadata: tt.metadata,
-				},
+			var req *extProcPb.ProcessingRequest
+			if tt.metadata != nil {
+				req = &extProcPb.ProcessingRequest{
+					MetadataContext: &corev3.Metadata{
+						FilterMetadata: tt.metadata,
+					},
+				}
+			} else {
+				req = &extProcPb.ProcessingRequest{}
 			}
 
 			result := ExtractMetadataValues(req)

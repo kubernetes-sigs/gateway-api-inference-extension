@@ -25,6 +25,8 @@ kind: Gateway
 metadata:
   name: conformance-primary
   namespace: inference-conformance-infra
+  labels:
+    istio.io/enable-inference-extproc: "true"
 spec:
   gatewayClassName: "{GATEWAY_CLASS_NAME}"
   listeners:
@@ -43,6 +45,8 @@ kind: Gateway
 metadata:
   name: conformance-secondary
   namespace: inference-conformance-infra
+  labels:
+    istio.io/enable-inference-extproc: "true"
 spec:
   gatewayClassName: "{GATEWAY_CLASS_NAME}"
   listeners:
@@ -250,7 +254,7 @@ spec:
       containers:
       - name: epp
         image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "primary-inference-pool"
@@ -348,7 +352,7 @@ spec:
       containers:
       - name: epp
         image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "secondary-inference-pool"
@@ -446,7 +450,7 @@ spec:
       containers:
       - name: epp
         image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "appprotocol-http-inference-pool"
@@ -544,7 +548,7 @@ spec:
       containers:
       - name: epp
         image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "appprotocol-h2c-inference-pool"
@@ -558,6 +562,7 @@ spec:
         - "9002"
         - --grpc-health-port
         - "9003"
+        - --secure-serving=false
         - "--config-file"
         - "/config/conformance-plugins.yaml"
         ports:
@@ -753,7 +758,7 @@ spec:
       containers:
       - name: epp
         image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args:
         - --pool-name
         - "dp-inference-pool"

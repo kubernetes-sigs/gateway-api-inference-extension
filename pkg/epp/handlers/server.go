@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"strings"
 	"time"
 
@@ -207,7 +208,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return status.Errorf(codes.Unknown, "cannot receive stream request: %v", recvErr)
 		}
 
-		reqCtx.Request.Metadata = envoy.ExtractMetadataValues(req)
+		newMetadata := envoy.ExtractMetadataValues(req)
+		if newMetadata != nil {
+			// We use maps.Copy to accumulate metadata across different processing phases (e.g., RequestHeaders, RequestBody).
+			// This ensures that plugins running later in the lifecycle have access to the full set of metadata
+			// sent by Envoy throughout the request. This is particularly important for conformance tests
+			// that verify destination endpoints during the response phase.
+			maps.Copy(reqCtx.Request.Metadata, newMetadata)
+		}
 
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:

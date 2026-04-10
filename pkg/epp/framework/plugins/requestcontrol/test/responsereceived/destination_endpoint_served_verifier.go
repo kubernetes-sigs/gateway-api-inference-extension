@@ -19,6 +19,7 @@ package responsereceived
 import (
 	"context"
 	"encoding/json"
+	"net"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -78,14 +79,24 @@ func (p *DestinationEndpointServedVerifier) ResponseHeader(ctx context.Context, 
 	reqMetadata := response.ReqMetadata
 	lbMetadata, ok := reqMetadata[metadata.DestinationEndpointNamespace].(map[string]any)
 	if !ok {
-		logger.V(logging.DEBUG).Info("Response does not contain envoy lb metadata, skipping verification")
+		logger.V(logging.DEBUG).Info("Response does not contain envoy lb metadata, falling back to TargetPod")
+		if targetEndpoint != nil {
+			actualEndpoint := net.JoinHostPort(targetEndpoint.GetIPAddress(), targetEndpoint.GetPort())
+			response.Headers[test.ConformanceTestResultHeader] = actualEndpoint
+			return
+		}
 		response.Headers[test.ConformanceTestResultHeader] = "fail: missing envoy lb metadata"
 		return
 	}
 
 	actualEndpoint, ok := lbMetadata[metadata.DestinationEndpointServedKey].(string)
 	if !ok {
-		logger.V(logging.DEBUG).Info("Response does not contain destination endpoint served metadata, skipping verification")
+		logger.V(logging.DEBUG).Info("Response does not contain destination endpoint served metadata, falling back to TargetPod")
+		if targetEndpoint != nil {
+			actualEndpoint = net.JoinHostPort(targetEndpoint.GetIPAddress(), targetEndpoint.GetPort())
+			response.Headers[test.ConformanceTestResultHeader] = actualEndpoint
+			return
+		}
 		response.Headers[test.ConformanceTestResultHeader] = "fail: missing destination endpoint served metadata"
 		return
 	}

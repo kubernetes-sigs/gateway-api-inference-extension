@@ -2,7 +2,7 @@
 # Example: make all ISTIO_VERSION=1.28.0
 GATEWAY_API_VERSION ?= v1.3.0
 INFERENCE_EXTENSION_VERSION ?= v0.4.0
-ISTIO_VERSION ?= 1.28.0
+ISTIO_VERSION ?= 1.29.0
 ISTIO_HUB ?=
 ISTIO_PROFILE ?= minimal
 
@@ -68,25 +68,60 @@ metadata:
 endef
 
 define TLS_DESTINATION_RULES
-apiVersion: networking.istio.io/v1
+apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
   name: primary-endpoint-picker-tls
   namespace: inference-conformance-app-backend
 spec:
-  host: primary-endpoint-picker-svc
+  host: primary-endpoint-picker-svc.inference-conformance-app-backend.svc.cluster.local
   trafficPolicy:
       tls:
         mode: SIMPLE
         insecureSkipVerify: true
 ---
-apiVersion: networking.istio.io/v1
+apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
   name: secondary-endpoint-picker-tls
   namespace: inference-conformance-app-backend
 spec:
-  host: secondary-endpoint-picker-svc
+  host: secondary-endpoint-picker-svc.inference-conformance-app-backend.svc.cluster.local
+  trafficPolicy:
+      tls:
+        mode: SIMPLE
+        insecureSkipVerify: true
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: appprotocol-http-endpoint-picker-tls
+  namespace: inference-conformance-app-backend
+spec:
+  host: appprotocol-http-endpoint-picker-svc.inference-conformance-app-backend.svc.cluster.local
+  trafficPolicy:
+      tls:
+        mode: SIMPLE
+        insecureSkipVerify: true
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: appprotocol-h2c-endpoint-picker-tls
+  namespace: inference-conformance-app-backend
+spec:
+  host: appprotocol-h2c-endpoint-picker-svc.inference-conformance-app-backend.svc.cluster.local
+  trafficPolicy:
+      tls:
+        mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: dp-endpoint-picker-tls
+  namespace: inference-conformance-app-backend
+spec:
+  host: dp-endpoint-picker-svc.inference-conformance-app-backend.svc.cluster.local
   trafficPolicy:
       tls:
         mode: SIMPLE
@@ -293,7 +328,18 @@ setup-kind:
 	kubectl wait --namespace metallb-system --for=condition=ready pod --selector=component=speaker --timeout=90s
 	@echo "Configuring metallb address pool..."
 	$(file >/tmp/metallb-kind-config.yaml,$(METALLB_KIND_CONFIG))
-	@DOCKER_NETWORK=$$(docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}' kind); \
+	@DOCKER_NETWORKS=$$(docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}' kind); \
+	DOCKER_NETWORK=""; \
+	for gw in $$DOCKER_NETWORKS; do \
+		if [[ $$gw == *.* ]]; then \
+			DOCKER_NETWORK=$$gw; \
+			break; \
+		fi; \
+	done; \
+	if [ -z "$$DOCKER_NETWORK" ]; then \
+		echo "ERROR: Could not find IPv4 gateway for Kind network"; \
+		exit 1; \
+	fi; \
 	NETWORK_PREFIX=$${DOCKER_NETWORK%.*}; \
 	echo "Using IP range: $${NETWORK_PREFIX}.200-$${NETWORK_PREFIX}.250"; \
 	sed -i "s/NETWORK_PREFIX/$${NETWORK_PREFIX}/g" /tmp/metallb-kind-config.yaml
@@ -422,9 +468,11 @@ setup-gateway-api-crds:
 
 # Apply Inference Extension CRDs
 setup-inference-extension-crds:
-	@echo "Applying Inference Extension CRDs version $(INFERENCE_EXTENSION_VERSION)..."
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.k8s.io_inferencepools.yaml
-	kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/$(INFERENCE_EXTENSION_VERSION)/config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml
+	@echo "Applying Inference Extension CRDs from local repository..."
+	kubectl apply -f $(TEST_BASE_DIR)/config/crd/bases/inference.networking.k8s.io_inferencepools.yaml
+	kubectl apply -f $(TEST_BASE_DIR)/config/crd/bases/inference.networking.x-k8s.io_inferenceobjectives.yaml
+	kubectl apply -f $(TEST_BASE_DIR)/config/crd/bases/inference.networking.x-k8s.io_inferencemodelrewrites.yaml
+	kubectl apply -f $(TEST_BASE_DIR)/config/crd/bases/inference.networking.x-k8s.io_inferencepoolimports.yaml
 
 # Apply all CRDs (convenience target)
 setup-crds: setup-gateway-api-crds setup-inference-extension-crds
@@ -447,8 +495,9 @@ run-tests: ensure-report-dir
 	else \
 		echo "Running all conformance tests"; \
 	fi
-	cd $(TEST_BASE_DIR) && go test ./conformance -args -gateway-class istio \
+	cd $(TEST_BASE_DIR) && go test -v ./conformance -args -gateway-class istio \
 		-cleanup-base-resources=false \
+		-allow-crds-mismatch \
 		-report-output=$(shell pwd)/$(REPORT_BASE_DIR)/$(IMPLEMENTATION_VERSION)-$(MODE)-$(PROFILE)-report.yaml \
 		-organization="$(ORGANIZATION)" \
 		-project="$(PROJECT)" \

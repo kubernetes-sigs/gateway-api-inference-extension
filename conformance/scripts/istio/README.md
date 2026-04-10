@@ -1,3 +1,13 @@
+make image-kind GIT_TAG=main
+
+kind delete cluster
+make setup-kind
+make setup-crds
+make setup-istio-kind
+make setup-tls
+make run-tests
+
+
 # Istio Conformance Testing
 
 This directory contains the Makefile and scripts for running Gateway API Inference Extension conformance tests against Istio implementations.
