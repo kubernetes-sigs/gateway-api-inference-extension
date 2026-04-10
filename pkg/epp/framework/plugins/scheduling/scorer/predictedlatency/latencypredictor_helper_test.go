@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/types"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 )
@@ -125,7 +126,7 @@ func TestBulkPredictWithMetrics_WithPredictedLatencyCtx(t *testing.T) {
 	prefixCacheScores := []float64{0.0}
 
 	plCtx := &predictedLatencyCtx{
-		schedulingRequest: schedulingtypes.LLMRequest{
+		schedulingRequest: schedulingtypes.InferenceRequest{
 			TargetModel: "test-model",
 		},
 		incomingModelName: "incoming-model",
@@ -151,10 +152,10 @@ func TestBulkPredictWithMetrics_ChatCompletionsPrompt(t *testing.T) {
 		{NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"}},
 	}
 
-	chatBody := &schedulingtypes.LLMRequestBody{
-		ChatCompletions: &schedulingtypes.ChatCompletionsRequest{
-			Messages: []schedulingtypes.Message{
-				{Role: "user", Content: schedulingtypes.Content{Raw: "Hello world"}},
+	chatBody := &fwkrh.InferenceRequestBody{
+		ChatCompletions: &fwkrh.ChatCompletionsRequest{
+			Messages: []fwkrh.Message{
+				{Role: "user", Content: fwkrh.Content{Raw: "Hello world"}},
 			},
 		},
 	}

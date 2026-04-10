@@ -188,16 +188,16 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 			for _, label := range loraMetrics.GetLabel() {
 				if label.GetName() == LoraInfoRunningAdaptersMetricName {
 					if label.GetValue() != "" {
-						adapterList := strings.Split(label.GetValue(), ",")
-						for _, adapter := range adapterList {
+						adapterList := strings.SplitSeq(label.GetValue(), ",")
+						for adapter := range adapterList {
 							updated.ActiveModels[adapter] = 0
 						}
 					}
 				}
 				if label.GetName() == LoraInfoWaitingAdaptersMetricName {
 					if label.GetValue() != "" {
-						adapterList := strings.Split(label.GetValue(), ",")
-						for _, adapter := range adapterList {
+						adapterList := strings.SplitSeq(label.GetValue(), ",")
+						for adapter := range adapterList {
 							updated.WaitingModels[adapter] = 0
 						}
 					}
@@ -227,7 +227,7 @@ func (p *PodMetricsClientImpl) promToPodMetrics(
 						errs = multierr.Append(errs, err)
 					}
 				case CacheConfigNumGPUBlocksMetricName:
-					updated.CacheNumGPUBlocks, err = strconv.Atoi(v.GetValue())
+					updated.CacheNumBlocks, err = strconv.Atoi(v.GetValue())
 					if err != nil {
 						errs = multierr.Append(errs, err)
 					}

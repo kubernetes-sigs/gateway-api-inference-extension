@@ -33,7 +33,7 @@ var _ requestcontrol.PrepareDataPlugin = &PredictedLatency{}
 
 // PrepareRequestData prepares the SLO context for the request, including
 // parsing SLO headers, gathering prefix cache scores, and generating predictions.
-func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.LLMRequest, endpoints []schedulingtypes.Endpoint) error {
+func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *schedulingtypes.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
 	logger := log.FromContext(ctx)
 	predictedLatencyCtx := s.getOrMakePredictedLatencyContextForRequest(request)
 

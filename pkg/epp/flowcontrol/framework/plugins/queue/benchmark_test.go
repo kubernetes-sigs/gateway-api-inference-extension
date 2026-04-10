@@ -171,9 +171,7 @@ func benchmarkHighContention(b *testing.B, q contracts.SafeQueue) {
 
 	// Start producer goroutines to run in the background.
 	for range 4 {
-		wgProducers.Add(1)
-		go func() {
-			defer wgProducers.Done()
+		wgProducers.Go(func() {
 			for {
 				select {
 				case <-stopCh:
@@ -183,7 +181,7 @@ func benchmarkHighContention(b *testing.B, q contracts.SafeQueue) {
 					q.Add(item)
 				}
 			}
-		}()
+		})
 	}
 
 	b.ReportAllocs()

@@ -86,16 +86,11 @@ func (p *BaseModelToHeaderPlugin) WithName(name string) *BaseModelToHeaderPlugin
 
 // ProcessRequest sets base model name on the header
 func (p *BaseModelToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
-	if request == nil || request.Headers == nil || request.Body == nil {
-		return nil // this shouldn't happen
-	}
-
 	// extract raw field value from body
 	rawFieldValue, exists := request.Body[modelField]
 	if !exists {
-		// If model field is not present, set empty base model header
-		request.SetHeader(BaseModelHeader, "")
-		log.FromContext(ctx).V(logutil.VERBOSE).Info("model field not found, setting empty base model header")
+		// If model field is not present, skip base model header
+		log.FromContext(ctx).V(logutil.VERBOSE).Info("model field not found, skipping")
 		return nil
 	}
 

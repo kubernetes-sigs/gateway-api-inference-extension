@@ -29,7 +29,32 @@ type Mapping struct {
 	TotalRunningRequests *Spec
 	KVCacheUtilization   *Spec
 	LoraRequestInfo      *LoRASpec
-	CacheInfo            *Spec
+	// CacheInfo is used for info-style gauge metrics where block_size and
+	// num_gpu_blocks are exposed as label values (e.g. vLLM, trtllm-serve, SGLang).
+	CacheInfo *Spec
+	// CacheBlockSizeLabel and CacheNumBlocksLabel allow engines to use different
+	// label names for the CacheInfo metric. If empty, defaults to "block_size"
+	// and "num_gpu_blocks".
+	CacheBlockSizeLabel string
+	CacheNumBlocksLabel string
+	// CacheBlockSize and CacheNumBlocks are used for engines that expose cache
+	// config as separate gauge values rather than labels on an info metric
+	// (e.g. Triton TRT-LLM).
+	CacheBlockSize *Spec
+	CacheNumBlocks *Spec
+}
+
+// MappingConfig holds the string-based configuration used to build a Mapping.
+type MappingConfig struct {
+	Queue               string
+	Running             string
+	KVUsage             string
+	Lora                string
+	CacheInfo           string
+	CacheBlockSizeLabel string
+	CacheNumBlocksLabel string
+	CacheBlockSize      string
+	CacheNumBlocks      string
 }
 
 // String returns a human-readable representation of the Mapping, listing which specs are disabled (nil).
@@ -58,26 +83,44 @@ func (m *Mapping) String() string {
 
 // NewMapping creates a metrics.Mapping from the input specification strings.
 func NewMapping(queue, running, kvusage, lora, cacheInfo string) (*Mapping, error) {
+	return NewMappingFromConfig(MappingConfig{
+		Queue:     queue,
+		Running:   running,
+		KVUsage:   kvusage,
+		Lora:      lora,
+		CacheInfo: cacheInfo,
+	})
+}
+
+// NewMappingFromConfig creates a metrics.Mapping from a MappingConfig.
+func NewMappingFromConfig(cfg MappingConfig) (*Mapping, error) {
 	var errs []error
 
-	queueSpec, err := parseStringToSpec(queue)
+	queueSpec, err := parseStringToSpec(cfg.Queue)
 	if err != nil {
 		errs = append(errs, err)
 	}
-	runningSpec, err := parseStringToSpec(running)
+	runningSpec, err := parseStringToSpec(cfg.Running)
 	if err != nil {
 		errs = append(errs, err)
 	}
-	kvusageSpec, err := parseStringToSpec(kvusage)
+	kvusageSpec, err := parseStringToSpec(cfg.KVUsage)
 	if err != nil {
 		errs = append(errs, err)
 	}
-	loraSpec, err := parseStringToLoRASpec(lora)
+	loraSpec, err := parseStringToLoRASpec(cfg.Lora)
 	if err != nil {
 		errs = append(errs, err)
 	}
-
-	cacheInfoSpec, err := parseStringToSpec(cacheInfo)
+	cacheInfoSpec, err := parseStringToSpec(cfg.CacheInfo)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	cacheBlockSizeSpec, err := parseStringToSpec(cfg.CacheBlockSize)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	cacheNumBlocksSpec, err := parseStringToSpec(cfg.CacheNumBlocks)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -91,5 +134,9 @@ func NewMapping(queue, running, kvusage, lora, cacheInfo string) (*Mapping, erro
 		KVCacheUtilization:   kvusageSpec,
 		LoraRequestInfo:      loraSpec,
 		CacheInfo:            cacheInfoSpec,
+		CacheBlockSizeLabel:  cfg.CacheBlockSizeLabel,
+		CacheNumBlocksLabel:  cfg.CacheNumBlocksLabel,
+		CacheBlockSize:       cacheBlockSizeSpec,
+		CacheNumBlocks:       cacheNumBlocksSpec,
 	}, nil
 }

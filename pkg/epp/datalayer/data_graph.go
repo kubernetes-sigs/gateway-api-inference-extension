@@ -18,6 +18,7 @@ package datalayer
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 
 	fwkfc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
@@ -126,9 +127,8 @@ func buildDAG(producers map[string]plugin.ProducerPlugin, consumers map[string]p
 			if producer.Produces() != nil && consumer.Consumes() != nil {
 				for producedKey, producedData := range producer.Produces() {
 					if consumedData, ok := consumer.Consumes()[producedKey]; ok {
-						// Check types are same. Reflection is avoided here for simplicity.
-						// TODO(#1985): Document this detail in IGW docs.
-						if producedData != consumedData {
+						// Check types are same.
+						if reflect.TypeOf(producedData) != reflect.TypeOf(consumedData) {
 							return nil, errors.New("data type mismatch between produced and consumed data for key: " + producedKey)
 						}
 						if pluginToLayerExecutionOrder(producer) > pluginToLayerExecutionOrder(consumer) {

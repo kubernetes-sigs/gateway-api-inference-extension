@@ -196,12 +196,12 @@ func TestGetBaseModel_ConcurrentRace(t *testing.T) {
 	cm := makeConfigMap(cmName, baseModel, "- a1\n")
 
 	go func() {
-		for i := 0; i < 10000; i++ {
+		for range 10000 {
 			_ = as.configMapUpdateOrAddIfNotExist(cm)
 		}
 	}()
 
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		as.getBaseModel("a1")
 	}
 }

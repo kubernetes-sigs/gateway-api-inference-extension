@@ -75,7 +75,7 @@ type mockScheduler struct {
 	dataProduced    bool // denotes whether data production is expected.
 }
 
-func (m *mockScheduler) Schedule(_ context.Context, _ *fwksched.LLMRequest, endpoints []fwksched.Endpoint) (*fwksched.SchedulingResult, error) {
+func (m *mockScheduler) Schedule(_ context.Context, _ *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) (*fwksched.SchedulingResult, error) {
 	if endpoints != nil && m.dataProduced {
 		data, ok := endpoints[0].Get(mockProducedDataKey)
 		if !ok || data.(mockProducedDataType).value != 42 {
@@ -125,7 +125,7 @@ func (m *mockPrepareDataPlugin) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) error {
+func (m *mockPrepareDataPlugin) PrepareRequestData(ctx context.Context, request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) error {
 	endpoints[0].Put(mockProducedDataKey, mockProducedDataType{value: 42})
 	return nil
 }
@@ -154,7 +154,7 @@ func (m *mockAdmissionPlugin) TypedName() fwkplugin.TypedName {
 	return m.typedName
 }
 
-func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) error {
+func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) error {
 	return m.denialError
 }
 
@@ -655,15 +655,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 				}
 				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
-				locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
-				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, openai.NewOpenAIParser(), locator, config)
+				endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(ds), time.Minute)
+				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, openai.NewOpenAIParser(), endpointCandidates, config)
 				if test.name == "successful request with model rewrite" {
 					mockDs := &mockDatastore{
 						pods:     ds.PodList(datastore.AllPodsPredicate),
 						rewrites: []*v1alpha2.InferenceModelRewrite{rewrite},
 					}
 					director.datastore = mockDs
-					director.podLocator = NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
+					director.endpointCandidates = NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(mockDs), time.Minute)
 				}
 
 				reqCtx := &handlers.RequestContext{
@@ -967,8 +967,8 @@ func TestDirector_ApplyWeightedModelRewrite(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockDs := &mockDatastore{rewrites: test.rewrites}
-			locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(mockDs), time.Minute)
-			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, nil, locator, NewConfig())
+			endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(mockDs), time.Minute)
+			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, nil, endpointCandidates, NewConfig())
 
 			reqCtx := &handlers.RequestContext{
 				IncomingModelName: test.incomingModel,
@@ -1068,13 +1068,13 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
+	endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(ds), time.Minute)
 	director := NewDirectorWithConfig(
 		ds,
 		mockSched,
 		&mockAdmissionController{},
 		nil,
-		locator,
+		endpointCandidates,
 		NewConfig().WithResponseReceivedPlugins(pr1),
 	)
 
@@ -1110,8 +1110,8 @@ func TestDirector_HandleResponseBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
-	locator := NewCachedPodLocator(context.Background(), NewDatastorePodLocator(ds), time.Minute)
-	director := NewDirectorWithConfig(ds, mockSched, nil, nil, locator, NewConfig().WithResponseStreamingPlugins(ps1))
+	endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(ds), time.Minute)
+	director := NewDirectorWithConfig(ds, mockSched, nil, nil, endpointCandidates, NewConfig().WithResponseStreamingPlugins(ps1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{
@@ -1185,12 +1185,12 @@ func (p *testResponseStreaming) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
-func (p *testResponseReceived) ResponseHeader(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseReceived) ResponseHeader(_ context.Context, _ *fwksched.InferenceRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.lastRespOnResponse = response
 	p.lastTargetPodOnResponse = targetPod.NamespacedName.String()
 }
 
-func (p *testResponseStreaming) ResponseBody(_ context.Context, _ *fwksched.LLMRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
+func (p *testResponseStreaming) ResponseBody(_ context.Context, _ *fwksched.InferenceRequest, response *fwk.Response, targetPod *fwkdl.EndpointMetadata) {
 	p.respsOnStreaming = append(p.respsOnStreaming, response)
 	p.targetPodsOnStreaming = append(p.targetPodsOnStreaming, targetPod.NamespacedName.String())
 

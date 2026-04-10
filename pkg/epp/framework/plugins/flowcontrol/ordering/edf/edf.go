@@ -1,0 +1,116 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package edf implements an ordering policy that selects requests based on their absolute deadlines
+// (Earliest Deadline First).
+//
+// For detailed documentation, see README.md.
+package edf
+
+import (
+	"encoding/json"
+	"time"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+)
+
+// EDFOrderingPolicyType is the registration type for the EDF ordering policy.
+//
+// It selects the request with the earliest absolute deadline.
+// For detailed documentation, see README.md.
+const EDFOrderingPolicyType = "edf-ordering-policy"
+
+func EDFOrderingPolicyFactory(name string, _ json.RawMessage, _ plugin.Handle) (plugin.Plugin, error) {
+	return newEDFPolicy().withName(name), nil
+}
+
+// Requests with earlier absolute deadlines (EnqueueTime + EffectiveTTL) are dispatched first.
+// See the documentation for the exported EDFOrderingPolicyType constant for detailed behavioral guarantees.
+type EDFPolicy struct {
+	name string
+}
+
+var _ flowcontrol.OrderingPolicy = &EDFPolicy{}
+
+func newEDFPolicy() *EDFPolicy {
+	return &EDFPolicy{
+		name: EDFOrderingPolicyType,
+	}
+}
+
+func (p *EDFPolicy) withName(name string) *EDFPolicy {
+	if name != "" {
+		p.name = name
+	}
+	return p
+}
+
+func (p *EDFPolicy) Name() string {
+	return p.name
+}
+
+// RequiredQueueCapabilities returns the queue capabilities required by this policy.
+// It requires a priority-configurable queue (e.g., heap-based) to maintain items in deadline-sorted order.
+func (p *EDFPolicy) RequiredQueueCapabilities() []flowcontrol.QueueCapability {
+	return []flowcontrol.QueueCapability{flowcontrol.CapabilityPriorityConfigurable}
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *EDFPolicy) TypedName() plugin.TypedName {
+	return plugin.TypedName{
+		Type: EDFOrderingPolicyType,
+		Name: p.name,
+	}
+}
+
+var maxDeadlineTime = time.Unix(0, 1<<63-1)
+
+// calculateDeadline computes the absolute deadline for a request.
+// The deadline is defined as the logical enqueue time plus the effective time-to-live (TTL).
+// If EffectiveTTL is zero or negative, the request is considered non-time-sensitive and assigned a
+// far-future deadline so it sorts after all SLO-bound requests.
+func calculateDeadline(item flowcontrol.QueueItemAccessor) time.Time {
+	ttl := item.EffectiveTTL()
+	if ttl <= 0 {
+		// No TTL: treat as "never expire", but still respect enqueue time for fairness.
+		return maxDeadlineTime
+	}
+	return item.EnqueueTime().Add(ttl)
+}
+
+// Less returns true if item 'a' should be dispatched before item 'b'.
+// EDF orders by deadline (earliest first), using FCFS as a tie-breaker.
+func (p *EDFPolicy) Less(a, b flowcontrol.QueueItemAccessor) bool {
+	if a == nil && b == nil {
+		return false
+	}
+	if a == nil { // Treat nil as lowest priority
+		return false
+	}
+	if b == nil { // Treat non-nil 'a' as higher priority than nil 'b'
+		return true
+	}
+	deadlineA := calculateDeadline(a)
+	deadlineB := calculateDeadline(b)
+
+	if !deadlineA.Equal(deadlineB) {
+		return deadlineA.Before(deadlineB) // earlier deadline = higher priority
+	}
+
+	// Same deadline: FCFS (earlier enqueue time = higher priority)
+	return a.EnqueueTime().Before(b.EnqueueTime())
+}

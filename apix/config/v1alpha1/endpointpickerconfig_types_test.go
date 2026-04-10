@@ -66,7 +66,7 @@ func TestStringers(t *testing.T) {
 					{Priority: 10, MaxBytes: resource.NewQuantity(512, resource.DecimalSI)},
 				},
 			},
-			want: "{MaxBytes: 1024, DefaultRequestTTL: 30s, PriorityBands: [{Priority: 10, MaxBytes: 512}]}",
+			want: "{MaxBytes: 1024, MaxRequests: unlimited, DefaultRequestTTL: 30s, PriorityBands: [{Priority: 10, MaxBytes: 512}]}",
 		},
 		{
 			name: "ParserConfig",

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai:v0.15.1"
+          image: "vllm/vllm-openai:latest"
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
@@ -164,8 +164,8 @@ spec:
       # follows:
       # 
       #   1. Identify the maximum context length the model was trained on, or the maximum
-      #      allowed length of output tokens configured on vLLM (llama2-7b was trained to
-      #      4k context length, while llama3-8b was trained to 128k).
+      #      allowed length of output tokens configured on vLLM (qwen3-32b was trained to
+      #      128k context length).
       #   2. Output tokens are the more compute intensive to calculate and the accelerator
       #      will have a maximum concurrency (batch size) - the time per output token at
       #      maximum batch with no prompt tokens being processed is the slowest an output

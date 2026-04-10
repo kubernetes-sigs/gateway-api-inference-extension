@@ -24,7 +24,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 )
 
-const testModelValue = "llama-3"
+const (
+	testModelValue = "qwen3"
+)
 
 func TestNewBodyFieldToHeaderPlugin(t *testing.T) {
 	tests := []struct {
@@ -70,10 +72,10 @@ func TestNewBodyFieldToHeaderPlugin(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if p.TypedName().Type != BodyFieldToHeaderPluginType {
-				t.Errorf("Type = %q, want %q", p.TypedName().Type, BodyFieldToHeaderPluginType)
+				t.Errorf("Type = %s, want %s", p.TypedName().Type, BodyFieldToHeaderPluginType)
 			}
 			if p.TypedName().Name != BodyFieldToHeaderPluginType {
-				t.Errorf("Name = %q, want %q", p.TypedName().Name, BodyFieldToHeaderPluginType)
+				t.Errorf("Name = %s, want %s", p.TypedName().Name, BodyFieldToHeaderPluginType)
 			}
 		})
 	}
@@ -88,10 +90,10 @@ func TestBodyFieldToHeaderPlugin_WithName(t *testing.T) {
 	p.WithName("custom-name")
 
 	if got := p.TypedName().Name; got != "custom-name" {
-		t.Errorf("Name after WithName = %q, want %q", got, "custom-name")
+		t.Errorf("Name after WithName = %s, want %s", got, "custom-name")
 	}
 	if got := p.TypedName().Type; got != BodyFieldToHeaderPluginType {
-		t.Errorf("Type should be unchanged = %q, want %q", got, BodyFieldToHeaderPluginType)
+		t.Errorf("Type should be unchanged = %s, want %s", got, BodyFieldToHeaderPluginType)
 	}
 }
 
@@ -106,7 +108,7 @@ func TestBodyFieldToHeaderPluginFactory(t *testing.T) {
 		{
 			name:       "valid config",
 			pluginName: "my-plugin",
-			rawParams:  json.RawMessage(`{"field_name":"model","header_name":"X-Gateway-Model"}`),
+			rawParams:  json.RawMessage(`{"fieldName":"model","headerName":"X-Gateway-Model"}`),
 			wantName:   "my-plugin",
 		},
 		{
@@ -116,13 +118,13 @@ func TestBodyFieldToHeaderPluginFactory(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:       "missing field_name",
+			name:       "missing fieldName",
 			pluginName: "my-plugin",
 			rawParams:  json.RawMessage(`{"header_name":"X-Gateway-Model"}`),
 			wantErr:    true,
 		},
 		{
-			name:       "missing header_name",
+			name:       "missing headerName",
 			pluginName: "my-plugin",
 			rawParams:  json.RawMessage(`{"field_name":"model"}`),
 			wantErr:    true,
@@ -165,10 +167,10 @@ func TestBodyFieldToHeaderPluginFactory(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got := p.TypedName().Name; got != tt.wantName {
-				t.Errorf("Name = %q, want %q", got, tt.wantName)
+				t.Errorf("Name = %s, want %s", got, tt.wantName)
 			}
 			if got := p.TypedName().Type; got != BodyFieldToHeaderPluginType {
-				t.Errorf("Type = %q, want %q", got, BodyFieldToHeaderPluginType)
+				t.Errorf("Type = %s, want %s", got, BodyFieldToHeaderPluginType)
 			}
 		})
 	}
@@ -247,45 +249,6 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest(t *testing.T) {
 				return r
 			}(),
 		},
-		{
-			name:       "nil field value",
-			fieldName:  "model",
-			headerName: "X-Gateway-Model",
-			request: func() *framework.InferenceRequest {
-				r := framework.NewInferenceRequest()
-				r.Body["model"] = nil
-				return r
-			}(),
-			wantHeader: "<nil>",
-		},
-		{
-			name:       "nil request",
-			fieldName:  "model",
-			headerName: "X-Gateway-Model",
-			request:    nil,
-		},
-		{
-			name:       "nil headers",
-			fieldName:  "model",
-			headerName: "X-Gateway-Model",
-			request: &framework.InferenceRequest{
-				InferenceMessage: framework.InferenceMessage{
-					Headers: nil,
-					Body:    map[string]any{"model": "llama"},
-				},
-			},
-		},
-		{
-			name:       "nil body",
-			fieldName:  "model",
-			headerName: "X-Gateway-Model",
-			request: &framework.InferenceRequest{
-				InferenceMessage: framework.InferenceMessage{
-					Headers: map[string]string{},
-					Body:    nil,
-				},
-			},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -306,7 +269,7 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest(t *testing.T) {
 			}
 			if tt.wantHeader != "" {
 				if got := tt.request.Headers[tt.headerName]; got != tt.wantHeader {
-					t.Errorf("Headers[%q] = %q, want %q", tt.headerName, got, tt.wantHeader)
+					t.Errorf("Headers[%s] = %s, want %s", tt.headerName, got, tt.wantHeader)
 				}
 			}
 		})
@@ -328,6 +291,6 @@ func TestBodyFieldToHeaderPlugin_ProcessRequest_MutatedHeaders(t *testing.T) {
 
 	mutated := request.MutatedHeaders()
 	if got, ok := mutated["X-Gateway-Model"]; !ok || got != testModelValue {
-		t.Errorf("MutatedHeaders[\"X-Gateway-Model\"] = %q, %v; want %q, true", got, ok, testModelValue)
+		t.Errorf("MutatedHeaders[\"X-Gateway-Model\"] = %s, %v; want %s, true", got, ok, testModelValue)
 	}
 }

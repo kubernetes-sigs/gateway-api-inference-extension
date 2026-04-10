@@ -31,6 +31,7 @@ import (
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	fwksched "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	latencypredictor "sigs.k8s.io/gateway-api-inference-extension/sidecars/latencypredictorasync"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
@@ -120,26 +121,26 @@ func createTestEndpoint(name string, kvCacheUsage float64, runningRequestsSize, 
 	)
 }
 
-func createTestLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
-		Completions: &fwksched.CompletionsRequest{
-			Prompt: "test prompt",
+func createTestInferenceRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
+	return createTestInferenceRequestWithBody(reqID, ttftSLO, tpotSLO, &fwkrh.InferenceRequestBody{
+		Completions: &fwkrh.CompletionsRequest{
+			Prompt: fwkrh.Prompt{Raw: "test prompt"},
 		},
 	})
 }
 
-func createTestChatCompletionsLLMRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.LLMRequest {
-	return createTestLLMRequestWithBody(reqID, ttftSLO, tpotSLO, &fwksched.LLMRequestBody{
-		ChatCompletions: &fwksched.ChatCompletionsRequest{
-			Messages: []fwksched.Message{
-				{Role: "system", Content: fwksched.Content{Raw: "You are a helpful assistant."}},
-				{Role: "user", Content: fwksched.Content{Raw: "Tell me a joke."}},
+func createTestChatCompletionsInferenceRequest(reqID string, ttftSLO, tpotSLO float64) *fwksched.InferenceRequest {
+	return createTestInferenceRequestWithBody(reqID, ttftSLO, tpotSLO, &fwkrh.InferenceRequestBody{
+		ChatCompletions: &fwkrh.ChatCompletionsRequest{
+			Messages: []fwkrh.Message{
+				{Role: "system", Content: fwkrh.Content{Raw: "You are a helpful assistant."}},
+				{Role: "user", Content: fwkrh.Content{Raw: "Tell me a joke."}},
 			},
 		},
 	})
 }
 
-func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwksched.LLMRequestBody) *fwksched.LLMRequest {
+func createTestInferenceRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *fwkrh.InferenceRequestBody) *fwksched.InferenceRequest {
 	headers := make(map[string]string)
 	headers[reqcommon.RequestIdHeaderKey] = reqID
 	if ttftSLO > 0 {
@@ -149,15 +150,15 @@ func createTestLLMRequestWithBody(reqID string, ttftSLO, tpotSLO float64, body *
 		headers["x-avg-tpot-slo"] = fmt.Sprintf("%f", tpotSLO)
 	}
 
-	return &fwksched.LLMRequest{
+	return &fwksched.InferenceRequest{
 		Headers: headers,
 		Body:    body,
 	}
 }
 
-// Add this helper function after the createTestLLMRequest function
+// Add this helper function after the createTestInferenceRequest function
 
-func setupPredictionContext(router *PredictedLatency, request *fwksched.LLMRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
+func setupPredictionContext(router *PredictedLatency, request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint, predictor *mockPredictor) {
 	ctx := context.Background()
 
 	// Create prediction context
@@ -200,7 +201,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 		name           string
 		predictor      *mockPredictor
 		strategy       headroomStrategy
-		request        *fwksched.LLMRequest
+		request        *fwksched.InferenceRequest
 		endpoints      []fwksched.Endpoint
 		expectedScores map[string]float64 // Map of pod name to expected score
 		expectNil      bool
@@ -209,7 +210,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			name:      "No predictor configured",
 			predictor: nil,
 			strategy:  headroomStrategyLeast,
-			request:   createTestLLMRequest("test", 1.0, 0.05),
+			request:   createTestInferenceRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 			},
@@ -225,7 +226,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05),
+			request:  createTestInferenceRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1), // 50% KV cache
 				createTestEndpoint("pod2", 0.6, 3, 2), // 60% KV cache
@@ -245,7 +246,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05),
+			request:  createTestInferenceRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.8, 5, 3), // 80% KV cache, high load
 				createTestEndpoint("pod2", 0.9, 6, 4), // 90% KV cache, very high load
@@ -262,7 +263,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05),
+			request:  createTestInferenceRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod-positive", 0.3, 1, 0), // Low KV cache, positive headroom
 				createTestEndpoint("pod-negative", 0.9, 6, 4), // High KV cache, negative headroom
@@ -276,7 +277,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 				err: errors.New("prediction failed"),
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestLLMRequest("test", 1.0, 0.05),
+			request:  createTestInferenceRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 				createTestEndpoint("pod2", 0.6, 3, 2),
@@ -290,7 +291,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 			name:      "Empty pod list",
 			predictor: &mockPredictor{},
 			strategy:  headroomStrategyLeast,
-			request:   createTestLLMRequest("test", 1.0, 0.05),
+			request:   createTestInferenceRequest("test", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{},
 			// Should return empty scores map
 			expectedScores: map[string]float64{},
@@ -304,7 +305,7 @@ func TestPredictedLatency_Score(t *testing.T) {
 				},
 			},
 			strategy: headroomStrategyLeast,
-			request:  createTestChatCompletionsLLMRequest("test-chat", 1.0, 0.05),
+			request:  createTestChatCompletionsInferenceRequest("test-chat", 1.0, 0.05),
 			endpoints: []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 				createTestEndpoint("pod2", 0.6, 3, 2),
@@ -409,7 +410,7 @@ func TestPredictedLatency_Strategies(t *testing.T) {
 			cfg.HeadroomSelectionStrategy = string(tt.strategy)
 			router := NewPredictedLatency(cfg, predictor)
 
-			request := createTestLLMRequest("test", 1.0, 0.05)
+			request := createTestInferenceRequest("test", 1.0, 0.05)
 			endpoints := []fwksched.Endpoint{
 				createTestEndpoint("pod1", 0.5, 2, 1),
 				createTestEndpoint("pod2", 0.6, 3, 2),
@@ -771,7 +772,7 @@ func TestSloContextStoreEviction(t *testing.T) {
 	requestID := "test-req-id"
 	endpointName := types.NamespacedName{Name: "test-model", Namespace: "default"}
 
-	req := &fwksched.LLMRequest{
+	req := &fwksched.InferenceRequest{
 		Headers: map[string]string{
 			reqcommon.RequestIdHeaderKey: requestID,
 		},

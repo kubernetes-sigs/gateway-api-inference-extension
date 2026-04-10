@@ -29,6 +29,7 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
@@ -357,8 +358,8 @@ func (ts *testDirector) HandleRequest(ctx context.Context, reqCtx *handlers.Requ
 	reqCtx.TargetEndpoint = fmt.Sprintf("%s:%d", podAddress, poolPort)
 
 	// Populate SchedulingRequest for testing request-based streaming detection.
-	reqCtx.SchedulingRequest = &scheduling.LLMRequest{
-		Body: &scheduling.LLMRequestBody{},
+	reqCtx.SchedulingRequest = &scheduling.InferenceRequest{
+		Body: &fwkrh.InferenceRequestBody{},
 	}
 	if stream, ok := bodyMap["stream"].(bool); ok && stream {
 		reqCtx.SchedulingRequest.Body.Stream = true

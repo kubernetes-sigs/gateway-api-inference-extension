@@ -67,6 +67,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts/mocks"
@@ -76,8 +78,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
 	testutils "sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
@@ -178,16 +179,16 @@ type benchRequest struct {
 }
 
 // --- stubs required by FlowControlRequest interface ---
-func (r *benchRequest) FlowKey() flowcontrol.FlowKey             { return r.key }
-func (r *benchRequest) ByteSize() uint64                         { return r.byteSize }
-func (r *benchRequest) InitialEffectiveTTL() time.Duration       { return 5 * time.Minute }
-func (r *benchRequest) ID() string                               { return "bench-req" }
-func (r *benchRequest) GetMetadata() map[string]any              { return nil }
-func (r *benchRequest) InferencePoolName() string                { return "bench-pool" }
-func (r *benchRequest) ModelName() string                        { return "bench-model" }
-func (r *benchRequest) TargetModelName() string                  { return "bench-target" }
-func (r *benchRequest) InferenceRequest() *scheduling.LLMRequest { return nil }
-func (r *benchRequest) ReceivedTimestamp() time.Time             { return time.Now() }
+func (r *benchRequest) FlowKey() flowcontrol.FlowKey                   { return r.key }
+func (r *benchRequest) ByteSize() uint64                               { return r.byteSize }
+func (r *benchRequest) InitialEffectiveTTL() time.Duration             { return 5 * time.Minute }
+func (r *benchRequest) ID() string                                     { return "bench-req" }
+func (r *benchRequest) GetMetadata() map[string]any                    { return nil }
+func (r *benchRequest) InferencePoolName() string                      { return "bench-pool" }
+func (r *benchRequest) ModelName() string                              { return "bench-model" }
+func (r *benchRequest) TargetModelName() string                        { return "bench-target" }
+func (r *benchRequest) InferenceRequest() *scheduling.InferenceRequest { return nil }
+func (r *benchRequest) ReceivedTimestamp() time.Time                   { return time.Now() }
 
 // setupRegistry provisions the concrete FlowRegistry.
 func setupRegistry(
@@ -242,13 +243,13 @@ func setupBenchmarkHarness(
 	b.Helper()
 	handle := testutils.NewTestHandle(ctx)
 
-	fPolicy, err := fairness.GlobalStrictFairnessPolicyFactory(registry.DefaultFairnessPolicyRef, nil, handle)
+	fPolicy, err := globalstrict.GlobalStrictFairnessPolicyFactory(registry.DefaultFairnessPolicyRef, nil, handle)
 	if err != nil {
 		b.Fatalf("Failed to create fairness policy: %v", err)
 	}
 	handle.AddPlugin(registry.DefaultFairnessPolicyRef, fPolicy)
 
-	oPolicy, err := ordering.FCFSOrderingPolicyFactory(registry.DefaultOrderingPolicyRef, nil, handle)
+	oPolicy, err := fcfs.FCFSOrderingPolicyFactory(registry.DefaultOrderingPolicyRef, nil, handle)
 	if err != nil {
 		b.Fatalf("Failed to create ordering policy: %v", err)
 	}
@@ -275,7 +276,12 @@ func setupBenchmarkHarness(
 		}
 	}
 
-	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, reg, detector, &mocks.MockPodLocator{})
+	fc, err := controller.NewFlowController(ctx, "benchmark", cfg, controller.Deps{
+		Registry:           reg,
+		SaturationDetector: detector,
+		EndpointCandidates: &mocks.MockEndpointCandidates{},
+		UsageLimitPolicy:   usagelimits.DefaultPolicy()},
+	)
 	if err != nil {
 		b.Fatalf("Failed to init FlowController: %v", err)
 	}

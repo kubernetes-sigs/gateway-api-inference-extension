@@ -341,9 +341,9 @@ func verifyTrafficRouting() {
 			}
 		}
 
-		// Expected ports and InferenceObjective target models
+		// Expected ports and client-facing model name (response model is rewritten back to the incoming name)
 		expectedPort := generateSequence(firstPort, numPorts)
-		expectedModel := []string{targetModelName}
+		expectedModel := []string{modelName}
 
 		// Observed ports and InferenceObjective target models
 		actualModel := make(map[string]int)
@@ -707,7 +707,7 @@ func generateTraffic(
 	var wg sync.WaitGroup
 	errorCh := make(chan error, batches)
 
-	for i := 0; i < batches; i++ {
+	for i := range batches {
 		wg.Add(1)
 		semaphore <- struct{}{}
 

@@ -6,6 +6,8 @@ This directory contains parser plugins used to parse and understand the payloads
 
 *   **`openai-parser`**: The default parser, supporting the [OpenAI API](https://developers.openai.com/api/reference/overview). This is used when no parser is explicitly specified in the `EndpointPickerConfig`.
 *   **`vllmgrpc-parser`**: A parser designed to handle requests specifically for the [vLLM gRPC API](https://docs.vllm.ai/en/latest/api/vllm/entrypoints/grpc_server/).
+*   **`passthrough-parser`**: A model-agnostic parser that supports any request format by passing the request body through without interpretation.
+    *   **Drawback**: EPP cannot parse the payload, so payload-related scheduling scorers (e.g., `prefix-cache-scorer`) are not supported.
 
 ## Configuration
 

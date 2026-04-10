@@ -19,7 +19,6 @@ package bodyfieldtoheader
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -41,9 +40,9 @@ var _ framework.RequestProcessor = &BodyFieldToHeaderPlugin{}
 // BodyFieldToHeaderConfig defines the JSON configuration structure for the plugin.
 type BodyFieldToHeaderConfig struct {
 	// FieldName is the name of the body field to extract
-	FieldName string `json:"field_name"`
+	FieldName string `json:"fieldName"`
 	// HeaderName is the name of the header to set
-	HeaderName string `json:"header_name"`
+	HeaderName string `json:"headerName"`
 }
 
 // BodyFieldToHeaderPluginFactory defines the factory function for NewBodyFieldToHeaderPlugin.
@@ -67,11 +66,11 @@ func BodyFieldToHeaderPluginFactory(name string, rawParameters json.RawMessage, 
 // NewBodyFieldToHeaderPlugin initializes a new BodyFieldToHeaderPlugin and returns its pointer.
 func NewBodyFieldToHeaderPlugin(fieldName, headerName string) (*BodyFieldToHeaderPlugin, error) {
 	if fieldName == "" {
-		return nil, errors.New("body fieldName is required in BodyFieldToHeader plugin")
+		return nil, fmt.Errorf("fieldName is required for plugin '%s'", BodyFieldToHeaderPluginType)
 	}
 
 	if headerName == "" {
-		return nil, errors.New("headerName is required in BodyFieldToHeader plugin")
+		return nil, fmt.Errorf("headerName is required for plugin '%s'", BodyFieldToHeaderPluginType)
 	}
 
 	return &BodyFieldToHeaderPlugin{
@@ -104,10 +103,6 @@ func (p *BodyFieldToHeaderPlugin) WithName(name string) *BodyFieldToHeaderPlugin
 
 // ProcessRequest extracts value from a given body field and sets it as HTTP header.
 func (p *BodyFieldToHeaderPlugin) ProcessRequest(ctx context.Context, _ *framework.CycleState, request *framework.InferenceRequest) error {
-	if request == nil || request.Headers == nil || request.Body == nil {
-		return nil // this shouldn't happen
-	}
-
 	// extract raw field value from body
 	rawFieldValue, exists := request.Body[p.fieldName]
 	if !exists {

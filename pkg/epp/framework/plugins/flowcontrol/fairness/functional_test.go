@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin"
 )
 
 // TestFairnessPolicyConformance is the main conformance test suite for FairnessPolicy implementations.
@@ -35,12 +37,12 @@ import (
 func TestFairnessPolicyConformance(t *testing.T) {
 	t.Parallel()
 
-	if len(fwkplugin.Registry) == 0 {
-		t.Log("No plugins registered. Skipping conformance tests.")
-		return
+	policies := map[string]fwkplugin.FactoryFunc{
+		globalstrict.GlobalStrictFairnessPolicyType: globalstrict.GlobalStrictFairnessPolicyFactory,
+		roundrobin.RoundRobinFairnessPolicyType:     roundrobin.RoundRobinFairnessPolicyFactory,
 	}
 
-	for name, f := range fwkplugin.Registry {
+	for name, f := range policies {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

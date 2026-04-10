@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai:v0.15.1"
+          image: "vllm/vllm-openai:latest"
           imagePullPolicy: Always
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
@@ -50,6 +50,10 @@ spec:
                   key: token
             - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
               value: "true"
+            - name: VLLM_PLUGINS
+              value: "lora_filesystem_resolver"
+            - name: VLLM_LORA_RESOLVER_CACHE_DIR
+              value: "/adapters"
           ports:
             - containerPort: 8000
               name: http
@@ -60,7 +64,7 @@ spec:
               # to give upstream gateways a chance to take us out of rotation. The time we wait
               # is dependent on the time it takes for all upstreams to completely remove us from
               # rotation. Older or simpler load balancers might take upwards of 30s, but we expect
-              # our deployment to run behind a modern gateway like Envoy which is designed to 
+              # our deployment to run behind a modern gateway like Envoy which is designed to
               # probe for readiness aggressively.
               sleep:
                 # Upstream gateway probers for health should be set on a low period, such as 5s,
@@ -69,7 +73,7 @@ spec:
                 # as load balancers may have internal delays, and we don't want to drop requests
                 # normally, so we're often aiming to set this value to a p99 propagation latency
                 # of readiness -> load balancer taking backend out of rotation, not the average.
-                # 
+                #
                 # This value is generally stable and must often be experimentally determined on
                 # for a given load balancer and health check period. We set the value here to
                 # the highest value we observe on a supported load balancer, and we recommend
@@ -143,8 +147,10 @@ spec:
           resources:
             limits:
               nvidia.com/gpu: 1
+              ephemeral-storage: "100Gi"
             requests:
               nvidia.com/gpu: 1
+              ephemeral-storage: "100Gi"
           volumeMounts:
             - mountPath: /data
               name: data
@@ -153,18 +159,31 @@ spec:
             - name: adapters
               mountPath: "/adapters"
       initContainers:
-        - name: lora-adapter-syncer
-          tty: true
-          stdin: true 
-          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.2.1
-          restartPolicy: Always
-          imagePullPolicy: IfNotPresent
-          env: 
-            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
-              value: "/config/configmap.yaml"
-          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
-          - name: config-volume
-            mountPath:  /config
+        - name: pull-lora
+          image: alpine/git
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            mkdir -p /adapters/small-segment-lora-1
+            if [ -n "$HUGGING_FACE_HUB_TOKEN" ]; then
+              git clone --depth 1 https://oauth2:$HUGGING_FACE_HUB_TOKEN@huggingface.co/ttt421/nec119-small-segment-lora /adapters/small-segment-lora-1
+            else
+              git clone --depth 1 https://huggingface.co/ttt421/nec119-small-segment-lora /adapters/small-segment-lora-1
+            fi
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+          volumeMounts:
+            - name: adapters
+              mountPath: /adapters
+          resources:
+            limits:
+              ephemeral-storage: "10Gi"
+            requests:
+              ephemeral-storage: "10Gi"
       restartPolicy: Always
 
       # vLLM allows VLLM_PORT to be specified as an environment variable, but a user might
@@ -185,10 +204,10 @@ spec:
       #
       # For most models you can derive an upper bound for the maximum drain latency as
       # follows:
-      # 
+      #
       #   1. Identify the maximum context length the model was trained on, or the maximum
-      #      allowed length of output tokens configured on vLLM (llama2-7b was trained to
-      #      4k context length, while llama3-8b was trained to 128k).
+      #      allowed length of output tokens configured on vLLM (qwen3-32b was trained to
+      #      128k context length).
       #   2. Output tokens are the more compute intensive to calculate and the accelerator
       #      will have a maximum concurrency (batch size) - the time per output token at
       #      maximum batch with no prompt tokens being processed is the slowest an output
@@ -199,7 +218,7 @@ spec:
       #      SIGTERM (for this model that is about 4096 / 10 ~ 40s)
       #   4. If there are any requests generating prompt tokens that will delay when those
       #      output tokens start, and prompt token generation is roughly 6x faster than
-      #      compute-bound output token generation, so add 20% to the time from above (40s + 
+      #      compute-bound output token generation, so add 20% to the time from above (40s +
       #      16s ~ 55s)
       #
       # Thus we think it will take us at worst about 55s to complete the longest possible
@@ -218,7 +237,7 @@ spec:
       # stuck or hung process (a possibility due to a GPU crash), there is operational safety
       # in keeping the value roughly proportional to the time to finish serving. There is also
       # value in adding a bit of extra time to deal with unexpectedly long workloads.
-      #   
+      #
       #   6. Add a 50% safety buffer to this time since the operational impact should be low
       #      (85s * 1.5 ~ 130s)
       #
@@ -239,21 +258,3 @@ spec:
             medium: Memory
         - name: adapters
           emptyDir: {}
-        - name: config-volume
-          configMap:
-            name: vllm-qwen3-32b-adapters
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vllm-qwen3-32b-adapters
-data:
-  configmap.yaml: |
-      vLLMLoRAConfig:
-        name: vllm-qwen3-32b-adapters
-        port: 8000
-        defaultBaseModel: Qwen/Qwen3-32B
-        ensureExist:
-          models:
-          - id: small-segment-lora-1
-            source: ttt421/nec119-small-segment-lora

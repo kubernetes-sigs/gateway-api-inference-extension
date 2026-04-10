@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"slices"
 	"strconv"
@@ -290,9 +291,7 @@ func (ds *datastore) podUpdateOrAddIfNotExist(ctx context.Context, pod *corev1.P
 	}
 
 	labels := make(map[string]string, len(pod.GetLabels()))
-	for key, value := range pod.GetLabels() {
-		labels[key] = value
-	}
+	maps.Copy(labels, pod.GetLabels())
 
 	modelServerMetricsPort := 0
 	if len(pool.TargetPorts) == 1 {
@@ -429,8 +428,8 @@ func extractActivePorts(pod *corev1.Pod, targetPorts []int) sets.Set[int] {
 	}
 
 	activePorts := sets.New[int]()
-	portStrs := strings.Split(portsAnnotation, ",")
-	for _, portStr := range portStrs {
+	portStrs := strings.SplitSeq(portsAnnotation, ",")
+	for portStr := range portStrs {
 		var portNum int
 		_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
 		if err == nil && portNum > 0 && allPorts.Has(portNum) {

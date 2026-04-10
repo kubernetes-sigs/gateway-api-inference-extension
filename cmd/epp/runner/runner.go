@@ -61,22 +61,37 @@ import (
 	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
 	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	sourcenotifications "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/notifications"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/edf"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
+	slodeadline "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/slodeadline"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/saturationdetector/concurrency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/admitter/latencyslo"
+	reqdataprodprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/dataproducer/approximateprefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestattributereporter"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestdataproducer/inflightload"
+	latencyproducer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/requestdataproducer/predictedlatency"
 	testresponsereceived "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test/responsereceived"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/passthrough"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/filter/prefixcacheaffinity"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/filter/sloheadroomtier"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker/maxscore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker/random"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker/weightedrandom"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
+	latencyscorer "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/latency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/predictedlatency"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/queuedepth"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/runningrequests"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/tokenload"
 	testfilter "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test/filter"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -89,9 +104,6 @@ import (
 )
 
 const (
-	// enableExperimentalDatalayerV2 defines the environment variable used as feature flag for the pluggable data layer.
-	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
-	enableExperimentalDatalayerV2 = "ENABLE_EXPERIMENTAL_DATALAYER_V2"
 	// enableExperimentalFlowControlLayer defines the environment variable used as a feature flag for the pluggable flow
 	// control layer.
 	// DEPRECATION NOTICE - this env var will be removed in the next version as we switch to configuring the EPP using FeatureGates in the config file.
@@ -120,8 +132,6 @@ type Runner struct {
 	customCollectors     []prometheus.Collector
 	parser               fwkrh.Parser
 	dlRuntime            *datalayer.Runtime
-
-	testOverrideSkipNameValidation bool
 }
 
 // WithExecutableName sets the name of the executable containing the runner.
@@ -202,7 +212,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	mgr, _, err := r.setup(ctx, cfg, opts, pmc)
+	mgr, _, err := r.setup(ctx, cfg, opts, pmc, nil)
 	if err != nil {
 		return err
 	}
@@ -220,17 +230,18 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // setup configures the internal state of the Runner, including the manager,
 // datastore, and other server components. It returns the initialized Manager
-// without starting it, allowing for flexible in integration test.
+// without starting it, allowing for flexible use in integration tests.
 //
-// The returned Datastore is **only** meant to use in the integration test.
-func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient) (ctrl.Manager, datastore.Datastore, error) {
+// The returned Datastore is **only** meant to be used in the integration test.
+// Optional managerOverrides are applied to the controller manager options before creation.
+func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Options, pmc backendmetrics.PodMetricsClient, managerOverrides []func(*ctrl.Options)) (ctrl.Manager, datastore.Datastore, error) {
 	rawConfig, err := r.parseConfigurationPhaseOne(ctx, opts)
 	if err != nil {
 		setupLog.Error(err, "Failed to parse configuration")
 		return nil, nil, err
 	}
-
-	epf := r.setupMetricsCollection(r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], opts, pmc)
+	useNewMetrics := !r.featureGates[datalayer.EnableLegacyMetricsFeatureGate]
+	epf := r.setupMetricsCollection(useNewMetrics, opts, pmc)
 	gknn, err := extractGKNN(opts.PoolName, opts.PoolGroup, opts.PoolNamespace, opts.EndpointSelector)
 	if err != nil {
 		setupLog.Error(err, "Failed to extract GKNN")
@@ -279,10 +290,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 	isLeader := &atomic.Bool{}
 	isLeader.Store(false)
 
-	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection, r.testOverrideSkipNameValidation)
-	if r.testOverrideSkipNameValidation {
-		setupLog.Info("Warning: testOverrideSkipNameValidation is set to true, this should be only used in test.")
-	}
+	mgr, err := runserver.NewDefaultManager(controllerCfg, *gknn, cfg, metricsServerOptions, opts.EnableLeaderElection, managerOverrides...)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		return nil, nil, err
@@ -319,7 +327,8 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	scheduler := scheduling.NewSchedulerWithConfig(r.schedulerConfig)
 
-	datalayerMetricsEnabled := r.featureGates[datalayer.ExperimentalDatalayerFeatureGate]
+	// Data layer is enabled by default; use the 'enableLegacyMetrics' feature gate to fall back to legacy polling.
+	datalayerMetricsEnabled := !r.featureGates[datalayer.EnableLegacyMetricsFeatureGate]
 	if err := r.configureAndStartDatalayer(ctx, datalayerMetricsEnabled, eppConfig.DataConfig, mgr); err != nil {
 		setupLog.Error(err, "failed to initialize data layer")
 		return nil, nil, err
@@ -327,10 +336,10 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	// --- Admission Control Initialization ---
 	var admissionController requestcontrol.AdmissionController
-	var locator contracts.PodLocator
-	locator = requestcontrol.NewDatastorePodLocator(ds, requestcontrol.WithDisableEndpointSubsetFilter(opts.DisableEndpointSubsetFilter))
+	var endpointCandidates contracts.EndpointCandidates
+	endpointCandidates = requestcontrol.NewDatastoreEndpointCandidates(ds, requestcontrol.WithDisableEndpointSubsetFilter(opts.DisableEndpointSubsetFilter))
 	if r.featureGates[flowcontrol.FeatureGate] {
-		locator = requestcontrol.NewCachedPodLocator(ctx, locator, time.Millisecond*50)
+		endpointCandidates = requestcontrol.NewCachedEndpointCandidates(ctx, endpointCandidates, time.Millisecond*50)
 		setupLog.Info("Initializing experimental Flow Control layer")
 		registry, err := fcregistry.NewFlowRegistry(eppConfig.FlowControlConfig.Registry, setupLog)
 		if err != nil {
@@ -340,8 +349,12 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 			ctx,
 			opts.PoolName,
 			eppConfig.FlowControlConfig.Controller,
-			registry, eppConfig.SaturationDetector,
-			locator,
+			fccontroller.Deps{
+				Registry:           registry,
+				SaturationDetector: eppConfig.SaturationDetector,
+				EndpointCandidates: endpointCandidates,
+				UsageLimitPolicy:   eppConfig.FlowControlConfig.UsageLimitPolicy,
+			},
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Flow Controller: %w", err)
@@ -350,12 +363,11 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		admissionController = requestcontrol.NewFlowControlAdmissionController(fc, opts.PoolName)
 	} else {
 		setupLog.Info("Experimental Flow Control layer is disabled, using legacy admission control")
-		admissionController = requestcontrol.NewLegacyAdmissionController(eppConfig.SaturationDetector, locator)
+		admissionController = requestcontrol.NewLegacyAdmissionController(eppConfig.SaturationDetector, endpointCandidates)
 	}
 
-	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, r.parser, locator, r.requestControlConfig)
+	director := requestcontrol.NewDirectorWithConfig(ds, scheduler, admissionController, r.parser, endpointCandidates, r.requestControlConfig)
 
-	// --- Setup ExtProc Server Runner ---
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         opts.GRPCPort,
 		GKNN:                             *gknn,
@@ -370,7 +382,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 		Director:                         director,
 		Parser:                           r.parser,
 		SaturationDetector:               eppConfig.SaturationDetector,
-		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate], // pluggable data layer feature flag
+		UseExperimentalDatalayerV2:       r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] || !r.featureGates[datalayer.EnableLegacyMetricsFeatureGate],
 	}
 
 	if err := serverRunner.SetupWithManager(mgr); err != nil {
@@ -380,7 +392,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, opts.GRPCHealthPort, isLeader, opts.EnableLeaderElection); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, opts.GRPCHealthPort, isLeader, opts.EnableLeaderElection, r.parser); err != nil {
 		return nil, nil, err
 	}
 
@@ -442,23 +454,34 @@ func setupDatastore(ctx context.Context, epFactory datalayer.EndpointFactory, mo
 
 // registerInTreePlugins registers the factory functions of all known plugins
 func (r *Runner) registerInTreePlugins() {
-	fwkplugin.Register(prefix.PrefixCachePluginType, prefix.PrefixCachePluginFactory)
-	fwkplugin.Register(picker.MaxScorePickerType, picker.MaxScorePickerFactory)
-	fwkplugin.Register(picker.RandomPickerType, picker.RandomPickerFactory)
-	fwkplugin.Register(picker.WeightedRandomPickerType, picker.WeightedRandomPickerFactory)
+	fwkplugin.Register(prefix.PrefixCacheScorerPluginType, prefix.PrefixCachePluginFactory)
+	fwkplugin.Register(maxscore.MaxScorePickerType, maxscore.MaxScorePickerFactory)
+	fwkplugin.Register(random.RandomPickerType, random.RandomPickerFactory)
+	fwkplugin.Register(weightedrandom.WeightedRandomPickerType, weightedrandom.WeightedRandomPickerFactory)
 	fwkplugin.Register(profile.SingleProfileHandlerType, profile.SingleProfileHandlerFactory)
 	fwkplugin.Register(kvcacheutilization.KvCacheUtilizationScorerType, kvcacheutilization.KvCacheUtilizationScorerFactory)
 	fwkplugin.Register(queuedepth.QueueScorerType, queuedepth.QueueScorerFactory)
 	fwkplugin.Register(runningrequests.RunningRequestsSizeScorerType, runningrequests.RunningRequestsSizeScorerFactory)
 	fwkplugin.Register(loraaffinity.LoraAffinityScorerType, loraaffinity.LoraAffinityScorerFactory)
+	fwkplugin.Register(tokenload.TokenLoadScorerType, tokenload.TokenLoadScorerFactory)
 	// Flow Control plugins
-	fwkplugin.Register(fairness.GlobalStrictFairnessPolicyType, fairness.GlobalStrictFairnessPolicyFactory)
-	fwkplugin.Register(fairness.RoundRobinFairnessPolicyType, fairness.RoundRobinFairnessPolicyFactory)
-	fwkplugin.Register(ordering.FCFSOrderingPolicyType, ordering.FCFSOrderingPolicyFactory)
-	fwkplugin.Register(ordering.EDFOrderingPolicyType, ordering.EDFOrderingPolicyFactory)
-	fwkplugin.Register(ordering.SLODeadlineOrderingPolicyType, ordering.SLODeadlineOrderingPolicyFactory)
-	// Latency predictor plugins
+	fwkplugin.Register(globalstrict.GlobalStrictFairnessPolicyType, globalstrict.GlobalStrictFairnessPolicyFactory)
+	fwkplugin.Register(roundrobin.RoundRobinFairnessPolicyType, roundrobin.RoundRobinFairnessPolicyFactory)
+	fwkplugin.Register(fcfs.FCFSOrderingPolicyType, fcfs.FCFSOrderingPolicyFactory)
+	fwkplugin.Register(edf.EDFOrderingPolicyType, edf.EDFOrderingPolicyFactory)
+	fwkplugin.Register(slodeadline.SLODeadlineOrderingPolicyType, slodeadline.SLODeadlineOrderingPolicyFactory)
+	fwkplugin.Register(usagelimits.StaticUsageLimitPolicyType, usagelimits.StaticPolicyFactory)
+	fwkplugin.Register(reqdataprodprefix.ApproxPrefixCachePluginType, reqdataprodprefix.ApproxPrefixCacheFactory)
+	// Latency predictor plugins (old monolith + new decomposed)
 	fwkplugin.Register(predictedlatency.PredictedLatencyPluginType, predictedlatency.PredictedLatencyFactory)
+	fwkplugin.Register(latencyproducer.LatencyDataProviderPluginType, latencyproducer.PredictedLatencyFactory)
+	fwkplugin.Register(latencyslo.LatencyAdmissionPluginType, latencyslo.LatencyAdmissionFactory)
+	// Latency scoring and filtering plugins
+	fwkplugin.Register(prefixcacheaffinity.PluginType, prefixcacheaffinity.Factory)
+	fwkplugin.Register(sloheadroomtier.PluginType, sloheadroomtier.Factory)
+	fwkplugin.Register(latencyscorer.LatencyScorerType, latencyscorer.Factory)
+	// In-flight load producer
+	fwkplugin.Register(inflightload.InFlightLoadProducerType, inflightload.InFlightLoadProducerFactory)
 	// register filter for test purpose only (used in conformance tests)
 	fwkplugin.Register(testfilter.HeaderBasedTestingFilterType, testfilter.HeaderBasedTestingFilterFactory)
 	// register response received plugin for test purpose only (used in conformance tests)
@@ -466,12 +489,14 @@ func (r *Runner) registerInTreePlugins() {
 	// register datalayer metrics collection plugins
 	fwkplugin.Register(sourcemetrics.MetricsDataSourceType, sourcemetrics.MetricsDataSourceFactory)
 	fwkplugin.Register(extractormetrics.MetricsExtractorType, extractormetrics.CoreMetricsExtractorFactory)
-	// register datalayer k8s notification source plugin
+	// register datalayer notification source plugins
 	fwkplugin.Register(sourcenotifications.NotificationSourceType, sourcenotifications.NotificationSourceFactory)
+	fwkplugin.Register(sourcenotifications.EndpointNotificationSourceType, sourcenotifications.EndpointSourceFactory)
 	// register request control pluigns
 	fwkplugin.Register(requestattributereporter.RequestAttributeReporterType, requestattributereporter.RequestAttributeReporterPluginFactory)
 	fwkplugin.Register(openai.OpenAIParserType, openai.OpenAIParserPluginFactory)
 	fwkplugin.Register(vllmgrpc.VllmGRPCParserType, vllmgrpc.VllmGRPCParserPluginFactory)
+	fwkplugin.Register(passthrough.PassthroughParserType, passthrough.PassthroughParserPluginFactory)
 	// register saturation detector plugins
 	fwkplugin.Register(concurrency.ConcurrencyDetectorType, concurrency.ConcurrencyDetectorFactory)
 	fwkplugin.Register(utilization.UtilizationDetectorType, utilization.UtilizationDetectorFactory)
@@ -492,8 +517,8 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	}
 
 	loader.RegisterFeatureGate(datalayer.ExperimentalDatalayerFeatureGate)
+	loader.RegisterFeatureGate(datalayer.EnableLegacyMetricsFeatureGate)
 	loader.RegisterFeatureGate(flowcontrol.FeatureGate)
-	loader.RegisterFeatureGate(datalayer.PrepareDataPluginsFeatureGate)
 
 	r.registerInTreePlugins()
 
@@ -503,6 +528,18 @@ func (r *Runner) parseConfigurationPhaseOne(ctx context.Context, opts *runserver
 	}
 
 	r.featureGates = featureGates
+
+	if r.featureGates[datalayer.ExperimentalDatalayerFeatureGate] {
+		setupLog.Info("The data layer is now enabled by default. " +
+			"Please remove the 'dataLayer' feature gate from your config. " +
+			"To fall back to legacy metrics polling, use the 'enableLegacyMetrics' feature gate.")
+	}
+
+	if r.featureGates[datalayer.EnableLegacyMetricsFeatureGate] {
+		setupLog.Info("Data layer: using legacy metrics polling (opt-in via 'enableLegacyMetrics' feature gate)")
+	} else {
+		setupLog.Info("Data layer: ENABLED (default)")
+	}
 
 	return rawConfig, nil
 }
@@ -523,7 +560,6 @@ func makePodListFunc(ds datastore.Datastore) func() []types.NamespacedName {
 func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *configapi.EndpointPickerConfig, ds datastore.Datastore) (*config.Config, error) {
 	logger := log.FromContext(ctx)
 
-	applyDeprecatedEnvFeatureGate(enableExperimentalDatalayerV2, "Data Layer V2", datalayer.ExperimentalDatalayerFeatureGate, rawConfig)
 	applyDeprecatedEnvFeatureGate(enableExperimentalFlowControlLayer, "Flow Control layer", flowcontrol.FeatureGate, rawConfig)
 
 	handle := fwkplugin.NewEppHandle(ctx, makePodListFunc(ds))
@@ -543,11 +579,6 @@ func (r *Runner) parseConfigurationPhaseTwo(ctx context.Context, rawConfig *conf
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the configuration - %w", err)
-	}
-	// TODO(#1970): Remove feature gate check once prepare data plugins are stable.
-	if !r.featureGates[datalayer.PrepareDataPluginsFeatureGate] {
-		// If the feature gate is disabled, clear any prepare data plugins so they are not used.
-		r.requestControlConfig.WithPrepareDataPlugins()
 	}
 	// The plugins will be executed in topologically sorted order to ensure that data is produced before it is consumed.
 	r.requestControlConfig.OrderPrepareDataPlugins(dag)
@@ -605,13 +636,14 @@ func registerExtProcServer(mgr manager.Manager, runner *runserver.ExtProcServerR
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int, isLeader *atomic.Bool, leaderElectionEnabled bool) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int, isLeader *atomic.Bool, leaderElectionEnabled bool, supporter appProtocolSupporter) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
 		logger:                logger,
 		datastore:             ds,
 		isLeader:              isLeader,
 		leaderElectionEnabled: leaderElectionEnabled,
+		supporter:             supporter,
 	})
 	if err := mgr.Add(
 		runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))); err != nil {

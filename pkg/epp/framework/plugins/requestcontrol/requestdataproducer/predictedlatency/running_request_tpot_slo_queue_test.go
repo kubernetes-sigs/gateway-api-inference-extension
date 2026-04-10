@@ -269,11 +269,11 @@ func TestConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Launch workers that add items
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			for j := 0; j < itemsPerWorker; j++ {
+			for j := range itemsPerWorker {
 				id := fmt.Sprintf("worker%d-item%d", workerID, j)
 				tpot := float64(j) + float64(workerID)*0.1
 				pq.Add(id, tpot)
@@ -282,16 +282,14 @@ func TestConcurrency(t *testing.T) {
 	}
 
 	// Launch workers that read from the queue
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < itemsPerWorker/2; j++ {
+	for range numWorkers {
+		wg.Go(func() {
+			for range itemsPerWorker / 2 {
 				pq.Peek()
 				pq.GetSize()
 				time.Sleep(time.Microsecond)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -308,7 +306,7 @@ func TestLargeQueue(t *testing.T) {
 	const numItems = 10000
 
 	// Add many items
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		id := fmt.Sprintf("item%d", i)
 		tpot := float64(numItems - i) // Reverse order so item0 has highest priority
 		pq.Add(id, tpot)
@@ -320,7 +318,7 @@ func TestLargeQueue(t *testing.T) {
 
 	// Verify priority ordering by removing items
 	lastTPOT := -1.0
-	for i := 0; i < numItems; i++ {
+	for range numItems {
 		item := pq.Peek()
 		if item.tpot < lastTPOT {
 			t.Errorf("Priority order violated: %.1f < %.1f", item.tpot, lastTPOT)
@@ -348,7 +346,7 @@ func BenchmarkPeek(b *testing.B) {
 	pq := newRequestPriorityQueue()
 
 	// Pre-populate queue
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		pq.Add(fmt.Sprintf("item%d", i), float64(i))
 	}
 

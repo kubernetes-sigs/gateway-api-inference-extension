@@ -58,7 +58,7 @@ func (m *mockPrepareRequestDataP) Consumes() map[string]any {
 	return m.consumes
 }
 
-func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *fwksch.LLMRequest, endpoints []fwksch.Endpoint) error {
+func (m *mockPrepareRequestDataP) PrepareRequestData(ctx context.Context, request *fwksch.InferenceRequest, endpoints []fwksch.Endpoint) error {
 	endpoints[0].Put(mockProducedDataKey, &mockProducedDataType{value: 42})
 	return nil
 }
@@ -99,30 +99,31 @@ func TestValidatePluginExecutionOrder(t *testing.T) {
 	testCases := []struct {
 		name        string
 		plugins     []fwkplugin.Plugin
-		expectError bool
+		expectedErr string
 	}{
 		{
 			name:        "Plugins with no dependencies",
 			plugins:     []fwkplugin.Plugin{pluginA},
-			expectError: false,
+			expectedErr: "",
 		},
 		{
 			name:        "FC depends on a request control plugin (invalid layer execution order)",
 			plugins:     []fwkplugin.Plugin{pluginA, &consumerFairnessPolicyPlugin},
-			expectError: true,
+			expectedErr: "invalid plugin layer execution order",
 		},
 		{
 			name:        "Scheduling plugin depends on a request control plugin",
 			plugins:     []fwkplugin.Plugin{pluginA, &consumerSchedulingPlugin},
-			expectError: false,
+			expectedErr: "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := ValidateAndOrderDataDependencies(tc.plugins)
-			if tc.expectError {
+			if tc.expectedErr != "" {
 				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectedErr)
 				return
 			}
 			assert.NoError(t, err)
@@ -145,17 +146,21 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 	pluginZ1 := &mockPrepareRequestDataP{name: "Z1", produces: map[string]any{"keyZ": int(0)}}
 	pluginZ2 := &mockPrepareRequestDataP{name: "Z2", consumes: map[string]any{"keyZ": string("")}}
 
+	// Same type different pointers.
+	pluginP1 := &mockPrepareRequestDataP{name: "P1", produces: map[string]any{"keyP": &mockProducedDataType{}}}
+	pluginP2 := &mockPrepareRequestDataP{name: "P2", consumes: map[string]any{"keyP": &mockProducedDataType{}}}
+
 	testCases := []struct {
 		name        string
 		plugins     []fwkrc.PrepareDataPlugin
 		expectedDAG map[string][]string
-		expectError bool
+		expectedErr string
 	}{
 		{
 			name:        "No plugins",
 			plugins:     []fwkrc.PrepareDataPlugin{},
 			expectedDAG: map[string][]string{},
-			expectError: false,
+			expectedErr: "",
 		},
 		{
 			name:    "Plugins with no dependencies",
@@ -164,7 +169,7 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 				"A/mock": {},
 				"E/mock": {},
 			},
-			expectError: false,
+			expectedErr: "",
 		},
 		{
 			name:    "Simple linear dependency (C -> B -> A)",
@@ -174,7 +179,7 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 				"B/mock": {"A/mock"},
 				"C/mock": {"B/mock"},
 			},
-			expectError: false,
+			expectedErr: "",
 		},
 		{
 			name:    "DAG with multiple dependencies (B -> A, D -> A, E independent)",
@@ -185,19 +190,28 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 				"D/mock": {"A/mock"},
 				"E/mock": {},
 			},
-			expectError: false,
+			expectedErr: "",
 		},
 		{
 			name:        "Graph with a cycle (X -> Y, Y -> X)",
 			plugins:     []fwkrc.PrepareDataPlugin{pluginX, pluginY},
 			expectedDAG: nil,
-			expectError: true,
+			expectedErr: "cycle detected",
 		},
 		{
 			name:        "Data type mismatch between produced and consumed data",
 			plugins:     []fwkrc.PrepareDataPlugin{pluginZ1, pluginZ2},
 			expectedDAG: nil,
-			expectError: true,
+			expectedErr: "data type mismatch between produced and consumed data",
+		},
+		{
+			name:    "Same type different pointers (should succeed)",
+			plugins: []fwkrc.PrepareDataPlugin{pluginP1, pluginP2},
+			expectedDAG: map[string][]string{
+				"P1/mock": {},
+				"P2/mock": {"P1/mock"},
+			},
+			expectedErr: "",
 		},
 	}
 
@@ -215,16 +229,18 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 			}
 			dag, err := buildDAG(producers, consumers)
 			if err != nil {
-				if tc.expectError {
+				if tc.expectedErr != "" {
 					assert.Error(t, err)
+					assert.Contains(t, err.Error(), tc.expectedErr)
 					return
 				}
+				assert.NoError(t, err)
 			}
 			orderedPlugins, err := topologicalSort(dag)
 
-			if tc.expectError {
+			if tc.expectedErr != "" {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "cycle detected")
+				assert.Contains(t, err.Error(), tc.expectedErr)
 				return
 			}
 			assert.NoError(t, err)
@@ -233,9 +249,7 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 			normalizedDAG := make(map[string][]string)
 			maps.Copy(normalizedDAG, dag)
 			normalizedExpectedDAG := make(map[string][]string)
-			for k, v := range tc.expectedDAG {
-				normalizedExpectedDAG[k] = v
-			}
+			maps.Copy(normalizedExpectedDAG, tc.expectedDAG)
 
 			if diff := cmp.Diff(normalizedExpectedDAG, normalizedDAG); diff != "" {
 				t.Errorf("prepareDataGraph() mismatch (-want +got):\n%s", diff)

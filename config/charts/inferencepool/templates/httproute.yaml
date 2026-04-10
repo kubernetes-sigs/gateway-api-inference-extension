@@ -8,7 +8,7 @@ spec:
   parentRefs:
   - group: gateway.networking.k8s.io
     kind: Gateway
-    name: {{ .Values.experimentalHttpRoute.inferenceGatewayName }}
+    name: {{ include "gateway-api-inference-extension.gateway.fullname" . }}
   rules:
   - backendRefs:
     - group: inference.networking.k8s.io

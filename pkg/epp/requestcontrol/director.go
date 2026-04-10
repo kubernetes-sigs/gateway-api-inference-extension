@@ -65,7 +65,7 @@ type Datastore interface {
 
 // Scheduler defines the interface required by the Director for scheduling.
 type Scheduler interface {
-	Schedule(ctx context.Context, request *fwksched.LLMRequest, candidateEndpoints []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
+	Schedule(ctx context.Context, request *fwksched.InferenceRequest, candidateEndpoints []fwksched.Endpoint) (result *fwksched.SchedulingResult, err error)
 }
 
 // NewDirectorWithConfig creates a new Director instance with all dependencies.
@@ -74,14 +74,14 @@ func NewDirectorWithConfig(
 	scheduler Scheduler,
 	admissionController AdmissionController,
 	parser fwkrh.Parser,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	config *Config,
 ) *Director {
 	return &Director{
 		datastore:             datastore,
 		scheduler:             scheduler,
 		admissionController:   admissionController,
-		podLocator:            podLocator,
+		endpointCandidates:    endpointCandidates,
 		requestControlPlugins: *config,
 		parser:                parser,
 		defaultPriority:       0, // define default priority explicitly
@@ -101,7 +101,7 @@ type Director struct {
 	datastore             Datastore
 	scheduler             Scheduler
 	admissionController   AdmissionController
-	podLocator            contracts.PodLocator
+	endpointCandidates    contracts.EndpointCandidates
 	requestControlPlugins Config
 	// we just need a pointer to an int variable since priority is a pointer in InferenceObjective
 	// no need to set this in the constructor, since the value we want is the default int val
@@ -151,8 +151,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 		attribute.Int("request_prio", *infObjective.Spec.Priority),
 	)
 
-	// Prepare LLMRequest (needed for both saturation detection and Scheduler)
-	reqCtx.SchedulingRequest = &fwksched.LLMRequest{
+	// Prepare InferenceRequest (needed for both saturation detection and Scheduler)
+	reqCtx.SchedulingRequest = &fwksched.InferenceRequest{
 		RequestId:        reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		TargetModel:      reqCtx.TargetModelName,
 		Body:             llmRequestBody,
@@ -168,28 +168,29 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err := d.admissionController.Admit(ctx, reqCtx, *infObjective.Spec.Priority); err != nil {
 		return reqCtx, err
 	}
-	candidateEndpoints := d.podLocator.Locate(ctx, reqCtx.Request.Metadata)
-	if len(candidateEndpoints) == 0 {
+
+	endpointCandidates := d.endpointCandidates.Locate(ctx, reqCtx.Request.Metadata)
+	if len(endpointCandidates) == 0 {
 		return reqCtx, errcommon.Error{
 			Code: errcommon.ServiceUnavailable,
-			Msg:  "failed to find candidate endpoints for serving the request",
+			Msg:  "failed to find endpoint candidates for serving the request",
 		}
 	}
-	candidateSnapshot := d.toSchedulerEndpoints(candidateEndpoints)
 
+	snapshotOfCandidatePods := d.toSchedulerEndpoints(endpointCandidates)
 	// Prepare per request data by running PrepareData plugins.
-	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
+	err = d.runPrepareDataPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		// Don't fail the request if PrepareData plugins fail.
 		logger.Error(err, "failed to prepare per request data")
 	}
 
 	// Run admit request plugins
-	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, candidateSnapshot) {
+	if !d.runAdmissionPlugins(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods) {
 		return reqCtx, errcommon.Error{Code: errcommon.Internal, Msg: "request cannot be admitted"}
 	}
 
-	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, candidateSnapshot)
+	result, err := d.scheduler.Schedule(ctx, reqCtx.SchedulingRequest, snapshotOfCandidatePods)
 	if err != nil {
 		return reqCtx, errcommon.Error{Code: errcommon.ResourceExhausted, Msg: fmt.Errorf("failed to find target endpoint: %w", err).Error()}
 	}
@@ -205,21 +206,21 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	return reqCtx, nil
 }
 
-func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwksched.LLMRequestBody, error) {
+func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.RequestContext, parser fwkrh.Parser) (*fwkrh.InferenceRequestBody, error) {
 	llmRequestBody, err := parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
 	if err != nil {
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: err.Error()}
 	}
 
 	switch v := llmRequestBody.Payload.(type) {
-	case fwksched.PayloadProto:
+	case fwkrh.PayloadProto:
 		// Protos are not currently mutated, return as-is.
 		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
-	case fwksched.PayloadMap:
+	case fwkrh.PayloadMap:
 		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
 			return nil, err
 		}
-	case fwksched.RawPayload:
+	case fwkrh.RawPayload:
 		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
 	default:
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
@@ -379,7 +380,7 @@ func (d *Director) GetRandomEndpoint() *fwkdl.EndpointMetadata {
 	return pod.GetMetadata()
 }
 
-func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.LLMRequest,
+func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.InferenceRequest,
 	schedulingResult *fwksched.SchedulingResult) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.preRequestPlugins {
@@ -392,7 +393,7 @@ func (d *Director) runPreRequestPlugins(ctx context.Context, request *fwksched.L
 }
 
 func (d *Director) runPrepareDataPlugins(ctx context.Context,
-	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) error {
+	request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) error {
 	if len(d.requestControlPlugins.prepareDataPlugins) == 0 {
 		return nil
 	}
@@ -400,7 +401,7 @@ func (d *Director) runPrepareDataPlugins(ctx context.Context,
 }
 
 func (d *Director) runAdmissionPlugins(ctx context.Context,
-	request *fwksched.LLMRequest, endpoints []fwksched.Endpoint) bool {
+	request *fwksched.InferenceRequest, endpoints []fwksched.Endpoint) bool {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.admissionPlugins {
 		loggerDebug.Info("Running AdmitRequest plugin", "plugin", plugin.TypedName())
@@ -413,7 +414,7 @@ func (d *Director) runAdmissionPlugins(ctx context.Context,
 	return true
 }
 
-func (d *Director) runResponseHeaderPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseHeaderPlugins(ctx context.Context, request *fwksched.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerDebug := log.FromContext(ctx).V(logutil.DEBUG)
 	for _, plugin := range d.requestControlPlugins.responseReceivedPlugins {
 		loggerDebug.Info("Running ResponseReceived plugin", "plugin", plugin.TypedName())
@@ -424,7 +425,7 @@ func (d *Director) runResponseHeaderPlugins(ctx context.Context, request *fwksch
 	}
 }
 
-func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched.LLMRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
+func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
 	loggerTrace := log.FromContext(ctx).V(logutil.TRACE)
 	for _, plugin := range d.requestControlPlugins.responseStreamingPlugins {
 		loggerTrace.Info("Running ResponseStreaming plugin", "plugin", plugin.TypedName())

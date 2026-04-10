@@ -216,11 +216,11 @@ Selects a single profile which is always the primary profile.
 
 The set of instantiated plugins can also include a picker, which chooses the actual pod to which
 the request is scheduled after filtering and scoring. If one is not referenced in a `SchedulingProfile`, an
-instance of `MaxScorePicker` will be added to the SchedulingProfile in question.
+instance of `MaxScorePicker` will be added to the SchedulingProfile in question. For a high-level overview of available pickers, see the [Scheduling Pickers](../../../pkg/epp/framework/plugins/scheduling/picker/README.md) guide.
 
 These plugins are referenced within the `schedulingProfiles` section.
 
-#### PrefixCache Scorer
+#### [PrefixCache Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/prefix/README.md)
 
 Scores pods based on the amount of the prompt is believed to be in the pod's KvCache.
 
@@ -233,9 +233,7 @@ Scores pods based on the amount of the prompt is believed to be in the pod's KvC
   - `lruCapacityPerServer` specifies the capacity of the LRU indexer in number of entries
     per server (pod). If not specified defaults to `31250`
 
-#### LoRAAffinity Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/loraaffinity) Link**
+#### [LoRAAffinity Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/loraaffinity/README.md)
 
 
 Scores pods based on whether the requested LoRA adapter is already loaded in the pod's HBM, or if
@@ -244,18 +242,14 @@ the pod is ready to load the LoRA on demand.
 - *Type*: lora-affinity-scorer
 - *Parameters*: none
 
-#### KvCacheUtilization Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization) Link**
+#### [KvCacheUtilization Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization/README.md)
 
 Scores the candidate pods based on their KV cache utilization.
 
 - *Type*: kv-cache-utilization-scorer
 - *Parameters*: none
 
-#### QueueDepth Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/queuedepth) Link**
+#### [QueueDepth Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/queuedepth/README.md)
 
 Scores list of candidate pods based on the pod's waiting queue size. The lower the
 waiting queue size the pod has, the higher the score it will get (since it's more
@@ -264,9 +258,7 @@ available to serve new request).
 - *Type*: queue-scorer
 - *Parameters*: none
 
-#### RunningRequest Scorer
-
-**Local [README](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp/framework/plugins/scheduling/scorer/runningrequest) Link**
+#### [RunningRequest Scorer](../../../pkg/epp/framework/plugins/scheduling/scorer/runningrequests/README.md)
 
 Scores candidate pods based on the number of requests currently being processed (in-flight) on
 each pod. Pods with fewer running requests receive a higher score. Scores are normalized across
@@ -277,7 +269,7 @@ every pod receives a neutral score of `1.0`.
 - *Type*: running-requests-size-scorer
 - *Parameters*: none
 
-#### MaxScorePicker
+#### [MaxScorePicker](../../../pkg/epp/framework/plugins/scheduling/picker/maxscore/README.md)
 
 Picks the pod with the maximum score from the list of candidates. This is the default picker plugin
 if not specified.
@@ -287,7 +279,7 @@ if not specified.
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates, based on
     the scores of those endpoints. If not specified defaults to `1`.
 
-#### RandomPicker
+#### [RandomPicker](../../../pkg/epp/framework/plugins/scheduling/picker/random/README.md)
 
 Picks a random pod from the list of candidates.
 
@@ -296,7 +288,7 @@ Picks a random pod from the list of candidates.
   - `maxNumOfEndpoints`: Maximum number of endpoints to pick from the list of candidates. If not
     specified defaults to `1`.
 
-#### WeightedRandomPicker
+#### [WeightedRandomPicker](../../../pkg/epp/framework/plugins/scheduling/picker/weightedrandom/README.md)
 
 Picks pod(s) from the list of candidates based on weighted random sampling using A-Res algorithm.
 
@@ -307,37 +299,45 @@ Picks pod(s) from the list of candidates based on weighted random sampling using
 
 ### Flow Control Plugins (Policies)
 
-These plugins are referenced within the `flowControl` section (Priority Bands).
+These plugins are referenced within the `flowControl` section (Priority Bands). This section includes policies for **[fairness](../../../pkg/epp/framework/plugins/flowcontrol/fairness/README.md)** and **[ordering](../../../pkg/epp/framework/plugins/flowcontrol/ordering/README.md)**.
 
-#### GlobalStrictFairnessPolicy
+#### [GlobalStrictFairnessPolicy](../../../pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict/README.md)
 
-A specialized Fairness Policy that ignores flow isolation and serves all requests in a single global FIFO order (strict prioritization). This is the default Fairness Policy.
+A Fairness Policy that ignores flow isolation and serves all requests in a single global order, delegating the actual ordering to the configured `OrderingPolicy`. It acts effectively as a single global queue per priority band.
 
-- *Type*: global-strict-fairness-policy
-- *Parameters*: none
+- **Unit of Fairness**: None (Greedy)
+- **Type**: `global-strict-fairness-policy`
+- **Parameters**: none
 
-#### RoundRobinFairnessPolicy
+> [!NOTE]
+> This policy prioritizes absolute ordering over fairness. A single flow with a burst of high-priority traffic can starve others.
 
-A Fairness Policy that ensures fair sharing of capacity between different flows (e.g., different models or LoRA adapters) by cycling through them in a round-robin fashion.
+#### [RoundRobinFairnessPolicy](../../../pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin/README.md)
 
-- *Type*: round-robin-fairness-policy
-- *Parameters*: none
+A Fairness Policy that guarantees fair sharing of dispatch opportunities between different flows (e.g., different models or LoRA adapters) by cycling through active flows one by one.
 
-#### FCFSOrderingPolicy
+- **Unit of Fairness**: Dispatch Attempts
+- **Type**: `round-robin-fairness-policy`
+- **Parameters**: none
+
+> [!NOTE]
+> While this policy prevents starvation, it may introduce global ordering violations, as a newer request in an under-served flow might be dispatched before an older request in a heavily loaded flow.
+
+#### [FCFSOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/fcfs/README.md)
 
 An Ordering Policy that implements First-Come, First-Served ordering based on logical arrival time. This is the default Ordering Policy.
 
 - *Type*: fcfs-ordering-policy
 - *Parameters*: none
 
-#### EDFOrderingPolicy
+#### [EDFOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/edf/README.md)
 
 An Ordering Policy that implements Earliest Deadline First. It prioritizes requests with the closest expiration time (deadline).
 
 - *Type*: edf-ordering-policy
 - *Parameters*: none
 
-#### SLODeadlineOrderingPolicy
+#### [SLODeadlineOrderingPolicy](../../../pkg/epp/framework/plugins/flowcontrol/ordering/slodeadline/README.md)
 
 An Ordering Policy that orders requests by an SLO-based deadline, computed from the time the request is received by the server. It prioritizes requests with the earliest such deadline.
 
@@ -350,9 +350,7 @@ An Ordering Policy that orders requests by an SLO-based deadline, computed from 
 
 These plugins are used to interpret system load and protect endpoints from overload. They are referenced in the `saturationDetector` section.
 
-#### Utilization Detector Plugin
-
-**Local [README](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization/README.md) Link**
+#### [Utilization Detector Plugin](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization/README.md)
 
 This is the default saturation detector. It closed-loop reacts to telemetry emitted by individual model servers. It evaluates queue depth and KV cache utilization against user thresholds to score global saturation.
 
@@ -363,9 +361,7 @@ This is the default saturation detector. It closed-loop reacts to telemetry emit
   - `metricsStalenessThreshold` (`string` duration): Maximum age of metrics before an endpoint is considered stale (e.g., `"150ms"`). Must be > 0. (Default: `"200ms"`)
   - `headroom` (`float64`): Allowed burst capacity above the ideal thresholds, expressed as a fraction (e.g., `0.2` for 20%). Must be >= 0.0. (Default: `0.0`)
 
-#### Concurrency Detector Plugin
-
-**Local [README](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/concurrency/README.md) Link**
+#### [Concurrency Detector Plugin](../../../pkg/epp/framework/plugins/flowcontrol/saturationdetector/concurrency/README.md)
 
 Synchronous saturation detection mechanism based on active in-flight request accounting. Open-loop calculation of pool load with local endpoint limiting.
 
@@ -457,9 +453,11 @@ flowControl:
   defaultRequestTTL: 60s
   defaultPriorityBand:
     maxBytes: 10Gi
+    maxRequests: 5000
   priorityBands:
   - priority: 100
     maxBytes: 5Gi
+    maxRequests: 500
     orderingPolicyRef: fcfs-ordering-policy
     fairnessPolicyRef: global-strict-fairness-policy
 ```
@@ -469,6 +467,9 @@ The fields in the `flowControl` section are:
 - `maxBytes`: Defines the global capacity limit for all active requests across all priority levels.
     - Supports Kubernetes quantity format (e.g., `10Gi`, `512Mi`, `1048576Ki`) as well as plain integers (in bytes).
     - If `0` or omitted, no global limit is enforced (unlimited), though individual priority band limits still apply.
+- `maxRequests`: Defines an optional global maximum total request count limit aggregated across all priority bands.
+    - Supports Kubernetes quantity format (e.g., `50Mi`, `5000Ki`) as plain integers.
+    - If `0` or omitted, no global request count limit is enforced, though individual priority band `maxRequests` limits still apply.
 - `defaultRequestTTL`: A fallback timeout for requests that do not specify their own deadline.
     - If `0` or omitted, it defaults to the client context deadline, meaning requests may wait indefinitely unless cancelled by the client.
 - `defaultPriorityBand`: A template used to dynamically provision priority bands for requests arriving with priority
@@ -483,6 +484,9 @@ Both the `defaultPriorityBand` template and the entries in `priorityBands` use t
 - `maxBytes`: The maximum aggregate byte size allowed for this specific priority band.
     - Supports Kubernetes quantity format (e.g., `5Gi`, `512Mi`) as well as plain integers (in bytes).
     - If `0` or omitted, the system default (1 GB) is used.
+- `maxRequests`: The maximum number of concurrent requests allowed for this specific priority band.
+    - Supports Kubernetes quantity format (e.g., `50Mi`, `5000Ki`) as plain integers.
+    - If `0` or omitted, no per-band request count limit is enforced for this band.
 - `orderingPolicyRef`: The name of the Ordering Policy plugin to use (e.g., `fcfs-ordering-policy`).
     - Defaults to `fcfs-ordering-policy` if omitted.
 - `fairnessPolicyRef`: The name of the Fairness Policy plugin to use (e.g., `global-strict-fairness-policy`).
@@ -518,24 +522,15 @@ list has the following field:
 **Note**: The names of the plugin instances mentioned above, refer to plugin instances defined in the plugins section
 of the configuration.
 
-<<<<<<< HEAD
 ### Minimal configuration (core vLLM metrics)
 
 The built-in `metrics-data-source` and `core-metrics-extractor` plugins collect the five vLLM Model
 Server Protocol metrics out of the box - no `parameters` are required:
-=======
-## Parser Configuration
-
-The `parser` section configures the parser to understand the request and response payloads. This is crucial for enabling advanced capabilities such as prefix-cache aware routing, request/response usage tracking, and other payload-specific processing. By default, if no parser is specified, the `openai-parser` is used, which supports the [OpenAI API](https://developers.openai.com/api/reference/overview).
-
-Here is an example configuration that uses the `vllmgrpc-parser`:
->>>>>>> 5943afb7 (add parser doc)
 
 ```yaml
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
-<<<<<<< HEAD
   - type: metrics-data-source
   - type: core-metrics-extractor
 
@@ -664,7 +659,16 @@ deployment that doesn't load LoRA adapters.
 
 To eliminate the error entirely, disable the spec with an empty string as shown above.
 
-=======
+## Parser Configuration
+
+The `parser` section configures the parser to understand the request and response payloads. This is crucial for enabling advanced capabilities such as prefix-cache aware routing, request/response usage tracking, and other payload-specific processing. By default, if no parser is specified, the `openai-parser` is used, which supports the [OpenAI API](https://developers.openai.com/api/reference/overview).
+
+Here is an example configuration that uses the `vllmgrpc-parser`:
+
+```yaml
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
 - name: maxScore
   type: max-score-picker
 - name: vllmgrpcParser
@@ -677,7 +681,6 @@ parser:
   pluginRef: vllmgrpcParser
 ```
 
->>>>>>> 5943afb7 (add parser doc)
 ## Feature Gates
 
 The Feature Gates section allows for the enabling of experimental features of the IGW. These experimental

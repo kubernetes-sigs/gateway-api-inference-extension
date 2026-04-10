@@ -9,7 +9,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+    group: inference.networking.k8s.io
     kind: InferencePool
     name: {{ .Release.Name }}
   default:
@@ -17,11 +17,24 @@ spec:
     # over during EPP rollout.
     timeoutSec: 2
     checkIntervalSec: 2
+    {{- $port := .Values.inferencePool.targetPortNumber }}
+    {{- if .Values.inferencePool.targetPorts }}
+      {{- $port = (index .Values.inferencePool.targetPorts 0).number }}
+    {{- end }}
+    {{- if eq .Values.inferencePool.modelServerProtocol "http" }}
     config:
       type: HTTP
       httpHealthCheck:
         requestPath: /health
-        port:  {{ .Values.inferencePool.targetPortNumber }}
+        port: {{ $port }}
+    {{- else if and (eq (lower .Values.inferencePool.modelServerType) "vllm") (eq .Values.inferencePool.modelServerProtocol "grpc") }}
+    config:
+      type: GRPC
+      grpcHealthCheck:
+        portSpecification: "USE_FIXED_PORT"
+        port: {{ $port }}
+        grpcServiceName: "/vllm.grpc.engine.VllmEngine/HealthCheck"
+    {{- end }}
 ---
 apiVersion: networking.gke.io/v1
 kind: GCPBackendPolicy
@@ -32,7 +45,7 @@ metadata:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   targetRef:
-    group: "{{ (split "/" .Values.inferencePool.apiVersion)._0 }}"
+    group: inference.networking.k8s.io
     kind: InferencePool
     name: {{ .Release.Name }}
   default:

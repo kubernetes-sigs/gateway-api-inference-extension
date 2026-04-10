@@ -1,8 +1,8 @@
 inferenceExtension:
   replicas: 1
   image:
-    name: epp
-    hub: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension
+    registry: us-central1-docker.pkg.dev/k8s-staging-images
+    repository: gateway-api-inference-extension/epp
     tag: main
     pullPolicy: Always
   extProcPort: 9002
@@ -22,7 +22,7 @@ inferenceExtension:
     # unused when createInferencePool is true
     targetPorts: 8000
     # unused when createInferencePool is true
-    modelServerType: vllm # vllm, triton-tensorrt-llm
+    modelServerType: vllm # vllm, sglang, triton-tensorrt-llm, trtllm-serve
 
 
   sidecar:
@@ -325,12 +325,8 @@ provider:
 inferencePool:
   targetPorts:
     - number: 8000
-  modelServerType: vllm # vllm, triton-tensorrt-llm
+  modelServerType: vllm # vllm, sglang, triton-tensorrt-llm, trtllm-serve
   apiVersion: inference.networking.k8s.io/v1
   # modelServers: # REQUIRED
   #   matchLabels:
-  #     app: vllm-llama3-8b-instruct
-
-  # Should only used if apiVersion is inference.networking.x-k8s.io/v1alpha2,
-  # This will soon be deprecated when upstream GW providers support v1, just doing something simple for now.
-  targetPortNumber: 8000
+  #     app: vllm-qwen3-32b

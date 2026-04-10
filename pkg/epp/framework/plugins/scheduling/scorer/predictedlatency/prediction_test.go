@@ -267,7 +267,7 @@ func TestGeneratePredictions(t *testing.T) {
 			cfg.StreamingMode = true
 			s := NewPredictedLatency(cfg, tt.predictor)
 
-			request := createTestLLMRequest("test-gen-pred", tt.ttftSLO, tt.avgTPOTSLO)
+			request := createTestInferenceRequest("test-gen-pred", tt.ttftSLO, tt.avgTPOTSLO)
 			plCtx := newPredictedLatencyContext(request)
 			plCtx.ttftSLO = tt.ttftSLO
 			plCtx.avgTPOTSLO = tt.avgTPOTSLO
@@ -349,7 +349,7 @@ func TestUpdateRequestContextWithPredictions(t *testing.T) {
 			cfg := DefaultConfig
 			s := NewPredictedLatency(cfg, nil)
 
-			request := createTestLLMRequest("test-update-ctx", 1000, 50)
+			request := createTestInferenceRequest("test-update-ctx", 1000, 50)
 			plCtx := newPredictedLatencyContext(request)
 
 			s.updateRequestContextWithPredictions(plCtx, tt.predictions)
@@ -377,7 +377,7 @@ func TestGeneratePredictions_ValidityFlags(t *testing.T) {
 	cfg.SLOBufferFactor = 1.0
 	s := NewPredictedLatency(cfg, predictor)
 
-	request := createTestLLMRequest("test-validity", 1000, 50)
+	request := createTestInferenceRequest("test-validity", 1000, 50)
 	plCtx := newPredictedLatencyContext(request)
 	plCtx.ttftSLO = 1000
 	plCtx.avgTPOTSLO = 50

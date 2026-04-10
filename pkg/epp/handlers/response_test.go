@@ -25,7 +25,7 @@ import (
 
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
@@ -36,7 +36,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -60,7 +60,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -79,7 +79,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"invalid json"
@@ -93,7 +93,7 @@ const (
 		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
 		"object": "text_completion",
 		"created": 1732563765,
-		"model": "meta-llama/Llama-3.1-8B-Instruct",
+		"model": "Qwen/Qwen3-32B",
 		"choices": [
 			{
 				"index": 0,
@@ -148,12 +148,12 @@ func TestHandleResponseBody(t *testing.T) {
 		name   string
 		body   []byte
 		reqCtx *RequestContext
-		want   fwkrq.Usage
+		want   fwkrh.Usage
 	}{
 		{
 			name: "success",
 			body: []byte(body),
-			want: fwkrq.Usage{
+			want: fwkrh.Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
@@ -162,11 +162,11 @@ func TestHandleResponseBody(t *testing.T) {
 		{
 			name: "success with cached tokens",
 			body: []byte(bodyWithCachedTokens),
-			want: fwkrq.Usage{
+			want: fwkrh.Usage{
 				PromptTokens:     11,
 				TotalTokens:      111,
 				CompletionTokens: 100,
-				PromptTokenDetails: &fwkrq.PromptTokenDetails{
+				PromptTokenDetails: &fwkrh.PromptTokenDetails{
 					CachedTokens: 10,
 				},
 			},
@@ -174,12 +174,12 @@ func TestHandleResponseBody(t *testing.T) {
 		{
 			name: "success body without usage, the HandleResponseBody should still return non-nil error",
 			body: []byte(bodyWithoutUsage),
-			want: fwkrq.Usage{}, // Since the usage is not set in the responseBody, this usage should be empty.
+			want: fwkrh.Usage{}, // Since the usage is not set in the responseBody, this usage should be empty.
 		},
 		{
 			name: "success invalid joson body, the HandleResponseBody should still return non-nil error",
 			body: []byte(bodyInvalidJSON),
-			want: fwkrq.Usage{}, // Since the response is invalid json, the usage cannot be extrcated.
+			want: fwkrh.Usage{}, // Since the response is invalid json, the usage cannot be extrcated.
 		},
 	}
 
@@ -208,7 +208,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 	tests := []struct {
 		name    string
 		body    []byte
-		want    fwkrq.Usage
+		want    fwkrh.Usage
 		wantErr bool
 	}{
 		{
@@ -221,7 +221,7 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			name:    "streaming request with usage",
 			body:    []byte(streamingBodyWithUsage),
 			wantErr: false,
-			want: fwkrq.Usage{
+			want: fwkrh.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
 				CompletionTokens: 10,
@@ -231,11 +231,11 @@ func TestHandleStreamedResponseBody(t *testing.T) {
 			name:    "streaming request with usage and cached tokens",
 			body:    []byte(streamingBodyWithUsageAndCachedTokens),
 			wantErr: false,
-			want: fwkrq.Usage{
+			want: fwkrh.Usage{
 				PromptTokens:     7,
 				TotalTokens:      17,
 				CompletionTokens: 10,
-				PromptTokenDetails: &fwkrq.PromptTokenDetails{
+				PromptTokenDetails: &fwkrh.PromptTokenDetails{
 					CachedTokens: 5,
 				},
 			},
@@ -275,14 +275,14 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 	tests := []struct {
 		name      string
 		chunks    []chunkStream
-		wantUsage fwkrq.Usage
+		wantUsage fwkrh.Usage
 	}{
 		{
 			name: "Standard: Usage and DONE in same chunk",
 			chunks: []chunkStream{
 				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`), endOfStream: true},
 			},
-			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+			wantUsage: fwkrh.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Split: Usage in Chunk 1, DONE in Chunk 2",
@@ -292,7 +292,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 				// Chunk 2: Stream termination. Should NOT overwrite the usage from Chunk 1.
 				{body: []byte(`data: [DONE]`), endOfStream: true},
 			},
-			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+			wantUsage: fwkrh.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "Fragmented: Content -> Usage -> DONE",
@@ -301,7 +301,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n"), endOfStream: false},
 				{body: []byte(`data: [DONE]`), endOfStream: true},
 			},
-			wantUsage: fwkrq.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+			wantUsage: fwkrh.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
 		},
 		{
 			name: "No Usage Data",
@@ -309,7 +309,7 @@ func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
 				{body: []byte(`data: {"choices":[{"text":"Hello"}]}` + "\n"), endOfStream: false},
 				{body: []byte(`data: [DONE]`), endOfStream: true},
 			},
-			wantUsage: fwkrq.Usage{}, // Zero values
+			wantUsage: fwkrh.Usage{}, // Zero values
 		},
 	}
 
@@ -361,6 +361,80 @@ func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
 	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
 	assert.NotContains(t, gotHeaders, metadata.DestinationEndpointKey)
 	assert.NotContains(t, gotHeaders, "content-length")
+}
+
+func TestRewriteModelName(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		targetModel   string
+		incomingModel string
+		want          string
+	}{
+		{
+			name:          "non-streaming response with model rewrite",
+			body:          `{"id":"cmpl-123","model":"vllm-backend-01","choices":[]}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"id":"cmpl-123","model":"gpt-4-proxy","choices":[]}`,
+		},
+		{
+			name:          "streaming SSE chunk with model rewrite",
+			body:          `data: {"id":"cmpl-123","model":"vllm-backend-01","choices":[]}` + "\n\n",
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `data: {"id":"cmpl-123","model":"gpt-4-proxy","choices":[]}` + "\n\n",
+		},
+		{
+			name:          "no rewrite when names are the same",
+			body:          `{"model":"same-model"}`,
+			targetModel:   "same-model",
+			incomingModel: "same-model",
+			want:          `{"model":"same-model"}`,
+		},
+		{
+			name:          "no rewrite when target is empty",
+			body:          `{"model":"some-model"}`,
+			targetModel:   "",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"model":"some-model"}`,
+		},
+		{
+			name:          "no rewrite when incoming is empty",
+			body:          `{"model":"some-model"}`,
+			targetModel:   "some-model",
+			incomingModel: "",
+			want:          `{"model":"some-model"}`,
+		},
+		{
+			name:          "model field with space after colon",
+			body:          `{"model": "vllm-backend-01"}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"model": "gpt-4-proxy"}`,
+		},
+		{
+			name:          "body without model field is unchanged",
+			body:          `{"id":"cmpl-123","choices":[]}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"id":"cmpl-123","choices":[]}`,
+		},
+		{
+			name:          "DONE marker is not affected",
+			body:          "data: [DONE]\n",
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          "data: [DONE]\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rewriteModelName([]byte(tc.body), tc.targetModel, tc.incomingModel)
+			assert.Equal(t, tc.want, string(got))
+		})
+	}
 }
 
 func TestResponseSizeAccumulation(t *testing.T) {

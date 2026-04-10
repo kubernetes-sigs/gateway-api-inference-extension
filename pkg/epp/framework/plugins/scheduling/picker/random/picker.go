@@ -1,0 +1,104 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package random implements a scheduling picker that selects endpoints uniformly at random,
+// ignoring any scores calculated by scorer plugins.
+//
+// For detailed behavioral intent and configuration, see the package README.
+package random
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+)
+
+const (
+	// RandomPickerType is the registered name of the random picker plugin.
+	RandomPickerType = "random-picker"
+)
+
+// compile-time type validation
+var _ framework.Picker = &RandomPicker{}
+
+// RandomPickerFactory defines the factory function for RandomPicker.
+func RandomPickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	parameters := picker.PickerParameters{MaxNumOfEndpoints: picker.DefaultMaxNumOfEndpoints}
+	if rawParameters != nil {
+		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+			return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", RandomPickerType, err)
+		}
+	}
+
+	return NewRandomPicker(parameters.MaxNumOfEndpoints).WithName(name), nil
+}
+
+// NewRandomPicker initializes a new RandomPicker and returns its pointer.
+func NewRandomPicker(maxNumOfEndpoints int) *RandomPicker {
+	if maxNumOfEndpoints <= 0 {
+		maxNumOfEndpoints = picker.DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
+	}
+
+	return &RandomPicker{
+		typedName:         fwkplugin.TypedName{Type: RandomPickerType, Name: RandomPickerType},
+		maxNumOfEndpoints: maxNumOfEndpoints,
+	}
+}
+
+// RandomPicker picks random endpoint(s) from the list of candidates.
+type RandomPicker struct {
+	typedName         fwkplugin.TypedName
+	maxNumOfEndpoints int
+}
+
+// WithName sets the name of the picker.
+func (p *RandomPicker) WithName(name string) *RandomPicker {
+	p.typedName.Name = name
+	return p
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *RandomPicker) TypedName() fwkplugin.TypedName {
+	return p.typedName
+}
+
+// Pick selects random endpoint(s) from the list of candidates.
+func (p *RandomPicker) Pick(ctx context.Context, _ *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates randomly", "max-num-of-endpoints", p.maxNumOfEndpoints,
+		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
+
+	// Shuffle to ensure uniform random selection.
+	picker.ShuffleScoredEndpoints(scoredEndpoints)
+
+	// if we have enough endpoints to return keep only the relevant subset
+	if p.maxNumOfEndpoints < len(scoredEndpoints) {
+		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
+	}
+
+	targetEndpoints := make([]framework.Endpoint, len(scoredEndpoints))
+	for i, scoredEndpoint := range scoredEndpoints {
+		targetEndpoints[i] = scoredEndpoint
+	}
+
+	return &framework.ProfileRunResult{TargetEndpoints: targetEndpoints}
+}

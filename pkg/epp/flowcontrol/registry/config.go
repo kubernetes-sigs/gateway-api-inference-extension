@@ -29,17 +29,20 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/framework/plugins/queue"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
 )
 
 // --- Defaults ---
 
 const (
 	// DefaultOrderingPolicyRef is the default policy for selecting items within a single flow's queue.
-	DefaultOrderingPolicyRef string = ordering.FCFSOrderingPolicyType
+	DefaultOrderingPolicyRef string = fcfs.FCFSOrderingPolicyType
 	// DefaultFairnessPolicyRef is the default policy for selecting which flow's queue to service next.
-	DefaultFairnessPolicyRef string = fairness.GlobalStrictFairnessPolicyType
+	DefaultFairnessPolicyRef string = globalstrict.GlobalStrictFairnessPolicyType
+	// DefaultUsageLimitPolicyRef is the default policy to compute usage limit of a priority band dynamically.
+	DefaultUsageLimitPolicyRef string = usagelimits.StaticUsageLimitPolicyType
 )
 
 const (
@@ -113,6 +116,12 @@ type Config struct {
 	// Optional: Defaults to 0.
 	MaxBytes uint64
 
+	// MaxRequests defines an optional, global maximum total request count aggregated across all priority bands and shards.
+	// The `controller.FlowController` enforces this limit in addition to per-band capacity limits.
+	// A value of 0 signifies that this global limit is ignored, and only per-band limits apply.
+	// Optional: Defaults to 0.
+	MaxRequests uint64
+
 	// PriorityBands defines the set of priority band templates managed by the `FlowRegistry`.
 	// It is a map keyed by Priority level, providing O(1) access and ensuring priority uniqueness by definition.
 	PriorityBands map[int]*PriorityBandConfig
@@ -168,6 +177,11 @@ type PriorityBandConfig struct {
 	// MaxBytes defines the maximum total byte size for this priority band, aggregated across all shards.
 	// Optional: Defaults to defaultPriorityBandMaxBytes (1 GB).
 	MaxBytes uint64
+
+	// MaxRequests defines the maximum total request count for this priority band, aggregated across all shards.
+	// A value of 0 signifies no request-count limit is enforced.
+	// Optional: Defaults to defaultPriorityBandMaxRequests (5000).
+	MaxRequests uint64
 }
 
 // --- Config Functional Options ---
@@ -186,6 +200,14 @@ type ConfigOption func(*configBuilder) error
 func WithMaxBytes(maxBytes uint64) ConfigOption {
 	return func(b *configBuilder) error {
 		b.config.MaxBytes = maxBytes
+		return nil
+	}
+}
+
+// WithMaxRequests sets the global maximum total request count limit.
+func WithMaxRequests(maxRequests uint64) ConfigOption {
+	return func(b *configBuilder) error {
+		b.config.MaxRequests = maxRequests
 		return nil
 	}
 }
@@ -338,17 +360,25 @@ func WithBandMaxBytes(maxBytes uint64) PriorityBandConfigOption {
 	}
 }
 
+// WithBandMaxRequests sets the request count limit for this specific priority band.
+func WithBandMaxRequests(maxRequests uint64) PriorityBandConfigOption {
+	return func(p *PriorityBandConfig) error {
+		p.MaxRequests = maxRequests
+		return nil
+	}
+}
+
 // --- Constructors ---
 
-// resolveMaxBytes extracts and validates MaxBytes from a resource.Quantity pointer.
-// Returns 0 (use default) if maxBytes is nil.
-func resolveMaxBytes(maxBytes *resource.Quantity) (uint64, error) {
-	if maxBytes == nil {
+// resolveQuantity extracts and validates a resource.Quantity value.
+// Returns 0 if q is nil.
+func resolveQuantity(q *resource.Quantity, fieldName string) (uint64, error) {
+	if q == nil {
 		return 0, nil
 	}
-	v := maxBytes.Value()
+	v := q.Value()
 	if v < 0 {
-		return 0, fmt.Errorf("MaxBytes must be non-negative, got %d", v)
+		return 0, fmt.Errorf("%s must be non-negative, got %d", fieldName, v)
 	}
 	return uint64(v), nil
 }
@@ -361,12 +391,20 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 
 	opts := make([]ConfigOption, 0, len(apiConfig.PriorityBands)+3)
 
-	maxBytes, err := resolveMaxBytes(apiConfig.MaxBytes)
+	maxBytes, err := resolveQuantity(apiConfig.MaxBytes, "global MaxBytes")
 	if err != nil {
-		return nil, fmt.Errorf("global %w", err)
+		return nil, err
 	}
 	if maxBytes > 0 {
 		opts = append(opts, WithMaxBytes(maxBytes))
+	}
+
+	maxRequests, err := resolveQuantity(apiConfig.MaxRequests, "global MaxRequests")
+	if err != nil {
+		return nil, err
+	}
+	if maxRequests > 0 {
+		opts = append(opts, WithMaxRequests(maxRequests))
 	}
 
 	if apiConfig.DefaultPriorityBand != nil {
@@ -393,12 +431,19 @@ func buildDefaultPriorityBandTemplate(
 	apiBand *configapi.PriorityBandConfig,
 ) (*PriorityBandConfig, error) {
 	bandOpts := make([]PriorityBandConfigOption, 0, 3)
-	maxBytes, err := resolveMaxBytes(apiBand.MaxBytes)
+	maxBytes, err := resolveQuantity(apiBand.MaxBytes, "DefaultPriorityBand MaxBytes")
 	if err != nil {
-		return nil, fmt.Errorf("DefaultPriorityBand %w", err)
+		return nil, err
 	}
 	if maxBytes > 0 {
 		bandOpts = append(bandOpts, WithBandMaxBytes(maxBytes))
+	}
+	maxRequests, err := resolveQuantity(apiBand.MaxRequests, "DefaultPriorityBand MaxRequests")
+	if err != nil {
+		return nil, err
+	}
+	if maxRequests > 0 {
+		bandOpts = append(bandOpts, WithBandMaxRequests(maxRequests))
 	}
 	if apiBand.OrderingPolicyRef != "" {
 		bandOpts = append(bandOpts, WithOrderingPolicy(apiBand.OrderingPolicyRef, handle))
@@ -417,12 +462,19 @@ func buildDefaultPriorityBandTemplate(
 
 func buildPriorityBand(handle plugin.Handle, band configapi.PriorityBandConfig) (*PriorityBandConfig, error) {
 	bandOpts := make([]PriorityBandConfigOption, 0, 3)
-	maxBytes, err := resolveMaxBytes(band.MaxBytes)
+	maxBytes, err := resolveQuantity(band.MaxBytes, fmt.Sprintf("priority band %d MaxBytes", band.Priority))
 	if err != nil {
-		return nil, fmt.Errorf("priority band %d %w", band.Priority, err)
+		return nil, err
 	}
 	if maxBytes > 0 {
 		bandOpts = append(bandOpts, WithBandMaxBytes(maxBytes))
+	}
+	maxRequests, err := resolveQuantity(band.MaxRequests, fmt.Sprintf("priority band %d MaxRequests", band.Priority))
+	if err != nil {
+		return nil, err
+	}
+	if maxRequests > 0 {
+		bandOpts = append(bandOpts, WithBandMaxRequests(maxRequests))
 	}
 	if band.OrderingPolicyRef != "" {
 		bandOpts = append(bandOpts, WithOrderingPolicy(band.OrderingPolicyRef, handle))
@@ -448,6 +500,7 @@ func NewConfig(handle plugin.Handle, opts ...ConfigOption) (*Config, error) {
 	builder := &configBuilder{
 		config: &Config{
 			MaxBytes:              0, // no limit enforced
+			MaxRequests:           0, // no limit enforced
 			InitialShardCount:     defaultInitialShardCount,
 			FlowGCTimeout:         defaultFlowGCTimeout,
 			PriorityBandGCTimeout: defaultPriorityBandGCTimeout,
@@ -601,6 +654,7 @@ func (c *Config) validate(checker capabilityChecker) error {
 // ShardConfig holds the partitioned configuration for a single registryShard.
 type ShardConfig struct {
 	MaxBytes      uint64
+	MaxRequests   uint64
 	PriorityBands map[int]*PriorityBandConfig
 }
 
@@ -610,6 +664,7 @@ type ShardConfig struct {
 func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 	shardCfg := &ShardConfig{
 		MaxBytes:      partitionUint64(c.MaxBytes, shardIndex, totalShards),
+		MaxRequests:   partitionUint64(c.MaxRequests, shardIndex, totalShards),
 		PriorityBands: make(map[int]*PriorityBandConfig, len(c.PriorityBands)),
 	}
 
@@ -620,6 +675,7 @@ func (c *Config) partition(shardIndex, totalShards int) *ShardConfig {
 			FairnessPolicy: template.FairnessPolicy,
 			Queue:          template.Queue,
 			MaxBytes:       partitionUint64(template.MaxBytes, shardIndex, totalShards),
+			MaxRequests:    partitionUint64(template.MaxRequests, shardIndex, totalShards),
 		}
 
 		shardCfg.PriorityBands[shardBand.Priority] = shardBand

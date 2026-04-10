@@ -64,7 +64,8 @@ type shardProcessorFactory func(
 	ctx context.Context,
 	shard contracts.RegistryShard,
 	saturationDetector flowcontrol.SaturationDetector,
-	podLocator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
+	usageLimitPolicy flowcontrol.UsageLimitPolicy,
 	clock clock.WithTicker,
 	cleanupSweepInterval time.Duration,
 	enqueueChannelBufferSize int,
@@ -100,7 +101,8 @@ type FlowController struct {
 	config                *Config
 	registry              registryClient
 	saturationDetector    flowcontrol.SaturationDetector
-	podLocator            contracts.PodLocator
+	endpointCandidates    contracts.EndpointCandidates
+	usageLimitPolicy      flowcontrol.UsageLimitPolicy
 	clock                 clock.WithTicker
 	logger                logr.Logger
 	shardProcessorFactory shardProcessorFactory
@@ -121,9 +123,14 @@ type FlowController struct {
 	wg sync.WaitGroup
 }
 
-// flowControllerOption is a function that applies a configuration change.
-// test-only
-type flowControllerOption func(*FlowController)
+// Deps groups the external FlowController build dependencies to construct a FlowController.
+type Deps struct {
+	Registry           contracts.FlowRegistry
+	SaturationDetector flowcontrol.SaturationDetector
+	EndpointCandidates contracts.EndpointCandidates
+	UsageLimitPolicy   flowcontrol.UsageLimitPolicy
+	Clock              clock.WithTicker
+}
 
 // NewFlowController creates and starts a new FlowController instance.
 // The provided context governs the lifecycle of the controller and all its workers.
@@ -131,17 +138,18 @@ func NewFlowController(
 	ctx context.Context,
 	poolName string,
 	config *Config,
-	registry contracts.FlowRegistry,
-	sd flowcontrol.SaturationDetector,
-	podLocator contracts.PodLocator,
-	opts ...flowControllerOption,
+	deps Deps,
 ) (*FlowController, error) {
+	if deps.Clock == nil {
+		deps.Clock = clock.RealClock{}
+	}
 	fc := &FlowController{
 		config:             config,
-		registry:           registry,
-		saturationDetector: sd,
-		podLocator:         podLocator,
-		clock:              clock.RealClock{},
+		registry:           deps.Registry,
+		saturationDetector: deps.SaturationDetector,
+		endpointCandidates: deps.EndpointCandidates,
+		usageLimitPolicy:   deps.UsageLimitPolicy,
+		clock:              deps.Clock,
 		logger:             log.FromContext(ctx).WithName("flow-controller"),
 		parentCtx:          ctx,
 	}
@@ -150,7 +158,8 @@ func NewFlowController(
 		ctx context.Context,
 		shard contracts.RegistryShard,
 		saturationDetector flowcontrol.SaturationDetector,
-		podLocator contracts.PodLocator,
+		endpointCandidates contracts.EndpointCandidates,
+		usageLimitPolicy flowcontrol.UsageLimitPolicy,
 		clock clock.WithTicker,
 		cleanupSweepInterval time.Duration,
 		enqueueChannelBufferSize int,
@@ -161,15 +170,13 @@ func NewFlowController(
 			poolName,
 			shard,
 			saturationDetector,
-			podLocator,
+			endpointCandidates,
+			usageLimitPolicy,
 			clock,
 			cleanupSweepInterval,
 			enqueueChannelBufferSize,
-			logger)
-	}
-
-	for _, opt := range opts {
-		opt(fc)
+			logger,
+		)
 	}
 
 	go fc.run(ctx)
@@ -501,7 +508,8 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 		processorCtx,
 		shard,
 		fc.saturationDetector,
-		fc.podLocator,
+		fc.endpointCandidates,
+		fc.usageLimitPolicy,
 		fc.clock,
 		fc.config.ExpiryCleanupInterval,
 		fc.config.EnqueueChannelBufferSize,
@@ -523,11 +531,9 @@ func (fc *FlowController) getOrStartWorker(shard contracts.RegistryShard) *manag
 
 	// We won the race. The newWorker was stored. Now, start the processor's long-running goroutine.
 	fc.logger.V(logutil.DEFAULT).Info("Starting new ShardProcessor worker.", "shardID", shard.ID())
-	fc.wg.Add(1)
-	go func() {
-		defer fc.wg.Done()
+	fc.wg.Go(func() {
 		processor.Run(processorCtx)
-	}()
+	})
 
 	return newWorker
 }

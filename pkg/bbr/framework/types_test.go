@@ -77,13 +77,13 @@ func TestRemoveBodyField_NonExistent(t *testing.T) {
 func TestSetBody(t *testing.T) {
 	msg := newInferenceMessage()
 
-	msg.SetBody(map[string]any{"model": "llama", "prompt": "hello"})
+	msg.SetBody(map[string]any{"model": "qwen", "prompt": "hello"})
 
 	if !msg.BodyMutated() {
 		t.Error("expected BodyMutated() to return true after SetBody")
 	}
-	if got, ok := msg.Body["model"]; !ok || got != "llama" {
-		t.Errorf("Body[\"model\"] = %v, %v; want \"llama\", true", got, ok)
+	if got, ok := msg.Body["model"]; !ok || got != "qwen" {
+		t.Errorf("Body[\"model\"] = %v, %v; want \"qwen\", true", got, ok)
 	}
 	if got, ok := msg.Body["prompt"]; !ok || got != "hello" {
 		t.Errorf("Body[\"prompt\"] = %v, %v; want \"hello\", true", got, ok)

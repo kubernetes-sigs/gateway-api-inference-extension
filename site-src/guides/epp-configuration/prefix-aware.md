@@ -55,7 +55,7 @@ for more details.
 
         Let's take an example:
 
-        * Model: llama3 8B
+        * Model: qwen3 32B
         * Accelerator: Nvidia H100 80GB
         * Num replicas: 3
         * Estimated # characters per token: 4 ([source](https://genai.stackexchange.com/questions/34/how-long-is-a-token))

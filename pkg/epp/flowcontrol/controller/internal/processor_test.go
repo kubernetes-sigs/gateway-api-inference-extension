@@ -33,6 +33,7 @@ import (
 	testclock "k8s.io/utils/clock/testing"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/usagelimits"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/contracts"
@@ -87,7 +88,7 @@ type testHarness struct {
 	clock              *testclock.FakeClock
 	logger             logr.Logger
 	saturationDetector *mockSaturationDetector
-	podLocator         *mocks.MockPodLocator
+	endpointCandidates *mocks.MockEndpointCandidates
 
 	// --- Centralized Mock State ---
 	// The harness's mutex protects the single source of truth for all mock state.
@@ -108,7 +109,7 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		clock:              testclock.NewFakeClock(time.Now()),
 		logger:             logr.Discard(),
 		saturationDetector: &mockSaturationDetector{},
-		podLocator:         &mocks.MockPodLocator{Pods: []fwkdl.Endpoint{&metrics.FakePodMetrics{}}},
+		endpointCandidates: &mocks.MockEndpointCandidates{Candidates: []fwkdl.Endpoint{&metrics.FakePodMetrics{}}},
 		startSignal:        make(chan struct{}),
 		queues:             make(map[flowcontrol.FlowKey]*mocks.MockManagedQueue),
 		priorityFlows:      make(map[int][]flowcontrol.FlowKey),
@@ -136,7 +137,8 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 		"test-pool",
 		h,
 		h.saturationDetector,
-		h.podLocator,
+		h.endpointCandidates,
+		usagelimits.DefaultPolicy(),
 		h.clock,
 		expiryCleanupInterval,
 		100,
@@ -154,12 +156,10 @@ func newTestHarness(t *testing.T, expiryCleanupInterval time.Duration) *testHarn
 func (h *testHarness) Start() {
 	h.t.Helper()
 	h.ctx, h.cancel = context.WithCancel(context.Background())
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	h.wg.Go(func() {
 		<-h.startSignal // Wait for the signal to begin execution.
 		h.processor.Run(h.ctx)
-	}()
+	})
 }
 
 // Go unpauses the processor's main Run loop.
@@ -666,24 +666,39 @@ func TestShardProcessor(t *testing.T) {
 				expectHasCap bool
 			}{
 				{
-					name:         "should allow zero-size item even if full",
-					itemByteSize: 0,
-					stats:        contracts.ShardStats{TotalByteSize: 100, TotalCapacityBytes: 100},
-					expectHasCap: true,
-				},
-				{
-					name:         "should deny item if shard capacity exceeded",
+					name:         "should deny item if shard byte capacity exceeded",
 					itemByteSize: 1,
 					stats:        contracts.ShardStats{TotalByteSize: 100, TotalCapacityBytes: 100},
 					expectHasCap: false,
 				},
 				{
-					name:         "should deny item if band capacity exceeded",
+					name:         "should deny item if shard request capacity exceeded",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						TotalCapacityRequests: 10, TotalLen: 10,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityRequests: 100, Len: 0},
+						},
+					},
+					expectHasCap: false,
+				},
+				{
+					name:         "should deny item if band byte capacity exceeded",
 					itemByteSize: 1,
 					stats: contracts.ShardStats{
 						TotalCapacityBytes: 200, TotalByteSize: 100,
 						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
 							testFlow.Priority: {ByteSize: 50, CapacityBytes: 50},
+						},
+					},
+					expectHasCap: false,
+				},
+				{
+					name:         "should deny item if band request capacity exceeded",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityRequests: 5, Len: 5},
 						},
 					},
 					expectHasCap: false,
@@ -698,7 +713,7 @@ func TestShardProcessor(t *testing.T) {
 					expectHasCap: false,
 				},
 				{
-					name:         "should allow item if both shard and band have capacity",
+					name:         "should allow item if both shard and band have byte capacity",
 					itemByteSize: 10,
 					stats: contracts.ShardStats{
 						TotalCapacityBytes: 200, TotalByteSize: 100,
@@ -707,6 +722,155 @@ func TestShardProcessor(t *testing.T) {
 						},
 					},
 					expectHasCap: true,
+				},
+				{
+					name:         "should allow item if both shard and band have request capacity",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						TotalCapacityRequests: 10, TotalLen: 5,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityRequests: 8, Len: 3},
+						},
+					},
+					expectHasCap: true,
+				},
+				{
+					name:         "should ignore zero-valued capacity limits",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 0, TotalByteSize: 999,
+						TotalCapacityRequests: 0, TotalLen: 999,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 0, ByteSize: 999, CapacityRequests: 0, Len: 999},
+						},
+					},
+					expectHasCap: true,
+				},
+				// --- Mixed dimension tests ---
+				{
+					name:         "should deny if shard bytes ok but band requests exceeded",
+					itemByteSize: 10,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 200, TotalByteSize: 50,
+						TotalCapacityRequests: 100, TotalLen: 5,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 100, ByteSize: 20, CapacityRequests: 5, Len: 5},
+						},
+					},
+					expectHasCap: false,
+				},
+				{
+					name:         "should deny if shard requests ok but band bytes exceeded",
+					itemByteSize: 10,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 200, TotalByteSize: 50,
+						TotalCapacityRequests: 100, TotalLen: 5,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 20, ByteSize: 20, CapacityRequests: 100, Len: 3},
+						},
+					},
+					expectHasCap: false,
+				},
+				{
+					name:         "should allow if all four checks pass",
+					itemByteSize: 10,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 200, TotalByteSize: 50,
+						TotalCapacityRequests: 100, TotalLen: 10,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 100, ByteSize: 20, CapacityRequests: 50, Len: 5},
+						},
+					},
+					expectHasCap: true,
+				},
+				// --- Boundary value tests ---
+				{
+					name:         "should allow when shard bytes exactly at capacity after add",
+					itemByteSize: 10,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 110, TotalByteSize: 100,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 60, ByteSize: 50},
+						},
+					},
+					expectHasCap: true,
+				},
+				{
+					name:         "should deny when shard bytes one over capacity after add",
+					itemByteSize: 11,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 110, TotalByteSize: 100,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 200, ByteSize: 50},
+						},
+					},
+					expectHasCap: false,
+				},
+				{
+					name:         "should allow when shard requests exactly at capacity after add",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						TotalCapacityRequests: 10, TotalLen: 9,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityRequests: 10, Len: 5},
+						},
+					},
+					expectHasCap: true,
+				},
+				{
+					name:         "should deny when shard requests one over capacity after add",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						TotalCapacityRequests: 10, TotalLen: 10,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityRequests: 100, Len: 5},
+						},
+					},
+					expectHasCap: false,
+				},
+				{
+					name:         "should allow when band bytes exactly at capacity after add",
+					itemByteSize: 10,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 500, TotalByteSize: 100,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 60, ByteSize: 50},
+						},
+					},
+					expectHasCap: true,
+				},
+				{
+					name:         "should deny when band bytes one over capacity after add",
+					itemByteSize: 11,
+					stats: contracts.ShardStats{
+						TotalCapacityBytes: 500, TotalByteSize: 100,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityBytes: 60, ByteSize: 50},
+						},
+					},
+					expectHasCap: false,
+				},
+				{
+					name:         "should allow when band requests exactly at capacity after add",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						TotalCapacityRequests: 100, TotalLen: 10,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityRequests: 6, Len: 5},
+						},
+					},
+					expectHasCap: true,
+				},
+				{
+					name:         "should deny when band requests one over capacity after add",
+					itemByteSize: 0,
+					stats: contracts.ShardStats{
+						TotalCapacityRequests: 100, TotalLen: 10,
+						PerPriorityBandStats: map[int]contracts.PriorityBandStats{
+							testFlow.Priority: {CapacityRequests: 5, Len: 5},
+						},
+					},
+					expectHasCap: false,
 				},
 			}
 

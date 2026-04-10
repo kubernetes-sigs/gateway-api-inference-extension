@@ -29,7 +29,7 @@ import (
 type MockFlowControlRequest struct {
 	FlowKeyV             flowcontrol.FlowKey
 	ByteSizeV            uint64
-	InferenceRequestV    *scheduling.LLMRequest
+	InferenceRequestV    *scheduling.InferenceRequest
 	ReceivedTimestampV   time.Time
 	InitialEffectiveTTLV time.Duration
 	IDV                  string
@@ -65,7 +65,7 @@ func NewMockFlowControlRequest(
 
 func (m *MockFlowControlRequest) FlowKey() flowcontrol.FlowKey { return m.FlowKeyV }
 func (m *MockFlowControlRequest) ByteSize() uint64             { return m.ByteSizeV }
-func (m *MockFlowControlRequest) InferenceRequest() *scheduling.LLMRequest {
+func (m *MockFlowControlRequest) InferenceRequest() *scheduling.InferenceRequest {
 	return m.InferenceRequestV
 }
 func (m *MockFlowControlRequest) ReceivedTimestamp() time.Time       { return m.ReceivedTimestampV }

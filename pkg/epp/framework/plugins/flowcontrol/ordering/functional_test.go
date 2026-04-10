@@ -25,6 +25,9 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/edf"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/slodeadline"
 )
 
 // TestOrderingPolicyConformance is the main conformance test suite for OrderingPolicy implementations.
@@ -33,12 +36,13 @@ import (
 func TestOrderingPolicyConformance(t *testing.T) {
 	t.Parallel()
 
-	if len(plugin.Registry) == 0 {
-		t.Log("No plugins registered. Skipping conformance tests.")
-		return
+	policies := map[string]plugin.FactoryFunc{
+		fcfs.FCFSOrderingPolicyType:               fcfs.FCFSOrderingPolicyFactory,
+		edf.EDFOrderingPolicyType:                 edf.EDFOrderingPolicyFactory,
+		slodeadline.SLODeadlineOrderingPolicyType: slodeadline.SLODeadlineOrderingPolicyFactory,
 	}
 
-	for name, factory := range plugin.Registry {
+	for name, factory := range policies {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

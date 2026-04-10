@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: vllm-server
-          image: vllm/vllm-openai:v0.15.1
+          image: vllm/vllm-openai:latest
           command: ["python3", "-m", "vllm.entrypoints.grpc_server"]
           args:
           - "--model"
@@ -29,9 +29,9 @@ spec:
           - "--max-model-len"
           - "16000"
           - "--port"
-          - "50051"
+          - "8000"
           ports:
-            - containerPort: 50051
+            - containerPort: 8000
               name: grpc
           resources:
             limits:
@@ -48,20 +48,20 @@ spec:
             # https://github.com/grpc/grpc/blob/master/doc/health-checking.md. 
             # Using a tcpSocket probe instead to verify that the port is open.
             tcpSocket:
-              port: 50051
+              port: 8000
             initialDelaySeconds: 2 
             periodSeconds: 1
             failureThreshold: 600 
           readinessProbe:
             tcpSocket:
-              port: 50051
+              port: 8000
             periodSeconds: 5
             successThreshold: 1
             failureThreshold: 3
             timeoutSeconds: 1
           livenessProbe:
             tcpSocket:
-              port: 50051
+              port: 8000
             periodSeconds: 10
             successThreshold: 1
             failureThreshold: 5

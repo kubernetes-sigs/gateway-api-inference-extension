@@ -170,6 +170,19 @@ func ExpectRouteToWithStream(endpoint, targetModel, prompt string) []*extProcPb.
 	return buildRouteResponse(endpoint, targetModel, prompt, true)
 }
 
+// ExpectPassthroughRouteTo asserts that the request was successfully routed to the specified endpoint and that the body was
+// not parsed.
+func ExpectPassthroughRouteTo(endpoint string, rawBytes []byte) []*extProcPb.ProcessingResponse {
+	return integration.NewRequestBufferedResponse(
+		endpoint, rawBytes,
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{Key: "hi", RawValue: []byte("mom")}},
+		&envoyCorev3.HeaderValueOption{Header: &envoyCorev3.HeaderValue{
+			Key:      reqcommon.RequestIdHeaderKey,
+			RawValue: []byte("test-request-id"),
+		}},
+	)
+}
+
 // ExpectGRPCRouteTo asserts that the request was successfully routed to the specified endpoint.
 func ExpectGRPCRouteTo(endpoint, prompt, method string) []*extProcPb.ProcessingResponse {
 	return buildGRPCRouteResponse(endpoint, prompt, method, false)
@@ -254,6 +267,7 @@ type testCase struct {
 	name          string
 	requests      []*extProcPb.ProcessingRequest
 	pods          []podState
+	configText    string
 	wantResponses []*extProcPb.ProcessingResponse
 	wantMetrics   map[string]string
 	waitForModel  string

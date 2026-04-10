@@ -216,15 +216,7 @@ func TestHandleRequestBody(t *testing.T) {
 						RequestBody: &extProcPb.BodyResponse{
 							Response: &extProcPb.CommonResponse{
 								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*basepb.HeaderValueOption{
-										{
-											Header: &basepb.HeaderValue{
-												Key: basemodelextractor.BaseModelHeader,
-											},
-										},
-									},
-								},
+								HeaderMutation:  &extProcPb.HeaderMutation{},
 							},
 						},
 					},
@@ -247,11 +239,6 @@ func TestHandleRequestBody(t *testing.T) {
 											Header: &basepb.HeaderValue{
 												Key:      "Content-Length",
 												RawValue: []byte("27"),
-											},
-										},
-										{
-											Header: &basepb.HeaderValue{
-												Key: basemodelextractor.BaseModelHeader,
 											},
 										},
 									},
@@ -657,12 +644,6 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 										SetHeaders: []*basepb.HeaderValueOption{
 											{
 												Header: &basepb.HeaderValue{
-													Key:      basemodelextractor.BaseModelHeader,
-													RawValue: []byte(""),
-												},
-											},
-											{
-												Header: &basepb.HeaderValue{
 													Key:      contentLengthHeader,
 													RawValue: []byte(strconv.Itoa(len(b))),
 												},
@@ -697,12 +678,6 @@ func TestHandleRequestBody_BodyMutation(t *testing.T) {
 									ClearRouteCache: true,
 									HeaderMutation: &extProcPb.HeaderMutation{
 										SetHeaders: []*basepb.HeaderValueOption{
-											{
-												Header: &basepb.HeaderValue{
-													Key:      basemodelextractor.BaseModelHeader,
-													RawValue: []byte(""),
-												},
-											},
 											{
 												Header: &basepb.HeaderValue{
 													Key:      contentLengthHeader,

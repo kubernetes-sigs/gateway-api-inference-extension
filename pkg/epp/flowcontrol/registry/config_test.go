@@ -31,36 +31,38 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
 	frameworkmocks "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol/mocks"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/globalstrict"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/fairness/roundrobin"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/edf"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/ordering/fcfs"
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
 func newTestPluginsHandle(t *testing.T) plugin.Handle {
 	t.Helper()
 	handle := utils.NewTestHandle(t.Context())
-	handle.AddPlugin(fairness.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+	handle.AddPlugin(globalstrict.GlobalStrictFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: fairness.GlobalStrictFairnessPolicyType,
-			Name: fairness.GlobalStrictFairnessPolicyType,
+			Type: globalstrict.GlobalStrictFairnessPolicyType,
+			Name: globalstrict.GlobalStrictFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(fairness.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
+	handle.AddPlugin(roundrobin.RoundRobinFairnessPolicyType, &frameworkmocks.MockFairnessPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: fairness.RoundRobinFairnessPolicyType,
-			Name: fairness.RoundRobinFairnessPolicyType,
+			Type: roundrobin.RoundRobinFairnessPolicyType,
+			Name: roundrobin.RoundRobinFairnessPolicyType,
 		},
 	})
-	handle.AddPlugin(ordering.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(fcfs.FCFSOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: ordering.FCFSOrderingPolicyType,
-			Name: ordering.FCFSOrderingPolicyType,
+			Type: fcfs.FCFSOrderingPolicyType,
+			Name: fcfs.FCFSOrderingPolicyType,
 		},
 	})
-	handle.AddPlugin(ordering.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
+	handle.AddPlugin(edf.EDFOrderingPolicyType, &frameworkmocks.MockOrderingPolicy{
 		TypedNameV: plugin.TypedName{
-			Type: ordering.EDFOrderingPolicyType,
-			Name: ordering.EDFOrderingPolicyType,
+			Type: edf.EDFOrderingPolicyType,
+			Name: edf.EDFOrderingPolicyType,
 		},
 		RequiredQueueCapabilitiesV: []flowcontrol.QueueCapability{flowcontrol.CapabilityPriorityConfigurable},
 	})
@@ -321,16 +323,16 @@ func TestNewPriorityBandConfig(t *testing.T) {
 		pb, err := NewPriorityBandConfig(handle, 1,
 			WithQueue(queue.RegisteredQueueName("CustomQueue")),
 			WithBandMaxBytes(999),
-			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
-			WithFairnessPolicy(fairness.RoundRobinFairnessPolicyType, handle),
+			WithOrderingPolicy(edf.EDFOrderingPolicyType, handle),
+			WithFairnessPolicy(roundrobin.RoundRobinFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName("CustomQueue"), pb.Queue)
 		assert.Equal(t, uint64(999), pb.MaxBytes)
 		require.NotNil(t, pb.OrderingPolicy)
-		assert.Equal(t, ordering.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
+		assert.Equal(t, edf.EDFOrderingPolicyType, pb.OrderingPolicy.TypedName().Name)
 		require.NotNil(t, pb.FairnessPolicy)
-		assert.Equal(t, fairness.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
+		assert.Equal(t, roundrobin.RoundRobinFairnessPolicyType, pb.FairnessPolicy.TypedName().Name)
 	})
 
 	t.Run("ShouldError_OnInvalidOptions", func(t *testing.T) {
@@ -353,8 +355,8 @@ func TestNewPriorityBandConfig(t *testing.T) {
 	t.Run("ShouldDefaultToHeap_WhenPolicyRequiresIt", func(t *testing.T) {
 		t.Parallel()
 		pb, err := NewPriorityBandConfig(handle, 10,
-			WithOrderingPolicy(ordering.EDFOrderingPolicyType, handle),
-			WithFairnessPolicy(fairness.GlobalStrictFairnessPolicyType, handle),
+			WithOrderingPolicy(edf.EDFOrderingPolicyType, handle),
+			WithFairnessPolicy(globalstrict.GlobalStrictFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName(queue.MaxMinHeapName), pb.Queue,
@@ -364,8 +366,8 @@ func TestNewPriorityBandConfig(t *testing.T) {
 	t.Run("ShouldDefaultToList_WhenPolicyDoesNotRequirePriority", func(t *testing.T) {
 		t.Parallel()
 		pb, err := NewPriorityBandConfig(handle, 20,
-			WithOrderingPolicy(ordering.FCFSOrderingPolicyType, handle),
-			WithFairnessPolicy(fairness.GlobalStrictFairnessPolicyType, handle),
+			WithOrderingPolicy(fcfs.FCFSOrderingPolicyType, handle),
+			WithFairnessPolicy(globalstrict.GlobalStrictFairnessPolicyType, handle),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, queue.RegisteredQueueName(queue.ListQueueName), pb.Queue,
@@ -406,7 +408,7 @@ func TestConfig_Partition(t *testing.T) {
 
 		var sumGlobal, sumBand1, sumBand2, sumBand3 uint64
 
-		for i := 0; i < totalShards; i++ {
+		for i := range totalShards {
 			shard := cfg.partition(i, totalShards)
 			require.NotNil(t, shard)
 
@@ -544,17 +546,17 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority:          1,
-						OrderingPolicyRef: ordering.EDFOrderingPolicyType,
-						FairnessPolicyRef: fairness.RoundRobinFairnessPolicyType,
+						OrderingPolicyRef: edf.EDFOrderingPolicyType,
+						FairnessPolicyRef: roundrobin.RoundRobinFairnessPolicyType,
 					},
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
 				require.Contains(t, cfg.PriorityBands, 1, "Configured priority band should be present")
 				band := cfg.PriorityBands[1]
-				assert.Equal(t, ordering.EDFOrderingPolicyType, band.OrderingPolicy.TypedName().Name,
+				assert.Equal(t, edf.EDFOrderingPolicyType, band.OrderingPolicy.TypedName().Name,
 					"OrderingPolicy should be correctly translated")
-				assert.Equal(t, fairness.RoundRobinFairnessPolicyType, band.FairnessPolicy.TypedName().Name,
+				assert.Equal(t, roundrobin.RoundRobinFairnessPolicyType, band.FairnessPolicy.TypedName().Name,
 					"FairnessPolicy should be correctly translated")
 			},
 		},
@@ -577,7 +579,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: nil, // Omitted
+						// MaxBytes and MaxRequests omitted
 					},
 				},
 			},
@@ -593,7 +595,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 				PriorityBands: []configapi.PriorityBandConfig{
 					{
 						Priority: 1,
-						MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+						MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero,
 					},
 				},
 			},
@@ -607,7 +609,7 @@ func TestNewConfigFromAPI(t *testing.T) {
 			name: "ShouldApplyDefault_WhenDefaultPriorityBandMaxBytesIsZero",
 			apiConfig: &configapi.FlowControlConfig{
 				DefaultPriorityBand: &configapi.PriorityBandConfig{
-					MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero
+					MaxBytes: ptr.To(resource.MustParse("0")), // Explicitly zero,
 				},
 			},
 			assertion: func(t *testing.T, cfg *Config) {
@@ -645,6 +647,129 @@ func TestNewConfigFromAPI(t *testing.T) {
 				},
 			},
 			expectedErr: "DefaultPriorityBand MaxBytes must be non-negative",
+		},
+
+		// --- MaxRequests: Happy Paths ---
+		{
+			name: "ShouldSucceed_WithMaxBytesAndMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxBytes:    ptr.To(resource.MustParse("1Gi")),
+				MaxRequests: ptr.To(resource.MustParse("5000")),
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    100,
+						MaxBytes:    ptr.To(resource.MustParse("1Gi")),
+						MaxRequests: ptr.To(resource.MustParse("5000")),
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(1073741824), cfg.MaxBytes, "Global MaxBytes should be 1Gi")
+				assert.Equal(t, uint64(5000), cfg.MaxRequests, "Global MaxRequests should be 5000")
+
+				require.Contains(t, cfg.PriorityBands, 100, "Priority band 100 should be present")
+				band := cfg.PriorityBands[100]
+				assert.Equal(t, uint64(1073741824), band.MaxBytes, "Band MaxBytes should be 1Gi")
+				assert.Equal(t, uint64(5000), band.MaxRequests, "Band MaxRequests should be 5000")
+			},
+		},
+		{
+			name: "ShouldSucceed_WithOnlyMaxRequests_NoMaxBytes",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxRequests: ptr.To(resource.MustParse("1000")),
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    1,
+						MaxRequests: ptr.To(resource.MustParse("500")),
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, uint64(0), cfg.MaxBytes, "Global MaxBytes should be 0 (no global byte limit)")
+				assert.Equal(t, uint64(1000), cfg.MaxRequests, "Global MaxRequests should be 1000")
+
+				require.Contains(t, cfg.PriorityBands, 1)
+				band := cfg.PriorityBands[1]
+				assert.Equal(t, defaultPriorityBandMaxBytes, band.MaxBytes,
+					"Band MaxBytes should fall back to system default when not configured")
+				assert.Equal(t, uint64(500), band.MaxRequests, "Band MaxRequests should be 500")
+			},
+		},
+		{
+			name: "ShouldSucceed_WithDefaultPriorityBandMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxRequests: ptr.To(resource.MustParse("200")),
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.DefaultPriorityBand)
+				assert.Equal(t, uint64(200), cfg.DefaultPriorityBand.MaxRequests,
+					"DefaultPriorityBand MaxRequests should be translated")
+			},
+		},
+
+		// --- MaxRequests: Defaulting Logic ---
+		{
+			name: "ShouldDefaultToZero_WhenMaxRequestsIsNil",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority: 1,
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, uint64(0), cfg.PriorityBands[1].MaxRequests,
+					"Omitted MaxRequests should default to 0 (no request limit)")
+			},
+		},
+		{
+			name: "ShouldDefaultToZero_WhenMaxRequestsIsZero",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    1,
+						MaxRequests: ptr.To(resource.MustParse("0")),
+					},
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.Contains(t, cfg.PriorityBands, 1)
+				assert.Equal(t, uint64(0), cfg.PriorityBands[1].MaxRequests,
+					"Explicit MaxRequests=0 should remain 0 (no request limit)")
+			},
+		},
+
+		// --- MaxRequests: Validation Errors ---
+		{
+			name: "ShouldError_WithNegativeGlobalMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				MaxRequests: ptr.To(resource.MustParse("-1")),
+			},
+			expectedErr: "global MaxRequests must be non-negative",
+		},
+		{
+			name: "ShouldError_WithNegativePriorityBandMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				PriorityBands: []configapi.PriorityBandConfig{
+					{
+						Priority:    1,
+						MaxRequests: ptr.To(resource.MustParse("-100")),
+					},
+				},
+			},
+			expectedErr: "priority band 1 MaxRequests must be non-negative",
+		},
+		{
+			name: "ShouldError_WithNegativeDefaultPriorityBandMaxRequests",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxRequests: ptr.To(resource.MustParse("-5")),
+				},
+			},
+			expectedErr: "DefaultPriorityBand MaxRequests must be non-negative",
 		},
 	}
 

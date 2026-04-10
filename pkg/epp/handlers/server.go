@@ -17,6 +17,7 @@ limitations under the License.
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"strings"
@@ -39,7 +40,6 @@ import (
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	fwkrq "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
 	schedulingtypes "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metrics"
@@ -89,14 +89,14 @@ type RequestContext struct {
 	RequestReceivedTimestamp  time.Time
 	ResponseCompleteTimestamp time.Time
 	RequestSize               int
-	Usage                     fwkrq.Usage
+	Usage                     fwkrh.Usage
 	ResponseSize              int
 	ResponseComplete          bool
 	ResponseStatusCode        string
 	RequestRunning            bool
 	Request                   *Request
 
-	SchedulingRequest *schedulingtypes.LLMRequest
+	SchedulingRequest *schedulingtypes.InferenceRequest
 
 	RequestState         StreamRequestState
 	modelServerStreaming bool
@@ -280,6 +280,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					reqCtx.ResponseCompleteTimestamp = time.Now()
 				}
 				s.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
+				// Rewrite the model name in response body back to the original client-facing name.
+				chunk = rewriteModelName(chunk, reqCtx.TargetModelName, reqCtx.IncomingModelName)
 				// For streaming response, we send response chunk back to envoy every time we received it.
 				reqCtx.respBodyResp = generateResponseBodyResponses(chunk, endOfStream, reqCtx.Response.DynamicMetadata)
 			} else {
@@ -337,9 +339,31 @@ func (s *StreamingServer) finishResponse(ctx context.Context, reqCtx *RequestCon
 	reqCtx.ResponseCompleteTimestamp = time.Now()
 	reqCtx = s.HandleResponseBody(ctx, reqCtx, body, true)
 	if !modelStreaming {
+		// Rewrite the model name in response body back to the original client-facing name.
+		body = rewriteModelName(body, reqCtx.TargetModelName, reqCtx.IncomingModelName)
 		// For non-streaming response, we send response back to envoy after receiving all the response body.
 		reqCtx.respBodyResp = generateResponseBodyResponses(body, setEos, reqCtx.Response.DynamicMetadata)
 	}
+}
+
+// rewriteModelName replaces occurrences of the target (internal) model name with the
+// incoming (client-facing) model name in the response body bytes. This ensures clients
+// see the model name they originally requested, not the internal backend model name.
+// It is a no-op when the names are identical or either is empty.
+func rewriteModelName(body []byte, targetModel, incomingModel string) []byte {
+	if targetModel == "" || incomingModel == "" || targetModel == incomingModel {
+		return body
+	}
+	old := []byte(`"model":"` + targetModel + `"`)
+	new := []byte(`"model":"` + incomingModel + `"`)
+	result := bytes.ReplaceAll(body, old, new)
+	if !bytes.Equal(result, body) {
+		return result
+	}
+	// Also handle the case where JSON has spaces after the colon: "model": "..."
+	old = []byte(`"model": "` + targetModel + `"`)
+	new = []byte(`"model": "` + incomingModel + `"`)
+	return bytes.ReplaceAll(body, old, new)
 }
 
 // updateStateAndSendIfNeeded checks state and can send multiple responses in a single pass, but only if ordered properly.

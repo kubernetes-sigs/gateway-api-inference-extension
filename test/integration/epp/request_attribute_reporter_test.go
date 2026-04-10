@@ -17,7 +17,6 @@ limitations under the License.
 package epp
 
 import (
-	"context"
 	_ "embed"
 	"testing"
 
@@ -35,8 +34,7 @@ var reqLogger = zap.New(zap.UseDevMode(true), zap.Level(-1*zapcore.Level(logutil
 var requestAttributeReporterTestConfig string
 
 func TestRequestAttributeReporter(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Use our new WithConfigText harness option to provide the custom config.
 	h := NewTestHarness(t, ctx, WithStandardMode(), WithConfigText(requestAttributeReporterTestConfig)).WithBaseResources()

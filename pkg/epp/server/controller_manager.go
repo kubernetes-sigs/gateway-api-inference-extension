@@ -44,7 +44,7 @@ func init() {
 }
 
 // defaultManagerOptions returns the default options used to create the manager.
-func defaultManagerOptions(cfg ControllerConfig, gknn common.GKNN, metricsServerOptions metricsserver.Options) (ctrl.Options, error) {
+func defaultManagerOptions(cfg ControllerConfig, gknn common.GKNN, metricsServerOptions metricsserver.Options) ctrl.Options {
 	opt := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -70,34 +70,19 @@ func defaultManagerOptions(cfg ControllerConfig, gknn common.GKNN, metricsServer
 			}}
 		}
 
-		switch gknn.Group {
-		case v1alpha2.GroupName:
-			opt.Cache.ByObject[&v1alpha2.InferencePool{}] = cache.ByObject{
-				Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
-					"metadata.name": gknn.Name,
-				})}},
-			}
-		case v1.GroupName:
-			opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
-				Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
-					"metadata.name": gknn.Name,
-				})}},
-			}
-		default:
-			return ctrl.Options{}, fmt.Errorf("unknown group: %s", gknn.Group)
+		opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
+			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
+				"metadata.name": gknn.Name,
+			})}},
 		}
 	}
-
-	return opt, nil
+	return opt
 }
 
 // NewDefaultManager creates a new controller manager with default configuration.
-func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool, testOverrideSkipNameValidation bool) (ctrl.Manager, error) {
-	opt, err := defaultManagerOptions(controllerCfg, gknn, metricsServerOptions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create controller manager options: %v", err)
-	}
-
+// Optional override functions can be passed to customize the manager options (e.g., for testing).
+func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool, overrides ...func(*ctrl.Options)) (ctrl.Manager, error) {
+	opt := defaultManagerOptions(controllerCfg, gknn, metricsServerOptions)
 	if leaderElectionEnabled {
 		opt.LeaderElection = true
 		opt.LeaderElectionResourceLock = "leases"
@@ -107,7 +92,9 @@ func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restCon
 		opt.LeaderElectionReleaseOnCancel = true
 	}
 
-	opt.Controller.SkipNameValidation = &testOverrideSkipNameValidation
+	for _, override := range overrides {
+		override(&opt)
+	}
 
 	manager, err := ctrl.NewManager(restConfig, opt)
 

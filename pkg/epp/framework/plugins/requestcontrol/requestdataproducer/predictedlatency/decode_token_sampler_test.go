@@ -24,6 +24,7 @@ func TestNewTokenSampler(t *testing.T) {
 	s := newDecodeTokenSampler("req-123", 100, 5)
 	if s == nil {
 		t.Fatal("sampler should not be nil")
+		return
 	}
 	if s.samplingMean != 100 {
 		t.Errorf("samplingMean = %f, want 100", s.samplingMean)

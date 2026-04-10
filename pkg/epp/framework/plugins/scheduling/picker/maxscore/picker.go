@@ -1,0 +1,115 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package maxscore implements a scheduling picker that selects the endpoint(s) with the highest
+// score calculated during the scoring phase.
+//
+// For detailed behavioral intent and configuration, see the package README.
+package maxscore
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
+	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+)
+
+const (
+	// MaxScorePickerType is the registered name of the max score picker plugin.
+	MaxScorePickerType = "max-score-picker"
+)
+
+// compile-time type validation
+var _ framework.Picker = &MaxScorePicker{}
+
+// MaxScorePickerFactory defines the factory function for MaxScorePicker.
+func MaxScorePickerFactory(name string, rawParameters json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
+	parameters := picker.PickerParameters{MaxNumOfEndpoints: picker.DefaultMaxNumOfEndpoints}
+	if rawParameters != nil {
+		if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+			return nil, fmt.Errorf("failed to parse the parameters of the '%s' picker - %w", MaxScorePickerType, err)
+		}
+	}
+
+	return NewMaxScorePicker(parameters.MaxNumOfEndpoints).WithName(name), nil
+}
+
+// NewMaxScorePicker initializes a new MaxScorePicker and returns its pointer.
+func NewMaxScorePicker(maxNumOfEndpoints int) *MaxScorePicker {
+	if maxNumOfEndpoints <= 0 {
+		maxNumOfEndpoints = picker.DefaultMaxNumOfEndpoints // on invalid configuration value, fallback to default value
+	}
+
+	return &MaxScorePicker{
+		typedName:         fwkplugin.TypedName{Type: MaxScorePickerType, Name: MaxScorePickerType},
+		maxNumOfEndpoints: maxNumOfEndpoints,
+	}
+}
+
+// MaxScorePicker picks endpoint(s) with the highest score calculated during the scoring phase.
+type MaxScorePicker struct {
+	typedName         fwkplugin.TypedName
+	maxNumOfEndpoints int // maximum number of endpoints to pick
+}
+
+// WithName sets the picker's name
+func (p *MaxScorePicker) WithName(name string) *MaxScorePicker {
+	p.typedName.Name = name
+	return p
+}
+
+// TypedName returns the type and name tuple of this plugin instance.
+func (p *MaxScorePicker) TypedName() fwkplugin.TypedName {
+	return p.typedName
+}
+
+// Pick selects the endpoint(s) with the highest score calculated during the scoring phase.
+func (p *MaxScorePicker) Pick(ctx context.Context, cycleState *framework.CycleState, scoredEndpoints []*framework.ScoredEndpoint) *framework.ProfileRunResult {
+	log.FromContext(ctx).V(logutil.DEBUG).Info("Selecting endpoints from candidates sorted by max score", "max-num-of-endpoints", p.maxNumOfEndpoints,
+		"num-of-candidates", len(scoredEndpoints), "scored-endpoints", scoredEndpoints)
+
+	// Shuffle in-place - needed for random tie break when scores are equal
+	picker.ShuffleScoredEndpoints(scoredEndpoints)
+
+	slices.SortStableFunc(scoredEndpoints, func(i, j *framework.ScoredEndpoint) int { // highest score first
+		if i.Score > j.Score {
+			return -1
+		}
+		if i.Score < j.Score {
+			return 1
+		}
+		return 0
+	})
+
+	// if we have enough endpoints to return keep only the "maxNumOfEndpoints" highest scored endpoints
+	if p.maxNumOfEndpoints < len(scoredEndpoints) {
+		scoredEndpoints = scoredEndpoints[:p.maxNumOfEndpoints]
+	}
+
+	targetEndpoints := make([]framework.Endpoint, len(scoredEndpoints))
+	for i, scoredEndpoint := range scoredEndpoints {
+		targetEndpoints[i] = scoredEndpoint
+	}
+
+	return &framework.ProfileRunResult{TargetEndpoints: targetEndpoints}
+}

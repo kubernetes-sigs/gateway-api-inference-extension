@@ -120,8 +120,8 @@ func (p *Predictor) parseMetricLine(line string, coefficients *ModelCoefficients
 	}
 
 	metricName := metricPart
-	if openBrace := strings.Index(metricPart, "{"); openBrace != -1 {
-		metricName = metricPart[:openBrace]
+	if before, _, ok := strings.Cut(metricPart, "{"); ok {
+		metricName = before
 	}
 
 	switch metricName {

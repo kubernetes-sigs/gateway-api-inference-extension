@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	testBaseModel = "llama-3-8b"
+	testBaseModel = "qwen3-8b"
 	testAdapter   = "finance-adapter"
 )
 
@@ -46,10 +46,10 @@ func TestBaseModelToHeaderPlugin_TypedName(t *testing.T) {
 
 	got := p.TypedName()
 	if got.Type != BaseModelToHeaderPluginType {
-		t.Errorf("TypedName().Type = %q, want %q", got.Type, BaseModelToHeaderPluginType)
+		t.Errorf("TypedName().Type = %s, want %s", got.Type, BaseModelToHeaderPluginType)
 	}
 	if got.Name != "test-plugin" {
-		t.Errorf("TypedName().Name = %q, want %q", got.Name, "test-plugin")
+		t.Errorf("TypedName().Name = %s, want %s", got.Name, "test-plugin")
 	}
 }
 
@@ -64,10 +64,10 @@ func TestBaseModelToHeaderPlugin_WithName(t *testing.T) {
 
 	got := p.TypedName()
 	if got.Name != "new-name" {
-		t.Errorf("TypedName().Name = %q, want %q", got.Name, "new-name")
+		t.Errorf("TypedName().Name = %s, want %s", got.Name, "new-name")
 	}
 	if got.Type != BaseModelToHeaderPluginType {
-		t.Errorf("TypedName().Type = %q, want %q", got.Type, BaseModelToHeaderPluginType)
+		t.Errorf("TypedName().Type = %s, want %s", got.Type, BaseModelToHeaderPluginType)
 	}
 }
 
@@ -77,7 +77,6 @@ func TestBaseModelToHeaderPluginFactory(t *testing.T) {
 		name       string
 		pluginName string
 		rawParams  json.RawMessage
-		wantErr    bool
 		wantName   string
 	}{
 		{
@@ -121,20 +120,14 @@ func TestBaseModelToHeaderPluginFactory(t *testing.T) {
 			handle := framework.NewBbrHandle(context.Background(), mgr)
 
 			p, err := BaseModelToHeaderPluginFactory(tt.pluginName, tt.rawParams, handle)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got := p.TypedName().Name; got != tt.wantName {
-				t.Errorf("Name = %q, want %q", got, tt.wantName)
+				t.Errorf("Name = %s, want %s", got, tt.wantName)
 			}
 			if got := p.TypedName().Type; got != BaseModelToHeaderPluginType {
-				t.Errorf("Type = %q, want %q", got, BaseModelToHeaderPluginType)
+				t.Errorf("Type = %s, want %s", got, BaseModelToHeaderPluginType)
 			}
 		})
 	}
@@ -242,28 +235,6 @@ func TestBaseModelToHeaderPlugin_ProcessRequest(t *testing.T) {
 			}(),
 			wantHeader: "",
 		},
-		{
-			name:    "nil request",
-			request: nil,
-		},
-		{
-			name: "nil headers",
-			request: &framework.InferenceRequest{
-				InferenceMessage: framework.InferenceMessage{
-					Headers: nil,
-					Body:    map[string]any{"model": testBaseModel},
-				},
-			},
-		},
-		{
-			name: "nil body",
-			request: &framework.InferenceRequest{
-				InferenceMessage: framework.InferenceMessage{
-					Headers: map[string]string{},
-					Body:    nil,
-				},
-			},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -279,7 +250,7 @@ func TestBaseModelToHeaderPlugin_ProcessRequest(t *testing.T) {
 			}
 			if tt.wantHeader != "" && tt.request != nil && tt.request.Headers != nil {
 				if got := tt.request.Headers[BaseModelHeader]; got != tt.wantHeader {
-					t.Errorf("Headers[%q] = %q, want %q", BaseModelHeader, got, tt.wantHeader)
+					t.Errorf("Headers[%s] = %s, want %s", BaseModelHeader, got, tt.wantHeader)
 				}
 			}
 		})

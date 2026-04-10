@@ -150,7 +150,7 @@ func (c *Plugin) TypedName() plugin.TypedName {
 	return c.typedName
 }
 
-func (c *Plugin) ResponseBody(ctx context.Context, request *scheduling.LLMRequest, response *requestcontrol.Response,
+func (c *Plugin) ResponseBody(ctx context.Context, request *scheduling.InferenceRequest, response *requestcontrol.Response,
 	_ *datalayer.EndpointMetadata) {
 	// Convert the request usage Go struct into a protobuf struct so that it can be used as a CEL variable.
 	celData, err := c.getCelData(response)

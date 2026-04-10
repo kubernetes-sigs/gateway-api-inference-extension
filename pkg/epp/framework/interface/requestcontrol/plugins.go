@@ -35,7 +35,7 @@ const (
 // before a request is sent to the selected model server.
 type PreRequest interface {
 	plugin.Plugin
-	PreRequest(ctx context.Context, request *types.LLMRequest, schedulingResult *types.SchedulingResult)
+	PreRequest(ctx context.Context, request *types.InferenceRequest, schedulingResult *types.SchedulingResult)
 }
 
 // ResponseHeader is called by the director after the response headers are successfully received
@@ -43,7 +43,7 @@ type PreRequest interface {
 // The given pod argument is the pod that served the request.
 type ResponseHeader interface {
 	plugin.Plugin
-	ResponseHeader(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
+	ResponseHeader(ctx context.Context, request *types.InferenceRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // ResponseBody is the primary hook for processing response data.
@@ -61,7 +61,7 @@ type ResponseHeader interface {
 // between success, errors, and disconnects.
 type ResponseBody interface {
 	plugin.Plugin
-	ResponseBody(ctx context.Context, request *types.LLMRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
+	ResponseBody(ctx context.Context, request *types.InferenceRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
 // PrepareRequestData is called by the director before scheduling requests.
@@ -69,7 +69,7 @@ type ResponseBody interface {
 type PrepareDataPlugin interface {
 	plugin.ProducerPlugin
 	plugin.ConsumerPlugin
-	PrepareRequestData(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
+	PrepareRequestData(ctx context.Context, request *types.InferenceRequest, pods []types.Endpoint) error
 }
 
 // AdmissionPlugin is called by the director after the prepare data phase and before scheduling.
@@ -79,5 +79,5 @@ type AdmissionPlugin interface {
 	plugin.Plugin
 	// AdmitRequest returns the denial reason, wrapped as error if the request is denied.
 	// If the request is allowed, it returns nil.
-	AdmitRequest(ctx context.Context, request *types.LLMRequest, pods []types.Endpoint) error
+	AdmitRequest(ctx context.Context, request *types.InferenceRequest, pods []types.Endpoint) error
 }

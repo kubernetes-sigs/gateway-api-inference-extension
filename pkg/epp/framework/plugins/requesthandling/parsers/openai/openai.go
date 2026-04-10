@@ -20,12 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
+	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
-	fwkrc "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requestcontrol"
 	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
 )
 
 const (
@@ -77,6 +77,10 @@ func (p *OpenAIParser) TypedName() fwkplugin.TypedName {
 	return p.typedName
 }
 
+func (p *OpenAIParser) SupportedAppProtocols() []v1.AppProtocol {
+	return []v1.AppProtocol{v1.AppProtocolH2C, v1.AppProtocolHTTP}
+}
+
 func OpenAIParserPluginFactory(name string, _ json.RawMessage, _ fwkplugin.Handle) (fwkplugin.Plugin, error) {
 	return NewOpenAIParser().WithName(name), nil
 }
@@ -87,16 +91,16 @@ func (p *OpenAIParser) WithName(name string) *OpenAIParser {
 }
 
 // ParseRequest parses the request body and headers and returns a map representation.
-func (p *OpenAIParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
+func (p *OpenAIParser) ParseRequest(ctx context.Context, body []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
 	bodyMap := make(map[string]any)
 	if err := json.Unmarshal(body, &bodyMap); err != nil {
-		return nil, errors.New("error unmarshaling request bodyMap")
+		return nil, fmt.Errorf("error unmarshaling request bodyMap: %w", err)
 	}
 	extractedBody, err := extractRequestBody(body, headers)
 	if err != nil {
 		return nil, err
 	}
-	extractedBody.Payload = scheduling.PayloadMap(bodyMap)
+	extractedBody.Payload = fwkrh.PayloadMap(bodyMap)
 	if stream, ok := bodyMap["stream"].(bool); ok && stream {
 		extractedBody.Stream = true
 	}
@@ -160,20 +164,22 @@ func getRequestPath(headers map[string]string) string {
 // determineAPITypeFromPath determines the API type based on the request path.
 // Note: path strings have already been cleaned and normalized by the gateway/proxy layer
 // (no trailing slashes, query parameters, or additional suffix strings at this point).
+// The suffix-based matching supports both standard OpenAI paths (e.g. /v1/chat/completions)
+// and provider-specific paths (e.g. Vertex AI's /v1/projects/.../chat/completions).
 func determineAPITypeFromPath(path string) string {
-	if strings.Contains(path, "/v1/conversations") {
+	if strings.HasSuffix(path, "/conversations") {
 		return conversationsAPI
 	}
-	if strings.Contains(path, "/v1/responses") {
+	if strings.HasSuffix(path, "/responses") {
 		return responsesAPI
 	}
-	if strings.Contains(path, "/v1/chat/completions") {
+	if strings.HasSuffix(path, "/chat/completions") {
 		return chatCompletionsAPI
 	}
-	if strings.Contains(path, "/v1/completions") {
+	if strings.HasSuffix(path, "/completions") {
 		return completionsAPI
 	}
-	if strings.Contains(path, "/v1/embeddings") {
+	if strings.HasSuffix(path, "/embeddings") {
 		return embeddingsAPI
 	}
 
@@ -182,46 +188,46 @@ func determineAPITypeFromPath(path string) string {
 }
 
 // extractRequestBody extracts the LLMRequestBody from the given request body map using path-based detection.
-func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.LLMRequestBody, error) {
+func extractRequestBody(rawBody []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
 	// Determine API type from request path
 	path := getRequestPath(headers)
 	apiType := determineAPITypeFromPath(path)
 
 	switch apiType {
 	case conversationsAPI:
-		var conversations scheduling.ConversationsRequest
+		var conversations fwkrh.ConversationsRequest
 		if err := json.Unmarshal(rawBody, &conversations); err == nil && len(conversations.Items) > 0 {
-			return &scheduling.LLMRequestBody{Conversations: &conversations}, nil
+			return &fwkrh.InferenceRequestBody{Conversations: &conversations}, nil
 		}
 		return nil, errors.New("invalid conversations request: must have items field")
 
 	case responsesAPI:
-		var responses scheduling.ResponsesRequest
+		var responses fwkrh.ResponsesRequest
 		if err := json.Unmarshal(rawBody, &responses); err == nil && responses.Input != nil {
-			return &scheduling.LLMRequestBody{Responses: &responses}, nil
+			return &fwkrh.InferenceRequestBody{Responses: &responses}, nil
 		}
 		return nil, errors.New("invalid responses request: must have input field")
 
 	case chatCompletionsAPI:
-		var chatCompletions scheduling.ChatCompletionsRequest
+		var chatCompletions fwkrh.ChatCompletionsRequest
 		if err := json.Unmarshal(rawBody, &chatCompletions); err == nil {
 			if err = validateChatCompletionsMessages(chatCompletions.Messages); err == nil {
-				return &scheduling.LLMRequestBody{ChatCompletions: &chatCompletions}, nil
+				return &fwkrh.InferenceRequestBody{ChatCompletions: &chatCompletions}, nil
 			}
 		}
 		return nil, errors.New("invalid chat completions request: must have valid messages field")
 
 	case completionsAPI:
-		var completions scheduling.CompletionsRequest
-		if err := json.Unmarshal(rawBody, &completions); err == nil && completions.Prompt != "" {
-			return &scheduling.LLMRequestBody{Completions: &completions}, nil
+		var completions fwkrh.CompletionsRequest
+		if err := json.Unmarshal(rawBody, &completions); err == nil && !completions.Prompt.IsEmpty() {
+			return &fwkrh.InferenceRequestBody{Completions: &completions}, nil
 		}
 		return nil, errors.New("invalid completions request: must have prompt field")
 
 	case embeddingsAPI:
-		var embeddings scheduling.EmbeddingsRequest
+		var embeddings fwkrh.EmbeddingsRequest
 		if err := json.Unmarshal(rawBody, &embeddings); err == nil && embeddings.Input != nil {
-			return &scheduling.LLMRequestBody{Embeddings: &embeddings}, nil
+			return &fwkrh.InferenceRequestBody{Embeddings: &embeddings}, nil
 		}
 		return nil, errors.New("invalid embeddings request: must have input field")
 
@@ -230,14 +236,14 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*scheduling.
 	}
 }
 
-func validateChatCompletionsMessages(messages []scheduling.Message) error {
+func validateChatCompletionsMessages(messages []fwkrh.Message) error {
 	if len(messages) == 0 {
 		return errors.New("chat-completions request must have at least one message")
 	}
 	return nil
 }
 
-func extractUsage(responseBytes []byte) (*fwkrc.Usage, error) {
+func extractUsage(responseBytes []byte) (*fwkrh.Usage, error) {
 	var responseErr error
 	var responseBody map[string]any
 	responseErr = json.Unmarshal(responseBytes, &responseBody)
@@ -252,7 +258,7 @@ func extractUsage(responseBytes []byte) (*fwkrc.Usage, error) {
 		if usg["prompt_token_details"] != nil {
 			detailsMap := usg["prompt_token_details"].(map[string]any)
 			if cachedTokens, ok := detailsMap["cached_tokens"]; ok {
-				usage.PromptTokenDetails = &fwkrc.PromptTokenDetails{
+				usage.PromptTokenDetails = &fwkrh.PromptTokenDetails{
 					CachedTokens: int(cachedTokens.(float64)),
 				}
 			}
@@ -264,8 +270,8 @@ func extractUsage(responseBytes []byte) (*fwkrc.Usage, error) {
 
 // extractUsageByAPIType extracts usage statistics using the appropriate field names
 // based on the OpenAI API type identified by the "object" field.
-func extractUsageByAPIType(usg map[string]any, objectType string) fwkrc.Usage {
-	usage := fwkrc.Usage{}
+func extractUsageByAPIType(usg map[string]any, objectType string) fwkrh.Usage {
+	usage := fwkrh.Usage{}
 
 	switch {
 	case strings.HasPrefix(objectType, objectTypeResponse) || strings.HasPrefix(objectType, objectTypeConversation):
@@ -325,10 +331,10 @@ func extractUsageByAPIType(usg map[string]any, objectType string) fwkrc.Usage {
 //	data: {"response":{"usage":{"input_tokens":31,..},...},"type":"response.completed"}
 //
 // It extracts usage from events with type="response.completed".
-func extractUsageStreaming(responseText string) *fwkrc.Usage {
+func extractUsageStreaming(responseText string) *fwkrh.Usage {
 
 	var streamResponse struct {
-		Usage    *fwkrc.Usage `json:"usage"`
+		Usage    *fwkrh.Usage `json:"usage"`
 		Response struct {
 			Usage  map[string]any `json:"usage"`
 			Object string         `json:"object"`

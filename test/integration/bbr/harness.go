@@ -67,7 +67,7 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 			},
 		},
 		Data: map[string]string{
-			"baseModel": "llama",
+			"baseModel": "qwen",
 			"adapters": `
 - sql-lora-sheddable
 - foo

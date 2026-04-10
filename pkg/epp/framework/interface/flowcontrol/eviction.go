@@ -36,7 +36,7 @@ type EvictionItem struct {
 	// TargetURL is the base URL of the model server serving this request.
 	TargetURL string
 	// Request is the original scheduling request.
-	Request *scheduling.LLMRequest
+	Request *scheduling.InferenceRequest
 	// TargetEndpoint is the metadata of the endpoint serving this request.
 	TargetEndpoint *datalayer.EndpointMetadata
 }

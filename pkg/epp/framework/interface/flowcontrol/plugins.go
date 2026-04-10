@@ -135,3 +135,44 @@ type SaturationDetector interface {
 	//   - If Saturation() < 1.0: Continue dispatching traffic to the pool.
 	Saturation(ctx context.Context, endpoints []datalayer.Endpoint) float64
 }
+
+// UsageLimitPolicy computes the usage limit of a priority band dynamically.
+//
+// The goal of this policy is to enable adaptive capacity management by gating lower-priority traffic
+// as the pool approaches saturation, reserving headroom for future higher-priority requests.
+//
+// Saturation represents resource usage as a fraction of total capacity (0.0 = idle, 1.0 = fully saturated)
+// as described in [/pkg/epp/flowcontrol/contracts.SaturationDetector]
+//
+// Architecture (Stateless Singleton):
+// UsageLimitPolicy plugins are Singletons. A single instance handles limit computation for all priority bands
+// across all shards. The plugin MUST be stateless: it is a pure function that maps the current saturation and
+// active priority domain to a set of ceilings. Any signal conditioning (trend detection, smoothing) belongs in
+// the SaturationDetector layer, not here.
+//
+// Integration:
+// This policy is called during dispatch decision-making, before a request is allowed to proceed. For each
+// priority band, the returned ceiling is compared against current saturation. If saturation exceeds the
+// ceiling for a given priority, requests at that priority are gated (not dispatched).
+//
+// Conformance: Implementations MUST ensure all methods are goroutine-safe.
+type UsageLimitPolicy interface {
+	plugin.Plugin
+
+	// ComputeLimit calculates usage ceilings for all currently active priority levels based on current
+	// saturation. The plugin observes the active priority domain (which changes dynamically as workloads
+	// come and go) and computes relative ceilings from scratch on each call.
+	//
+	// Parameters:
+	//   - ctx: Request context for logging, tracing, etc.
+	//   - saturation: Current pool-wide resource saturation as a fraction [0.0, 1.0]
+	//   - priorities: Ordered list of currently active priority levels (highest first)
+	//
+	// Returns:
+	//   - ceilings: Computed ceiling for each given priority (n-th ceiling is assigned to the given n-th priority)
+	//     - 0.0 = fully gated (cannot dispatch regardless of current saturation)
+	//     - 1.0 = no gating (can dispatch until fully saturated)
+	//     - Values between 0.0 and 1.0 reserve capacity headroom
+	//
+	ComputeLimit(ctx context.Context, saturation float64, priorities []int) (ceilings []float64)
+}

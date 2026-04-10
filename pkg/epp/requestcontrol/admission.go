@@ -65,13 +65,13 @@ type flowController interface {
 func rejectIfSheddableAndSaturated(
 	ctx context.Context,
 	sd flowcontrol.SaturationDetector,
-	locator contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 	reqCtx *handlers.RequestContext,
 	priority int,
 	logger logr.Logger,
 ) error {
 	if requtil.IsSheddable(priority) {
-		if sd.Saturation(ctx, locator.Locate(ctx, reqCtx.Request.Metadata)) >= 1.0 {
+		if sd.Saturation(ctx, endpointCandidates.Locate(ctx, reqCtx.Request.Metadata)) >= 1.0 {
 			logger.V(logutil.TRACE).Info("Request rejected: system saturated and request is sheddable",
 				"requestID", reqCtx.SchedulingRequest.RequestId)
 			return errcommon.Error{
@@ -90,17 +90,17 @@ func rejectIfSheddableAndSaturated(
 // saturated. Non-sheddable requests always bypass the saturation check.
 type LegacyAdmissionController struct {
 	saturationDetector flowcontrol.SaturationDetector
-	podLocator         contracts.PodLocator
+	endpointCandidates contracts.EndpointCandidates
 }
 
 // NewLegacyAdmissionController creates a new LegacyAdmissionController.
 func NewLegacyAdmissionController(
 	sd flowcontrol.SaturationDetector,
-	pl contracts.PodLocator,
+	endpointCandidates contracts.EndpointCandidates,
 ) *LegacyAdmissionController {
 	return &LegacyAdmissionController{
 		saturationDetector: sd,
-		podLocator:         pl,
+		endpointCandidates: endpointCandidates,
 	}
 }
 
@@ -117,7 +117,7 @@ func (lac *LegacyAdmissionController) Admit(
 	if err := rejectIfSheddableAndSaturated(
 		ctx,
 		lac.saturationDetector,
-		lac.podLocator,
+		lac.endpointCandidates,
 		reqCtx, priority,
 		logger,
 	); err != nil {
@@ -177,7 +177,7 @@ type flowControlRequest struct {
 	fairnessID        string
 	priority          int
 	requestByteSize   uint64
-	inferenceRequest  *scheduling.LLMRequest
+	inferenceRequest  *scheduling.InferenceRequest
 	receivedTimestamp time.Time
 	reqMetadata       map[string]any
 	inferencePoolName string
@@ -192,13 +192,15 @@ func (r *flowControlRequest) ID() string {
 	}
 	return r.inferenceRequest.RequestId
 }
-func (r *flowControlRequest) InitialEffectiveTTL() time.Duration       { return 0 } // Use controller default.
-func (r *flowControlRequest) ByteSize() uint64                         { return r.requestByteSize }
-func (r *flowControlRequest) InferenceRequest() *scheduling.LLMRequest { return r.inferenceRequest }
-func (r *flowControlRequest) ReceivedTimestamp() time.Time             { return r.receivedTimestamp }
-func (r *flowControlRequest) GetMetadata() map[string]any              { return r.reqMetadata }
-func (r *flowControlRequest) InferencePoolName() string                { return r.inferencePoolName }
-func (r *flowControlRequest) ModelName() string                        { return r.modelName }
+func (r *flowControlRequest) InitialEffectiveTTL() time.Duration { return 0 } // Use controller default.
+func (r *flowControlRequest) ByteSize() uint64                   { return r.requestByteSize }
+func (r *flowControlRequest) InferenceRequest() *scheduling.InferenceRequest {
+	return r.inferenceRequest
+}
+func (r *flowControlRequest) ReceivedTimestamp() time.Time { return r.receivedTimestamp }
+func (r *flowControlRequest) GetMetadata() map[string]any  { return r.reqMetadata }
+func (r *flowControlRequest) InferencePoolName() string    { return r.inferencePoolName }
+func (r *flowControlRequest) ModelName() string            { return r.modelName }
 func (r *flowControlRequest) TargetModelName() string {
 	if r.inferenceRequest == nil {
 		return ""

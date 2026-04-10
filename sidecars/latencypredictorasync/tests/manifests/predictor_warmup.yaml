@@ -15,9 +15,9 @@ spec:
         imagePullPolicy: Always
         env:
         - name: PREDICTION_SERVERS
-          value: "http://vllm-llama3-8b-instruct-epp:8001"
+          value: "http://vllm-qwen3-32b-epp:8001"
         - name: TRAINING_SERVER_URL
-          value: "http://vllm-llama3-8b-instruct-epp:8000"
+          value: "http://vllm-qwen3-32b-epp:8000"
         # Minimal prediction load — warmup is purely to fill training buckets
         - name: TEST_QPS
           value: "1"

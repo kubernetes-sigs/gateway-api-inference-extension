@@ -90,12 +90,6 @@ func TestBodyMutation_Unary(t *testing.T) {
 						SetHeaders: []*envoyCorev3.HeaderValueOption{
 							{
 								Header: &envoyCorev3.HeaderValue{
-									Key:      "X-Gateway-Base-Model-Name",
-									RawValue: []byte(""),
-								},
-							},
-							{
-								Header: &envoyCorev3.HeaderValue{
 									Key:      "Content-Length",
 									RawValue: []byte(strconv.Itoa(len(wantBody))),
 								},
@@ -166,12 +160,6 @@ func TestBodyMutation_Streaming(t *testing.T) {
 						ClearRouteCache: true,
 						HeaderMutation: &extProcPb.HeaderMutation{
 							SetHeaders: []*envoyCorev3.HeaderValueOption{
-								{
-									Header: &envoyCorev3.HeaderValue{
-										Key:      "X-Gateway-Base-Model-Name",
-										RawValue: []byte(""),
-									},
-								},
 								{
 									Header: &envoyCorev3.HeaderValue{
 										Key:      "Content-Length",

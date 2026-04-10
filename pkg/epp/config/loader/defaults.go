@@ -18,16 +18,20 @@ package loader
 
 import (
 	"fmt"
+	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "sigs.k8s.io/gateway-api-inference-extension/apix/config/v1alpha1"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/flowcontrol/registry"
 	fwkplugin "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	framework "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/scheduling"
+	extractormetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/extractor/metrics"
+	sourcemetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/source/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/flowcontrol/saturationdetector/utilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/picker/maxscore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/profile"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/kvcacheutilization"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/scorer/prefix"
@@ -48,6 +52,7 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 			APIVersion: "inference.networking.x-k8s.io/v1alpha1",
 			Kind:       "EndpointPickerConfig",
 		},
+		FeatureGates: []string{}, // Data layer is now enabled by default (no feature gate needed)
 		Plugins: []configapi.PluginSpec{
 			{
 				Type: queuedepth.QueueScorerType,
@@ -56,7 +61,13 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 				Type: kvcacheutilization.KvCacheUtilizationScorerType,
 			},
 			{
-				Type: prefix.PrefixCachePluginType,
+				Type: prefix.PrefixCacheScorerPluginType,
+			},
+			{
+				Type: sourcemetrics.MetricsDataSourceType,
+			},
+			{
+				Type: extractormetrics.MetricsExtractorType,
 			},
 		},
 		SchedulingProfiles: []configapi.SchedulingProfile{
@@ -72,8 +83,18 @@ func loadDefaultConfig() *configapi.EndpointPickerConfig {
 						Weight:    &kvCacheUtilizationScorerWeight,
 					},
 					{
-						PluginRef: prefix.PrefixCachePluginType,
+						PluginRef: prefix.PrefixCacheScorerPluginType,
 						Weight:    &prefixCacheScorerWeight,
+					},
+				},
+			},
+		},
+		DataLayer: &configapi.DataLayerConfig{
+			Sources: []configapi.DataLayerSource{
+				{
+					PluginRef: sourcemetrics.MetricsDataSourceType,
+					Extractors: []configapi.DataLayerExtractor{
+						{PluginRef: extractormetrics.MetricsExtractorType},
 					},
 				},
 			},
@@ -112,6 +133,9 @@ func applySystemDefaults(cfg *configapi.EndpointPickerConfig, handle fwkplugin.H
 	}
 	if err := ensureSaturationDetector(cfg, handle, allPlugins); err != nil {
 		return fmt.Errorf("failed to apply saturation detector defaults: %w", err)
+	}
+	if err := ensureDataLayer(cfg, handle, allPlugins); err != nil {
+		return fmt.Errorf("failed to apply data layer defaults: %w", err)
 	}
 	return nil
 }
@@ -162,10 +186,10 @@ func ensureSchedulingLayer(
 	}
 
 	if maxScorePickerName == "" {
-		if err := registerDefaultPlugin(cfg, handle, picker.MaxScorePickerType); err != nil {
+		if err := registerDefaultPlugin(cfg, handle, maxscore.MaxScorePickerType); err != nil {
 			return err
 		}
-		maxScorePickerName = picker.MaxScorePickerType
+		maxScorePickerName = maxscore.MaxScorePickerType
 	}
 
 	for i, prof := range cfg.SchedulingProfiles {
@@ -194,18 +218,21 @@ func ensureSchedulingLayer(
 }
 
 // ensureFlowControlLayer guarantees that the flow control subsystem is structurally complete.
-func ensureFlowControlLayer(
-	cfg *configapi.EndpointPickerConfig,
-	handle fwkplugin.Handle,
-	allPlugins map[string]fwkplugin.Plugin,
-) error {
+func ensureFlowControlLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle, allPlugins map[string]fwkplugin.Plugin) error {
 	if _, ok := allPlugins[registry.DefaultOrderingPolicyRef]; !ok {
 		if err := registerDefaultPlugin(cfg, handle, registry.DefaultOrderingPolicyRef); err != nil {
 			return err
 		}
 	}
 	if _, ok := allPlugins[registry.DefaultFairnessPolicyRef]; !ok {
-		return registerDefaultPlugin(cfg, handle, registry.DefaultFairnessPolicyRef)
+		if err := registerDefaultPlugin(cfg, handle, registry.DefaultFairnessPolicyRef); err != nil {
+			return err
+		}
+	}
+	if _, ok := allPlugins[registry.DefaultUsageLimitPolicyRef]; !ok {
+		if err := registerDefaultPlugin(cfg, handle, registry.DefaultUsageLimitPolicyRef); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -258,6 +285,42 @@ func ensureSaturationDetector(
 			}
 		}
 	}
+	return nil
+}
+
+// ensureDataLayer guarantees that the data layer is configured unless explicitly disabled.
+// If no data section is provided, the default plugins are added.
+// If a data section is explicitly provided (even empty), it is left unchanged — an empty section
+// disables metrics collection without falling back to legacy.
+func ensureDataLayer(cfg *configapi.EndpointPickerConfig, handle fwkplugin.Handle, allPlugins map[string]fwkplugin.Plugin) error {
+	if slices.Contains(cfg.FeatureGates, datalayer.EnableLegacyMetricsFeatureGate) {
+		return nil
+	}
+
+	if cfg.DataLayer != nil {
+		return nil
+	}
+
+	if _, ok := allPlugins[sourcemetrics.MetricsDataSourceType]; !ok {
+		if err := registerDefaultPlugin(cfg, handle, sourcemetrics.MetricsDataSourceType); err != nil {
+			return err
+		}
+	}
+	if _, ok := allPlugins[extractormetrics.MetricsExtractorType]; !ok {
+		if err := registerDefaultPlugin(cfg, handle, extractormetrics.MetricsExtractorType); err != nil {
+			return err
+		}
+	}
+
+	cfg.DataLayer = &configapi.DataLayerConfig{
+		Sources: []configapi.DataLayerSource{{
+			PluginRef: sourcemetrics.MetricsDataSourceType,
+			Extractors: []configapi.DataLayerExtractor{{
+				PluginRef: extractormetrics.MetricsExtractorType,
+			}},
+		}},
+	}
+
 	return nil
 }
 

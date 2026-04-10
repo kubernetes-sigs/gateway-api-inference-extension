@@ -111,8 +111,8 @@ func (in *EndpointPickerConfig) DeepCopyInto(out *EndpointPickerConfig) {
 		*out = new(SaturationDetectorConfig)
 		**out = **in
 	}
-	if in.Data != nil {
-		in, out := &in.Data, &out.Data
+	if in.DataLayer != nil {
+		in, out := &in.DataLayer, &out.DataLayer
 		*out = new(DataLayerConfig)
 		(*in).DeepCopyInto(*out)
 	}
@@ -170,6 +170,11 @@ func (in *FlowControlConfig) DeepCopyInto(out *FlowControlConfig) {
 	*out = *in
 	if in.MaxBytes != nil {
 		in, out := &in.MaxBytes, &out.MaxBytes
+		x := (*in).DeepCopy()
+		*out = &x
+	}
+	if in.MaxRequests != nil {
+		in, out := &in.MaxRequests, &out.MaxRequests
 		x := (*in).DeepCopy()
 		*out = &x
 	}
@@ -242,6 +247,11 @@ func (in *PriorityBandConfig) DeepCopyInto(out *PriorityBandConfig) {
 	*out = *in
 	if in.MaxBytes != nil {
 		in, out := &in.MaxBytes, &out.MaxBytes
+		x := (*in).DeepCopy()
+		*out = &x
+	}
+	if in.MaxRequests != nil {
+		in, out := &in.MaxRequests, &out.MaxRequests
 		x := (*in).DeepCopy()
 		*out = &x
 	}
