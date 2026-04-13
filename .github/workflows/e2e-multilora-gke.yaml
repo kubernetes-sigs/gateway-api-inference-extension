@@ -1,0 +1,382 @@
+name: GKE Multilora Test
+
+on:
+  # Runs with a PR comment /run-gke-multilora
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_or_branch:
+        description: 'Pull-request number or branch name to test'
+        required: true
+        default: 'main'
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # Authorization Job: Ensures only authorized users can execute workflow
+  # Note, even if user checks out branch to modify access, user will need to provide correct secret keys to deploy to GCP.
+  check_access:
+    runs-on: ubuntu-latest
+    
+    if: |
+      (github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/run-gke-multilora')) || github.event_name == 'workflow_dispatch'
+    
+    outputs:
+      authorized: ${{ steps.auth_logic.outputs.authorized }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Authorization Logic
+        id: auth_logic
+        shell: bash
+        run: |
+          authorized='false'
+          auth_file=".github/authorized_workflow_users.txt"
+          user=""
+          role=""
+          
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            user="${{ github.event.comment.user.login }}"
+            role="${{ github.event.comment.author_association }}"
+            
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            user="${{ github.actor }}"
+          fi
+
+          if [[ "$role" == "OWNER" || "$role" == "MAINTAINER" ]]; then
+            echo "User authorized by role: $role"
+            authorized='true'          
+          
+          elif grep -Fxq "$user" "$auth_file"; then
+            echo "User authorized by file lookup: $auth_file"
+            authorized='true'
+          fi
+          
+          echo "authorized=$authorized" >> "$GITHUB_OUTPUT"
+
+  deploy_and_validate:
+    needs: [check_access]
+    if: |
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'issue_comment') &&
+        needs.check_access.outputs.authorized == 'true'
+      
+    name: Test on ${{ matrix.accelerator.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        accelerator:
+          - name: GPU
+
+    env:
+      GCP_PROJECT_ID: llm-d-scale
+      GKE_CLUSTER_NAME: llm-d-e2e-us-east5
+      GKE_CLUSTER_ZONE: us-east5
+      NAMESPACE: igw-multilora-test
+      GATEWAY: gke-l7-regional-external-managed
+      GATEWAY_PROVIDER: gke
+      PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch || github.event.issue.number || 'main' }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      DEPLOYMENT_NAME: vllm-qwen3-32b
+      MODEL: Qwen/Qwen3-32B
+      GSA_EMAIL: ${{ secrets.GCS_WORKLOAD_SA }}
+      GCS_BUCKET: igw-e2e-benchmark-results
+      KSA_NAME: igw-e2e-benchmark-sa
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Determine if pr_or_branch is a PR number
+        id: check_pr
+        shell: bash
+        run: |
+          VAL="${{ env.PR_OR_BRANCH }}"
+          echo "TARGET=$VAL" >> "$GITHUB_ENV"
+          if [[ "$VAL" =~ ^[0-9]+$ ]]; then
+            echo "is_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch and checkout PR
+        if: steps.check_pr.outputs.is_pr == 'true'
+        run: |
+          git fetch origin pull/"$TARGET"/head:pr-"$TARGET"
+          git checkout pr-"$TARGET"
+
+      - name: Checkout branch
+        if: steps.check_pr.outputs.is_pr == 'false'
+        run: |
+          git fetch origin "$TARGET"
+          git checkout "$TARGET"
+
+      - name: Install Python Dependencies
+        run: |
+          cd benchmarking
+          python3 -m venv .venv
+          pip install inference-perf pandas numpy matplotlib
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud CLI and kubectl
+        uses: google-github-actions/setup-gcloud@cb1e50a9932213ecece00a606661ae9ca44f3397
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          install_components: 'kubectl,gke-gcloud-auth-plugin'
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials "${{ env.GKE_CLUSTER_NAME }}" --zone "${{ env.GKE_CLUSTER_ZONE }}"
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace "${NAMESPACE}" || echo "Namespace already exists"
+
+      - name: Create hf-token secret
+        run: |
+          kubectl create secret generic hf-token \
+            --from-literal="token=${{ secrets.HF_TOKEN }}" \
+            --namespace "${NAMESPACE}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create and Annotate KSA for Workload Identity
+        run: |     
+          kubectl create serviceaccount $KSA_NAME --namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl annotate serviceaccount $KSA_NAME \
+            iam.gke.io/gcp-service-account=$GSA_EMAIL \
+            --overwrite \
+            --namespace "${NAMESPACE}"
+
+      - name: Fetch Latest IGW Release
+        run: |
+          IGW_LATEST_RELEASE=$(curl -s https://api.github.com/repos/kubernetes-sigs/gateway-api-inference-extension/releases \
+            | jq -r '.[] | select(.prerelease == false) | .tag_name' \
+            | sort -V \
+            | tail -n1)
+                    
+          echo "IGW_CHART_VERSION=$IGW_LATEST_RELEASE" >> $GITHUB_ENV
+
+      - name: Deploy Model Server and CRDs
+        run: |
+          cd config/manifests/vllm
+          echo "Deploying Model Server..."
+          kubectl apply -f gpu-multilora-deployment.yaml -n ${NAMESPACE} | tee ~/igw-multilora-deployment.log
+          kubectl scale deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} --replicas=8
+          echo "Installing CRDs"
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/${IGW_CHART_VERSION}/manifests.yaml
+          echo "---------------------------------------" >> ~/igw-multilora-deployment.log
+
+      - name: Deploy InferencePool and Endpoint Picker Extension
+        run: |
+          helm upgrade --install ${DEPLOYMENT_NAME} \
+          --dependency-update \
+          --namespace $NAMESPACE \
+          --set inferencePool.modelServers.matchLabels.app=${DEPLOYMENT_NAME} \
+          --set provider.name=$GATEWAY_PROVIDER \
+          --set experimentalHttpRoute.enabled=true \
+          --version $IGW_CHART_VERSION \
+          oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool | tee ~/igw-multilora-deployment.log
+          echo "---------------------------------------" >> ~/igw-multilora-deployment.log
+
+      - name: Wait for all pods to be ready
+        run: |
+          kubectl wait pod \
+            --for=condition=Ready \
+            --all \
+            -n "${NAMESPACE}" \
+            --timeout=25m
+          echo "✅ All pods are ready."
+          kubectl get pods -n "${NAMESPACE}"
+
+      - name: Deploy Gateway
+        run: |
+          GATEWAY_NAME=inference-gateway
+          echo "Deploying Gateway..."
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_CHART_VERSION}/config/manifests/gateway/gke/gateway.yaml -n ${NAMESPACE} | tee ~/igw-multilora-deployment.log 
+          echo "---------------------------------------" >> ~/igw-multilora-deployment.log
+
+      - name: Wait for gateway to be ready
+        run: |
+          GATEWAY_NAME=inference-gateway
+          kubectl wait gateway/${GATEWAY_NAME} \
+            --for=condition=Programmed=True \
+            -n "${NAMESPACE}" \
+            --timeout=500s
+          echo "✅ Gateway is ready."
+          kubectl get gateway -n "${NAMESPACE}"
+
+      - name: Show deployment status
+        run: |
+          echo "=== Deployments ==="
+          kubectl get deployments -n "${NAMESPACE}"
+          echo ""
+          echo "=== Pods ==="
+          kubectl get pods -n "${NAMESPACE}"
+          echo ""
+          echo "=== Services ==="
+          kubectl get svc -n "${NAMESPACE}"
+          echo ""
+          echo "=== Helm releases ==="
+          helm list -n "${NAMESPACE}" || true
+          echo ""
+          echo "=== Inference Pools ==="
+          kubectl get inferencepools -n "${NAMESPACE}" -o yaml || true
+          echo ""
+          echo "=== HTTPRoutes ==="
+          kubectl get httproutes -n "${NAMESPACE}" -o yaml || true
+          echo ""
+          echo ""
+          echo "=== Healthchecks ==="
+          kubectl get healthcheckpolicy -n "${NAMESPACE}" -o yaml || true
+          echo ""
+           echo "=== GCPBackendPolicy ==="
+          kubectl get gcpbackendpolicy -n "${NAMESPACE}" -o yaml || true
+          echo ""
+          echo "=== Gateway ==="
+          kubectl get Gateway -n "${NAMESPACE}" || true
+          echo ""
+          echo "---------------------------------------"
+          echo "Giving extra time for resources to initialize..."
+          sleep 30
+          echo "---------------------------------------"
+
+      # This step sometimes fails because gateway is not ready fully. Try a max of 3 times.
+      - name: Verify installation and run validation test
+        uses: nick-fields/retry@v2
+        with:
+          retry_wait_seconds: 30
+          timeout_minutes: 5
+          max_attempts: 3
+          command: ./.github/scripts/e2e/e2e-validate.sh -n "${NAMESPACE}" -v -m ${MODEL}
+
+      - name: Run benchmarking test
+        run: |
+          TIMESTAMP=$(date +"%Y-%m-%d-%H-%M-%S")
+          echo "TIMESTAMP=$TIMESTAMP" >> "$GITHUB_ENV"
+          cd benchmarking/multilora-workload
+          host="${GATEWAY_HOST:-$(kubectl get gateway -n "$NAMESPACE" \
+          -o jsonpath='{.items[0].status.addresses[0].value}' 2>/dev/null || true)}"
+          if [[ -z "$host" ]]; then
+            echo "Error: could not discover a Gateway address in namespace '$NAMESPACE'." >&2
+            exit 1
+          fi
+          port=80
+          svc_host="${host}:${port}"
+          helm upgrade --install multilora-benchmark ../inference-perf/ -f multilora-values.yaml \
+            --namespace "${NAMESPACE}" \
+            --create-namespace \
+            --set token.hfToken="${HF_TOKEN}" \
+            --set "config.server.base_url=http://${svc_host}" \
+            --set "job.serviceAccountName=$KSA_NAME" \
+            --set "job.image.tag=latest" \
+            --set "config.storage.google_cloud_storage.bucket_name=${GCS_BUCKET}" \
+            --set "config.storage.google_cloud_storage.path=${NAMESPACE}/${TIMESTAMP}" \
+            --set "gcsPath=${GCS_BUCKET}/datasets/billsum_conversations.json" \
+            --set "config.data.path=/gcsDataset/gcs-dataset.json" \
+            --set-string 'job.resources.limits.nvidia\.com/gpu=1'
+
+      - name: Wait for benchmarking job to finish
+        run: |
+          job_name=multilora-benchmark-inference-perf-job
+          TIMEOUT_DURATION="7200s"
+          if ! kubectl wait --for=condition=complete job/"$job_name" -n "$NAMESPACE" --timeout="$TIMEOUT_DURATION"; then
+            echo "Error: Benchmark job $job_name did not complete successfully within $TIMEOUT_DURATION." >&2
+            echo "--- Job Description ---" >&2
+            kubectl describe job "$job_name" -n "$NAMESPACE" >&2
+            echo "--- Pod Logs (Last 50 lines) ---" >&2
+            kubectl logs -l job-name="$job_name" -n "$NAMESPACE" --all-containers=true --tail 50 >&2
+            exit 1
+          fi
+          echo "✅ Benchmarking Job Completed."
+
+      - name: Analyze Benchmarking Results
+        run: |
+          cd benchmarking
+          source .venv/bin/activate
+
+          benchmark_id='multilora' ./download-results.bash gcs $GCS_BUCKET ${NAMESPACE}/${TIMESTAMP}
+          inference-perf --analyze output/default-run/multilora/results/json/${TIMESTAMP}
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarking-artifacts
+          path: benchmarking/output/default-run/multilora/results/json/**/*
+
+      - name: Comment on PR
+        if: steps.check_pr.outputs.is_pr == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cd benchmarking/output/default-run/multilora/results/json/${TIMESTAMP}
+          FILE_LIST=$(ls | sed 's/^/- /')
+
+          COMMENT_BODY=$(cat <<EOF
+          ✅ **Benchmarking Job Completed!**
+          
+          You can find the benchmarking artifacts in the [Workflow Summary](https://github.com{{ github.repository }}/actions/runs/$RUN_ID).
+          
+          **Files generated:**
+          $FILE_LIST
+          EOF
+          )
+
+          gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+
+      - name: Collect and upload Kubernetes pod logs
+        if: always()
+        run: |
+            mkdir -p pod-logs-inference-multilora
+            cd pod-logs-inference-multilora
+            echo "Fetching ${NAMESPACE} pods log..."
+            kubectl get pods -n "${NAMESPACE}" --no-headers -o custom-columns=":metadata.name" \
+            | xargs -I{} sh -c 'kubectl logs --all-containers=true -n "${NAMESPACE}" {} > "{}.log" 2>&1'
+            echo "Fetching ${NAMESPACE} pods descriptions..."
+            kubectl get pods -n "${NAMESPACE}" --no-headers -o custom-columns=":metadata.name" \
+            | xargs -I{} sh -c 'kubectl describe pod -n "${NAMESPACE}" {} > "{}-describe.log" 2>&1'
+            mv ~/igw-multilora-deployment.log . || true
+            mv ~/install-deps.log . || true
+
+      - name: Upload pod logs as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: igw-pod-logs-inference-multilora-${{ matrix.accelerator.name }}
+          path: pod-logs-inference-multilora
+
+      - name: Send Google Chat notification on failure
+        if: failure()
+        uses: SimonScholz/google-chat-action@3b3519e5102dba8aa5046fd711c4b553586409bb
+        with:
+          webhookUrl: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+          jobStatus: ${{ job.status }}
+          title: '${{ github.workflow }} - ${{ matrix.accelerator.name }}'
+
+      - name: Cleanup deployment
+        if: always()
+        run: |
+          GATEWAY_NAME=inference-gateway
+          helm uninstall ${DEPLOYMENT_NAME} -n ${NAMESPACE} --ignore-not-found
+          helm uninstall multilora-benchmark -n ${NAMESPACE} --ignore-not-found
+          kubectl delete httproute llm-route -n ${NAMESPACE} --ignore-not-found
+          kubectl delete gateway ${GATEWAY_NAME} -n ${NAMESPACE} --ignore-not-found
+          kubectl delete deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} --ignore-not-found

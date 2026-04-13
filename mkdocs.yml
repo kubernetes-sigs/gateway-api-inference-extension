@@ -93,6 +93,7 @@ nav:
       - Prefix Cache Aware: performance/benchmark/advanced-configs/prefix-cache-aware.md
       - Decode Heavy Workload: performance/benchmark/advanced-configs/decode-heavy-workload.md
       - Prefill Heavy Workload: performance/benchmark/advanced-configs/prefill-heavy-workload.md
+      - Multilora Workload: performance/benchmark/advanced-configs/multilora-workload.md
     - Regression Testing: performance/regression-testing/index.md
   - Reference:
     - v1 API Reference: reference/spec.md

@@ -1,0 +1,140 @@
+# Multilora Configuration
+job:
+  image:
+    repository: quay.io/inference-perf/inference-perf
+    tag: "" # Defaults to .Chart.AppVersion
+  nodeSelector: {}
+  serviceAccountName: ""
+  # Example resources:
+  # resources:
+  #   requests:
+  #     cpu: "1"
+  #     memory: "4Gi"
+  #   limits:
+  #     cpu: "2"
+  #     memory: "8Gi"
+  resources: {}
+
+logLevel: INFO
+
+# A GCS bucket path that points to the dataset file.
+# The file will be copied from this path to the local file system
+# at /gcsDataset/gcs-dataset.json for use during the run.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /gcsDataset/gcs-dataset.json.
+# Format: bucket-name/folder/to/dataset/file
+gcsPath: ""
+
+# An S3 bucket path that points to the dataset file.
+# The file will be copied from this path to the local file system
+# at /s3Dataset/s3-dataset.json for use during the run.
+# NOTE: For this dataset to be used, config.data.path must also be explicitly set to /s3Dataset/s3-dataset.json.
+# Format: bucket-name/folder/to/dataset/file
+s3Path: ""
+
+# Optional Token configuration for Hugging Face authentication.
+# hfSecret: Configures a pre-existing Kubernetes Secret.
+# hfToken: Creates a new kubernetes secret with the specified token.
+# If both specified, 'hfSecret' takes precedence over 'hfToken'.
+token:
+  hfSecret:
+    name: "" # The name of the existing Secret (e.g., 'my-hf-secret').
+    key: ""  # The key within the Secret that holds the token value (e.g., 'token' or 'hf-token').
+  hfToken: ""
+
+config:
+  load:
+    type: poisson
+    worker_max_concurrency: 1000
+    stages:
+      # Warmup — seat residents (~1×S)
+      - rate: 15
+        duration: 60            # 15*60  = 900
+
+      - rate: 10
+        duration: 30
+      - rate: 15
+        duration: 30
+      - rate: 20
+        duration: 48
+      - rate: 25
+        duration: 40
+      - rate: 30
+        duration: 35
+      - rate: 35
+        duration: 31
+      - rate: 40
+        duration: 48
+      - rate: 45
+        duration: 46
+      - rate: 50
+        duration: 40
+      - rate: 55
+        duration: 37
+      - rate: 60
+        duration: 35
+
+    lora_traffic_split:
+      - name: "adapter-0"
+        split: 0.12
+      - name: "adapter-1"
+        split: 0.12
+      - name: "adapter-2"
+        split: 0.12
+      - name: "adapter-3"
+        split: 0.12
+      - name: "adapter-4"
+        split: 0.12
+      - name: "adapter-5"
+        split: 0.06
+      - name: "adapter-6"
+        split: 0.06
+      - name: "adapter-7"
+        split: 0.06
+      - name: "adapter-8"
+        split: 0.06
+      - name: "adapter-9"
+        split: 0.06
+      - name: "adapter-10"
+        split: 0.02
+      - name: "adapter-11"
+        split: 0.02
+      - name: "adapter-12"
+        split: 0.02
+      - name: "adapter-13"
+        split: 0.02
+      - name: "adapter-14"
+        split: 0.02
+  api:
+    type: completion
+    streaming: true
+  server:
+    type: vllm
+    model_name: Qwen/Qwen3-32B
+    base_url: "http://0.0.0.0:8000"
+    ignore_eos: true
+  tokenizer:
+    pretrained_model_name_or_path: Qwen/Qwen3-32B
+  data:
+    type: billsum_conversations
+    path: ""
+    input_distribution:
+      max: 2048
+    output_distribution:
+      max: 128
+  metrics:
+    type: prometheus
+    prometheus:
+      google_managed: true
+  report:
+    request_lifecycle:
+      summary: true
+      per_stage: true
+      per_request: false 
+      per_adapter: true
+      per_adapter_stage: true
+    prometheus:
+      summary: true
+      per_stage: true
+      per_request: false 
+      per_adapter: true
+      per_adapter_stage: true

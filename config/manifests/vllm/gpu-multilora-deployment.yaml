@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen3-32b
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: vllm-qwen3-32b
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen3-32b
+        inference.networking.k8s.io/engine-type: vllm
+    spec:
+      containers:
+        - name: vllm
+          image: "vllm/vllm-openai:latest"
+          imagePullPolicy: Always
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+          - "--model"
+          - "Qwen/Qwen3-32B-AWQ"
+          - "--served-model-name"
+          - "Qwen/Qwen3-32B"
+          - "--tensor-parallel-size"
+          - "2"
+          - "--enable-lora"
+          - "--max-loras"
+          - "15"
+          - "--max-lora-rank"
+          - "64"
+          - "--gpu-memory-utilization"
+          - "0.85"
+          - "--max-model-len"
+          - "32768"
+          - --lora-modules
+          - adapter-0=/adapters/adapter-0
+          - adapter-1=/adapters/adapter-1
+          - adapter-2=/adapters/adapter-2
+          - adapter-3=/adapters/adapter-3
+          - adapter-4=/adapters/adapter-4
+          - adapter-5=/adapters/adapter-5
+          - adapter-6=/adapters/adapter-6
+          - adapter-7=/adapters/adapter-7
+          - adapter-8=/adapters/adapter-8
+          - adapter-9=/adapters/adapter-9
+          - adapter-10=/adapters/adapter-10
+          - adapter-11=/adapters/adapter-11
+          - adapter-12=/adapters/adapter-12
+          - adapter-13=/adapters/adapter-13
+          - adapter-14=/adapters/adapter-14
+          env:
+            - name: VLLM_USE_V1
+              value: "1"
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
+            - name: VLLM_PLUGINS
+              value: "lora_filesystem_resolver"
+            - name: VLLM_LORA_RESOLVER_CACHE_DIR
+              value: "/adapters"
+          resources:
+            limits:
+              nvidia.com/gpu: 2
+              cpu: "16"
+              memory: "128Gi"
+            requests:
+              nvidia.com/gpu: 2
+              cpu: "16"
+              memory: "128Gi"
+          startupProbe:
+            httpGet: { path: /health, port: 8000 }
+            failureThreshold: 120
+            periodSeconds: 5
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+            - name: adapters
+              mountPath: "/adapters"
+
+      initContainers:
+        - name: pull-lora
+          image: alpine/git
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            # Loop to create 15 folders (adapter-0 to adapter-14)
+            for i in $(seq 0 14); do
+              echo "Setting up adapter-${i}..."
+              mkdir -p /adapters/adapter-${i}
+              git clone --depth 1 https://huggingface.co/ttt421/nec119-small-segment-lora /adapters/adapter-${i}
+            done
+          volumeMounts:
+            - name: adapters
+              mountPath: /adapters
+
+      volumes:
+        - name: shm
+          # Increased for Tensor Parallelism communication
+          emptyDir: { medium: Memory, sizeLimit: "20Gi" }
+        - name: adapters
+          emptyDir: {}

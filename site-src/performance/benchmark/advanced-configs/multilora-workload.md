@@ -1,5 +1,5 @@
-# Prefill Heavy Workload Benchmarking
-This guide shows how to deploy a prefill-heavy benchmarking config using inference-perf.
+# Multilora Workload Benchmarking
+This guide shows how to deploy a multilora benchmarking config using inference-perf.
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ The chart uses the `billsum_conversations` [dataset type](https://huggingface.co
 
 ```bash
 git clone https://github.com/kubernetes-sigs/gateway-api-inference-extension
-cd gateway-api-inference-extension/benchmarking/single-workload
+cd gateway-api-inference-extension/benchmarking/multilora-workload
 ```
 
 ### 2. Get the target IP. 
@@ -41,9 +41,9 @@ cd gateway-api-inference-extension/benchmarking/single-workload
   echo $SVC_IP
   ```
 
-### 3. Deploying the Prefill Heavy Configuration
+### 3. Deploying the Multilora Configuration
 
-This configuration is optimized for scenarios where a high cache hit rate is expected. It uses the `prefill-heavy-values.yaml` file.
+This configuration is optimized for scenarios where a high cache hit rate is expected. It uses the `multilora-values.yaml` file.
 
 === "Google Cloud Storage (GCS)"
     Use the `gcsPath` field to provide your dataset stored on GCS. The dataset will be downloaded from the bucket and stored locally on the cluster at `/dataset/gcs-dataset.json`. 
@@ -58,7 +58,7 @@ This configuration is optimized for scenarios where a high cache hit rate is exp
     export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
     export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
 
-    helm install prefill-heavy ../inference-perf -f prefill-heavy-values.yaml \
+    helm install multilora-benchmark ../inference-perf -f multilora-values.yaml \
       --set "config.server.base_url=http://${IP}:${PORT}" \
       --set "config.data.path=/dataset/gcs-dataset.json" \
       --set "gcsPath=<PATH TO DATASET FILE ON GCS BUCKET>"
@@ -73,7 +73,7 @@ This configuration is optimized for scenarios where a high cache hit rate is exp
     ```
     **Parameters to customize:**
     
-    *   `prefill-heavy`: A unique name for this deployment.
+    *   `multilora-benchmark`: A unique name for this deployment.
     *   `token.hfToken`: Your hugging face token. Inference Perf chart will create a new kubernetes secret containing this token.
     *   `hfSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
     *   `hfSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
@@ -93,7 +93,7 @@ This configuration is optimized for scenarios where a high cache hit rate is exp
     export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
     export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
 
-    helm install prefill-heavy ../inference-perf -f prefill-heavy-values.yaml \
+    helm install multilora-benchmark ../inference-perf -f multilora-values.yaml \
       --set "config.server.base_url=http://${IP}:${PORT}" \
       --set "config.data.path=/dataset/s3-dataset.json" \
       --set "s3Path=<PATH TO DATASET FILE ON S3 BUCKET>"
@@ -109,7 +109,7 @@ This configuration is optimized for scenarios where a high cache hit rate is exp
 
     **Parameters to customize:**
     
-    *   `prefill-heavy`: A unique name for this deployment.
+    *   `multilora-benchmark`: A unique name for this deployment.
     *   `token.hfToken`: Your hugging face token. Inference Perf chart will create a new kubernetes secret containing this token.
     *   `hfSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
     *   `hfSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
@@ -121,7 +121,7 @@ This configuration is optimized for scenarios where a high cache hit rate is exp
 To uninstall the deployed charts:
 
 ```bash
-helm uninstall prefill-heavy
+helm uninstall multilora-benchmark
 ```
 
 ## Post Benchmark Analysis
@@ -139,4 +139,4 @@ The following E2E test runs on GitHub using GitHub Actions.
 
 | Test name	| Link | PR comment trigger
 | :--- | :--- | :--- |
-| GKE Prefill Heavy Test | https://github.com/gateway-api-inference-extension/.github/workflows/e2e-prefill-heavy-gke.yaml | /run-gke-prefill-heavy |
+| GKE Multilora Test | https://github.com/gateway-api-inference-extension/.github/workflows/e2e-multilora-gke.yaml | /run-gke-multilora |
