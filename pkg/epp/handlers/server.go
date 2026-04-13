@@ -196,12 +196,15 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	// This avoids spawning a new goroutine per message and allows the main loop to
 	// select on both incoming messages and the eviction channel.
 	recvCh := make(chan recvResult, 1)
+	// Capture the stream context's Done channel before ctx is reassigned in the main loop.
+	// This avoids a data race between the reader goroutine reading ctx and the main loop writing it.
+	streamDone := srv.Context().Done()
 	go func() {
 		for {
 			req, err := srv.Recv()
 			select {
 			case recvCh <- recvResult{req: req, err: err}:
-			case <-ctx.Done():
+			case <-streamDone:
 				return
 			}
 			if err != nil {
