@@ -49,10 +49,10 @@ func InFlightLoadProducerFactory(name string, _ json.RawMessage, _ fwkplugin.Han
 }
 
 var (
-	_ requestcontrol.PreRequest        = &InFlightLoadProducer{}
-	_ requestcontrol.ResponseBody      = &InFlightLoadProducer{}
-	_ requestcontrol.PrepareDataPlugin = &InFlightLoadProducer{}
-	_ datalayer.NotificationExtractor  = &InFlightLoadProducer{}
+	_ requestcontrol.PreRequest            = &InFlightLoadProducer{}
+	_ requestcontrol.ResponseBodyProcessor = &InFlightLoadProducer{}
+	_ requestcontrol.DataProducer          = &InFlightLoadProducer{}
+	_ datalayer.NotificationExtractor      = &InFlightLoadProducer{}
 )
 
 type InFlightLoadProducer struct {

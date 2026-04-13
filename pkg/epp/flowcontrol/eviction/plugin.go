@@ -33,7 +33,7 @@ import (
 )
 
 var _ requestcontrol.PreRequest = &Plugin{}
-var _ requestcontrol.ResponseBody = &Plugin{}
+var _ requestcontrol.ResponseBodyProcessor = &Plugin{}
 
 // Plugin tracks in-flight requests via RequestControl hooks and provides eviction capability.
 type Plugin struct {

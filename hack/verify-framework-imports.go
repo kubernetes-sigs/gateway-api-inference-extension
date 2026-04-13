@@ -60,41 +60,6 @@ var currentCodeExceptionMap = map[string][]string{
 	"pkg/epp/framework/plugins/requestcontrol/test/responsereceived/destination_endpoint_served_verifier_test.go": {
 		"pkg/epp/metadata",
 	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/headers.go": {
-		"pkg/epp/util/error",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/latencypredictor_helper.go": {
-		"pkg/epp/metrics",
-		"pkg/epp/util/request",
-		"sidecars/latencypredictorasync",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/latencypredictor_helper_test.go": {
-		"sidecars/latencypredictorasync",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/prediction.go": {
-		"sidecars/latencypredictorasync",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/prediction_test.go": {
-		"sidecars/latencypredictorasync",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/requestcontrol_hooks.go": {
-		"pkg/epp/metrics",
-		"pkg/epp/util/request",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/requestcontrol_hooks_test.go": {
-		"pkg/epp/util/request",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/scorer.go": {
-		"sidecars/latencypredictorasync",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/scorer_helpers.go": {
-		"pkg/epp/util/error",
-	},
-	"pkg/epp/framework/plugins/scheduling/scorer/predictedlatency/scorer_test.go": {
-		"pkg/epp/util/request",
-		"sidecars/latencypredictorasync",
-		"test/utils",
-	},
 	"pkg/epp/framework/plugins/scheduling/scorer/prefix/plugin.go": {
 		"pkg/epp/metrics",
 	},

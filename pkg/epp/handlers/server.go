@@ -55,7 +55,7 @@ func NewStreamingServer(datastore Datastore, director Director, parser fwkrh.Par
 }
 
 type Director interface {
-	HandleRequest(ctx context.Context, reqCtx *RequestContext) (*RequestContext, error)
+	HandleRequest(ctx context.Context, reqCtx *RequestContext, inferenceRequestBody *fwkrh.InferenceRequestBody) (*RequestContext, error)
 	HandleResponseHeader(ctx context.Context, reqCtx *RequestContext) *RequestContext
 	HandleResponseBody(ctx context.Context, reqCtx *RequestContext, endOfStream bool) *RequestContext
 	GetRandomEndpoint() *fwkdl.EndpointMetadata
@@ -238,7 +238,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				reqCtx.RequestSize = len(body)
 				body = []byte{}
 
-				reqCtx, err = s.director.HandleRequest(ctx, reqCtx)
+				inferenceRequestBody, parseErr := s.parser.ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
+				if parseErr != nil {
+					err = errcommon.Error{Code: errcommon.BadRequest, Msg: parseErr.Error()}
+					logger.Error(err, "Error parsing request")
+					break
+				}
+
+				reqCtx, err = s.director.HandleRequest(ctx, reqCtx, inferenceRequestBody)
 				if err != nil {
 					logger.Error(err, "Error handling request")
 					break

@@ -136,7 +136,7 @@ inferenceExtension:
 ```
 
 #### Example: Latency-Based Routing Enabled
-Use this if `inferenceExtension.latencyPredictor.enabled` is set to `true`. Note the inclusion of `featureGates`.
+Use this if `inferenceExtension.latencyPredictor.enabled` is set to `true`. See the [Latency-Based Request Scheduling guide](./latency-based-predictor.md) for details on the plugins used below.
 
 ```yaml
 inferenceExtension:
@@ -146,23 +146,17 @@ inferenceExtension:
       apiVersion: inference.networking.x-k8s.io/v1alpha1
       kind: EndpointPickerConfig
       plugins:
-      - type: queue-scorer
-      - type: kv-cache-utilization-scorer
-      - type: prefix-cache-scorer
-        parameters:
-          blockSize: 64 # Match your setup
-          maxPrefixBlocksToMatch: 512 # Match your setup
-          lruCapacityPerServer: 31250 # Match your setup
-      - type: predicted-latency-scorer
-        parameters:
-          # Include your latency predictor parameters here
-          samplingMean: 1000.0
+      - type: predicted-latency-producer
+      - type: prefix-cache-affinity-filter
+      - type: latency-scorer
+      - type: weighted-random-picker
       schedulingProfiles:
       - name: default
         plugins:
-        - pluginRef: predicted-latency-scorer
-      featureGates:
-      - prepareDataPlugins
+        - pluginRef: predicted-latency-producer
+        - pluginRef: prefix-cache-affinity-filter
+        - pluginRef: latency-scorer
+        - pluginRef: weighted-random-picker
 ```
 
 See the [Prefix Cache Aware Plugin Customization](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/prefix-aware/#customize-the-prefix-cache-plugin) for a detailed explanation of each parameter.

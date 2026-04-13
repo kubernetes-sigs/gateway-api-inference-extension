@@ -36,7 +36,7 @@ const (
 	DestinationEndpointServedVerifierType = "destination-endpoint-served-verifier"
 )
 
-var _ requestcontrol.ResponseHeader = &DestinationEndpointServedVerifier{}
+var _ requestcontrol.ResponseHeaderProcessor = &DestinationEndpointServedVerifier{}
 
 // DestinationEndpointServedVerifier is a test-only plugin for conformance tests.
 // It verifies that the request was served by the expected endpoint.

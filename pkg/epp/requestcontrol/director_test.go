@@ -656,7 +656,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
 				endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(ds), time.Minute)
-				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, openai.NewOpenAIParser(), endpointCandidates, config)
+				director := NewDirectorWithConfig(ds, mockSched, test.mockAdmissionController, endpointCandidates, config)
 				if test.name == "successful request with model rewrite" {
 					mockDs := &mockDatastore{
 						pods:     ds.PodList(datastore.AllPodsPredicate),
@@ -688,7 +688,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 					reqCtx.Request.Headers[":path"] = "/v1/chat/completions"
 				}
 
-				returnedReqCtx, err := director.HandleRequest(ctx, reqCtx)
+				inferenceRequestBody, parseErr := openai.NewOpenAIParser().ParseRequest(ctx, reqCtx.Request.RawBody, reqCtx.Request.Headers)
+				var returnedReqCtx *handlers.RequestContext
+				if parseErr != nil {
+					err = errcommon.Error{Code: errcommon.BadRequest, Msg: parseErr.Error()}
+				} else {
+					returnedReqCtx, err = director.HandleRequest(ctx, reqCtx, inferenceRequestBody)
+				}
 
 				if test.wantErrCode != "" {
 					assert.Error(t, err, "HandleRequest() should have returned an error")
@@ -968,7 +974,7 @@ func TestDirector_ApplyWeightedModelRewrite(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			mockDs := &mockDatastore{rewrites: test.rewrites}
 			endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(mockDs), time.Minute)
-			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, nil, endpointCandidates, NewConfig())
+			director := NewDirectorWithConfig(mockDs, &mockScheduler{}, &mockAdmissionController{}, endpointCandidates, NewConfig())
 
 			reqCtx := &handlers.RequestContext{
 				IncomingModelName: test.incomingModel,
@@ -1073,7 +1079,6 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 		ds,
 		mockSched,
 		&mockAdmissionController{},
-		nil,
 		endpointCandidates,
 		NewConfig().WithResponseReceivedPlugins(pr1),
 	)
@@ -1111,7 +1116,7 @@ func TestDirector_HandleResponseBody(t *testing.T) {
 	ds := datastore.NewDatastore(t.Context(), nil, 0)
 	mockSched := &mockScheduler{}
 	endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(ds), time.Minute)
-	director := NewDirectorWithConfig(ds, mockSched, nil, nil, endpointCandidates, NewConfig().WithResponseStreamingPlugins(ps1))
+	director := NewDirectorWithConfig(ds, mockSched, nil, endpointCandidates, NewConfig().WithResponseStreamingPlugins(ps1))
 
 	reqCtx := &handlers.RequestContext{
 		Request: &handlers.Request{

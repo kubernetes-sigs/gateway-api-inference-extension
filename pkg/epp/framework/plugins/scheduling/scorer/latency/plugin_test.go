@@ -41,7 +41,7 @@ func makeLatencyScorerEndpoint(name string, kvCache float64, queueSize, runningR
 
 func setLatencyPrediction(ep framework.Endpoint, ttftValid, tpotValid bool, ttftHeadroom, tpotHeadroom, ttft, tpot float64) {
 	ep.Put(attrlatency.LatencyPredictionInfoKey,
-		attrlatency.NewLatencyPredictionInfo(ttftValid, tpotValid, ttftHeadroom, tpotHeadroom, ttft, tpot))
+		attrlatency.NewLatencyPredictionInfo(ttftValid, tpotValid, ttftHeadroom, tpotHeadroom, ttft, tpot, 0))
 }
 
 // noExploreConfig returns default config for deterministic tests.
@@ -141,9 +141,9 @@ func TestScoreIdlePodPreference(t *testing.T) {
 	// Same predictions — both negative, same deficit.
 	// Use dispatch count for idle detection (matches EPP internal queue).
 	epBusy.Put(attrlatency.LatencyPredictionInfoKey,
-		attrlatency.NewLatencyPredictionInfoWithDispatch(false, false, -50, -10, 150, 40, 5))
+		attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40, 5))
 	epIdle.Put(attrlatency.LatencyPredictionInfoKey,
-		attrlatency.NewLatencyPredictionInfoWithDispatch(false, false, -50, -10, 150, 40, 0))
+		attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40, 0))
 
 	endpoints := []framework.Endpoint{epBusy, epIdle}
 	scores := scorer.Score(context.Background(), framework.NewCycleState(), nil, endpoints)

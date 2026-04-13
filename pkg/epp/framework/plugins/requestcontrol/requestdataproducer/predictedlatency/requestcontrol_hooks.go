@@ -35,8 +35,8 @@ import (
 )
 
 var _ requestcontrol.PreRequest = &PredictedLatency{}
-var _ requestcontrol.ResponseHeader = &PredictedLatency{}
-var _ requestcontrol.ResponseBody = &PredictedLatency{}
+var _ requestcontrol.ResponseHeaderProcessor = &PredictedLatency{}
+var _ requestcontrol.ResponseBodyProcessor = &PredictedLatency{}
 
 // --- RequestControl Hooks ---
 

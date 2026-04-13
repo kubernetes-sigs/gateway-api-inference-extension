@@ -77,16 +77,16 @@ func pluginToLayerExecutionOrder(plugin plugin.Plugin) int {
 	}
 
 	// Request control plugins
-	if _, ok := plugin.(fwkrq.PrepareDataPlugin); ok {
+	if _, ok := plugin.(fwkrq.DataProducer); ok {
 		return RequestControlLayer
 	}
-	if _, ok := plugin.(fwkrq.AdmissionPlugin); ok {
+	if _, ok := plugin.(fwkrq.Admitter); ok {
 		return RequestControlLayer
 	}
 	if _, ok := plugin.(fwkrq.PreRequest); ok {
 		return RequestControlLayer
 	}
-	if _, ok := plugin.(fwkrq.ResponseHeader); ok {
+	if _, ok := plugin.(fwkrq.ResponseHeaderProcessor); ok {
 		return RequestControlLayer
 	}
 

@@ -82,7 +82,7 @@ func TestAdmitRequest(t *testing.T) {
 			setupFn: func(endpoints []schedulingtypes.Endpoint) {
 				// All invalid predictions
 				endpoints[0].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40))
+					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40, 0))
 			},
 			wantErr: false,
 		},
@@ -103,9 +103,9 @@ func TestAdmitRequest(t *testing.T) {
 			},
 			setupFn: func(endpoints []schedulingtypes.Endpoint) {
 				endpoints[0].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40))
+					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40, 0))
 				endpoints[1].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -30, -5, 130, 35))
+					attrlatency.NewLatencyPredictionInfo(false, false, -30, -5, 130, 35, 0))
 			},
 			wantErr: true,
 		},
@@ -118,9 +118,9 @@ func TestAdmitRequest(t *testing.T) {
 			},
 			setupFn: func(endpoints []schedulingtypes.Endpoint) {
 				endpoints[0].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40))
+					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40, 0))
 				endpoints[1].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -30, -5, 130, 35))
+					attrlatency.NewLatencyPredictionInfo(false, false, -30, -5, 130, 35, 0))
 			},
 			wantErr: false,
 		},
@@ -133,9 +133,9 @@ func TestAdmitRequest(t *testing.T) {
 			},
 			setupFn: func(endpoints []schedulingtypes.Endpoint) {
 				endpoints[0].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40))
+					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40, 0))
 				endpoints[1].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -30, -5, 130, 35))
+					attrlatency.NewLatencyPredictionInfo(false, false, -30, -5, 130, 35, 0))
 			},
 			wantErr: false,
 		},
@@ -148,9 +148,9 @@ func TestAdmitRequest(t *testing.T) {
 			},
 			setupFn: func(endpoints []schedulingtypes.Endpoint) {
 				endpoints[0].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40))
+					attrlatency.NewLatencyPredictionInfo(false, false, -50, -10, 150, 40, 0))
 				endpoints[1].Put(attrlatency.LatencyPredictionInfoKey,
-					attrlatency.NewLatencyPredictionInfo(true, true, 20, 5, 80, 25)) // valid
+					attrlatency.NewLatencyPredictionInfo(true, true, 20, 5, 80, 25, 0)) // valid
 			},
 			wantErr: false,
 		},

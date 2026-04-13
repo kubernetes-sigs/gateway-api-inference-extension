@@ -29,7 +29,7 @@ import (
 	attrprefix "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/datalayer/attribute/prefix"
 )
 
-var _ requestcontrol.PrepareDataPlugin = &PredictedLatency{}
+var _ requestcontrol.DataProducer = &PredictedLatency{}
 
 // PrepareRequestData prepares the SLO context for the request, including
 // parsing SLO headers, gathering prefix cache scores, and generating predictions.
@@ -69,7 +69,7 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		// Store predictions in endpoint attributes
 		for _, pred := range predictions {
 			if pred.Endpoint != nil {
-				latencyInfo := attrlatency.NewLatencyPredictionInfoWithDispatch(
+				latencyInfo := attrlatency.NewLatencyPredictionInfo(
 					pred.TTFTValid,
 					pred.TPOTValid,
 					pred.TTFTHeadroom,

@@ -40,7 +40,7 @@ const (
 )
 
 // compile-time validation
-var _ requestcontrol.AdmissionPlugin = &LatencyAdmission{}
+var _ requestcontrol.Admitter = &LatencyAdmission{}
 
 // LatencyAdmissionConfig holds configuration for the latency admission plugin.
 type LatencyAdmissionConfig struct{}

@@ -17,10 +17,8 @@ limitations under the License.
 package registry
 
 import (
-	"cmp"
 	"context"
 	"fmt"
-	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -105,11 +103,8 @@ type FlowRegistry struct {
 
 	// --- Administrative state (protected by `mu`) ---
 
-	mu             sync.RWMutex
-	activeShards   []*registryShard
-	drainingShards map[string]*registryShard
-	allShards      []*registryShard // Cached, sorted combination of Active and Draining shards
-	nextShardID    uint64
+	mu    sync.RWMutex
+	shard *registryShard
 }
 
 var _ contracts.FlowRegistry = &FlowRegistry{}
@@ -131,10 +126,8 @@ func withClock(clk clock.WithTickerAndDelayedExecution) RegistryOption {
 func NewFlowRegistry(config *Config, logger logr.Logger, opts ...RegistryOption) (*FlowRegistry, error) {
 	cfg := config.Clone()
 	fr := &FlowRegistry{
-		config:         cfg,
-		logger:         logger.WithName("flow-registry"),
-		activeShards:   []*registryShard{},
-		drainingShards: make(map[string]*registryShard),
+		config: cfg,
+		logger: logger.WithName("flow-registry"),
 	}
 
 	for _, opt := range opts {
@@ -148,8 +141,8 @@ func NewFlowRegistry(config *Config, logger logr.Logger, opts ...RegistryOption)
 		fr.perPriorityBandStats.Store(prio, &bandStats{})
 	}
 
-	if err := fr.updateShardCount(cfg.InitialShardCount); err != nil {
-		return nil, fmt.Errorf("failed to initialize shards: %w", err)
+	if err := fr.createShard(); err != nil {
+		return nil, fmt.Errorf("failed to initialize shard: %w", err)
 	}
 	fr.logger.V(logging.DEFAULT).Info("FlowRegistry initialized successfully")
 	return fr, nil
@@ -261,14 +254,12 @@ func (fr *FlowRegistry) ensureFlowInfrastructure(key flowcontrol.FlowKey) error 
 	fr.mu.RLock()
 	defer fr.mu.RUnlock()
 
-	components, err := fr.buildFlowComponents(key, len(fr.allShards))
+	components, err := fr.buildFlowComponents(key, 1)
 	if err != nil {
 		return err
 	}
 
-	for i, shard := range fr.allShards {
-		shard.synchronizeFlow(key, components[i].policy, components[i].queue)
-	}
+	fr.shard.synchronizeFlow(key, components[0].policy, components[0].queue)
 
 	fr.logger.V(logging.DEBUG).Info("JIT provisioned flow infrastructure", "flowKey", key)
 	return nil
@@ -298,9 +289,7 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 
 	fr.repartitionShardConfigsLocked()
 
-	for _, shard := range fr.activeShards {
-		shard.addPriorityBand(priority)
-	}
+	fr.shard.addPriorityBand(priority)
 
 	return nil
 }
@@ -346,14 +335,8 @@ func (fr *FlowRegistry) Stats() contracts.AggregateStats {
 
 // ShardStats returns a slice of statistics, one for each internal shard.
 func (fr *FlowRegistry) ShardStats() []contracts.ShardStats {
-	fr.mu.RLock()
-	allShards := fr.allShards
-	fr.mu.RUnlock()
-
-	shardStats := make([]contracts.ShardStats, len(allShards))
-	for i, s := range allShards {
-		shardStats[i] = s.Stats()
-	}
+	shardStats := make([]contracts.ShardStats, 1)
+	shardStats[0] = fr.shard.Stats()
 	return shardStats
 }
 
@@ -364,7 +347,6 @@ func (fr *FlowRegistry) executeGCCycle() {
 	fr.logger.V(logging.DEBUG).Info("Starting periodic GC scan")
 	fr.gcFlows()
 	fr.gcPriorityBands()
-	fr.sweepDrainingShards()
 }
 
 // gcFlows removes idle flows.
@@ -400,9 +382,7 @@ func (fr *FlowRegistry) cleanupFlowResources(keys []flowcontrol.FlowKey) {
 		if _, exists := fr.flowStates.Load(key); exists {
 			continue // 'Zombie' flow
 		}
-		for _, shard := range fr.allShards {
-			shard.deleteFlow(key)
-		}
+		fr.shard.deleteFlow(key)
 	}
 }
 
@@ -442,78 +422,24 @@ func (fr *FlowRegistry) cleanupPriorityBandResources(priorities []int) {
 		// Delete from stats tracking
 		fr.perPriorityBandStats.Delete(priority)
 
-		// Delete from all shards (both active and draining)
-		for _, shard := range fr.allShards {
-			shard.deletePriorityBand(priority)
-		}
+		// Delete from the shard
+		fr.shard.deletePriorityBand(priority)
 
 		fr.logger.V(logging.DEFAULT).Info("Successfully deleted priority band", "priority", priority)
 	}
 }
 
-// sweepDrainingShards finalizes the removal of drained shards.
-func (fr *FlowRegistry) sweepDrainingShards() {
-	// Acquire a full write lock on the registry as we may be modifying the shard topology.
-	fr.mu.Lock()
-	defer fr.mu.Unlock()
-
-	var shardsToDelete []string
-	for id, shard := range fr.drainingShards {
-		// A Draining shard is ready for GC once it is completely empty.
-		// Draining shards do not accept new work (enforced at `managedQueue.Add`), so `shard.totalLen.Load()` can only
-		// monotonically decrease.
-		if shard.totalLen.Load() == 0 {
-			shardsToDelete = append(shardsToDelete, id)
-		}
-	}
-
-	if len(shardsToDelete) > 0 {
-		fr.logger.V(logging.DEBUG).Info("Garbage collecting drained shards", "shardIDs", shardsToDelete)
-		for _, id := range shardsToDelete {
-			delete(fr.drainingShards, id)
-		}
-		fr.updateAllShardsCacheLocked()
-	}
-}
-
 // --- Shard Management (Scaling) ---
 
-// updateShardCount dynamically adjusts the number of internal state shards.
-func (fr *FlowRegistry) updateShardCount(n int) error {
-	if n <= 0 {
-		return fmt.Errorf("%w: shard count must be a positive integer, but got %d", contracts.ErrInvalidShardCount, n)
-	}
-
+// createShard creates the shard.
+func (fr *FlowRegistry) createShard() error {
 	// Use a full write lock as this is a major structural change to the shard topology.
 	fr.mu.Lock()
 	defer fr.mu.Unlock()
 
-	currentActiveShards := len(fr.activeShards)
-	if n == currentActiveShards {
-		return nil
-	}
-
-	if n > currentActiveShards {
-		return fr.executeScaleUpLocked(n)
-	}
-	fr.executeScaleDownLocked(n)
-	return nil
-}
-
-// executeScaleUpLocked handles adding new shards.
-// It pre-provisions all existing active flows onto the new shards to ensure continuity.
-func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
-	currentActive := len(fr.activeShards)
-	numToAdd := newTotalActive - currentActive
-	fr.logger.V(logging.DEFAULT).Info("Scaling up shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
-
-	// Prepare All New Shard Objects (Infallible):
-	newShards := make([]*registryShard, numToAdd)
-	for i := range numToAdd {
-		shardID := fmt.Sprintf("shard-%04d", fr.nextShardID+uint64(i))
-		partitionedConfig := fr.config.partition(currentActive+i, newTotalActive)
-		newShards[i] = newShard(shardID, partitionedConfig, fr.logger, fr.propagateStatsDelta)
-	}
+	// Prepare Shard Object (Infallible)
+	partitionedConfig := fr.config.partition(0, 1)
+	shard := newShard("shard-0", partitionedConfig, fr.logger, fr.propagateStatsDelta)
 
 	// Prepare All Components for All New Shards (Fallible):
 	// Pre-build every component for every existing flow on every new shard.
@@ -523,7 +449,7 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	var rangeErr error
 	fr.flowStates.Range(func(key, _ any) bool {
 		flowKey := key.(flowcontrol.FlowKey)
-		components, err := fr.buildFlowComponents(flowKey, len(newShards))
+		components, err := fr.buildFlowComponents(flowKey, 1)
 		if err != nil {
 			rangeErr = fmt.Errorf("failed to prepare components for flow %s on new shards: %w", flowKey, err)
 			return false
@@ -536,43 +462,19 @@ func (fr *FlowRegistry) executeScaleUpLocked(newTotalActive int) error {
 	}
 
 	// Commit (Infallible):
-	for i, shard := range newShards {
-		for key, components := range allComponents {
-			shard.synchronizeFlow(key, components[i].policy, components[i].queue)
-		}
+	for key, components := range allComponents {
+		shard.synchronizeFlow(key, components[0].policy, components[0].queue)
 	}
-	fr.activeShards = append(fr.activeShards, newShards...)
-	fr.nextShardID += uint64(numToAdd)
+	fr.shard = shard
 	fr.repartitionShardConfigsLocked()
-	fr.updateAllShardsCacheLocked()
 	return nil
-}
-
-// executeScaleDownLocked handles marking shards for graceful draining.
-// Expects the registry's write lock to be held.
-func (fr *FlowRegistry) executeScaleDownLocked(newTotalActive int) {
-	currentActive := len(fr.activeShards)
-	fr.logger.V(logging.DEFAULT).Info("Scaling down shards", "currentActive", currentActive, "newTotalActive", newTotalActive)
-
-	shardsToDrain := fr.activeShards[newTotalActive:]
-	fr.activeShards = fr.activeShards[:newTotalActive]
-	for _, shard := range shardsToDrain {
-		fr.drainingShards[shard.id] = shard
-		shard.markAsDraining()
-	}
-
-	fr.repartitionShardConfigsLocked()
-	fr.updateAllShardsCacheLocked()
 }
 
 // repartitionShardConfigsLocked updates the configuration for all active shards.
 // Expects the registry's write lock to be held.
 func (fr *FlowRegistry) repartitionShardConfigsLocked() {
-	numActive := len(fr.activeShards)
-	for i, shard := range fr.activeShards {
-		newPartitionedConfig := fr.config.partition(i, numActive)
-		shard.updateConfig(newPartitionedConfig)
-	}
+	newPartitionedConfig := fr.config.partition(0, 1)
+	fr.shard.updateConfig(newPartitionedConfig)
 }
 
 // --- Internal Helpers ---
@@ -601,27 +503,6 @@ func (fr *FlowRegistry) buildFlowComponents(key flowcontrol.FlowKey, numInstance
 		allComponents[i] = flowComponents{policy: bandConfig.OrderingPolicy, queue: q}
 	}
 	return allComponents, nil
-}
-
-// updateAllShardsCacheLocked recalculates the cached `allShards` slice.
-// It ensures the slice is sorted by shard ID to maintain a deterministic order.
-// Expects the registry's write lock to be held.
-func (fr *FlowRegistry) updateAllShardsCacheLocked() {
-	allShards := make([]*registryShard, 0, len(fr.activeShards)+len(fr.drainingShards))
-	allShards = append(allShards, fr.activeShards...)
-	for _, shard := range fr.drainingShards {
-		allShards = append(allShards, shard)
-	}
-
-	// Sort the combined slice by shard ID.
-	// This provides a stable, deterministic order for all consumers of the shard list, which is critical because map
-	// iteration for `drainingShards` is non-deterministic.
-	// While this is a lexicographical sort, our shard ID format is padded with leading zeros (e.g., "shard-0001"),
-	// ensuring that the string sort produces the same result as a natural numerical sort.
-	slices.SortFunc(allShards, func(a, b *registryShard) int {
-		return cmp.Compare(a.id, b.id)
-	})
-	fr.allShards = allShards
 }
 
 // propagateStatsDelta is the top-level, lock-free aggregator for all statistics.

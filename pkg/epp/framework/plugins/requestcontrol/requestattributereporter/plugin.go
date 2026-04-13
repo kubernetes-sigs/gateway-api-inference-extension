@@ -41,7 +41,7 @@ const (
 )
 
 // Test interface satisfaction at compile time.
-var _ requestcontrol.ResponseBody = &Plugin{}
+var _ requestcontrol.ResponseBodyProcessor = &Plugin{}
 
 // Plugin state
 type Plugin struct {

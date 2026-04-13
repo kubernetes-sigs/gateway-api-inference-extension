@@ -92,7 +92,7 @@ func TestValidatePluginExecutionOrder(t *testing.T) {
 	consumerFairnessPolicyPlugin := MockConsumerFairnessPolicy{consumes: map[string]any{"keyA": nil}}
 	// Scheduling plugin.
 	consumerSchedulingPlugin := MockSchedulingPlugin{consumes: map[string]any{"keyA": nil}}
-	if _, ok := any(pluginA).(fwkrc.PrepareDataPlugin); !ok {
+	if _, ok := any(pluginA).(fwkrc.DataProducer); !ok {
 		t.Fatalf("pluginA should implement PrepareDataPlugin")
 	}
 
@@ -152,19 +152,19 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		plugins     []fwkrc.PrepareDataPlugin
+		plugins     []fwkrc.DataProducer
 		expectedDAG map[string][]string
 		expectedErr string
 	}{
 		{
 			name:        "No plugins",
-			plugins:     []fwkrc.PrepareDataPlugin{},
+			plugins:     []fwkrc.DataProducer{},
 			expectedDAG: map[string][]string{},
 			expectedErr: "",
 		},
 		{
 			name:    "Plugins with no dependencies",
-			plugins: []fwkrc.PrepareDataPlugin{pluginA, pluginE},
+			plugins: []fwkrc.DataProducer{pluginA, pluginE},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"E/mock": {},
@@ -173,7 +173,7 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 		},
 		{
 			name:    "Simple linear dependency (C -> B -> A)",
-			plugins: []fwkrc.PrepareDataPlugin{pluginA, pluginB, pluginC},
+			plugins: []fwkrc.DataProducer{pluginA, pluginB, pluginC},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"B/mock": {"A/mock"},
@@ -183,7 +183,7 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 		},
 		{
 			name:    "DAG with multiple dependencies (B -> A, D -> A, E independent)",
-			plugins: []fwkrc.PrepareDataPlugin{pluginA, pluginB, pluginD, pluginE},
+			plugins: []fwkrc.DataProducer{pluginA, pluginB, pluginD, pluginE},
 			expectedDAG: map[string][]string{
 				"A/mock": {},
 				"B/mock": {"A/mock"},
@@ -194,19 +194,19 @@ func TestDAGAndTopologicalOrder(t *testing.T) {
 		},
 		{
 			name:        "Graph with a cycle (X -> Y, Y -> X)",
-			plugins:     []fwkrc.PrepareDataPlugin{pluginX, pluginY},
+			plugins:     []fwkrc.DataProducer{pluginX, pluginY},
 			expectedDAG: nil,
 			expectedErr: "cycle detected",
 		},
 		{
 			name:        "Data type mismatch between produced and consumed data",
-			plugins:     []fwkrc.PrepareDataPlugin{pluginZ1, pluginZ2},
+			plugins:     []fwkrc.DataProducer{pluginZ1, pluginZ2},
 			expectedDAG: nil,
 			expectedErr: "data type mismatch between produced and consumed data",
 		},
 		{
 			name:    "Same type different pointers (should succeed)",
-			plugins: []fwkrc.PrepareDataPlugin{pluginP1, pluginP2},
+			plugins: []fwkrc.DataProducer{pluginP1, pluginP2},
 			expectedDAG: map[string][]string{
 				"P1/mock": {},
 				"P2/mock": {"P1/mock"},

@@ -75,6 +75,8 @@ type managedQueue struct {
 	// Its state must only be modified while holding `mu`.
 	queue contracts.SafeQueue
 
+	flowQueueAccessor *flowQueueAccessor
+
 	// --- Concurrent-Safe State (Atomics) ---
 
 	// Queue-level statistics.
@@ -99,7 +101,7 @@ func newManagedQueue(
 		"flowKey", key,
 		"queueType", queue.Name(),
 	)
-	return &managedQueue{
+	mq := &managedQueue{
 		queue:        queue,
 		policy:       policy,
 		key:          key,
@@ -107,11 +109,13 @@ func newManagedQueue(
 		logger:       mqLogger,
 		isDraining:   isDraining,
 	}
+	mq.flowQueueAccessor = &flowQueueAccessor{mq: mq}
+	return mq
 }
 
 // FlowQueueAccessor returns a read-only, flow-aware view of this queue.
 func (mq *managedQueue) FlowQueueAccessor() flowcontrol.FlowQueueAccessor {
-	return &flowQueueAccessor{mq: mq}
+	return mq.flowQueueAccessor
 }
 
 // Add performs an atomic check on the parent shard's lifecycle state before adding the item to the underlying queue.

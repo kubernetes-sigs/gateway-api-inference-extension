@@ -38,15 +38,15 @@ type PreRequest interface {
 	PreRequest(ctx context.Context, request *types.InferenceRequest, schedulingResult *types.SchedulingResult)
 }
 
-// ResponseHeader is called by the director after the response headers are successfully received
+// ResponseHeaderProcessor is called by the director after the response headers are successfully received
 // which indicates the beginning of the response handling by the model server.
 // The given pod argument is the pod that served the request.
-type ResponseHeader interface {
+type ResponseHeaderProcessor interface {
 	plugin.Plugin
 	ResponseHeader(ctx context.Context, request *types.InferenceRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
-// ResponseBody is the primary hook for processing response data.
+// ResponseBodyProcessor is the primary hook for processing response data.
 // It is called by the director for every data chunk in a streaming response, or exactly once
 // for non-streaming responses.
 //
@@ -59,23 +59,23 @@ type ResponseHeader interface {
 // TODO(https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2079):
 // Update signature to pass error/termination state. This is a breaking change required for plugins to distinguish
 // between success, errors, and disconnects.
-type ResponseBody interface {
+type ResponseBodyProcessor interface {
 	plugin.Plugin
 	ResponseBody(ctx context.Context, request *types.InferenceRequest, response *Response, targetEndpoint *datalayer.EndpointMetadata)
 }
 
+// DataProducer is implemented by data producers which produce data from different sources.
 // PrepareRequestData is called by the director before scheduling requests.
-// PrepareDataPlugin plugin is implemented by data producers which produce data from different sources.
-type PrepareDataPlugin interface {
+type DataProducer interface {
 	plugin.ProducerPlugin
 	plugin.ConsumerPlugin
 	PrepareRequestData(ctx context.Context, request *types.InferenceRequest, pods []types.Endpoint) error
 }
 
-// AdmissionPlugin is called by the director after the prepare data phase and before scheduling.
-// When a request has to go through multiple AdmissionPlugin,
+// Admitter is called by the director after the data producer and before scheduling.
+// When a request has to go through multiple Admitter,
 // the request is admitted only if all plugins say that the request should be admitted.
-type AdmissionPlugin interface {
+type Admitter interface {
 	plugin.Plugin
 	// AdmitRequest returns the denial reason, wrapped as error if the request is denied.
 	// If the request is allowed, it returns nil.
