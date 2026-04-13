@@ -9,7 +9,7 @@ replace cloud.google.com/go/storage => cloud.google.com/go/storage v1.59.2
 require (
 	sigs.k8s.io/gateway-api v0.0.0-20260406183130-ace5815870c6
 	sigs.k8s.io/gateway-api-inference-extension v0.0.0-00010101000000-000000000000
-	sigs.k8s.io/gateway-api/conformance v0.0.0-20260406183130-ace5815870c6
+	sigs.k8s.io/gateway-api/conformance v1.5.1
 )
 
 require (
@@ -65,7 +65,7 @@ require (
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
