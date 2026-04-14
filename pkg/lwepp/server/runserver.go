@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
@@ -36,33 +35,23 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/internal/runnable"
 	tlsutil "sigs.k8s.io/gateway-api-inference-extension/internal/tls"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/controller"
-	datalayerlogger "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer/logger"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datastore"
-	fwkflowcontrol "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/flowcontrol"
-	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/handlers"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/requestcontrol"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/controller"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/handlers"
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
-type ExtProcServerRunner struct {
-	GrpcPort                         int
-	GKNN                             common.GKNN
-	ControllerCfg                    ControllerConfig
-	Datastore                        datastore.Datastore
-	SecureServing                    bool
-	HealthChecking                   bool
-	CertPath                         string
-	EnableCertReload                 bool
-	RefreshPrometheusMetricsInterval time.Duration
-	MetricsStalenessThreshold        time.Duration
-	Director                         *requestcontrol.Director
-	Parser                           fwkrh.Parser
-	SaturationDetector               fwkflowcontrol.SaturationDetector
-	UseExperimentalDatalayerV2       bool // Pluggable data layer feature flag
-}
+  type ExtProcServerRunner struct {
+      GrpcPort                    int
+      GKNN                        common.GKNN
+      ControllerCfg               ControllerConfig
+      Datastore                   datastore.Datastore
+      SecureServing               bool
+      HealthChecking              bool
+      CertPath                    string
+      EnableCertReload            bool
+      DisableEndpointSubsetFilter bool
+  }
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
@@ -79,16 +68,16 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 			Kind:  "InferencePool",
 		},
 	}
-	return &ExtProcServerRunner{
-		GrpcPort:                         opts.GRPCPort,
-		GKNN:                             gknn,
-		ControllerCfg:                    ControllerConfig{true, true, true},
-		SecureServing:                    opts.SecureServing,
-		HealthChecking:                   opts.HealthChecking,
-		RefreshPrometheusMetricsInterval: opts.RefreshPrometheusMetricsInterval,
-		MetricsStalenessThreshold:        opts.MetricsStalenessThreshold,
-		// Dependencies can be assigned later.
-	}
+  return &ExtProcServerRunner{
+      GrpcPort:                    opts.GRPCPort,
+      GKNN:                        gknn,
+      ControllerCfg:               NewControllerConfig(true),
+      SecureServing:               opts.SecureServing,
+      HealthChecking:              opts.HealthChecking,
+      DisableEndpointSubsetFilter: opts.DisableEndpointSubsetFilter,
+
+      // Dependencies can be assigned later.
+  }
 }
 
 // SetupWithManager sets up the runner with the given manager.
@@ -102,24 +91,6 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 			return fmt.Errorf("failed setting up InferencePoolReconciler - %w", err)
 		}
 
-		if r.ControllerCfg.hasInferenceObjective {
-			if err := (&controller.InferenceObjectiveReconciler{
-				Datastore: r.Datastore,
-				Reader:    mgr.GetClient(),
-				PoolGKNN:  r.GKNN,
-			}).SetupWithManager(mgr); err != nil {
-				return fmt.Errorf("failed setting up InferenceObjectiveReconciler - %w", err)
-			}
-		}
-		if r.ControllerCfg.hasInferenceModelRewrites {
-			if err := (&controller.InferenceModelRewriteReconciler{
-				Datastore: r.Datastore,
-				Reader:    mgr.GetClient(),
-				PoolGKNN:  r.GKNN,
-			}).SetupWithManager(mgr); err != nil {
-				return fmt.Errorf("failed setting up InferenceModelRewriteReconciler - %w", err)
-			}
-		}
 	}
 
 	if err := (&controller.PodReconciler{
@@ -135,12 +106,6 @@ func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
 // The runnable implements LeaderElectionRunnable with leader election disabled.
 func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
-		if r.UseExperimentalDatalayerV2 {
-			datalayerlogger.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval, r.MetricsStalenessThreshold)
-		} else {
-			backendmetrics.StartMetricsLogger(ctx, r.Datastore, r.RefreshPrometheusMetricsInterval, r.MetricsStalenessThreshold)
-		}
-
 		var srv *grpc.Server
 		if r.SecureServing {
 			var cert tls.Certificate
@@ -179,7 +144,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcServer := handlers.NewStreamingServer(r.Datastore, r.Director, r.Parser)
+		extProcServer := handlers.NewStreamingServer(r.Datastore, r.DisableEndpointSubsetFilter)
 		extProcPb.RegisterExternalProcessorServer(srv, extProcServer)
 
 		if r.HealthChecking {

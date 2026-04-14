@@ -1,23 +1,20 @@
-# The EndPoint Picker (EPP)
-This package provides the reference implementation for the Endpoint Picker (EPP). As demonstrated in the diagram below, it implements the [extension protocol](../../docs/proposals/004-endpoint-picker-protocol), enabling a proxy or gateway to request endpoint hints from an extension, and interacts with the model servers through the defined [model server protocol](../..//docs/proposals/003-model-server-protocol).
+# Lightweight Endpoint Picker (LWEPP)
 
-![Architecture Diagram](../../docs/endpoint-picker.svg)
-
+This package provides a minimal, lightweight reference implementation of the Endpoint Picker (EPP). It is designed for testing and simple use cases where complex traffic routing policies are not required.
 
 ## Core Functions
 
-An EPP instance handles a single `InferencePool` (and so for each `InferencePool`, one must create a dedicated EPP deployment), it performs the following core functions:
+- **Simple Load Balancing**: Performs basic round-robin load balancing across available pods in the target pool.
+- **Endpoint Filtering**: Supports filtering candidate endpoints based on the `test-epp-endpoint-selection` header. If present, the EPP will only select from the list of comma-separated IP addresses provided in the header.
+- **Envoy Integration**: Implements the Envoy External Processing (ext_proc) protocol to:
+  - Receive request headers and set the target endpoint header to guide Envoy's routing decision.
+  - Receive response headers and add a header indicating which endpoint served the request.
 
-- Endpoint Selection
-  - The EPP determines the appropriate Pod endpoint for the load balancer (LB) to route requests.
-  - It selects from the pool of ready Pods designated by the assigned InferencePool's [Selector](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/7e3cd457cdcd01339b65861c8e472cf27e6b6e80/api/v1alpha1/inferencepool_types.go#L53) field.
-  - Endpoint selection is contingent on the request's ModelName matching an `InferenceObjective` that references the `InferencePool`.
-  - Requests with unmatched ModelName values trigger an error response to the proxy.
-- Traffic Splitting and ModelName Rewriting
-  - The EPP facilitates controlled rollouts of new adapter versions by implementing traffic splitting between adapters within the same `InferencePool`, as defined by the `InferenceObjective`.
-  - EPP rewrites the model name in the request to the [target model name](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/7e3cd457cdcd01339b65861c8e472cf27e6b6e80/api/v1alpha1/inferencemodel_types.go#L161) as defined on the `InferenceObjective` object.
-- Observability
-  - The EPP generates metrics to enhance observability.
-  - It reports InferenceObjective-level metrics, further broken down by target model.
-  - Detailed information regarding metrics can be found on the [website](https://gateway-api-inference-extension.sigs.k8s.io/guides/metrics-and-observability).
-  
+## Differences from Full EPP
+
+Unlike the full EPP implementation, this lightweight version:
+- Does **not** implement complex scheduling or queueing.
+- Does **not** support traffic splitting between different models or adapters.
+- Does **not** perform ModelName rewriting.
+
+This implementation is intended as a simple reference or a starting point for environments testing basic connectivity and routing with the Gateway API Inference Extension.

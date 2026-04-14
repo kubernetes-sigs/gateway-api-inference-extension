@@ -21,7 +21,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/server"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/server"
 )
 
 func TestRunnable(t *testing.T) {

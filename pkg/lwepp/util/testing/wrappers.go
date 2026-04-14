@@ -21,7 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 // DefaultTestPort is the standard port used for mock model servers in tests.
@@ -108,60 +107,6 @@ func (p *PodWrapper) DeletionTimestamp() *PodWrapper {
 // Obj returns the wrapped Pod.
 func (p *PodWrapper) ObjRef() *corev1.Pod {
 	return &p.Pod
-}
-
-// InferenceObjectiveWrapper wraps an InferenceObjective.
-type InferenceObjectiveWrapper struct {
-	v1alpha2.InferenceObjective
-}
-
-// MakeInferenceObjective creates a wrapper for a InferenceObjective.
-func MakeInferenceObjective(name string) *InferenceObjectiveWrapper {
-	return &InferenceObjectiveWrapper{
-		v1alpha2.InferenceObjective{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
-			},
-			Spec: v1alpha2.InferenceObjectiveSpec{},
-		},
-	}
-}
-
-func (m *InferenceObjectiveWrapper) Namespace(ns string) *InferenceObjectiveWrapper {
-	m.ObjectMeta.Namespace = ns
-	return m
-}
-
-// Obj returns the wrapped InferenceObjective.
-func (m *InferenceObjectiveWrapper) ObjRef() *v1alpha2.InferenceObjective {
-	return &m.InferenceObjective
-}
-
-func (m *InferenceObjectiveWrapper) PoolName(poolName string) *InferenceObjectiveWrapper {
-	m.Spec.PoolRef.Name = v1alpha2.ObjectName(poolName)
-	return m
-}
-
-func (m *InferenceObjectiveWrapper) PoolGroup(poolGroup string) *InferenceObjectiveWrapper {
-	m.Spec.PoolRef.Group = v1alpha2.Group(poolGroup)
-	return m
-}
-
-func (m *InferenceObjectiveWrapper) Priority(priority int) *InferenceObjectiveWrapper {
-	m.Spec.Priority = &priority
-	return m
-}
-
-func (m *InferenceObjectiveWrapper) DeletionTimestamp() *InferenceObjectiveWrapper {
-	now := metav1.Now()
-	m.ObjectMeta.DeletionTimestamp = &now
-	m.Finalizers = []string{"finalizer"}
-	return m
-}
-
-func (m *InferenceObjectiveWrapper) CreationTimestamp(t metav1.Time) *InferenceObjectiveWrapper {
-	m.ObjectMeta.CreationTimestamp = t
-	return m
 }
 
 // InferencePoolWrapper wraps an group "inference.networking.k8s.io" InferencePool.

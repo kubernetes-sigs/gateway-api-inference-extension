@@ -18,10 +18,10 @@ package pool
 
 import (
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
 )
 
-func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datalayer.EndpointPool {
+func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datastore.EndpointPool {
 	if inferencePool == nil {
 		return nil
 	}
@@ -34,12 +34,10 @@ func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datalayer.End
 	for k, v := range inferencePool.Spec.Selector.MatchLabels {
 		selector[string(k)] = string(v)
 	}
-	endpointPool := &datalayer.EndpointPool{
+	endpointPool := &datastore.EndpointPool{
 		Selector:    selector,
 		TargetPorts: targetPorts,
 		Namespace:   inferencePool.Namespace,
-		Name:        inferencePool.Name,
-		AppProtocol: inferencePool.Spec.AppProtocol,
 	}
 	return endpointPool
 }

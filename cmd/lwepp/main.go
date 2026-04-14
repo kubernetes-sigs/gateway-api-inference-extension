@@ -17,18 +17,90 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"sigs.k8s.io/gateway-api-inference-extension/cmd/epp/runner"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/server"
 )
 
 func main() {
-	// For adding out-of-tree plugins to the plugins registry, use the following:
-	// plugins.Register(my-out-of-tree-plugin-name, my-out-of-tree-plugin-factory-function)
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	setupLog := ctrl.Log.WithName("setup")
 
-	if err := runner.NewRunner().Run(ctrl.SetupSignalHandler()); err != nil {
+	opts := server.NewOptions()
+	opts.AddFlags(pflag.CommandLine)
+	pflag.Parse()
+
+	if err := opts.Complete(); err != nil {
+		setupLog.Error(err, "Failed to complete options")
+		os.Exit(1)
+	}
+	if err := opts.Validate(); err != nil {
+		setupLog.Error(err, "Failed to validate options")
+		os.Exit(1)
+	}
+
+	ctx := ctrl.SetupSignalHandler()
+
+	cfg, err := ctrl.GetConfig()
+	if err != nil {
+		setupLog.Error(err, "Failed to get Kubernetes rest config")
+		os.Exit(1)
+	}
+
+	ds := datastore.NewDatastore(ctx)
+
+	gknn := common.GKNN{
+		NamespacedName: types.NamespacedName{Name: opts.PoolName, Namespace: opts.PoolNamespace},
+		GroupKind: schema.GroupKind{
+			Group: opts.PoolGroup,
+			Kind:  "InferencePool",
+		},
+	}
+
+	metricsServerOptions := metricsserver.Options{
+		BindAddress: fmt.Sprintf(":%d", opts.MetricsPort),
+	}
+
+	mgr, err := server.NewDefaultManager(server.NewControllerConfig(true), gknn, cfg, metricsServerOptions, opts.EnableLeaderElection)
+	if err != nil {
+		setupLog.Error(err, "Failed to create controller manager")
+		os.Exit(1)
+	}
+
+	runner := &server.ExtProcServerRunner{
+		GrpcPort:         opts.GRPCPort,
+		GKNN:             gknn,
+		Datastore:        ds,
+		ControllerCfg:    server.NewControllerConfig(true),
+		SecureServing:    opts.SecureServing,
+		HealthChecking:   opts.HealthChecking,
+		CertPath:         opts.CertPath,
+		EnableCertReload: opts.EnableCertReload,
+	}
+
+	if err := runner.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to setup EPP controllers")
+		os.Exit(1)
+	}
+
+	if err := mgr.Add(runner.AsRunnable(setupLog)); err != nil {
+		setupLog.Error(err, "Failed to add runner to manager")
+		os.Exit(1)
+	}
+
+	setupLog.Info("Starting manager")
+	if err := mgr.Start(ctx); err != nil {
+		setupLog.Error(err, "Problem running manager")
 		os.Exit(1)
 	}
 }

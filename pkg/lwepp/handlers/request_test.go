@@ -20,133 +20,179 @@ import (
 	"context"
 	"testing"
 
-	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/structpb"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
 
-func TestHandleRequestHeaders(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		headers        []*configPb.HeaderValue
-		wantHeaders    map[string]string
-		wantFairnessID string
-	}{
-		{
-			name: "Extracts Fairness ID and Removes Header",
-			headers: []*configPb.HeaderValue{
-				{Key: "x-test", Value: "val"},
-				{Key: metadata.FlowFairnessIDKey, Value: "user-123"},
-			},
-			wantHeaders:    map[string]string{"x-test": "val"},
-			wantFairnessID: "user-123",
-		},
-		{
-			name: "Prefers RawValue over Value",
-			headers: []*configPb.HeaderValue{
-				{Key: metadata.FlowFairnessIDKey, RawValue: []byte("binary-id"), Value: "wrong-id"},
-			},
-			wantFairnessID: "binary-id",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			server := &StreamingServer{}
-			reqCtx := &RequestContext{
-				Request: &Request{Headers: make(map[string]string)},
-			}
-			req := &extProcPb.ProcessingRequest_RequestHeaders{
-				RequestHeaders: &extProcPb.HttpHeaders{
-					Headers: &configPb.HeaderMap{Headers: tc.headers},
-				},
-			}
-
-			err := server.HandleRequestHeaders(context.Background(), reqCtx, req)
-			assert.NoError(t, err, "HandleRequestHeaders should not return an error")
-
-			assert.Equal(t, tc.wantFairnessID, reqCtx.FairnessID, "FairnessID should match expected value")
-
-			if tc.wantHeaders != nil {
-				for k, v := range tc.wantHeaders {
-					assert.Equal(t, v, reqCtx.Request.Headers[k], "Header %q should match expected value", k)
-				}
-			}
-		})
-	}
+type mockDatastore struct {
+	pods []*datastore.Endpoint
 }
 
-func TestGenerateHeaders_Sanitization(t *testing.T) {
-	server := &StreamingServer{}
-	reqCtx := &RequestContext{
-		TargetEndpoint: "1.2.3.4:8080",
-		RequestSize:    123,
-		Request: &Request{
-			Headers: map[string]string{
-				"x-user-data":                   "important",              // should passthrough
-				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
-				metadata.DestinationEndpointKey: "1.1.1.1:666",            // should be stripped
-				"content-length":                "99999",                  // should be stripped (re-added by logic)
-			},
-		},
-	}
-
-	results := server.generateHeaders(context.Background(), reqCtx)
-
-	gotHeaders := make(map[string]string)
-	for _, h := range results {
-		gotHeaders[h.Header.Key] = string(h.Header.RawValue)
-	}
-
-	assert.Contains(t, gotHeaders, "x-user-data")
-	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
-	assert.Equal(t, "1.2.3.4:8080", gotHeaders[metadata.DestinationEndpointKey])
-	assert.Equal(t, "123", gotHeaders["Content-Length"])
+func (m *mockDatastore) PoolGet() (*datastore.EndpointPool, error) {
+	return nil, nil
 }
 
-func TestGenerateRequestHeaderResponse_MergeMetadata(t *testing.T) {
-	t.Parallel()
+func (m *mockDatastore) PodList(predicate func(*datastore.Endpoint) bool) []*datastore.Endpoint {
+	var res []*datastore.Endpoint
+	for _, p := range m.pods {
+		if predicate(p) {
+			res = append(res, p)
+		}
+	}
+	return res
+}
 
-	server := &StreamingServer{}
-	reqCtx := &RequestContext{
-		TargetEndpoint: "1.2.3.4:8080",
-		Request: &Request{
-			Headers: make(map[string]string),
+func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
+	pods := []*datastore.Endpoint{
+		{Address: "10.0.0.1", Port: "8080"},
+		{Address: "10.0.0.2", Port: "8080"},
+	}
+	ds := &mockDatastore{pods: pods}
+	server := &StreamingServer{datastore: ds}
+
+	req := &extProcPb.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extProcPb.HttpHeaders{
+			Headers: &envoyCorev3.HeaderMap{},
 		},
-		Response: &Response{
-			DynamicMetadata: &structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"existing_namespace": {
-						Kind: &structpb.Value_StructValue{
-							StructValue: &structpb.Struct{
-								Fields: map[string]*structpb.Value{
-									"existing_key": {Kind: &structpb.Value_StringValue{StringValue: "existing_value"}},
-								},
-							},
-						},
-					},
+	}
+
+	// First request
+	reqCtx1 := &RequestContext{}
+	err := server.handleRequestHeaders(context.Background(), reqCtx1, nil, req)
+	assert.NoError(t, err)
+
+	// Second request
+	reqCtx2 := &RequestContext{}
+	err = server.handleRequestHeaders(context.Background(), reqCtx2, nil, req)
+	assert.NoError(t, err)
+
+	// They should be different pods (round-robin)
+	assert.NotEqual(t, reqCtx1.SelectedPodIP, reqCtx2.SelectedPodIP)
+
+	// Third request should wrap around
+	reqCtx3 := &RequestContext{}
+	err = server.handleRequestHeaders(context.Background(), reqCtx3, nil, req)
+	assert.NoError(t, err)
+	assert.Equal(t, reqCtx1.SelectedPodIP, reqCtx3.SelectedPodIP)
+}
+
+  func TestHandleRequestHeaders_FilteringViaHeader(t *testing.T) {
+			pods := []*datastore.Endpoint{
+		{Address: "10.0.0.1", Port: "8080"},
+		{Address: "10.0.0.2", Port: "8080"},
+		{Address: "10.0.0.3", Port: "8080"},
+	}
+	ds := &mockDatastore{pods: pods}
+	server := &StreamingServer{datastore: ds}
+
+	req := &extProcPb.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extProcPb.HttpHeaders{
+      Headers: &envoyCorev3.HeaderMap{
+          Headers: []*envoyCorev3.HeaderValue{
+					{Key: "test-epp-endpoint-selection", Value: "10.0.0.2"},
 				},
 			},
 		},
 	}
 
-	resp := server.generateRequestHeaderResponse(context.Background(), reqCtx)
-
-	// Check that the existing metadata is preserved
-	existingNamespace, ok := resp.DynamicMetadata.Fields["existing_namespace"]
-	assert.True(t, ok, "Expected existing_namespace to be in DynamicMetadata")
-	existingKey, ok := existingNamespace.GetStructValue().Fields["existing_key"]
-	assert.True(t, ok, "Expected existing_key to be in existing_namespace")
-	assert.Equal(t, "existing_value", existingKey.GetStringValue(), "Unexpected value for existing_key")
-
-	// Check that the new metadata is added
-	endpointNamespace, ok := resp.DynamicMetadata.Fields[metadata.DestinationEndpointNamespace]
-	assert.True(t, ok, "Expected DestinationEndpointNamespace to be in DynamicMetadata")
-	endpointKey, ok := endpointNamespace.GetStructValue().Fields[metadata.DestinationEndpointKey]
-	assert.True(t, ok, "Expected DestinationEndpointKey to be in DestinationEndpointNamespace")
-	assert.Equal(t, "1.2.3.4:8080", endpointKey.GetStringValue(), "Unexpected value for DestinationEndpointKey")
+	reqCtx := &RequestContext{}
+	 err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
+	assert.NoError(t, err)
+	assert.Equal(t, "10.0.0.2", reqCtx.SelectedPodIP)
 }
+
+func TestHandleRequestHeaders_NoPods(t *testing.T) {
+	ds := &mockDatastore{pods: []*datastore.Endpoint{}}
+	server := &StreamingServer{datastore: ds}
+
+	req := &extProcPb.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extProcPb.HttpHeaders{
+			Headers: &envoyCorev3.HeaderMap{},
+		},
+	}
+
+	reqCtx := &RequestContext{}
+	 err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
+	assert.Error(t, err)
+}
+
+  func TestHandleRequestHeaders_FilteringViaFilterMetadata(t *testing.T) {
+      pods := []*datastore.Endpoint{
+          {Address: "10.0.0.1", Port: "8080"},
+          {Address: "10.0.0.2", Port: "8080"},
+          {Address: "10.0.0.3", Port: "8080"},
+      }
+      ds := &mockDatastore{pods: pods}
+      server := &StreamingServer{datastore: ds}
+
+      fullReq := &extProcPb.ProcessingRequest{
+          MetadataContext: &envoyCorev3.Metadata{
+              FilterMetadata: map[string]*structpb.Struct{
+                  metadata.SubsetFilterNamespace: {
+                      Fields: map[string]*structpb.Value{
+                          metadata.SubsetFilterKey: structpb.NewListValue(&structpb.ListValue{
+                              Values: []*structpb.Value{
+                                  structpb.NewStringValue("10.0.0.3:8080"),
+                              },
+                          }),
+                      },
+                  },
+              },
+          },
+      }
+      req := &extProcPb.ProcessingRequest_RequestHeaders{
+          RequestHeaders: &extProcPb.HttpHeaders{
+              Headers: &envoyCorev3.HeaderMap{},
+          },
+      }
+
+      reqCtx := &RequestContext{}
+      err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
+      assert.NoError(t, err)
+      assert.Equal(t, "10.0.0.3", reqCtx.SelectedPodIP)
+  }
+
+	  func TestHandleRequestHeaders_FilterMetadataTakesPrecedenceOverHeader(t *testing.T) {
+      pods := []*datastore.Endpoint{
+          {Address: "10.0.0.2", Port: "8080"},
+          {Address: "10.0.0.3", Port: "8080"},
+      }
+      ds := &mockDatastore{pods: pods}
+      server := &StreamingServer{datastore: ds}
+
+      fullReq := &extProcPb.ProcessingRequest{
+          MetadataContext: &envoyCorev3.Metadata{
+              FilterMetadata: map[string]*structpb.Struct{
+                  metadata.SubsetFilterNamespace: {
+                      Fields: map[string]*structpb.Value{
+                          metadata.SubsetFilterKey: structpb.NewListValue(&structpb.ListValue{
+                              Values: []*structpb.Value{
+                                  structpb.NewStringValue("10.0.0.3:8080"),
+                              },
+                          }),
+                      },
+                  },
+              },
+          },
+      }
+      req := &extProcPb.ProcessingRequest_RequestHeaders{
+          RequestHeaders: &extProcPb.HttpHeaders{
+              Headers: &envoyCorev3.HeaderMap{
+                  Headers: []*envoyCorev3.HeaderValue{
+                      {Key: "test-epp-endpoint-selection", Value: "10.0.0.1"},
+                  },
+              },
+          },
+      }
+
+      reqCtx := &RequestContext{}
+      err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
+      assert.NoError(t, err)
+      // Filter metadata should win over the test header.
+      assert.Equal(t, "10.0.0.3", reqCtx.SelectedPodIP)
+  }

@@ -19,7 +19,6 @@ package server
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -51,21 +50,7 @@ type Options struct {
 	EndpointSelector            string // Selector to filter model server pods on, only 'key=value' pairs are supported. (TODO: k8s.Selector, pflag.StringSlice?)
 	EndpointTargetPorts         []int  // Target ports of model server pods.
 	DisableEndpointSubsetFilter bool   // Disables respecting x-gateway-destination-endpoint-subset in EPP.
-	//
-	// MSP metrics scraping.
-	//
-	ModelServerMetricsScheme         string        // Protocol scheme used in scraping metrics from endpoints.
-	ModelServerMetricsPath           string        // URL path used in scraping metrics from endpoints.
-	ModelServerMetricsPort           int           // Port to scrape metrics from endpoints. (TODO: Deprecated, uint16)
-	ModelServerMetricsHTTPSInsecure  bool          // Disable certificate verification when using 'https' scheme for 'model-server-metrics-scheme'.
-	RefreshMetricsInterval           time.Duration // Interval to refresh metrics.
-	RefreshPrometheusMetricsInterval time.Duration // Interval to flush Prometheus metrics.
-	MetricsStalenessThreshold        time.Duration // Duration after which metrics are considered stale.
-	TotalQueuedRequestsMetric        string        // Prometheus metric specification for the number of queued requests.
-	TotalRunningRequestsMetric       string        // Prometheus metric specification for the number of running requests.
-	KVCacheUsagePercentageMetric     string        // Prometheus metric specification for the fraction of KV-cache blocks currently in use.
-	LoRAInfoMetric                   string        // Prometheus metric specification for the LoRA info metrics.
-	CacheInfoMetric                  string        // Prometheus metric specification for the cache info metrics.
+
 	//
 	// Diagnostics.
 	//
@@ -92,28 +77,18 @@ type Options struct {
 // NewOptions returns a new Options struct initialized with the default values.
 func NewOptions() *Options {
 	return &Options{ // "zero" values are no explicitly set
-		GRPCPort:                         DefaultGrpcPort,
-		PoolGroup:                        "inference.networking.k8s.io",
-		EndpointTargetPorts:              []int{},
-		DisableEndpointSubsetFilter:      false,
-		ModelServerMetricsScheme:         "http",
-		ModelServerMetricsPath:           "/metrics",
-		ModelServerMetricsHTTPSInsecure:  true,
-		RefreshMetricsInterval:           50 * time.Millisecond,
-		RefreshPrometheusMetricsInterval: 5 * time.Second,
-		MetricsStalenessThreshold:        2 * time.Second,
-		TotalQueuedRequestsMetric:        "vllm:num_requests_waiting",
-		TotalRunningRequestsMetric:       "vllm:num_requests_running",
-		KVCacheUsagePercentageMetric:     "vllm:kv_cache_usage_perc",
-		LoRAInfoMetric:                   "vllm:lora_requests_info",
-		CacheInfoMetric:                  "vllm:cache_config_info",
-		LoggingOptions:                   *logging.NewOptions(),
-		Tracing:                          true,
-		MetricsPort:                      9090,
-		GRPCHealthPort:                   9003,
-		EnablePprof:                      true,
-		SecureServing:                    true,
-		MetricsEndpointAuth:              true,
+		GRPCPort:                    DefaultGrpcPort,
+		PoolGroup:                   "inference.networking.k8s.io",
+		EndpointTargetPorts:         []int{},
+		DisableEndpointSubsetFilter: false,
+
+		LoggingOptions:      *logging.NewOptions(),
+		Tracing:             true,
+		MetricsPort:         9090,
+		GRPCHealthPort:      9003,
+		EnablePprof:         true,
+		SecureServing:       true,
+		MetricsEndpointAuth: true,
 	}
 }
 
@@ -138,37 +113,6 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 		"Format: a comma-separated list of numbers without whitespace (e.g., '3000,3001,3002').")
 	fs.BoolVar(&opts.DisableEndpointSubsetFilter, "disable-endpoint-subset-filter", opts.DisableEndpointSubsetFilter,
 		"Disables respecting the x-gateway-destination-endpoint-subset metadata for dispatching requests in EPP.")
-	fs.StringVar(&opts.ModelServerMetricsScheme, "model-server-metrics-scheme", opts.ModelServerMetricsScheme,
-		"Protocol scheme used in scraping metrics from endpoints.")
-	_ = fs.MarkDeprecated("model-server-metrics-scheme", "This flag is deprecated. Configure via EndpointPickerConfig data layer plugin parameters instead.")
-	fs.StringVar(&opts.ModelServerMetricsPath, "model-server-metrics-path", opts.ModelServerMetricsPath,
-		"URL path used in scraping metrics from endpoints.")
-	_ = fs.MarkDeprecated("model-server-metrics-path", "This flag is deprecated. Configure via EndpointPickerConfig data layer plugin parameters instead.")
-	fs.IntVar(&opts.ModelServerMetricsPort, "model-server-metrics-port", opts.ModelServerMetricsPort,
-		"Port to scrape metrics from endpoints. Set to the InferencePool.Spec.TargetPorts[0].Number if not defined.")
-	_ = fs.MarkDeprecated("model-server-metrics-port", "This flag is deprecated and will be removed in a future release.")
-	fs.BoolVar(&opts.ModelServerMetricsHTTPSInsecure, "model-server-metrics-https-insecure-skip-verify", opts.ModelServerMetricsHTTPSInsecure,
-		"Disable certificate verification when using 'https' scheme for 'model-server-metrics-scheme'.")
-	_ = fs.MarkDeprecated("model-server-metrics-https-insecure-skip-verify", "This flag is deprecated. Configure via EndpointPickerConfig data layer plugin parameters instead.")
-	fs.DurationVar(&opts.RefreshMetricsInterval, "refresh-metrics-interval", opts.RefreshMetricsInterval, "Interval to refresh metrics.")
-	fs.DurationVar(&opts.RefreshPrometheusMetricsInterval, "refresh-prometheus-metrics-interval", opts.RefreshPrometheusMetricsInterval,
-		"Interval to flush Prometheus metrics.")
-	fs.DurationVar(&opts.MetricsStalenessThreshold, "metrics-staleness-threshold", opts.MetricsStalenessThreshold,
-		"Duration after which metrics are considered stale. This is used to determine if an endpoint's metrics are fresh enough.")
-	fs.StringVar(&opts.TotalQueuedRequestsMetric, "total-queued-requests-metric", opts.TotalQueuedRequestsMetric,
-		"Prometheus metric for the number of queued requests.")
-	_ = fs.MarkDeprecated("total-queued-requests-metric", "use engineConfigs in EndpointPickerConfig instead")
-	fs.StringVar(&opts.TotalRunningRequestsMetric, "total-running-requests-metric", opts.TotalRunningRequestsMetric,
-		"Prometheus metric for the number of running requests.")
-	_ = fs.MarkDeprecated("total-running-requests-metric", "use engineConfigs in EndpointPickerConfig instead")
-	fs.StringVar(&opts.KVCacheUsagePercentageMetric, "kv-cache-usage-percentage-metric", opts.KVCacheUsagePercentageMetric,
-		"Prometheus metric for the fraction of KV-cache blocks currently in use (from 0 to 1).")
-	_ = fs.MarkDeprecated("kv-cache-usage-percentage-metric", "use engineConfigs in EndpointPickerConfig instead")
-	fs.StringVar(&opts.LoRAInfoMetric, "lora-info-metric", opts.LoRAInfoMetric,
-		"Prometheus metric for the LoRA info metrics (must be in vLLM label format).")
-	_ = fs.MarkDeprecated("lora-info-metric", "use engineConfigs in EndpointPickerConfig instead")
-	fs.StringVar(&opts.CacheInfoMetric, "cache-info-metric", opts.CacheInfoMetric, "Prometheus metric for the cache info metrics.")
-	_ = fs.MarkDeprecated("cache-info-metric", "use engineConfigs in EndpointPickerConfig instead")
 
 	opts.LoggingOptions.AddFlags(fs) // Add logging flags.
 
@@ -219,24 +163,6 @@ func (opts *Options) Validate() error {
 
 	if opts.ConfigText != "" && opts.ConfigFile != "" {
 		return fmt.Errorf("both the %q and %q flags can not be set at the same time", "configText", "configFile")
-	}
-	if opts.ModelServerMetricsScheme != "http" && opts.ModelServerMetricsScheme != "https" {
-		return fmt.Errorf("unexpected %q value for %q flag, it can only be set to 'http' or 'https'",
-			opts.ModelServerMetricsScheme, "model-server-metrics-scheme")
-	}
-
-	// Validate deprecated metric flags are not explicitly set
-	deprecatedMetricFlags := []string{
-		"total-queued-requests-metric",
-		"total-running-requests-metric",
-		"kv-cache-usage-percentage-metric",
-		"lora-info-metric",
-		"cache-info-metric",
-	}
-	for _, flagName := range deprecatedMetricFlags {
-		if f := opts.fs.Lookup(flagName); f != nil && f.Changed {
-			return fmt.Errorf("flag %q is deprecated and cannot be used; configure metrics via engineConfigs in EndpointPickerConfig instead", flagName)
-		}
 	}
 
 	// Validate logging options.

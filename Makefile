@@ -32,6 +32,7 @@ DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
 BBR_IMAGE_BUILD_EXTRA_OPTS ?=
+LWEPP_IMAGE_BUILD_EXTRA_OPTS ?=
 LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS ?=
 LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS ?=
 LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS ?=
@@ -56,6 +57,10 @@ BBR_IMAGE_NAME := bbr
 BBR_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(BBR_IMAGE_NAME)
 BBR_IMAGE_TAG ?= $(BBR_IMAGE_REPO):$(GIT_TAG)
 
+LWEPP_IMAGE_NAME := lwepp
+LWEPP_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LWEPP_IMAGE_NAME)
+LWEPP_IMAGE_TAG ?= $(LWEPP_IMAGE_REPO):$(GIT_TAG)
+
 LATENCY_TRAINING_IMAGE_NAME := latency-training-server
 LATENCY_TRAINING_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LATENCY_TRAINING_IMAGE_NAME)
 LATENCY_TRAINING_IMAGE_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(GIT_TAG)
@@ -78,6 +83,7 @@ BUILD_REF ?= $(shell git describe --tags --match '$(ROOT_RELEASE_TAG_MATCH)' --a
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
 BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
+LWEPP_IMAGE_EXTRA_TAG ?= $(LWEPP_IMAGE_REPO):$(EXTRA_TAG)
 LATENCY_TRAINING_IMAGE_EXTRA_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(EXTRA_TAG)
 LATENCY_PREDICTION_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_IMAGE_REPO):$(EXTRA_TAG)
 LATENCY_PREDICTION_TEST_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_TEST_IMAGE_REPO):$(EXTRA_TAG)
@@ -86,6 +92,7 @@ endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
 BBR_IMAGE_BUILD_EXTRA_OPTS += -t $(BBR_IMAGE_EXTRA_TAG)
+LWEPP_IMAGE_BUILD_EXTRA_OPTS += -t $(LWEPP_IMAGE_EXTRA_TAG)
 LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_TRAINING_IMAGE_EXTRA_TAG)
 LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_IMAGE_EXTRA_TAG)
 LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_TEST_IMAGE_EXTRA_TAG)
@@ -305,6 +312,48 @@ bbr-image-load: bbr-image-build
 .PHONY: bbr-image-kind
 bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
 	kind load docker-image $(BBR_IMAGE_TAG) --name $(KIND_CLUSTER)
+
+##@ Lightweight EPP
+
+# Build the container image
+.PHONY: lwepp-image-local-build
+lwepp-image-local-build: ## Build the image using Docker Buildx for local development.
+	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
+	$(MAKE) lwepp-image-build PUSH=$(PUSH)
+	$(MAKE) lwepp-image-build LOAD=$(LOAD)
+	$(DOCKER_BUILDX_CMD) rm $$BUILDER
+
+.PHONY: lwepp-image-local-push
+lwepp-image-local-push: PUSH=--push ## Build the image for local development and push it to $IMAGE_REPO.
+lwepp-image-local-push: lwepp-image-local-build
+
+.PHONY: lwepp-image-local-load
+lwepp-image-local-load: LOAD=--load ## Build the image for local development and load it in the local Docker registry.
+lwepp-image-local-load: lwepp-image-local-build
+
+.PHONY: lwepp-image-build
+lwepp-image-build: ## Build the image using Docker Buildx.
+	$(IMAGE_BUILD_CMD) -f lwepp.Dockerfile -t $(LWEPP_IMAGE_TAG) \
+		--platform=$(PLATFORMS) \
+		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
+		--build-arg COMMIT_SHA=${GIT_COMMIT_SHA} \
+		--build-arg BUILD_REF=${BUILD_REF} \
+		$(PUSH) \
+		$(LOAD) \
+		$(LWEPP_IMAGE_BUILD_EXTRA_OPTS) ./
+
+.PHONY: lwepp-image-push
+lwepp-image-push: PUSH=--push ## Build the image and push it to $IMAGE_REPO.
+lwepp-image-push: lwepp-image-build
+
+.PHONY: lwepp-image-load
+lwepp-image-load: LOAD=--load ## Build the image and load it in the local Docker registry.
+lwepp-image-load: lwepp-image-build
+
+.PHONY: lwepp-image-kind
+lwepp-image-kind: lwepp-image-build ## Build the image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
+	kind load docker-image $(LWEPP_IMAGE_TAG) --name $(KIND_CLUSTER)
 
 ##@ Latency Prediction - Training Server
 

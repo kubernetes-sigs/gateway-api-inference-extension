@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	"sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common"
 )
 
@@ -39,7 +38,6 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1alpha2.Install(scheme))
 	utilruntime.Must(v1.Install(scheme))
 }
 
@@ -59,16 +57,6 @@ func defaultManagerOptions(cfg ControllerConfig, gknn common.GKNN, metricsServer
 		Metrics: metricsServerOptions,
 	}
 	if cfg.startCrdReconcilers {
-		if cfg.hasInferenceObjective {
-			opt.Cache.ByObject[&v1alpha2.InferenceObjective{}] = cache.ByObject{Namespaces: map[string]cache.Config{
-				gknn.Namespace: {},
-			}}
-		}
-		if cfg.hasInferenceModelRewrites {
-			opt.Cache.ByObject[&v1alpha2.InferenceModelRewrite{}] = cache.ByObject{Namespaces: map[string]cache.Config{
-				gknn.Namespace: {},
-			}}
-		}
 
 		opt.Cache.ByObject[&v1.InferencePool{}] = cache.ByObject{
 			Namespaces: map[string]cache.Config{gknn.Namespace: {FieldSelector: fields.SelectorFromSet(fields.Set{
