@@ -38,19 +38,25 @@ func executePluginsAsDAG(plugins []fwk.DataProducer, ctx context.Context, reques
 }
 
 // prepareDataPluginsWithTimeout executes the PrepareRequestData plugins with retries and timeout.
+// The child context is cancelled when the timeout fires so plugins can observe cancellation
+// (e.g. abort outbound HTTP calls) and avoid committing state after the director has moved on.
 func prepareDataPluginsWithTimeout(timeout time.Duration, plugins []fwk.DataProducer,
 	ctx context.Context, request *schedulingtypes.InferenceRequest, endpoints []schedulingtypes.Endpoint) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- executePluginsAsDAG(plugins, ctx, request, endpoints)
 	}()
 
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
 	case err := <-errCh:
 		return err
-	case <-time.After(timeout):
-		return errors.New("prepare data plugin timed out")
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return errors.New("prepare data plugin timed out")
+		}
+		return ctx.Err()
 	}
 }

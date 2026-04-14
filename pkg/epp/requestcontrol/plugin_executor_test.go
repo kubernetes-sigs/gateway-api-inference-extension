@@ -62,6 +62,59 @@ func (m *mockPrepareRequestDataPlugin) Consumes() map[string]any {
 	return nil
 }
 
+// ctxObservingPlugin records the context it received so tests can verify the
+// timeout wrapper cancels the plugin's context when the deadline fires.
+type ctxObservingPlugin struct {
+	name           string
+	block          time.Duration
+	observedCtxErr error
+	wg             sync.WaitGroup
+}
+
+func (p *ctxObservingPlugin) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Type: "mock", Name: p.name}
+}
+
+func (p *ctxObservingPlugin) PrepareRequestData(ctx context.Context, _ *schedulingtypes.InferenceRequest, _ []schedulingtypes.Endpoint) error {
+	defer p.wg.Done()
+	select {
+	case <-time.After(p.block):
+	case <-ctx.Done():
+	}
+	p.observedCtxErr = ctx.Err()
+	return ctx.Err()
+}
+
+func (p *ctxObservingPlugin) Produces() map[string]any { return nil }
+func (p *ctxObservingPlugin) Consumes() map[string]any { return nil }
+
+// TestPrepareDataPluginsWithTimeout_CancelsPluginContext verifies that the
+// child context passed to plugins is cancelled with DeadlineExceeded when the
+// timeout fires. Without this cancellation, a slow plugin would continue
+// executing past the director's deadline and potentially commit state after
+// downstream hooks have already observed an "empty" state — the root cause of
+// the orphan-decrement drift we're fixing in the predicted-latency producer.
+func TestPrepareDataPluginsWithTimeout_CancelsPluginContext(t *testing.T) {
+	plugin := &ctxObservingPlugin{name: "slow", block: time.Second}
+	plugin.wg.Add(1)
+
+	err := prepareDataPluginsWithTimeout(
+		20*time.Millisecond,
+		[]fwk.DataProducer{plugin},
+		context.Background(),
+		&schedulingtypes.InferenceRequest{},
+		nil,
+	)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "prepare data plugin timed out")
+
+	// Wait for the plugin goroutine to observe cancellation before asserting
+	// on the recorded context error.
+	plugin.wg.Wait()
+	assert.ErrorIs(t, plugin.observedCtxErr, context.DeadlineExceeded,
+		"plugin's context should be cancelled with DeadlineExceeded when timeout fires")
+}
+
 func TestPrepareDataPluginsWithTimeout(t *testing.T) {
 	testCases := []struct {
 		name          string
