@@ -1,4 +1,5 @@
-# High-Cache Configuration
+# Long-Questions__Few-System-Prompts__Multi-Chat Configuration
+# Low System Prompt Overlap, Low System Cache Pressure
 job:
   image:
     repository: quay.io/inference-perf/inference-perf
@@ -44,35 +45,29 @@ token:
 config:
   load:
     type: poisson
-    worker_max_concurrency: 1200
+    num_workers: 6
+    worker_max_concurrency: 3000
     stages:
-      # Warmup — seat residents (~1×S)
-      - rate: 15
-        duration: 50            # 15*50  = 750
-
-      # Main ladder
+      - rate: 1
+        duration: 100
+      - rate: 2
+        duration: 100
+      - rate: 3
+        duration: 100                   
+      - rate: 4
+        duration: 100
+      - rate: 5
+        duration: 100
+      - rate: 6
+        duration: 100
+      - rate: 7
+        duration: 100
+      - rate: 8
+        duration: 100
+      - rate: 9
+        duration: 100
       - rate: 10
-        duration: 20
-      - rate: 15
-        duration: 20
-      - rate: 20
-        duration: 38                   
-      - rate: 25
-        duration: 30           
-      - rate: 30
-        duration: 25           
-      - rate: 35
-        duration: 21           
-      - rate: 40               
-        duration: 38           
-      - rate: 45
-        duration: 36                   
-      - rate: 50
-        duration: 30                 
-      - rate: 55
-        duration: 27                 
-      - rate: 60
-        duration: 25 
+        duration: 100
   api:
     type: completion
     streaming: true
@@ -86,12 +81,22 @@ config:
   data:
     type: shared_prefix
     shared_prefix:
-      num_groups: 150             # Ensures a pool of 10k unique prompts
-      num_prompts_per_group: 5
-      system_prompt_len: 6000      # Large shared system prompt
-      question_len: 1200           # Short unique user query
+      num_groups: 6
+      num_prompts_per_group: 1000  # Ensures a pool of 6k unique prompts
+      system_prompt_len: 1000      # Large shared system prompt
+      question_len: 3000           # Long unique user query
       output_len: 1000
-      enable_multi_turn_chat: false
+      question_distribution:
+        mean: 3000
+        std_dev: 900
+        min: 1
+        max: 10000
+      output_distribution:
+        mean: 1000
+        std_dev: 300
+        min: 1
+        max: 10000
+      enable_multi_turn_chat: true
   metrics:
     type: prometheus
     prometheus:

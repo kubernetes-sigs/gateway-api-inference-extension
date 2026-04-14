@@ -277,7 +277,7 @@ jobs:
           fi
           port=80
           svc_host="${host}:${port}"
-          helm upgrade --install prefix-cache-benchmark ../inference-perf/ -f high-cache-values.yaml \
+          helm upgrade --install prefix-cache-benchmark ../inference-perf/ -f short-questions__many-system-prompts-values.yaml \
             --namespace "${NAMESPACE}" \
             --create-namespace \
             --set token.hfToken="${HF_TOKEN}" \

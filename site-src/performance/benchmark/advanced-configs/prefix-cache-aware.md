@@ -22,18 +22,25 @@ The chart uses the `shared_prefix` dataset type, which is designed to test cachi
 *   `system_prompt_len`: The length of the system prompt.
 *   `question_len`: The length of the question part of the prompt.
 *   `output_len`: The desired length of the model's output.
+*   `enable_multi_turn_chat`: Creates a user session to keep the conversation where the chat context will be appended for the each request.
 
 The default values for the dataset are defined in the chart, but you can override them using `--set config.data.shared_prefix.<parameter>` flags. 
 
 Example:
 
 ```bash
-helm install my-release ../inference-perf -f high-cache-values.yaml --set config.data.shared_prefix.num_groups=512
+helm install my-release ../inference-perf -f long-prefix__many-templates-values.yaml --set config.data.shared_prefix.num_groups=512
 ```
 
 ## Deployment
 
-This chart supports two main configurations, defined in `high-cache-values.yaml` and `low-cache-values.yaml`.
+This chart supports four configurations located under `gateway-api-inference-extension/benchmarking/prefix-cache-aware`:
+
+*   `short-questions__many-system-prompts-values.yaml`: Low System Prompt Overlap, High System Cache Pressure
+*   `long-questions__many-system-prompts-values.yaml`: Low System Prompt Overlap, Low System Cache Pressure
+*   `short-questions__few-system-prompts-values__multi-chat-values.yaml`: High System Prompt Overlap, No System Cache Pressure
+*   `long-questions__few-system-prompts-values__multi-chat-values.yaml`: Low System Prompt Overlap, No System Cache Pressure
+
 
 ### 1. Check out the repo.
 
@@ -56,9 +63,9 @@ cd gateway-api-inference-extension/benchmarking/prefix-cache-aware
   echo $SVC_IP
   ```
 
-### 3. Deploying the High-Cache Configuration
+### 3. Deploying the Configuration
 
-This configuration is optimized for scenarios where a high cache hit rate is expected. It uses the `high-cache-values.yaml` file.
+This example uses the `short-questions__many-system-prompts-values.yaml` file which is optimized for scenarios where a high cache hit rate is expected. It
 
 ```bash
 export IP='<YOUR_IP>'
@@ -71,7 +78,7 @@ export HF_TOKEN='<YOUR_HUGGINGFACE_TOKEN>'
 export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
 export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
 
-helm install high-cache ../inference-perf -f high-cache-values.yaml \
+helm install prefix-cache-benchmark ../inference-perf -f long-prefix__many-templates-values.yaml \
   --set "config.server.base_url=http://${IP}:${PORT}"
   # ------------------------------------------------
   # HUGGINGFACE OPTION A
@@ -85,55 +92,20 @@ helm install high-cache ../inference-perf -f high-cache-values.yaml \
 
 **Parameters to customize:**
 
-*   `high-cache`: A unique name for this deployment.
+*   `prefix-cache-benchmark`: A unique name for this deployment. Note, you can deploy multiple charts as long as they have different names.
+*.  `long-prefix__many-templates-values.yaml`: The appropriate benchmark config you want to test.
 *   `token.hfToken`: Your hugging face token. Inference Perf chart will create a new kubernetes secret containing this token.
 *   `hfSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
 *   `hfSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
 *   `config.server.base_url`: The base URL (IP and port) of your inference server for the high-cache scenario.
 
-### 4. Deploying the Low-Cache Configuration
 
-This configuration is designed for scenarios with a lower cache hit rate. It uses the `low-cache-values.yaml` file.
-
-```bash
-cd gateway-api-inference-extension/benchmarking/prefix-cache-aware
-export IP='<YOUR_IP>'
-export PORT='<YOUR_PORT>'
-
-# HUGGINGFACE PARAMETERS
-# Option A: Pass Token Directly
-export HF_TOKEN='<YOUR_HUGGINGFACE_TOKEN>'
-# Option B: Use Existing Kubernetes Secret
-export HF_SECRET_NAME='<YOUR_SECRET_NAME>'
-export HF_SECRET_KEY='<YOUR_SECRET_KEY>'
-
-helm install low-cache ../inference-perf -f low-cache-values.yaml \
-  --set "config.server.base_url=http://${IP}:${PORT}"
-  # ------------------------------------------------
-  # HUGGINGFACE OPTION A
-  --set token.hfToken=${HF_TOKEN} \ 
-  # ------------------------------------------------
-  # HUGGINGFACE OPTION B
-  # --set token.hfSecret.name=${HF_SECRET_NAME} \
-  # --set token.hfSecret.key=${HF_SECRET_KEY} \
-  # ------------------------------------------------
-```
-
-**Parameters to customize:**
-
-*   `low-cache`: A unique name for this deployment.
-*   `token.hfToken`: Your hugging face token. Inference Perf chart will create a new kubernetes secret containing this token.
-*   `hfSecret.name`: The name of your Kubernetes Secret containing the Hugging Face token (default: `hf-token`).
-*   `hfSecret.key`: The key in your Kubernetes Secret pointing to the Hugging Face token (default: `token`).
-*   `config.server.base_url`: The base URL (IP and port) of your inference server for the high-cache scenario.
-
-## Clean Up
+## 4. Clean Up
 
 To uninstall the deployed charts:
 
 ```bash
-helm uninstall my-high-cache-release
-helm uninstall my-low-cache-release
+helm uninstall prefix-cache-benchmark
 ```
 
 ## Post Benchmark Analysis

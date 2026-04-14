@@ -1,4 +1,5 @@
-# Low-Cache Configuration
+# Short-Questions__Many-System-Prompts Configuration
+# Low System Prompt Overlap, High System Cache Pressure
 job:
   image:
     repository: quay.io/inference-perf/inference-perf
@@ -88,8 +89,8 @@ config:
     shared_prefix:
       num_groups: 150             # Ensures a pool of 10k unique prompts
       num_prompts_per_group: 5
-      system_prompt_len: 1200      # Low shared system prompt
-      question_len: 6000           # Long query - flipped for low cache
+      system_prompt_len: 6000      # Large shared system prompt
+      question_len: 1200           # Short unique user query
       output_len: 1000
       enable_multi_turn_chat: false
   metrics:
