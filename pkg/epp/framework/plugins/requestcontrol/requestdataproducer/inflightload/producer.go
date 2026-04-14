@@ -73,7 +73,7 @@ func (p *InFlightLoadProducer) GVK() schema.GroupVersionKind {
 
 // ExpectedInputType defines the type expected by the extractor.
 func (p *InFlightLoadProducer) ExpectedInputType() reflect.Type {
-	return nil // Not used for NotificationExtractors.
+	return reflect.TypeFor[datalayer.NotificationEvent]()
 }
 
 // Extract transforms the raw data into structured attributes (not used for notifications).
@@ -150,7 +150,7 @@ func (p *InFlightLoadProducer) ResponseBody(
 
 func (p *InFlightLoadProducer) Produces() map[string]any {
 	return map[string]any{
-		attrconcurrency.InFlightLoadKey: &attrconcurrency.InFlightLoad{},
+		attrconcurrency.InFlightLoadKey: attrconcurrency.InFlightLoad{},
 	}
 }
 

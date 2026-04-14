@@ -76,7 +76,7 @@ func (s *TokenLoadScorer) Category() framework.ScorerCategory {
 
 func (s *TokenLoadScorer) Consumes() map[string]any {
 	return map[string]any{
-		attrconcurrency.InFlightLoadKey: &attrconcurrency.InFlightLoad{},
+		attrconcurrency.InFlightLoadKey: attrconcurrency.InFlightLoad{},
 	}
 }
 
