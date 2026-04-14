@@ -7,7 +7,7 @@ replace sigs.k8s.io/gateway-api-inference-extension => ../
 replace cloud.google.com/go/storage => cloud.google.com/go/storage v1.59.2
 
 require (
-	sigs.k8s.io/gateway-api v0.0.0-20260406183130-ace5815870c6
+	sigs.k8s.io/gateway-api v1.5.1
 	sigs.k8s.io/gateway-api-inference-extension v0.0.0-00010101000000-000000000000
 	sigs.k8s.io/gateway-api/conformance v1.5.1
 )
