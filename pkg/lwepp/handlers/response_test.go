@@ -1,0 +1,488 @@
+/*
+Copyright 2025 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package handlers
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
+
+	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
+	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
+	fwkrh "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/requesthandling"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/openai"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
+)
+
+const (
+	body = `
+	{
+		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
+		"object": "text_completion",
+		"created": 1732563765,
+		"model": "Qwen/Qwen3-32B",
+		"choices": [
+			{
+				"index": 0,
+				"text": " Chronicle\nThe San Francisco Chronicle has a new book review section, and it's a good one. The reviews are short, but they're well-written and well-informed. The Chronicle's book review section is a good place to start if you're looking for a good book review.\nThe Chronicle's book review section is a good place to start if you're looking for a good book review. The Chronicle's book review section",
+				"logprobs": null,
+				"finish_reason": "length",
+				"stop_reason": null,
+				"prompt_logprobs": null
+			}
+		],
+		"usage": {
+			"prompt_tokens": 11,
+			"total_tokens": 111,
+			"completion_tokens": 100
+		}
+	}
+	`
+
+	bodyWithoutUsage = `
+	{
+		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
+		"object": "text_completion",
+		"created": 1732563765,
+		"model": "Qwen/Qwen3-32B",
+		"choices": [
+			{
+				"index": 0,
+				"text": " Chronicle\nThe San Francisco Chronicle has a new book review section, and it's a good one. The reviews are short, but they're well-written and well-informed. The Chronicle's book review section is a good place to start if you're looking for a good book review.\nThe Chronicle's book review section is a good place to start if you're looking for a good book review. The Chronicle's book review section",
+				"logprobs": null,
+				"finish_reason": "length",
+				"stop_reason": null,
+				"prompt_logprobs": null
+			}
+		]
+	}
+	`
+
+	bodyInvalidJSON = `
+	{
+		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
+		"object": "text_completion",
+		"created": 1732563765,
+		"model": "Qwen/Qwen3-32B",
+		"choices": [
+			{
+				"invalid json"
+			}
+		]
+	}
+	`
+
+	bodyWithCachedTokens = `
+	{
+		"id": "cmpl-573498d260f2423f9e42817bbba3743a",
+		"object": "text_completion",
+		"created": 1732563765,
+		"model": "Qwen/Qwen3-32B",
+		"choices": [
+			{
+				"index": 0,
+				"text": " Chronicle\nThe San Francisco Chronicle has a new book review section, and it's a good one. The reviews are short, but they're well-written and well-informed. The Chronicle's book review section is a good place to start if you're looking for a good book review.\nThe Chronicle's book review section is a good place to start if you're looking for a good book review. The Chronicle's book review section",
+				"logprobs": null,
+				"finish_reason": "length",
+				"stop_reason": null,
+				"prompt_logprobs": null
+			}
+		],
+		"usage": {
+			"prompt_tokens": 11,
+			"total_tokens": 111,
+			"completion_tokens": 100,
+			"prompt_token_details": {
+				"cached_tokens": 10
+			}
+		}
+	}
+	`
+
+	streamingBodyWithoutUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":null}
+	`
+
+	streamingBodyWithUsage = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10}}
+data: [DONE]
+	`
+	streamingBodyWithUsageAndCachedTokens = `data: {"id":"cmpl-41764c93-f9d2-4f31-be08-3ba04fa25394","object":"text_completion","created":1740002445,"model":"food-review-0","choices":[],"usage":{"prompt_tokens":7,"total_tokens":17,"completion_tokens":10,"prompt_token_details":{"cached_tokens":5}}}
+data: [DONE]
+	`
+)
+
+type mockDirector struct{}
+
+func (m *mockDirector) HandleResponseBody(ctx context.Context, reqCtx *RequestContext, endOfStream bool) *RequestContext {
+	return reqCtx
+}
+func (m *mockDirector) HandleResponseHeader(ctx context.Context, reqCtx *RequestContext) *RequestContext {
+	return reqCtx
+}
+func (m *mockDirector) GetRandomEndpoint() *fwkdl.EndpointMetadata {
+	return &fwkdl.EndpointMetadata{}
+}
+func (m *mockDirector) HandleRequest(ctx context.Context, reqCtx *RequestContext, inferenceRequestBody *fwkrh.InferenceRequestBody) (*RequestContext, error) {
+	return reqCtx, nil
+}
+
+func TestHandleResponseBody(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	tests := []struct {
+		name   string
+		body   []byte
+		reqCtx *RequestContext
+		want   fwkrh.Usage
+	}{
+		{
+			name: "success",
+			body: []byte(body),
+			want: fwkrh.Usage{
+				PromptTokens:     11,
+				TotalTokens:      111,
+				CompletionTokens: 100,
+			},
+		},
+		{
+			name: "success with cached tokens",
+			body: []byte(bodyWithCachedTokens),
+			want: fwkrh.Usage{
+				PromptTokens:     11,
+				TotalTokens:      111,
+				CompletionTokens: 100,
+				PromptTokenDetails: &fwkrh.PromptTokenDetails{
+					CachedTokens: 10,
+				},
+			},
+		},
+		{
+			name: "success body without usage, the HandleResponseBody should still return non-nil error",
+			body: []byte(bodyWithoutUsage),
+			want: fwkrh.Usage{}, // Since the usage is not set in the responseBody, this usage should be empty.
+		},
+		{
+			name: "success invalid joson body, the HandleResponseBody should still return non-nil error",
+			body: []byte(bodyInvalidJSON),
+			want: fwkrh.Usage{}, // Since the response is invalid json, the usage cannot be extrcated.
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := &StreamingServer{
+				parser: openai.NewOpenAIParser(),
+			}
+			server.director = &mockDirector{}
+			reqCtx := test.reqCtx
+			if reqCtx == nil {
+				reqCtx = &RequestContext{
+					Response: &Response{},
+				}
+			}
+			server.HandleResponseBody(ctx, reqCtx, test.body, true)
+			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
+				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
+	}
+}
+
+func TestHandleStreamedResponseBody(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+	tests := []struct {
+		name    string
+		body    []byte
+		want    fwkrh.Usage
+		wantErr bool
+	}{
+		{
+			name:    "streaming request without usage",
+			body:    []byte(streamingBodyWithoutUsage),
+			wantErr: false,
+			// In the middle of streaming response, so request context response is not set yet.
+		},
+		{
+			name:    "streaming request with usage",
+			body:    []byte(streamingBodyWithUsage),
+			wantErr: false,
+			want: fwkrh.Usage{
+				PromptTokens:     7,
+				TotalTokens:      17,
+				CompletionTokens: 10,
+			},
+		},
+		{
+			name:    "streaming request with usage and cached tokens",
+			body:    []byte(streamingBodyWithUsageAndCachedTokens),
+			wantErr: false,
+			want: fwkrh.Usage{
+				PromptTokens:     7,
+				TotalTokens:      17,
+				CompletionTokens: 10,
+				PromptTokenDetails: &fwkrh.PromptTokenDetails{
+					CachedTokens: 5,
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := &StreamingServer{
+				parser: openai.NewOpenAIParser(),
+			}
+			server.director = &mockDirector{}
+			reqCtx := &RequestContext{
+				Response: &Response{
+					Headers: map[string]string{
+						"content-type": "text/event-stream; charset=utf-8",
+					},
+				},
+			}
+			server.HandleResponseBody(ctx, reqCtx, test.body, true) // Hard coded to true since openAIParser does not endOfStream to switch logic.
+
+			if diff := cmp.Diff(test.want, reqCtx.Usage); diff != "" {
+				t.Errorf("HandleResponseBody returned unexpected response, diff(-want, +got): %v", diff)
+			}
+		})
+	}
+}
+
+func TestHandleResponseBodyModelStreaming_TokenAccumulation(t *testing.T) {
+	t.Parallel()
+
+	type chunkStream struct {
+		body        []byte
+		endOfStream bool
+	}
+
+	tests := []struct {
+		name      string
+		chunks    []chunkStream
+		wantUsage fwkrh.Usage
+	}{
+		{
+			name: "Standard: Usage and DONE in same chunk",
+			chunks: []chunkStream{
+				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n" + `data: [DONE]`), endOfStream: true},
+			},
+			wantUsage: fwkrh.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+		},
+		{
+			name: "Split: Usage in Chunk 1, DONE in Chunk 2",
+			chunks: []chunkStream{
+				// Chunk 1: Usage data arrives
+				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n"), endOfStream: false},
+				// Chunk 2: Stream termination. Should NOT overwrite the usage from Chunk 1.
+				{body: []byte(`data: [DONE]`), endOfStream: true},
+			},
+			wantUsage: fwkrh.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+		},
+		{
+			name: "Fragmented: Content -> Usage -> DONE",
+			chunks: []chunkStream{
+				{body: []byte(`data: {"choices":[{"text":"Hello"}]}` + "\n"), endOfStream: false},
+				{body: []byte(`data: {"usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}` + "\n"), endOfStream: false},
+				{body: []byte(`data: [DONE]`), endOfStream: true},
+			},
+			wantUsage: fwkrh.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15},
+		},
+		{
+			name: "No Usage Data",
+			chunks: []chunkStream{
+				{body: []byte(`data: {"choices":[{"text":"Hello"}]}` + "\n"), endOfStream: false},
+				{body: []byte(`data: [DONE]`), endOfStream: true},
+			},
+			wantUsage: fwkrh.Usage{}, // Zero values
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := &StreamingServer{
+				parser:   openai.NewOpenAIParser(),
+				director: &mockDirector{},
+			}
+			reqCtx := &RequestContext{
+				Response: &Response{
+					Headers: map[string]string{
+						"content-type": "text/event-stream",
+					},
+				},
+			}
+
+			for _, chunk := range tc.chunks {
+				server.HandleResponseBody(context.Background(), reqCtx, chunk.body, chunk.endOfStream)
+			}
+
+			assert.Equal(t, tc.wantUsage, reqCtx.Usage, "Usage data should match expected accumulation")
+		})
+	}
+}
+
+func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
+	server := &StreamingServer{}
+	reqCtx := &RequestContext{
+		Response: &Response{
+			Headers: map[string]string{
+				"x-backend-server":              "vllm-v0.6.3",            // should passthrough
+				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
+				metadata.DestinationEndpointKey: "10.2.0.5:8080",          // should be stripped
+				"content-length":                "500",                    // hould be stripped
+			},
+		},
+	}
+
+	results := server.generateResponseHeaders(reqCtx)
+
+	gotHeaders := make(map[string]string)
+	for _, h := range results {
+		gotHeaders[h.Header.Key] = string(h.Header.RawValue)
+	}
+
+	assert.Contains(t, gotHeaders, "x-backend-server")
+	assert.Contains(t, gotHeaders, "x-went-into-resp-headers")
+	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
+	assert.NotContains(t, gotHeaders, metadata.DestinationEndpointKey)
+	assert.NotContains(t, gotHeaders, "content-length")
+}
+
+func TestRewriteModelName(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		targetModel   string
+		incomingModel string
+		want          string
+	}{
+		{
+			name:          "non-streaming response with model rewrite",
+			body:          `{"id":"cmpl-123","model":"vllm-backend-01","choices":[]}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"id":"cmpl-123","model":"gpt-4-proxy","choices":[]}`,
+		},
+		{
+			name:          "streaming SSE chunk with model rewrite",
+			body:          `data: {"id":"cmpl-123","model":"vllm-backend-01","choices":[]}` + "\n\n",
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `data: {"id":"cmpl-123","model":"gpt-4-proxy","choices":[]}` + "\n\n",
+		},
+		{
+			name:          "no rewrite when names are the same",
+			body:          `{"model":"same-model"}`,
+			targetModel:   "same-model",
+			incomingModel: "same-model",
+			want:          `{"model":"same-model"}`,
+		},
+		{
+			name:          "no rewrite when target is empty",
+			body:          `{"model":"some-model"}`,
+			targetModel:   "",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"model":"some-model"}`,
+		},
+		{
+			name:          "no rewrite when incoming is empty",
+			body:          `{"model":"some-model"}`,
+			targetModel:   "some-model",
+			incomingModel: "",
+			want:          `{"model":"some-model"}`,
+		},
+		{
+			name:          "model field with space after colon",
+			body:          `{"model": "vllm-backend-01"}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"model": "gpt-4-proxy"}`,
+		},
+		{
+			name:          "body without model field is unchanged",
+			body:          `{"id":"cmpl-123","choices":[]}`,
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          `{"id":"cmpl-123","choices":[]}`,
+		},
+		{
+			name:          "DONE marker is not affected",
+			body:          "data: [DONE]\n",
+			targetModel:   "vllm-backend-01",
+			incomingModel: "gpt-4-proxy",
+			want:          "data: [DONE]\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rewriteModelName([]byte(tc.body), tc.targetModel, tc.incomingModel)
+			assert.Equal(t, tc.want, string(got))
+		})
+	}
+}
+
+func TestResponseSizeAccumulation(t *testing.T) {
+	ctx := logutil.NewTestLoggerIntoContext(context.Background())
+
+	tests := []struct {
+		name             string
+		chunks           [][]byte
+		wantResponseSize int
+	}{
+		{
+			name:             "single chunk",
+			chunks:           [][]byte{[]byte("hello world")},
+			wantResponseSize: 11,
+		},
+		{
+			name:             "multiple chunks",
+			chunks:           [][]byte{[]byte("chunk1"), []byte("chunk2"), []byte("chunk3")},
+			wantResponseSize: 18,
+		},
+		{
+			name:             "empty chunk",
+			chunks:           [][]byte{[]byte("")},
+			wantResponseSize: 0,
+		},
+		{
+			name:             "mixed chunks with empty",
+			chunks:           [][]byte{[]byte("data"), []byte(""), []byte("more")},
+			wantResponseSize: 8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &StreamingServer{
+				parser:   openai.NewOpenAIParser(),
+				director: &mockDirector{},
+			}
+			reqCtx := &RequestContext{
+				Response: &Response{
+					Headers: map[string]string{},
+				},
+			}
+			for i, chunk := range tt.chunks {
+				endOfStream := i == len(tt.chunks)-1
+				server.HandleResponseBody(ctx, reqCtx, chunk, endOfStream)
+			}
+			assert.Equal(t, tt.wantResponseSize, reqCtx.ResponseSize)
+		})
+	}
+}
