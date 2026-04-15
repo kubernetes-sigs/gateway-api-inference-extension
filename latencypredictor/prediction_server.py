@@ -279,12 +279,17 @@ class ModelSyncer:
     def _sync_loop(self):
         while not self._shutdown_event.is_set():
             try:
-                updated = self.sync_models()
-                # Always try to load models if predictor isn't ready yet,
-                # even if no new files were downloaded (another worker may
-                # have already written them to disk).
-                if updated or not predictor.is_ready:
-                    predictor.load_models()
+                # Download the latest model files from the training server.
+                # sync_models() returns True only if THIS worker downloaded a
+                # new file. In multi-worker mode only one of the N workers
+                # wins that race per cycle, so we must call load_models()
+                # unconditionally — otherwise the N-1 workers that lost the
+                # download race would keep serving a stale in-memory model.
+                # load_models() has its own checksum-based early return, so
+                # the cost when the file on disk hasn't changed is just a
+                # file-checksum read.
+                self.sync_models()
+                predictor.load_models()
             except Exception as e:
                 logging.error(f"Error in sync loop: {e}")
             self._shutdown_event.wait(timeout=settings.MODEL_SYNC_INTERVAL_SEC)
