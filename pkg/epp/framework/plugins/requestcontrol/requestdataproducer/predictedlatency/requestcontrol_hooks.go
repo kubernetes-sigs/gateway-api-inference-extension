@@ -100,11 +100,11 @@ func (t *PredictedLatency) PreRequest(ctx context.Context, request *schedulingty
 	decodePodKey := endpointName.String()
 	if predictedLatencyCtx.prefillTargetMetadata != nil {
 		prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
-		t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
-		predictedLatencyCtx.prefillTokensAtDispatchOnPrefill = t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Load()
+		t.endpointCounter(&t.prefillTokensInFlight, prefillPodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
+		predictedLatencyCtx.prefillTokensAtDispatchOnPrefill = t.endpointCounter(&t.prefillTokensInFlight, prefillPodKey).Load()
 	}
-	t.podCounter(&t.prefillTokensInFlight, decodePodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
-	predictedLatencyCtx.prefillTokensAtDispatch = t.podCounter(&t.prefillTokensInFlight, decodePodKey).Load()
+	t.endpointCounter(&t.prefillTokensInFlight, decodePodKey).Add(int64(predictedLatencyCtx.inputTokenCount))
+	predictedLatencyCtx.prefillTokensAtDispatch = t.endpointCounter(&t.prefillTokensInFlight, decodePodKey).Load()
 	predictedLatencyCtx.decodeTokensAtDispatch = 0
 
 	processPreRequestForLatencyPrediction(ctx, predictedLatencyCtx)
@@ -141,11 +141,12 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 		if t.config.StreamingMode && !response.EndOfStream {
 			processFirstTokenForLatencyPrediction(ctx, t.latencypredictor, t.config.StreamingMode, t.config.EndpointRoleLabel, predictedLatencyCtx, now, t.config.SamplingMean, t.config.MaxDecodeTokenSamplesForPrediction)
 
-			if predictedLatencyCtx.prefillTargetMetadata != nil {
+			// Only decrement if PreRequest actually incremented the prefill pod counter.
+			// If PrepareData timed out, PreRequest may have skipped incrementing, and
+			// decrementing here would drift the counter negative.
+			if predictedLatencyCtx.prefillTargetMetadata != nil && predictedLatencyCtx.prefillTokensAtDispatchOnPrefill > 0 {
 				prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
-				if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
-					t.prefillTokensInFlight.Delete(prefillPodKey)
-				}
+				t.decrementEndpointCounter(&t.prefillTokensInFlight, prefillPodKey, int64(predictedLatencyCtx.inputTokenCount))
 			}
 		}
 	} else {
@@ -202,14 +203,16 @@ func (t *PredictedLatency) ResponseBody(ctx context.Context, request *scheduling
 		}
 
 		decodePodKey := targetMetadata.NamespacedName.String()
-		if ttftNotYetRecorded && predictedLatencyCtx.prefillTargetMetadata != nil {
+		// Only decrement counters that PreRequest actually incremented. See the TTFT
+		// branch above for the rationale: PrepareData timeouts can leave PreRequest
+		// without an SLO context, so the counter was never bumped up, and decrementing
+		// here would orphan the pod's counter into negative territory.
+		if ttftNotYetRecorded && predictedLatencyCtx.prefillTargetMetadata != nil && predictedLatencyCtx.prefillTokensAtDispatchOnPrefill > 0 {
 			prefillPodKey := predictedLatencyCtx.prefillTargetMetadata.NamespacedName.String()
-			if t.podCounter(&t.prefillTokensInFlight, prefillPodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
-				t.prefillTokensInFlight.Delete(prefillPodKey)
-			}
+			t.decrementEndpointCounter(&t.prefillTokensInFlight, prefillPodKey, int64(predictedLatencyCtx.inputTokenCount))
 		}
-		if t.podCounter(&t.prefillTokensInFlight, decodePodKey).Add(-int64(predictedLatencyCtx.inputTokenCount)) == 0 {
-			t.prefillTokensInFlight.Delete(decodePodKey)
+		if predictedLatencyCtx.prefillTokensAtDispatch > 0 {
+			t.decrementEndpointCounter(&t.prefillTokensInFlight, decodePodKey, int64(predictedLatencyCtx.inputTokenCount))
 		}
 
 		id := request.Headers[reqcommon.RequestIdHeaderKey]

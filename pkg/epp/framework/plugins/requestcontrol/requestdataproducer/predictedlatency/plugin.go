@@ -52,7 +52,7 @@ const (
 	// TPOTSLOHeaderKey is the header key for the TPOT SLO.
 	TPOTSLOHeaderKey = "x-slo-tpot-ms"
 
-	// Experimental_DefaultPrefillProfile is the default profile name for prefill pods in disaggregated serving.
+	// Experimental_DefaultPrefillProfile is the default profile name for prefill endpoints in disaggregated serving.
 	Experimental_DefaultPrefillProfile = "prefill"
 )
 
@@ -70,13 +70,46 @@ type PredictedLatency struct {
 	runningRequestLists   sync.Map                                      // Key: types.NamespacedName, Value: *requestPriorityQueue
 	sloContextStore       *ttlcache.Cache[string, *predictedLatencyCtx] // TTL cache for request contexts
 	config                Config
-	prefillTokensInFlight sync.Map // Key: pod NamespacedName.String(), Value: *atomic.Int64
+	prefillTokensInFlight sync.Map // Key: endpoint NamespacedName.String(), Value: *atomic.Int64
 }
 
-// podCounter returns the atomic counter for the given pod key, creating it if necessary.
-func (t *PredictedLatency) podCounter(m *sync.Map, key string) *atomic.Int64 {
+// endpointCounter returns the atomic counter for the given endpoint key, creating it if necessary.
+func (t *PredictedLatency) endpointCounter(m *sync.Map, key string) *atomic.Int64 {
 	v, _ := m.LoadOrStore(key, new(atomic.Int64))
 	return v.(*atomic.Int64)
+}
+
+// decrementEndpointCounter subtracts delta from the counter at key with a hard
+// floor at zero, and removes the entry from the map once the counter reaches
+// zero. This is the only sanctioned way to decrement prefillTokensInFlight
+// (or any counter with the same shape): a naive Add(-delta) can drift the
+// counter negative if callers race (e.g. PrepareData publishing an SLO
+// context after PreRequest already skipped the increment), which used to
+// break prediction requests with `greater_than_equal: 0` validation errors.
+// Decrementing a missing key is a no-op and does not create a zero entry.
+func (t *PredictedLatency) decrementEndpointCounter(m *sync.Map, key string, delta int64) {
+	v, ok := m.Load(key)
+	if !ok {
+		return
+	}
+	counter := v.(*atomic.Int64)
+	for {
+		current := counter.Load()
+		if current <= 0 {
+			// Already at or below zero; clamp and don't over-decrement.
+			return
+		}
+		next := current - delta
+		if next < 0 {
+			next = 0
+		}
+		if counter.CompareAndSwap(current, next) {
+			if next == 0 {
+				m.Delete(key)
+			}
+			return
+		}
+	}
 }
 
 type Config struct {
@@ -160,19 +193,13 @@ func NewPredictedLatency(config Config, predictor latencypredictor.PredictorInte
 		}
 		plCtx := item.Value()
 		predictedLatency.removeRequestFromQueue(item.Key(), plCtx)
-		if plCtx.prefillTokensAtDispatch > 0 || plCtx.prefillTokensAtDispatchOnPrefill > 0 {
-			if plCtx.prefillTargetMetadata != nil && plCtx.ttft == 0 {
-				prefillPodKey := plCtx.prefillTargetMetadata.NamespacedName.String()
-				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, prefillPodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
-					predictedLatency.prefillTokensInFlight.Delete(prefillPodKey)
-				}
-			}
-			if plCtx.targetMetadata != nil {
-				decodePodKey := plCtx.targetMetadata.NamespacedName.String()
-				if predictedLatency.podCounter(&predictedLatency.prefillTokensInFlight, decodePodKey).Add(-int64(plCtx.inputTokenCount)) == 0 {
-					predictedLatency.prefillTokensInFlight.Delete(decodePodKey)
-				}
-			}
+		if plCtx.prefillTargetMetadata != nil && plCtx.ttft == 0 && plCtx.prefillTokensAtDispatchOnPrefill > 0 {
+			prefillEndpointKey := plCtx.prefillTargetMetadata.NamespacedName.String()
+			predictedLatency.decrementEndpointCounter(&predictedLatency.prefillTokensInFlight, prefillEndpointKey, int64(plCtx.inputTokenCount))
+		}
+		if plCtx.targetMetadata != nil && plCtx.prefillTokensAtDispatch > 0 {
+			decodeEndpointKey := plCtx.targetMetadata.NamespacedName.String()
+			predictedLatency.decrementEndpointCounter(&predictedLatency.prefillTokensInFlight, decodeEndpointKey, int64(plCtx.inputTokenCount))
 		}
 	})
 
