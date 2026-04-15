@@ -69,7 +69,7 @@ func (s *PredictedLatency) generatePredictions(ctx context.Context, predictedLat
 		prefixCacheScores[i] = prefixCacheScore
 
 		podKey := endpoint.GetMetadata().NamespacedName.String()
-		prefillTokensInFlights[i] = s.podCounter(&s.prefillTokensInFlight, podKey).Load()
+		prefillTokensInFlights[i] = s.endpointCounter(&s.prefillTokensInFlight, podKey).Load()
 	}
 
 	// Bulk predict
@@ -151,7 +151,7 @@ func (s *PredictedLatency) validatePrediction(
 		// a podMinTPOTSLO of 0 means no either no requests, or no TPOT SLOs specified on running requests
 		if podMinTPOTSLO > 0 {
 			if podMinTPOTSLO < predictedLatencyCtx.avgTPOTSLO {
-				log.FromContext(context.Background()).V(logutil.DEBUG).Info("Pod min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", predictedLatencyCtx.avgTPOTSLO)
+				log.FromContext(context.Background()).V(logutil.DEBUG).Info("Endpoint min TPOT SLO is less than the req SLO, adjusting", "podMinTPOTSLO", podMinTPOTSLO, "bufferedTPOT", predictedLatencyCtx.avgTPOTSLO)
 			}
 			bufferedTPOT = min(bufferedTPOT, podMinTPOTSLO*s.config.SLOBufferFactor)
 		}
