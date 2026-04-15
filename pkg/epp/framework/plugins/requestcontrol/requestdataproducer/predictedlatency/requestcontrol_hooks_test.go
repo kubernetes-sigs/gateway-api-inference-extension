@@ -19,6 +19,7 @@ package predictedlatency
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -769,6 +770,97 @@ func TestPredictedLatency_NonStreamingMode_ResponseBody_FinalToken(t *testing.T)
 	// Context should be deleted when EndOfStream is reached
 	_, err := router.getPredictedLatencyContextForRequest(request)
 	assert.Error(t, err)
+}
+
+// TestDecrementEndpointCounter_FloorAtZero verifies the last line of defense:
+// decrementEndpointCounter never lets a counter go below zero, regardless of
+// how many times it's called or how large the delta is. This is what keeps
+// prefillTokensInFlight valid even if callers race in surprising ways.
+func TestDecrementEndpointCounter_FloorAtZero(t *testing.T) {
+	pl := &PredictedLatency{}
+	var m sync.Map
+	key := "default/pod-a"
+
+	// Decrement a counter that doesn't exist yet: should be a no-op and not
+	// create a negative entry.
+	pl.decrementEndpointCounter(&m, key, 100)
+	_, exists := m.Load(key)
+	assert.False(t, exists, "decrementing a missing counter should not create a negative entry")
+
+	// Increment, then decrement by more than the current value: result must
+	// clamp at zero and the entry should be removed from the map.
+	pl.endpointCounter(&m, key).Add(50)
+	pl.decrementEndpointCounter(&m, key, 200)
+	_, exists = m.Load(key)
+	assert.False(t, exists, "counter should be deleted when it reaches zero")
+
+	// Decrement-after-delete: another no-op, still no negative entries.
+	pl.decrementEndpointCounter(&m, key, 10)
+	if counter, ok := m.Load(key); ok {
+		value := counter.(*atomic.Int64).Load()
+		assert.GreaterOrEqual(t, value, int64(0), "counter must never go below zero")
+	}
+
+	// Normal path: partial decrement keeps the counter positive.
+	pl.endpointCounter(&m, key).Add(100)
+	pl.decrementEndpointCounter(&m, key, 30)
+	counter, ok := m.Load(key)
+	assert.True(t, ok)
+	assert.Equal(t, int64(70), counter.(*atomic.Int64).Load())
+}
+
+// TestPredictedLatency_ResponseBody_NoOrphanDecrement_WhenPreRequestSkipped
+// simulates the race that drove prefill counters negative in production: the
+// director's PrepareData window timed out, PreRequest saw no SLO context and
+// skipped the counter increment, but the PrepareData goroutine later published
+// the context anyway. ResponseBody must refuse to decrement counters that
+// PreRequest never bumped up — otherwise prefillTokensInFlight drifts below
+// zero and the prediction server rejects every subsequent request with 422.
+func TestPredictedLatency_ResponseBody_NoOrphanDecrement_WhenPreRequestSkipped(t *testing.T) {
+	router := createTestRouter()
+	router.config.StreamingMode = false
+	mockPredictor := new(mockPredictor)
+	router.latencypredictor = mockPredictor
+
+	ctx := context.Background()
+	endpoint := createTestEndpoint("test-pod", 1, 1, 1)
+	request := createTestInferenceRequest("orphan-test", 100, 50)
+	response := &requestcontrol.Response{EndOfStream: true}
+	schedulingResult := createTestSchedulingResult(endpoint.GetMetadata())
+
+	// Build an SLO context the way PrepareData would have, but skip the
+	// PreRequest step that would have incremented prefillTokensAtDispatch.
+	// This mirrors the production bug: PrepareData raced past the director's
+	// timeout and published a context that PreRequest never saw.
+	predictedLatencyCtx := newPredictedLatencyContext(request)
+	predictedLatencyCtx.targetMetadata = endpoint.GetMetadata()
+	predictedLatencyCtx.schedulingResult = schedulingResult
+	predictedLatencyCtx.schedulingRequest = *request
+	predictedLatencyCtx.requestReceivedTimestamp = time.Now().Add(-50 * time.Millisecond)
+	predictedLatencyCtx.inputTokenCount = 4096
+	// prefillTokensAtDispatch stays zero — PreRequest never ran.
+	router.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
+
+	queue := newRequestPriorityQueue()
+	queue.Add(request.Headers[reqcommon.RequestIdHeaderKey], 50.0)
+	router.runningRequestLists.Store(endpoint.GetMetadata().NamespacedName, queue)
+
+	decodePodKey := endpoint.GetMetadata().NamespacedName.String()
+
+	router.ResponseBody(ctx, request, response, endpoint.GetMetadata())
+
+	// The decode pod counter must not have been decremented below zero. It
+	// should either not exist (never created) or still be at its starting
+	// value of zero — either is acceptable, anything negative is the bug.
+	if counter, ok := router.prefillTokensInFlight.Load(decodePodKey); ok {
+		value := counter.(*atomic.Int64).Load()
+		assert.GreaterOrEqual(t, value, int64(0),
+			"prefillTokensInFlight must not drift negative when PreRequest skipped the increment")
+	}
+
+	// The SLO context should still be cleaned up so we don't leak memory.
+	_, err := router.getPredictedLatencyContextForRequest(request)
+	assert.Error(t, err, "SLO context should be removed at EOS even on the orphan path")
 }
 
 func TestPredictedLatency_CheckPredictor_NilPod(t *testing.T) {

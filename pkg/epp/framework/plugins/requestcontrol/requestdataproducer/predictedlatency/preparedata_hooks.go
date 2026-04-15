@@ -58,6 +58,9 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 	}
 	if !s.config.PredictInPrepareData {
 		logger.V(logutil.DEBUG).Info("PredictInPrepareData disabled, skipping predictions")
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 		return nil
 	}
@@ -91,6 +94,13 @@ func (s *PredictedLatency) PrepareRequestData(ctx context.Context, request *sche
 		}
 	}
 
+	// Don't publish the SLO context after the director's PrepareData window has closed.
+	// If we did, PreRequest has already run (and skipped incrementing counters because the
+	// context wasn't yet present), but ResponseBody would later find the context and issue
+	// an orphan decrement — drifting prefillTokensInFlight negative under sustained load.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.setPredictedLatencyContextForRequest(request, predictedLatencyCtx)
 	return nil
 }
