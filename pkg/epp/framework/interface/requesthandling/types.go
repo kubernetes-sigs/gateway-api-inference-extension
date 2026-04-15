@@ -27,6 +27,12 @@ import (
 
 const nilStr = "<nil>"
 
+// Modality identifies the type of multimodal content in a prompt.
+type Modality string
+
+// ModalityImage is the only currently supported modality.
+const ModalityImage Modality = "image"
+
 // RequestPayload represents a strongly-typed unmarshaled request payload or raw bytes.
 type RequestPayload interface {
 	isRequestPayload()
@@ -71,10 +77,38 @@ type InferenceRequestBody struct {
 	// If the payload is unmarshaled, we can perform advanced processing (like prefix cache aware routing).
 	// If it remains as raw bytes, such processing may not be supported.
 	Payload RequestPayload `json:"-"`
+	// TokenizedPrompt contains parser-derived tokenization results when available.
+	// It is nil when the request was not already tokenized.
+	TokenizedPrompt *TokenizedPrompt `json:"-"`
 
 	// Stream indicates whether the request specifies a streaming response (e.g., via a stream field).
 	// This typically implies the model server's response will be streamed.
 	Stream bool `json:"-"`
+}
+
+// TokenizedPrompt contains the result of tokenizing the request prompt.
+// It is consumed by scheduling and request-control plugins that benefit from
+// actual token data such as prefix-cache awareness.
+type TokenizedPrompt struct {
+	// TokenIDs are the token IDs for the prompt, including multimodal placeholder tokens.
+	TokenIDs []uint32
+	// MultiModalFeatures holds one entry per multimodal item in prompt order.
+	// Nil if the prompt contains no multimodal content.
+	MultiModalFeatures []MultiModalFeature
+}
+
+// MultiModalFeature holds all data needed for precise prefix-cache scoring of a single
+// multimodal item. Items are ordered by token position within the prompt.
+// Currently only ModalityImage is supported.
+type MultiModalFeature struct {
+	// Modality identifies the type of content.
+	Modality Modality
+	// Hash is the content hash of the item, used for KV-cache reuse across requests.
+	Hash string
+	// Offset is the index of the first placeholder token for this item in TokenIDs.
+	Offset int
+	// Length is the number of placeholder tokens this item occupies in TokenIDs.
+	Length int
 }
 
 // PromptText returns a plain-text representation of the prompt from whichever

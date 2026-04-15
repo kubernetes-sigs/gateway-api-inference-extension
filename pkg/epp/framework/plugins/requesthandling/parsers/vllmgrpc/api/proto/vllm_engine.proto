@@ -85,6 +85,50 @@ message TokenizedInput {
   repeated uint32 input_ids = 2;  // Actual token IDs to process
 }
 
+// A typed tensor: raw little-endian bytes + shape + dtype.
+message TensorData {
+  bytes data = 1;              // Raw little-endian bytes (f32/i64/u32)
+  repeated uint32 shape = 2;   // Dimension sizes
+  string dtype = 3;            // "float32", "int64", "uint32"
+}
+
+message PlaceholderRange {
+  uint32 offset = 1;
+  uint32 length = 2;
+}
+
+// Multimodal inputs for vision/audio models.
+message MultimodalInputs {
+  // Reserved: field 1 was image_data (raw bytes), removed in favor of
+  // preprocessed pixel_values.
+  reserved 1;
+
+  // Preprocessed pixel values tensor.
+  TensorData pixel_values = 2;
+
+  // Model-specific tensors (image_grid_thw, aspect_ratios, etc.).
+  map<string, TensorData> model_specific_tensors = 3;
+
+  // Image token ID used for placeholder expansion.
+  optional uint32 im_token_id = 4;
+
+  // Placeholder offsets: where each image's tokens are in input_ids.
+  repeated PlaceholderRange mm_placeholders = 5;
+
+  // Per-image blake3 hex hashes for encoder output caching.
+  repeated string mm_hashes = 6;
+
+  // Tensor keys whose first dimension is per-image (batched).
+  // Keys not listed here are shared across all images.
+  repeated string batched_keys = 7;
+
+  // Tensor keys that need flat slicing: maps tensor name -> sizes tensor name.
+  map<string, string> flat_keys = 8;
+
+  // Tensor keys that should remain on CPU (not transferred to GPU).
+  repeated string keep_on_cpu_keys = 9;
+}
+
 // =====================
 // Generate Request
 // =====================
@@ -103,6 +147,9 @@ message GenerateRequest {
 
   // Streaming
   bool stream = 5;
+
+  // Optional multimodal data (images for vision models)
+  MultimodalInputs mm_inputs = 7;
 }
 
 // =====================

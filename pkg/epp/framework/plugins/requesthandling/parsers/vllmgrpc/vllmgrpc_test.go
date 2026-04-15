@@ -119,6 +119,7 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 				Input: &pb.GenerateRequest_Tokenized{
 					Tokenized: &pb.TokenizedInput{
 						OriginalText: "Tokenized hello",
+						InputIds:     []uint32{11, 12, 13},
 					},
 				},
 			},
@@ -132,9 +133,109 @@ func TestVllmGRPCParser_ParseRequest(t *testing.T) {
 						Input: &pb.GenerateRequest_Tokenized{
 							Tokenized: &pb.TokenizedInput{
 								OriginalText: "Tokenized hello",
+								InputIds:     []uint32{11, 12, 13},
 							},
 						},
 					}},
+				TokenizedPrompt: &fwkrh.TokenizedPrompt{
+					TokenIDs: []uint32{11, 12, 13},
+				},
+			},
+		},
+		{
+			name: "Valid Tokenized Request With Multimodal Inputs",
+			reqMsg: &pb.GenerateRequest{
+				Input: &pb.GenerateRequest_Tokenized{
+					Tokenized: &pb.TokenizedInput{
+						OriginalText: "Describe image",
+						InputIds:     []uint32{101, 102, 103, 104, 105},
+					},
+				},
+				MmInputs: &pb.MultimodalInputs{
+					MmPlaceholders: []*pb.PlaceholderRange{
+						{Offset: 1, Length: 2},
+						{Offset: 4, Length: 1},
+					},
+					MmHashes: []string{"hash-a", "hash-b"},
+				},
+			},
+			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
+			want: &fwkrh.InferenceRequestBody{
+				Completions: &fwkrh.CompletionsRequest{
+					Prompt: fwkrh.Prompt{Raw: "Describe image"},
+				},
+				Payload: fwkrh.PayloadProto{
+					Message: &pb.GenerateRequest{
+						Input: &pb.GenerateRequest_Tokenized{
+							Tokenized: &pb.TokenizedInput{
+								OriginalText: "Describe image",
+								InputIds:     []uint32{101, 102, 103, 104, 105},
+							},
+						},
+						MmInputs: &pb.MultimodalInputs{
+							MmPlaceholders: []*pb.PlaceholderRange{
+								{Offset: 1, Length: 2},
+								{Offset: 4, Length: 1},
+							},
+							MmHashes: []string{"hash-a", "hash-b"},
+						},
+					},
+				},
+				TokenizedPrompt: &fwkrh.TokenizedPrompt{
+					TokenIDs: []uint32{101, 102, 103, 104, 105},
+					MultiModalFeatures: []fwkrh.MultiModalFeature{
+						{Modality: fwkrh.ModalityImage, Hash: "hash-a", Offset: 1, Length: 2},
+						{Modality: fwkrh.ModalityImage, Hash: "hash-b", Offset: 4, Length: 1},
+					},
+				},
+			},
+		},
+		{
+			name: "Valid Tokenized Request Pads Missing Multimodal Hashes",
+			reqMsg: &pb.GenerateRequest{
+				Input: &pb.GenerateRequest_Tokenized{
+					Tokenized: &pb.TokenizedInput{
+						OriginalText: "Two images",
+						InputIds:     []uint32{201, 202, 203, 204},
+					},
+				},
+				MmInputs: &pb.MultimodalInputs{
+					MmPlaceholders: []*pb.PlaceholderRange{
+						{Offset: 0, Length: 1},
+						{Offset: 2, Length: 2},
+					},
+					MmHashes: []string{"hash-only"},
+				},
+			},
+			headers: map[string]string{":path": "/vllm.grpc.engine.VllmEngine/Generate"},
+			want: &fwkrh.InferenceRequestBody{
+				Completions: &fwkrh.CompletionsRequest{
+					Prompt: fwkrh.Prompt{Raw: "Two images"},
+				},
+				Payload: fwkrh.PayloadProto{
+					Message: &pb.GenerateRequest{
+						Input: &pb.GenerateRequest_Tokenized{
+							Tokenized: &pb.TokenizedInput{
+								OriginalText: "Two images",
+								InputIds:     []uint32{201, 202, 203, 204},
+							},
+						},
+						MmInputs: &pb.MultimodalInputs{
+							MmPlaceholders: []*pb.PlaceholderRange{
+								{Offset: 0, Length: 1},
+								{Offset: 2, Length: 2},
+							},
+							MmHashes: []string{"hash-only"},
+						},
+					},
+				},
+				TokenizedPrompt: &fwkrh.TokenizedPrompt{
+					TokenIDs: []uint32{201, 202, 203, 204},
+					MultiModalFeatures: []fwkrh.MultiModalFeature{
+						{Modality: fwkrh.ModalityImage, Hash: "hash-only", Offset: 0, Length: 1},
+						{Modality: fwkrh.ModalityImage, Hash: "", Offset: 2, Length: 2},
+					},
+				},
 			},
 		},
 

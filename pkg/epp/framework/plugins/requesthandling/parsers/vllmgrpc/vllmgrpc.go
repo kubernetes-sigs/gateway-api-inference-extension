@@ -193,17 +193,66 @@ func convertToInferenceRequestBody(payload []byte) (*fwkrh.InferenceRequestBody,
 			Payload: fwkrh.PayloadProto{Message: pbReq},
 		}
 	case *pb.GenerateRequest_Tokenized:
+		tokenized := pbReq.GetTokenized()
+		if tokenized == nil {
+			return nil, errors.New("missing tokenized input")
+		}
 		body = &fwkrh.InferenceRequestBody{
 			Completions: &fwkrh.CompletionsRequest{
-				Prompt: fwkrh.Prompt{Raw: pbReq.GetTokenized().OriginalText},
+				Prompt: fwkrh.Prompt{Raw: tokenized.GetOriginalText()},
 			},
-			Payload: fwkrh.PayloadProto{Message: pbReq},
+			Payload:         fwkrh.PayloadProto{Message: pbReq},
+			TokenizedPrompt: convertTokenizedPrompt(tokenized, pbReq.GetMmInputs()),
 		}
 	default:
 		return nil, errors.New("not supported request inputType")
 	}
 	body.Stream = pbReq.GetStream()
 	return body, nil
+}
+
+func convertTokenizedPrompt(tokenized *pb.TokenizedInput, mmInputs *pb.MultimodalInputs) *fwkrh.TokenizedPrompt {
+	if tokenized == nil {
+		return nil
+	}
+
+	return &fwkrh.TokenizedPrompt{
+		TokenIDs:           append([]uint32(nil), tokenized.GetInputIds()...),
+		MultiModalFeatures: convertMultiModalFeatures(mmInputs),
+	}
+}
+
+func convertMultiModalFeatures(mmInputs *pb.MultimodalInputs) []fwkrh.MultiModalFeature {
+	if mmInputs == nil {
+		return nil
+	}
+
+	placeholders := mmInputs.GetMmPlaceholders()
+	if len(placeholders) == 0 {
+		return nil
+	}
+
+	hashes := mmInputs.GetMmHashes()
+	features := make([]fwkrh.MultiModalFeature, 0, len(placeholders))
+	for i, placeholder := range placeholders {
+		hash := ""
+		if i < len(hashes) {
+			hash = hashes[i]
+		}
+
+		feature := fwkrh.MultiModalFeature{
+			Modality: fwkrh.ModalityImage,
+			Hash:     hash,
+		}
+		if placeholder != nil {
+			feature.Offset = int(placeholder.GetOffset())
+			feature.Length = int(placeholder.GetLength())
+		}
+
+		features = append(features, feature)
+	}
+
+	return features
 }
 
 // parseGrpcPayload extracts the message payload and its compression status from a gRPC frame.
